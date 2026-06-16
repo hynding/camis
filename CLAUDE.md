@@ -90,6 +90,16 @@ phase's exit criteria are green.
 - **Databases:** the Filament/Express targets must run on `sqlite | mysql | pgsql` selected
   purely by env var, with **no code change** between environments. CI exercises all three.
 
+### Environment gotchas (this session's shell is zsh)
+
+- **zsh does not word-split unquoted `$var`** — `for x in $list` iterates once with the whole
+  string. Use a literal token list or `${=list}`.
+- **`status` is a reserved read-only variable in zsh** — never use it as a variable name in
+  scripts; pick `st`/`state`.
+- **pnpm 10 blocks dependency build/postinstall scripts by default** — if a dep genuinely needs
+  its postinstall (not esbuild, which ships its binary via an optional dep), allow it with
+  `pnpm.onlyBuiltDependencies`, not by disabling the safety globally.
+
 ---
 
 ## Toolchain decisions (settled — do not re-litigate)
