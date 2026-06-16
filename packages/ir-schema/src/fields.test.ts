@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { field } from "./fields";
+import { field, componentField } from "./fields";
 
 const parse = (v: unknown) => field.safeParse(v);
 
@@ -35,5 +35,56 @@ describe("scalar fields", () => {
 
   it("rejects min > max on a numeric field (S3)", () => {
     expect(parse({ type: "integer", name: "rank", min: 10, max: 1 }).success).toBe(false);
+  });
+});
+
+describe("structural fields", () => {
+  it("accepts a relation field", () => {
+    expect(
+      field.safeParse({
+        type: "relation",
+        name: "author",
+        relationKind: "manyToOne",
+        target: "User",
+        inverse: "articles",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("accepts a component field", () => {
+    expect(
+      field.safeParse({ type: "component", name: "seo", component: "SeoMeta", repeatable: false })
+        .success,
+    ).toBe(true);
+  });
+
+  it("accepts a dynamic zone at field level", () => {
+    expect(
+      field.safeParse({ type: "dynamicZone", name: "blocks", components: ["Hero"] }).success,
+    ).toBe(true);
+  });
+
+  it("rejects an empty dynamic zone (S7)", () => {
+    expect(field.safeParse({ type: "dynamicZone", name: "blocks", components: [] }).success).toBe(
+      false,
+    );
+  });
+
+  it("componentField rejects a dynamic zone (S6/D6)", () => {
+    expect(
+      componentField.safeParse({ type: "dynamicZone", name: "blocks", components: ["Hero"] })
+        .success,
+    ).toBe(false);
+  });
+
+  it("componentField accepts a relation", () => {
+    expect(
+      componentField.safeParse({
+        type: "relation",
+        name: "author",
+        relationKind: "oneToOne",
+        target: "User",
+      }).success,
+    ).toBe(true);
   });
 });

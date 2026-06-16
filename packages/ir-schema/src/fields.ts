@@ -103,10 +103,7 @@ export const SCALAR_VARIANTS = [
   mediaField,
 ] as const;
 
-export const perFieldRefine = (
-  f: z.infer<(typeof SCALAR_VARIANTS)[number]>,
-  ctx: z.RefinementCtx,
-) => {
+export const perFieldRefine = (f: unknown, ctx: z.RefinementCtx) => {
   const anyF = f as Record<string, unknown>;
   if (
     typeof anyF.minLength === "number" &&
@@ -128,7 +125,12 @@ export const perFieldRefine = (
       path: ["min"],
     });
   }
-  if (f.type === "enumeration" && f.default !== undefined && !f.values.includes(f.default)) {
+  if (
+    anyF.type === "enumeration" &&
+    anyF.default !== undefined &&
+    Array.isArray(anyF.values) &&
+    !(anyF.values as string[]).includes(anyF.default as string)
+  ) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: "default must be one of values",
@@ -138,6 +140,39 @@ export const perFieldRefine = (
   }
 };
 
-export const field = z.discriminatedUnion("type", [...SCALAR_VARIANTS]).superRefine(perFieldRefine);
+const relationField = z.object({
+  type: z.literal("relation"),
+  ...common,
+  relationKind: z.enum(RELATION_KINDS),
+  target: typeName,
+  inverse: fieldName.optional(),
+});
+const componentRefField = z.object({
+  type: z.literal("component"),
+  ...common,
+  component: typeName,
+  repeatable: z.boolean(),
+});
+const dynamicZoneField = z.object({
+  type: z.literal("dynamicZone"),
+  ...common,
+  components: z.array(typeName).min(1),
+});
+
+const ALL_VARIANTS = [
+  ...SCALAR_VARIANTS,
+  relationField,
+  componentRefField,
+  dynamicZoneField,
+] as const;
+const COMPONENT_VARIANTS = [...SCALAR_VARIANTS, relationField, componentRefField] as const; // no dynamicZone (D6)
+
+export const field = z.discriminatedUnion("type", [...ALL_VARIANTS]).superRefine(perFieldRefine);
+export const componentField = z
+  .discriminatedUnion("type", [...COMPONENT_VARIANTS])
+  .superRefine(perFieldRefine);
+
+export type Field = z.infer<typeof field>;
+export type ComponentFieldT = z.infer<typeof componentField>;
 
 export { typeName };
