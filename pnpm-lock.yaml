@@ -56,7 +56,11 @@ importers:
 
   packages/expr-ts: {}
 
-  packages/ir-core: {}
+  packages/ir-core:
+    dependencies:
+      '@camis/ir-schema':
+        specifier: workspace:*
+        version: link:../ir-schema
 
   packages/ir-schema:
     dependencies:
