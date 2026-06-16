@@ -1,0 +1,12 @@
+node_modules
+dist
+coverage
+vendor
+apps
+pnpm-lock.yaml
+*.tsbuildinfo
+
+# Authored prose docs are hand-laid-out (tables, intentional wrapping); Prettier
+# formats code, not prose. Re-enable per-file if we ever want it.
+*.md
+
