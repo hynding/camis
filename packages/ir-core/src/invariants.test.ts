@@ -54,3 +54,59 @@ describe("reference invariants", () => {
     expect(codes(doc)).toContain("unknown_component_ref");
   });
 });
+
+describe("uniqueness, acyclic, inverse collision", () => {
+  it("flags duplicate content type names (C3)", () => {
+    const doc: IrDocument = {
+      version: 1,
+      contentTypes: [
+        { name: "Article", kind: "collection", fields: [] },
+        { name: "Article", kind: "single", fields: [] },
+      ],
+      components: [],
+    };
+    expect(codes(doc)).toContain("duplicate_content_type_name");
+  });
+
+  it("flags a cyclic component reference (C4)", () => {
+    const doc: IrDocument = {
+      version: 1,
+      contentTypes: [],
+      components: [
+        {
+          name: "A",
+          fields: [{ type: "component", name: "b", component: "B", repeatable: false }],
+        },
+        {
+          name: "B",
+          fields: [{ type: "component", name: "a", component: "A", repeatable: false }],
+        },
+      ],
+    };
+    expect(codes(doc)).toContain("cyclic_component_reference");
+  });
+
+  it("flags an inverse field that collides on the target (C5)", () => {
+    const doc: IrDocument = {
+      version: 1,
+      contentTypes: [
+        {
+          name: "Article",
+          kind: "collection",
+          fields: [
+            {
+              type: "relation",
+              name: "author",
+              relationKind: "manyToOne",
+              target: "User",
+              inverse: "name",
+            },
+          ],
+        },
+        { name: "User", kind: "collection", fields: [{ type: "string", name: "name" }] },
+      ],
+      components: [],
+    };
+    expect(codes(doc)).toContain("inverse_field_collision");
+  });
+});
