@@ -7,7 +7,7 @@ describe("inflect", () => {
     expect(humanize("Article")).toBe("Article");
   });
 
-  it("snakeCase pluralizes and lowercases", () => {
+  it("snakeCase converts PascalCase to snake_case", () => {
     expect(snakeCase("BlogPost")).toBe("blog_post");
   });
 
