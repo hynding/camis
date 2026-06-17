@@ -31,6 +31,28 @@ describe("runtime comparison", () => {
       ok: false,
       error: "UNKNOWN_VAR",
     }));
+
+  it("ne equal → false", () => expect(r.ne(num(1), num(1))).toEqual({ ok: true, value: false }));
+  it("ne unequal → true", () => expect(r.ne(num(1), num(2))).toEqual({ ok: true, value: true }));
+  it("ne null both → false", () =>
+    expect(r.ne(t(r.lit(null)), t(r.lit(null)))).toEqual({ ok: true, value: false }));
+  it("ne mixed non-null type → TYPE_MISMATCH", () =>
+    expect(r.ne(num(1), str("1"))).toEqual({ ok: false, error: "TYPE_MISMATCH" }));
+
+  it("lte equal → true", () => expect(r.lte(num(2), num(2))).toEqual({ ok: true, value: true }));
+  it("gt numbers", () => expect(r.gt(num(2), num(1))).toEqual({ ok: true, value: true }));
+  it("gte equal → true", () => expect(r.gte(num(2), num(2))).toEqual({ ok: true, value: true }));
+
+  // Pins direct < / > ordering: subtraction would lose this near MAX_SAFE_INTEGER.
+  it("gt large integers (no precision loss)", () =>
+    expect(r.gt(num(Number.MAX_SAFE_INTEGER), num(Number.MAX_SAFE_INTEGER - 1))).toEqual({
+      ok: true,
+      value: true,
+    }));
+
+  // String ordering is lexicographic codepoint, not numeric: "10" < "9".
+  it("lt strings lexicographic not numeric", () =>
+    expect(r.lt(str("10"), str("9"))).toEqual({ ok: true, value: true }));
 });
 
 describe("runtime arithmetic", () => {
@@ -40,4 +62,6 @@ describe("runtime arithmetic", () => {
     expect(r.div(num(1), num(0))).toEqual({ ok: false, error: "DIV_BY_ZERO" }));
   it("add non-number → TYPE_MISMATCH", () =>
     expect(r.add(num(1), str("x"))).toEqual({ ok: false, error: "TYPE_MISMATCH" }));
+  it("sub numbers", () => expect(r.sub(num(5), num(3))).toEqual({ ok: true, value: 2 }));
+  it("mul numbers", () => expect(r.mul(num(4), num(3))).toEqual({ ok: true, value: 12 }));
 });

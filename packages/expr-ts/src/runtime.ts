@@ -22,15 +22,16 @@ const eqValues = (x: Value, y: Value): EvalResult => {
   return ok(x === y);
 };
 
+// Direct < / > comparison (not subtraction) so number ordering avoids
+// floating-point precision loss near MAX_SAFE_INTEGER and stays structurally
+// symmetric with the string branch — the PHP runtime must mirror this.
+const compare = <T extends number | string>(x: T, y: T): number => (x < y ? -1 : x > y ? 1 : 0);
+
 const order = (x: Value, y: Value, f: (c: number) => boolean): EvalResult => {
   const tx = typeOf(x);
   const ty = typeOf(y);
-  if (tx === "number" && ty === "number") return ok(f(Math.sign((x as number) - (y as number))));
-  if (tx === "string" && ty === "string") {
-    const xs = x as string;
-    const ys = y as string;
-    return ok(f(xs < ys ? -1 : xs > ys ? 1 : 0));
-  }
+  if (tx === "number" && ty === "number") return ok(f(compare(x as number, y as number)));
+  if (tx === "string" && ty === "string") return ok(f(compare(x as string, y as string)));
   return err("TYPE_MISMATCH");
 };
 
@@ -47,7 +48,8 @@ export const r = {
   eq: (a: Thunk, b: Thunk): EvalResult => force2(a, b, eqValues),
   ne: (a: Thunk, b: Thunk): EvalResult => {
     const e = force2(a, b, eqValues);
-    return e.ok ? ok(e.value !== true) : e;
+    // eqValues yields ok(true) | ok(false) on success; negate the equal case.
+    return e.ok ? ok(e.value === false) : e;
   },
   lt: (a: Thunk, b: Thunk): EvalResult => force2(a, b, (x, y) => order(x, y, (c) => c < 0)),
   lte: (a: Thunk, b: Thunk): EvalResult => force2(a, b, (x, y) => order(x, y, (c) => c <= 0)),
