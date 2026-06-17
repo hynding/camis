@@ -68,6 +68,18 @@ describe("uniqueness, acyclic, inverse collision", () => {
     expect(codes(doc)).toContain("duplicate_content_type_name");
   });
 
+  it("flags duplicate component names (C3)", () => {
+    const doc: IrDocument = {
+      version: 1,
+      contentTypes: [],
+      components: [
+        { name: "Seo", fields: [{ type: "string", name: "metaTitle" }] },
+        { name: "Seo", fields: [{ type: "string", name: "metaDescription" }] },
+      ],
+    };
+    expect(codes(doc)).toContain("duplicate_component_name");
+  });
+
   it("flags a cyclic component reference (C4)", () => {
     const doc: IrDocument = {
       version: 1,
