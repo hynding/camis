@@ -25,6 +25,14 @@ export const toAttribute = (field: Field): Attribute => {
     return attr;
   }
 
+  if (field.type === "relation") {
+    const targetSingular = field.target.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
+    attr.relation = field.relationKind;
+    attr.target = `api::${targetSingular}.${targetSingular}`;
+    put(attr, "inversedBy", field.inverse);
+    return attr;
+  }
+
   put(attr, "required", f.required);
   put(attr, "unique", f.unique);
   put(attr, "minLength", f.minLength);
@@ -32,5 +40,12 @@ export const toAttribute = (field: Field): Attribute => {
   put(attr, "min", f.min);
   put(attr, "max", f.max);
   put(attr, "default", f.default);
+  put(attr, "targetField", f.targetField);
   return attr;
+};
+
+export const toAttributes = (fields: Field[]): Record<string, Attribute> => {
+  const out: Record<string, Attribute> = {};
+  for (const field of fields) out[field.name] = toAttribute(field);
+  return out;
 };

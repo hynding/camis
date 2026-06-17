@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Field } from "@camis/ir-schema";
-import { toAttribute } from "./attributes";
+import { toAttribute, toAttributes } from "./attributes";
 
 describe("toAttribute — scalars", () => {
   it("maps a string with constraints", () => {
@@ -27,5 +27,50 @@ describe("toAttribute — scalars", () => {
 
   it("omits absent constraints (no undefined keys)", () => {
     expect(toAttribute({ type: "boolean", name: "flag" })).toEqual({ type: "boolean" });
+  });
+});
+
+describe("toAttribute — relations", () => {
+  it("maps a relation with an inverse to the api:: target uid + inversedBy", () => {
+    expect(
+      toAttribute({
+        type: "relation",
+        name: "author",
+        relationKind: "manyToOne",
+        target: "Author",
+        inverse: "articles",
+      }),
+    ).toEqual({
+      type: "relation",
+      relation: "manyToOne",
+      target: "api::author.author",
+      inversedBy: "articles",
+    });
+  });
+
+  it("omits inversedBy for a unidirectional relation", () => {
+    expect(
+      toAttribute({ type: "relation", name: "owner", relationKind: "oneToOne", target: "User" }),
+    ).toEqual({ type: "relation", relation: "oneToOne", target: "api::user.user" });
+  });
+});
+
+describe("toAttribute — uid targetField", () => {
+  it("copies uid.targetField to the Strapi attribute", () => {
+    expect(toAttribute({ type: "uid", name: "slug", targetField: "title" })).toEqual({
+      type: "uid",
+      targetField: "title",
+    });
+  });
+});
+
+describe("toAttributes", () => {
+  it("builds an ordered attributes object keyed by field name", () => {
+    const attrs = toAttributes([
+      { type: "string", name: "title" },
+      { type: "boolean", name: "flag" },
+    ]);
+    expect(Object.keys(attrs)).toEqual(["title", "flag"]);
+    expect(attrs.title).toEqual({ type: "string" });
   });
 });
