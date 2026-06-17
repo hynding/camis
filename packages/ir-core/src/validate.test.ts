@@ -10,7 +10,7 @@ describe("validate", () => {
     expect(r.value.contentTypes[0]!.names!.collection).toBe("articles");
   });
 
-  it("collects structural and cross-graph errors together", () => {
+  it("collects cross-graph invariant errors on a structurally valid doc", () => {
     const r = validate({
       version: 1,
       contentTypes: [
