@@ -49,3 +49,12 @@ describe("materialize", () => {
     expect(existsSync(join(dir, "a.ts"))).toBe(true);
   });
 });
+
+describe("materialize seed mode", () => {
+  it("writes a seed file when absent but never overwrites a user-modified one", async () => {
+    await materialize(result([{ path: ".env", content: "ORIGINAL", mode: "seed" }]), dir);
+    await writeFile(join(dir, ".env"), "USER_EDITED");
+    await materialize(result([{ path: ".env", content: "ORIGINAL", mode: "seed" }]), dir);
+    expect(await readFile(join(dir, ".env"), "utf8")).toBe("USER_EDITED");
+  });
+});
