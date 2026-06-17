@@ -42,11 +42,16 @@ export const toAttribute = (field: Field): Attribute => {
   put(attr, "max", f.max);
   put(attr, "default", f.default);
   put(attr, "targetField", f.targetField);
+  put(attr, "multiple", f.multiple);
+  put(attr, "allowedTypes", f.allowedTypes);
   return attr;
 };
 
 export const toAttributes = (fields: Field[]): Record<string, Attribute> => {
   const out: Record<string, Attribute> = {};
-  for (const field of fields) out[field.name] = toAttribute(field);
+  for (const field of fields) {
+    if (field.type === "dynamicZone") continue; // deferred; generate emits a capability-gap
+    out[field.name] = toAttribute(field);
+  }
   return out;
 };

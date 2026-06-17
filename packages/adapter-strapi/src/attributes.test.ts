@@ -64,6 +64,29 @@ describe("toAttribute — uid targetField", () => {
   });
 });
 
+describe("toAttribute — media", () => {
+  it("carries multiple and allowedTypes", () => {
+    expect(
+      toAttribute({
+        type: "media",
+        name: "cover",
+        multiple: true,
+        allowedTypes: ["image", "video"],
+      }),
+    ).toEqual({ type: "media", multiple: true, allowedTypes: ["image", "video"] });
+  });
+});
+
+describe("toAttributes — dynamicZone", () => {
+  it("skips dynamicZone fields (deferred; generate reports a gap)", () => {
+    const attrs = toAttributes([
+      { type: "string", name: "title" },
+      { type: "dynamicZone", name: "blocks", components: ["Hero"] },
+    ]);
+    expect(Object.keys(attrs)).toEqual(["title"]);
+  });
+});
+
 describe("toAttributes", () => {
   it("builds an ordered attributes object keyed by field name", () => {
     const attrs = toAttributes([
