@@ -26,6 +26,10 @@ which requires finishing the component *generate* path deferred in Phase 2.
 | D4 | **Reuse `CapabilityGapReport`** for import diagnostics (constructs the IR can't represent). | A generation gap and an import gap are both representability gaps; one vocabulary, DRY. |
 | D5 | **Default component category `shared`** on generate (a Strapi-ism confined to the adapter). Components round-trip by **name**; the category is fixed. | The IR `Component` has no category; Strapi requires one. A fixed default keeps round-trip deterministic. |
 | D6 | **Import imports collection types only** (matching Phase 2 generate). Single-type import deferred. | Keeps the round-trip symmetric with what generate produces today. |
+| D7 | **Two-sided bidirectional relations.** For an IR relation with `inverse`, generate emits BOTH the owner attribute (`inversedBy`) AND a synthesized inverse attribute on the target (`mappedBy`, dual kind). Import **collapses**: a `mappedBy` attribute is the inverse side → skipped; `inversedBy`/plain attributes are owners → kept (`inverse` = `inversedBy`). | A dangling `inversedBy` (Phase 2's one-sided emission) likely won't boot in Strapi; two-sided is correct AND round-trips to the single-declaration IR. |
+| D8 | **Import reads ONLY declarative schema files** — `**/content-types/**/schema.json` and `**/components/**/*.json`. Generated `.ts` (controllers/routes/services), skeleton, and `.camis/manifest.json` are ignored. | Prime Directive: import only from declarative sources, never generated code. |
+| D9 | **media `multiple`/`allowedTypes` round-trip** (fixes a Phase 2 gap — the generic constraint copier never carried them). | media is core taxonomy; a few lines make it round-trip. |
+| D10 | **Import returns two distinct channels:** capability-gaps (unrepresentable constructs, *skipped*) AND the `ir-core` validation `Result` (structurally invalid reconstructed IR). Gaps are emitted in document order. | Gaps and validation errors are different failure modes; both surfaced, deterministically. |
 
 ## 3. Strapi v5 component format (researched via context7)
 
@@ -34,9 +38,16 @@ which requires finishing the component *generate* path deferred in Phase 2.
   `{ "collectionName":"components_<category>_<plural>", "info":{ "displayName":... }, "options":{}, "attributes":{...} }` (no `kind`).
 - Dynamic zone: `{ "type":"dynamiczone", "components":["category.name", ...] }` — **deferred** (gap both directions).
 
-## 4. Completing the component generate path (Phase 2 deferral)
+## 4. Generate completions (Phase 2 deferrals + relation/media fixes)
 
-- **`attributes.ts`**: add a `component` branch → `{ type:"component", repeatable, component:"shared.<kebab-name>" }` (the kebab helper already exists in `names.ts`). Add a `dynamicZone` guard: such fields are **not emitted**; `generate()` records a capability-gap instead.
+- **`attributes.ts`**: add a `component` branch → `{ type:"component", repeatable, component:"shared.<kebab-name>" }` (the kebab helper already exists in `names.ts`). Add a `dynamicZone` guard: such fields are **not emitted**; `generate()` records a capability-gap instead. Add **media `multiple`/`allowedTypes`** to the media mapping (D9).
+- **Two-sided relations (D7):** the owner attribute keeps `inversedBy`. `generate()` additionally
+  synthesizes the **inverse attribute** on the target type for each IR relation that has an
+  `inverse`: `{ type:"relation", relation: dual(kind), target:"api::<owner-singular>.<owner-singular>", mappedBy:<owner-field> }`, inserted into the target's attributes. `dual`:
+  `manyToOne→oneToMany`, `oneToMany→manyToOne`, `oneToOne→oneToOne`, `manyToMany→manyToMany`.
+  (This is wiring in `generate.ts`/`schema.ts`, which assembles each type's full attribute set
+  including synthesized inverses, since the inverse lives on a *different* content type than the
+  declaring one.)
 - **`component-schema.ts`** (new): `componentSchema(component)` → the component json object:
   `{ collectionName:"components_shared_<plural>", info:{ displayName:<humanized name> }, options:{}, attributes: toAttributes(fields) }`, where `<plural>` is the snake plural of the component name.
 - **`generate.ts`**: also emit, per IR component, `src/components/shared/<kebab-name>.json` =
@@ -47,10 +58,11 @@ which requires finishing the component *generate* path deferred in Phase 2.
 
 - **`names.ts`** — `irName(strapiSingular: string): string` = PascalCase from kebab
   (`article`→`Article`, `blog-post`→`BlogPost`). Inverse of generate's `kebab`.
-- **`attributes.ts`** — `irField(name: string, attr: Record<string,unknown>): { field?: Field; gap?: CapabilityGap }`, inverse of `toAttribute`:
+- **`attributes.ts`** — `irField(name, attr): { field?: Field; gap?: CapabilityGap; skip?: true }`, inverse of `toAttribute`:
   - casing back: `richtext→richText`, `biginteger→bigInteger`, `datetime→dateTime`; other scalar types 1:1.
-  - `relation`: `target` `api::author.author` → IR `target` `Author` (PascalCase of singular), `relationKind` from `relation`, `inverse` from `inversedBy`.
+  - `relation`: **if the attribute has `mappedBy`, it is the synthesized inverse side → `skip:true`** (no field, no gap — represented by the owner's `inverse`). Otherwise (owner/`inversedBy`/plain): IR `target` = PascalCase of the `api::x.x` singular, `relationKind` from `relation`, `inverse` from `inversedBy` (when present).
   - `component`: `shared.seo-meta` → IR `component` `SeoMeta` (PascalCase of name part), `repeatable`.
+  - `media`: `multiple`/`allowedTypes` copied back (D9).
   - `enumeration`: `enum` → IR `values`; constraints (`required/unique/minLength/maxLength/min/max/default/targetField`) copied back when present.
   - unknown `type` (customField, plugin field, `dynamiczone`, etc.) → return a `gap` (`severity:"downgrade"`, located), no field.
 - **`schema.ts`** — `irContentType(schema)` / `irComponent(componentName, schema)`: inverse of
@@ -61,7 +73,13 @@ which requires finishing the component *generate* path deferred in Phase 2.
     (`src/components/shared/<name>.json` → `componentName = irName(<name>)`), which
     `import-document.ts` passes in. IR `Component` = `{ name: componentName, fields }`.
 - **`import-document.ts`** — `importDocument(files: { path: string; content: string }[]): { document: Result<IrDocument>; gaps: CapabilityGapReport }`:
-  classify files by path (`content-types/.../schema.json` vs `components/.../*.json`), parse each via `schema.ts`, assemble `{ version:1, contentTypes, components }`, collect field-level gaps, then **validate via `ir-core` `validate`** (returns the located errors if the reconstructed IR is somehow invalid).
+  **select only declarative schema files** — `**/content-types/**/schema.json` and
+  `**/components/**/*.json`; **ignore** generated `.ts`, skeleton, and `.camis/manifest.json`
+  (D8). Parse each via `schema.ts` (components get their name from the file path), dropping
+  `mappedBy` inverse attributes (D7), assemble `{ version:1, contentTypes, components }`, collect
+  field-level gaps **in document order** (D10). The two return channels are distinct (D10):
+  `document` is the `ir-core` `validate` `Result` (located errors if the reconstructed IR is
+  structurally invalid — relevant for hand-written projects); `gaps` is the unrepresentable-construct report.
 
 ## 6. Import — fs loader
 
@@ -69,10 +87,12 @@ which requires finishing the component *generate* path deferred in Phase 2.
 
 ## 7. Round-trip equality (the spine)
 
-- **Curated fixtures** (`__fixtures__/`): standard PascalCase names; scalars + relations +
-  components + draftPublish. **Excluded** (out of the round-trippable subset): softDelete
-  (dropped to a gap on generate), timestamps (always-on in Strapi), acronym-heavy names
-  (`APIKey` kebabs lossily), dynamicZone (deferred).
+- **Curated fixtures** (`__fixtures__/`): standard PascalCase names; scalars + a **bidirectional
+  relation** (owner + synthesized inverse, to exercise D7) + components + media + draftPublish.
+  Component fields are kept simple (scalars, optionally a nested component) — **no bidirectional
+  relations inside components** (Strapi restricts those). **Excluded** (out of the round-trippable
+  subset): softDelete (dropped to a gap on generate), timestamps (always-on in Strapi),
+  acronym-heavy names (`APIKey` kebabs lossily), dynamicZone (deferred).
 - **Assertion:** `normalize(importDocument(generate(ir, { projectName }).files).document.value)`
   **deep-equals** `normalize(ir)`.
 - Symmetry: generate normalizes internally and emits `info`/`collectionName`; import
