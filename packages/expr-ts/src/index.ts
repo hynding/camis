@@ -1,2 +1,4 @@
-// @camis/expr-ts — Phase 0 stub. Real exports arrive in the phase that owns this package.
-export {};
+export { r } from "./runtime";
+export type { Thunk } from "./runtime";
+export { evaluate } from "./evaluate";
+export { emitTs } from "./emit";
