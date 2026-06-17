@@ -1,0 +1,12 @@
+{
+  "collectionName": "components_shared_seo_metas",
+  "info": {
+    "displayName": "Seo Meta"
+  },
+  "options": {},
+  "attributes": {
+    "metaTitle": {
+      "type": "string"
+    }
+  }
+}

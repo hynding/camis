@@ -63,4 +63,28 @@ describe("importDocument", () => {
     if (!document.ok) return;
     expect(document.value.contentTypes).toHaveLength(1);
   });
+
+  it("reports an unsupported attribute as a gap, not a field", () => {
+    const files = [
+      {
+        path: "src/api/article/content-types/article/schema.json",
+        content: JSON.stringify({
+          kind: "collectionType",
+          collectionName: "articles",
+          info: { singularName: "article", pluralName: "articles", displayName: "Article" },
+          options: {},
+          pluginOptions: {},
+          attributes: {
+            title: { type: "string" },
+            blocks: { type: "dynamiczone", components: ["shared.seo-meta"] },
+          },
+        }),
+      },
+    ];
+    const { document, gaps } = importDocument(files);
+    expect(gaps.gaps.some((g) => g.feature === "dynamiczone")).toBe(true);
+    expect(document.ok).toBe(true);
+    if (!document.ok) return;
+    expect(document.value.contentTypes[0]!.fields.map((f) => f.name)).toEqual(["title"]);
+  });
 });
