@@ -22,4 +22,41 @@ export default tseslint.config(
       "@typescript-eslint/no-explicit-any": "error",
     },
   },
+  {
+    files: ["packages/ir-schema/src/**/*.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@camis/*"],
+              message: "ir-schema is a leaf package; it must not import other @camis packages.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: [
+      "packages/adapter-strapi/src/**/*.ts",
+      "packages/adapter-filament/src/**/*.ts",
+      "packages/adapter-express/src/**/*.ts",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@camis/adapter-*"],
+              message:
+                "Adapters must not import sibling adapters; lift shared logic into a shared package.",
+            },
+          ],
+        },
+      ],
+    },
+  },
 );
