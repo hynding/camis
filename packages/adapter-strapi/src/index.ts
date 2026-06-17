@@ -1,2 +1,3 @@
-// @camis/adapter-strapi — Phase 0 stub. Real exports arrive in the phase that owns this package.
-export {};
+export { strapiAdapter } from "./generate";
+export { contentTypeSchema } from "./schema";
+export { strapiNames } from "./names";
