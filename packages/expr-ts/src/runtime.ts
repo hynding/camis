@@ -61,4 +61,41 @@ export const r = {
   mul: (a: Thunk, b: Thunk): EvalResult => force2(a, b, (x, y) => arith(x, y, (m, n) => ok(m * n))),
   div: (a: Thunk, b: Thunk): EvalResult =>
     force2(a, b, (x, y) => arith(x, y, (m, n) => (n === 0 ? err("DIV_BY_ZERO") : ok(m / n)))),
+
+  and: (...args: Thunk[]): EvalResult => {
+    for (const t of args) {
+      const v = t();
+      if (!v.ok) return v;
+      if (typeof v.value !== "boolean") return err("TYPE_MISMATCH");
+      if (v.value === false) return ok(false);
+    }
+    return ok(true);
+  },
+  or: (...args: Thunk[]): EvalResult => {
+    for (const t of args) {
+      const v = t();
+      if (!v.ok) return v;
+      if (typeof v.value !== "boolean") return err("TYPE_MISMATCH");
+      if (v.value === true) return ok(true);
+    }
+    return ok(false);
+  },
+  not: (a: Thunk): EvalResult => {
+    const v = a();
+    if (!v.ok) return v;
+    if (typeof v.value !== "boolean") return err("TYPE_MISMATCH");
+    return ok(!v.value);
+  },
+  isNull: (a: Thunk): EvalResult => {
+    const v = a();
+    return v.ok ? ok(v.value === null) : v;
+  },
+  coalesce: (...args: Thunk[]): EvalResult => {
+    for (const t of args) {
+      const v = t();
+      if (!v.ok) return v;
+      if (v.value !== null) return ok(v.value);
+    }
+    return ok(null);
+  },
 };
