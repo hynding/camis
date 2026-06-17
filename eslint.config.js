@@ -25,6 +25,14 @@ export default tseslint.config(
     },
   },
   {
+    // Node ESM scripts (e.g. the gated PHP conformance runner) run under Node,
+    // not the browser; flat config applies no environment globals by default.
+    files: ["**/*.mjs"],
+    languageOptions: {
+      globals: { console: "readonly", process: "readonly" },
+    },
+  },
+  {
     files: ["packages/ir-schema/src/**/*.ts"],
     rules: {
       "no-restricted-imports": [
