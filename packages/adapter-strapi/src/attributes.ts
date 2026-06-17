@@ -1,4 +1,5 @@
 import type { Field } from "@camis/ir-schema";
+import { kebab } from "./names";
 
 type Attribute = Record<string, unknown>;
 
@@ -26,7 +27,7 @@ export const toAttribute = (field: Field): Attribute => {
   }
 
   if (field.type === "relation") {
-    const targetSingular = field.target.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
+    const targetSingular = kebab(field.target);
     attr.relation = field.relationKind;
     attr.target = `api::${targetSingular}.${targetSingular}`;
     put(attr, "inversedBy", field.inverse);

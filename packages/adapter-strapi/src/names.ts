@@ -8,7 +8,10 @@ export interface StrapiNames {
   uid: string;
 }
 
-const kebab = (name: string): string => name.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
+// Strapi uses kebab-case for singular/plural/UID segments; the same transform feeds
+// relation target UIDs, so it lives here as the one source of truth for name casing.
+export const kebab = (name: string): string =>
+  name.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
 
 // Assumes a normalized ContentType (names.* populated by ir-core); falls back to the
 // canonical name if an override is missing.
