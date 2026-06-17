@@ -53,6 +53,21 @@ describe("reference invariants", () => {
     };
     expect(codes(doc)).toContain("unknown_component_ref");
   });
+
+  it("flags an unknown component in a dynamic zone (C2)", () => {
+    const doc: IrDocument = {
+      version: 1,
+      contentTypes: [
+        {
+          name: "Page",
+          kind: "collection",
+          fields: [{ type: "dynamicZone", name: "blocks", components: ["Ghost"] }],
+        },
+      ],
+      components: [],
+    };
+    expect(codes(doc)).toContain("unknown_component_ref");
+  });
 });
 
 describe("uniqueness, acyclic, inverse collision", () => {

@@ -48,6 +48,23 @@ describe("parseDocument", () => {
     expect(r.errors.some((x) => x.code === "invalid_identifier")).toBe(true);
   });
 
+  it("maps a wrong-typed default to invalid_default_type", () => {
+    const r = parseDocument(
+      doc({
+        contentTypes: [
+          {
+            name: "Article",
+            kind: "collection",
+            fields: [{ type: "boolean", name: "flag", default: "yes" }],
+          },
+        ],
+      }),
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.errors.some((e) => e.code === "invalid_default_type")).toBe(true);
+  });
+
   it("emits errors in deterministic (path) order", () => {
     const r = parseDocument(
       doc({

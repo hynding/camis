@@ -88,3 +88,12 @@ describe("structural fields", () => {
     ).toBe(true);
   });
 });
+
+describe("typed defaults (S9)", () => {
+  it("rejects a boolean field with a string default", () => {
+    expect(field.safeParse({ type: "boolean", name: "flag", default: "yes" }).success).toBe(false);
+  });
+  it("rejects an integer field with a string default", () => {
+    expect(field.safeParse({ type: "integer", name: "rank", default: "high" }).success).toBe(false);
+  });
+});

@@ -15,6 +15,8 @@ const codeFromIssue = (issue: z.ZodIssue): IrErrorCode => {
   if (issue.code === "invalid_string") return "invalid_identifier";
   if (issue.code === "too_small" && issue.path.at(-1) === "values") return "empty_enumeration";
   if (issue.code === "too_small" && issue.path.at(-1) === "components") return "empty_dynamic_zone";
+  if (issue.code === "invalid_type" && issue.path.at(-1) === "default")
+    return "invalid_default_type";
   return "invalid_document";
 };
 
