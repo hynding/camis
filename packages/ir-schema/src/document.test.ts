@@ -35,3 +35,32 @@ describe("contentType node refinements", () => {
     expect(ct([{ type: "uid", name: "slug", targetField: "missing" }]).success).toBe(false);
   });
 });
+
+describe("field expression attachment points", () => {
+  it("accepts a field with a validate/visibleWhen/computed expression", () => {
+    const r = contentType.safeParse({
+      name: "Article",
+      kind: "collection",
+      fields: [
+        {
+          type: "string",
+          name: "slug",
+          visibleWhen: {
+            kind: "eq",
+            left: { kind: "var", name: "status" },
+            right: { kind: "lit", value: "published" },
+          },
+        },
+      ],
+    });
+    expect(r.success).toBe(true);
+  });
+  it("rejects an ill-formed expression", () => {
+    const r = contentType.safeParse({
+      name: "Article",
+      kind: "collection",
+      fields: [{ type: "string", name: "slug", computed: { kind: "loop" } }],
+    });
+    expect(r.success).toBe(false);
+  });
+});

@@ -68,11 +68,27 @@ importers:
 
   packages/cli: {}
 
-  packages/expr: {}
+  packages/expr:
+    dependencies:
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
 
-  packages/expr-php-emit: {}
+  packages/expr-php-emit:
+    dependencies:
+      '@camis/expr':
+        specifier: workspace:*
+        version: link:../expr
+    devDependencies:
+      tsx:
+        specifier: ^4.22.4
+        version: 4.22.4
 
-  packages/expr-ts: {}
+  packages/expr-ts:
+    dependencies:
+      '@camis/expr':
+        specifier: workspace:*
+        version: link:../expr
 
   packages/ir-core:
     dependencies:
@@ -82,6 +98,9 @@ importers:
 
   packages/ir-schema:
     dependencies:
+      '@camis/expr':
+        specifier: workspace:*
+        version: link:../expr
       zod:
         specifier: ^3.25.76
         version: 3.25.76

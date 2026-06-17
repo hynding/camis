@@ -1,0 +1,21 @@
+name: expr-php-conformance
+on:
+  workflow_dispatch:
+  pull_request:
+  schedule:
+    - cron: "0 5 * * *"
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @camis/expr-php-emit conformance
