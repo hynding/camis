@@ -10,3 +10,6 @@ pnpm-lock.yaml
 # formats code, not prose. Re-enable per-file if we ever want it.
 *.md
 
+# Golden snapshot files are byte-exact; Prettier must never reformat them.
+**/__golden__/**
+

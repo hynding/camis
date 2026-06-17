@@ -1,0 +1,17 @@
+overwrite config/admin.ts
+overwrite config/api.ts
+overwrite config/database.ts
+overwrite config/middlewares.ts
+overwrite config/server.ts
+overwrite package.json
+overwrite src/api/article/content-types/article/schema.json
+overwrite src/api/article/controllers/article.ts
+overwrite src/api/article/routes/article.ts
+overwrite src/api/article/services/article.ts
+overwrite src/api/author/content-types/author/schema.json
+overwrite src/api/author/controllers/author.ts
+overwrite src/api/author/routes/author.ts
+overwrite src/api/author/services/author.ts
+overwrite src/index.ts
+overwrite tsconfig.json
+seed .env
