@@ -47,3 +47,52 @@ describe("irField — scalars", () => {
     expect(r.gap?.feature).toBe("customField");
   });
 });
+
+describe("irField — relations + components", () => {
+  it("maps an owner relation (inversedBy) to a single-declaration IR relation", () => {
+    expect(
+      irField(
+        "author",
+        {
+          type: "relation",
+          relation: "manyToOne",
+          target: "api::author.author",
+          inversedBy: "articles",
+        },
+        loc,
+      ).field,
+    ).toEqual({
+      type: "relation",
+      name: "author",
+      relationKind: "manyToOne",
+      target: "Author",
+      inverse: "articles",
+    });
+  });
+  it("maps a plain (unidirectional) relation without inverse", () => {
+    expect(
+      irField("owner", { type: "relation", relation: "oneToOne", target: "api::user.user" }, loc)
+        .field,
+    ).toEqual({ type: "relation", name: "owner", relationKind: "oneToOne", target: "User" });
+  });
+  it("skips the synthesized inverse side (mappedBy)", () => {
+    const r = irField(
+      "articles",
+      {
+        type: "relation",
+        relation: "oneToMany",
+        target: "api::article.article",
+        mappedBy: "author",
+      },
+      loc,
+    );
+    expect(r.skip).toBe(true);
+    expect(r.field).toBeUndefined();
+  });
+  it("maps a component ref back to the IR component name", () => {
+    expect(
+      irField("seo", { type: "component", component: "shared.seo-meta", repeatable: false }, loc)
+        .field,
+    ).toEqual({ type: "component", name: "seo", component: "SeoMeta", repeatable: false });
+  });
+});

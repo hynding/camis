@@ -1,4 +1,5 @@
 import { FIELD_TYPES, type CapabilityGap, type Field } from "@camis/ir-schema";
+import { irName } from "./names";
 
 export interface IrFieldResult {
   field?: Field;
@@ -31,6 +32,30 @@ export const irField = (
 ): IrFieldResult => {
   const strapiType = String(attr.type);
   const irType = REVERSE_TYPE[strapiType] ?? strapiType;
+
+  if (strapiType === "relation") {
+    if (attr.mappedBy !== undefined) return { skip: true };
+    const target = irName(String(attr.target).split("::")[1]?.split(".")[0] ?? "");
+    const field: Record<string, unknown> = {
+      type: "relation",
+      name,
+      relationKind: attr.relation,
+      target,
+    };
+    if (attr.inversedBy !== undefined) field.inverse = attr.inversedBy;
+    return { field: field as Field };
+  }
+  if (strapiType === "component") {
+    const compName = irName(String(attr.component).split(".").slice(1).join("-"));
+    return {
+      field: {
+        type: "component",
+        name,
+        component: compName,
+        repeatable: Boolean(attr.repeatable),
+      } as Field,
+    };
+  }
 
   if (
     !(FIELD_TYPES as readonly string[]).includes(irType) ||
