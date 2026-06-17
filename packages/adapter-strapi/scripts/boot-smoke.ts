@@ -1,7 +1,8 @@
 // Generates, materializes, installs, boots Strapi on sqlite, asserts the Article
 // route is registered (200 or 403 — both prove it's exposed; 404/500 fail).
 // Runs in the gated CI job (Node 20). Cannot run in the restricted dev sandbox (npm denied).
-import { spawn, spawnSync } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { once } from "node:events";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,7 +16,7 @@ const pollUntilRegistered = async (url: string, timeoutMs: number): Promise<bool
     try {
       const res = await fetch(url);
       if (res.status === 200 || res.status === 403) return true; // registered (403 = default-deny)
-      if (res.status === 404) return false;
+      if (res.status === 404 || res.status >= 500) return false; // not registered / boot error
     } catch {
       /* server not up yet */
     }
@@ -27,14 +28,22 @@ const pollUntilRegistered = async (url: string, timeoutMs: number): Promise<bool
 const dir = await mkdtemp(join(tmpdir(), "camis-boot-"));
 try {
   await materialize(strapiAdapter.generate(blog, { projectName: "blog" }), dir);
-  spawnSync("npm", ["install", "--no-audit", "--no-fund"], { cwd: dir, stdio: "inherit" });
-  const proc = spawn("npm", ["run", "develop"], {
+  const install = spawnSync("npm", ["install", "--no-audit", "--no-fund"], {
+    cwd: dir,
+    stdio: "inherit",
+  });
+  if (install.status !== 0) {
+    console.error(`npm install failed with exit code ${install.status}`);
+    process.exit(1);
+  }
+  const proc: ChildProcess = spawn("npm", ["run", "develop"], {
     cwd: dir,
     stdio: "inherit",
     env: { ...process.env, BROWSER: "none" },
   });
   const ok = await pollUntilRegistered("http://127.0.0.1:1337/api/articles", 180_000);
   proc.kill("SIGTERM");
+  await once(proc, "close"); // let Strapi release its working dir before cleanup
   if (!ok) {
     console.error("Article route not registered");
     process.exit(1);
