@@ -29,5 +29,6 @@ describe("expression schema", () => {
   });
   it("rejects a non-finite number literal", () => {
     expect(expression.safeParse({ kind: "lit", value: Infinity }).success).toBe(false);
+    expect(expression.safeParse({ kind: "lit", value: NaN }).success).toBe(false);
   });
 });
