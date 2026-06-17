@@ -27,8 +27,30 @@ describe("emitPhp", () => {
         ],
       }),
     ).toBe("Ring1::and(fn() => Ring1::lit(true), fn() => Ring1::lit(false))");
+    expect(
+      emitPhp({
+        kind: "or",
+        args: [
+          { kind: "lit", value: true },
+          { kind: "lit", value: false },
+        ],
+      }),
+    ).toBe("Ring1::or(fn() => Ring1::lit(true), fn() => Ring1::lit(false))");
+    expect(emitPhp({ kind: "not", arg: { kind: "lit", value: true } })).toBe(
+      "Ring1::not(fn() => Ring1::lit(true))",
+    );
     expect(emitPhp({ kind: "call", fn: "isNull", args: [{ kind: "lit", value: null }] })).toBe(
       "Ring1::isNull(fn() => Ring1::lit(null))",
     );
+    expect(
+      emitPhp({
+        kind: "call",
+        fn: "coalesce",
+        args: [
+          { kind: "var", name: "a" },
+          { kind: "lit", value: 0 },
+        ],
+      }),
+    ).toBe('Ring1::coalesce(fn() => Ring1::var($data, "a"), fn() => Ring1::lit(0))');
   });
 });
