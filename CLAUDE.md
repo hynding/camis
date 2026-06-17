@@ -82,8 +82,9 @@ phase's exit criteria are green.
 
 - **Node:** pnpm workspace. `pnpm -r <script>` runs across packages.
 - **TS:** strict mode on; no implicit `any`; `tsconfig.base.json` is the root of truth.
-- **PHP:** **Composer**, owned inside each generated app under `apps/`. Wrap with pnpm
-  scripts (`pnpm --filter <app> run …`) so the monorepo has one entry point.
+- **PHP:** **Composer**, owned inside each generated project under `generated/`. Since
+  `generated/` projects are not workspace members, drive Composer directly within the project
+  directory (e.g. via the `camis` CLI), not through `pnpm --filter`.
 - **Lint/format:** ESLint + Prettier (TS), PSR-12 (emitted PHP). Lint + test on commit.
 - **CI:** install → lint → typecheck → test for every package; the `expr-php-emit` and
   Filament adapter test jobs additionally require PHP and the relevant databases.
@@ -136,10 +137,11 @@ point — it stops a future session from re-deciding or silently contradicting a
 - **PHP tooling plugins installed:** `php-lsp` (emitted-PHP intelligence, from Phase 4),
   `laravel-boost` (Filament, Phase 6).
 
-## Open decisions (resolve before the phase that needs them)
+## Settled decisions (formerly open)
 
-- **`apps/` bodies: committed vs git-ignored** — undecided (ARCHITECTURE §2). Shapes
-  `.gitignore`; needed before **Phase 2**. Do not silently pick one — ask.
+- **Generated CMS outputs → `generated/`** (root-level, git-ignored, disposable, not pnpm
+  workspace members). `apps/` is reserved for future management/UI applications, not generated
+  outputs. See ARCHITECTURE §2.
 
 ---
 

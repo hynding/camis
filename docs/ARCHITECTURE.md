@@ -70,16 +70,17 @@ your edits by design.
 
 ## 2. Monorepo layout
 
-A pnpm + TypeScript workspace. PHP apps are *generated artifacts* that live under `apps/`
-and own their Composer dependencies internally; pnpm scripts wrap Composer so the monorepo
-has one entry point.
+A pnpm + TypeScript workspace. Generated CMS projects are disposable outputs that live under
+`generated/` (git-ignored, not workspace members); their Composer dependencies are owned and
+driven inside each project directory (via the `camis` CLI), not through the pnpm workspace.
 
 ```
 camis/
-├── apps/                      # Generated, runnable CMS projects (git-ignored bodies or committed per-config)
+├── generated/                 # Generated, runnable CMS projects (git-ignored, disposable, not workspace members)
 │   ├── <project>-strapi/
 │   ├── <project>-filament/    # PHP app; Composer owned here, wrapped by package.json scripts
 │   └── <project>-express/
+├── apps/                      # Reserved for future management/UI applications (not generated outputs)
 ├── packages/                  # All buildable libraries (the actual product)
 │   ├── ir-schema/             # IR type definitions + JSON Schema + validator
 │   ├── ir-core/               # IR construction, normalization, invariants, capability model
@@ -104,14 +105,14 @@ camis/
 └── tsconfig.base.json
 ```
 
-**Why `packages/` holds the product:** the apps are disposable outputs; the libraries are
+**Why `packages/` holds the product:** the generated projects are disposable outputs; the libraries are
 the thing of value. Each package is independently testable and has one reason to change
 (SoC). The PHP-emitter (`expr-php-emit`) is a *TypeScript* package that emits PHP *source*;
 no PHP runtime is needed to build it, only to test the emitted output.
 
-**The PHP package manager is Composer**, owned inside each generated Filament app. There is
-no real alternative for the Laravel/Filament ecosystem, and Filament/Spatie ship as Composer
-packages.
+**The PHP package manager is Composer**, owned inside each generated Filament project under
+`generated/`. There is no real alternative for the Laravel/Filament ecosystem, and
+Filament/Spatie ship as Composer packages.
 
 ---
 

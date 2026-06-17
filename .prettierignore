@@ -3,6 +3,7 @@ dist
 coverage
 vendor
 apps
+generated
 pnpm-lock.yaml
 *.tsbuildinfo
 

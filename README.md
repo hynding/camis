@@ -27,7 +27,8 @@ primitive.
 ## Layout
 
 - `packages/` — the product: IR, expression engine, permission model, target adapters, AI, CLI.
-- `apps/` — generated, runnable CMS projects (disposable outputs).
+- `generated/` — generated, runnable CMS projects (disposable outputs, git-ignored, not workspace members).
+- `apps/` — reserved for future management/UI applications (not generated outputs).
 - `vendor/` — vendored/patched third-party code.
 - `docs/` — architecture and plan.
 

@@ -42,3 +42,6 @@ dist/
 .DS_Store
 .husky/_/
 
+# Generated CMS project outputs (disposable; see ARCHITECTURE §2)
+generated/
+
