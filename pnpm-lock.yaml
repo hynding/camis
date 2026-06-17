@@ -46,7 +46,17 @@ importers:
         specifier: workspace:*
         version: link:../ir-schema
 
-  packages/adapter-strapi: {}
+  packages/adapter-strapi:
+    dependencies:
+      '@camis/adapter-kernel':
+        specifier: workspace:*
+        version: link:../adapter-kernel
+      '@camis/ir-core':
+        specifier: workspace:*
+        version: link:../ir-core
+      '@camis/ir-schema':
+        specifier: workspace:*
+        version: link:../ir-schema
 
   packages/ai-authoring: {}
 
