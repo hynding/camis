@@ -50,7 +50,7 @@ export default tseslint.config(
         {
           patterns: [
             {
-              group: ["@camis/adapter-*"],
+              group: ["@camis/adapter-*", "!@camis/adapter-kernel"],
               message:
                 "Adapters must not import sibling adapters; lift shared logic into a shared package.",
             },
