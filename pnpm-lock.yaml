@@ -40,7 +40,11 @@ importers:
 
   packages/adapter-filament: {}
 
-  packages/adapter-kernel: {}
+  packages/adapter-kernel:
+    dependencies:
+      '@camis/ir-schema':
+        specifier: workspace:*
+        version: link:../ir-schema
 
   packages/adapter-strapi: {}
 
