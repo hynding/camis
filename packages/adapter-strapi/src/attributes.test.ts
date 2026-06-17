@@ -87,6 +87,14 @@ describe("toAttributes — dynamicZone", () => {
   });
 });
 
+describe("toAttribute — component", () => {
+  it("maps a component field to the shared category uid", () => {
+    expect(
+      toAttribute({ type: "component", name: "seo", component: "SeoMeta", repeatable: false }),
+    ).toEqual({ type: "component", component: "shared.seo-meta", repeatable: false });
+  });
+});
+
 describe("toAttributes", () => {
   it("builds an ordered attributes object keyed by field name", () => {
     const attrs = toAttributes([

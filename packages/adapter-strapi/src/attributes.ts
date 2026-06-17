@@ -34,6 +34,12 @@ export const toAttribute = (field: Field): Attribute => {
     return attr;
   }
 
+  if (field.type === "component") {
+    attr.component = `shared.${kebab(field.component)}`;
+    attr.repeatable = field.repeatable;
+    return attr;
+  }
+
   put(attr, "required", f.required);
   put(attr, "unique", f.unique);
   put(attr, "minLength", f.minLength);
