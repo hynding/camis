@@ -53,3 +53,57 @@ describe("strapiAdapter.generate", () => {
     expect(result.gaps.gaps.some((g) => g.feature === "softDelete")).toBe(true);
   });
 });
+
+describe("strapiAdapter.generate — components + inverses", () => {
+  const doc = {
+    version: 1 as const,
+    contentTypes: [
+      {
+        name: "Article",
+        kind: "collection" as const,
+        fields: [
+          {
+            type: "relation" as const,
+            name: "author",
+            relationKind: "manyToOne" as const,
+            target: "Author",
+            inverse: "articles",
+          },
+          { type: "component" as const, name: "seo", component: "SeoMeta", repeatable: false },
+          { type: "dynamicZone" as const, name: "blocks", components: ["SeoMeta"] },
+        ],
+      },
+      {
+        name: "Author",
+        kind: "collection" as const,
+        fields: [{ type: "string" as const, name: "name" }],
+      },
+    ],
+    components: [{ name: "SeoMeta", fields: [{ type: "string" as const, name: "metaTitle" }] }],
+  };
+
+  it("emits a component json file", () => {
+    const r = strapiAdapter.generate(doc, { projectName: "blog" });
+    expect(r.files.map((f) => f.path)).toContain("src/components/shared/seo-meta.json");
+  });
+
+  it("adds the synthesized inverse attribute to the target type schema", () => {
+    const r = strapiAdapter.generate(doc, { projectName: "blog" });
+    const author = JSON.parse(r.files.find((f) => f.path.endsWith("author/schema.json"))!.content);
+    expect(author.attributes.articles).toEqual({
+      type: "relation",
+      relation: "oneToMany",
+      target: "api::article.article",
+      mappedBy: "author",
+    });
+  });
+
+  it("reports dynamicZone as a capability gap and omits it", () => {
+    const r = strapiAdapter.generate(doc, { projectName: "blog" });
+    expect(r.gaps.gaps.some((g) => g.feature === "dynamicZone")).toBe(true);
+    const article = JSON.parse(
+      r.files.find((f) => f.path.endsWith("article/schema.json"))!.content,
+    );
+    expect(article.attributes.blocks).toBeUndefined();
+  });
+});

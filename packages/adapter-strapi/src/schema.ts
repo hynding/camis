@@ -2,7 +2,10 @@ import type { ContentType } from "@camis/ir-schema";
 import { toAttributes } from "./attributes";
 import { strapiNames } from "./names";
 
-export const contentTypeSchema = (ct: ContentType): Record<string, unknown> => {
+export const contentTypeSchema = (
+  ct: ContentType,
+  extraAttributes: Record<string, unknown> = {},
+): Record<string, unknown> => {
   const names = strapiNames(ct);
   const options: Record<string, unknown> = {};
   if (ct.options?.draftPublish) options.draftAndPublish = true;
@@ -16,6 +19,6 @@ export const contentTypeSchema = (ct: ContentType): Record<string, unknown> => {
     },
     options,
     pluginOptions: {},
-    attributes: toAttributes(ct.fields),
+    attributes: { ...toAttributes(ct.fields), ...extraAttributes },
   };
 };
