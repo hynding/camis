@@ -76,7 +76,11 @@ importers:
 
   packages/expr-php-emit: {}
 
-  packages/expr-ts: {}
+  packages/expr-ts:
+    dependencies:
+      '@camis/expr':
+        specifier: workspace:*
+        version: link:../expr
 
   packages/ir-core:
     dependencies:
