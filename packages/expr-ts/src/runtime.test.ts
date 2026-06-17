@@ -90,6 +90,11 @@ describe("runtime boolean + functions", () => {
     expect(r.and(T, boom)).toEqual({ ok: false, error: "UNKNOWN_VAR" }));
   it("or short-circuits on true", () => expect(r.or(T, boom)).toEqual({ ok: true, value: true }));
   it("or all false", () => expect(r.or(F, F)).toEqual({ ok: true, value: false }));
+  it("or non-boolean operand → TYPE_MISMATCH", () =>
+    expect(r.or(F, () => ({ ok: true, value: 1 }))).toEqual({
+      ok: false,
+      error: "TYPE_MISMATCH",
+    }));
   it("not", () => expect(r.not(T)).toEqual({ ok: true, value: false }));
   it("not non-boolean → TYPE_MISMATCH", () =>
     expect(r.not(() => ({ ok: true, value: 1 }))).toEqual({ ok: false, error: "TYPE_MISMATCH" }));
@@ -106,4 +111,12 @@ describe("runtime boolean + functions", () => {
     ).toEqual({ ok: true, value: 5 }));
   it("coalesce all null → null", () =>
     expect(r.coalesce(() => ({ ok: true, value: null }))).toEqual({ ok: true, value: null }));
+  it("coalesce propagates error reached before a non-null", () =>
+    expect(
+      r.coalesce(
+        () => ({ ok: true, value: null }),
+        boom,
+        () => ({ ok: true, value: 5 }),
+      ),
+    ).toEqual({ ok: false, error: "UNKNOWN_VAR" }));
 });
