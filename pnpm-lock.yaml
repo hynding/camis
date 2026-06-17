@@ -98,6 +98,9 @@ importers:
 
   packages/ir-schema:
     dependencies:
+      '@camis/expr':
+        specifier: workspace:*
+        version: link:../expr
       zod:
         specifier: ^3.25.76
         version: 3.25.76

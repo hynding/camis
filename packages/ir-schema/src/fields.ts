@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { expression } from "@camis/expr";
 import { fieldName, typeName } from "./identifiers";
 
 export const FIELD_TYPES = [
@@ -28,7 +29,13 @@ export type FieldType = (typeof FIELD_TYPES)[number];
 export const RELATION_KINDS = ["oneToOne", "oneToMany", "manyToOne", "manyToMany"] as const;
 export type RelationKind = (typeof RELATION_KINDS)[number];
 
-const common = { name: fieldName, required: z.boolean().optional() };
+const common = {
+  name: fieldName,
+  required: z.boolean().optional(),
+  validate: expression.optional(),
+  visibleWhen: expression.optional(),
+  computed: expression.optional(),
+};
 const len = {
   minLength: z.number().int().nonnegative().optional(),
   maxLength: z.number().int().nonnegative().optional(),

@@ -32,8 +32,9 @@ export default tseslint.config(
         {
           patterns: [
             {
-              group: ["@camis/*"],
-              message: "ir-schema is a leaf package; it must not import other @camis packages.",
+              group: ["@camis/*", "!@camis/expr"],
+              message:
+                "ir-schema may only import @camis/expr; it must not import other @camis packages.",
             },
           ],
         },
