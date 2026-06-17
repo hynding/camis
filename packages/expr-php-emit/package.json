@@ -9,9 +9,13 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "conformance": "tsx scripts/php-conformance.mjs"
   },
   "dependencies": {
     "@camis/expr": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.22.4"
   }
 }
