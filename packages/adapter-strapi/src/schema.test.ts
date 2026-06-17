@@ -26,4 +26,9 @@ describe("contentTypeSchema", () => {
     const s = contentTypeSchema({ ...article, options: {} });
     expect(s.options).toEqual({});
   });
+
+  it("maps a single kind to singleType", () => {
+    const s = contentTypeSchema({ ...article, kind: "single" });
+    expect(s.kind).toBe("singleType");
+  });
 });
