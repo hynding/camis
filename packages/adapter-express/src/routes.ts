@@ -3,12 +3,14 @@ import type { ContentType } from "@camis/ir-schema";
 import { isSupportedField } from "./fields";
 import { expressNames, snakeColumn } from "./names";
 
-export const emitRoutes = (ct: ContentType): string => {
+export const emitRoutes = (ct: ContentType, fkColumns: string[] = []): string => {
   const n = expressNames(ct);
   const t = n.table;
-  const cols = ct.fields
-    .filter((f) => isSupportedField(f.type))
-    .map((f) => `"${snakeColumn(f.name)}"`)
+  const cols = [
+    ...ct.fields.filter((f) => isSupportedField(f.type)).map((f) => snakeColumn(f.name)),
+    ...fkColumns,
+  ]
+    .map((c) => `"${c}"`)
     .join(", ");
   return withMarker(`import { Router } from "express";
 import { eq } from "drizzle-orm";
