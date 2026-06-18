@@ -10,6 +10,21 @@ import { blog } from "../src/__fixtures__/blog";
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
+// Poll the API until it responds (or time out), rather than a fixed sleep — more robust under CI load.
+const waitForServer = async (url: string, timeoutMs: number): Promise<boolean> => {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const res = await fetch(url);
+      if (res.status < 500) return true; // server is up and routing
+    } catch {
+      /* connection refused — not ready yet */
+    }
+    await sleep(500);
+  }
+  return false;
+};
+
 const dir = await mkdtemp(join(tmpdir(), "camis-express-"));
 let proc: ChildProcess | undefined;
 try {
@@ -29,8 +44,11 @@ try {
     stdio: "inherit",
     env: { ...process.env, PORT: "3210" },
   });
-  await sleep(5000);
   const base = "http://127.0.0.1:3210/api/articles";
+  if (!(await waitForServer(base, 30_000))) {
+    console.error("server did not start within 30s");
+    process.exit(1);
+  }
   const created = await fetch(base, {
     method: "POST",
     headers: { "content-type": "application/json" },
