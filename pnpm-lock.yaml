@@ -105,7 +105,17 @@ importers:
         specifier: ^3.25.76
         version: 3.25.76
 
-  packages/permissions: {}
+  packages/permissions:
+    dependencies:
+      '@camis/expr':
+        specifier: workspace:*
+        version: link:../expr
+      '@camis/ir-schema':
+        specifier: workspace:*
+        version: link:../ir-schema
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
 
 packages:
 

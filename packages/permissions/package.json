@@ -10,5 +10,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "lint": "eslint ."
+  },
+  "dependencies": {
+    "@camis/expr": "workspace:*",
+    "@camis/ir-schema": "workspace:*",
+    "zod": "^3.25.76"
   }
 }
