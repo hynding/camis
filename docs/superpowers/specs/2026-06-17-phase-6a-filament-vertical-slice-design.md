@@ -27,7 +27,7 @@ yet) — 6A is pure content → Laravel/Filament emission.
 | # | Decision | Rationale |
 |---|----------|-----------|
 | D1 | **Target Filament v5** (`^5.0`) on Laravel 12. Resources follow v5's layout: `app/Filament/Resources/<Plural>/{<Singular>Resource.php, Schemas/<Singular>Form.php, Schemas/<Plural>Table.php, Pages/*.php}`. | Current stable (v5.1.1), Laravel 12-native; matches the project's "target the current stable" ethos. |
-| D2 | **Overlay, not standalone.** `generate()` emits ONLY IR-derived files (model, migration, Resource). The base app (framework + `AdminPanelProvider` that auto-discovers `app/Filament/Resources`) is scaffolded by the official `laravel new` + `filament:install --panels` in the gated job. | "Generated = IR-derived, owned & overwritten." We do not own/version-track Laravel's ~40 framework files; Filament auto-discovers our Resources. |
+| D2 | **Overlay, not standalone.** `generate()` emits ONLY IR-derived files (model, migration, Resource). The base app (framework + `AdminPanelProvider` that auto-discovers `app/Filament/Resources`) is scaffolded by the official `laravel new` + `filament:install --panels` in the gated job. **`materialize` is already overlay-safe** — on a scaffold with no prior `.camis/manifest.json` it prunes nothing and only writes our files (verified: `materialize.ts` only removes *previously-camis-generated* `overwrite` files that disappear between runs, never files it did not author). | "Generated = IR-derived, owned & overwritten." We do not own/version-track Laravel's ~40 framework files; Filament auto-discovers our Resources. |
 | D3 | **Deterministic ordinal migration filenames**, never timestamps: `0000_00_00_000001_create_<table>_table.php`, incrementing in sorted content-type order. | CLAUDE.md determinism — golden files and idempotent regen require no timestamps; Laravel orders migrations lexically by filename, so ordinals preserve order. |
 | D4 | **Multi-DB is env-driven and (almost) free.** camis emits NO database config code; Laravel's stock `config/database.php` selects the driver by `DB_CONNECTION`. Our only obligation: **portable migrations** (schema-builder types valid on sqlite/mysql/pgsql). | "No code change between environments" is Laravel's default; the gated job's matrix sets env per DB. |
 | D5 | **Verification = golden + structural per commit; boot is a gated CI job.** No PHP execution in the per-commit loop. The gated `adapter-filament-boot` job is the integration truth oracle for the v5 file layout. | Matches the chosen verification depth and the Phase 2 gated-smoke precedent; `composer install` needs network/DB. |
@@ -51,9 +51,11 @@ yet) — 6A is pure content → Laravel/Filament emission.
 `generate(ir, { projectName })` → `GenerationResult` whose `files` are the overlay (only when the
 document has content types). For `Article`:
 
-1. **`app/Models/Article.php`** — `final class Article extends Model`; `protected $table = 'articles';`
-   `protected $fillable = [...]` (IR field names, in IR order); `protected $casts = [...]` for
-   typed fields (`boolean`, `datetime`/`immutable_datetime`, `array`/`json`). PSR-12.
+1. **`app/Models/Article.php`** — `class Article extends Model` (**not `final`** — Eloquent/Filament
+   rely on extension/late-static-binding); `protected $table = 'articles';`; `protected $fillable = [...]`
+   (IR field names, in IR order); a **Laravel 12 `protected function casts(): array`** returning the
+   typed casts (`boolean`, `datetime`, `array`) for typed fields. All emitted PHP files open with
+   `<?php` + `declare(strict_types=1);`. PSR-12.
 2. **`database/migrations/0000_00_00_000001_create_articles_table.php`** — `return new class extends Migration { public function up(): void { Schema::create('articles', function (Blueprint $table) { $table->id(); … $table->timestamps(); }); } public function down(): void { Schema::dropIfExists('articles'); } };`
    Columns mapped from IR fields; `->nullable()` when `required` is not true; column order = IR order.
 3. **`app/Filament/Resources/Articles/ArticleResource.php`** — `protected static ?string $model = Article::class;` navigation icon/label; `form(Schema $schema)` → `ArticleForm::configure($schema)`;
@@ -95,13 +97,14 @@ emitter would record a capability-gap rather than emit — but the 6A fixture us
 Triggers: `workflow_dispatch` + `pull_request` + nightly `schedule`. Matrix:
 `db: [sqlite, mysql, pgsql]` with mysql/pgsql as service containers. Steps: checkout → setup-php
 8.3 → setup-node/pnpm → `laravel new app` (Laravel 12) → `composer require filament/filament:"^5.0"`
-→ `php artisan filament:install --panels --no-interaction` → run the camis generator to overlay our
-files into `app/` → `composer install` → set `DB_CONNECTION` for the matrix entry →
-`php artisan migrate --force` → boot check (`php artisan about` and `php artisan filament:check`
-or equivalent). Green = the overlay integrates and the app boots/migrates on that DB.
-
-(How the generator is invoked in CI — a small `camis generate` entrypoint or a script calling
-`filamentAdapter` + `materialize` into the scaffolded dir — is pinned in the plan.)
+→ `php artisan filament:install --panels --no-interaction` → **overlay our files** via
+`packages/adapter-filament/scripts/overlay.ts` (a tsx script mirroring
+`adapter-strapi/scripts/boot-smoke.ts`: it imports the `Article` fixture + `filamentAdapter` +
+`materialize` and materializes the overlay into the scaffolded app dir passed as argv) →
+`composer install` → set `DB_CONNECTION` for the matrix entry → `php artisan migrate --force` →
+**artisan-level boot check** (`php artisan about` + `php artisan filament:check` or equivalent — not
+an HTTP/login smoke; a rendered-request smoke is deferred to 6C where permission enforcement needs a
+real request). Green = the overlay integrates and the app boots/migrates on that DB.
 
 ## 8. Testing (per-commit)
 
