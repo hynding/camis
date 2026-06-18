@@ -66,4 +66,27 @@ describe("projectFilamentPermissions", () => {
       projectFilamentPermissions(doc, roles).gaps.some((g) => g.feature === "conditionContext"),
     ).toBe(true);
   });
+  it("gaps a divergent multi-role condition on the same action (first wins)", () => {
+    const condA = {
+      kind: "eq",
+      left: { kind: "var", name: "user.role" },
+      right: { kind: "lit", value: "a" },
+    } as const;
+    const condB = {
+      kind: "eq",
+      left: { kind: "var", name: "user.role" },
+      right: { kind: "lit", value: "b" },
+    } as const;
+    const roles: Role[] = [
+      { name: "RoleA", grants: [{ contentType: "Article", actions: ["read"], condition: condA }] },
+      { name: "RoleB", grants: [{ contentType: "Article", actions: ["read"], condition: condB }] },
+    ];
+    const out = projectFilamentPermissions(doc, roles);
+    expect(out.gaps.some((g) => g.feature === "conditionConflict")).toBe(true);
+    // first-wins: the read-action methods carry RoleA's condition (condA), not condB.
+    const view = out.policies
+      .find((p) => p.contentType === "Article")!
+      .methods.find((m) => m.method === "view")!;
+    expect(view.condition).toEqual(condA);
+  });
 });
