@@ -1,0 +1,12 @@
+overwrite camis.schema.json
+overwrite drizzle.config.ts
+overwrite package.json
+overwrite src/db/client.ts
+overwrite src/db/schema.ts
+overwrite src/index.ts
+overwrite src/routes/articles.ts
+overwrite src/routes/authors.ts
+overwrite src/routes/tags.ts
+overwrite src/server.ts
+overwrite tsconfig.json
+seed .env
