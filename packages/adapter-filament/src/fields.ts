@@ -35,6 +35,8 @@ const SUPPORTED = new Set<string>([
 ]);
 export const isSupportedField = (t: string): boolean => SUPPORTED.has(t);
 
+// Emit a string default as a single-quoted PHP literal, escaping backslashes and single quotes
+// so an author-controlled default cannot break out of (or inject code into) the generated PHP.
 const phpDefault = (v: unknown): string =>
   typeof v === "boolean"
     ? v
@@ -42,7 +44,7 @@ const phpDefault = (v: unknown): string =>
       : "false"
     : typeof v === "number"
       ? JSON.stringify(v)
-      : `'${String(v)}'`;
+      : `'${String(v).replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
 
 interface Base {
   migration: string;
