@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { IrBundle } from "@camis/permissions";
 import { filamentAdapter } from "./generate";
+import { permissionsBundle } from "./__fixtures__/permissions";
 
 const bundle: IrBundle = {
   document: {
@@ -97,5 +98,18 @@ describe("filamentAdapter relations + gaps", () => {
     expect(
       result.gaps.gaps.some((g) => g.feature === "component" && g.location.field === "seo"),
     ).toBe(true);
+  });
+});
+
+describe("filamentAdapter permissions", () => {
+  const result = filamentAdapter.generate(permissionsBundle, { projectName: "blog" });
+  const paths = result.files.map((f) => f.path);
+  it("emits the seeder, policy, and Ring1 support file", () => {
+    expect(paths).toContain("database/seeders/RolePermissionSeeder.php");
+    expect(paths).toContain("app/Policies/ArticlePolicy.php");
+    expect(paths).toContain("app/Support/Ring1.php");
+  });
+  it("has no gaps for the user.*/record.* fixture", () => {
+    expect(result.gaps.gaps).toEqual([]);
   });
 });
