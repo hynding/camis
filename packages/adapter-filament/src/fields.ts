@@ -35,8 +35,10 @@ const SUPPORTED = new Set<string>([
 ]);
 export const isSupportedField = (t: string): boolean => SUPPORTED.has(t);
 
-// Emit a string default as a single-quoted PHP literal, escaping backslashes and single quotes
-// so an author-controlled default cannot break out of (or inject code into) the generated PHP.
+// Wrap an author-controlled string as a single-quoted PHP literal, escaping backslashes and single
+// quotes so it cannot break out of (or inject code into) the generated PHP.
+const phpSingleQuoted = (s: string): string => `'${s.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
+
 const phpDefault = (v: unknown): string =>
   typeof v === "boolean"
     ? v
@@ -44,7 +46,7 @@ const phpDefault = (v: unknown): string =>
       : "false"
     : typeof v === "number"
       ? JSON.stringify(v)
-      : `'${String(v).replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
+      : phpSingleQuoted(String(v));
 
 interface Base {
   migration: string;
@@ -115,7 +117,7 @@ const base = (field: Field, c: string): Base => {
       };
     case "enumeration": {
       const values = (f.values as string[] | undefined) ?? [];
-      const opts = values.map((v) => `'${v}' => '${v}'`).join(", ");
+      const opts = values.map((v) => `${phpSingleQuoted(v)} => ${phpSingleQuoted(v)}`).join(", ");
       return {
         migration: `$table->string('${c}')`,
         formComponent: `Select::make('${c}')->options([${opts}])`,
