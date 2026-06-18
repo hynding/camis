@@ -64,7 +64,7 @@ export const resolveRelations = (doc: IrDocument): ResolvedRelations => {
         push(
           out.fkColumns,
           owner,
-          `$table->foreignId('${fk}')${unique}->constrained('${targetN.table}')${required ? "" : "->nullable()"}`,
+          `$table->foreignId('${fk}')${required ? "" : "->nullable()"}${unique}->constrained('${targetN.table}')`,
         );
         push(
           out.formFields,

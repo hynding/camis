@@ -42,7 +42,7 @@ describe("resolveRelations", () => {
     expect(
       r.fkColumns
         .get("Article")!
-        .some((c) => c.includes("foreignId('author_id')->constrained('authors')")),
+        .some((c) => c === "$table->foreignId('author_id')->nullable()->constrained('authors')"),
     ).toBe(true);
     expect(
       r.formFields
