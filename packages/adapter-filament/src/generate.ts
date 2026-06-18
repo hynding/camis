@@ -7,6 +7,7 @@ import {
 import { normalize } from "@camis/ir-core";
 import type { CapabilityGap } from "@camis/ir-schema";
 import { isSupportedField } from "./fields";
+import { emitPermissions } from "./permissions/emit";
 import {
   emitMigration,
   emitPivotMigration,
@@ -59,6 +60,12 @@ export const filamentAdapter: GenerateAdapter = {
         });
       });
 
-    return { files, manifest: buildManifest(files), gaps: { target: "filament", gaps } };
+    const perm = emitPermissions(doc, ir.roles);
+    const allFiles = [...files, ...perm.files];
+    return {
+      files: allFiles,
+      manifest: buildManifest(allFiles),
+      gaps: { target: "filament", gaps: [...gaps, ...perm.gaps] },
+    };
   },
 };

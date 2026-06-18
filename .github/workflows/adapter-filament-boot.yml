@@ -45,6 +45,12 @@ jobs:
           cd app
           composer require filament/filament:"^5.0" --no-interaction
           php artisan filament:install --panels --no-interaction
+      - name: Install Spatie + HasRoles
+        run: |
+          cd app
+          composer require spatie/laravel-permission --no-interaction
+          php artisan vendor:publish --provider="Spatie\Permission\PermissionServiceProvider" --no-interaction
+          php -r '$f="app/Models/User.php";$c=file_get_contents($f);$c=str_replace("use HasFactory, Notifiable;","use HasFactory, Notifiable, \\Spatie\\Permission\\Traits\\HasRoles;",$c);file_put_contents($f,$c);'
       - name: Overlay camis-generated files
         run: pnpm --filter @camis/adapter-filament overlay "$GITHUB_WORKSPACE/app"
       - name: Configure DB env (${{ matrix.db }})
@@ -55,9 +61,19 @@ jobs:
             mysql)  printf 'DB_CONNECTION=mysql\nDB_HOST=127.0.0.1\nDB_PORT=3306\nDB_DATABASE=camis\nDB_USERNAME=root\nDB_PASSWORD=camis\n' >> .env ;;
             pgsql)  printf 'DB_CONNECTION=pgsql\nDB_HOST=127.0.0.1\nDB_PORT=5432\nDB_DATABASE=camis\nDB_USERNAME=postgres\nDB_PASSWORD=camis\n' >> .env ;;
           esac
-      - name: Migrate + boot check
+      - name: Migrate + seed + enforce
         run: |
           cd app
           php artisan migrate --force
+          php artisan db:seed --class="Database\\Seeders\\RolePermissionSeeder" --force
           php artisan about
-          php artisan filament:check || true
+          php artisan tinker --execute='
+            $u = \App\Models\User::factory()->create();
+            $u->assignRole("Editor");
+            $published = new \App\Models\Article(["status" => "published"]);
+            $draft = new \App\Models\Article(["status" => "draft"]);
+            $allow = \Illuminate\Support\Facades\Gate::forUser($u)->allows("view", $published);
+            $deny = \Illuminate\Support\Facades\Gate::forUser($u)->allows("view", $draft);
+            if ($allow !== true || $deny !== false) { fwrite(STDERR, "ENFORCEMENT MISMATCH allow=".var_export($allow,true)." deny=".var_export($deny,true)."\n"); exit(1); }
+            echo "ENFORCEMENT OK\n";
+          '

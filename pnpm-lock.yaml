@@ -43,6 +43,15 @@ importers:
       '@camis/adapter-kernel':
         specifier: workspace:*
         version: link:../adapter-kernel
+      '@camis/expr':
+        specifier: workspace:*
+        version: link:../expr
+      '@camis/expr-php-emit':
+        specifier: workspace:*
+        version: link:../expr-php-emit
+      '@camis/expr-ts':
+        specifier: workspace:*
+        version: link:../expr-ts
       '@camis/ir-core':
         specifier: workspace:*
         version: link:../ir-core
