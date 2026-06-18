@@ -17,7 +17,7 @@ export const expressAdapter: GenerateAdapter = {
   generate: (ir, options): GenerationResult => {
     const doc = normalize(ir.document);
     const gaps: CapabilityGap[] = [];
-    const files: GeneratedFile[] = [...skeletonFiles(doc, options.projectName)];
+    const files: GeneratedFile[] = [...skeletonFiles(doc, options.projectName, "sqlite")];
 
     const schemas = doc.contentTypes
       .map((ct) => emitSchema(ct, "sqlite", { fkColumns: [] }))

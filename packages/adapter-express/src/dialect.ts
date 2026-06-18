@@ -8,6 +8,7 @@ export interface DialectSpec {
   idColumn: string; // the id primary-key column expression
   idImports: string[]; // imports the id column needs from `core`
   driverDep: Record<string, string>; // runtime driver dependency
+  devDriverDep: Record<string, string>; // dev-only driver typings
   clientImports: string; // import lines for src/db/client.ts
   clientDb: string; // the `drizzle(...)` expression body
   configCredentials: string; // dbCredentials block for drizzle.config.ts
@@ -23,6 +24,7 @@ export const DIALECTS: Record<Dialect, DialectSpec> = {
     idColumn: `id: integer("id").primaryKey({ autoIncrement: true })`,
     idImports: ["integer"],
     driverDep: { "better-sqlite3": "^11.8.0" },
+    devDriverDep: { "@types/better-sqlite3": "^7.6.0" },
     clientImports: `import Database from "better-sqlite3";\nimport { drizzle } from "drizzle-orm/better-sqlite3";`,
     clientDb: `drizzle(new Database(process.env.DB_FILE_NAME ?? "./data.db"), { schema })`,
     configCredentials: `dbCredentials: { url: process.env.DB_FILE_NAME ?? "./data.db" }`,
@@ -36,6 +38,7 @@ export const DIALECTS: Record<Dialect, DialectSpec> = {
     idColumn: `id: serial("id").primaryKey()`,
     idImports: ["serial"],
     driverDep: { postgres: "^3.4.0" },
+    devDriverDep: {},
     clientImports: `import postgres from "postgres";\nimport { drizzle } from "drizzle-orm/postgres-js";`,
     clientDb: `drizzle(postgres(process.env.DATABASE_URL ?? ""), { schema })`,
     configCredentials: `dbCredentials: { url: process.env.DATABASE_URL ?? "" }`,
@@ -49,6 +52,7 @@ export const DIALECTS: Record<Dialect, DialectSpec> = {
     idColumn: `id: int("id").primaryKey().autoincrement()`,
     idImports: ["int"],
     driverDep: { mysql2: "^3.11.0" },
+    devDriverDep: {},
     clientImports: `import mysql from "mysql2/promise";\nimport { drizzle } from "drizzle-orm/mysql2";`,
     clientDb: `drizzle(mysql.createPool(process.env.DATABASE_URL ?? ""), { schema, mode: "default" })`,
     configCredentials: `dbCredentials: { url: process.env.DATABASE_URL ?? "" }`,

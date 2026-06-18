@@ -11,7 +11,7 @@ const doc: IrDocument = {
 };
 
 describe("skeletonFiles", () => {
-  const files = skeletonFiles(doc, "blog");
+  const files = skeletonFiles(doc, "blog", "sqlite");
   const c = (p: string) => files.find((f) => f.path === p)!.content;
   it("emits package.json with deps + scripts", () => {
     const pkg = JSON.parse(c("package.json"));
@@ -26,5 +26,12 @@ describe("skeletonFiles", () => {
     expect(c("src/index.ts")).toContain("app.listen(");
     const env = files.find((f) => f.path === ".env")!;
     expect(env.mode).toBe("seed");
+  });
+  it("pg skeleton uses postgres driver + dialect", () => {
+    const files = skeletonFiles(doc, "blog", "pgsql");
+    const c = (p: string) => files.find((f) => f.path === p)!.content;
+    expect(JSON.parse(c("package.json")).dependencies["postgres"]).toBeDefined();
+    expect(c("src/db/client.ts")).toContain("drizzle-orm/postgres-js");
+    expect(c("drizzle.config.ts")).toContain('dialect: "postgresql"');
   });
 });
