@@ -19,6 +19,8 @@ export interface ColumnEmit {
   import: "text" | "integer" | "real";
 }
 
+// Emit a string default as a single-quoted TS literal, escaping backslashes and quotes so an
+// author-controlled default cannot break out of (or inject code into) the generated schema.
 const tsLiteral = (v: unknown): string =>
   typeof v === "boolean"
     ? v
@@ -26,7 +28,7 @@ const tsLiteral = (v: unknown): string =>
       : "false"
     : typeof v === "number"
       ? String(v)
-      : `'${String(v)}'`;
+      : `'${String(v).replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
 
 export const emitColumn = (field: Field): ColumnEmit => {
   const f = field as Field & Record<string, unknown>;

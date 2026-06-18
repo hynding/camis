@@ -21,4 +21,8 @@ describe("emitColumn", () => {
     expect(isSupported8A("string")).toBe(true);
     expect(isSupported8A("relation")).toBe(false);
   });
+  it("escapes quotes and backslashes in a string default (no codegen injection)", () => {
+    const c = emitColumn({ type: "string", name: "tag", default: "a'b\\c" } as Field);
+    expect(c.drizzle).toBe("text('tag').default('a\\'b\\\\c')");
+  });
 });
