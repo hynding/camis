@@ -49,6 +49,14 @@ describe("emitField", () => {
     expect(f.migration).toBe("$table->string('slug')->unique()->default('x')");
     expect(f.formComponent).toBe("TextInput::make('slug')->required()->unique()");
   });
+  it("escapes quotes and backslashes in a string default (no codegen injection)", () => {
+    const f = emitField({ type: "string", name: "tag", default: "a'b\\c" } as Field);
+    expect(f.migration).toBe("$table->string('tag')->nullable()->default('a\\'b\\\\c')");
+  });
+  it("escapes enum values in Select options (no codegen injection)", () => {
+    const f = emitField({ type: "enumeration", name: "kind", values: ["o'k"] } as Field);
+    expect(f.formComponent).toBe("Select::make('kind')->options(['o\\'k' => 'o\\'k'])");
+  });
   it("maps json/media/richText/decimal", () => {
     expect(emitField({ type: "json", name: "meta" } as Field).cast).toBe("'array'");
     expect(emitField({ type: "media", name: "cover", multiple: true } as Field).migration).toBe(
