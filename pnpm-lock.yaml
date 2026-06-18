@@ -50,6 +50,10 @@ importers:
       '@camis/permissions':
         specifier: workspace:*
         version: link:../permissions
+    devDependencies:
+      tsx:
+        specifier: ^4.22.4
+        version: 4.22.4
 
   packages/adapter-filament:
     dependencies:
