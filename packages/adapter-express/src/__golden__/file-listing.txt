@@ -1,3 +1,4 @@
+overwrite camis.schema.json
 overwrite drizzle.config.ts
 overwrite package.json
 overwrite src/db/client.ts
