@@ -28,7 +28,10 @@ afterEach(async () => {
 
 describe("readStrapiProject", () => {
   it("reads a materialized project's declarative schemas into IR", async () => {
-    await materialize(strapiAdapter.generate(blog, { projectName: "blog" }), dir);
+    await materialize(
+      strapiAdapter.generate({ document: blog, roles: [] }, { projectName: "blog" }),
+      dir,
+    );
     const { document } = await readStrapiProject(dir);
     expect(document.ok).toBe(true);
     if (!document.ok) return;

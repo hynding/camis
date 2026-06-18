@@ -27,7 +27,7 @@ const doc: IrDocument = {
 
 describe("strapiAdapter.generate", () => {
   it("emits a schema.json + api files for every content type, plus the skeleton", () => {
-    const result = strapiAdapter.generate(doc, { projectName: "blog" });
+    const result = strapiAdapter.generate({ document: doc, roles: [] }, { projectName: "blog" });
     const paths = result.files.map((f) => f.path);
     expect(paths).toContain("src/api/article/content-types/article/schema.json");
     expect(paths).toContain("src/api/author/content-types/author/schema.json");
@@ -36,7 +36,7 @@ describe("strapiAdapter.generate", () => {
   });
 
   it("derives names even if the input is not pre-normalized (generate normalizes)", () => {
-    const result = strapiAdapter.generate(doc, { projectName: "blog" });
+    const result = strapiAdapter.generate({ document: doc, roles: [] }, { projectName: "blog" });
     const schemaFile = result.files.find((f) => f.path.endsWith("article/schema.json"))!;
     expect(JSON.parse(schemaFile.content).info.pluralName).toBe("articles");
   });
@@ -49,7 +49,10 @@ describe("strapiAdapter.generate", () => {
         doc.contentTypes[1]!,
       ],
     };
-    const result = strapiAdapter.generate(withSoftDelete, { projectName: "blog" });
+    const result = strapiAdapter.generate(
+      { document: withSoftDelete, roles: [] },
+      { projectName: "blog" },
+    );
     expect(result.gaps.gaps.some((g) => g.feature === "softDelete")).toBe(true);
   });
 });
@@ -83,12 +86,12 @@ describe("strapiAdapter.generate — components + inverses", () => {
   };
 
   it("emits a component json file", () => {
-    const r = strapiAdapter.generate(doc, { projectName: "blog" });
+    const r = strapiAdapter.generate({ document: doc, roles: [] }, { projectName: "blog" });
     expect(r.files.map((f) => f.path)).toContain("src/components/shared/seo-meta.json");
   });
 
   it("adds the synthesized inverse attribute to the target type schema", () => {
-    const r = strapiAdapter.generate(doc, { projectName: "blog" });
+    const r = strapiAdapter.generate({ document: doc, roles: [] }, { projectName: "blog" });
     const author = JSON.parse(r.files.find((f) => f.path.endsWith("author/schema.json"))!.content);
     expect(author.attributes.articles).toEqual({
       type: "relation",
@@ -99,7 +102,7 @@ describe("strapiAdapter.generate — components + inverses", () => {
   });
 
   it("reports dynamicZone as a capability gap and omits it", () => {
-    const r = strapiAdapter.generate(doc, { projectName: "blog" });
+    const r = strapiAdapter.generate({ document: doc, roles: [] }, { projectName: "blog" });
     expect(r.gaps.gaps.some((g) => g.feature === "dynamicZone")).toBe(true);
     const article = JSON.parse(
       r.files.find((f) => f.path.endsWith("article/schema.json"))!.content,

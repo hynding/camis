@@ -27,7 +27,10 @@ const pollUntilRegistered = async (url: string, timeoutMs: number): Promise<bool
 
 const dir = await mkdtemp(join(tmpdir(), "camis-boot-"));
 try {
-  await materialize(strapiAdapter.generate(blog, { projectName: "blog" }), dir);
+  await materialize(
+    strapiAdapter.generate({ document: blog, roles: [] }, { projectName: "blog" }),
+    dir,
+  );
   const install = spawnSync("npm", ["install", "--no-audit", "--no-fund"], {
     cwd: dir,
     stdio: "inherit",

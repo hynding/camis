@@ -147,3 +147,21 @@ ADMIN_JWT_SECRET=camisDevAdminJwtSecret
 TRANSFER_TOKEN_SALT=camisDevTransferTokenSalt
 JWT_SECRET=camisDevJwtSecret
 `;
+
+export const PERMISSIONS_INDEX_TS = `import { conditions } from "./permissions/conditions";
+import roles from "./permissions/roles.json";
+
+export default {
+  async register() {},
+  async bootstrap({ strapi }: { strapi: any }) {
+    await strapi.admin.services.permission.conditionProvider.registerMany(conditions);
+    for (const role of roles) {
+      const existing = await strapi.query("admin::role").findOne({ where: { name: role.name } });
+      const record = existing ?? (await strapi.query("admin::role").create({ data: { name: role.name, description: role.description } }));
+      for (const p of role.permissions) {
+        await strapi.query("admin::permission").create({ data: { ...p, role: record.id } });
+      }
+    }
+  },
+};
+`;

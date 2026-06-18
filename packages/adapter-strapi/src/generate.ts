@@ -10,6 +10,7 @@ import type { CapabilityGap, Component, ContentType, IrDocument } from "@camis/i
 import { apiFactoryFiles } from "./api-files";
 import { componentSchema } from "./component-schema";
 import { kebab, strapiNames } from "./names";
+import { emitPermissions } from "./permissions/emit";
 import { contentTypeSchema } from "./schema";
 import { synthesizedInverses } from "./relations";
 import { skeletonFiles } from "./skeleton";
@@ -58,18 +59,27 @@ const dynamicZoneGaps = (doc: IrDocument): CapabilityGap[] =>
 
 export const strapiAdapter: GenerateAdapter = {
   target: "strapi",
-  generate: (input: IrDocument, options): GenerationResult => {
-    const doc = normalize(input);
+  generate: (ir, options): GenerationResult => {
+    const doc = normalize(ir.document);
     const inverses = synthesizedInverses(doc);
     const files: GeneratedFile[] = [
       ...skeletonFiles(options.projectName),
       ...doc.contentTypes.flatMap((ct) => typeFiles(ct, inverses.get(ct.name) ?? {})),
       ...doc.components.map(componentFile),
     ];
+    const perm = emitPermissions(doc, ir.roles);
+    const withPerm =
+      perm.indexContent === undefined
+        ? files
+        : files.map((f) => (f.path === "src/index.ts" ? { ...f, content: perm.indexContent! } : f));
+    const allFiles = [...withPerm, ...perm.files];
     return {
-      files,
-      manifest: buildManifest(files),
-      gaps: { target: "strapi", gaps: [...softDeleteGaps(doc), ...dynamicZoneGaps(doc)] },
+      files: allFiles,
+      manifest: buildManifest(allFiles),
+      gaps: {
+        target: "strapi",
+        gaps: [...softDeleteGaps(doc), ...dynamicZoneGaps(doc), ...perm.gaps],
+      },
     };
   },
 };

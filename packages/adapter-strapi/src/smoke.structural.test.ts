@@ -17,7 +17,10 @@ afterEach(async () => {
 
 describe("structural smoke", () => {
   it("materializes a well-formed project tree", async () => {
-    await materialize(strapiAdapter.generate(blog, { projectName: "blog" }), dir);
+    await materialize(
+      strapiAdapter.generate({ document: blog, roles: [] }, { projectName: "blog" }),
+      dir,
+    );
     expect(existsSync(join(dir, "package.json"))).toBe(true);
     const schema = JSON.parse(
       await readFile(join(dir, "src/api/article/content-types/article/schema.json"), "utf8"),
@@ -28,7 +31,7 @@ describe("structural smoke", () => {
   });
 
   it("materialize is idempotent on disk (second run leaves files unchanged)", async () => {
-    const result = strapiAdapter.generate(blog, { projectName: "blog" });
+    const result = strapiAdapter.generate({ document: blog, roles: [] }, { projectName: "blog" });
     await materialize(result, dir);
     const before = await readFile(
       join(dir, "src/api/article/content-types/article/schema.json"),

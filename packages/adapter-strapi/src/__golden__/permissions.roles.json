@@ -1,0 +1,41 @@
+[
+  {
+    "name": "Editor",
+    "description": "Edits articles",
+    "permissions": [
+      {
+        "action": "plugin::content-manager.explorer.publish",
+        "subject": "api::article.article",
+        "conditions": [
+          "camis-cond-fa37f9b7"
+        ]
+      },
+      {
+        "action": "plugin::content-manager.explorer.read",
+        "subject": "api::article.article",
+        "conditions": [
+          "camis-cond-fa37f9b7"
+        ]
+      },
+      {
+        "action": "plugin::content-manager.explorer.read",
+        "subject": "api::article.article",
+        "properties": {
+          "fields": [
+            "secret"
+          ]
+        },
+        "conditions": [
+          "camis-cond-fa37f9b7"
+        ]
+      },
+      {
+        "action": "plugin::content-manager.explorer.update",
+        "subject": "api::article.article",
+        "conditions": [
+          "camis-cond-fa37f9b7"
+        ]
+      }
+    ]
+  }
+]

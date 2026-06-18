@@ -45,18 +45,30 @@ importers:
       '@camis/ir-schema':
         specifier: workspace:*
         version: link:../ir-schema
+      '@camis/permissions':
+        specifier: workspace:*
+        version: link:../permissions
 
   packages/adapter-strapi:
     dependencies:
       '@camis/adapter-kernel':
         specifier: workspace:*
         version: link:../adapter-kernel
+      '@camis/expr':
+        specifier: workspace:*
+        version: link:../expr
+      '@camis/expr-ts':
+        specifier: workspace:*
+        version: link:../expr-ts
       '@camis/ir-core':
         specifier: workspace:*
         version: link:../ir-core
       '@camis/ir-schema':
         specifier: workspace:*
         version: link:../ir-schema
+      '@camis/permissions':
+        specifier: workspace:*
+        version: link:../permissions
     devDependencies:
       tsx:
         specifier: ^4.22.4
@@ -105,7 +117,17 @@ importers:
         specifier: ^3.25.76
         version: 3.25.76
 
-  packages/permissions: {}
+  packages/permissions:
+    dependencies:
+      '@camis/expr':
+        specifier: workspace:*
+        version: link:../expr
+      '@camis/ir-schema':
+        specifier: workspace:*
+        version: link:../ir-schema
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
 
 packages:
 
