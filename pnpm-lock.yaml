@@ -36,7 +36,24 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@22.19.21)
 
-  packages/adapter-express: {}
+  packages/adapter-express:
+    dependencies:
+      '@camis/adapter-kernel':
+        specifier: workspace:*
+        version: link:../adapter-kernel
+      '@camis/ir-core':
+        specifier: workspace:*
+        version: link:../ir-core
+      '@camis/ir-schema':
+        specifier: workspace:*
+        version: link:../ir-schema
+      '@camis/permissions':
+        specifier: workspace:*
+        version: link:../permissions
+    devDependencies:
+      tsx:
+        specifier: ^4.22.4
+        version: 4.22.4
 
   packages/adapter-filament:
     dependencies:
