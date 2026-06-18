@@ -9,11 +9,14 @@ const useBlock = (imports: string[]): string =>
     .map((i) => `use ${i};`)
     .join("\n");
 
-export const emitResourceFiles = (ct: ContentType): GeneratedFile[] => {
+export const emitResourceFiles = (
+  ct: ContentType,
+  relationFields: string[] = [],
+): GeneratedFile[] => {
   const n = filamentNames(ct);
   const dir = `app/Filament/Resources/${n.resourceDir}`;
   const ns = `App\\Filament\\Resources\\${n.resourceDir}`;
-  const emits = ct.fields.map(emitField);
+  const emits = ct.fields.filter((f) => f.type !== "relation").map(emitField);
 
   // Page class names follow v5's make:filament-resource convention: List<plural>, Create<singular>, Edit<singular>.
   const listPage = `List${n.resourceDir}`;
@@ -63,10 +66,16 @@ class ${n.resourceClass} extends Resource
 }
 `;
 
-  const formImports = useBlock([...emits.map((e) => e.formImport), "Filament\\Schemas\\Schema"]);
-  const formBody = emits
-    .map((e) => `            ${e.formComponent}${e.required ? "->required()" : ""},`)
-    .join("\n");
+  const SELECT = "Filament\\Forms\\Components\\Select";
+  const formImports = useBlock([
+    ...emits.map((e) => e.formImport),
+    ...(relationFields.length > 0 ? [SELECT] : []),
+    "Filament\\Schemas\\Schema",
+  ]);
+  const formBody = [
+    ...emits.map((e) => `            ${e.formComponent},`),
+    ...relationFields.map((s) => `            ${s},`),
+  ].join("\n");
   const form = `<?php
 
 declare(strict_types=1);

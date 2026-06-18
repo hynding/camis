@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { ContentType } from "@camis/ir-schema";
-import { emitMigration, migrationFilename } from "./migration";
+import {
+  emitMigration,
+  emitPivotMigration,
+  migrationFilename,
+  pivotMigrationFilename,
+} from "./migration";
 
 const article: ContentType = {
   name: "Article",
@@ -30,5 +35,29 @@ describe("migration", () => {
     expect(migrationFilename(article, 2)).toBe(
       "database/migrations/0000_00_00_000002_create_articles_table.php",
     );
+  });
+  it("appends injected FK columns to a create migration", () => {
+    const php = emitMigration(article, [
+      "$table->foreignId('author_id')->nullable()->constrained('authors')",
+    ]);
+    expect(php).toContain("$table->foreignId('author_id')->nullable()->constrained('authors');");
+  });
+  it("emits a pivot table migration", () => {
+    const pivot = {
+      table: "article_tag",
+      leftTable: "articles",
+      rightTable: "tags",
+      leftFk: "article_id",
+      rightFk: "tag_id",
+    };
+    expect(pivotMigrationFilename(pivot, 5)).toBe(
+      "database/migrations/0000_00_00_000005_create_article_tag_table.php",
+    );
+    const php = emitPivotMigration(pivot);
+    expect(php).toContain("Schema::create('article_tag', function (Blueprint $table): void {");
+    expect(php).toContain(
+      "$table->foreignId('article_id')->constrained('articles')->cascadeOnDelete();",
+    );
+    expect(php).toContain("$table->foreignId('tag_id')->constrained('tags')->cascadeOnDelete();");
   });
 });

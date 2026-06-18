@@ -25,4 +25,15 @@ describe("emitModel", () => {
     expect(php).toContain("'published_at' => 'datetime',");
     expect(php.startsWith("<?php\n\ndeclare(strict_types=1);")).toBe(true);
   });
+
+  it("emits injected relationship methods and their imports", () => {
+    const php = emitModel(article, [
+      {
+        import: "Illuminate\\Database\\Eloquent\\Relations\\BelongsTo",
+        php: "    public function author(): BelongsTo\n    {\n        return $this->belongsTo(Author::class, 'author_id');\n    }",
+      },
+    ]);
+    expect(php).toContain("use Illuminate\\Database\\Eloquent\\Relations\\BelongsTo;");
+    expect(php).toContain("public function author(): BelongsTo");
+  });
 });

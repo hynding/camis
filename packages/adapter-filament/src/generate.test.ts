@@ -40,3 +40,62 @@ describe("filamentAdapter", () => {
     expect(filamentAdapter.generate(bundle, { projectName: "blog" })).toEqual(result);
   });
 });
+
+const relBundle: IrBundle = {
+  document: {
+    version: 1,
+    contentTypes: [
+      {
+        name: "Article",
+        kind: "collection",
+        fields: [
+          { type: "string", name: "title", required: true },
+          {
+            type: "relation",
+            name: "author",
+            relationKind: "manyToOne",
+            target: "Author",
+            inverse: "articles",
+          },
+          {
+            type: "relation",
+            name: "tags",
+            relationKind: "manyToMany",
+            target: "Tag",
+            inverse: "articles",
+          },
+          { type: "component", name: "seo", component: "Seo", repeatable: false },
+        ],
+      },
+      {
+        name: "Author",
+        kind: "collection",
+        fields: [{ type: "string", name: "name", required: true }],
+      },
+      {
+        name: "Tag",
+        kind: "collection",
+        fields: [{ type: "string", name: "label", required: true }],
+      },
+    ],
+    components: [],
+  },
+  roles: [],
+};
+
+describe("filamentAdapter relations + gaps", () => {
+  const result = filamentAdapter.generate(relBundle, { projectName: "blog" });
+  const paths = result.files.map((f) => f.path);
+  it("emits a pivot migration after the content-type migrations", () => {
+    expect(paths).toContain("database/migrations/0000_00_00_000004_create_article_tag_table.php");
+  });
+  it("injects the author_id FK into the articles migration", () => {
+    const mig = result.files.find((f) => f.path.endsWith("create_articles_table.php"))!.content;
+    expect(mig).toContain("$table->foreignId('author_id')->nullable()->constrained('authors');");
+  });
+  it("reports the component field as a capability gap", () => {
+    expect(
+      result.gaps.gaps.some((g) => g.feature === "component" && g.location.field === "seo"),
+    ).toBe(true);
+  });
+});

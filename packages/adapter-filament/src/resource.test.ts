@@ -41,4 +41,14 @@ describe("emitResourceFiles", () => {
       "IconColumn::make('published')->boolean(),",
     );
   });
+  it("appends injected relation Select form fields with the Select import", () => {
+    const files = emitResourceFiles(article, [
+      "Select::make('author_id')->relationship(name: 'author', titleAttribute: 'id')",
+    ]);
+    const form = files.find((f) => f.path.endsWith("Schemas/ArticleForm.php"))!.content;
+    expect(form).toContain("use Filament\\Forms\\Components\\Select;");
+    expect(form).toContain(
+      "Select::make('author_id')->relationship(name: 'author', titleAttribute: 'id'),",
+    );
+  });
 });
