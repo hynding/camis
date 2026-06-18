@@ -9,6 +9,16 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "overlay": "tsx scripts/overlay.ts"
+  },
+  "dependencies": {
+    "@camis/adapter-kernel": "workspace:*",
+    "@camis/ir-core": "workspace:*",
+    "@camis/ir-schema": "workspace:*",
+    "@camis/permissions": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.22.4"
   }
 }
