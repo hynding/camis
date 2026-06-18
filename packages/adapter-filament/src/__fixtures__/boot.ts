@@ -5,7 +5,18 @@ import { catalog } from "./catalog";
 // condition, so the boot job exercises migrations, relations, the Spatie seeder, and Policy
 // enforcement in one app. Not golden-tested (it is free to combine).
 export const bootBundle: IrBundle = {
-  document: catalog.document,
+  document: {
+    ...catalog.document,
+    hooks: [
+      {
+        name: "TransformTitle",
+        trigger: "onPublish",
+        contentType: "Article",
+        input: [{ name: "title", type: "string" }],
+        output: [{ name: "title", type: "string" }],
+      },
+    ],
+  },
   roles: [
     {
       name: "Editor",
