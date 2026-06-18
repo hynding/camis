@@ -23,8 +23,8 @@ multi-dialect fuse into one `(dialect, fieldType)` column map rather than three 
 
 | # | Decision | Rationale |
 |---|----------|-----------|
-| D1 | **Multi-dialect via a generation-time `dialect` option**: `generate(ir, { projectName, dialect })` emits a SINGLE-dialect project. The gated boot runs the generator 3× (one per dialect) and boots each. | Drizzle schemas are dialect-bound (`sqlite-core`/`pg-core`/`mysql-core`); one project per dialect matches Drizzle's design. A runtime env-switch would need a dialect-abstraction layer fighting Drizzle. |
-| D2 | **`dialect?: "sqlite" \| "mysql" \| "pgsql"` is an optional field on the kernel `GenerateOptions`** (default `sqlite`); only `adapter-express` reads it. | An optional generation knob, like `projectName`. Other adapters ignore it. Avoids an express-specific subtype of `GenerateAdapter`. |
+| D1 | **Multi-dialect via a per-dialect adapter**: `generate()` emits a SINGLE-dialect project. The gated boot runs the generator 3× (one per dialect) and boots each. | Drizzle schemas are dialect-bound (`sqlite-core`/`pg-core`/`mysql-core`); one project per dialect matches Drizzle's design. A runtime env-switch would need a dialect-abstraction layer fighting Drizzle. |
+| D2 | **A factory `expressAdapterFor(dialect): GenerateAdapter`** binds the dialect at adapter construction (closure), threaded through the emitters. `expressAdapter = expressAdapterFor("sqlite")` is the default export (back-compatible with 8A). The kernel `GenerateOptions` is UNCHANGED. | The Prime Directive forbids target-specific concepts (a Drizzle/SQL `dialect`) leaking into the shared `adapter-kernel` (`GenerateOptions`). A construction-time factory keeps the dialect entirely inside `adapter-express`; the generic `GenerateAdapter` contract is untouched. The gated boot calls `expressAdapterFor(d)` per dialect. |
 | D3 | **Dialect-parameterized column map**: `column(dialect, field)` keyed by `(dialect, fieldType)`, covering the full taxonomy. | Breadth + multi-dialect as ONE table; avoids three near-duplicate emitters. |
 | D4 | **Relations → Drizzle FK columns (`.references`) + `relations()` declarations**, mirroring the Strapi/Filament resolution (owner FK for manyToOne/oneToOne, target FK for oneToMany, junction table for manyToMany). Relation *traversal/nesting in the API* is deferred. | The schema-level relational model is the 8B deliverable; nested-resource routes are a later enhancement. |
 | D5 | **Round-trip via a neutral `camis.schema.json`** artifact: `generate()` emits the normalized IR document as `camis.schema.json` (`stableJson`); `importExpressProject(files)` reads it back through `ir-schema`. Property: `normalize(import(generate(ir).camisSchema)) ≅ normalize(ir)`. | Respects the Prime Directive (import a declarative artifact, never parse the generated Drizzle TS); runs per-commit (pure, no DB); validates the import path + artifact fidelity. |
@@ -42,8 +42,9 @@ multi-dialect fuse into one `(dialect, fieldType)` column map rather than three 
   `drizzle(mysql2 pool)`), and the **`drizzle.config` dialect** + `dbCredentials`.
 - **timestamp default** for `createdAt`/`updatedAt`.
 
-`generate()` selects the spec from `options.dialect ?? "sqlite"` and threads it through the schema,
-client, drizzle.config, and package.json emitters.
+`expressAdapterFor(dialect)` captures the spec at construction and threads it through the schema,
+client, drizzle.config, and package.json emitters. `expressAdapter` (the default export) is
+`expressAdapterFor("sqlite")`. No dialect flows through `GenerateOptions`.
 
 ## 4. Full field taxonomy (`fields.ts` → `column(dialect, field)`)
 
@@ -76,7 +77,7 @@ emitter treats FK columns as ordinary insertable columns.
 
 ## 7. Generate orchestration
 
-`generate(ir, options)`: pick the dialect spec; resolve relations; emit the skeleton (dialect-aware
+`generate(ir, options)` (the dialect already bound via `expressAdapterFor`): resolve relations; emit the skeleton (dialect-aware
 package.json/client/drizzle.config), the schema (id + columns + FK + relations()), the routes, the
 server/index, `camis.schema.json`, and `.env`. Route each field: supported scalar → column;
 `relation` → the relations pass; `component`/`dynamicZone` → a `downgrade` gap.
