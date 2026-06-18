@@ -10,5 +10,11 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "lint": "eslint ."
+  },
+  "dependencies": {
+    "@camis/adapter-kernel": "workspace:*",
+    "@camis/ir-core": "workspace:*",
+    "@camis/ir-schema": "workspace:*",
+    "@camis/permissions": "workspace:*"
   }
 }
