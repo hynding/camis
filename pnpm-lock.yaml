@@ -38,7 +38,20 @@ importers:
 
   packages/adapter-express: {}
 
-  packages/adapter-filament: {}
+  packages/adapter-filament:
+    dependencies:
+      '@camis/adapter-kernel':
+        specifier: workspace:*
+        version: link:../adapter-kernel
+      '@camis/ir-core':
+        specifier: workspace:*
+        version: link:../ir-core
+      '@camis/ir-schema':
+        specifier: workspace:*
+        version: link:../ir-schema
+      '@camis/permissions':
+        specifier: workspace:*
+        version: link:../permissions
 
   packages/adapter-kernel:
     dependencies:
