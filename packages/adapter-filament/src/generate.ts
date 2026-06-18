@@ -7,6 +7,7 @@ import {
 import { normalize } from "@camis/ir-core";
 import type { CapabilityGap } from "@camis/ir-schema";
 import { isSupportedField } from "./fields";
+import { emitHookFiles } from "./hooks/emit";
 import { emitPermissions } from "./permissions/emit";
 import {
   emitMigration,
@@ -24,6 +25,7 @@ export const filamentAdapter: GenerateAdapter = {
   generate: (ir): GenerationResult => {
     const doc = normalize(ir.document);
     const rel = resolveRelations(doc);
+    const hooks = emitHookFiles(doc);
     const files: GeneratedFile[] = [];
     const gaps: CapabilityGap[] = [];
 
@@ -42,7 +44,7 @@ export const filamentAdapter: GenerateAdapter = {
       const names = filamentNames(ct);
       files.push({
         path: `app/Models/${names.model}.php`,
-        content: emitModel(ct, rel.methods.get(ct.name) ?? []),
+        content: emitModel(ct, rel.methods.get(ct.name) ?? [], hooks.observedModels.has(ct.name)),
       });
       files.push({
         path: migrationFilename(ct, i + 1),
@@ -61,7 +63,7 @@ export const filamentAdapter: GenerateAdapter = {
       });
 
     const perm = emitPermissions(doc, ir.roles);
-    const allFiles = [...files, ...perm.files];
+    const allFiles = [...files, ...hooks.files, ...perm.files];
     return {
       files: allFiles,
       manifest: buildManifest(allFiles),
