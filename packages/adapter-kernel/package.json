@@ -12,6 +12,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@camis/ir-schema": "workspace:*"
+    "@camis/ir-schema": "workspace:*",
+    "@camis/permissions": "workspace:*"
   }
 }

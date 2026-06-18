@@ -31,7 +31,10 @@ const blog = {
 
 describe("importDocument", () => {
   it("reads only declarative schema files and reconstructs IR", () => {
-    const files = strapiAdapter.generate(blog, { projectName: "blog" }).files;
+    const files = strapiAdapter.generate(
+      { document: blog, roles: [] },
+      { projectName: "blog" },
+    ).files;
     const { document, gaps } = importDocument(files);
     expect(document.ok).toBe(true);
     if (!document.ok) return;

@@ -58,8 +58,8 @@ const dynamicZoneGaps = (doc: IrDocument): CapabilityGap[] =>
 
 export const strapiAdapter: GenerateAdapter = {
   target: "strapi",
-  generate: (input: IrDocument, options): GenerationResult => {
-    const doc = normalize(input);
+  generate: (ir, options): GenerationResult => {
+    const doc = normalize(ir.document);
     const inverses = synthesizedInverses(doc);
     const files: GeneratedFile[] = [
       ...skeletonFiles(options.projectName),

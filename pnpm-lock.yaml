@@ -45,6 +45,9 @@ importers:
       '@camis/ir-schema':
         specifier: workspace:*
         version: link:../ir-schema
+      '@camis/permissions':
+        specifier: workspace:*
+        version: link:../permissions
 
   packages/adapter-strapi:
     dependencies:
@@ -57,6 +60,9 @@ importers:
       '@camis/ir-schema':
         specifier: workspace:*
         version: link:../ir-schema
+      '@camis/permissions':
+        specifier: workspace:*
+        version: link:../permissions
     devDependencies:
       tsx:
         specifier: ^4.22.4

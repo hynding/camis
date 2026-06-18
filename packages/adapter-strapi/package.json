@@ -15,7 +15,8 @@
   "dependencies": {
     "@camis/adapter-kernel": "workspace:*",
     "@camis/ir-core": "workspace:*",
-    "@camis/ir-schema": "workspace:*"
+    "@camis/ir-schema": "workspace:*",
+    "@camis/permissions": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.22.4"

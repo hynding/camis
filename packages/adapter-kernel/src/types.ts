@@ -1,4 +1,5 @@
-import type { CapabilityGapReport, IrDocument } from "@camis/ir-schema";
+import type { CapabilityGapReport } from "@camis/ir-schema";
+import type { IrBundle } from "@camis/permissions";
 
 export type FileMode = "overwrite" | "seed";
 
@@ -31,5 +32,5 @@ export interface GenerationResult {
 
 export interface GenerateAdapter {
   target: string;
-  generate(doc: IrDocument, options: GenerateOptions): GenerationResult;
+  generate(ir: IrBundle, options: GenerateOptions): GenerationResult;
 }
