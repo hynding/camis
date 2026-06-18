@@ -79,6 +79,16 @@ describe("document hooks", () => {
       }).success,
     ).toBe(false);
   });
+  it("rejects duplicate hook names", () => {
+    const h = {
+      name: "TransformTitle",
+      trigger: "onPublish",
+      contentType: "Article",
+      input: [{ name: "title", type: "string" }],
+      output: [{ name: "title", type: "string" }],
+    };
+    expect(irDocument.safeParse({ ...base, hooks: [h, h] }).success).toBe(false);
+  });
 });
 
 describe("field expression attachment points", () => {
