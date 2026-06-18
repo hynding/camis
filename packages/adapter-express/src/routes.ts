@@ -1,14 +1,16 @@
 import { withMarker } from "@camis/adapter-kernel";
 import type { ContentType } from "@camis/ir-schema";
-import { isSupported8A } from "./fields";
+import { isSupportedField } from "./fields";
 import { expressNames, snakeColumn } from "./names";
 
-export const emitRoutes = (ct: ContentType): string => {
+export const emitRoutes = (ct: ContentType, fkColumns: string[] = []): string => {
   const n = expressNames(ct);
   const t = n.table;
-  const cols = ct.fields
-    .filter((f) => isSupported8A(f.type))
-    .map((f) => `"${snakeColumn(f.name)}"`)
+  const cols = [
+    ...ct.fields.filter((f) => isSupportedField(f.type)).map((f) => snakeColumn(f.name)),
+    ...fkColumns,
+  ]
+    .map((c) => `"${c}"`)
     .join(", ");
   return withMarker(`import { Router } from "express";
 import { eq } from "drizzle-orm";

@@ -7,6 +7,27 @@ on:
 jobs:
   boot:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dialect: [sqlite, mysql, pgsql]
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_DATABASE: camis
+          MYSQL_ROOT_PASSWORD: camis
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=5
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: camis
+          POSTGRES_PASSWORD: camis
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready" --health-interval=10s --health-timeout=5s --health-retries=5
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -15,4 +36,11 @@ jobs:
           node-version-file: ".nvmrc"
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @camis/adapter-express smoke
+      - name: Configure DB env (${{ matrix.dialect }})
+        run: |
+          case "${{ matrix.dialect }}" in
+            mysql) echo "DATABASE_URL=mysql://root:camis@127.0.0.1:3306/camis" >> "$GITHUB_ENV" ;;
+            pgsql) echo "DATABASE_URL=postgres://postgres:camis@127.0.0.1:5432/camis" >> "$GITHUB_ENV" ;;
+          esac
+      - name: Boot smoke (${{ matrix.dialect }})
+        run: pnpm --filter @camis/adapter-express smoke ${{ matrix.dialect }}

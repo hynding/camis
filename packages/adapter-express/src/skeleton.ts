@@ -1,8 +1,9 @@
 import { withMarker, type GeneratedFile } from "@camis/adapter-kernel";
 import type { IrDocument } from "@camis/ir-schema";
+import { DIALECTS, type Dialect, type DialectSpec } from "./dialect";
 import { expressNames } from "./names";
 
-const PACKAGE_JSON = (projectName: string): string =>
+const PACKAGE_JSON = (projectName: string, spec: DialectSpec): string =>
   JSON.stringify(
     {
       name: projectName,
@@ -13,9 +14,9 @@ const PACKAGE_JSON = (projectName: string): string =>
         start: "tsx src/index.ts",
         "db:push": "drizzle-kit push",
       },
-      dependencies: { "better-sqlite3": "^11.8.0", "drizzle-orm": "^0.38.0", express: "^4.21.0" },
+      dependencies: { ...spec.driverDep, "drizzle-orm": "^0.38.0", express: "^4.21.0" },
       devDependencies: {
-        "@types/better-sqlite3": "^7.6.0",
+        ...spec.devDriverDep,
         "@types/express": "^4.17.0",
         "@types/node": "^22.0.0",
         "drizzle-kit": "^0.30.0",
@@ -45,21 +46,22 @@ const TSCONFIG =
     2,
   ) + "\n";
 
-const DRIZZLE_CONFIG = withMarker(`import { defineConfig } from "drizzle-kit";
+const DRIZZLE_CONFIG = (spec: DialectSpec): string =>
+  withMarker(`import { defineConfig } from "drizzle-kit";
 
 export default defineConfig({
   out: "./drizzle",
   schema: "./src/db/schema.ts",
-  dialect: "sqlite",
-  dbCredentials: { url: process.env.DB_FILE_NAME ?? "./data.db" },
+  dialect: "${spec.configDialect}",
+  ${spec.configCredentials},
 });
 `);
 
-const CLIENT = withMarker(`import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
+const CLIENT = (spec: DialectSpec): string =>
+  withMarker(`${spec.clientImports}
 import * as schema from "./schema";
 
-export const db = drizzle(new Database(process.env.DB_FILE_NAME ?? "./data.db"), { schema });
+export const db = ${spec.clientDb};
 `);
 
 const INDEX = withMarker(`import { app } from "./server";
@@ -68,7 +70,8 @@ const port = Number(process.env.PORT ?? 3000);
 app.listen(port, () => console.log(\`listening on \${port}\`));
 `);
 
-const ENV = `DB_FILE_NAME=./data.db\nPORT=3000\n`;
+const ENV = (spec: DialectSpec): string =>
+  spec.dialect === "sqlite" ? `DB_FILE_NAME=./data.db\nPORT=3000\n` : `DATABASE_URL=\nPORT=3000\n`;
 
 const emitServer = (doc: IrDocument): string => {
   const cts = doc.contentTypes;
@@ -93,12 +96,19 @@ app.use((_req, res) => {
 `);
 };
 
-export const skeletonFiles = (doc: IrDocument, projectName: string): GeneratedFile[] => [
-  { path: "package.json", content: PACKAGE_JSON(projectName) },
-  { path: "tsconfig.json", content: TSCONFIG },
-  { path: "drizzle.config.ts", content: DRIZZLE_CONFIG },
-  { path: "src/db/client.ts", content: CLIENT },
-  { path: "src/server.ts", content: emitServer(doc) },
-  { path: "src/index.ts", content: INDEX },
-  { path: ".env", content: ENV, mode: "seed" },
-];
+export const skeletonFiles = (
+  doc: IrDocument,
+  projectName: string,
+  dialect: Dialect,
+): GeneratedFile[] => {
+  const spec = DIALECTS[dialect];
+  return [
+    { path: "package.json", content: PACKAGE_JSON(projectName, spec) },
+    { path: "tsconfig.json", content: TSCONFIG },
+    { path: "drizzle.config.ts", content: DRIZZLE_CONFIG(spec) },
+    { path: "src/db/client.ts", content: CLIENT(spec) },
+    { path: "src/server.ts", content: emitServer(doc) },
+    { path: "src/index.ts", content: INDEX },
+    { path: ".env", content: ENV(spec), mode: "seed" },
+  ];
+};

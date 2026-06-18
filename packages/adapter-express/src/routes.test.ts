@@ -12,7 +12,7 @@ const article: ContentType = {
 } as ContentType;
 
 describe("emitRoutes", () => {
-  const ts = emitRoutes(article);
+  const ts = emitRoutes(article, []);
   it("emits a marked CRUD router using sync better-sqlite3 calls", () => {
     expect(ts).toContain("@camis:generated");
     expect(ts).toContain("export const articlesRouter = Router();");
@@ -22,5 +22,10 @@ describe("emitRoutes", () => {
     expect(ts).toContain(
       "db.delete(articles).where(eq(articles.id, Number(req.params.id))).run();",
     );
+  });
+
+  it("includes FK columns in the insertable pick-list", () => {
+    const ts = emitRoutes(article, ["author_id"]);
+    expect(ts).toContain('pick(req.body, ["title", "published", "author_id"]);');
   });
 });
