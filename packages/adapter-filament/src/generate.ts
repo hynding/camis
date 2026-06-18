@@ -14,8 +14,7 @@ import { emitResourceFiles } from "./resource";
 
 export const filamentAdapter: GenerateAdapter = {
   target: "filament",
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  generate: (ir, _options): GenerationResult => {
+  generate: (ir): GenerationResult => {
     const doc = normalize(ir.document);
     const files: GeneratedFile[] = [];
     const gaps: CapabilityGap[] = [];
