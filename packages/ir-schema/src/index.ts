@@ -7,3 +7,5 @@ export type { Component, ContentType, IrDocument } from "./document";
 export { parseDocument } from "./parse";
 export type { CapabilityDescriptor, CapabilityGap, CapabilityGapReport } from "./capability";
 export { fieldName, typeName } from "./identifiers";
+export { HOOK_SCALARS, hook, shapeField } from "./hooks";
+export type { Hook, HookScalar, ShapeField } from "./hooks";
