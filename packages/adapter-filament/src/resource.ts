@@ -64,9 +64,7 @@ class ${n.resourceClass} extends Resource
 `;
 
   const formImports = useBlock([...emits.map((e) => e.formImport), "Filament\\Schemas\\Schema"]);
-  const formBody = emits
-    .map((e) => `            ${e.formComponent}${e.required ? "->required()" : ""},`)
-    .join("\n");
+  const formBody = emits.map((e) => `            ${e.formComponent},`).join("\n");
   const form = `<?php
 
 declare(strict_types=1);

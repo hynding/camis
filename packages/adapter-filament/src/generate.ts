@@ -6,7 +6,7 @@ import {
 } from "@camis/adapter-kernel";
 import { normalize } from "@camis/ir-core";
 import type { CapabilityGap } from "@camis/ir-schema";
-import { isScalar6A } from "./fields";
+import { isSupportedField } from "./fields";
 import { emitMigration, migrationFilename } from "./migration";
 import { emitModel } from "./model";
 import { filamentNames } from "./names";
@@ -20,14 +20,13 @@ export const filamentAdapter: GenerateAdapter = {
     const gaps: CapabilityGap[] = [];
 
     doc.contentTypes.forEach((ct, i) => {
-      // 6A supports scalar fields only; anything else is a capability gap (deferred to 6B).
       for (const f of ct.fields) {
-        if (!isScalar6A(f.type)) {
+        if (f.type !== "relation" && !isSupportedField(f.type)) {
           gaps.push({
             feature: f.type,
             location: { contentType: ct.name, field: f.name },
             severity: "downgrade",
-            message: `field type "${f.type}" is not supported in Phase 6A (scalars only)`,
+            message: `field type "${f.type}" is not supported by the Filament target`,
           });
         }
       }

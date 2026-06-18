@@ -12,7 +12,7 @@ export const emitMigration = (ct: ContentType): string => {
   const names = filamentNames(ct);
   const columns = ct.fields
     .map(emitField)
-    .map((e) => `            ${e.migration}${e.required ? "" : "->nullable()"};`)
+    .map((e) => `            ${e.migration};`)
     .join("\n");
   return `<?php
 
