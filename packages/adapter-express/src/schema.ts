@@ -1,12 +1,12 @@
 import { withMarker } from "@camis/adapter-kernel";
 import type { ContentType } from "@camis/ir-schema";
-import { emitColumn, isSupported8A } from "./fields";
+import { column, isSupportedField } from "./fields";
 import { expressNames } from "./names";
 
 export const emitSchema = (ct: ContentType): string => {
   const n = expressNames(ct);
-  // 8A: only supported scalar fields become columns; unsupported types are gapped in generate.ts.
-  const cols = ct.fields.filter((f) => isSupported8A(f.type)).map(emitColumn);
+  // Only supported scalar fields become columns; unsupported types are gapped in generate.ts.
+  const cols = ct.fields.filter((f) => isSupportedField(f.type)).map((f) => column("sqlite", f));
   const imports = [...new Set(["sqliteTable", "integer", ...cols.map((c) => c.import)])]
     .sort()
     .join(", ");

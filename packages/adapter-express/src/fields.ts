@@ -1,22 +1,32 @@
 import type { Field } from "@camis/ir-schema";
+import type { Dialect } from "./dialect";
 import { snakeColumn } from "./names";
 
 const SUPPORTED = new Set<string>([
   "string",
   "text",
+  "richText",
   "email",
   "uid",
   "integer",
+  "bigInteger",
   "float",
+  "decimal",
   "boolean",
+  "enumeration",
+  "date",
+  "time",
   "dateTime",
+  "timestamp",
+  "json",
+  "media",
 ]);
-export const isSupported8A = (t: string): boolean => SUPPORTED.has(t);
+export const isSupportedField = (t: string): boolean => SUPPORTED.has(t);
 
 export interface ColumnEmit {
   column: string;
   drizzle: string;
-  import: "text" | "integer" | "real";
+  import: string; // the drizzle-core import the base column needs
 }
 
 // Emit a string default as a single-quoted TS literal, escaping backslashes and quotes so an
@@ -30,37 +40,74 @@ const tsLiteral = (v: unknown): string =>
       ? String(v)
       : `'${String(v).replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
 
-export const emitColumn = (field: Field): ColumnEmit => {
+// Per-dialect base column (expression WITHOUT modifiers) + the drizzle-core import it needs.
+const base = (dialect: Dialect, field: Field, c: string): { expr: string; import: string } => {
+  switch (field.type) {
+    case "string":
+    case "email":
+    case "uid":
+      return dialect === "sqlite"
+        ? { expr: `text('${c}')`, import: "text" }
+        : { expr: `varchar('${c}', { length: 255 })`, import: "varchar" };
+    case "text":
+    case "richText":
+    case "media":
+    case "enumeration":
+      return { expr: `text('${c}')`, import: "text" };
+    case "integer":
+      return dialect === "mysql"
+        ? { expr: `int('${c}')`, import: "int" }
+        : { expr: `integer('${c}')`, import: "integer" };
+    case "bigInteger":
+      return dialect === "sqlite"
+        ? { expr: `integer('${c}')`, import: "integer" }
+        : { expr: `bigint('${c}', { mode: 'number' })`, import: "bigint" };
+    case "float":
+      return dialect === "mysql"
+        ? { expr: `float('${c}')`, import: "float" }
+        : { expr: `real('${c}')`, import: "real" };
+    case "decimal":
+      return dialect === "mysql"
+        ? { expr: `decimal('${c}')`, import: "decimal" }
+        : { expr: `numeric('${c}')`, import: "numeric" };
+    case "boolean":
+      return dialect === "sqlite"
+        ? { expr: `integer('${c}', { mode: 'boolean' })`, import: "integer" }
+        : { expr: `boolean('${c}')`, import: "boolean" };
+    case "json":
+      return dialect === "sqlite"
+        ? { expr: `text('${c}', { mode: 'json' })`, import: "text" }
+        : dialect === "pgsql"
+          ? { expr: `jsonb('${c}')`, import: "jsonb" }
+          : { expr: `json('${c}')`, import: "json" };
+    case "date":
+      return dialect === "sqlite"
+        ? { expr: `integer('${c}', { mode: 'timestamp' })`, import: "integer" }
+        : { expr: `date('${c}')`, import: "date" };
+    case "time":
+      return dialect === "sqlite"
+        ? { expr: `text('${c}')`, import: "text" }
+        : { expr: `time('${c}')`, import: "time" };
+    case "dateTime":
+    case "timestamp":
+      return dialect === "sqlite"
+        ? { expr: `integer('${c}', { mode: 'timestamp' })`, import: "integer" }
+        : { expr: `timestamp('${c}')`, import: "timestamp" };
+    default:
+      return dialect === "sqlite"
+        ? { expr: `text('${c}')`, import: "text" }
+        : { expr: `varchar('${c}', { length: 255 })`, import: "varchar" };
+  }
+};
+
+export const column = (dialect: Dialect, field: Field): ColumnEmit => {
   const f = field as Field & Record<string, unknown>;
   const c = snakeColumn(field.name);
-  let base: string;
-  let imp: ColumnEmit["import"];
-  switch (field.type) {
-    case "integer":
-      base = `integer('${c}')`;
-      imp = "integer";
-      break;
-    case "float":
-      base = `real('${c}')`;
-      imp = "real";
-      break;
-    case "boolean":
-      base = `integer('${c}', { mode: 'boolean' })`;
-      imp = "integer";
-      break;
-    case "dateTime":
-      base = `integer('${c}', { mode: 'timestamp' })`;
-      imp = "integer";
-      break;
-    default:
-      // string | text | email | uid
-      base = `text('${c}')`;
-      imp = "text";
-  }
+  const b = base(dialect, field, c);
   const drizzle =
-    base +
+    b.expr +
     (f.required === true ? ".notNull()" : "") +
     (f.unique === true ? ".unique()" : "") +
     (f.default !== undefined ? `.default(${tsLiteral(f.default)})` : "");
-  return { column: c, drizzle, import: imp };
+  return { column: c, drizzle, import: b.import };
 };

@@ -6,7 +6,7 @@ import {
 } from "@camis/adapter-kernel";
 import { normalize } from "@camis/ir-core";
 import type { CapabilityGap } from "@camis/ir-schema";
-import { isSupported8A } from "./fields";
+import { isSupportedField } from "./fields";
 import { expressNames } from "./names";
 import { emitRoutes } from "./routes";
 import { emitSchema } from "./schema";
@@ -24,12 +24,12 @@ export const expressAdapter: GenerateAdapter = {
 
     for (const ct of doc.contentTypes) {
       for (const f of ct.fields) {
-        if (!isSupported8A(f.type)) {
+        if (!isSupportedField(f.type)) {
           gaps.push({
             feature: f.type,
             location: { contentType: ct.name, field: f.name },
             severity: "downgrade",
-            message: `field type "${f.type}" is not supported in Phase 8A (scalars only)`,
+            message: `field type "${f.type}" is not supported by the Express target`,
           });
         }
       }

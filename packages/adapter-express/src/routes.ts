@@ -1,13 +1,13 @@
 import { withMarker } from "@camis/adapter-kernel";
 import type { ContentType } from "@camis/ir-schema";
-import { isSupported8A } from "./fields";
+import { isSupportedField } from "./fields";
 import { expressNames, snakeColumn } from "./names";
 
 export const emitRoutes = (ct: ContentType): string => {
   const n = expressNames(ct);
   const t = n.table;
   const cols = ct.fields
-    .filter((f) => isSupported8A(f.type))
+    .filter((f) => isSupportedField(f.type))
     .map((f) => `"${snakeColumn(f.name)}"`)
     .join(", ");
   return withMarker(`import { Router } from "express";
