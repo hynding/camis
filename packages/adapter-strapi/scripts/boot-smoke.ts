@@ -31,6 +31,11 @@ try {
     strapiAdapter.generate({ document: blog, roles: [] }, { projectName: "blog" }),
     dir,
   );
+  // Strapi hook contract coverage note: the `blog` fixture has no hooks (it is golden-tested
+  // and must not be modified). End-to-end hook runtime coverage — including the reference impl
+  // firing on publish — is provided by the Filament gated boot job. The Strapi hook contract
+  // (generated contract file + seed stub + invocation wiring) is covered by the Strapi hooks
+  // golden tests and the regen-preservation tests in the adapter-strapi package.
   const install = spawnSync("npm", ["install", "--no-audit", "--no-fund"], {
     cwd: dir,
     stdio: "inherit",

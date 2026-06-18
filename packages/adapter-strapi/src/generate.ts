@@ -9,6 +9,7 @@ import { normalize } from "@camis/ir-core";
 import type { CapabilityGap, Component, ContentType, IrDocument } from "@camis/ir-schema";
 import { apiFactoryFiles } from "./api-files";
 import { componentSchema } from "./component-schema";
+import { emitHookFiles } from "./hooks/emit";
 import { kebab, strapiNames } from "./names";
 import { emitPermissions } from "./permissions/emit";
 import { contentTypeSchema } from "./schema";
@@ -72,7 +73,7 @@ export const strapiAdapter: GenerateAdapter = {
       perm.indexContent === undefined
         ? files
         : files.map((f) => (f.path === "src/index.ts" ? { ...f, content: perm.indexContent! } : f));
-    const allFiles = [...withPerm, ...perm.files];
+    const allFiles = [...withPerm, ...perm.files, ...emitHookFiles(doc)];
     return {
       files: allFiles,
       manifest: buildManifest(allFiles),

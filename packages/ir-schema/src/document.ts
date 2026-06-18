@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { componentField, field } from "./fields";
+import { hook } from "./hooks";
 import { typeName } from "./identifiers";
 
 const RESERVED_FIELD_NAMES = new Set(["id"]);
@@ -74,11 +75,36 @@ export const component = z
     nodeRefine(c.fields as { name: string; type: string; targetField?: string }[], ctx),
   );
 
-export const irDocument = z.object({
-  version: z.literal(1),
-  contentTypes: z.array(contentType),
-  components: z.array(component),
-});
+export const irDocument = z
+  .object({
+    version: z.literal(1),
+    contentTypes: z.array(contentType),
+    components: z.array(component),
+    hooks: z.array(hook).optional(),
+  })
+  .superRefine((doc, ctx) => {
+    const names = new Set(doc.contentTypes.map((ct) => ct.name));
+    const seen = new Set<string>();
+    (doc.hooks ?? []).forEach((h, i) => {
+      if (!names.has(h.contentType)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `hook "${h.name}" references unknown content type "${h.contentType}"`,
+          params: { irCode: "unknown_hook_content_type" },
+          path: ["hooks", i, "contentType"],
+        });
+      }
+      if (seen.has(h.name)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `duplicate hook name "${h.name}"`,
+          params: { irCode: "duplicate_hook" },
+          path: ["hooks", i, "name"],
+        });
+      }
+      seen.add(h.name);
+    });
+  });
 
 export type ContentType = z.infer<typeof contentType>;
 export type Component = z.infer<typeof component>;

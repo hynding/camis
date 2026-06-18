@@ -1,0 +1,9 @@
+import type { TransformTitleHook } from "./contracts/transform-title.contract";
+
+// Ring 2 hook — hand-written. camis seeds this once and never overwrites it.
+export const transformTitle: TransformTitleHook = {
+  run(input) {
+    // TODO: implement the behavior for "TransformTitle".
+    return input;
+  },
+};

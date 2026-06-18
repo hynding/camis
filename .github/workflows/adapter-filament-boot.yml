@@ -53,6 +53,18 @@ jobs:
           php -r '$f="app/Models/User.php";$c=file_get_contents($f);$c=str_replace("use HasFactory, Notifiable;","use HasFactory, Notifiable, \\Spatie\\Permission\\Traits\\HasRoles;",$c);file_put_contents($f,$c);'
       - name: Overlay camis-generated files
         run: pnpm --filter @camis/adapter-filament overlay "$GITHUB_WORKSPACE/app"
+      - name: Hook reference impl (uppercase title on publish)
+        run: |
+          cat > "$GITHUB_WORKSPACE/app/app/Hooks/TransformTitle.php" <<'PHP'
+          <?php
+          declare(strict_types=1);
+          namespace App\Hooks;
+          use App\Hooks\Contracts\TransformTitleHook;
+          final class TransformTitle implements TransformTitleHook
+          {
+              public function run(array $input): array { return ['title' => strtoupper($input['title'])]; }
+          }
+          PHP
       - name: Configure DB env (${{ matrix.db }})
         run: |
           cd app
@@ -76,4 +88,8 @@ jobs:
             $deny = \Illuminate\Support\Facades\Gate::forUser($u)->allows("view", $draft);
             if ($allow !== true || $deny !== false) { fwrite(STDERR, "ENFORCEMENT MISMATCH allow=".var_export($allow,true)." deny=".var_export($deny,true)."\n"); exit(1); }
             echo "ENFORCEMENT OK\n";
+            $art = \App\Models\Article::create(["title" => "hello"]);
+            $art->published_at = now(); $art->save();
+            if ($art->fresh()->title !== "HELLO") { fwrite(STDERR, "HOOK MISMATCH title=".$art->fresh()->title."\n"); exit(1); }
+            echo "HOOK OK\n";
           '

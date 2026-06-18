@@ -36,4 +36,13 @@ describe("emitModel", () => {
     expect(php).toContain("use Illuminate\\Database\\Eloquent\\Relations\\BelongsTo;");
     expect(php).toContain("public function author(): BelongsTo");
   });
+
+  it("adds the ObservedBy attribute and observer use when observed", () => {
+    const php = emitModel(article, [], true);
+    expect(php).toContain("use App\\Observers\\ArticleObserver;");
+    expect(php).toContain(
+      "#[\\Illuminate\\Database\\Eloquent\\Attributes\\ObservedBy([ArticleObserver::class])]",
+    );
+    expect(php).toContain("class Article extends Model");
+  });
 });

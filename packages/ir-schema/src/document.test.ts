@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contentType } from "./document";
+import { contentType, irDocument } from "./document";
 
 const ct = (fields: unknown[]) =>
   contentType.safeParse({ name: "Article", kind: "collection", fields });
@@ -33,6 +33,61 @@ describe("contentType node refinements", () => {
 
   it("rejects uid.targetField with no such sibling (S10)", () => {
     expect(ct([{ type: "uid", name: "slug", targetField: "missing" }]).success).toBe(false);
+  });
+});
+
+describe("document hooks", () => {
+  const base = {
+    version: 1,
+    components: [],
+    contentTypes: [
+      { name: "Article", kind: "collection", fields: [{ type: "string", name: "title" }] },
+    ],
+  };
+  it("accepts a document with a valid hook", () => {
+    expect(
+      irDocument.safeParse({
+        ...base,
+        hooks: [
+          {
+            name: "TransformTitle",
+            trigger: "onPublish",
+            contentType: "Article",
+            input: [{ name: "title", type: "string" }],
+            output: [{ name: "title", type: "string" }],
+          },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+  it("accepts a document with no hooks key (backward compatible)", () => {
+    expect(irDocument.safeParse(base).success).toBe(true);
+  });
+  it("rejects a hook referencing an unknown content type", () => {
+    expect(
+      irDocument.safeParse({
+        ...base,
+        hooks: [
+          {
+            name: "H",
+            trigger: "onPublish",
+            contentType: "Ghost",
+            input: [{ name: "t", type: "string" }],
+            output: [{ name: "t", type: "string" }],
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+  it("rejects duplicate hook names", () => {
+    const h = {
+      name: "TransformTitle",
+      trigger: "onPublish",
+      contentType: "Article",
+      input: [{ name: "title", type: "string" }],
+      output: [{ name: "title", type: "string" }],
+    };
+    expect(irDocument.safeParse({ ...base, hooks: [h, h] }).success).toBe(false);
   });
 });
 
