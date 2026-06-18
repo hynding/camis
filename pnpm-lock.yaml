@@ -54,6 +54,9 @@ importers:
       '@camis/adapter-kernel':
         specifier: workspace:*
         version: link:../adapter-kernel
+      '@camis/expr':
+        specifier: workspace:*
+        version: link:../expr
       '@camis/ir-core':
         specifier: workspace:*
         version: link:../ir-core
