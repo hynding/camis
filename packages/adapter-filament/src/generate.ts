@@ -6,6 +6,7 @@ import {
 } from "@camis/adapter-kernel";
 import { normalize } from "@camis/ir-core";
 import type { CapabilityGap } from "@camis/ir-schema";
+import { aiFieldContentTypes, aiProviderFile, emitAiObserver, hasAiField } from "./ai";
 import { isSupportedField } from "./fields";
 import { emitHookFiles } from "./hooks/emit";
 import { emitPermissions } from "./permissions/emit";
@@ -29,6 +30,29 @@ export const filamentAdapter: GenerateAdapter = {
     const files: GeneratedFile[] = [];
     const gaps: CapabilityGap[] = [];
 
+    const aiObservedModels = new Set<string>();
+    const aiGenFiles: GeneratedFile[] = [];
+    const aiGaps: CapabilityGap[] = [];
+    if (hasAiField(doc)) {
+      aiGenFiles.push(aiProviderFile());
+      for (const ct of aiFieldContentTypes(doc)) {
+        if (hooks.observedModels.has(ct.name)) {
+          aiGaps.push({
+            feature: "aiHookCollision",
+            location: { contentType: ct.name },
+            severity: "downgrade",
+            message: `"${ct.name}" has both a hook and an AI field; both target the model observer. The hook observer wins; AI generation is not wired for this type.`,
+          });
+          continue;
+        }
+        aiObservedModels.add(ct.name);
+        aiGenFiles.push({
+          path: `app/Observers/${filamentNames(ct).model}Observer.php`,
+          content: emitAiObserver(ct),
+        });
+      }
+    }
+
     doc.contentTypes.forEach((ct, i) => {
       for (const f of ct.fields) {
         if (f.type === "relation") continue;
@@ -44,7 +68,11 @@ export const filamentAdapter: GenerateAdapter = {
       const names = filamentNames(ct);
       files.push({
         path: `app/Models/${names.model}.php`,
-        content: emitModel(ct, rel.methods.get(ct.name) ?? [], hooks.observedModels.has(ct.name)),
+        content: emitModel(
+          ct,
+          rel.methods.get(ct.name) ?? [],
+          hooks.observedModels.has(ct.name) || aiObservedModels.has(ct.name),
+        ),
       });
       files.push({
         path: migrationFilename(ct, i + 1),
@@ -63,11 +91,11 @@ export const filamentAdapter: GenerateAdapter = {
       });
 
     const perm = emitPermissions(doc, ir.roles);
-    const allFiles = [...files, ...hooks.files, ...perm.files];
+    const allFiles = [...files, ...hooks.files, ...perm.files, ...aiGenFiles];
     return {
       files: allFiles,
       manifest: buildManifest(allFiles),
-      gaps: { target: "filament", gaps: [...gaps, ...perm.gaps] },
+      gaps: { target: "filament", gaps: [...gaps, ...perm.gaps, ...aiGaps] },
     };
   },
 };

@@ -113,3 +113,95 @@ describe("filamentAdapter permissions", () => {
     expect(result.gaps.gaps).toEqual([]);
   });
 });
+
+describe("filamentAdapter AI fields", () => {
+  it("emits the AI provider + observer and marks the model observed for an AI content type", () => {
+    const r = filamentAdapter.generate(
+      {
+        document: {
+          version: 1,
+          contentTypes: [
+            {
+              name: "Article",
+              kind: "collection",
+              fields: [
+                { type: "text", name: "body" },
+                {
+                  type: "text",
+                  name: "summary",
+                  ai: { prompt: "Sum {{body}}", trigger: "onCreate" },
+                },
+              ],
+            },
+          ],
+          components: [],
+        },
+        roles: [],
+      } as never,
+      { projectName: "blog" },
+    );
+    const paths = r.files.map((f) => f.path);
+    expect(paths).toContain("app/Ai/Provider.php");
+    expect(paths).toContain("app/Observers/ArticleObserver.php");
+    expect(r.files.find((f) => f.path === "app/Models/Article.php")!.content).toContain(
+      "ObservedBy",
+    );
+  });
+  it("emits no AI files when no content type has an ai field", () => {
+    const r = filamentAdapter.generate(
+      {
+        document: {
+          version: 1,
+          contentTypes: [
+            { name: "Article", kind: "collection", fields: [{ type: "text", name: "body" }] },
+          ],
+          components: [],
+        },
+        roles: [],
+      } as never,
+      { projectName: "blog" },
+    );
+    expect(r.files.some((f) => f.path === "app/Ai/Provider.php")).toBe(false);
+  });
+  it("gaps a content type with BOTH a hook and an ai field (observer collision)", () => {
+    const r = filamentAdapter.generate(
+      {
+        document: {
+          version: 1,
+          hooks: [
+            {
+              name: "Enrich",
+              trigger: "onPublish",
+              contentType: "Article",
+              input: [{ name: "body", type: "text" }],
+              output: [{ name: "summary", type: "text" }],
+            },
+          ],
+          contentTypes: [
+            {
+              name: "Article",
+              kind: "collection",
+              fields: [
+                { type: "text", name: "body" },
+                {
+                  type: "text",
+                  name: "summary",
+                  ai: { prompt: "Sum {{body}}", trigger: "onCreate" },
+                },
+              ],
+            },
+          ],
+          components: [],
+        },
+        roles: [],
+      } as never,
+      { projectName: "blog" },
+    );
+    expect(
+      r.gaps.gaps.some(
+        (g) => g.feature === "aiHookCollision" && g.location.contentType === "Article",
+      ),
+    ).toBe(true);
+    expect(r.files.filter((f) => f.path === "app/Observers/ArticleObserver.php")).toHaveLength(1);
+  });
+});
