@@ -1,0 +1,12 @@
+import { Admin, Resource } from "react-admin";
+import { authProvider } from "./authProvider";
+import { dataProvider } from "./dataProvider";
+import { ArticleCreate, ArticleEdit, ArticleList } from "./resources/articles";
+import { AuthorCreate, AuthorEdit, AuthorList } from "./resources/authors";
+
+export const App = () => (
+  <Admin dataProvider={dataProvider} authProvider={authProvider}>
+    <Resource name="articles" list={ArticleList} edit={ArticleEdit} create={ArticleCreate} />
+    <Resource name="authors" list={AuthorList} edit={AuthorEdit} create={AuthorCreate} />
+  </Admin>
+);

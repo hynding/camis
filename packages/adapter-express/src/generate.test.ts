@@ -110,6 +110,52 @@ describe("secured generation", () => {
   });
 });
 
+describe("admin sub-app emission", () => {
+  it("emits the admin sub-app only when the bundle carries roles", () => {
+    const bare = expressAdapter.generate(
+      {
+        document: {
+          version: 1,
+          contentTypes: [
+            {
+              name: "Article",
+              kind: "collection",
+              fields: [{ type: "string", name: "title", required: true }],
+            },
+          ],
+          components: [],
+        },
+        roles: [],
+      } as never,
+      { projectName: "blog" },
+    );
+    expect(bare.files.some((f) => f.path.startsWith("admin/"))).toBe(false);
+
+    const secured = expressAdapter.generate(
+      {
+        document: {
+          version: 1,
+          contentTypes: [
+            {
+              name: "Article",
+              kind: "collection",
+              fields: [{ type: "string", name: "title", required: true }],
+            },
+          ],
+          components: [],
+        },
+        roles: [{ name: "Editor", grants: [{ contentType: "Article", actions: ["read"] }] }],
+      } as never,
+      { projectName: "blog" },
+    );
+    const paths = secured.files.map((f) => f.path);
+    expect(paths).toContain("admin/package.json");
+    expect(paths).toContain("admin/src/App.tsx");
+    expect(paths).toContain("admin/src/dataProvider.ts");
+    expect(paths).toContain("admin/src/resources/articles.tsx");
+  });
+});
+
 describe("expressAdapterFor", () => {
   const relBundle = {
     document: {

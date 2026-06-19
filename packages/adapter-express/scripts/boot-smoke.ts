@@ -119,6 +119,20 @@ try {
   if (editorBody.secret_notes !== "classified")
     fail(`editor should see secret_notes, got ${JSON.stringify(editorBody)}`);
 
+  // The admin SPA is dialect-agnostic — build it once (sqlite leg) to prove the generated react-admin
+  // TSX type-checks (tsc) and bundles (vite build).
+  if (dialect === "sqlite") {
+    const adminDir = join(dir, "admin");
+    const adminInstall = spawnSync("npm", ["install", "--no-audit", "--no-fund"], {
+      cwd: adminDir,
+      stdio: "inherit",
+    });
+    if (adminInstall.status !== 0) fail("admin npm install failed");
+    const adminBuild = spawnSync("npm", ["run", "build"], { cwd: adminDir, stdio: "inherit" });
+    if (adminBuild.status !== 0) fail("admin build failed");
+    console.log("ADMIN BUILD OK");
+  }
+
   console.log(`EXPRESS SECURED BOOT SMOKE PASS (${dialect})`);
 } finally {
   proc?.kill("SIGTERM");

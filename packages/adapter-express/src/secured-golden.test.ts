@@ -26,6 +26,21 @@ describe("secured golden", () => {
   it("server golden (auth wiring)", async () => {
     await expect(c("src/server.ts")).toMatchFileSnapshot("./__golden__/secured/server.ts.txt");
   });
+  it("admin App golden", async () => {
+    await expect(c("admin/src/App.tsx")).toMatchFileSnapshot(
+      "./__golden__/secured/admin.App.tsx.txt",
+    );
+  });
+  it("admin articles resource golden", async () => {
+    await expect(c("admin/src/resources/articles.tsx")).toMatchFileSnapshot(
+      "./__golden__/secured/admin.articles.tsx.txt",
+    );
+  });
+  it("admin dataProvider golden", async () => {
+    await expect(c("admin/src/dataProvider.ts")).toMatchFileSnapshot(
+      "./__golden__/secured/admin.dataProvider.ts.txt",
+    );
+  });
   it("file-listing golden", async () => {
     await expect(
       result.files
