@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { materialize } from "@camis/adapter-kernel";
 import type { Dialect } from "../src/dialect";
 import { expressAdapterFor } from "../src/generate";
+import { aiFixture } from "../src/__fixtures__/ai";
 import { secured } from "../src/__fixtures__/secured";
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -131,6 +132,72 @@ try {
     const adminBuild = spawnSync("npm", ["run", "build"], { cwd: adminDir, stdio: "inherit" });
     if (adminBuild.status !== 0) fail("admin build failed");
     console.log("ADMIN BUILD OK");
+  }
+
+  // Boot a second (unsecured) project with an AI field and prove offline populate + change-detection
+  // (deterministic stub provider — no network, no ANTHROPIC_API_KEY). sqlite leg only.
+  if (dialect === "sqlite") {
+    const aiDir = await mkdtemp(join(tmpdir(), "camis-express-ai-"));
+    process.env.DB_FILE_NAME = join(aiDir, "data.db");
+    let aiProc: ChildProcess | undefined;
+    try {
+      await materialize(
+        expressAdapterFor("sqlite").generate(aiFixture, { projectName: "ai" }),
+        aiDir,
+      );
+      if (
+        spawnSync("npm", ["install", "--no-audit", "--no-fund"], { cwd: aiDir, stdio: "inherit" })
+          .status !== 0
+      )
+        fail("ai install failed");
+      if (
+        spawnSync("npm", ["run", "db:push", "--", "--force"], { cwd: aiDir, stdio: "inherit" })
+          .status !== 0
+      )
+        fail("ai db:push failed");
+      aiProc = spawn("npm", ["start"], {
+        cwd: aiDir,
+        stdio: "inherit",
+        env: { ...process.env, PORT: "3211" },
+      });
+      const aiRoot = "http://127.0.0.1:3211/api/articles";
+      if (!(await waitForServer(aiRoot, 30_000))) fail("ai server did not start");
+
+      // create → summary populated by the stub
+      const created = await fetch(aiRoot, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ title: "t", body: "the original body" }),
+      });
+      const createdBody = (await created.json()) as { id: number; summary?: string };
+      if (created.status !== 201 || !createdBody.summary?.startsWith("[ai:"))
+        fail(`ai create did not populate summary: ${JSON.stringify(createdBody)}`);
+      const id = createdBody.id;
+      const firstSummary = createdBody.summary;
+
+      // update title only → summary unchanged (no source field changed)
+      await fetch(`${aiRoot}/${id}`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ title: "t2" }),
+      });
+      const afterTitle = (await (await fetch(`${aiRoot}/${id}`)).json()) as { summary?: string };
+      if (afterTitle.summary !== firstSummary) fail("summary regenerated on a non-source update");
+
+      // update body → summary regenerates from the new source value
+      await fetch(`${aiRoot}/${id}`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ body: "a different body entirely" }),
+      });
+      const afterBody = (await (await fetch(`${aiRoot}/${id}`)).json()) as { summary?: string };
+      if (!afterBody.summary?.includes("a different body"))
+        fail(`summary did not regenerate on a source update: ${JSON.stringify(afterBody)}`);
+      console.log("AI POPULATE OK");
+    } finally {
+      aiProc?.kill("SIGTERM");
+      await rm(aiDir, { recursive: true, force: true });
+    }
   }
 
   console.log(`EXPRESS SECURED BOOT SMOKE PASS (${dialect})`);

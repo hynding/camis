@@ -5,6 +5,7 @@ import { expressNames, snakeColumn } from "./names";
 
 export interface RouteOptions {
   secured?: boolean;
+  aiColumns?: string[];
 }
 
 export const emitRoutes = (
@@ -15,18 +16,33 @@ export const emitRoutes = (
   const n = expressNames(ct);
   const t = n.table;
   const typeName = ct.name;
+  const aiSet = new Set(options.aiColumns ?? []);
   const cols = [
-    ...ct.fields.filter((f) => isSupportedField(f.type)).map((f) => snakeColumn(f.name)),
+    ...ct.fields
+      .filter((f) => isSupportedField(f.type))
+      .map((f) => snakeColumn(f.name))
+      .filter((c) => !aiSet.has(c)),
     ...fkColumns,
   ]
     .map((c) => `"${c}"`)
     .join(", ");
 
+  const hasAi = aiSet.size > 0;
+  const asyncKw = hasAi ? "async " : "";
+  const dataDecl = hasAi ? "let" : "const";
+  const aiImport = hasAi ? `\nimport { populateAiFields } from "../ai/populate";` : "";
+  const createPop = hasAi
+    ? `\n  data = await populateAiFields("${typeName}", data, "create");`
+    : "";
+  const updatePop = hasAi
+    ? `\n  data = await populateAiFields("${typeName}", data, "update");`
+    : "";
+
   if (!options.secured) {
     return withMarker(`import { Router } from "express";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client";
-import { ${t} } from "../db/schema";
+import { ${t} } from "../db/schema";${aiImport}
 
 function pick(obj: Record<string, unknown>, keys: string[]): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -49,14 +65,14 @@ ${t}Router.get("/:id", (req, res) => {
   res.json(row);
 });
 
-${t}Router.post("/", (req, res) => {
-  const data = pick(req.body, [${cols}]);
+${t}Router.post("/", ${asyncKw}(req, res) => {
+  ${dataDecl} data = pick(req.body, [${cols}]);${createPop}
   const row = db.insert(${t}).values(data).returning().get();
   res.status(201).json(row);
 });
 
-${t}Router.patch("/:id", (req, res) => {
-  const data = pick(req.body, [${cols}]);
+${t}Router.patch("/:id", ${asyncKw}(req, res) => {
+  ${dataDecl} data = pick(req.body, [${cols}]);${updatePop}
   const row = db.update(${t}).set(data).where(eq(${t}.id, Number(req.params.id))).returning().get();
   if (!row) {
     res.status(404).json({ error: "not found" });
@@ -76,7 +92,7 @@ ${t}Router.delete("/:id", (req, res) => {
 import { eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { ${t} } from "../db/schema";
-import { authorizeAction, recordAllowed, filterRead, stripWrites, roleOf } from "../permissions/enforce";
+import { authorizeAction, recordAllowed, filterRead, stripWrites, roleOf } from "../permissions/enforce";${aiImport}
 
 function pick(obj: Record<string, unknown>, keys: string[]): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -115,18 +131,18 @@ ${t}Router.get("/:id", (req, res) => {
   res.json(filterRead(req, "${typeName}", row));
 });
 
-${t}Router.post("/", (req, res) => {
+${t}Router.post("/", ${asyncKw}(req, res) => {
   if (!authorizeAction(roleOf(req), "${typeName}", "create")) {
     res.status(403).json({ error: "forbidden" });
     return;
   }
   const proposed = pick(req.body, [${cols}]);
-  const data = stripWrites(req, "${typeName}", proposed, proposed);
+  ${dataDecl} data = stripWrites(req, "${typeName}", proposed, proposed);${createPop}
   const row = db.insert(${t}).values(data).returning().get();
   res.status(201).json(filterRead(req, "${typeName}", row));
 });
 
-${t}Router.patch("/:id", (req, res) => {
+${t}Router.patch("/:id", ${asyncKw}(req, res) => {
   if (!authorizeAction(roleOf(req), "${typeName}", "update")) {
     res.status(403).json({ error: "forbidden" });
     return;
@@ -137,7 +153,7 @@ ${t}Router.patch("/:id", (req, res) => {
     return;
   }
   const incoming = pick(req.body, [${cols}]);
-  const data = stripWrites(req, "${typeName}", { ...existing, ...incoming }, incoming);
+  ${dataDecl} data = stripWrites(req, "${typeName}", { ...existing, ...incoming }, incoming);${updatePop}
   const row = db.update(${t}).set(data).where(eq(${t}.id, Number(req.params.id))).returning().get();
   res.json(filterRead(req, "${typeName}", row));
 });

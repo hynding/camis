@@ -1,0 +1,5 @@
+// camis AI provider — REPLACE FOR PRODUCTION.
+// Real impl: read process.env.ANTHROPIC_API_KEY and call the model SDK here.
+export async function generate(model: string | undefined, prompt: string): Promise<string> {
+  return `[ai:${model ?? "default"}] ${prompt.slice(0, 80)}`;
+}

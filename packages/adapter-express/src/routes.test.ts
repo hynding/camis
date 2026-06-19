@@ -44,4 +44,16 @@ describe("emitRoutes", () => {
     expect(ts).toContain("res.json({ id: Number(req.params.id) });");
     expect(ts).toContain('res.setHeader("Content-Range"');
   });
+
+  it("without aiColumns, output is unchanged (no populate import)", () => {
+    expect(emitRoutes(article, [])).not.toContain("populateAiFields");
+  });
+  it("with aiColumns, excludes them from the pick-list and weaves async populate", () => {
+    const ts = emitRoutes(article, [], { aiColumns: ["summary"] });
+    expect(ts).toContain('import { populateAiFields } from "../ai/populate";');
+    expect(ts).toContain('Router.post("/", async (req, res) =>');
+    expect(ts).toContain('data = await populateAiFields("Article", data, "create");');
+    expect(ts).toContain('data = await populateAiFields("Article", data, "update");');
+    expect(ts).not.toContain('"summary"');
+  });
 });
