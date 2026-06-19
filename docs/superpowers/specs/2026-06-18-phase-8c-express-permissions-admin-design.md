@@ -49,7 +49,8 @@ embeddable runtime (§5).
   - The permission-context builder that flattens `{ user.*, record.* }` into the Ring-1 eval `data` map.
 - **Protected (seed):** `src/auth/store.ts` — exports `verifyCredentials`, `getUser`, `jwtSecret`.
   Default stub: an in-memory map of **deterministic dev users, one per IR role**, with known dev
-  credentials (so the gated boot can log in). Marked "replace for production".
+  credentials (so the gated boot can log in), and a **fixed dev `jwtSecret` constant** (never random —
+  determinism is required for stable goldens + idempotent regen). Marked "replace for production".
 - **Anonymous handling:** no/invalid token → if the IR defines a role named `public`, the caller gets
   that role's grants; otherwise `401`. Lets the model express public access without a magic flag.
 
@@ -61,7 +62,9 @@ embeddable runtime (§5).
 - `conditions`: by `role × contentType` → grant `Expression` (record-level).
 - `fieldRules`: by `role × contentType` → `[{ field, access: "read"|"write", when?: Expression }]`.
 - `gaps`: a `conditionContext` downgrade when a `condition`/`when` references free vars outside
-  `user.*` / `record.<field>` (mirrors Filament; such a rule denies).
+  `user.*` / `record.<field>` (mirrors Filament; such a rule denies). A field rule naming a field
+  absent from the content type (or an unsupported field type) is ignored with an `unknownFieldRule`
+  downgrade, so projection never emits a dangling guard.
 
 Action vocabulary is the IR's `create | read | update | delete | publish` (no `list`). HTTP mapping:
 `GET /` and `GET /:id` → `read`; `POST /` → `create`; `PATCH /:id` → `update`; `DELETE /:id` →
@@ -81,7 +84,11 @@ The route emitter (extended from 8B) calls generated guard helpers on the single
 
 **`record.*` binding:** for **read** rules and record conditions, `record.*` is the stored row; for
 **write** rules, `record.*` binds to the *proposed* record (create: the request body; update: the
-existing row merged with the body). All four helpers route through the fail-closed chokepoint (D8).
+existing row merged with the body). Flattening **maps stored snake_case columns back to IR field
+names** (e.g. `author_id` → `record.authorId`), since conditions are authored against IR field names
+(camelCase, as in Filament); an unmapped/missing var hits D8 and denies. `user.*` binds to the
+hydrated `camisUser` attributes. Enforcement applies to the content-type routes only — `/auth/login`
+is unguarded. All four helpers route through the fail-closed chokepoint (D8).
 
 ### 4.3 react-admin REST contract (routes addendum)
 The list route gains `_start/_end/_sort/_order` handling and a `Content-Range` total-count header;
@@ -131,6 +138,11 @@ enforcement is server-side only (YAGNI on client gating).
 6. Continue to emit `camis.schema.json` (document-level; roles are an enforced input, not part of the
    content-model round-trip).
 
+**Dependencies:** the API skeleton gains a JWT dependency (e.g. `jsonwebtoken` + types); the `admin/`
+sub-app carries its own `react`/`react-dom`/`react-admin`/`vite` deps in its own `package.json`. The
+single `expr-ts` change (exporting `Value`/`EvalResult` from the embeddable runtime) may update a
+`tsRuntimeSource` snapshot if one exists — expected, verified in the plan.
+
 ## 8. Verification
 
 - **Unit:** `projectExpressPermissions` (grants/conditions/fieldRules/`conditionContext` gap); HTTP→action
@@ -142,8 +154,9 @@ enforcement is server-side only (YAGNI on client gating).
 - **Round-trip:** unchanged from 8B (document-level) — still green.
 - **Gated boot (extends the 3-DB matrix):** generate → `drizzle-kit push` → boot API → **log in via the
   stub** → exercise an **allowed vs a denied path** (denied must `403`/`404` — proves enforcement) → a
-  **field-stripped read** (a read-denied field absent from the response) → `npm run build` the `admin/`
-  sub-app (proves it type-checks + bundles).
+  **field-stripped read** (a read-denied field absent from the response). The `admin/` sub-app
+  `npm run build` runs **once** (it is dialect-agnostic), not per matrix leg, to prove it type-checks
+  + bundles.
 
 ## 9. Exit criteria (8C — closes Phase 8)
 
