@@ -6,7 +6,10 @@ export interface CapabilityDescriptor {
   fieldTypes: Partial<Record<FieldType, boolean>>;
   relationKinds: Partial<Record<RelationKind, boolean>>;
   features: Partial<
-    Record<"dynamicZone" | "component" | "softDelete" | "draftPublish" | "media", boolean>
+    Record<
+      "dynamicZone" | "component" | "softDelete" | "draftPublish" | "media" | "aiField",
+      boolean
+    >
   >;
 }
 

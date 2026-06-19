@@ -9,3 +9,5 @@ export type { CapabilityDescriptor, CapabilityGap, CapabilityGapReport } from ".
 export { fieldName, typeName } from "./identifiers";
 export { HOOK_SCALARS, hook, shapeField } from "./hooks";
 export type { Hook, HookScalar, ShapeField } from "./hooks";
+export { ai, aiPlaceholders, AI_TRIGGERS } from "./ai";
+export type { Ai, AiTrigger } from "./ai";

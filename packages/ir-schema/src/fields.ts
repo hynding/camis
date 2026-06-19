@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { expression } from "@camis/expr";
 import { fieldName, typeName } from "./identifiers";
+import { ai } from "./ai";
 
 export const FIELD_TYPES = [
   "string",
@@ -49,6 +50,7 @@ const textLike = (type: "string" | "text" | "richText" | "email") =>
     unique: z.boolean().optional(),
     ...len,
     default: z.string().optional(),
+    ...(type === "email" ? {} : { ai: ai.optional() }),
   });
 
 const numeric = (type: "integer" | "bigInteger" | "float" | "decimal") =>
