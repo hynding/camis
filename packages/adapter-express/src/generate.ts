@@ -6,6 +6,8 @@ import {
 } from "@camis/adapter-kernel";
 import { normalize } from "@camis/ir-core";
 import type { CapabilityGap } from "@camis/ir-schema";
+import { adminResourceFiles } from "./admin-resources";
+import { adminStaticFiles } from "./admin-app";
 import { authFiles } from "./auth";
 import { type Dialect } from "./dialect";
 import { isSupportedField } from "./fields";
@@ -93,6 +95,8 @@ export const expressAdapterFor = (dialect: Dialect): GenerateAdapter => ({
         content: emitConditionsFile(namedConditions(perms)),
       });
       files.push({ path: "src/permissions/enforce.ts", content: emitEnforce(perms, doc) });
+      files.push(...adminStaticFiles());
+      files.push(...adminResourceFiles(doc));
     }
 
     return { files, manifest: buildManifest(files), gaps: { target: "express", gaps } };
