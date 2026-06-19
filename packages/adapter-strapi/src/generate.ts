@@ -7,6 +7,7 @@ import {
 } from "@camis/adapter-kernel";
 import { normalize } from "@camis/ir-core";
 import type { CapabilityGap, Component, ContentType, IrDocument } from "@camis/ir-schema";
+import { aiFieldContentTypes, aiLifecycleFile, aiProviderFile, hasAiField } from "./ai";
 import { apiFactoryFiles } from "./api-files";
 import { componentSchema } from "./component-schema";
 import { emitHookFiles } from "./hooks/emit";
@@ -73,13 +74,31 @@ export const strapiAdapter: GenerateAdapter = {
       perm.indexContent === undefined
         ? files
         : files.map((f) => (f.path === "src/index.ts" ? { ...f, content: perm.indexContent! } : f));
-    const allFiles = [...withPerm, ...perm.files, ...emitHookFiles(doc)];
+    const aiGenFiles: GeneratedFile[] = [];
+    const aiGaps: CapabilityGap[] = [];
+    if (hasAiField(doc)) {
+      aiGenFiles.push(aiProviderFile());
+      const hookCts = new Set((doc.hooks ?? []).map((h) => h.contentType));
+      for (const ct of aiFieldContentTypes(doc)) {
+        if (hookCts.has(ct.name)) {
+          aiGaps.push({
+            feature: "aiHookCollision",
+            location: { contentType: ct.name },
+            severity: "downgrade",
+            message: `"${ct.name}" has both a hook and an AI field; both target lifecycles.ts. The hook lifecycle wins; AI generation is not wired for this type.`,
+          });
+          continue;
+        }
+        aiGenFiles.push(aiLifecycleFile(ct));
+      }
+    }
+    const allFiles = [...withPerm, ...perm.files, ...emitHookFiles(doc), ...aiGenFiles];
     return {
       files: allFiles,
       manifest: buildManifest(allFiles),
       gaps: {
         target: "strapi",
-        gaps: [...softDeleteGaps(doc), ...dynamicZoneGaps(doc), ...perm.gaps],
+        gaps: [...softDeleteGaps(doc), ...dynamicZoneGaps(doc), ...perm.gaps, ...aiGaps],
       },
     };
   },

@@ -57,6 +57,95 @@ describe("strapiAdapter.generate", () => {
   });
 });
 
+it("emits the AI provider + lifecycle for an AI-bearing content type", () => {
+  const r = strapiAdapter.generate(
+    {
+      document: {
+        version: 1,
+        contentTypes: [
+          {
+            name: "Article",
+            kind: "collection",
+            fields: [
+              { type: "text", name: "body" },
+              {
+                type: "text",
+                name: "summary",
+                ai: { prompt: "Sum {{body}}", trigger: "onCreate" },
+              },
+            ],
+          },
+        ],
+        components: [],
+      },
+      roles: [],
+    } as never,
+    { projectName: "blog" },
+  );
+  const paths = r.files.map((f) => f.path);
+  expect(paths).toContain("src/ai/provider.ts");
+  expect(paths).toContain("src/api/article/content-types/article/lifecycles.ts");
+});
+it("emits no AI files when no content type has an ai field", () => {
+  const r = strapiAdapter.generate(
+    {
+      document: {
+        version: 1,
+        contentTypes: [
+          { name: "Article", kind: "collection", fields: [{ type: "text", name: "body" }] },
+        ],
+        components: [],
+      },
+      roles: [],
+    } as never,
+    { projectName: "blog" },
+  );
+  expect(r.files.some((f) => f.path === "src/ai/provider.ts")).toBe(false);
+});
+it("gaps a content type with BOTH a hook and an ai field (lifecycle collision)", () => {
+  const r = strapiAdapter.generate(
+    {
+      document: {
+        version: 1,
+        hooks: [
+          {
+            name: "Enrich",
+            trigger: "onPublish",
+            contentType: "Article",
+            input: [{ name: "body", type: "text" }],
+            output: [{ name: "summary", type: "text" }],
+          },
+        ],
+        contentTypes: [
+          {
+            name: "Article",
+            kind: "collection",
+            fields: [
+              { type: "text", name: "body" },
+              {
+                type: "text",
+                name: "summary",
+                ai: { prompt: "Sum {{body}}", trigger: "onCreate" },
+              },
+            ],
+          },
+        ],
+        components: [],
+      },
+      roles: [],
+    } as never,
+    { projectName: "blog" },
+  );
+  expect(
+    r.gaps.gaps.some(
+      (g) => g.feature === "aiHookCollision" && g.location.contentType === "Article",
+    ),
+  ).toBe(true);
+  expect(
+    r.files.filter((f) => f.path === "src/api/article/content-types/article/lifecycles.ts"),
+  ).toHaveLength(1);
+});
+
 describe("strapiAdapter.generate — components + inverses", () => {
   const doc = {
     version: 1 as const,
