@@ -1,0 +1,82 @@
+import { fetchUtils, type DataProvider } from "react-admin";
+
+const apiUrl = "/api";
+
+const httpClient = (url: string, options: fetchUtils.Options = {}) => {
+  const headers = (options.headers ||
+    new Headers({ Accept: "application/json" })) as Headers;
+  const token = localStorage.getItem("token");
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  return fetchUtils.fetchJson(url, { ...options, headers });
+};
+
+export const dataProvider: DataProvider = {
+  getList: async (resource, params) => {
+    const { page = 1, perPage = 25 } = params.pagination ?? {};
+    const { field = "id", order = "ASC" } = params.sort ?? {};
+    const start = (page - 1) * perPage;
+    const end = page * perPage;
+    const query = new URLSearchParams({
+      _sort: field,
+      _order: order,
+      _start: String(start),
+      _end: String(end),
+    });
+    const { headers, json } = await httpClient(`${apiUrl}/${resource}?${query}`);
+    const range = headers.get("Content-Range") ?? "";
+    const total = Number(range.split("/").pop() ?? json.length);
+    return { data: json, total };
+  },
+  getOne: async (resource, params) => {
+    const { json } = await httpClient(`${apiUrl}/${resource}/${params.id}`);
+    return { data: json };
+  },
+  getMany: async (resource, params) => {
+    const data = await Promise.all(
+      params.ids.map((id) => httpClient(`${apiUrl}/${resource}/${id}`).then(({ json }) => json)),
+    );
+    return { data };
+  },
+  getManyReference: async (resource, params) => {
+    const { json } = await httpClient(`${apiUrl}/${resource}?_start=0&_end=1000`);
+    const data = json.filter((r: Record<string, unknown>) => r[params.target] === params.id);
+    return { data, total: data.length };
+  },
+  create: async (resource, params) => {
+    const { json } = await httpClient(`${apiUrl}/${resource}`, {
+      method: "POST",
+      body: JSON.stringify(params.data),
+    });
+    return { data: json };
+  },
+  update: async (resource, params) => {
+    const { json } = await httpClient(`${apiUrl}/${resource}/${params.id}`, {
+      method: "PATCH",
+      body: JSON.stringify(params.data),
+    });
+    return { data: json };
+  },
+  updateMany: async (resource, params) => {
+    await Promise.all(
+      params.ids.map((id) =>
+        httpClient(`${apiUrl}/${resource}/${id}`, {
+          method: "PATCH",
+          body: JSON.stringify(params.data),
+        }),
+      ),
+    );
+    return { data: params.ids };
+  },
+  delete: async (resource, params) => {
+    const { json } = await httpClient(`${apiUrl}/${resource}/${params.id}`, { method: "DELETE" });
+    return { data: json };
+  },
+  deleteMany: async (resource, params) => {
+    await Promise.all(
+      params.ids.map((id) =>
+        httpClient(`${apiUrl}/${resource}/${id}`, { method: "DELETE" }),
+      ),
+    );
+    return { data: params.ids };
+  },
+};

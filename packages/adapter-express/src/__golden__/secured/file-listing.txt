@@ -1,3 +1,13 @@
+overwrite admin/index.html
+overwrite admin/package.json
+overwrite admin/src/App.tsx
+overwrite admin/src/authProvider.ts
+overwrite admin/src/dataProvider.ts
+overwrite admin/src/main.tsx
+overwrite admin/src/resources/articles.tsx
+overwrite admin/src/resources/authors.tsx
+overwrite admin/tsconfig.json
+overwrite admin/vite.config.ts
 overwrite camis.schema.json
 overwrite drizzle.config.ts
 overwrite package.json

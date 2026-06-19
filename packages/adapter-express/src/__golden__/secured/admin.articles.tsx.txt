@@ -1,0 +1,35 @@
+import { Create, Datagrid, Edit, List, ReferenceField, ReferenceInput, SimpleForm, TextField, TextInput } from "react-admin";
+
+export const ArticleList = () => (
+  <List>
+    <Datagrid rowClick="edit">
+      <TextField source="id" />
+      <TextField source="title" />
+      <TextField source="status" />
+      <TextField source="secret_notes" />
+      <ReferenceField source="author_id" reference="authors" />
+    </Datagrid>
+  </List>
+);
+
+export const ArticleEdit = () => (
+  <Edit>
+    <SimpleForm>
+      <TextInput source="title" />
+      <TextInput source="status" />
+      <TextInput source="secret_notes" />
+      <ReferenceInput source="author_id" reference="authors" />
+    </SimpleForm>
+  </Edit>
+);
+
+export const ArticleCreate = () => (
+  <Create>
+    <SimpleForm>
+      <TextInput source="title" />
+      <TextInput source="status" />
+      <TextInput source="secret_notes" />
+      <ReferenceInput source="author_id" reference="authors" />
+    </SimpleForm>
+  </Create>
+);
