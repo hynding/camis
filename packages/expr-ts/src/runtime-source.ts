@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-const PREAMBLE = `type Value = null | boolean | number | string;
+const PREAMBLE = `export type Value = null | boolean | number | string;
 type EvalError = "TYPE_MISMATCH" | "DIV_BY_ZERO" | "UNKNOWN_VAR";
-type EvalResult = { ok: true; value: Value } | { ok: false; error: EvalError };
+export type EvalResult = { ok: true; value: Value } | { ok: false; error: EvalError };
 const ok = (value: Value): EvalResult => ({ ok: true, value });
 const err = (error: EvalError): EvalResult => ({ ok: false, error });
 `;

@@ -34,4 +34,20 @@ describe("skeletonFiles", () => {
     expect(c("src/db/client.ts")).toContain("drizzle-orm/postgres-js");
     expect(c("drizzle.config.ts")).toContain('dialect: "postgresql"');
   });
+  it("unsecured server has no auth wiring (8A/8B compatible)", () => {
+    const files = skeletonFiles(doc, "blog", "sqlite");
+    expect(files.find((f) => f.path === "src/server.ts")!.content).not.toContain("authRouter");
+  });
+  it("secured server mounts verify + /auth and adds jsonwebtoken", () => {
+    const files = skeletonFiles(doc, "blog", "sqlite", { secured: true });
+    const server = files.find((f) => f.path === "src/server.ts")!.content;
+    expect(server).toContain('import { verify } from "./auth/verify";');
+    expect(server).toContain('app.use("/auth", authRouter);');
+    expect(server).toContain("app.use(verify);");
+    expect(
+      JSON.parse(files.find((f) => f.path === "package.json")!.content).dependencies[
+        "jsonwebtoken"
+      ],
+    ).toBeDefined();
+  });
 });

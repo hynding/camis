@@ -28,4 +28,20 @@ describe("emitRoutes", () => {
     const ts = emitRoutes(article, ["author_id"]);
     expect(ts).toContain('pick(req.body, ["title", "published", "author_id"]);');
   });
+
+  it("unsecured routes are unchanged (no guard imports)", () => {
+    const ts = emitRoutes(article, []);
+    expect(ts).not.toContain("authorizeAction");
+  });
+
+  it("secured routes import guards, gate actions, filter reads, and return {id} on delete", () => {
+    const ts = emitRoutes(article, [], { secured: true });
+    expect(ts).toContain(
+      'import { authorizeAction, recordAllowed, filterRead, stripWrites, roleOf } from "../permissions/enforce";',
+    );
+    expect(ts).toContain('authorizeAction(roleOf(req), "Article", "read")');
+    expect(ts).toContain("filterRead(req,");
+    expect(ts).toContain("res.json({ id: Number(req.params.id) });");
+    expect(ts).toContain('res.setHeader("Content-Range"');
+  });
 });

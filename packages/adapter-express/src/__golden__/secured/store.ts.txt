@@ -1,0 +1,24 @@
+// camis dev auth stub — REPLACE FOR PRODUCTION (real user store, hashing, secret from env).
+export interface CamisUser {
+  id: number;
+  role: string;
+  email: string;
+}
+
+const USERS: (CamisUser & { password: string })[] = [
+  { id: 1, role: "Editor", email: "editor@example.com", password: "dev" },
+  { id: 2, role: "Viewer", email: "viewer@example.com", password: "dev" },
+  { id: 3, role: "public", email: "public@example.com", password: "dev" },
+];
+
+export const jwtSecret = "dev-secret-change-me";
+
+export const verifyCredentials = (email: string, password: string): CamisUser | null => {
+  const u = USERS.find((x) => x.email === email && x.password === password);
+  return u ? { id: u.id, role: u.role, email: u.email } : null;
+};
+
+export const getUser = (id: number): CamisUser | null => {
+  const u = USERS.find((x) => x.id === id);
+  return u ? { id: u.id, role: u.role, email: u.email } : null;
+};

@@ -1,0 +1,17 @@
+overwrite camis.schema.json
+overwrite drizzle.config.ts
+overwrite package.json
+overwrite src/auth/login.ts
+overwrite src/auth/verify.ts
+overwrite src/db/client.ts
+overwrite src/db/schema.ts
+overwrite src/index.ts
+overwrite src/permissions/conditions.ts
+overwrite src/permissions/enforce.ts
+overwrite src/ring1/runtime.ts
+overwrite src/routes/articles.ts
+overwrite src/routes/authors.ts
+overwrite src/server.ts
+overwrite tsconfig.json
+seed .env
+seed src/auth/store.ts
