@@ -1,4 +1,5 @@
 import type { Component, ContentType, IrDocument, IrError } from "@camis/ir-schema";
+import { aiPlaceholders } from "@camis/ir-schema";
 
 const findDuplicates = (names: string[]): string[] => {
   const seen = new Set<string>();
@@ -75,6 +76,34 @@ export const validateInvariants = (doc: IrDocument): IrError[] => {
             errors.push({
               code: "unknown_component_ref",
               message: `component "${c}" does not exist`,
+              location: { ...location, field: f.name },
+              path: [],
+            });
+          }
+        }
+      }
+      const af = f as { ai?: { prompt: string }; computed?: unknown };
+      if (af.ai) {
+        if (af.computed !== undefined) {
+          errors.push({
+            code: "ai_computed_conflict",
+            message: `field "${f.name}" cannot be both an AI field and computed`,
+            location: { ...location, field: f.name },
+            path: [],
+          });
+        }
+        const scalarNames = new Set(
+          fields
+            .filter(
+              (g) => g.type !== "relation" && g.type !== "component" && g.type !== "dynamicZone",
+            )
+            .map((g) => g.name),
+        );
+        for (const src of aiPlaceholders(af.ai.prompt)) {
+          if (src === f.name || !scalarNames.has(src)) {
+            errors.push({
+              code: "unknown_ai_source",
+              message: `AI field "${f.name}" references unknown source "${src}"`,
               location: { ...location, field: f.name },
               path: [],
             });

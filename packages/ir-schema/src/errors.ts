@@ -18,7 +18,9 @@ export type IrErrorCode =
   | "cyclic_component_reference"
   | "inverse_field_collision"
   | "unknown_hook_content_type"
-  | "duplicate_hook";
+  | "duplicate_hook"
+  | "unknown_ai_source"
+  | "ai_computed_conflict";
 
 export interface IrErrorLocation {
   contentType?: string;

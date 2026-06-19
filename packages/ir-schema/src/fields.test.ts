@@ -97,3 +97,41 @@ describe("typed defaults (S9)", () => {
     expect(field.safeParse({ type: "integer", name: "rank", default: "high" }).success).toBe(false);
   });
 });
+
+describe("ai annotation on fields", () => {
+  it("accepts ai on a text field", () => {
+    const r = field.safeParse({
+      type: "text",
+      name: "summary",
+      ai: { prompt: "Sum {{body}}", trigger: "onCreate" },
+    });
+    expect(r.success).toBe(true);
+  });
+  it("accepts ai on string and richText", () => {
+    expect(
+      field.safeParse({
+        type: "string",
+        name: "blurb",
+        ai: { prompt: "{{title}}", trigger: "onUpdate" },
+      }).success,
+    ).toBe(true);
+    expect(
+      field.safeParse({
+        type: "richText",
+        name: "draft",
+        ai: { prompt: "{{title}}", trigger: "onCreateOrUpdate" },
+      }).success,
+    ).toBe(true);
+  });
+  it("strips ai on an email field (email is not an AI field)", () => {
+    const r = field.safeParse({
+      type: "email",
+      name: "contact",
+      ai: { prompt: "{{x}}", trigger: "onCreate" },
+    });
+    expect(r.success).toBe(true);
+    expect((r.success ? r.data : ({} as never)) as Record<string, unknown>).not.toHaveProperty(
+      "ai",
+    );
+  });
+});

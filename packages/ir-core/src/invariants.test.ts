@@ -2,6 +2,13 @@ import { describe, expect, it } from "vitest";
 import type { IrDocument } from "@camis/ir-schema";
 import { validateInvariants } from "./invariants";
 
+const docWith = (articleFields: unknown[]): IrDocument =>
+  ({
+    version: 1,
+    contentTypes: [{ name: "Article", kind: "collection", fields: articleFields }],
+    components: [],
+  }) as IrDocument;
+
 const codes = (doc: IrDocument) => validateInvariants(doc).map((e) => e.code);
 
 describe("reference invariants", () => {
@@ -135,5 +142,55 @@ describe("uniqueness, acyclic, inverse collision", () => {
       components: [],
     };
     expect(codes(doc)).toContain("inverse_field_collision");
+  });
+});
+
+describe("ai invariants", () => {
+  it("accepts an ai field whose placeholders name existing scalar fields", () => {
+    const errors = validateInvariants(
+      docWith([
+        { type: "text", name: "body" },
+        { type: "text", name: "summary", ai: { prompt: "Sum {{body}}", trigger: "onCreate" } },
+      ]),
+    );
+    expect(errors.filter((e) => e.code === "unknown_ai_source")).toHaveLength(0);
+  });
+  it("rejects an unknown placeholder", () => {
+    const errors = validateInvariants(
+      docWith([
+        { type: "text", name: "summary", ai: { prompt: "Sum {{missing}}", trigger: "onCreate" } },
+      ]),
+    );
+    expect(
+      errors.some((e) => e.code === "unknown_ai_source" && e.location.field === "summary"),
+    ).toBe(true);
+  });
+  it("rejects a placeholder naming a relation/the field itself", () => {
+    const errors = validateInvariants(
+      docWith([
+        { type: "relation", name: "author", relationKind: "manyToOne", target: "Article" },
+        {
+          type: "text",
+          name: "summary",
+          ai: { prompt: "{{author}} {{summary}}", trigger: "onCreate" },
+        },
+      ]),
+    );
+    expect(errors.filter((e) => e.code === "unknown_ai_source")).toHaveLength(2);
+  });
+  it("rejects ai + computed on the same field", () => {
+    const errors = validateInvariants(
+      docWith([
+        {
+          type: "text",
+          name: "summary",
+          ai: { prompt: "x", trigger: "onCreate" },
+          computed: { kind: "lit", value: "y" },
+        },
+      ]),
+    );
+    expect(
+      errors.some((e) => e.code === "ai_computed_conflict" && e.location.field === "summary"),
+    ).toBe(true);
   });
 });
