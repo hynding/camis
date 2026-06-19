@@ -8,6 +8,7 @@ import { normalize } from "@camis/ir-core";
 import type { CapabilityGap } from "@camis/ir-schema";
 import { adminResourceFiles } from "./admin-resources";
 import { adminStaticFiles } from "./admin-app";
+import { aiColumnsOf, aiFiles, hasAiField } from "./ai";
 import { authFiles } from "./auth";
 import { type Dialect } from "./dialect";
 import { isSupportedField } from "./fields";
@@ -75,7 +76,7 @@ export const expressAdapterFor = (dialect: Dialect): GenerateAdapter => ({
       const fk = rel.fkColumns.get(ct.name) ?? [];
       files.push({
         path: `src/routes/${expressNames(ct).table}.ts`,
-        content: emitRoutes(ct, fkNames(fk), { secured }),
+        content: emitRoutes(ct, fkNames(fk), { secured, aiColumns: aiColumnsOf(ct) }),
       });
     });
 
@@ -84,6 +85,8 @@ export const expressAdapterFor = (dialect: Dialect): GenerateAdapter => ({
       content: emitSchemaFile(doc.contentTypes, dialect, rel),
     });
     files.push(camisSchemaFile(doc));
+
+    if (hasAiField(doc)) files.push(...aiFiles(doc));
 
     if (secured) {
       const perms = projectExpressPermissions(doc, ir.roles);

@@ -156,6 +156,55 @@ describe("admin sub-app emission", () => {
   });
 });
 
+describe("AI emission", () => {
+  it("emits AI provider + populate and AI-aware routes when a field has an ai annotation", () => {
+    const bundle = {
+      document: {
+        version: 1,
+        contentTypes: [
+          {
+            name: "Article",
+            kind: "collection",
+            fields: [
+              { type: "text", name: "body" },
+              {
+                type: "text",
+                name: "summary",
+                ai: { prompt: "Sum {{body}}", trigger: "onCreate" },
+              },
+            ],
+          },
+        ],
+        components: [],
+      },
+      roles: [],
+    } as never;
+    const r = expressAdapter.generate(bundle, { projectName: "blog" });
+    const paths = r.files.map((f) => f.path);
+    expect(paths).toContain("src/ai/provider.ts");
+    expect(paths).toContain("src/ai/populate.ts");
+    expect(r.files.find((f) => f.path === "src/routes/articles.ts")!.content).toContain(
+      "populateAiFields",
+    );
+  });
+  it("emits no AI files when no field has an ai annotation", () => {
+    const r = expressAdapter.generate(
+      {
+        document: {
+          version: 1,
+          contentTypes: [
+            { name: "Article", kind: "collection", fields: [{ type: "text", name: "body" }] },
+          ],
+          components: [],
+        },
+        roles: [],
+      } as never,
+      { projectName: "blog" },
+    );
+    expect(r.files.some((f) => f.path.startsWith("src/ai/"))).toBe(false);
+  });
+});
+
 describe("expressAdapterFor", () => {
   const relBundle = {
     document: {
