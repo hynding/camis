@@ -36,8 +36,11 @@ of truth, one-way authoritative generation, import only from declarative sources
   (exit 0) or each `IrError` as `✗ [code] <location> — <message>` (exit 1).
 - **`camis import <target> <projectDir> [--out ir.json]`** — read a **declarative** source via that
   adapter's importer → `Result<IrDocument>`; on `ok`, `validate`, `stableJson`, write `--out` (default
-  `./camis.json`), print `✓ imported → <out>`. Targets: `strapi` (a Strapi `schema.json` project),
-  `express` (a `camis.schema.json`). `filament`/unknown → exit 1 ("no importer; generation is one-way").
+  `./camis.json`), print `✓ imported → <out>`. The two importers have **different shapes** the command
+  normalizes: Strapi is `await readStrapiProject(projectDir)` (async; reads the project's `schema.json`
+  files itself); Express is `importExpressProject([{ path: "camis.schema.json", content }])` (sync; the
+  command reads `<projectDir>/camis.schema.json` and passes it as a one-file set). Both yield
+  `{ document: Result<IrDocument> }`. `filament`/unknown → exit 1 ("no importer; generation is one-way").
 - **`camis generate [--config camis.config.json]`** — load config + IR, `validate` (fail-fast, exit 1 if
   invalid); for each target run `adapter.generate` and print `<target>: N files → <out> (dry-run)` plus
   the gap report. **No disk writes.**
@@ -84,7 +87,10 @@ JSON is a content model; `roles` defaults to `[]` unless the IR file carries a b
 
 For each target, group `result.gaps.gaps` and print each as `⚠ <feature> @ <contentType>[.<field>] —
 <message>`. **Exit code:** any gap with `severity: "error"` ⇒ non-zero (and, in `build`, that target's
-write is aborted); `downgrade` gaps are warnings (exit stays 0; `build` still writes). A per-target
+write is aborted); `downgrade` gaps are warnings (exit stays 0; `build` still writes). No current adapter
+emits an `error`-severity gap (every real gap is a `downgrade`), so this abort path is **defensive** and
+is covered by a test using a **stub `GenerateAdapter`** that emits an `error` gap — not left as untested
+dead code. A per-target
 failure (invalid IR, error-gap) sets a non-zero overall exit but does not suppress reporting the other
 targets. `validate` and `import` failures exit 1.
 
