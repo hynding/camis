@@ -45,9 +45,10 @@ ai: {
 }
 ```
 
-- **Schema (`ir-schema/fields.ts`):** add an optional `ai` object to the `string`/`text`/`richText`
-  builders (NOT to numeric/boolean/relation/component/json). A small helper extracts
-  `{{placeholders}}` from `prompt` (the derived source set).
+- **Schema (`ir-schema/fields.ts`):** accept an optional `ai` object on `string`/`text`/`richText`
+  only (NOT numeric/boolean/relation/component/json — and NOT `email`, even though it shares the
+  `textLike` factory: gate `ai` via a `textLike` parameter or reject it on `email` in an invariant). A
+  small helper extracts `{{placeholders}}` from `prompt` (the derived source set).
 - **Invariants (`ir-core`):** (a) every `{{placeholder}}` names an existing **non-relation, non-component**
   field of the same content type (and not the AI field itself); (b) a field may not have both `ai` and `computed`
   (mutually exclusive value origins); (c) `prompt` is non-empty. Violations are `IrError`s — the same
