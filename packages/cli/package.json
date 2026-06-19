@@ -10,5 +10,15 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "lint": "eslint ."
+  },
+  "dependencies": {
+    "@camis/adapter-express": "workspace:*",
+    "@camis/adapter-filament": "workspace:*",
+    "@camis/adapter-kernel": "workspace:*",
+    "@camis/adapter-strapi": "workspace:*",
+    "@camis/ir-core": "workspace:*",
+    "@camis/ir-schema": "workspace:*",
+    "@camis/permissions": "workspace:*",
+    "zod": "^3.25.76"
   }
 }

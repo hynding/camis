@@ -140,7 +140,32 @@ importers:
 
   packages/ai-runtime-spec: {}
 
-  packages/cli: {}
+  packages/cli:
+    dependencies:
+      '@camis/adapter-express':
+        specifier: workspace:*
+        version: link:../adapter-express
+      '@camis/adapter-filament':
+        specifier: workspace:*
+        version: link:../adapter-filament
+      '@camis/adapter-kernel':
+        specifier: workspace:*
+        version: link:../adapter-kernel
+      '@camis/adapter-strapi':
+        specifier: workspace:*
+        version: link:../adapter-strapi
+      '@camis/ir-core':
+        specifier: workspace:*
+        version: link:../ir-core
+      '@camis/ir-schema':
+        specifier: workspace:*
+        version: link:../ir-schema
+      '@camis/permissions':
+        specifier: workspace:*
+        version: link:../permissions
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
 
   packages/expr:
     dependencies:
