@@ -32,6 +32,12 @@ primitive.
 - `vendor/` — vendored/patched third-party code.
 - `docs/` — architecture and plan.
 
+## Using the CLI
+
+`@camis/cli` wires everything into one entry point — `camis validate | import | generate | build`,
+driven by a `camis.config.json` that selects target(s) and output dirs. See
+[`packages/cli/README.md`](./packages/cli/README.md).
+
 ## Status
 
 Greenfield. Build proceeds by the phases in [`docs/PLAN.md`](./docs/PLAN.md); each phase has
