@@ -6,7 +6,7 @@ import { loadConfig } from "../config";
 import { adapterFor } from "../registry";
 import { locStr } from "./validate";
 
-const printGaps = (io: Io, gaps: CapabilityGap[]): boolean => {
+export const printGaps = (io: Io, gaps: CapabilityGap[]): boolean => {
   let hasError = false;
   for (const g of gaps) {
     if (g.severity === "error") hasError = true;

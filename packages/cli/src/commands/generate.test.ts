@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { GenerationResult } from "@camis/adapter-kernel";
 import type { MockedFunction } from "vitest";
-import { generateCommand } from "./generate";
+import { generateCommand, printGaps } from "./generate";
 import type { Io } from "../io";
 
 const config = JSON.stringify({
@@ -50,5 +50,27 @@ describe("generateCommand", () => {
     expect(code).toBe(0);
     expect(spy).toHaveBeenCalledTimes(1);
     expect(spy.mock.calls[0]![1]).toBe("/p/out/api");
+  });
+});
+
+describe("printGaps", () => {
+  it("returns true when any gap is severity error, false for downgrades only", () => {
+    const lines: string[] = [];
+    const io: Io = {
+      readFile: () => Promise.resolve(""),
+      writeFile: () => Promise.resolve(),
+      materialize: () => Promise.resolve(),
+      out: (l) => lines.push(l),
+      cwd: "/p",
+    };
+    expect(
+      printGaps(io, [{ feature: "x", location: {}, severity: "downgrade", message: "m" }]),
+    ).toBe(false);
+    expect(
+      printGaps(io, [
+        { feature: "y", location: { contentType: "A" }, severity: "error", message: "boom" },
+      ]),
+    ).toBe(true);
+    expect(lines.join("\n")).toContain("boom");
   });
 });
