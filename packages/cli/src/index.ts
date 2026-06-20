@@ -1,2 +1,4 @@
-// @camis/cli — Phase 0 stub. Real exports arrive in the phase that owns this package.
-export {};
+export { run } from "./run";
+export type { Io } from "./io";
+export { loadConfig, projectConfig } from "./config";
+export type { ProjectConfig, TargetConfig } from "./config";
