@@ -41,3 +41,12 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
 - `ir` and each `out` resolve relative to the config file's directory.
 - `target` is `express` | `strapi` | `filament`; `dialect` (`sqlite` | `mysql` | `pgsql`) is Express-only.
 - `projectName` defaults to the `out` directory's basename.
+- `roles` (optional) points at a JSON array of roles (`@camis/permissions` shape:
+  `{ name, grants: [{ contentType, actions, condition?, fieldRules? }] }`). When present, the
+  roles are cross-validated against the IR and drive permission emission: the Spatie seeder +
+  Ring-1-backed policies on Filament, and the JWT/enforcement layer on Express.
+
+Ownership conditions: owning relations (`manyToOne`/`oneToOne`) expose their FK to Ring-1
+conditions as `record.<name>Id`, so a grant condition like
+`{"kind":"eq","left":{"kind":"var","name":"record.ownerId"},"right":{"kind":"var","name":"user.id"}}`
+enforces record-level ownership on both PHP and Express backends (fail-closed).
