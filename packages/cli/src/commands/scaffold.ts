@@ -29,6 +29,7 @@ const steps = (
     args: ["artisan", "filament:install", "--panels", "--no-interaction"],
     cwd: appDir,
   },
+  { cmd: "php", args: ["artisan", "install:api", "--no-interaction"], cwd: appDir },
   {
     cmd: "composer",
     args: ["require", "spatie/laravel-permission", "--no-interaction"],
