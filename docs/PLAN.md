@@ -189,6 +189,71 @@ updated; full `pnpm -r test` green.
 
 ---
 
+## Phase 11 — Built-in user content type
+
+**Goal:** relations to a target's native user model are representable in the IR.
+
+- IR: optional `builtin: "user"` marker on a content type.
+- Strapi import: `plugin::users-permissions.user` relation targets map to a synthesized
+  builtin `User` type; other `plugin::` targets become downgrade gaps, not dangling names.
+- Strapi generate: round-trips the marker (emits the plugin UID, no schema files for it).
+- Filament: builtin user maps to the stock `App\Models\User` / `users` table; no files emitted.
+- Express: no change — materializing the builtin as a regular `users` table is correct there.
+
+**Exit criteria:** a real Strapi project with owner/creator relations to the plugin user
+(e.g. OYL) imports cleanly and generates on all three targets; round-trip test green.
+
+## Phase 12 — Component fields on relational targets (Filament, Express)
+
+**Goal:** `component` fields stop being capability gaps on the relational targets.
+
+- Non-repeatable component → prefixed embedded columns on the parent table (recursive).
+- Repeatable component (any depth) → child table + FK + relation + Filament `Repeater` /
+  Drizzle relations.
+- Relations inside components remain downgrade gaps (bounded scope).
+
+**Exit criteria:** OYL's `finance.money`, `nutrition.nutrition-facts` (nested + repeatable
+`additional`), and `activity.quantity` fixtures generate on both targets; goldens + idempotent
+regen; zero component gaps for the OYL corpus.
+
+## Phase 13 — Roles reach the CLI; ownership predicates
+
+**Goal:** `camis build` can emit permission code; record-ownership rules are expressible.
+
+- Project config gains optional `roles` path (validated via `validateBundle`); CLI passes
+  roles through instead of hardcoding `[]`.
+- Policy/enforce record data exposes relation FKs (`record.<name>Id`) so Ring-1 conditions
+  can express `record.ownerId == user.id` on both PHP and Express backends.
+
+**Exit criteria:** a roles file + config produces Spatie seeder, policies, and Express
+enforcement via the CLI; denied-path tests cover an ownership condition on both targets.
+
+## Phase 14 — Scaffold & deploy ergonomics
+
+**Goal:** one command from IR to a deployable Laravel app.
+
+- `camis scaffold filament <dir>`: composer create-project + filament install + Spatie
+  install + `HasRoles` patch, then overlay (testable via an injected exec).
+- Filament target emits `.env.example` + `DEPLOY.md` (shared-hosting path documented).
+- CLI bin runs under plain `node` via a tsx-registering wrapper.
+
+**Exit criteria:** scaffold + build + migrate boots a Filament panel from a fresh checkout;
+CLI invocable without pnpm dlx.
+
+## Phase 15 — Laravel sync API
+
+**Goal:** the Filament target can serve as a headless backend, not only an admin panel.
+
+- Generated JSON API: routes + controllers per content type (index/show/store/update/destroy).
+- IR `options.upsertBy: <uniqueField>` → store() upserts on that field.
+- Protected seam: generated `routes/api.php` requires a seed-mode `routes/api-custom.php`
+  for bespoke endpoints (e.g. an OYL `/api/bootstrap`).
+
+**Exit criteria:** generated API passes a CRUD + upsert round-trip test; custom-route seam
+survives regeneration; policies enforced on API paths when roles are configured.
+
+---
+
 ## Sequencing rationale (quick reference)
 
 1. **Strapi first** — mature schema validates the IR fastest, with the thinnest adapter.
