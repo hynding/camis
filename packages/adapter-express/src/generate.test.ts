@@ -15,7 +15,7 @@ const bundle: IrBundle = {
         ],
       },
     ],
-    components: [],
+    components: [{ name: "Seo", fields: [{ type: "string", name: "metaTitle" }] }],
   },
   roles: [],
 };
@@ -29,9 +29,11 @@ describe("expressAdapter", () => {
     expect(paths).toContain("src/routes/articles.ts");
     expect(paths).toContain("src/server.ts");
   });
-  it("builds a manifest and gaps a non-subset field type", () => {
+  it("builds a manifest and flattens the component field into embedded columns", () => {
     expect(result.manifest.files.length).toBe(result.files.length);
-    expect(result.gaps.gaps.some((g) => g.feature === "component")).toBe(true);
+    expect(result.gaps.gaps).toEqual([]);
+    const schema = result.files.find((f) => f.path === "src/db/schema.ts")!.content;
+    expect(schema).toContain("seo_meta_title: text('seo_meta_title'),");
   });
   it("is idempotent", () => {
     expect(expressAdapter.generate(bundle, { projectName: "blog" })).toEqual(result);
@@ -231,7 +233,7 @@ describe("expressAdapterFor", () => {
           fields: [{ type: "string", name: "name", required: true }],
         },
       ],
-      components: [],
+      components: [{ name: "Seo", fields: [{ type: "string", name: "metaTitle" }] }],
     },
     roles: [],
   } as never;
@@ -239,12 +241,79 @@ describe("expressAdapterFor", () => {
   it("default export targets sqlite", () => {
     expect(expressAdapter.target).toBe("express");
   });
-  it("pg adapter emits a pg schema + camis.schema.json + relation FK + component gap", () => {
+  it("pg adapter emits a pg schema + camis.schema.json + relation FK + embedded component", () => {
     const result = expressAdapterFor("pgsql").generate(relBundle, { projectName: "blog" });
     const schema = result.files.find((f) => f.path === "src/db/schema.ts")!.content;
     expect(schema).toContain("pgTable(");
     expect(schema).toContain("author_id: integer('author_id').references(() => authors.id)");
+    expect(schema).toContain("seo_meta_title: varchar('seo_meta_title', { length: 255 }),");
     expect(result.files.some((f) => f.path === "camis.schema.json")).toBe(true);
-    expect(result.gaps.gaps.some((g) => g.feature === "component")).toBe(true);
+    expect(result.gaps.gaps.some((g) => g.feature === "component")).toBe(false);
+  });
+});
+
+describe("component fields", () => {
+  const doc = {
+    version: 1 as const,
+    contentTypes: [
+      {
+        name: "Transaction",
+        kind: "collection" as const,
+        fields: [
+          { type: "string" as const, name: "category" },
+          { type: "component" as const, name: "amount", component: "Money", repeatable: false },
+        ],
+      },
+      {
+        name: "ActivitySession",
+        kind: "collection" as const,
+        fields: [
+          { type: "dateTime" as const, name: "occurredAt" },
+          {
+            type: "component" as const,
+            name: "quantities",
+            component: "Quantity",
+            repeatable: true,
+          },
+        ],
+      },
+    ],
+    components: [
+      {
+        name: "Money",
+        fields: [
+          { type: "bigInteger" as const, name: "minor", required: true },
+          { type: "string" as const, name: "currency", required: true },
+        ],
+      },
+      {
+        name: "Quantity",
+        fields: [
+          { type: "decimal" as const, name: "amount", required: true },
+          { type: "string" as const, name: "unit", required: true },
+        ],
+      },
+    ],
+  };
+
+  it("emits embedded columns and child tables with relations, and no component gaps", () => {
+    const result = expressAdapterFor("sqlite").generate(
+      { document: doc, roles: [] },
+      { projectName: "t" },
+    );
+    expect(result.gaps.gaps).toEqual([]);
+    const schema = result.files.find((f) => f.path === "src/db/schema.ts")!.content;
+    expect(schema).toContain("amount_minor: integer('amount_minor').notNull(),");
+    expect(schema).toContain("amount_currency: text('amount_currency').notNull(),");
+    expect(schema).toContain(
+      'export const activity_sessions_quantities = sqliteTable("activity_sessions_quantities", {',
+    );
+    expect(schema).toContain(
+      "activity_session_id: integer('activity_session_id').references(() => activity_sessions.id),",
+    );
+    expect(schema).toContain("quantities: many(activity_sessions_quantities),");
+    expect(schema).toContain(
+      "activity_session: one(activity_sessions, { fields: [activity_sessions_quantities.activity_session_id], references: [activity_sessions.id] }),",
+    );
   });
 });

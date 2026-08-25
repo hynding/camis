@@ -26,8 +26,9 @@ describe("express catalog golden", () => {
         .join("\n"),
     ).toMatchFileSnapshot("./__golden__/catalog/file-listing.txt");
   });
-  it("reports a component capability gap", () => {
-    expect(result.gaps.gaps.some((g) => g.feature === "component")).toBe(true);
+  it("flattens the component field instead of reporting a capability gap", () => {
+    expect(result.gaps.gaps.some((g) => g.feature === "component")).toBe(false);
+    expect(c("src/db/schema.ts")).toContain("seo_meta_title: text('seo_meta_title'),");
   });
   it("is idempotent", () => {
     expect(expressAdapter.generate(catalog, { projectName: "blog" })).toEqual(result);
