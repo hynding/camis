@@ -37,6 +37,7 @@ declare(strict_types=1);
 
 namespace ${ns};
 
+use BackedEnum;
 use ${ns}\\Pages\\${createPage};
 use ${ns}\\Pages\\${editPage};
 use ${ns}\\Pages\\${listPage};
@@ -51,7 +52,7 @@ class ${n.resourceClass} extends Resource
 {
     protected static ?string $model = ${n.model}::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-rectangle-stack';
 
     public static function form(Schema $schema): Schema
     {

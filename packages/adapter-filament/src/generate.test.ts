@@ -386,3 +386,14 @@ describe("DEPLOY.md", () => {
     expect(deploy!.content).toContain("public/");
   });
 });
+
+describe("Filament v5 resource compatibility", () => {
+  it("declares navigationIcon with the v5 BackedEnum union type", () => {
+    const result = filamentAdapter.generate(bundle, { projectName: "blog" });
+    const resource = result.files.find((f) => f.path.endsWith("ArticleResource.php"))!;
+    expect(resource.content).toContain(
+      "protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-rectangle-stack';",
+    );
+    expect(resource.content).toContain("use BackedEnum;");
+  });
+});
