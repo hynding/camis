@@ -17,6 +17,7 @@ import {
   repeaterComponent,
   type ChildTableEmit,
 } from "./components";
+import { deployFile } from "./deploy";
 import { emitField, isSupportedField } from "./fields";
 import { emitHookFiles } from "./hooks/emit";
 import { emitPermissions } from "./permissions/emit";
@@ -94,6 +95,7 @@ export const filamentAdapter: GenerateAdapter = {
           [...(rel.methods.get(ct.name) ?? []), ...ctChildren.map(childRelationMethod)],
           hooks.observedModels.has(ct.name) || aiObservedModels.has(ct.name),
           embeddedEmits,
+          rel.fkNames.get(ct.name) ?? [],
         ),
       });
       files.push({
@@ -132,7 +134,7 @@ export const filamentAdapter: GenerateAdapter = {
       });
 
     const perm = emitPermissions(doc, ir.roles);
-    const allFiles = [...files, ...hooks.files, ...perm.files, ...aiGenFiles];
+    const allFiles = [...files, ...hooks.files, ...perm.files, ...aiGenFiles, deployFile()];
     return {
       files: allFiles,
       manifest: buildManifest(allFiles),

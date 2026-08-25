@@ -19,6 +19,7 @@ class Article extends Model
         'meta',
         'cover',
         'published_at',
+        'author_id',
     ];
 
     protected function casts(): array

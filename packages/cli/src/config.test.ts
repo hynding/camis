@@ -7,6 +7,7 @@ const fakeIo = (files: Record<string, string>): Io => ({
     p in files ? Promise.resolve(files[p]!) : Promise.reject(new Error(`ENOENT ${p}`)),
   writeFile: () => Promise.resolve(),
   materialize: () => Promise.resolve(),
+  exec: () => Promise.resolve(0),
   out: () => {},
   cwd: "/proj",
 });

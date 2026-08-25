@@ -7,7 +7,7 @@
     ".": "./src/index.ts"
   },
   "bin": {
-    "camis": "src/bin.ts"
+    "camis": "bin/camis.mjs"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -22,6 +22,7 @@
     "@camis/ir-core": "workspace:*",
     "@camis/ir-schema": "workspace:*",
     "@camis/permissions": "workspace:*",
+    "tsx": "^4.22.4",
     "zod": "^3.25.76"
   }
 }

@@ -18,6 +18,7 @@ export interface ResolvedRelations {
   methods: Map<string, RelationMethod[]>;
   formFields: Map<string, string[]>;
   fkColumns: Map<string, string[]>;
+  fkNames: Map<string, string[]>; // plain FK column names (for $fillable)
   pivots: PivotTable[];
 }
 
@@ -39,6 +40,7 @@ export const resolveRelations = (doc: IrDocument): ResolvedRelations => {
     methods: new Map(),
     formFields: new Map(),
     fkColumns: new Map(),
+    fkNames: new Map(),
     pivots: [],
   };
   const byName = new Map(doc.contentTypes.map((ct) => [ct.name, ct]));
@@ -66,6 +68,7 @@ export const resolveRelations = (doc: IrDocument): ResolvedRelations => {
           owner,
           `$table->foreignId('${fk}')${required ? "" : "->nullable()"}${unique}->constrained('${targetN.table}')`,
         );
+        push(out.fkNames, owner, fk);
         push(
           out.formFields,
           owner,
@@ -87,6 +90,7 @@ export const resolveRelations = (doc: IrDocument): ResolvedRelations => {
           target,
           `$table->foreignId('${fk}')->nullable()->constrained('${ownerN.table}')`,
         );
+        push(out.fkNames, target, fk);
         if (f.inverse !== undefined) {
           push(out.methods, target, method("BelongsTo", f.inverse, ownerN.model, `'${fk}'`));
           push(

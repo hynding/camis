@@ -30,10 +30,10 @@ describe("migration", () => {
   });
   it("uses a deterministic ordinal filename (no timestamp)", () => {
     expect(migrationFilename(article, 1)).toBe(
-      "database/migrations/0000_00_00_000001_create_articles_table.php",
+      "database/migrations/0001_01_02_000001_create_articles_table.php",
     );
     expect(migrationFilename(article, 2)).toBe(
-      "database/migrations/0000_00_00_000002_create_articles_table.php",
+      "database/migrations/0001_01_02_000002_create_articles_table.php",
     );
   });
   it("appends injected FK columns to a create migration", () => {
@@ -51,7 +51,7 @@ describe("migration", () => {
       rightFk: "tag_id",
     };
     expect(pivotMigrationFilename(pivot, 5)).toBe(
-      "database/migrations/0000_00_00_000005_create_article_tag_table.php",
+      "database/migrations/0001_01_02_000005_create_article_tag_table.php",
     );
     const php = emitPivotMigration(pivot);
     expect(php).toContain("Schema::create('article_tag', function (Blueprint $table): void {");
@@ -59,5 +59,19 @@ describe("migration", () => {
       "$table->foreignId('article_id')->constrained('articles')->cascadeOnDelete();",
     );
     expect(php).toContain("$table->foreignId('tag_id')->constrained('tags')->cascadeOnDelete();");
+  });
+});
+
+describe("migration ordering vs the Laravel skeleton", () => {
+  it("generated migrations sort after Laravel's framework migrations", () => {
+    const ct = {
+      name: "Note",
+      kind: "collection" as const,
+      fields: [{ type: "text" as const, name: "text" }],
+    };
+    const name = migrationFilename(ct, 1).replace("database/migrations/", "");
+    // Laravel 12 ships 0001_01_01_00000{0,1,2}_*; ours must run after them so FKs
+    // like ->constrained('users') resolve.
+    expect(name > "0001_01_01_000002_create_jobs_table.php").toBe(true);
   });
 });

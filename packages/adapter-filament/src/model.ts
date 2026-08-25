@@ -8,6 +8,7 @@ export const emitModel = (
   relations: RelationMethod[] = [],
   observed = false,
   extraEmits: FieldEmit[] = [],
+  fkNames: string[] = [],
 ): string => {
   const names = filamentNames(ct);
   const emits = [
@@ -16,7 +17,9 @@ export const emitModel = (
       .map((f) => emitField(f)),
     ...extraEmits,
   ];
-  const fillable = emits.map((e) => `        '${e.column}',`).join("\n");
+  const fillable = [...emits.map((e) => e.column), ...fkNames]
+    .map((c) => `        '${c}',`)
+    .join("\n");
   const casts = emits
     .filter((e) => e.cast !== undefined)
     .map((e) => `            '${e.column}' => ${e.cast},`)

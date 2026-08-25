@@ -31,7 +31,7 @@ export const childTableEmit = (ct: ContentType, table: ExpandedTable): ChildTabl
 };
 
 export const childMigrationFilename = (child: ChildTableEmit, ordinal: number): string =>
-  `database/migrations/0000_00_00_${String(ordinal).padStart(6, "0")}_create_${child.table}_table.php`;
+  `database/migrations/0001_01_02_${String(ordinal).padStart(6, "0")}_create_${child.table}_table.php`;
 
 export const emitChildMigration = (ct: ContentType, child: ChildTableEmit): string => {
   const parent = filamentNames(ct);

@@ -1,0 +1,68 @@
+import type { GeneratedFile } from "@camis/adapter-kernel";
+
+// Generator-owned deployment guide for the overlaid Laravel app. Regenerated on every run.
+export const deployFile = (): GeneratedFile => ({
+  path: "DEPLOY.md",
+  content: `<!-- @camis:generated — do not edit -->
+
+# Deploying this camis-generated Filament app
+
+This directory is a standard Laravel 12 application with a camis-generated overlay
+(models, migrations, Filament resources, policies). Deployment is stock Laravel.
+
+## Database — selected purely by environment
+
+Set the connection in \`.env\`; no code changes between environments.
+
+\`\`\`ini
+# sqlite (simplest; shared hosting friendly)
+DB_CONNECTION=sqlite
+# then: touch database/database.sqlite
+
+# mysql
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=app
+DB_USERNAME=app
+DB_PASSWORD=secret
+
+# pgsql
+DB_CONNECTION=pgsql
+DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_DATABASE=app
+DB_USERNAME=app
+DB_PASSWORD=secret
+\`\`\`
+
+## First deploy
+
+\`\`\`sh
+composer install --no-dev --optimize-autoloader
+php artisan key:generate
+php artisan migrate
+# only when roles were configured (database/seeders/RolePermissionSeeder.php exists):
+php artisan db:seed --class=RolePermissionSeeder
+php artisan filament:optimize
+php artisan config:cache
+\`\`\`
+
+## Shared hosting (no shell)
+
+Build locally (scaffold + \`camis build\` + \`composer install\`), upload the whole app
+directory, and point the document root at \`public/\`. Laravel's \`.htaccess\` ships in
+\`public/\` for Apache. Run the migrate/seed steps via your host's one-off job runner, or
+locally against the production database.
+
+## Regeneration
+
+Generated files are overwritten on every \`camis build\`; hand-written code belongs in the
+protected seams only (\`app/Hooks/*.php\` implementations and other seed-mode files).
+
+## AI fields
+
+If the IR declares AI fields, \`app/Ai/Provider.php\` is a stub that returns placeholder
+text — replace it before production use.
+`,
+});

@@ -6,6 +6,7 @@ const ioWith = (content: string, lines: string[]): Io => ({
   readFile: () => Promise.resolve(content),
   writeFile: () => Promise.resolve(),
   materialize: () => Promise.resolve(),
+  exec: () => Promise.resolve(0),
   out: (l) => lines.push(l),
   cwd: "/p",
 });
