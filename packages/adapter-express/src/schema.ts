@@ -1,9 +1,14 @@
-import { withMarker } from "@camis/adapter-kernel";
-import type { ContentType } from "@camis/ir-schema";
+import { withMarker, type ExpandedContentType } from "@camis/adapter-kernel";
+import type { ContentType, Field } from "@camis/ir-schema";
 import { DIALECTS, type Dialect } from "./dialect";
 import { column, isSupportedField } from "./fields";
-import { expressNames } from "./names";
+import { expressNames, snakeColumn } from "./names";
 import type { ResolvedRelations } from "./relations";
+
+const snakePath = (path: string[]): string => path.map(snakeColumn).join("_");
+
+const camelPath = (path: string[]): string =>
+  path.map((seg, i) => (i === 0 ? seg : seg.charAt(0).toUpperCase() + seg.slice(1))).join("");
 
 // A single `schema.ts` is ONE ES module, so it must carry exactly one import block — re-importing
 // `integer`/`text`/etc. per table would be a duplicate-declaration error. emitSchemaFile collects
@@ -12,6 +17,7 @@ export const emitSchemaFile = (
   cts: ContentType[],
   dialect: Dialect,
   rel: ResolvedRelations,
+  expansions: ReadonlyMap<string, ExpandedContentType> = new Map(),
 ): string => {
   const spec = DIALECTS[dialect];
   const fkImport = dialect === "mysql" ? "int" : "integer";
@@ -21,9 +27,17 @@ export const emitSchemaFile = (
   let hasRelations = false;
   const blocks: string[] = [];
 
+  const childBlocks: string[] = [];
   for (const ct of cts) {
     const n = expressNames(ct);
-    const cols = ct.fields.filter((f) => isSupportedField(f.type)).map((f) => column(dialect, f));
+    const expansion = expansions.get(ct.name);
+    const embedded = (expansion?.scalars ?? []).map((s) =>
+      column(dialect, { ...s.field, name: snakePath(s.path) } as Field),
+    );
+    const cols = [
+      ...ct.fields.filter((f) => isSupportedField(f.type)).map((f) => column(dialect, f)),
+      ...embedded,
+    ];
     cols.forEach((c) => importNames.add(c.import));
     const fk = rel.fkColumns.get(ct.name) ?? [];
     if (fk.length > 0) importNames.add(fkImport);
@@ -35,14 +49,37 @@ ${body}
   createdAt: ${ts1.expr},
   updatedAt: ${ts2.expr},
 });`);
-    const relBlocks = rel.relationBlocks.get(ct.name);
-    if (relBlocks && relBlocks.length > 0) {
+    const childRel: string[] = [];
+    for (const t of expansion?.tables ?? []) {
+      const childTable = `${n.table}_${snakePath(t.path)}`;
+      const fkCol = `${snakeColumn(ct.name)}_id`;
+      importNames.add(fkImport);
+      const childCols = t.scalars.map((s) =>
+        column(dialect, { ...s.field, name: snakePath(s.path) } as Field),
+      );
+      childCols.forEach((c) => importNames.add(c.import));
+      const childColLines = childCols.map((c) => `  ${c.column}: ${c.drizzle},`).join("\n");
+      const fkExpr = dialect === "mysql" ? `int('${fkCol}')` : `integer('${fkCol}')`;
+      childBlocks.push(`export const ${childTable} = ${spec.tableFn}("${childTable}", {
+  ${spec.idColumn},
+  ${fkCol}: ${fkExpr}.references(() => ${n.table}.id),
+${childColLines}
+});`);
+      childBlocks.push(`export const ${childTable}Relations = relations(${childTable}, ({ one }) => ({
+  ${snakeColumn(ct.name)}: one(${n.table}, { fields: [${childTable}.${fkCol}], references: [${n.table}.id] }),
+}));`);
+      childRel.push(`  ${camelPath(t.path)}: many(${childTable}),`);
+      hasRelations = true;
+    }
+    const relBlocks = [...(rel.relationBlocks.get(ct.name) ?? []), ...childRel];
+    if (relBlocks.length > 0) {
       hasRelations = true;
       blocks.push(`export const ${n.table}Relations = relations(${n.table}, ({ one, many }) => ({
 ${relBlocks.join("\n")}
 }));`);
     }
   }
+  blocks.push(...childBlocks);
 
   for (const [key, lines] of rel.fkColumns) {
     if (!key.startsWith("__pivot__")) continue;

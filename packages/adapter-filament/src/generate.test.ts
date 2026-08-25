@@ -79,7 +79,7 @@ const relBundle: IrBundle = {
         fields: [{ type: "string", name: "label", required: true }],
       },
     ],
-    components: [],
+    components: [{ name: "Seo", fields: [{ type: "string", name: "metaTitle" }] }],
   },
   roles: [],
 };
@@ -94,10 +94,10 @@ describe("filamentAdapter relations + gaps", () => {
     const mig = result.files.find((f) => f.path.endsWith("create_articles_table.php"))!.content;
     expect(mig).toContain("$table->foreignId('author_id')->nullable()->constrained('authors');");
   });
-  it("reports the component field as a capability gap", () => {
-    expect(
-      result.gaps.gaps.some((g) => g.feature === "component" && g.location.field === "seo"),
-    ).toBe(true);
+  it("flattens the component field into embedded columns instead of a capability gap", () => {
+    expect(result.gaps.gaps).toEqual([]);
+    const mig = result.files.find((f) => f.path.endsWith("create_articles_table.php"))!.content;
+    expect(mig).toContain("$table->string('seo_meta_title')->nullable();");
   });
 });
 
@@ -251,5 +251,126 @@ describe("builtin user", () => {
     expect(migration.content).toContain("->constrained('users')");
     expect(migration.path).toBe("database/migrations/0000_00_00_000001_create_notes_table.php");
     expect(result.gaps.gaps).toEqual([]);
+  });
+});
+
+describe("component fields — embedded columns", () => {
+  const moneyDoc = {
+    version: 1 as const,
+    contentTypes: [
+      {
+        name: "Transaction",
+        kind: "collection" as const,
+        fields: [
+          { type: "string" as const, name: "category" },
+          {
+            type: "component" as const,
+            name: "amount",
+            component: "Money",
+            repeatable: false,
+          },
+        ],
+      },
+    ],
+    components: [
+      {
+        name: "Money",
+        fields: [
+          { type: "bigInteger" as const, name: "minor", required: true },
+          { type: "string" as const, name: "currency", required: true },
+          { type: "integer" as const, name: "exponent", default: 2 },
+        ],
+      },
+    ],
+  };
+
+  it("flattens a non-repeatable component into prefixed columns across migration/model/form", () => {
+    const result = filamentAdapter.generate(
+      { document: moneyDoc, roles: [] },
+      { projectName: "t" },
+    );
+    expect(result.gaps.gaps).toEqual([]);
+    const migration = result.files.find((f) => f.path.includes("create_transactions_table"))!;
+    expect(migration.content).toContain("$table->bigInteger('amount_minor')");
+    expect(migration.content).toContain("$table->string('amount_currency')");
+    expect(migration.content).toContain(
+      "$table->integer('amount_exponent')->nullable()->default(2)",
+    );
+    const model = result.files.find((f) => f.path === "app/Models/Transaction.php")!;
+    expect(model.content).toContain("'amount_minor',");
+    expect(model.content).toContain("'amount_currency',");
+    const form = result.files.find((f) => f.path.endsWith("Schemas/TransactionForm.php"))!;
+    expect(form.content).toContain("TextInput::make('amount_minor')->numeric()->required()");
+    const table = result.files.find((f) => f.path.endsWith("Schemas/TransactionsTable.php"))!;
+    expect(table.content).toContain("TextColumn::make('amount_currency')");
+  });
+});
+
+describe("component fields — repeatable child tables", () => {
+  const sessionDoc = {
+    version: 1 as const,
+    contentTypes: [
+      {
+        name: "ActivitySession",
+        kind: "collection" as const,
+        fields: [
+          { type: "dateTime" as const, name: "occurredAt", required: true },
+          {
+            type: "component" as const,
+            name: "quantities",
+            component: "Quantity",
+            repeatable: true,
+          },
+        ],
+      },
+    ],
+    components: [
+      {
+        name: "Quantity",
+        fields: [
+          { type: "decimal" as const, name: "amount", required: true },
+          { type: "string" as const, name: "unit", required: true },
+        ],
+      },
+    ],
+  };
+
+  it("emits a child table, child model, parent HasMany, and a Repeater form", () => {
+    const result = filamentAdapter.generate(
+      { document: sessionDoc, roles: [] },
+      { projectName: "t" },
+    );
+    expect(result.gaps.gaps).toEqual([]);
+    const paths = result.files.map((f) => f.path);
+
+    const childMig = result.files.find((f) =>
+      f.path.endsWith("create_activity_sessions_quantities_table.php"),
+    )!;
+    expect(childMig).toBeDefined();
+    expect(childMig.content).toContain(
+      "$table->foreignId('activity_session_id')->constrained('activity_sessions')->cascadeOnDelete();",
+    );
+    expect(childMig.content).toContain("$table->decimal('amount');");
+    expect(childMig.path).toBe(
+      "database/migrations/0000_00_00_000002_create_activity_sessions_quantities_table.php",
+    );
+
+    expect(paths).toContain("app/Models/ActivitySessionQuantities.php");
+    const childModel = result.files.find(
+      (f) => f.path === "app/Models/ActivitySessionQuantities.php",
+    )!;
+    expect(childModel.content).toContain("protected $table = 'activity_sessions_quantities';");
+    expect(childModel.content).toContain("'amount',");
+
+    const parentModel = result.files.find((f) => f.path === "app/Models/ActivitySession.php")!;
+    expect(parentModel.content).toContain("public function quantities(): HasMany");
+    expect(parentModel.content).toContain(
+      "return $this->hasMany(ActivitySessionQuantities::class, 'activity_session_id');",
+    );
+
+    const form = result.files.find((f) => f.path.endsWith("Schemas/ActivitySessionForm.php"))!;
+    expect(form.content).toContain("Repeater::make('quantities')");
+    expect(form.content).toContain("->relationship()");
+    expect(form.content).toContain("TextInput::make('amount')->numeric()->required()");
   });
 });

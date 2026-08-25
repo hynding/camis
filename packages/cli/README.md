@@ -12,6 +12,12 @@
   content type named `User` (each target resolves it to its native user model — Strapi's plugin
   user, Laravel's stock `App\Models\User`). Other `plugin::` relation targets are reported as
   downgrade gaps and skipped.
+
+On the relational targets (Filament, Express), `component` fields generate real structure:
+non-repeatable components flatten into prefixed embedded columns (`amount.minor` →
+`amount_minor`), and repeatable components become child tables with a cascade FK — surfaced
+in Filament as `Repeater::relationship()` forms. Relations or AI attachments inside
+components, and repeatables nested inside repeatables, are reported as downgrade gaps.
 - `camis generate [--config camis.config.json]` — dry-run: list the files each target would emit, plus
   any capability gaps. Writes nothing.
 - `camis build [--config camis.config.json]` — write the generated project(s) to each target's `out`.

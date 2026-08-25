@@ -10,6 +10,7 @@ export const articles = sqliteTable("articles", {
   price: numeric('price'),
   meta: text('meta', { mode: 'json' }),
   published_at: integer('published_at', { mode: 'timestamp' }),
+  seo_meta_title: text('seo_meta_title'),
   author_id: integer('author_id').references(() => authors.id),
   createdAt: integer("created_at", { mode: "timestamp" }),
   updatedAt: integer("updated_at", { mode: "timestamp" }),

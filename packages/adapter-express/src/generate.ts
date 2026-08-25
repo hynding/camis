@@ -1,5 +1,7 @@
 import {
   buildManifest,
+  expandComponents,
+  type ExpandedContentType,
   type GenerateAdapter,
   type GeneratedFile,
   type GenerationResult,
@@ -61,9 +63,10 @@ export const expressAdapterFor = (dialect: Dialect): GenerateAdapter => ({
       ...skeletonFiles(doc, options.projectName, dialect, { secured }),
     ];
 
+    const expansions = new Map<string, ExpandedContentType>();
     doc.contentTypes.forEach((ct) => {
       for (const f of ct.fields) {
-        if (f.type === "relation") continue;
+        if (f.type === "relation" || f.type === "component") continue;
         if (!isSupportedField(f.type)) {
           gaps.push({
             feature: f.type,
@@ -73,6 +76,9 @@ export const expressAdapterFor = (dialect: Dialect): GenerateAdapter => ({
           });
         }
       }
+      const expansion = expandComponents(doc, ct);
+      expansions.set(ct.name, expansion);
+      gaps.push(...expansion.gaps);
       const fk = rel.fkColumns.get(ct.name) ?? [];
       files.push({
         path: `src/routes/${expressNames(ct).table}.ts`,
@@ -82,7 +88,7 @@ export const expressAdapterFor = (dialect: Dialect): GenerateAdapter => ({
 
     files.push({
       path: "src/db/schema.ts",
-      content: emitSchemaFile(doc.contentTypes, dialect, rel),
+      content: emitSchemaFile(doc.contentTypes, dialect, rel, expansions),
     });
     files.push(camisSchemaFile(doc));
 

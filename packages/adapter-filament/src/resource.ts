@@ -1,6 +1,7 @@
 import type { ContentType } from "@camis/ir-schema";
 import type { GeneratedFile } from "@camis/adapter-kernel";
-import { emitField } from "./fields";
+import type { RepeaterEmit } from "./components";
+import { emitField, type FieldEmit } from "./fields";
 import { filamentNames } from "./names";
 
 const useBlock = (imports: string[]): string =>
@@ -12,11 +13,18 @@ const useBlock = (imports: string[]): string =>
 export const emitResourceFiles = (
   ct: ContentType,
   relationFields: string[] = [],
+  extraEmits: FieldEmit[] = [],
+  repeaters: RepeaterEmit[] = [],
 ): GeneratedFile[] => {
   const n = filamentNames(ct);
   const dir = `app/Filament/Resources/${n.resourceDir}`;
   const ns = `App\\Filament\\Resources\\${n.resourceDir}`;
-  const emits = ct.fields.filter((f) => f.type !== "relation").map(emitField);
+  const emits = [
+    ...ct.fields
+      .filter((f) => f.type !== "relation" && f.type !== "component")
+      .map((f) => emitField(f)),
+    ...extraEmits,
+  ];
 
   // Page class names follow v5's make:filament-resource convention: List<plural>, Create<singular>, Edit<singular>.
   const listPage = `List${n.resourceDir}`;
@@ -70,11 +78,13 @@ class ${n.resourceClass} extends Resource
   const formImports = useBlock([
     ...emits.map((e) => e.formImport),
     ...(relationFields.length > 0 ? [SELECT] : []),
+    ...repeaters.flatMap((r) => r.imports),
     "Filament\\Schemas\\Schema",
   ]);
   const formBody = [
     ...emits.map((e) => `            ${e.formComponent},`),
     ...relationFields.map((s) => `            ${s},`),
+    ...repeaters.map((r) => `            ${r.component},`),
   ].join("\n");
   const form = `<?php
 

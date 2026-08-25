@@ -1,5 +1,5 @@
 import type { ContentType } from "@camis/ir-schema";
-import { emitField } from "./fields";
+import { emitField, type FieldEmit } from "./fields";
 import { filamentNames } from "./names";
 import type { PivotTable } from "./relations";
 
@@ -11,12 +11,18 @@ export const migrationFilename = (ct: ContentType, ordinal: number): string => {
 export const pivotMigrationFilename = (pivot: PivotTable, ordinal: number): string =>
   `database/migrations/0000_00_00_${String(ordinal).padStart(6, "0")}_create_${pivot.table}_table.php`;
 
-export const emitMigration = (ct: ContentType, fkColumns: string[] = []): string => {
+export const emitMigration = (
+  ct: ContentType,
+  fkColumns: string[] = [],
+  extraEmits: FieldEmit[] = [],
+): string => {
   const names = filamentNames(ct);
-  const fieldCols = ct.fields
-    .filter((f) => f.type !== "relation")
-    .map(emitField)
-    .map((e) => `            ${e.migration};`);
+  const fieldCols = [
+    ...ct.fields
+      .filter((f) => f.type !== "relation" && f.type !== "component")
+      .map((f) => emitField(f)),
+    ...extraEmits,
+  ].map((e) => `            ${e.migration};`);
   const fkCols = fkColumns.map((c) => `            ${c};`);
   const columns = [...fieldCols, ...fkCols].join("\n");
   return `<?php
