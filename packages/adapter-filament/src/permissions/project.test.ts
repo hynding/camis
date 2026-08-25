@@ -139,3 +139,49 @@ describe("projectFilamentPermissions — ownership conditions", () => {
     expect(result.policies[0]?.methods.some((m) => m.condition !== undefined)).toBe(true);
   });
 });
+
+describe("projectFilamentPermissions — condition scoping", () => {
+  it("attaches record conditions only to record-scoped policy methods", () => {
+    const doc = {
+      version: 1 as const,
+      contentTypes: [
+        {
+          name: "Note",
+          kind: "collection" as const,
+          fields: [
+            { type: "text" as const, name: "text" },
+            {
+              type: "relation" as const,
+              name: "owner",
+              relationKind: "manyToOne" as const,
+              target: "Note",
+            },
+          ],
+        },
+      ],
+      components: [],
+    };
+    const roles = [
+      {
+        name: "member",
+        grants: [
+          {
+            contentType: "Note",
+            actions: ["create" as const, "read" as const, "update" as const],
+            condition: {
+              kind: "eq" as const,
+              left: { kind: "var" as const, name: "record.ownerId" },
+              right: { kind: "var" as const, name: "user.id" },
+            },
+          },
+        ],
+      },
+    ];
+    const { policies } = projectFilamentPermissions(doc, roles);
+    const byMethod = Object.fromEntries(policies[0]!.methods.map((m) => [m.method, m]));
+    expect(byMethod.create!.condition).toBeUndefined();
+    expect(byMethod.viewAny!.condition).toBeUndefined();
+    expect(byMethod.view!.condition).toBeDefined();
+    expect(byMethod.update!.condition).toBeDefined();
+  });
+});

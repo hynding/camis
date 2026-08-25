@@ -12,16 +12,7 @@ class ArticlePolicy
 {
     public function viewAny(User $user): bool
     {
-        if (! $user->can('article.read')) {
-            return false;
-        }
-        $data = [
-            'user.id' => $user->id,
-            'user.email' => $user->email,
-            'user.role' => $user->getRoleNames()->first(),
-        ];
-        $result = Ring1::eq(fn() => Ring1::var($data, "record.status"), fn() => Ring1::lit("published"));
-        return $result['ok'] === true && $result['value'] === true;
+        return $user->can('article.read');
     }
 
     public function view(User $user, Article $record): bool
