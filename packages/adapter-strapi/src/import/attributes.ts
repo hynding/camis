@@ -5,7 +5,10 @@ export interface IrFieldResult {
   field?: Field;
   gap?: CapabilityGap;
   skip?: true;
+  builtinUser?: true;
 }
+
+const PLUGIN_USER_UID = "plugin::users-permissions.user";
 
 const REVERSE_TYPE: Record<string, string> = {
   richtext: "richText",
@@ -35,7 +38,19 @@ export const irField = (
 
   if (strapiType === "relation") {
     if (attr.mappedBy !== undefined) return { skip: true };
-    const target = irName(String(attr.target).split("::")[1]?.split(".")[0] ?? "");
+    const rawTarget = String(attr.target);
+    const builtinUser = rawTarget === PLUGIN_USER_UID;
+    if (rawTarget.startsWith("plugin::") && !builtinUser) {
+      return {
+        gap: {
+          feature: "pluginRelation",
+          location: { ...location, field: name },
+          severity: "downgrade",
+          message: `relation "${name}" targets plugin type "${rawTarget}", which has no IR representation; skipped.`,
+        },
+      };
+    }
+    const target = builtinUser ? "User" : irName(rawTarget.split("::")[1]?.split(".")[0] ?? "");
     const field: Record<string, unknown> = {
       type: "relation",
       name,
@@ -43,7 +58,7 @@ export const irField = (
       target,
     };
     if (attr.inversedBy !== undefined) field.inverse = attr.inversedBy;
-    return { field: field as Field };
+    return builtinUser ? { field: field as Field, builtinUser: true } : { field: field as Field };
   }
   if (strapiType === "component") {
     const compName = irName(String(attr.component).split(".").slice(1).join("-"));

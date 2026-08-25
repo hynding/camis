@@ -16,25 +16,29 @@ const asRecord = (v: unknown): Record<string, unknown> =>
 const fieldsFromAttributes = (
   attributes: Record<string, unknown>,
   location: CapabilityGap["location"],
-): { fields: Field[]; gaps: CapabilityGap[] } => {
+): { fields: Field[]; gaps: CapabilityGap[]; usesBuiltinUser: boolean } => {
   const fields: Field[] = [];
   const gaps: CapabilityGap[] = [];
+  let usesBuiltinUser = false;
   for (const [name, attr] of Object.entries(attributes)) {
     const r = irField(name, asRecord(attr), location);
     if (r.skip) continue;
     if (r.field) fields.push(r.field);
     if (r.gap) gaps.push(r.gap);
+    if (r.builtinUser) usesBuiltinUser = true;
   }
-  return { fields, gaps };
+  return { fields, gaps, usesBuiltinUser };
 };
 
 export const irContentType = (
   schema: Record<string, unknown>,
-): { contentType: ContentType; gaps: CapabilityGap[] } => {
+): { contentType: ContentType; gaps: CapabilityGap[]; usesBuiltinUser: boolean } => {
   const info = asRecord(schema.info);
   const options = asRecord(schema.options);
   const name = irName(str(info.singularName));
-  const { fields, gaps } = fieldsFromAttributes(asRecord(schema.attributes), { contentType: name });
+  const { fields, gaps, usesBuiltinUser } = fieldsFromAttributes(asRecord(schema.attributes), {
+    contentType: name,
+  });
   const contentType: ContentType = {
     name,
     kind: schema.kind === "singleType" ? "single" : "collection",
@@ -46,7 +50,7 @@ export const irContentType = (
     fields,
   };
   if (options.draftAndPublish) contentType.options = { draftPublish: true };
-  return { contentType, gaps };
+  return { contentType, gaps, usesBuiltinUser };
 };
 
 export const irComponent = (
