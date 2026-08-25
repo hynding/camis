@@ -104,7 +104,9 @@ export const projectFilamentPermissions = (doc: IrDocument, roles: Role[]): Fila
       const methods: PolicyMethodSpec[] = [];
       for (const action of [...actions].sort()) {
         for (const pm of POLICY_METHODS[action as keyof typeof POLICY_METHODS]) {
-          const condition = condByCa.get(`${ctName}.${action}`);
+          // Record-scoped conditions govern access to a record; methods without a $record
+          // (create, viewAny) cannot evaluate them and must not fail closed on their absence.
+          const condition = pm.record ? condByCa.get(`${ctName}.${action}`) : undefined;
           methods.push({
             method: pm.method,
             key: permissionKey(ctName, action as never),

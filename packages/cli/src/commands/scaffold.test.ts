@@ -74,6 +74,7 @@ describe("scaffoldCommand", () => {
       "composer create-project",
       "composer require",
       "php artisan",
+      "php artisan",
       "composer require",
       "php artisan",
     ]);
@@ -82,8 +83,9 @@ describe("scaffoldCommand", () => {
     expect(calls[1]!.args).toContain("filament/filament:^5.0");
     expect(calls[1]!.cwd).toBe("/proj/app");
     expect(calls[2]!.args).toEqual(["artisan", "filament:install", "--panels", "--no-interaction"]);
-    expect(calls[3]!.args).toContain("spatie/laravel-permission");
-    expect(calls[4]!.args.join(" ")).toContain("vendor:publish");
+    expect(calls[3]!.args).toEqual(["artisan", "install:api", "--no-interaction"]);
+    expect(calls[4]!.args).toContain("spatie/laravel-permission");
+    expect(calls[5]!.args.join(" ")).toContain("vendor:publish");
     expect(written["/proj/app/app/Models/User.php"]).toContain("HasRoles");
   });
 

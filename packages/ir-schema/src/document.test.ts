@@ -142,3 +142,16 @@ describe("field expression attachment points", () => {
     expect(r.success).toBe(false);
   });
 });
+
+describe("options.upsertBy", () => {
+  it("accepts upsertBy naming a field", () => {
+    const r = contentType.safeParse({
+      name: "Note",
+      kind: "collection",
+      options: { upsertBy: "recordId" },
+      fields: [{ type: "string", name: "recordId", required: true, unique: true }],
+    });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.options?.upsertBy).toBe("recordId");
+  });
+});

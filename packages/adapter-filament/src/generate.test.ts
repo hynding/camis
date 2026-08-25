@@ -405,3 +405,71 @@ describe("relation FK mass assignment", () => {
     expect(article.content).toContain("'author_id',");
   });
 });
+
+describe("API emission", () => {
+  const apiDoc = {
+    version: 1 as const,
+    contentTypes: [
+      {
+        name: "Note",
+        kind: "collection" as const,
+        options: { upsertBy: "recordId" },
+        fields: [
+          { type: "string" as const, name: "recordId", required: true, unique: true },
+          { type: "text" as const, name: "text" },
+          {
+            type: "relation" as const,
+            name: "owner",
+            relationKind: "manyToOne" as const,
+            target: "User",
+          },
+        ],
+      },
+      {
+        name: "User",
+        kind: "collection" as const,
+        builtin: "user" as const,
+        fields: [{ type: "string" as const, name: "username" }],
+      },
+    ],
+    components: [],
+  };
+
+  it("emits controllers, generated api routes, and the protected custom seam", () => {
+    const result = filamentAdapter.generate({ document: apiDoc, roles: [] }, { projectName: "t" });
+    const paths = result.files.map((f) => f.path);
+    expect(paths).toContain("app/Http/Controllers/Api/NoteApiController.php");
+    expect(paths).not.toContain("app/Http/Controllers/Api/UserApiController.php");
+
+    const routes = result.files.find((f) => f.path === "routes/api.php")!;
+    expect(routes.content).toContain("Route::apiResource('notes', NoteApiController::class);");
+    expect(routes.content).toContain("require __DIR__.'/api-custom.php';");
+    expect(routes.content).not.toContain("middleware('auth')");
+
+    const custom = result.files.find((f) => f.path === "routes/api-custom.php")!;
+    expect(custom.mode).toBe("seed");
+
+    const controller = result.files.find(
+      (f) => f.path === "app/Http/Controllers/Api/NoteApiController.php",
+    )!;
+    expect(controller.content).toContain(
+      "private const FIELDS = ['record_id', 'text', 'owner_id'];",
+    );
+    expect(controller.content).toContain(
+      "updateOrCreate(['record_id' => $payload['record_id'] ?? null]",
+    );
+  });
+
+  it("wraps generated api routes in auth middleware when roles are configured", () => {
+    const roles = [
+      { name: "member", grants: [{ contentType: "Note", actions: ["read" as const] }] },
+    ];
+    const result = filamentAdapter.generate({ document: apiDoc, roles }, { projectName: "t" });
+    const routes = result.files.find((f) => f.path === "routes/api.php")!;
+    expect(routes.content).toContain("Route::middleware('auth')->group(");
+    const controller = result.files.find(
+      (f) => f.path === "app/Http/Controllers/Api/NoteApiController.php",
+    )!;
+    expect(controller.content).toContain("$this->authorize('view', $note);");
+  });
+});

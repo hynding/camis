@@ -113,7 +113,28 @@ export const validateInvariants = (doc: IrDocument): IrError[] => {
     }
   };
 
-  for (const ct of doc.contentTypes) checkFields(ct.fields, { contentType: ct.name });
+  for (const ct of doc.contentTypes) {
+    checkFields(ct.fields, { contentType: ct.name });
+    const upsertBy = ct.options?.upsertBy;
+    if (upsertBy !== undefined) {
+      const field = ct.fields.find((f) => f.name === upsertBy);
+      if (!field) {
+        errors.push({
+          code: "unknown_upsert_field",
+          message: `upsertBy field "${upsertBy}" does not exist`,
+          location: { contentType: ct.name },
+          path: [],
+        });
+      } else if ((field as { unique?: boolean }).unique !== true) {
+        errors.push({
+          code: "non_unique_upsert_field",
+          message: `upsertBy field "${upsertBy}" must be a unique scalar field`,
+          location: { contentType: ct.name, field: upsertBy },
+          path: [],
+        });
+      }
+    }
+  }
   for (const c of doc.components)
     checkFields(c.fields as ContentType["fields"], { component: c.name });
 
