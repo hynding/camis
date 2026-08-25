@@ -5,6 +5,7 @@ import { strapiNames } from "./names";
 export const contentTypeSchema = (
   ct: ContentType,
   extraAttributes: Record<string, unknown> = {},
+  builtinUsers: ReadonlySet<string> = new Set(),
 ): Record<string, unknown> => {
   const names = strapiNames(ct);
   const options: Record<string, unknown> = {};
@@ -19,6 +20,6 @@ export const contentTypeSchema = (
     },
     options,
     pluginOptions: {},
-    attributes: { ...toAttributes(ct.fields), ...extraAttributes },
+    attributes: { ...toAttributes(ct.fields, builtinUsers), ...extraAttributes },
   };
 };
