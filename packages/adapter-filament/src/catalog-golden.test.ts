@@ -18,12 +18,12 @@ describe("catalog golden", () => {
   });
   it("articles migration golden", async () => {
     await expect(
-      content("database/migrations/0000_00_00_000001_create_articles_table.php"),
+      content("database/migrations/0001_01_02_000001_create_articles_table.php"),
     ).toMatchFileSnapshot("./__golden__/catalog/create_articles_table.php");
   });
   it("pivot migration golden", async () => {
     await expect(
-      content("database/migrations/0000_00_00_000004_create_article_tag_table.php"),
+      content("database/migrations/0001_01_02_000004_create_article_tag_table.php"),
     ).toMatchFileSnapshot("./__golden__/catalog/create_article_tag_table.php");
   });
   it("Article form golden", async () => {

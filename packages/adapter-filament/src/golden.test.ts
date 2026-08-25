@@ -13,7 +13,7 @@ describe("filament golden", () => {
   });
   it("migration golden", async () => {
     await expect(
-      content("database/migrations/0000_00_00_000001_create_articles_table.php"),
+      content("database/migrations/0001_01_02_000001_create_articles_table.php"),
     ).toMatchFileSnapshot("./__golden__/create_articles_table.php");
   });
   it("resource golden", async () => {

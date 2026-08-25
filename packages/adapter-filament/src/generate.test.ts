@@ -29,8 +29,8 @@ describe("filamentAdapter", () => {
 
   it("emits a model, an ordinal migration, and a resource set per content type", () => {
     expect(paths).toContain("app/Models/Article.php");
-    expect(paths).toContain("database/migrations/0000_00_00_000001_create_articles_table.php");
-    expect(paths).toContain("database/migrations/0000_00_00_000002_create_tags_table.php");
+    expect(paths).toContain("database/migrations/0001_01_02_000001_create_articles_table.php");
+    expect(paths).toContain("database/migrations/0001_01_02_000002_create_tags_table.php");
     expect(paths).toContain("app/Filament/Resources/Articles/ArticleResource.php");
   });
   it("builds a manifest and an empty gap report (scalars only)", () => {
@@ -88,7 +88,7 @@ describe("filamentAdapter relations + gaps", () => {
   const result = filamentAdapter.generate(relBundle, { projectName: "blog" });
   const paths = result.files.map((f) => f.path);
   it("emits a pivot migration after the content-type migrations", () => {
-    expect(paths).toContain("database/migrations/0000_00_00_000004_create_article_tag_table.php");
+    expect(paths).toContain("database/migrations/0001_01_02_000004_create_article_tag_table.php");
   });
   it("injects the author_id FK into the articles migration", () => {
     const mig = result.files.find((f) => f.path.endsWith("create_articles_table.php"))!.content;
@@ -249,7 +249,7 @@ describe("builtin user", () => {
     expect(note.content).toContain("$this->belongsTo(User::class, 'owner_id')");
     const migration = result.files.find((f) => f.path.includes("create_notes_table"))!;
     expect(migration.content).toContain("->constrained('users')");
-    expect(migration.path).toBe("database/migrations/0000_00_00_000001_create_notes_table.php");
+    expect(migration.path).toBe("database/migrations/0001_01_02_000001_create_notes_table.php");
     expect(result.gaps.gaps).toEqual([]);
   });
 });
@@ -352,7 +352,7 @@ describe("component fields — repeatable child tables", () => {
     );
     expect(childMig.content).toContain("$table->decimal('amount');");
     expect(childMig.path).toBe(
-      "database/migrations/0000_00_00_000002_create_activity_sessions_quantities_table.php",
+      "database/migrations/0001_01_02_000002_create_activity_sessions_quantities_table.php",
     );
 
     expect(paths).toContain("app/Models/ActivitySessionQuantities.php");

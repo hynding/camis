@@ -5,11 +5,11 @@ import type { PivotTable } from "./relations";
 
 export const migrationFilename = (ct: ContentType, ordinal: number): string => {
   const table = filamentNames(ct).table;
-  return `database/migrations/0000_00_00_${String(ordinal).padStart(6, "0")}_create_${table}_table.php`;
+  return `database/migrations/0001_01_02_${String(ordinal).padStart(6, "0")}_create_${table}_table.php`;
 };
 
 export const pivotMigrationFilename = (pivot: PivotTable, ordinal: number): string =>
-  `database/migrations/0000_00_00_${String(ordinal).padStart(6, "0")}_create_${pivot.table}_table.php`;
+  `database/migrations/0001_01_02_${String(ordinal).padStart(6, "0")}_create_${pivot.table}_table.php`;
 
 export const emitMigration = (
   ct: ContentType,
