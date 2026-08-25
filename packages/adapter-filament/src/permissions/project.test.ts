@@ -90,3 +90,52 @@ describe("projectFilamentPermissions", () => {
     expect(view.condition).toEqual(condA);
   });
 });
+
+describe("projectFilamentPermissions — ownership conditions", () => {
+  it("allows record.<relation>Id for owning relations without a conditionContext gap", () => {
+    const doc = {
+      version: 1 as const,
+      contentTypes: [
+        {
+          name: "Note",
+          kind: "collection" as const,
+          fields: [
+            { type: "text" as const, name: "text" },
+            {
+              type: "relation" as const,
+              name: "owner",
+              relationKind: "manyToOne" as const,
+              target: "User",
+            },
+          ],
+        },
+        {
+          name: "User",
+          kind: "collection" as const,
+          builtin: "user" as const,
+          fields: [{ type: "string" as const, name: "username" }],
+        },
+      ],
+      components: [],
+    };
+    const roles = [
+      {
+        name: "member",
+        grants: [
+          {
+            contentType: "Note",
+            actions: ["read" as const],
+            condition: {
+              kind: "eq" as const,
+              left: { kind: "var" as const, name: "record.ownerId" },
+              right: { kind: "var" as const, name: "user.id" },
+            },
+          },
+        ],
+      },
+    ];
+    const result = projectFilamentPermissions(doc, roles);
+    expect(result.gaps).toEqual([]);
+    expect(result.policies[0]?.methods.some((m) => m.condition !== undefined)).toBe(true);
+  });
+});

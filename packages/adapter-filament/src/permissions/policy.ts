@@ -9,10 +9,18 @@ const userData = [
   "            'user.role' => $user->getRoleNames()->first(),",
 ];
 
-const recordData = (ct: ContentType): string[] =>
-  ct.fields
-    .filter((f) => f.type !== "relation")
-    .map((f) => `            'record.${f.name}' => $record->${snakeColumn(f.name)},`);
+const recordData = (ct: ContentType): string[] => [
+  ...ct.fields
+    .filter((f) => f.type !== "relation" && f.type !== "component")
+    .map((f) => `            'record.${f.name}' => $record->${snakeColumn(f.name)},`),
+  // Owning relations expose their FK as record.<name>Id so conditions can express ownership.
+  ...ct.fields
+    .filter(
+      (f) =>
+        f.type === "relation" && (f.relationKind === "manyToOne" || f.relationKind === "oneToOne"),
+    )
+    .map((f) => `            'record.${f.name}Id' => $record->${snakeColumn(f.name)}_id,`),
+];
 
 const method = (m: PolicyMethodSpec, ct: ContentType): string => {
   const sig = m.record

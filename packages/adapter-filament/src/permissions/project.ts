@@ -24,7 +24,18 @@ export interface FilamentPermissions {
 }
 
 const recordVars = (ct: ContentType): Set<string> =>
-  new Set(ct.fields.filter((f) => f.type !== "relation").map((f) => `record.${f.name}`));
+  new Set([
+    ...ct.fields
+      .filter((f) => f.type !== "relation" && f.type !== "component")
+      .map((f) => `record.${f.name}`),
+    ...ct.fields
+      .filter(
+        (f) =>
+          f.type === "relation" &&
+          (f.relationKind === "manyToOne" || f.relationKind === "oneToOne"),
+      )
+      .map((f) => `record.${f.name}Id`),
+  ]);
 
 export const projectFilamentPermissions = (doc: IrDocument, roles: Role[]): FilamentPermissions => {
   const byName = new Map(doc.contentTypes.map((ct) => [ct.name, ct]));
