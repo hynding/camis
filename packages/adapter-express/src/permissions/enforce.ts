@@ -8,7 +8,17 @@ const columnToField = (doc: IrDocument): Record<string, Record<string, string>> 
   const out: Record<string, Record<string, string>> = {};
   for (const ct of doc.contentTypes) {
     const m: Record<string, string> = {};
-    for (const f of ct.fields) if (f.type !== "relation") m[snakeColumn(f.name)] = f.name;
+    for (const f of ct.fields) {
+      if (f.type === "component") continue;
+      if (f.type === "relation") {
+        // Owning relations surface their FK column as record.<name>Id for conditions.
+        if (f.relationKind === "manyToOne" || f.relationKind === "oneToOne") {
+          m[`${snakeColumn(f.name)}_id`] = `${f.name}Id`;
+        }
+        continue;
+      }
+      m[snakeColumn(f.name)] = f.name;
+    }
     out[ct.name] = m;
   }
   return out;

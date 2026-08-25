@@ -38,3 +38,46 @@ describe("emitEnforce", () => {
     expect(file).toContain("c__Editor__Article__record");
   });
 });
+
+describe("emitEnforce — ownership via relation FKs", () => {
+  const ownerDoc: IrDocument = {
+    version: 1,
+    contentTypes: [
+      {
+        name: "Note",
+        kind: "collection",
+        fields: [
+          { type: "text", name: "text" },
+          { type: "relation", name: "owner", relationKind: "manyToOne", target: "User" },
+        ],
+      },
+      {
+        name: "User",
+        kind: "collection",
+        builtin: "user",
+        fields: [{ type: "string", name: "username" }],
+      },
+    ],
+    components: [],
+  };
+  const ownerPerms: ExpressPermissions = {
+    roles: ["member"],
+    grants: { member: { Note: ["read"] } },
+    conditions: {
+      member: {
+        Note: {
+          kind: "eq",
+          left: { kind: "var", name: "record.ownerId" },
+          right: { kind: "var", name: "user.id" },
+        },
+      },
+    },
+    fieldRules: {},
+    gaps: [],
+  };
+
+  it("maps the owning-relation FK column to record.<name>Id", () => {
+    const file = emitEnforce(ownerPerms, ownerDoc);
+    expect(file).toContain('"owner_id": "ownerId"');
+  });
+});
