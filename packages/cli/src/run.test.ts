@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -65,5 +65,50 @@ describe("run", () => {
     const pkg = JSON.parse(await readFile(join(tmp, "generated/api/package.json"), "utf8"));
     expect(pkg.dependencies["drizzle-orm"]).toBeDefined();
     expect(lines.join("\n")).toContain("wrote");
+  });
+
+  it("imports a Strapi project with plugin user relations end-to-end", async () => {
+    tmp = await mkdtemp(join(tmpdir(), "camis-cli-user-"));
+    const schemaDir = join(tmp, "strapi-app/src/api/note/content-types/note");
+    await mkdir(schemaDir, { recursive: true });
+    await writeFile(
+      join(schemaDir, "schema.json"),
+      JSON.stringify({
+        kind: "collectionType",
+        collectionName: "notes",
+        info: { singularName: "note", pluralName: "notes", displayName: "Note" },
+        options: {},
+        pluginOptions: {},
+        attributes: {
+          text: { type: "text" },
+          owner: {
+            type: "relation",
+            relation: "manyToOne",
+            target: "plugin::users-permissions.user",
+          },
+        },
+      }),
+    );
+    const io = realIo(tmp);
+    const importCode = await run(
+      ["import", "strapi", join(tmp, "strapi-app"), "--out", join(tmp, "camis.json")],
+      io,
+    );
+    expect(importCode).toBe(0);
+    const ir = JSON.parse(await readFile(join(tmp, "camis.json"), "utf8")) as {
+      contentTypes: { name: string; builtin?: string }[];
+    };
+    expect(ir.contentTypes.find((ct) => ct.name === "User")?.builtin).toBe("user");
+
+    await writeFile(
+      join(tmp, "camis.config.json"),
+      JSON.stringify({
+        ir: "./camis.json",
+        targets: [{ target: "filament", out: "./generated/admin" }],
+      }),
+    );
+    const genCode = await run(["generate", "--config", join(tmp, "camis.config.json")], io);
+    expect(genCode).toBe(0);
+    expect(lines.some((l) => l.includes("filament:"))).toBe(true);
   });
 });

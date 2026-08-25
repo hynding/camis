@@ -17,20 +17,24 @@ import { contentTypeSchema } from "./schema";
 import { synthesizedInverses } from "./relations";
 import { skeletonFiles } from "./skeleton";
 
-const typeFiles = (ct: ContentType, extraAttributes: Record<string, unknown>): GeneratedFile[] => {
+const typeFiles = (
+  ct: ContentType,
+  extraAttributes: Record<string, unknown>,
+  builtinUsers: ReadonlySet<string>,
+): GeneratedFile[] => {
   const names = strapiNames(ct);
   return [
     {
       path: `src/api/${names.singularName}/content-types/${names.singularName}/schema.json`,
-      content: stableJson(contentTypeSchema(ct, extraAttributes)),
+      content: stableJson(contentTypeSchema(ct, extraAttributes, builtinUsers)),
     },
     ...apiFactoryFiles(names),
   ];
 };
 
-const componentFile = (component: Component): GeneratedFile => ({
+const componentFile = (component: Component, builtinUsers: ReadonlySet<string>): GeneratedFile => ({
   path: `src/components/shared/${kebab(component.name)}.json`,
-  content: stableJson(componentSchema(component)),
+  content: stableJson(componentSchema(component, builtinUsers)),
 });
 
 const softDeleteGaps = (doc: IrDocument): CapabilityGap[] =>
@@ -64,10 +68,15 @@ export const strapiAdapter: GenerateAdapter = {
   generate: (ir, options): GenerationResult => {
     const doc = normalize(ir.document);
     const inverses = synthesizedInverses(doc);
+    const builtinUsers = new Set(
+      doc.contentTypes.filter((ct) => ct.builtin === "user").map((ct) => ct.name),
+    );
     const files: GeneratedFile[] = [
       ...skeletonFiles(options.projectName),
-      ...doc.contentTypes.flatMap((ct) => typeFiles(ct, inverses.get(ct.name) ?? {})),
-      ...doc.components.map(componentFile),
+      ...doc.contentTypes
+        .filter((ct) => ct.builtin === undefined)
+        .flatMap((ct) => typeFiles(ct, inverses.get(ct.name) ?? {}, builtinUsers)),
+      ...doc.components.map((c) => componentFile(c, builtinUsers)),
     ];
     const perm = emitPermissions(doc, ir.roles);
     const withPerm =

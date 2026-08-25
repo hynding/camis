@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { IrDocument } from "@camis/ir-schema";
 import { strapiAdapter } from "./generate";
+import { importDocument } from "./import/import-document";
 
 const doc: IrDocument = {
   version: 1,
@@ -197,5 +198,65 @@ describe("strapiAdapter.generate — components + inverses", () => {
       r.files.find((f) => f.path.endsWith("article/schema.json"))!.content,
     );
     expect(article.attributes.blocks).toBeUndefined();
+  });
+});
+
+describe("builtin user round-trip", () => {
+  const doc = {
+    version: 1 as const,
+    contentTypes: [
+      {
+        name: "Note",
+        kind: "collection" as const,
+        fields: [
+          { type: "text" as const, name: "text" },
+          {
+            type: "relation" as const,
+            name: "owner",
+            relationKind: "manyToOne" as const,
+            target: "User",
+          },
+        ],
+      },
+      {
+        name: "User",
+        kind: "collection" as const,
+        builtin: "user" as const,
+        fields: [
+          { type: "string" as const, name: "username", required: true, unique: true },
+          { type: "email" as const, name: "email", required: true },
+        ],
+      },
+    ],
+    components: [],
+  };
+
+  it("emits no schema files for the builtin user and targets the plugin UID", () => {
+    const result = strapiAdapter.generate({ document: doc, roles: [] }, { projectName: "t" });
+    const paths = result.files.map((f) => f.path);
+    expect(paths.some((p) => p.startsWith("src/api/user/"))).toBe(false);
+    const note = result.files.find(
+      (f) => f.path === "src/api/note/content-types/note/schema.json",
+    )!;
+    const parsed = JSON.parse(note.content) as {
+      attributes: Record<string, { target?: string }>;
+    };
+    expect(parsed.attributes.owner?.target).toBe("plugin::users-permissions.user");
+  });
+
+  it("round-trips through import back to the same builtin User document", () => {
+    const files = strapiAdapter.generate({ document: doc, roles: [] }, { projectName: "t" }).files;
+    const { document } = importDocument(files);
+    expect(document.ok).toBe(true);
+    if (!document.ok) return;
+    const user = document.value.contentTypes.find((ct) => ct.name === "User");
+    expect(user?.builtin).toBe("user");
+    const note = document.value.contentTypes.find((ct) => ct.name === "Note")!;
+    expect(note.fields.find((f) => f.name === "owner")).toEqual({
+      type: "relation",
+      name: "owner",
+      relationKind: "manyToOne",
+      target: "User",
+    });
   });
 });

@@ -8,6 +8,10 @@
 - `camis import <strapi|express> <projectDir> [--out ir.json]` — import a **declarative** source
   (a Strapi project's `schema.json`, or an Express project's `camis.schema.json`) into IR.
   Filament is generate-only (no importer).
+  Relations targeting `plugin::users-permissions.user` map to a synthesized `builtin: "user"`
+  content type named `User` (each target resolves it to its native user model — Strapi's plugin
+  user, Laravel's stock `App\Models\User`). Other `plugin::` relation targets are reported as
+  downgrade gaps and skipped.
 - `camis generate [--config camis.config.json]` — dry-run: list the files each target would emit, plus
   any capability gaps. Writes nothing.
 - `camis build [--config camis.config.json]` — write the generated project(s) to each target's `out`.

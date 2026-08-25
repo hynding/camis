@@ -49,6 +49,7 @@ export const contentType = z
   .object({
     name: typeName,
     kind: z.enum(["collection", "single"]),
+    builtin: z.literal("user").optional(),
     names: z
       .object({
         plural: z.string().optional(),

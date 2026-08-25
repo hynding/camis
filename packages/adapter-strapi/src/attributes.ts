@@ -15,7 +15,12 @@ const put = (attr: Attribute, key: string, value: unknown): void => {
   if (value !== undefined) attr[key] = value;
 };
 
-export const toAttribute = (field: Field): Attribute => {
+const PLUGIN_USER_UID = "plugin::users-permissions.user";
+
+export const toAttribute = (
+  field: Field,
+  builtinUsers: ReadonlySet<string> = new Set(),
+): Attribute => {
   const f = field as Field & Record<string, unknown>;
   const attr: Attribute = { type: TYPE_MAP[field.type] ?? field.type };
 
@@ -29,7 +34,9 @@ export const toAttribute = (field: Field): Attribute => {
   if (field.type === "relation") {
     const targetSingular = kebab(field.target);
     attr.relation = field.relationKind;
-    attr.target = `api::${targetSingular}.${targetSingular}`;
+    attr.target = builtinUsers.has(field.target)
+      ? PLUGIN_USER_UID
+      : `api::${targetSingular}.${targetSingular}`;
     put(attr, "inversedBy", field.inverse);
     return attr;
   }
@@ -53,11 +60,14 @@ export const toAttribute = (field: Field): Attribute => {
   return attr;
 };
 
-export const toAttributes = (fields: Field[]): Record<string, Attribute> => {
+export const toAttributes = (
+  fields: Field[],
+  builtinUsers: ReadonlySet<string> = new Set(),
+): Record<string, Attribute> => {
   const out: Record<string, Attribute> = {};
   for (const field of fields) {
     if (field.type === "dynamicZone") continue; // deferred; generate emits a capability-gap
-    out[field.name] = toAttribute(field);
+    out[field.name] = toAttribute(field, builtinUsers);
   }
   return out;
 };

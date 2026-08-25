@@ -96,3 +96,31 @@ describe("irField — relations + components", () => {
     ).toEqual({ type: "component", name: "seo", component: "SeoMeta", repeatable: false });
   });
 });
+
+describe("irField — plugin relation targets", () => {
+  it("maps a plugin::users-permissions.user relation to the builtin User target", () => {
+    const r = irField(
+      "owner",
+      { type: "relation", relation: "manyToOne", target: "plugin::users-permissions.user" },
+      loc,
+    );
+    expect(r.field).toEqual({
+      type: "relation",
+      name: "owner",
+      relationKind: "manyToOne",
+      target: "User",
+    });
+    expect(r.builtinUser).toBe(true);
+  });
+
+  it("reports other plugin:: relation targets as downgrade gaps", () => {
+    const r = irField(
+      "file",
+      { type: "relation", relation: "oneToOne", target: "plugin::upload.file" },
+      loc,
+    );
+    expect(r.field).toBeUndefined();
+    expect(r.gap?.severity).toBe("downgrade");
+    expect(r.gap?.feature).toBe("pluginRelation");
+  });
+});

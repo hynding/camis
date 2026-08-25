@@ -91,3 +91,54 @@ describe("importDocument", () => {
     expect(document.value.contentTypes[0]!.fields.map((f) => f.name)).toEqual(["title"]);
   });
 });
+
+describe("importDocument — builtin user synthesis", () => {
+  const noteWithPluginOwner = {
+    path: "src/api/note/content-types/note/schema.json",
+    content: JSON.stringify({
+      kind: "collectionType",
+      collectionName: "notes",
+      info: { singularName: "note", pluralName: "notes", displayName: "Note" },
+      options: {},
+      pluginOptions: {},
+      attributes: {
+        text: { type: "text" },
+        owner: {
+          type: "relation",
+          relation: "manyToOne",
+          target: "plugin::users-permissions.user",
+        },
+      },
+    }),
+  };
+
+  it("synthesizes a builtin User content type when plugin user relations are imported", () => {
+    const { document, gaps } = importDocument([noteWithPluginOwner]);
+    expect(document.ok).toBe(true);
+    if (!document.ok) return;
+    const user = document.value.contentTypes.find((ct) => ct.name === "User");
+    expect(user?.builtin).toBe("user");
+    expect(gaps.gaps).toEqual([]);
+  });
+
+  it("does not synthesize User when the project defines api::user.user itself", () => {
+    const ownUser = {
+      path: "src/api/user/content-types/user/schema.json",
+      content: JSON.stringify({
+        kind: "collectionType",
+        collectionName: "users",
+        info: { singularName: "user", pluralName: "users", displayName: "User" },
+        options: {},
+        pluginOptions: {},
+        attributes: { username: { type: "string" } },
+      }),
+    };
+    const { document } = importDocument([noteWithPluginOwner, ownUser]);
+    expect(document.ok).toBe(true);
+    if (!document.ok) return;
+    const users = document.value.contentTypes.filter((ct) => ct.name === "User");
+    expect(users).toHaveLength(1);
+    expect(users[0]?.builtin).toBeUndefined();
+    expect(users[0]?.fields.map((f) => f.name)).toEqual(["username"]);
+  });
+});
