@@ -36,6 +36,29 @@ describe("contentType node refinements", () => {
   });
 });
 
+describe("builtin content types", () => {
+  it("accepts builtin: 'user' on a content type and preserves it", () => {
+    const r = contentType.safeParse({
+      name: "User",
+      kind: "collection",
+      builtin: "user",
+      fields: [{ type: "string", name: "username" }],
+    });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.builtin).toBe("user");
+  });
+
+  it("rejects unknown builtin kinds", () => {
+    const r = contentType.safeParse({
+      name: "Team",
+      kind: "collection",
+      builtin: "team",
+      fields: [{ type: "string", name: "name" }],
+    });
+    expect(r.success).toBe(false);
+  });
+});
+
 describe("document hooks", () => {
   const base = {
     version: 1,
