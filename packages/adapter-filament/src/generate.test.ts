@@ -397,3 +397,11 @@ describe("Filament v5 resource compatibility", () => {
     expect(resource.content).toContain("use BackedEnum;");
   });
 });
+
+describe("relation FK mass assignment", () => {
+  it("includes owning-relation FK columns in the model fillable", () => {
+    const result = filamentAdapter.generate(relBundle, { projectName: "blog" });
+    const article = result.files.find((f) => f.path === "app/Models/Article.php")!;
+    expect(article.content).toContain("'author_id',");
+  });
+});

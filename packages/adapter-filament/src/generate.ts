@@ -95,6 +95,7 @@ export const filamentAdapter: GenerateAdapter = {
           [...(rel.methods.get(ct.name) ?? []), ...ctChildren.map(childRelationMethod)],
           hooks.observedModels.has(ct.name) || aiObservedModels.has(ct.name),
           embeddedEmits,
+          rel.fkNames.get(ct.name) ?? [],
         ),
       });
       files.push({
