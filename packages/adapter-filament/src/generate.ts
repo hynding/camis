@@ -53,7 +53,10 @@ export const filamentAdapter: GenerateAdapter = {
       }
     }
 
-    doc.contentTypes.forEach((ct, i) => {
+    // Builtin content types (the target's native user model) map onto the stock Laravel
+    // User/users table; the host app owns those files, so nothing is emitted for them.
+    const emitted = doc.contentTypes.filter((ct) => ct.builtin === undefined);
+    emitted.forEach((ct, i) => {
       for (const f of ct.fields) {
         if (f.type === "relation") continue;
         if (!isSupportedField(f.type)) {
@@ -85,7 +88,7 @@ export const filamentAdapter: GenerateAdapter = {
       .sort((a, b) => a.table.localeCompare(b.table))
       .forEach((p, j) => {
         files.push({
-          path: pivotMigrationFilename(p, doc.contentTypes.length + 1 + j),
+          path: pivotMigrationFilename(p, emitted.length + 1 + j),
           content: emitPivotMigration(p),
         });
       });

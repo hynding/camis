@@ -205,3 +205,51 @@ describe("filamentAdapter AI fields", () => {
     expect(r.files.filter((f) => f.path === "app/Observers/ArticleObserver.php")).toHaveLength(1);
   });
 });
+
+describe("builtin user", () => {
+  const docWithBuiltinUser = {
+    version: 1 as const,
+    contentTypes: [
+      {
+        name: "Note",
+        kind: "collection" as const,
+        fields: [
+          { type: "text" as const, name: "text" },
+          {
+            type: "relation" as const,
+            name: "owner",
+            relationKind: "manyToOne" as const,
+            target: "User",
+          },
+        ],
+      },
+      {
+        name: "User",
+        kind: "collection" as const,
+        builtin: "user" as const,
+        fields: [
+          { type: "string" as const, name: "username", required: true, unique: true },
+          { type: "email" as const, name: "email", required: true },
+        ],
+      },
+    ],
+    components: [],
+  };
+
+  it("maps builtin User relations onto the stock Laravel User without emitting user files", () => {
+    const result = filamentAdapter.generate(
+      { document: docWithBuiltinUser, roles: [] },
+      { projectName: "t" },
+    );
+    const paths = result.files.map((f) => f.path);
+    expect(paths).not.toContain("app/Models/User.php");
+    expect(paths.some((p) => p.includes("create_users_table"))).toBe(false);
+    expect(paths.some((p) => p.startsWith("app/Filament/Resources/Users/"))).toBe(false);
+    const note = result.files.find((f) => f.path === "app/Models/Note.php")!;
+    expect(note.content).toContain("$this->belongsTo(User::class, 'owner_id')");
+    const migration = result.files.find((f) => f.path.includes("create_notes_table"))!;
+    expect(migration.content).toContain("->constrained('users')");
+    expect(migration.path).toBe("database/migrations/0000_00_00_000001_create_notes_table.php");
+    expect(result.gaps.gaps).toEqual([]);
+  });
+});
