@@ -38,6 +38,10 @@ DB_PASSWORD=secret
 
 ## First deploy
 
+The generated JSON API in \`routes/api.php\` requires Laravel's API layer
+(\`php artisan install:api\`) — \`camis scaffold filament\` runs it for you; add it manually on
+an existing app. Custom endpoints belong in \`routes/api-custom.php\` (never overwritten).
+
 \`\`\`sh
 composer install --no-dev --optimize-autoloader
 php artisan key:generate

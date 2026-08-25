@@ -51,6 +51,13 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
   roles are cross-validated against the IR and drive permission emission: the Spatie seeder +
   Ring-1-backed policies on Filament, and the JWT/enforcement layer on Express.
 
+The Filament target also generates a JSON API: `routes/api.php` +
+`app/Http/Controllers/Api/*ApiController.php` per content type (index/show/store/update/
+destroy). `options.upsertBy: "<uniqueField>"` on a content type makes `store()` upsert via
+that field. With roles configured, routes carry auth middleware and controllers authorize
+against the generated policies. Hand-written endpoints (aggregates like a `/bootstrap`)
+go in `routes/api-custom.php` — seed-mode, written once, never overwritten.
+
 Ownership conditions: owning relations (`manyToOne`/`oneToOne`) expose their FK to Ring-1
 conditions as `record.<name>Id`, so a grant condition like
 `{"kind":"eq","left":{"kind":"var","name":"record.ownerId"},"right":{"kind":"var","name":"user.id"}}`
