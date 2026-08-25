@@ -194,3 +194,44 @@ describe("ai invariants", () => {
     ).toBe(true);
   });
 });
+
+describe("upsertBy invariants", () => {
+  const doc = (options: object, fields: object[]) => ({
+    version: 1 as const,
+    contentTypes: [{ name: "Note", kind: "collection" as const, options, fields }],
+    components: [],
+  });
+
+  it("accepts upsertBy on a unique scalar field", () => {
+    const errors = validateInvariants(
+      doc({ upsertBy: "recordId" }, [
+        { type: "string", name: "recordId", required: true, unique: true },
+      ]) as never,
+    );
+    expect(errors).toEqual([]);
+  });
+
+  it("rejects upsertBy naming an absent field", () => {
+    const errors = validateInvariants(
+      doc({ upsertBy: "missing" }, [{ type: "string", name: "recordId" }]) as never,
+    );
+    expect(errors.map((e) => e.code)).toEqual(["unknown_upsert_field"]);
+  });
+
+  it("rejects upsertBy naming a non-unique field", () => {
+    const errors = validateInvariants(
+      doc({ upsertBy: "recordId" }, [{ type: "string", name: "recordId" }]) as never,
+    );
+    expect(errors.map((e) => e.code)).toEqual(["non_unique_upsert_field"]);
+  });
+
+  it("rejects upsertBy naming a relation field", () => {
+    const errors = validateInvariants(
+      doc({ upsertBy: "owner" }, [
+        { type: "string", name: "recordId" },
+        { type: "relation", name: "owner", relationKind: "manyToOne", target: "Note" },
+      ]) as never,
+    );
+    expect(errors.map((e) => e.code)).toEqual(["non_unique_upsert_field"]);
+  });
+});

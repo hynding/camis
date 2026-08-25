@@ -9,6 +9,8 @@ export type IrErrorCode =
   | "reserved_field_name"
   | "invalid_default_type"
   | "unknown_uid_target"
+  | "unknown_upsert_field"
+  | "non_unique_upsert_field"
   | "unknown_relation_target"
   | "unknown_component_ref"
   | "unknown_grant_content_type"

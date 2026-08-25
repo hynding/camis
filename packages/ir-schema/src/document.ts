@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { componentField, field } from "./fields";
 import { hook } from "./hooks";
-import { typeName } from "./identifiers";
+import { fieldName, typeName } from "./identifiers";
 
 const RESERVED_FIELD_NAMES = new Set(["id"]);
 
@@ -63,6 +63,7 @@ export const contentType = z
         draftPublish: z.boolean().optional(),
         timestamps: z.boolean().optional(),
         softDelete: z.boolean().optional(),
+        upsertBy: fieldName.optional(),
       })
       .optional(),
   })
