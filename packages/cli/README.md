@@ -18,6 +18,11 @@ non-repeatable components flatten into prefixed embedded columns (`amount.minor`
 `amount_minor`), and repeatable components become child tables with a cascade FK — surfaced
 in Filament as `Repeater::relationship()` forms. Relations or AI attachments inside
 components, and repeatables nested inside repeatables, are reported as downgrade gaps.
+- `camis scaffold filament <dir>` — create the Laravel 12 + Filament v5 + Spatie host app the
+  overlay needs (`composer create-project`, `filament:install --panels`, Spatie install +
+  `HasRoles` patch on `app/Models/User.php`). Refuses to run over an existing composer project.
+  Requires `composer` and `php` (with Filament's `ext-intl`) on PATH. Point a filament target's
+  `out` at the same directory afterwards and run `camis build`.
 - `camis generate [--config camis.config.json]` — dry-run: list the files each target would emit, plus
   any capability gaps. Writes nothing.
 - `camis build [--config camis.config.json]` — write the generated project(s) to each target's `out`.
