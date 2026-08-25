@@ -41,3 +41,30 @@ describe("loadConfig", () => {
     expect((await loadConfig(io2, "c.json")).ok).toBe(false);
   });
 });
+
+describe("loadConfig — roles", () => {
+  it("resolves an optional roles path relative to the config dir", async () => {
+    const io = fakeIo({
+      "/proj/camis.config.json": JSON.stringify({
+        ir: "./camis.json",
+        roles: "./camis.roles.json",
+        targets: [{ target: "filament", out: "./generated/admin" }],
+      }),
+    });
+    const cfg = await loadConfig(io, "camis.config.json");
+    expect(cfg.ok).toBe(true);
+    if (cfg.ok) expect(cfg.value.roles).toBe("/proj/camis.roles.json");
+  });
+
+  it("leaves roles undefined when the key is absent", async () => {
+    const io = fakeIo({
+      "/proj/camis.config.json": JSON.stringify({
+        ir: "./camis.json",
+        targets: [{ target: "filament", out: "./generated/admin" }],
+      }),
+    });
+    const cfg = await loadConfig(io, "camis.config.json");
+    expect(cfg.ok).toBe(true);
+    if (cfg.ok) expect(cfg.value.roles).toBeUndefined();
+  });
+});
