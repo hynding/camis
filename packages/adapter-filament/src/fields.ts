@@ -184,9 +184,9 @@ const base = (field: Field, c: string): Base => {
   }
 };
 
-export const emitField = (field: Field): FieldEmit => {
+export const emitField = (field: Field, columnOverride?: string): FieldEmit => {
   const f = field as Field & Record<string, unknown>;
-  const column = snakeColumn(field.name);
+  const column = columnOverride ?? snakeColumn(field.name);
   const b = base(field, column);
   const required = f.required === true;
   const unique = f.unique === true;

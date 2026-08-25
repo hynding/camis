@@ -1,5 +1,5 @@
 import type { ContentType } from "@camis/ir-schema";
-import { emitField } from "./fields";
+import { emitField, type FieldEmit } from "./fields";
 import { filamentNames } from "./names";
 import type { RelationMethod } from "./relations";
 
@@ -7,9 +7,15 @@ export const emitModel = (
   ct: ContentType,
   relations: RelationMethod[] = [],
   observed = false,
+  extraEmits: FieldEmit[] = [],
 ): string => {
   const names = filamentNames(ct);
-  const emits = ct.fields.filter((f) => f.type !== "relation").map(emitField);
+  const emits = [
+    ...ct.fields
+      .filter((f) => f.type !== "relation" && f.type !== "component")
+      .map((f) => emitField(f)),
+    ...extraEmits,
+  ];
   const fillable = emits.map((e) => `        '${e.column}',`).join("\n");
   const casts = emits
     .filter((e) => e.cast !== undefined)
