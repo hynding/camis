@@ -1,5 +1,6 @@
 import type { ContentType } from "@camis/ir-schema";
 import type { GeneratedFile } from "@camis/adapter-kernel";
+import type { RepeaterEmit } from "./components";
 import { emitField, type FieldEmit } from "./fields";
 import { filamentNames } from "./names";
 
@@ -13,6 +14,7 @@ export const emitResourceFiles = (
   ct: ContentType,
   relationFields: string[] = [],
   extraEmits: FieldEmit[] = [],
+  repeaters: RepeaterEmit[] = [],
 ): GeneratedFile[] => {
   const n = filamentNames(ct);
   const dir = `app/Filament/Resources/${n.resourceDir}`;
@@ -76,11 +78,13 @@ class ${n.resourceClass} extends Resource
   const formImports = useBlock([
     ...emits.map((e) => e.formImport),
     ...(relationFields.length > 0 ? [SELECT] : []),
+    ...repeaters.flatMap((r) => r.imports),
     "Filament\\Schemas\\Schema",
   ]);
   const formBody = [
     ...emits.map((e) => `            ${e.formComponent},`),
     ...relationFields.map((s) => `            ${s},`),
+    ...repeaters.map((r) => `            ${r.component},`),
   ].join("\n");
   const form = `<?php
 

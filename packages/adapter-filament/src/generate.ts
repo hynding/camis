@@ -8,6 +8,15 @@ import {
 import { normalize } from "@camis/ir-core";
 import type { CapabilityGap } from "@camis/ir-schema";
 import { aiFieldContentTypes, aiProviderFile, emitAiObserver, hasAiField } from "./ai";
+import {
+  childMigrationFilename,
+  childRelationMethod,
+  childTableEmit,
+  emitChildMigration,
+  emitChildModel,
+  repeaterComponent,
+  type ChildTableEmit,
+} from "./components";
 import { emitField, isSupportedField } from "./fields";
 import { emitHookFiles } from "./hooks/emit";
 import { emitPermissions } from "./permissions/emit";
@@ -57,6 +66,7 @@ export const filamentAdapter: GenerateAdapter = {
     // Builtin content types (the target's native user model) map onto the stock Laravel
     // User/users table; the host app owns those files, so nothing is emitted for them.
     const emitted = doc.contentTypes.filter((ct) => ct.builtin === undefined);
+    const children: { ct: (typeof emitted)[number]; child: ChildTableEmit }[] = [];
     emitted.forEach((ct, i) => {
       for (const f of ct.fields) {
         if (f.type === "relation" || f.type === "component") continue;
@@ -74,12 +84,14 @@ export const filamentAdapter: GenerateAdapter = {
       const embeddedEmits = expansion.scalars.map((s) =>
         emitField(s.field, s.path.map(snakeColumn).join("_")),
       );
+      const ctChildren = expansion.tables.map((t) => childTableEmit(ct, t));
+      ctChildren.forEach((child) => children.push({ ct, child }));
       const names = filamentNames(ct);
       files.push({
         path: `app/Models/${names.model}.php`,
         content: emitModel(
           ct,
-          rel.methods.get(ct.name) ?? [],
+          [...(rel.methods.get(ct.name) ?? []), ...ctChildren.map(childRelationMethod)],
           hooks.observedModels.has(ct.name) || aiObservedModels.has(ct.name),
           embeddedEmits,
         ),
@@ -88,7 +100,17 @@ export const filamentAdapter: GenerateAdapter = {
         path: migrationFilename(ct, i + 1),
         content: emitMigration(ct, rel.fkColumns.get(ct.name) ?? [], embeddedEmits),
       });
-      files.push(...emitResourceFiles(ct, rel.formFields.get(ct.name) ?? [], embeddedEmits));
+      files.push(
+        ...emitResourceFiles(
+          ct,
+          rel.formFields.get(ct.name) ?? [],
+          embeddedEmits,
+          ctChildren.map(repeaterComponent),
+        ),
+      );
+      ctChildren.forEach((child) => {
+        files.push({ path: `app/Models/${child.model}.php`, content: emitChildModel(child) });
+      });
     });
 
     [...rel.pivots]
@@ -97,6 +119,15 @@ export const filamentAdapter: GenerateAdapter = {
         files.push({
           path: pivotMigrationFilename(p, emitted.length + 1 + j),
           content: emitPivotMigration(p),
+        });
+      });
+
+    [...children]
+      .sort((a, b) => a.child.table.localeCompare(b.child.table))
+      .forEach(({ ct, child }, k) => {
+        files.push({
+          path: childMigrationFilename(child, emitted.length + rel.pivots.length + 1 + k),
+          content: emitChildMigration(ct, child),
         });
       });
 

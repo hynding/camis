@@ -305,3 +305,72 @@ describe("component fields — embedded columns", () => {
     expect(table.content).toContain("TextColumn::make('amount_currency')");
   });
 });
+
+describe("component fields — repeatable child tables", () => {
+  const sessionDoc = {
+    version: 1 as const,
+    contentTypes: [
+      {
+        name: "ActivitySession",
+        kind: "collection" as const,
+        fields: [
+          { type: "dateTime" as const, name: "occurredAt", required: true },
+          {
+            type: "component" as const,
+            name: "quantities",
+            component: "Quantity",
+            repeatable: true,
+          },
+        ],
+      },
+    ],
+    components: [
+      {
+        name: "Quantity",
+        fields: [
+          { type: "decimal" as const, name: "amount", required: true },
+          { type: "string" as const, name: "unit", required: true },
+        ],
+      },
+    ],
+  };
+
+  it("emits a child table, child model, parent HasMany, and a Repeater form", () => {
+    const result = filamentAdapter.generate(
+      { document: sessionDoc, roles: [] },
+      { projectName: "t" },
+    );
+    expect(result.gaps.gaps).toEqual([]);
+    const paths = result.files.map((f) => f.path);
+
+    const childMig = result.files.find((f) =>
+      f.path.endsWith("create_activity_sessions_quantities_table.php"),
+    )!;
+    expect(childMig).toBeDefined();
+    expect(childMig.content).toContain(
+      "$table->foreignId('activity_session_id')->constrained('activity_sessions')->cascadeOnDelete();",
+    );
+    expect(childMig.content).toContain("$table->decimal('amount');");
+    expect(childMig.path).toBe(
+      "database/migrations/0000_00_00_000002_create_activity_sessions_quantities_table.php",
+    );
+
+    expect(paths).toContain("app/Models/ActivitySessionQuantities.php");
+    const childModel = result.files.find(
+      (f) => f.path === "app/Models/ActivitySessionQuantities.php",
+    )!;
+    expect(childModel.content).toContain("protected $table = 'activity_sessions_quantities';");
+    expect(childModel.content).toContain("'amount',");
+
+    const parentModel = result.files.find((f) => f.path === "app/Models/ActivitySession.php")!;
+    expect(parentModel.content).toContain("public function quantities(): HasMany");
+    expect(parentModel.content).toContain(
+      "return $this->hasMany(ActivitySessionQuantities::class, 'activity_session_id');",
+    );
+
+    const form = result.files.find((f) => f.path.endsWith("Schemas/ActivitySessionForm.php"))!;
+    expect(form.content).toContain("Repeater::make('quantities')");
+    expect(form.content).toContain("->relationship()");
+    expect(form.content).toContain("TextInput::make('amount')->numeric()->required()");
+  });
+});
