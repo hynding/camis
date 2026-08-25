@@ -17,6 +17,7 @@ import {
   repeaterComponent,
   type ChildTableEmit,
 } from "./components";
+import { apiCustomSeed, emitApiController, emitApiRoutes } from "./api";
 import { deployFile } from "./deploy";
 import { emitField, isSupportedField } from "./fields";
 import { emitHookFiles } from "./hooks/emit";
@@ -113,7 +114,27 @@ export const filamentAdapter: GenerateAdapter = {
       ctChildren.forEach((child) => {
         files.push({ path: `app/Models/${child.model}.php`, content: emitChildModel(child) });
       });
+      files.push({
+        path: `app/Http/Controllers/Api/${names.model}ApiController.php`,
+        content: emitApiController(
+          ct,
+          [
+            ...ct.fields
+              .filter((f) => f.type !== "relation" && f.type !== "component")
+              .map((f) => emitField(f).column),
+            ...embeddedEmits.map((e) => e.column),
+            ...(rel.fkNames.get(ct.name) ?? []),
+          ],
+          { secured: ir.roles.length > 0 },
+        ),
+      });
     });
+
+    files.push({
+      path: "routes/api.php",
+      content: emitApiRoutes(emitted, { secured: ir.roles.length > 0 }),
+    });
+    files.push(apiCustomSeed());
 
     [...rel.pivots]
       .sort((a, b) => a.table.localeCompare(b.table))
