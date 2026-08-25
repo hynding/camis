@@ -1,3 +1,4 @@
+overwrite DEPLOY.md
 overwrite app/Filament/Resources/Articles/ArticleResource.php
 overwrite app/Filament/Resources/Articles/Pages/CreateArticle.php
 overwrite app/Filament/Resources/Articles/Pages/EditArticle.php

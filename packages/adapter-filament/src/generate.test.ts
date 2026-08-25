@@ -374,3 +374,15 @@ describe("component fields — repeatable child tables", () => {
     expect(form.content).toContain("TextInput::make('amount')->numeric()->required()");
   });
 });
+
+describe("DEPLOY.md", () => {
+  it("is emitted with env-driven DB selection and migrate/seed steps", () => {
+    const result = filamentAdapter.generate(bundle, { projectName: "blog" });
+    const deploy = result.files.find((f) => f.path === "DEPLOY.md");
+    expect(deploy).toBeDefined();
+    expect(deploy!.content).toContain("DB_CONNECTION");
+    expect(deploy!.content).toContain("php artisan migrate");
+    expect(deploy!.content).toContain("RolePermissionSeeder");
+    expect(deploy!.content).toContain("public/");
+  });
+});
