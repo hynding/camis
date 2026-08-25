@@ -27,6 +27,7 @@ const io = (lines: string[], materializeSpy = vi.fn(() => Promise.resolve())): I
   readFile: (p) => Promise.resolve(p.endsWith("camis.config.json") ? config : ir),
   writeFile: () => Promise.resolve(),
   materialize: materializeSpy,
+  exec: () => Promise.resolve(0),
   out: (l) => lines.push(l),
   cwd: "/p",
 });
@@ -60,6 +61,7 @@ describe("printGaps", () => {
       readFile: () => Promise.resolve(""),
       writeFile: () => Promise.resolve(),
       materialize: () => Promise.resolve(),
+      exec: () => Promise.resolve(0),
       out: (l) => lines.push(l),
       cwd: "/p",
     };
@@ -107,6 +109,7 @@ describe("generateCommand — roles", () => {
       ),
     writeFile: () => Promise.resolve(),
     materialize: () => Promise.resolve(),
+    exec: () => Promise.resolve(0),
     out: (l) => lines.push(l),
     cwd: "/p",
   });

@@ -19,6 +19,7 @@ const realIo = (cwd: string): Io => ({
   readFile: (p) => readFile(p, "utf8"),
   writeFile: (p, c) => writeFile(p, c),
   materialize,
+  exec: () => Promise.resolve(0),
   out: (l) => lines.push(l),
   cwd,
 });
@@ -29,6 +30,7 @@ describe("run", () => {
       readFile: () => Promise.resolve(""),
       writeFile: () => Promise.resolve(),
       materialize: () => Promise.resolve(),
+      exec: () => Promise.resolve(0),
       out: (l) => lines.push(l),
       cwd: "/p",
     };

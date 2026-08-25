@@ -1,6 +1,7 @@
 import type { Io } from "./io";
 import { generateCommand } from "./commands/generate";
 import { importCommand } from "./commands/import";
+import { scaffoldCommand } from "./commands/scaffold";
 import { validateCommand } from "./commands/validate";
 
 const USAGE = `camis — content-model build tool
@@ -8,6 +9,7 @@ const USAGE = `camis — content-model build tool
 Usage:
   camis validate <ir.json>
   camis import <strapi|express> <projectDir> [--out ir.json]
+  camis scaffold filament <dir>                 (create the Laravel host app for the overlay)
   camis generate [--config camis.config.json]   (dry-run: lists files + gaps)
   camis build    [--config camis.config.json]   (writes the project to each out)`;
 
@@ -33,6 +35,13 @@ export const run = async (argv: string[], io: Io): Promise<number> => {
         return 1;
       }
       return importCommand(rest[0], rest[1], flag(rest, "--out", "camis.json"), io);
+    }
+    case "scaffold": {
+      if (!rest[0] || !rest[1]) {
+        io.out("✗ scaffold needs <target> <dir>");
+        return 1;
+      }
+      return scaffoldCommand(rest[0], rest[1], io);
     }
     case "generate":
       return generateCommand(flag(rest, "--config", "camis.config.json"), io, { write: false });

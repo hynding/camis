@@ -4,6 +4,8 @@ export interface Io {
   readFile(path: string): Promise<string>;
   writeFile(path: string, content: string): Promise<void>;
   materialize(result: GenerationResult, destDir: string): Promise<void>;
+  /** Run a child process (stdio inherited); resolves with its exit code. */
+  exec(cmd: string, args: string[], cwd: string): Promise<number>;
   out(line: string): void;
   cwd: string;
 }
