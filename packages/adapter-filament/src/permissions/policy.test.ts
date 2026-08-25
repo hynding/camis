@@ -52,3 +52,35 @@ describe("emitPolicy", () => {
     expect(php).toContain("public function viewAny(User $user): bool");
   });
 });
+
+describe("emitPolicy — ownership via relation FKs", () => {
+  const note: ContentType = {
+    name: "Note",
+    kind: "collection",
+    fields: [
+      { type: "text", name: "text" },
+      { type: "relation", name: "owner", relationKind: "manyToOne", target: "User" },
+    ],
+  } as ContentType;
+  const ownerSpec: PolicySpec = {
+    contentType: "Note",
+    model: "Note",
+    methods: [
+      {
+        method: "view",
+        key: "note.read",
+        record: true,
+        condition: {
+          kind: "eq",
+          left: { kind: "var", name: "record.ownerId" },
+          right: { kind: "var", name: "user.id" },
+        },
+      },
+    ],
+  };
+
+  it("exposes owning-relation FKs as record.<name>Id in the policy data", () => {
+    const php = emitPolicy(ownerSpec, note);
+    expect(php).toContain("'record.ownerId' => $record->owner_id,");
+  });
+});

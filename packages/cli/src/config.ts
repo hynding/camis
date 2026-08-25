@@ -12,6 +12,7 @@ export type TargetConfig = z.infer<typeof targetConfig>;
 
 export const projectConfig = z.object({
   ir: z.string().min(1),
+  roles: z.string().min(1).optional(),
   targets: z.array(targetConfig).min(1),
 });
 export type ProjectConfig = z.infer<typeof projectConfig>;
@@ -36,6 +37,7 @@ export const loadConfig = async (io: Io, configPath: string): Promise<LoadResult
   const base = dirname(abs);
   const value: ProjectConfig = {
     ir: resolve(base, parsed.data.ir),
+    ...(parsed.data.roles !== undefined ? { roles: resolve(base, parsed.data.roles) } : {}),
     targets: parsed.data.targets.map((t) => ({ ...t, out: resolve(base, t.out) })),
   };
   return { ok: true, value };

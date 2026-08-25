@@ -67,7 +67,8 @@ const COLUMN_TO_FIELD = {
   "Article": {
     "title": "title",
     "status": "status",
-    "secret_notes": "secretNotes"
+    "secret_notes": "secretNotes",
+    "author_id": "authorId"
   },
   "Author": {
     "name": "name"

@@ -17,7 +17,17 @@ export interface ExpressPermissions {
 }
 
 const recordFieldNames = (ct: ContentType): Set<string> =>
-  new Set(ct.fields.filter((f) => f.type !== "relation").map((f) => f.name));
+  new Set([
+    ...ct.fields.filter((f) => f.type !== "relation" && f.type !== "component").map((f) => f.name),
+    // Owning relations expose their FK as <name>Id so conditions can express ownership.
+    ...ct.fields
+      .filter(
+        (f) =>
+          f.type === "relation" &&
+          (f.relationKind === "manyToOne" || f.relationKind === "oneToOne"),
+      )
+      .map((f) => `${f.name}Id`),
+  ]);
 
 export const projectExpressPermissions = (doc: IrDocument, roles: Role[]): ExpressPermissions => {
   const byName = new Map(doc.contentTypes.map((ct) => [ct.name, ct]));
