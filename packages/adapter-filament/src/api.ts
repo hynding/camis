@@ -40,13 +40,15 @@ declare(strict_types=1);
 namespace App\\Http\\Controllers\\Api;
 
 use App\\Http\\Controllers\\Controller;
-use App\\Models\\${model};
+use App\\Models\\${model};${
+    options.secured ? "\nuse Illuminate\\Foundation\\Auth\\Access\\AuthorizesRequests;" : ""
+  }
 use Illuminate\\Http\\JsonResponse;
 use Illuminate\\Http\\Request;
 
 class ${model}ApiController extends Controller
 {
-    private const FIELDS = [${fields}];
+${options.secured ? "    use AuthorizesRequests;\n\n" : ""}    private const FIELDS = [${fields}];
 
     public function index(): JsonResponse
     {

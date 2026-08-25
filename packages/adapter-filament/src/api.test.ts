@@ -39,6 +39,9 @@ describe("emitApiController", () => {
 
   it("secured variant authorizes every method against the policies", () => {
     const php = emitApiController(note, columns, { secured: true });
+    // Laravel 12's base Controller is bare; the trait must come from the generated class.
+    expect(php).toContain("use Illuminate\\Foundation\\Auth\\Access\\AuthorizesRequests;");
+    expect(php).toContain("    use AuthorizesRequests;");
     expect(php).toContain("$this->authorize('viewAny', Note::class);");
     expect(php).toContain("$this->authorize('view', $note);");
     expect(php).toContain("$this->authorize('create', Note::class);");
