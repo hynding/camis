@@ -16,7 +16,7 @@ const ir = JSON.stringify({
       kind: "collection",
       fields: [
         { type: "string", name: "title", required: true },
-        { type: "component", name: "seo", component: "Seo", repeatable: false },
+        { type: "dynamicZone", name: "body", components: ["Seo"] },
       ],
     },
   ],
