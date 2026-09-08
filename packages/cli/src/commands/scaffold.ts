@@ -2,11 +2,12 @@ import { isAbsolute, dirname, join, resolve } from "node:path";
 import type { Io } from "../io";
 
 const STOCK_TRAIT_USE = "use HasFactory, Notifiable;";
-const PATCHED_TRAIT_USE = "use HasFactory, Notifiable, \\Spatie\\Permission\\Traits\\HasRoles;";
+const PATCHED_TRAIT_USE =
+  "use HasFactory, Notifiable, \\Spatie\\Permission\\Traits\\HasRoles, \\Laravel\\Sanctum\\HasApiTokens;";
 
-/** Add Spatie's HasRoles trait to the stock Laravel User model. Idempotent. */
+/** Add Spatie's HasRoles and Sanctum's HasApiTokens to the stock Laravel User model. Idempotent. */
 export const patchUserModel = (source: string): string =>
-  source.includes("HasRoles") ? source : source.replace(STOCK_TRAIT_USE, PATCHED_TRAIT_USE);
+  source.includes("HasApiTokens") ? source : source.replace(STOCK_TRAIT_USE, PATCHED_TRAIT_USE);
 
 // The exact sequence proven by the adapter-filament boot CI workflow.
 const steps = (

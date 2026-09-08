@@ -54,7 +54,7 @@ describe("patchUserModel", () => {
   it("adds the HasRoles trait to the stock User model", () => {
     const patched = patchUserModel(STOCK_USER);
     expect(patched).toContain(
-      "use HasFactory, Notifiable, \\Spatie\\Permission\\Traits\\HasRoles;",
+      "use HasFactory, Notifiable, \\Spatie\\Permission\\Traits\\HasRoles, \\Laravel\\Sanctum\\HasApiTokens;",
     );
   });
 
