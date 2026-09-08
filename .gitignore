@@ -45,3 +45,6 @@ dist/
 # Generated CMS project outputs (disposable; see ARCHITECTURE §2)
 generated/
 
+
+# superpowers SDD scratch (ledger, briefs, review packages)
+.superpowers/
