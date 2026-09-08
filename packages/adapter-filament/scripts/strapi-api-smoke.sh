@@ -32,6 +32,11 @@ C=$(req POST /notes "$TA" '{"data":{"recordId":"n1","text":"hello","occurredAt":
 [[ "$(echo "$C" | body | jq -r .data.recordId)" == "n1" ]] || fail "create envelope: $C"
 [[ "$(echo "$C" | body | jq 'has("data") and (.data|has("owner_id")|not) and (.data|has("record_id")|not)')" == "true" ]] || fail "wire keys: $C"
 
+# Missing required columns (text, occurredAt) must surface as a 400 ValidationError, not a 500.
+MISSING=$(req POST /notes "$TA" '{"data":{"recordId":"bad1"}}')
+[[ "$(echo "$MISSING" | status)" == "400" ]] || fail "missing-required status: $MISSING"
+[[ "$(echo "$MISSING" | body | jq -r .error.name)" == "ValidationError" ]] || fail "missing-required shape: $MISSING"
+
 U=$(req PUT /notes/n2 "$TA" '{"data":{"text":"upsert-created","occurredAt":"2026-09-08T11:00:00.000Z"}}')
 [[ "$(echo "$U" | status)" == "200" && "$(echo "$U" | body | jq -r .data.recordId)" == "n2" ]] || fail "put-create: $U"
 U2=$(req PUT /notes/n2 "$TA" '{"data":{"text":"upsert-updated","occurredAt":"2026-09-08T11:00:00.000Z"}}')

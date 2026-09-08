@@ -64,6 +64,18 @@ describe("strapi-api auth", () => {
   it("has no process-lifetime static guard around registration", () => {
     expect(emitStrapiErrorsMiddleware()).not.toContain("static bool $registered");
   });
+  // A missing required column reaches the handler as a QueryException (a NOT NULL violation from
+  // the driver), which without an arm falls into `default` and becomes a 500 — the caller sent a
+  // bad request, so it must be a 400. The message is fixed so raw SQL never reaches the wire.
+  it("maps QueryException to a 400 ValidationError with no SQL text on the wire", () => {
+    const php = emitStrapiErrorsMiddleware();
+    expect(php).toContain("use Illuminate\\Database\\QueryException;");
+    expect(php).toMatch(
+      /QueryException\s*=>\s*\$this->error\(400, 'ValidationError', 'Validation failed'\)/,
+    );
+    const arm = php.split("\n").find((l) => l.includes("$e instanceof QueryException"))!;
+    expect(arm).not.toContain("getMessage");
+  });
   // HttpResponseException does not implement HttpExceptionInterface, so without an explicit arm
   // it falls into `default` and gets mis-shaped as a 500 — it must instead pass through (return
   // null) so Laravel's default handling emits the response the exception already carries.
