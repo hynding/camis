@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -19,6 +19,7 @@ const realIo = (cwd: string): Io => ({
   readFile: (p) => readFile(p, "utf8"),
   writeFile: (p, c) => writeFile(p, c),
   materialize,
+  copyDir: (s, d) => cp(s, d, { recursive: true, force: true }),
   exec: () => Promise.resolve(0),
   out: (l) => lines.push(l),
   cwd,
@@ -30,6 +31,7 @@ describe("run", () => {
       readFile: () => Promise.resolve(""),
       writeFile: () => Promise.resolve(),
       materialize: () => Promise.resolve(),
+      copyDir: () => Promise.resolve(),
       exec: () => Promise.resolve(0),
       out: (l) => lines.push(l),
       cwd: "/p",

@@ -17,6 +17,7 @@ const memIo = (
     return Promise.resolve();
   },
   materialize: () => Promise.resolve(),
+  copyDir: () => Promise.resolve(),
   exec: () => Promise.resolve(0),
   out: (l) => lines.push(l),
   cwd: "/p",

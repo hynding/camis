@@ -25,6 +25,7 @@ const fakeIo = (opts: {
       return Promise.resolve();
     },
     materialize: () => Promise.resolve(),
+    copyDir: () => Promise.resolve(),
     exec: (cmd, args, cwd) => {
       calls.push({ cmd, args, cwd });
       return Promise.resolve(execResults[calls.length - 1] ?? 0);
