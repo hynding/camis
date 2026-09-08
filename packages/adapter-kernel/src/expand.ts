@@ -35,10 +35,24 @@ const stripAi = (field: Field): Field => {
 };
 
 /**
+ * A flattened column is shared by the whole embedded component, so it can only be NOT NULL if
+ * the component is always there. Behind an optional component reference the component may be
+ * absent entirely, and required-ness inside it constrains the component when present — a
+ * validation concern, not a column one.
+ */
+const stripRequired = (field: Field): Field => {
+  if (field.required === undefined) return field;
+  const rest = { ...field };
+  delete rest.required;
+  return rest;
+};
+
+/**
  * Expand a content type's component fields against the document's component definitions.
  * Non-repeatable components flatten (recursively) into prefixed embedded scalars; repeatable
  * components become child tables. Relations and AI attachments inside components, and
- * repeatables nested inside repeatables, are bounded out as downgrade gaps.
+ * repeatables nested inside repeatables, are bounded out as downgrade gaps. A flattened scalar
+ * keeps its `required` only when every component reference above it is required.
  */
 export const expandComponents = (doc: IrDocument, ct: ContentType): ExpandedContentType => {
   const byName = new Map<string, Component>(doc.components.map((c) => [c.name, c]));
@@ -49,6 +63,7 @@ export const expandComponents = (doc: IrDocument, ct: ContentType): ExpandedCont
     path: string[],
     sink: ExpandedScalar[],
     insideRepeatable: boolean,
+    alwaysPresent: boolean,
   ): void => {
     for (const field of component.fields) {
       const location = { contentType: ct.name, component: component.name, field: field.name };
@@ -78,9 +93,16 @@ export const expandComponents = (doc: IrDocument, ct: ContentType): ExpandedCont
           }
           const table: ExpandedTable = { path: [...path, field.name], scalars: [] };
           out.tables.push(table);
-          walk(child, [], table.scalars, true);
+          // A child-table row exists only when the item does, so required-ness inside it holds.
+          walk(child, [], table.scalars, true, true);
         } else {
-          walk(child, [...path, field.name], sink, insideRepeatable);
+          walk(
+            child,
+            [...path, field.name],
+            sink,
+            insideRepeatable,
+            alwaysPresent && field.required === true,
+          );
         }
         continue;
       }
@@ -94,7 +116,8 @@ export const expandComponents = (doc: IrDocument, ct: ContentType): ExpandedCont
           ),
         );
       }
-      sink.push({ path: [...path, field.name], field: stripAi(field) });
+      const scalar = alwaysPresent ? stripAi(field) : stripRequired(stripAi(field));
+      sink.push({ path: [...path, field.name], field: scalar });
     }
   };
 
@@ -105,9 +128,9 @@ export const expandComponents = (doc: IrDocument, ct: ContentType): ExpandedCont
     if (field.repeatable) {
       const table: ExpandedTable = { path: [field.name], scalars: [] };
       out.tables.push(table);
-      walk(component, [], table.scalars, true);
+      walk(component, [], table.scalars, true, true);
     } else {
-      walk(component, [field.name], out.scalars, false);
+      walk(component, [field.name], out.scalars, false, field.required === true);
     }
   }
   return out;

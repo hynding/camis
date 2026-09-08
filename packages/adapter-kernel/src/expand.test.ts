@@ -29,6 +29,20 @@ const doc: IrDocument = {
         { type: "component", name: "quantities", component: "Quantity", repeatable: true },
       ],
     },
+    {
+      name: "Invoice",
+      kind: "collection",
+      fields: [
+        {
+          type: "component",
+          name: "total",
+          component: "Money",
+          repeatable: false,
+          required: true,
+        },
+        { type: "component", name: "discount", component: "Money", repeatable: false },
+      ],
+    },
   ],
   components: [
     {
@@ -41,14 +55,14 @@ const doc: IrDocument = {
     {
       name: "ServingSize",
       fields: [
-        { type: "decimal", name: "amount" },
-        { type: "string", name: "unit" },
+        { type: "decimal", name: "amount", required: true },
+        { type: "string", name: "unit", required: true },
       ],
     },
     {
       name: "AdditionalNutrient",
       fields: [
-        { type: "string", name: "slug" },
+        { type: "string", name: "slug", required: true },
         { type: "decimal", name: "amount" },
       ],
     },
@@ -84,9 +98,41 @@ describe("expandComponents", () => {
       ["amount", "minor"],
       ["amount", "currency"],
     ]);
-    expect(r.scalars[0]?.field).toEqual({ type: "bigInteger", name: "minor", required: true });
+    // Transaction.amount is itself optional, so its inner required-ness cannot reach the column.
+    expect(r.scalars[0]?.field).toEqual({ type: "bigInteger", name: "minor" });
     expect(r.tables).toEqual([]);
     expect(r.gaps).toEqual([]);
+  });
+
+  // A flattened column is shared by the whole embedded component: when the component reference
+  // is optional the component may simply be absent, and a NOT NULL column then rejects every
+  // record without it (SQLSTATE 23000 on insert). Required-ness inside an optional component
+  // constrains the component when present, which is a validation concern, not a column one.
+  it("keeps inner required only when every enclosing component reference is required", () => {
+    const r = expandComponents(doc, ct("Invoice"));
+    expect(r.scalars.map((s) => [s.path, s.field.required])).toEqual([
+      [["total", "minor"], true],
+      [["total", "currency"], true],
+      [["discount", "minor"], undefined],
+      [["discount", "currency"], undefined],
+    ]);
+  });
+
+  it("drops inner required as soon as one link in a nested path is optional", () => {
+    const r = expandComponents(doc, ct("Consumable"));
+    const servingSize = r.scalars.filter((s) => s.path[1] === "servingSize");
+    expect(servingSize.map((s) => s.path[2])).toEqual(["amount", "unit"]);
+    for (const s of servingSize) expect(s.field.required).toBeUndefined();
+  });
+
+  // A child-table row exists only when the repeatable item does, so required-ness inside it is
+  // a genuine NOT NULL — nothing is being made optional by the parent reference here.
+  it("keeps required inside a repeatable component's child table", () => {
+    const r = expandComponents(doc, ct("Consumable"));
+    expect(r.tables[0]?.scalars.map((s) => [s.field.name, s.field.required])).toEqual([
+      ["slug", true],
+      ["amount", undefined],
+    ]);
   });
 
   it("flattens nested non-repeatables and splits nested repeatables into tables", () => {
