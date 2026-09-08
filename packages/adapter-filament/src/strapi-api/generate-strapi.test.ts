@@ -47,3 +47,32 @@ describe("filamentAdapter apiStyle strapi", () => {
     );
   });
 });
+
+// With no roles there is nothing to scope or authorize by: every model must stay free of
+// scopeForUser and every controller free of $request->user(), or an unsecured app would call
+// methods on a null user at runtime.
+describe("filamentAdapter apiStyle strapi without roles", () => {
+  const result = filamentAdapter.generate(catalog, { projectName: "blog", apiStyle: "strapi" });
+  const models = result.files.filter((f) => f.path.startsWith("app/Models/"));
+  const controllers = result.files.filter((f) =>
+    f.path.startsWith("app/Http/Controllers/Api/Generated/"),
+  );
+
+  it("emits no scopeForUser on any model", () => {
+    expect(models.length).toBeGreaterThan(0);
+    for (const m of models) expect(m.content).not.toContain("scopeForUser");
+  });
+  it("emits no authenticated-user reference in any generated controller", () => {
+    expect(controllers.length).toBeGreaterThan(0);
+    for (const c of controllers) {
+      expect(c.content).not.toContain("$request->user()");
+      expect(c.content).not.toContain("AuthorizesRequests");
+      expect(c.content).not.toContain("->forUser(");
+    }
+  });
+  it("unsecured routes golden", async () => {
+    await expect(
+      result.files.find((f) => f.path === "routes/api.php")!.content,
+    ).toMatchFileSnapshot("./__golden__/strapi-api/routes.unsecured.api.php");
+  });
+});
