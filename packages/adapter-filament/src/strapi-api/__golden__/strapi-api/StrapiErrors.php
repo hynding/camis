@@ -8,7 +8,9 @@ namespace App\Http\Middleware;
 use Closure;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\Response;
@@ -17,28 +19,44 @@ use Throwable;
 
 class StrapiErrors
 {
-    public function handle(Request $request, Closure $next): Response
-    {
-        try {
-            return $next($request);
-        } catch (ValidationException $e) {
-            return $this->error(400, 'ValidationError', collect($e->errors())->flatten()->first() ?? 'Validation failed');
-        } catch (AuthenticationException $e) {
-            return $this->error(401, 'UnauthorizedError', 'Missing or invalid credentials');
-        } catch (AuthorizationException $e) {
-            return $this->error(403, 'ForbiddenError', 'Forbidden');
-        } catch (ModelNotFoundException $e) {
-            return $this->error(404, 'NotFoundError', 'Not Found');
-        } catch (HttpExceptionInterface $e) {
-            return $this->error($e->getStatusCode(), 'HttpError', $e->getMessage() !== '' ? $e->getMessage() : 'Error');
-        } catch (Throwable $e) {
-            report($e);
+    private static bool $registered = false;
 
-            return $this->error(500, 'InternalServerError', 'Internal Server Error');
-        }
+    public function __construct(private readonly ExceptionHandler $handler)
+    {
     }
 
-    private function error(int $status, string $name, string $message): Response
+    public function handle(Request $request, Closure $next): Response
+    {
+        $this->registerRenderer();
+
+        return $next($request);
+    }
+
+    /** Registered once per process: the callback closes over $this and stays valid for every request. */
+    private function registerRenderer(): void
+    {
+        if (self::$registered || ! method_exists($this->handler, 'renderable')) {
+            return;
+        }
+        self::$registered = true;
+
+        $this->handler->renderable(function (Throwable $e, Request $request): ?JsonResponse {
+            if (! $request->is('api/*')) {
+                return null;
+            }
+
+            return match (true) {
+                $e instanceof ValidationException => $this->error(400, 'ValidationError', collect($e->errors())->flatten()->first() ?? 'Validation failed'),
+                $e instanceof AuthenticationException => $this->error(401, 'UnauthorizedError', 'Missing or invalid credentials'),
+                $e instanceof AuthorizationException => $this->error(403, 'ForbiddenError', 'Forbidden'),
+                $e instanceof ModelNotFoundException => $this->error(404, 'NotFoundError', 'Not Found'),
+                $e instanceof HttpExceptionInterface => $this->error($e->getStatusCode(), 'HttpError', $e->getMessage() !== '' ? $e->getMessage() : 'Error'),
+                default => $this->error(500, 'InternalServerError', 'Internal Server Error'),
+            };
+        });
+    }
+
+    private function error(int $status, string $name, string $message): JsonResponse
     {
         return response()->json(['error' => ['status' => $status, 'name' => $name, 'message' => $message]], $status);
     }

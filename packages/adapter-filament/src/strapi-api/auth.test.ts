@@ -31,4 +31,17 @@ describe("strapi-api auth", () => {
       "./__golden__/strapi-api/StrapiErrors.php",
     );
   });
+  // Illuminate\Routing\Pipeline renders every exception (via the bound ExceptionHandler) at the
+  // pipe/destination layer where it is thrown — before it can ever bubble up as a thrown PHP
+  // exception to an outer middleware's own try/catch around $next(). A middleware that wraps
+  // `try { return $next($request); } catch (...)` therefore never actually catches anything:
+  // proven against a real Laravel 12 app in Task 11 (a wrong-password login returned Laravel's
+  // default 422 validation shape, not the Strapi { error: {...} } shape). The middleware must
+  // instead register a renderable callback with the exception handler, which IS consulted by
+  // that same per-layer rendering.
+  it("registers a renderable callback instead of relying on try/catch around $next (Illuminate\\Routing\\Pipeline renders exceptions before they reach an outer middleware's catch)", () => {
+    const php = emitStrapiErrorsMiddleware();
+    expect(php).toContain("->renderable(");
+    expect(php).not.toMatch(/try\s*\{\s*return \$next\(\$request\);/);
+  });
 });
