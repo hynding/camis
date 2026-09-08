@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { normalize } from "@camis/ir-core";
 import { strapiApiBundle } from "./__fixtures__/strapi-api";
 import { emitGeneratedController, emitProtectedController } from "./controller";
-import { emitStrapiRoutes } from "./routes";
+import { emitApiConfig, emitStrapiRoutes } from "./routes";
 import { wireShape } from "./wire-shape";
 
 const doc = normalize(strapiApiBundle.document);
@@ -69,11 +69,29 @@ describe("strapi-api controllers", () => {
       true,
     );
     expect(php).toContain(
-      "Route::post('/auth/local', [AuthController::class, 'login'])->middleware('throttle:10,1');",
+      "Route::post('/auth/local', [AuthController::class, 'login'])->middleware($authThrottle);",
     );
     expect(php).toContain(
-      "Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware('throttle:10,1');",
+      "Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware($authThrottle);",
     );
+  });
+  // Laravel's unnamed `throttle:N,1` keys on the client IP alone and shares one bucket across
+  // both credential routes, so a single hard-coded rate is wrong for every deployment at once:
+  // too loose behind a per-user address, and low enough to lock out an office NAT — or an
+  // automated acceptance suite that registers an account per test. The rate is an operational
+  // knob, so it comes from config (env-overridable, config:cache-safe), not from a literal.
+  it("reads the auth throttle rate from config, defaulting to 10 per minute", () => {
+    const php = emitStrapiRoutes(
+      doc.contentTypes.filter((c) => c.builtin === undefined),
+      true,
+    );
+    expect(php).toContain(
+      "$authThrottle = 'throttle:'.(int) config('camis.auth_throttle_per_minute', 10).',1';",
+    );
+    expect(php).not.toContain("throttle:10,1");
+  });
+  it("api config golden (auth throttle rate, env-overridable)", async () => {
+    await expect(emitApiConfig()).toMatchFileSnapshot("./__golden__/strapi-api/config.camis.php");
   });
   // Outside the group closure the require ran at file scope, so hand-written routes registered
   // with no middleware at all and returned Laravel's default error shape instead of the envelope.

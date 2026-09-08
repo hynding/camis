@@ -20,11 +20,14 @@ use Illuminate\Support\Facades\Route;
 // every route in the group; the resolved list is deduplicated, so it still runs exactly once.
 Route::prependMiddlewareToGroup('api', StrapiErrors::class);
 
-Route::middleware([StrapiErrors::class])->group(function (): void {
+// The only unauthenticated credential endpoints: throttled so they are not a guessing oracle.
+// The rate is deployment-specific — see config/camis.php.
+$authThrottle = 'throttle:'.(int) config('camis.auth_throttle_per_minute', 10).',1';
+
+Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle): void {
     Route::get('/_health', fn () => response()->noContent());
-    // The only unauthenticated credential endpoints: throttled so they are not a guessing oracle.
-    Route::post('/auth/local', [AuthController::class, 'login'])->middleware('throttle:10,1');
-    Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware('throttle:10,1');
+    Route::post('/auth/local', [AuthController::class, 'login'])->middleware($authThrottle);
+    Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware($authThrottle);
 
     Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/users/me', [AuthController::class, 'me']);
