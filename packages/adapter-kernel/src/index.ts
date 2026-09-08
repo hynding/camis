@@ -1,4 +1,5 @@
 export type {
+  ApiStyle,
   FileMode,
   GeneratedFile,
   GenerateAdapter,

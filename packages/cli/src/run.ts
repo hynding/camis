@@ -8,7 +8,7 @@ const USAGE = `camis — content-model build tool
 
 Usage:
   camis validate <ir.json>
-  camis import <strapi|express> <projectDir> [--out ir.json]
+  camis import <strapi|express> <projectDir> [--out ir.json] [--upsert-by <field>]
   camis scaffold filament <dir>                 (create the Laravel host app for the overlay)
   camis generate [--config camis.config.json]   (dry-run: lists files + gaps)
   camis build    [--config camis.config.json]   (writes the project to each out)`;
@@ -34,7 +34,10 @@ export const run = async (argv: string[], io: Io): Promise<number> => {
         io.out("✗ import needs <target> <projectDir>");
         return 1;
       }
-      return importCommand(rest[0], rest[1], flag(rest, "--out", "camis.json"), io);
+      const upsertBy = flag(rest, "--upsert-by", "");
+      return importCommand(rest[0], rest[1], flag(rest, "--out", "camis.json"), io, {
+        ...(upsertBy ? { upsertBy } : {}),
+      });
     }
     case "scaffold": {
       if (!rest[0] || !rest[1]) {

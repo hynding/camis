@@ -14,11 +14,12 @@ export const importCommand = async (
   projectDir: string,
   outPath: string,
   io: Io,
+  opts: { upsertBy?: string } = {},
 ): Promise<number> => {
   const dir = abs(io, projectDir);
   let imported: Result<IrDocument>;
   if (target === "strapi") {
-    imported = (await readStrapiProject(dir)).document;
+    imported = (await readStrapiProject(dir, opts)).document;
   } else if (target === "express") {
     let content: string;
     try {

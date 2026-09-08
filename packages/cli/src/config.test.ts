@@ -69,3 +69,29 @@ describe("loadConfig — roles", () => {
     if (cfg.ok) expect(cfg.value.roles).toBeUndefined();
   });
 });
+
+describe("loadConfig — apiStyle + protected", () => {
+  it("accepts apiStyle on a target and resolves protected relative to the config", async () => {
+    const io = fakeIo({
+      "/proj/camis.config.json": JSON.stringify({
+        ir: "./camis.json",
+        protected: "./overlay",
+        targets: [{ target: "filament", out: "./laravel", apiStyle: "strapi" }],
+      }),
+    });
+    const r = await loadConfig(io, "camis.config.json");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.protected).toBe("/proj/overlay");
+    expect(r.value.targets[0]?.apiStyle).toBe("strapi");
+  });
+  it("rejects an unknown apiStyle", async () => {
+    const io = fakeIo({
+      "/proj/camis.config.json": JSON.stringify({
+        ir: "./camis.json",
+        targets: [{ target: "filament", out: "./laravel", apiStyle: "graphql" }],
+      }),
+    });
+    expect((await loadConfig(io, "camis.config.json")).ok).toBe(false);
+  });
+});
