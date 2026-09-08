@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class NoteApiController extends Controller
 {
@@ -56,8 +57,10 @@ class NoteApiController extends Controller
         $wire = NoteSerializer::fromWire((array) $request->input('data', []));
         $m = new Note($wire['columns']);
         $m->owner_id = $request->user()->id;
-        $m->save();
-        NoteSerializer::syncChildren($m, $wire['children']);
+        DB::transaction(function () use ($m, $wire): void {
+            $m->save();
+            NoteSerializer::syncChildren($m, $wire['children']);
+        });
 
         return response()->json(['data' => NoteSerializer::toWire($m->fresh())], 201);
     }
@@ -68,8 +71,10 @@ class NoteApiController extends Controller
         $m = $this->scoped($request)->where(self::KEY, $key)->first();
         if ($m !== null && $request->user()->can('view', $m)) {
             $this->authorize('update', $m);
-            $m->fill($wire['columns'])->save();
-            NoteSerializer::syncChildren($m, $wire['children']);
+            DB::transaction(function () use ($m, $wire): void {
+                $m->fill($wire['columns'])->save();
+                NoteSerializer::syncChildren($m, $wire['children']);
+            });
 
             return response()->json(['data' => NoteSerializer::toWire($m->fresh())]);
         }
@@ -81,8 +86,10 @@ class NoteApiController extends Controller
         $m = new Note($wire['columns']);
         $m->{self::KEY} = $key;
         $m->owner_id = $request->user()->id;
-        $m->save();
-        NoteSerializer::syncChildren($m, $wire['children']);
+        DB::transaction(function () use ($m, $wire): void {
+            $m->save();
+            NoteSerializer::syncChildren($m, $wire['children']);
+        });
 
         return response()->json(['data' => NoteSerializer::toWire($m->fresh())], 200);
     }

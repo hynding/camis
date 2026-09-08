@@ -19,6 +19,14 @@ export const emitGeneratedController = (spec: ControllerSpec): string => {
   const { shape, secured, scoped } = spec;
   const M = shape.model;
   const S = `${M}Serializer`;
+  // syncChildren deletes the existing child rows before re-inserting them, so a failing insert
+  // outside a transaction would leave the parent persisted with its children gone. Both halves
+  // must commit or roll back together.
+  const persist = (save: string, indent: string = STMT): string =>
+    `${indent}DB::transaction(function () use ($m, $wire): void {
+${indent}    ${save}
+${indent}    ${S}::syncChildren($m, $wire['children']);
+${indent}});`;
   // `indent` lets a single call site emit at whatever nesting depth it sits in
   // (the update() create branch and the update() if-block sit one level apart).
   const auth = (line: string, indent: string = STMT): string =>
@@ -37,8 +45,7 @@ export const emitGeneratedController = (spec: ControllerSpec): string => {
         }
 ${auth(`$this->authorize('create', ${M}::class);`)}        $m = new ${M}($wire['columns']);
         $m->{self::KEY} = $key;
-${assignBlock}        $m->save();
-        ${S}::syncChildren($m, $wire['children']);
+${assignBlock}${persist("$m->save();")}
 
         return response()->json(['data' => ${S}::toWire($m->fresh())], 200);`
     : `
@@ -52,6 +59,7 @@ ${assignBlock}        $m->save();
     "Illuminate\\Database\\Eloquent\\Builder",
     "Illuminate\\Http\\JsonResponse",
     "Illuminate\\Http\\Request",
+    "Illuminate\\Support\\Facades\\DB",
   ]
     .sort()
     .map((u) => `use ${u};`)
@@ -104,8 +112,7 @@ ${auth(`$this->authorize('viewAny', ${M}::class);`)}        $rows = $this->scope
     {
 ${auth(`$this->authorize('create', ${M}::class);`)}        $wire = ${S}::fromWire((array) $request->input('data', []));
         $m = new ${M}($wire['columns']);
-${assignBlock}        $m->save();
-        ${S}::syncChildren($m, $wire['children']);
+${assignBlock}${persist("$m->save();")}
 
         return response()->json(['data' => ${S}::toWire($m->fresh())], 201);
     }
@@ -115,8 +122,7 @@ ${assignBlock}        $m->save();
         $wire = ${S}::fromWire((array) $request->input('data', []));
         $m = $this->scoped($request)->where(self::KEY, $key)->first();
         if ($m !== null${secured ? ` && $request->user()->can('view', $m)` : ""}) {
-${auth(`$this->authorize('update', $m);`, NESTED_STMT)}            $m->fill($wire['columns'])->save();
-            ${S}::syncChildren($m, $wire['children']);
+${auth(`$this->authorize('update', $m);`, NESTED_STMT)}${persist("$m->fill($wire['columns'])->save();", NESTED_STMT)}
 
             return response()->json(['data' => ${S}::toWire($m->fresh())]);
         }

@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class ActivityApiController extends Controller
 {
@@ -56,8 +57,10 @@ class ActivityApiController extends Controller
         $wire = ActivitySerializer::fromWire((array) $request->input('data', []));
         $m = new Activity($wire['columns']);
         $m->creator_id = $request->user()->id;
-        $m->save();
-        ActivitySerializer::syncChildren($m, $wire['children']);
+        DB::transaction(function () use ($m, $wire): void {
+            $m->save();
+            ActivitySerializer::syncChildren($m, $wire['children']);
+        });
 
         return response()->json(['data' => ActivitySerializer::toWire($m->fresh())], 201);
     }
@@ -68,8 +71,10 @@ class ActivityApiController extends Controller
         $m = $this->scoped($request)->where(self::KEY, $key)->first();
         if ($m !== null && $request->user()->can('view', $m)) {
             $this->authorize('update', $m);
-            $m->fill($wire['columns'])->save();
-            ActivitySerializer::syncChildren($m, $wire['children']);
+            DB::transaction(function () use ($m, $wire): void {
+                $m->fill($wire['columns'])->save();
+                ActivitySerializer::syncChildren($m, $wire['children']);
+            });
 
             return response()->json(['data' => ActivitySerializer::toWire($m->fresh())]);
         }
@@ -81,8 +86,10 @@ class ActivityApiController extends Controller
         $m = new Activity($wire['columns']);
         $m->{self::KEY} = $key;
         $m->creator_id = $request->user()->id;
-        $m->save();
-        ActivitySerializer::syncChildren($m, $wire['children']);
+        DB::transaction(function () use ($m, $wire): void {
+            $m->save();
+            ActivitySerializer::syncChildren($m, $wire['children']);
+        });
 
         return response()->json(['data' => ActivitySerializer::toWire($m->fresh())], 200);
     }
