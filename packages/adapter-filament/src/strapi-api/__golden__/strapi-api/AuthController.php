@@ -42,10 +42,8 @@ class AuthController extends Controller
             'identifier' => ['required', 'string'],
             'password' => ['required', 'string'],
         ]);
-        $user = User::query()
-            ->where('email', $data['identifier'])
-            ->orWhere('username', $data['identifier'])
-            ->first();
+        $user = User::query()->where('email', $data['identifier'])->first()
+            ?? User::query()->where('username', $data['identifier'])->first();
         if ($user === null || ! Hash::check($data['password'], $user->password)) {
             throw ValidationException::withMessages(['identifier' => 'Invalid identifier or password']);
         }
