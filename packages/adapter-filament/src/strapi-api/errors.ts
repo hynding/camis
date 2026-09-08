@@ -3,9 +3,10 @@ import { PHP_MARKER } from "../hooks/names";
 /**
  * Converts every exception on API routes into Strapi's { error: { status, name, message } } body.
  *
- * Scope is deliberately the whole `api/*` namespace, not just camis-generated routes: a
- * Strapi-style app wants one error envelope across its entire API, including hand-written routes
- * in routes/api-custom.php. `HttpResponseException` (which does not implement
+ * The envelope covers every route registered in routes/api.php or routes/api-custom.php (the
+ * latter is required inside the middleware group for exactly that reason); requests to unmatched
+ * paths under `/api` fall back to Laravel's default 404 shape, because no route means no
+ * middleware. `HttpResponseException` (which does not implement
  * `HttpExceptionInterface`) passes through untouched so Laravel emits the response it already
  * carries, rather than this middleware re-shaping it into a 500.
  *

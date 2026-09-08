@@ -43,8 +43,9 @@ Route::middleware([StrapiErrors::class])->group(function (): void {
 
 ${resources}
     });
-});
 
-require __DIR__.'/api-custom.php';
+    // Inside the group so hand-written routes inherit the Strapi error envelope.
+    require __DIR__.'/api-custom.php';
+});
 `;
 };

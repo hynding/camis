@@ -44,6 +44,20 @@ describe("strapi-api controllers", () => {
       ),
     ).toMatchFileSnapshot("./__golden__/strapi-api/routes.api.php");
   });
+  // Outside the group closure the require ran at file scope, so hand-written routes registered
+  // with no middleware at all and returned Laravel's default error shape instead of the envelope.
+  it("requires api-custom.php inside the StrapiErrors group so custom routes inherit the envelope", () => {
+    const php = emitStrapiRoutes(
+      doc.contentTypes.filter((c) => c.builtin === undefined),
+      true,
+    );
+    const lines = php.split("\n");
+    const requireLine = lines.findIndex((l) => l.includes("require __DIR__"));
+    const groupClose = lines.findIndex((l) => l === "});");
+    expect(requireLine).toBeGreaterThan(-1);
+    expect(requireLine).toBeLessThan(groupClose);
+    expect(lines[requireLine]).toBe("    require __DIR__.'/api-custom.php';");
+  });
   // A failing child insert after `$m->save()` would otherwise leave the parent row persisted
   // with its children already deleted — the delete-then-reinsert in syncChildren is only safe
   // when both halves share one transaction.
