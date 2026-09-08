@@ -128,7 +128,8 @@ jobs:
           php artisan migrate --force
           php artisan db:seed --class="Database\\Seeders\\RolePermissionSeeder" --force
           (php artisan serve --host=127.0.0.1 --port=8765 > serve.log 2>&1 &)
-          for i in $(seq 1 30); do curl -sf -o /dev/null http://127.0.0.1:8765/api/_health && break; sleep 1; done
+          for _ in $(seq 1 30); do curl -sf -o /dev/null http://127.0.0.1:8765/api/_health && break; sleep 1; done
+          curl -sf -o /dev/null http://127.0.0.1:8765/api/_health || { cat serve.log; exit 1; }
       - name: HTTP round trip
         run: bash packages/adapter-filament/scripts/strapi-api-smoke.sh http://127.0.0.1:8765/api
       - name: Server log on failure
