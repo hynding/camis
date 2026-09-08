@@ -199,4 +199,13 @@ describe("projectFilamentPermissions readConditions + assigns", () => {
     expect(p.assigns.get("Activity")).toEqual(["creator"]);
     expect(p.assigns.has("Tag")).toBe(false);
   });
+  // A catalog type is readable by everyone but writable only by its creator. One grant covering
+  // read+write with the read condition would make every public row world-writable.
+  it("keeps a catalog type's write condition narrower than its read condition", () => {
+    const activity = p.policies.find((x) => x.contentType === "Activity")!;
+    const byMethod = Object.fromEntries(activity.methods.map((m) => [m.method, m]));
+    expect(byMethod.view!.condition!.kind).toBe("or");
+    expect(byMethod.update!.condition!.kind).toBe("eq");
+    expect(byMethod.delete!.condition!.kind).toBe("eq");
+  });
 });

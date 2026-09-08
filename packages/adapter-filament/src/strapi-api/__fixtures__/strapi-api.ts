@@ -6,6 +6,13 @@ const ownerEq = {
   left: { kind: "var", name: "record.ownerId" },
   right: { kind: "var", name: "user.id" },
 } as const;
+const creatorEq = {
+  kind: "eq",
+  left: { kind: "var", name: "record.creatorId" },
+  right: { kind: "var", name: "user.id" },
+} as const;
+// A catalog type: everyone reads public rows, but only the creator may write them. Read and write
+// therefore need separate grants — one grant covering both would make public rows world-writable.
 const publicOrMine: Expression = {
   kind: "or",
   args: [
@@ -131,10 +138,11 @@ export const strapiApiBundle: IrBundle = {
           condition: ownerEq,
           assign: { owner: "user.id" },
         },
+        { contentType: "Activity", actions: ["read"], condition: publicOrMine },
         {
           contentType: "Activity",
-          actions: ["create", "read", "update", "delete"],
-          condition: publicOrMine,
+          actions: ["create", "update", "delete"],
+          condition: creatorEq,
           assign: { creator: "user.id" },
         },
         { contentType: "Tag", actions: ["read"] },

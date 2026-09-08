@@ -64,6 +64,17 @@ B=$(req POST /auth/local/register '' '{"username":"bob","email":"bob@example.tes
 TB=$(echo "$B" | body | jq -r .jwt)
 [[ "$(req GET /activities "$TB" | body | jq -c '[.data[].recordId]')" == '["a1"]' ]] || fail "catalog scope"
 
+# Readable is not writable: bob sees alice's public activity but may not change or delete it.
+BPUT=$(req PUT /activities/a1 "$TB" '{"data":{"name":"hijacked"}}')
+[[ "$(echo "$BPUT" | status)" == "403" ]] || fail "catalog write status: $BPUT"
+[[ "$(echo "$BPUT" | body | jq -r .error.name)" == "ForbiddenError" ]] || fail "catalog write shape: $BPUT"
+BDEL=$(req DELETE /activities/a1 "$TB")
+[[ "$(echo "$BDEL" | status)" == "403" ]] || fail "catalog delete status: $BDEL"
+[[ "$(echo "$BDEL" | body | jq -r .error.name)" == "ForbiddenError" ]] || fail "catalog delete shape: $BDEL"
+APUT=$(req PUT /activities/a1 "$TA" '{"data":{"name":"run harder"}}')
+[[ "$(echo "$APUT" | status)" == "200" ]] || fail "creator write status: $APUT"
+[[ "$(echo "$APUT" | body | jq -r .data.name)" == "run harder" ]] || fail "creator write: $APUT"
+
 # Cross-owner: bob cannot see, update, or delete alice's note; PUT on her key is 404, not create
 [[ "$(req GET /notes/n1 "$TB" | status)" == "404" ]] || fail "cross-owner show"
 [[ "$(req PUT /notes/n1 "$TB" '{"data":{"text":"steal"}}' | status)" == "404" ]] || fail "cross-owner put"
@@ -72,7 +83,9 @@ TB=$(echo "$B" | body | jq -r .jwt)
 
 [[ "$(req DELETE /notes/n1 "$TA" | status)" == "204" ]] || fail "delete"
 [[ "$(req GET /notes/nope "$TA" | body | jq -r .error.name)" == "NotFoundError" ]] || fail "404 shape"
-[[ "$(req GET /notes '' | status)" == "401" ]] || fail "unauthenticated"
+UNAUTH=$(req GET /notes '')
+[[ "$(echo "$UNAUTH" | status)" == "401" ]] || fail "unauthenticated status: $UNAUTH"
+[[ "$(echo "$UNAUTH" | body | jq -r .error.name)" == "UnauthorizedError" ]] || fail "unauthenticated shape: $UNAUTH"
 
 # Tag has a read-only grant in the fixture (no create): creating one is a policy-denied 403.
 FORBIDDEN=$(req POST /tags "$TA" '{"data":{"label":"x"}}')
