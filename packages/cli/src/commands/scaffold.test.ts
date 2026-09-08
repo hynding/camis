@@ -50,12 +50,25 @@ class User extends Authenticatable
 }
 `;
 
+const FULL_TRAIT_USE =
+  "use HasFactory, Notifiable, \\Spatie\\Permission\\Traits\\HasRoles, \\Laravel\\Sanctum\\HasApiTokens;";
+// The shape left by the non-strapi boot workflow, which adds HasRoles but not HasApiTokens.
+const ROLES_ONLY_USER = STOCK_USER.replace(
+  "use HasFactory, Notifiable;",
+  "use HasFactory, Notifiable, \\Spatie\\Permission\\Traits\\HasRoles;",
+);
+
 describe("patchUserModel", () => {
   it("adds the HasRoles trait to the stock User model", () => {
-    const patched = patchUserModel(STOCK_USER);
-    expect(patched).toContain(
-      "use HasFactory, Notifiable, \\Spatie\\Permission\\Traits\\HasRoles, \\Laravel\\Sanctum\\HasApiTokens;",
-    );
+    expect(patchUserModel(STOCK_USER)).toContain(FULL_TRAIT_USE);
+  });
+
+  // Without this arm the HasApiTokens-less roles-only form fell through unchanged, so Sanctum
+  // token creation blew up at runtime instead of at scaffold time.
+  it("upgrades a User model that already has HasRoles but not HasApiTokens", () => {
+    const patched = patchUserModel(ROLES_ONLY_USER);
+    expect(patched).toContain(FULL_TRAIT_USE);
+    expect(patched).not.toBe(ROLES_ONLY_USER);
   });
 
   it("is idempotent", () => {
@@ -105,6 +118,23 @@ describe("scaffoldCommand", () => {
     const code = await scaffoldCommand("filament", "app", io);
     expect(code).toBe(1);
     expect(calls).toHaveLength(2);
+  });
+
+  // A User model whose trait line has been hand-edited matches nothing; writing it back unchanged
+  // would report success and leave an app that cannot issue Sanctum tokens.
+  it("fails when the User model matches no known trait line", async () => {
+    const unrecognised = STOCK_USER.replace(
+      "use HasFactory, Notifiable;",
+      "use HasFactory, Notifiable, SomeOtherTrait;",
+    );
+    const { io, lines, written } = fakeIo({
+      files: { "/proj/app/app/Models/User.php": unrecognised },
+    });
+    const code = await scaffoldCommand("filament", "app", io);
+    expect(code).toBe(1);
+    expect(lines.join("\n")).toContain("✗");
+    expect(lines.join("\n")).toContain("app/Models/User.php");
+    expect(written["/proj/app/app/Models/User.php"]).toBeUndefined();
   });
 
   it("rejects unknown scaffold targets", async () => {

@@ -51,6 +51,7 @@ jobs:
           composer require spatie/laravel-permission --no-interaction
           php artisan vendor:publish --provider="Spatie\Permission\PermissionServiceProvider" --no-interaction
           php -r '$f="app/Models/User.php";$c=file_get_contents($f);$c=str_replace("use HasFactory, Notifiable;","use HasFactory, Notifiable, \\Spatie\\Permission\\Traits\\HasRoles;",$c);file_put_contents($f,$c);'
+          grep -q HasRoles app/Models/User.php || { echo "User model patch did not apply"; exit 1; }
       - name: Overlay camis-generated files
         run: pnpm --filter @camis/adapter-filament overlay "$GITHUB_WORKSPACE/app"
       - name: Hook reference impl (uppercase title on publish)
@@ -116,6 +117,7 @@ jobs:
           composer require spatie/laravel-permission --no-interaction
           php artisan vendor:publish --provider="Spatie\Permission\PermissionServiceProvider" --no-interaction
           php -r '$f="app/Models/User.php";$c=file_get_contents($f);$c=str_replace("use HasFactory, Notifiable;","use HasFactory, Notifiable, \\Spatie\\Permission\\Traits\\HasRoles, \\Laravel\\Sanctum\\HasApiTokens;",$c);file_put_contents($f,$c);'
+          grep -q HasApiTokens app/Models/User.php || { echo "User model patch did not apply"; exit 1; }
       - name: Overlay (apiStyle strapi)
         run: pnpm --filter @camis/adapter-filament overlay "$GITHUB_WORKSPACE/app" --style strapi
       - name: Migrate + seed + serve

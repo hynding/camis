@@ -2,12 +2,25 @@ import { isAbsolute, dirname, join, resolve } from "node:path";
 import type { Io } from "../io";
 
 const STOCK_TRAIT_USE = "use HasFactory, Notifiable;";
+const ROLES_ONLY_TRAIT_USE = "use HasFactory, Notifiable, \\Spatie\\Permission\\Traits\\HasRoles;";
 const PATCHED_TRAIT_USE =
   "use HasFactory, Notifiable, \\Spatie\\Permission\\Traits\\HasRoles, \\Laravel\\Sanctum\\HasApiTokens;";
 
-/** Add Spatie's HasRoles and Sanctum's HasApiTokens to the stock Laravel User model. Idempotent. */
-export const patchUserModel = (source: string): string =>
-  source.includes("HasApiTokens") ? source : source.replace(STOCK_TRAIT_USE, PATCHED_TRAIT_USE);
+/**
+ * Add Spatie's HasRoles and Sanctum's HasApiTokens to the Laravel User model. Idempotent.
+ *
+ * Handles the roles-only form as well as the stock one: an app already patched by the non-strapi
+ * boot path has HasRoles but no HasApiTokens, and returning it unchanged would leave an app that
+ * cannot issue Sanctum tokens. A source matching neither is returned unchanged; the caller treats
+ * that as a failure rather than reporting a patch that never happened.
+ */
+export const patchUserModel = (source: string): string => {
+  if (source.includes("HasApiTokens")) return source;
+  if (source.includes(ROLES_ONLY_TRAIT_USE)) {
+    return source.replace(ROLES_ONLY_TRAIT_USE, PATCHED_TRAIT_USE);
+  }
+  return source.replace(STOCK_TRAIT_USE, PATCHED_TRAIT_USE);
+};
 
 // The exact sequence proven by the adapter-filament boot CI workflow.
 const steps = (
@@ -74,8 +87,15 @@ export const scaffoldCommand = async (target: string, dir: string, io: Io): Prom
   const userModelPath = join(appDir, "app/Models/User.php");
   try {
     const source = await io.readFile(userModelPath);
-    await io.writeFile(userModelPath, patchUserModel(source));
-    io.out("✓ patched app/Models/User.php with Spatie HasRoles");
+    const patched = patchUserModel(source);
+    if (patched === source && !source.includes("HasApiTokens")) {
+      io.out(
+        "✗ could not patch app/Models/User.php: no recognised `use HasFactory, Notifiable…` trait line",
+      );
+      return 1;
+    }
+    await io.writeFile(userModelPath, patched);
+    io.out("✓ patched app/Models/User.php with Spatie HasRoles and Sanctum HasApiTokens");
   } catch (e) {
     io.out(`✗ cannot patch ${userModelPath}: ${(e as Error).message}`);
     return 1;
