@@ -19,6 +19,15 @@ import { PHP_MARKER } from "../hooks/names";
  * Registered on every request: under FPM the handler is per-request so a guard is unnecessary;
  * under a long-lived worker a static guard would be needed to avoid re-registering on the same
  * handler — revisit if this app ever runs under Octane.
+ *
+ * Forces `Accept: application/json` on the request before calling `$next($request)`. Without
+ * it, an unauthenticated request that omits that header (as the OYL browser client always does)
+ * makes `Illuminate\Auth\Middleware\Authenticate::unauthenticated()` see `expectsJson() === false`
+ * and call `redirectTo()`, which calls `route('login')` — a route this generated app never
+ * defines — so a `RouteNotFoundException` surfaces as a 500 instead of the intended 401. Setting
+ * the header here is the standard Laravel "force JSON for API" idiom: `expectsJson()` reads it,
+ * so `Authenticate` always throws `AuthenticationException` on `api/*` routes, which the
+ * renderable below turns into the 401 `UnauthorizedError` envelope.
  */
 export const emitStrapiErrorsMiddleware = (): string => `<?php
 ${PHP_MARKER}
@@ -48,6 +57,8 @@ class StrapiErrors
     public function handle(Request $request, Closure $next): Response
     {
         $this->registerRenderer();
+
+        $request->headers->set('Accept', 'application/json');
 
         return $next($request);
     }

@@ -83,4 +83,20 @@ describe("strapi-api auth", () => {
     expect(php).toContain("HttpResponseException");
     expect(php).toMatch(/HttpResponseException\s*=>\s*null/);
   });
+  // Illuminate\Auth\Middleware\Authenticate::unauthenticated() only throws AuthenticationException
+  // (→ our 401 UnauthorizedError arm) when Request::expectsJson() is true; without an incoming
+  // Accept: application/json header (the OYL browser client never sends one) it instead calls
+  // redirectTo(), which calls route('login') — a route the generated app never defines — so a
+  // RouteNotFoundException surfaces as a 500 InternalServerError instead of a 401. Forcing the
+  // Accept header before $next($request) makes expectsJson() true regardless of what the client
+  // sent, so Authenticate always throws AuthenticationException on api/* routes.
+  it("forces Accept: application/json before calling $next so Authenticate sees expectsJson() and throws AuthenticationException instead of redirecting to a nonexistent login route", () => {
+    const php = emitStrapiErrorsMiddleware();
+    expect(php).toContain("$request->headers->set('Accept', 'application/json');");
+    const forceIndex = php.indexOf("$request->headers->set('Accept', 'application/json');");
+    const nextIndex = php.indexOf("$next($request)");
+    expect(forceIndex).toBeGreaterThan(-1);
+    expect(nextIndex).toBeGreaterThan(-1);
+    expect(forceIndex).toBeLessThan(nextIndex);
+  });
 });
