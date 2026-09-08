@@ -87,6 +87,14 @@ UNAUTH=$(req GET /notes '')
 [[ "$(echo "$UNAUTH" | status)" == "401" ]] || fail "unauthenticated status: $UNAUTH"
 [[ "$(echo "$UNAUTH" | body | jq -r .error.name)" == "UnauthorizedError" ]] || fail "unauthenticated shape: $UNAUTH"
 
+# Same check with no Accept header at all (the OYL browser client never sends one): StrapiErrors
+# must force Accept: application/json before $next($request) so Authenticate::unauthenticated()
+# sees expectsJson() and throws AuthenticationException (→ 401), instead of calling
+# redirectTo() -> route('login') (a route this app never defines) and 500ing.
+NOACCEPT_STATUS=$(curl -s -o /tmp/body -w '%{http_code}' "$BASE/notes")
+[[ "$NOACCEPT_STATUS" == "401" ]] || fail "unauthenticated (no Accept header) status: $NOACCEPT_STATUS $(cat /tmp/body)"
+[[ "$(jq -r .error.name /tmp/body)" == "UnauthorizedError" ]] || fail "unauthenticated (no Accept header) shape: $(cat /tmp/body)"
+
 # Tag has a read-only grant in the fixture (no create): creating one is a policy-denied 403.
 FORBIDDEN=$(req POST /tags "$TA" '{"data":{"label":"x"}}')
 [[ "$(echo "$FORBIDDEN" | status)" == "403" && "$(echo "$FORBIDDEN" | body | jq -r .error.name)" == "ForbiddenError" ]] || fail "forbidden shape: $FORBIDDEN"
