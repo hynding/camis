@@ -2,6 +2,9 @@ import type { ContentType } from "@camis/ir-schema";
 import { filamentNames } from "../names";
 import { routePath } from "./names";
 
+/** Requests per minute per IP allowed on the unauthenticated credential endpoints. */
+const AUTH_THROTTLE = "throttle:10,1";
+
 export const emitStrapiRoutes = (cts: ContentType[], secured: boolean): string => {
   const sorted = [...cts].sort((a, b) => routePath(a).localeCompare(routePath(b)));
   const uses = [
@@ -35,8 +38,9 @@ ${uses}
 
 Route::middleware([StrapiErrors::class])->group(function (): void {
     Route::get('/_health', fn () => response()->noContent());
-    Route::post('/auth/local', [AuthController::class, 'login']);
-    Route::post('/auth/local/register', [AuthController::class, 'register']);
+    // The only unauthenticated credential endpoints: throttled so they are not a guessing oracle.
+    Route::post('/auth/local', [AuthController::class, 'login'])->middleware('${AUTH_THROTTLE}');
+    Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware('${AUTH_THROTTLE}');
 
     ${guard}->group(function (): void {
         Route::get('/users/me', [AuthController::class, 'me']);

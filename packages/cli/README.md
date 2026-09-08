@@ -64,7 +64,9 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
   400, `UnauthorizedError` 401, `ForbiddenError` 403, `NotFoundError` 404, otherwise
   `HttpError`), and the error envelope applies to every route registered in `routes/api.php` or
   `routes/api-custom.php`; requests to unmatched paths under `/api` fall back to Laravel's
-  default 404 shape. Each controller is a generated base under
+  default 404 shape. Login and registration are throttled to 10 requests per minute per IP; set
+  `SANCTUM_TOKEN_EXPIRATION` in `.env` to bound token lifetime (tokens do not expire by default).
+  Each controller is a generated base under
   `app/Http/Controllers/Api/Generated/` plus a seed-mode subclass you may override.
 - The roles file is either a bare `Role[]` or `{ "defaultRole": "<role>", "roles": [...] }`;
   `defaultRole` is assigned on `/auth/local/register`.

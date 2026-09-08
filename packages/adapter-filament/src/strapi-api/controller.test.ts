@@ -44,6 +44,20 @@ describe("strapi-api controllers", () => {
       ),
     ).toMatchFileSnapshot("./__golden__/strapi-api/routes.api.php");
   });
+  // Unauthenticated credential endpoints are the one place an unbounded request rate is a
+  // password-guessing oracle; everything else already sits behind auth:sanctum.
+  it("throttles the login and register routes", () => {
+    const php = emitStrapiRoutes(
+      doc.contentTypes.filter((c) => c.builtin === undefined),
+      true,
+    );
+    expect(php).toContain(
+      "Route::post('/auth/local', [AuthController::class, 'login'])->middleware('throttle:10,1');",
+    );
+    expect(php).toContain(
+      "Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware('throttle:10,1');",
+    );
+  });
   // Outside the group closure the require ran at file scope, so hand-written routes registered
   // with no middleware at all and returned Laravel's default error shape instead of the envelope.
   it("requires api-custom.php inside the StrapiErrors group so custom routes inherit the envelope", () => {

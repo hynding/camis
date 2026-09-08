@@ -15,8 +15,9 @@ use Illuminate\Support\Facades\Route;
 
 Route::middleware([StrapiErrors::class])->group(function (): void {
     Route::get('/_health', fn () => response()->noContent());
-    Route::post('/auth/local', [AuthController::class, 'login']);
-    Route::post('/auth/local/register', [AuthController::class, 'register']);
+    // The only unauthenticated credential endpoints: throttled so they are not a guessing oracle.
+    Route::post('/auth/local', [AuthController::class, 'login'])->middleware('throttle:10,1');
+    Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware('throttle:10,1');
 
     Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/users/me', [AuthController::class, 'me']);
