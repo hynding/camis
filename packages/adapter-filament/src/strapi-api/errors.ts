@@ -14,11 +14,11 @@ import { PHP_MARKER } from "../hooks/names";
  * `$next($request)` in try/catch: Illuminate\Routing\Pipeline renders every exception (via that
  * same handler) at the pipe/destination layer where it is thrown, before it can ever bubble up as
  * a thrown PHP exception to an outer middleware's own catch block, so a try/catch around
- * `$next()` here would never actually run. Registration happens on every request rather than
- * being guarded by a process-lifetime static: under Octane/RoadRunner the container (and its
- * bound exception handler) is restored from a boot snapshot between requests, so a static guard
- * would register once and then silently go stale for every later request in that worker;
- * re-registering is free under FPM.
+ * `$next()` here would never actually run.
+ *
+ * Registered on every request: under FPM the handler is per-request so a guard is unnecessary;
+ * under a long-lived worker a static guard would be needed to avoid re-registering on the same
+ * handler — revisit if this app ever runs under Octane.
  */
 export const emitStrapiErrorsMiddleware = (): string => `<?php
 ${PHP_MARKER}

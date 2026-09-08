@@ -56,12 +56,11 @@ describe("strapi-api auth", () => {
     expect(php).not.toContain("ModelNotFoundException");
     expect(php).not.toContain("AuthorizationException");
   });
-  // Under Octane/RoadRunner the container (and its bound ExceptionHandler) is restored from the
-  // boot snapshot between requests, but a `static` survives across requests in the same worker —
-  // so a static "already registered" guard silently stops registering after request #1, and every
-  // later API error reverts to Laravel's default shape. Re-registering per request is free under
-  // FPM, so there must be no such guard.
-  it("has no process-lifetime static guard around registration", () => {
+  // Under FPM the exception handler is built fresh per request, so a guard would protect nothing;
+  // under a long-lived worker (Octane) the same handler instance survives, and re-registering per
+  // request would grow its renderCallbacks by one entry per request — that is the case a static
+  // guard exists for. This app targets FPM, so there is no guard; revisit under Octane.
+  it("registers per request with no static guard (correct under FPM; revisit under Octane)", () => {
     expect(emitStrapiErrorsMiddleware()).not.toContain("static bool $registered");
   });
   // A missing required column reaches the handler as a QueryException (a NOT NULL violation from
