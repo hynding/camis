@@ -52,14 +52,14 @@ export const generateCommand = async (
       return 1;
     }
     const parsed = parseRolesFile(rolesRaw);
-    if (!parsed) {
-      io.out(`✗ roles: expected a Role[] or { defaultRole?, roles: Role[] }`);
+    if (!parsed.ok) {
+      io.out(`✗ roles: ${parsed.issues.join("; ")}`);
       return 1;
     }
     const bundle = validateBundle({
       document,
-      roles: parsed.roles,
-      ...(parsed.defaultRole !== undefined ? { defaultRole: parsed.defaultRole } : {}),
+      roles: parsed.value.roles,
+      ...(parsed.value.defaultRole !== undefined ? { defaultRole: parsed.value.defaultRole } : {}),
     });
     if (!bundle.ok) {
       for (const e of bundle.errors) io.out(`✗ [${e.code}] ${locStr(e.location)} — ${e.message}`);

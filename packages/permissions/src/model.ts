@@ -33,10 +33,24 @@ export const rolesFile = z.object({
 });
 export type RolesFile = z.infer<typeof rolesFile>;
 
-/** A roles file is either a bare `Role[]` (legacy) or `{ defaultRole?, roles }`. */
-export const parseRolesFile = (raw: unknown): RolesFile | undefined => {
+export type ParsedRolesFile =
+  | { ok: true; value: RolesFile }
+  | { ok: false; issues: readonly string[] };
+
+/**
+ * A roles file is either a bare `Role[]` (legacy) or `{ defaultRole?, roles }`.
+ *
+ * When neither parses, the reported issues are the object form's: it is the documented shape, so
+ * its diagnostics locate the actual mistake, whereas the bare-array attempt on an object-shaped
+ * file only ever says "expected array".
+ */
+export const parseRolesFile = (raw: unknown): ParsedRolesFile => {
   const bare = z.array(role).safeParse(raw);
-  if (bare.success) return { roles: bare.data };
+  if (bare.success) return { ok: true, value: { roles: bare.data } };
   const obj = rolesFile.safeParse(raw);
-  return obj.success ? obj.data : undefined;
+  if (obj.success) return { ok: true, value: obj.data };
+  return {
+    ok: false,
+    issues: obj.error.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`),
+  };
 };

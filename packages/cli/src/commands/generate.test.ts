@@ -154,6 +154,19 @@ describe("generateCommand — roles", () => {
     expect(code).toBe(1);
     expect(lines.join("\n")).toContain("roles");
   });
+
+  // "expected a Role[]" left the author hunting for the mistake by hand; the zod issue names it.
+  it("reports the zod issue path for a bad value inside a grant", async () => {
+    const lines: string[] = [];
+    const badActions = JSON.stringify({
+      roles: [{ name: "admin", grants: [{ contentType: "Note", actions: ["fly"] }] }],
+    });
+    const code = await generateCommand("camis.config.json", rolesIo(lines, badActions), {
+      write: false,
+    });
+    expect(code).toBe(1);
+    expect(lines.join("\n")).toContain("✗ roles: roles.0.grants.0.actions.0");
+  });
 });
 
 const rolesObj = JSON.stringify({

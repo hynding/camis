@@ -53,15 +53,29 @@ describe("grant.assign", () => {
 describe("parseRolesFile", () => {
   const roles = [{ name: "authenticated", grants: [] }];
   it("accepts the bare array form with no defaultRole", () => {
-    expect(parseRolesFile(roles)).toEqual({ roles });
+    expect(parseRolesFile(roles)).toEqual({ ok: true, value: { roles } });
   });
   it("accepts the object form with defaultRole", () => {
     expect(parseRolesFile({ defaultRole: "authenticated", roles })).toEqual({
-      defaultRole: "authenticated",
-      roles,
+      ok: true,
+      value: { defaultRole: "authenticated", roles },
     });
   });
-  it("returns undefined on malformed input", () => {
-    expect(parseRolesFile({ roles: "nope" })).toBeUndefined();
+  // A bare `undefined` told the caller only that *something* was wrong, so the CLI could say no
+  // more than "expected a Role[]" for a single mistyped action deep inside one grant.
+  it("reports the object-form zod issues as path: message when both forms fail", () => {
+    const r = parseRolesFile({ roles: "nope" });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.issues).toHaveLength(1);
+      expect(r.issues[0]).toMatch(/^roles: /);
+    }
+  });
+  it("locates a bad value inside a grant", () => {
+    const r = parseRolesFile({
+      roles: [{ name: "a", grants: [{ contentType: "Note", actions: ["fly"] }] }],
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.issues.join("; ")).toContain("roles.0.grants.0.actions.0");
   });
 });
