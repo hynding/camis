@@ -142,3 +142,37 @@ describe("importDocument — builtin user synthesis", () => {
     expect(users[0]?.fields.map((f) => f.name)).toEqual(["username"]);
   });
 });
+
+describe("importDocument upsertBy", () => {
+  const note = JSON.stringify({
+    kind: "collectionType",
+    collectionName: "notes",
+    info: { singularName: "note", pluralName: "notes", displayName: "Note" },
+    attributes: {
+      recordId: { type: "string", required: true, unique: true },
+      text: { type: "text" },
+    },
+  });
+  const tag = JSON.stringify({
+    kind: "collectionType",
+    collectionName: "tags",
+    info: { singularName: "tag", pluralName: "tags", displayName: "Tag" },
+    attributes: { label: { type: "string" } },
+  });
+  const files = [
+    { path: "src/api/note/content-types/note/schema.json", content: note },
+    { path: "src/api/tag/content-types/tag/schema.json", content: tag },
+  ];
+  it("sets options.upsertBy only on types that have that unique field", () => {
+    const r = importDocument(files, { upsertBy: "recordId" }).document;
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const byName = new Map(r.value.contentTypes.map((c) => [c.name, c]));
+    expect(byName.get("Note")?.options?.upsertBy).toBe("recordId");
+    expect(byName.get("Tag")?.options?.upsertBy).toBeUndefined();
+  });
+  it("leaves options untouched without the option", () => {
+    const r = importDocument(files).document;
+    expect(r.ok && r.value.contentTypes[0]?.options?.upsertBy).toBeUndefined();
+  });
+});

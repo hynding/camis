@@ -30,8 +30,14 @@ export const BUILTIN_USER: ContentType = {
   ],
 };
 
+export interface ImportOptions {
+  /** Set `options.upsertBy` on every content type carrying a unique field of this name. */
+  upsertBy?: string;
+}
+
 export const importDocument = (
   files: { path: string; content: string }[],
+  opts: ImportOptions = {},
 ): { document: Result<IrDocument>; gaps: CapabilityGapReport } => {
   const contentTypes: ContentType[] = [];
   const components: Component[] = [];
@@ -51,6 +57,14 @@ export const importDocument = (
       const r = irComponent(pascal(m[1]!), JSON.parse(file.content) as Record<string, unknown>);
       components.push(r.component);
       gaps.push(...r.gaps);
+    }
+  }
+
+  if (opts.upsertBy !== undefined) {
+    for (const ct of contentTypes) {
+      const f = ct.fields.find((x) => x.name === opts.upsertBy);
+      const unique = f !== undefined && (f as { unique?: boolean }).unique === true;
+      if (unique) ct.options = { ...(ct.options ?? {}), upsertBy: opts.upsertBy };
     }
   }
 

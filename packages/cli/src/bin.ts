@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { readFile, writeFile } from "node:fs/promises";
+import { cp, readFile, writeFile } from "node:fs/promises";
 import { materialize } from "@camis/adapter-kernel";
 import type { Io } from "./io";
 import { run } from "./run";
@@ -8,6 +8,7 @@ const io: Io = {
   readFile: (p) => readFile(p, "utf8"),
   writeFile: (p, c) => writeFile(p, c),
   materialize,
+  copyDir: (s, d) => cp(s, d, { recursive: true, force: true }),
   exec: (cmd, args, cwd) =>
     new Promise((resolvePromise, rejectPromise) => {
       const child = spawn(cmd, args, { cwd, stdio: "inherit" });

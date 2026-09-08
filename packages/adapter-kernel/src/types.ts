@@ -20,8 +20,12 @@ export interface Manifest {
   files: ManifestEntry[];
 }
 
+export type ApiStyle = "laravel" | "strapi";
+
 export interface GenerateOptions {
   projectName: string;
+  /** Filament only: shape of the generated JSON API. Default "laravel". */
+  apiStyle?: ApiStyle;
 }
 
 export interface GenerationResult {

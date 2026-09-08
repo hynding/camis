@@ -32,10 +32,12 @@ import { emitModel } from "./model";
 import { filamentNames, snakeColumn } from "./names";
 import { resolveRelations } from "./relations";
 import { emitResourceFiles } from "./resource";
+import { emitStrapiApi } from "./strapi-api/emit";
 
 export const filamentAdapter: GenerateAdapter = {
   target: "filament",
-  generate: (ir): GenerationResult => {
+  generate: (ir, options): GenerationResult => {
+    const apiStyle = options.apiStyle ?? "laravel";
     const doc = normalize(ir.document);
     const rel = resolveRelations(doc);
     const hooks = emitHookFiles(doc);
@@ -68,6 +70,10 @@ export const filamentAdapter: GenerateAdapter = {
     // Builtin content types (the target's native user model) map onto the stock Laravel
     // User/users table; the host app owns those files, so nothing is emitted for them.
     const emitted = doc.contentTypes.filter((ct) => ct.builtin === undefined);
+    const strapi =
+      apiStyle === "strapi"
+        ? emitStrapiApi({ doc, bundle: ir, emitted, fkNames: rel.fkNames })
+        : undefined;
     const children: { ct: (typeof emitted)[number]; child: ChildTableEmit }[] = [];
     emitted.forEach((ct, i) => {
       for (const f of ct.fields) {
@@ -97,6 +103,9 @@ export const filamentAdapter: GenerateAdapter = {
           hooks.observedModels.has(ct.name) || aiObservedModels.has(ct.name),
           embeddedEmits,
           rel.fkNames.get(ct.name) ?? [],
+          strapi?.scopeMethods.get(ct.name) !== undefined
+            ? [strapi.scopeMethods.get(ct.name)!]
+            : [],
         ),
       });
       files.push({
@@ -114,26 +123,33 @@ export const filamentAdapter: GenerateAdapter = {
       ctChildren.forEach((child) => {
         files.push({ path: `app/Models/${child.model}.php`, content: emitChildModel(child) });
       });
-      files.push({
-        path: `app/Http/Controllers/Api/${names.model}ApiController.php`,
-        content: emitApiController(
-          ct,
-          [
-            ...ct.fields
-              .filter((f) => f.type !== "relation" && f.type !== "component")
-              .map((f) => emitField(f).column),
-            ...embeddedEmits.map((e) => e.column),
-            ...(rel.fkNames.get(ct.name) ?? []),
-          ],
-          { secured: ir.roles.length > 0 },
-        ),
-      });
+      if (apiStyle === "laravel") {
+        files.push({
+          path: `app/Http/Controllers/Api/${names.model}ApiController.php`,
+          content: emitApiController(
+            ct,
+            [
+              ...ct.fields
+                .filter((f) => f.type !== "relation" && f.type !== "component")
+                .map((f) => emitField(f).column),
+              ...embeddedEmits.map((e) => e.column),
+              ...(rel.fkNames.get(ct.name) ?? []),
+            ],
+            { secured: ir.roles.length > 0 },
+          ),
+        });
+      }
     });
 
-    files.push({
-      path: "routes/api.php",
-      content: emitApiRoutes(emitted, { secured: ir.roles.length > 0 }),
-    });
+    if (strapi) {
+      files.push(...strapi.files);
+      gaps.push(...strapi.gaps);
+    } else {
+      files.push({
+        path: "routes/api.php",
+        content: emitApiRoutes(emitted, { secured: ir.roles.length > 0 }),
+      });
+    }
     files.push(apiCustomSeed());
 
     [...rel.pivots]

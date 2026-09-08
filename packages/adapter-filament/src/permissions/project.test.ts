@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { IrDocument } from "@camis/ir-schema";
 import type { Role } from "@camis/permissions";
 import { projectFilamentPermissions } from "./project";
+import { strapiApiBundle } from "../strapi-api/__fixtures__/strapi-api";
 
 const doc: IrDocument = {
   version: 1,
@@ -183,5 +184,28 @@ describe("projectFilamentPermissions — condition scoping", () => {
     expect(byMethod.viewAny!.condition).toBeUndefined();
     expect(byMethod.view!.condition).toBeDefined();
     expect(byMethod.update!.condition).toBeDefined();
+  });
+});
+
+describe("projectFilamentPermissions readConditions + assigns", () => {
+  const p = projectFilamentPermissions(strapiApiBundle.document, strapiApiBundle.roles);
+  it("exposes the read condition per content type", () => {
+    expect(p.readConditions.get("Note")?.kind).toBe("eq");
+    expect(p.readConditions.get("Activity")?.kind).toBe("or");
+    expect(p.readConditions.has("Tag")).toBe(false);
+  });
+  it("exposes assigns per content type, sorted", () => {
+    expect(p.assigns.get("Note")).toEqual(["owner"]);
+    expect(p.assigns.get("Activity")).toEqual(["creator"]);
+    expect(p.assigns.has("Tag")).toBe(false);
+  });
+  // A catalog type is readable by everyone but writable only by its creator. One grant covering
+  // read+write with the read condition would make every public row world-writable.
+  it("keeps a catalog type's write condition narrower than its read condition", () => {
+    const activity = p.policies.find((x) => x.contentType === "Activity")!;
+    const byMethod = Object.fromEntries(activity.methods.map((m) => [m.method, m]));
+    expect(byMethod.view!.condition!.kind).toBe("or");
+    expect(byMethod.update!.condition!.kind).toBe("eq");
+    expect(byMethod.delete!.condition!.kind).toBe("eq");
   });
 });

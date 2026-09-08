@@ -252,6 +252,34 @@ CLI invocable without pnpm dlx.
 **Exit criteria:** generated API passes a CRUD + upsert round-trip test; custom-route seam
 survives regeneration; policies enforced on API paths when roles are configured.
 
+## Phase 16 — Strapi-compatible API style (`adapter-filament`, `cli`, `permissions`)
+
+**Goal:** a generated Laravel app can replace a Strapi backend for an existing Strapi client
+without any per-content-type hand code. Driver: OYL's `apps/camis-php-oyl`; design spec in
+the oyl repo at `docs/superpowers/specs/2026-09-08-camis-php-oyl-design.md`.
+
+- Filament target option `apiStyle: "strapi"` (default `laravel` keeps current output
+  byte-identical): `{ data }` envelope, Strapi error shape, camelCase serializers that
+  re-nest components (inverse of Phase 12 flattening), nulls omitted, numeric casts.
+- Route key = `options.upsertBy`; `PUT /:key` upserts within scope, 404 across owners.
+  `camis import strapi --upsert-by <field>` sets it on every type with that unique field.
+- Route paths are kebab-case `names.plural` (`/activity-sessions`), not table names.
+- Controllers emitted as generated base + seed-mode subclass (`Api\Generated\X` /
+  `Api\X`) so request-level overrides survive regeneration.
+- Ring 1 → Eloquent `where` emitter for the `eq/and/or` subset (`ne`/`not` excluded: SQL
+  three-valued logic diverges from Ring 1 on NULL columns), joined to the conformance suite
+  (evaluator vs SQL against SQLite); out-of-subset predicates fall back to fetch-then-filter
+  and report a downgrade gap. Lists query through the scope.
+- Grants gain explicit `assign: { <relation>: "user.id" }` for create-time FK fill; roles
+  file gains top-level `defaultRole`.
+- Sanctum auth routes mirroring Strapi (`/auth/local`, `/auth/local/register`, `/users/me`),
+  `username` column migration, `/api/_health` (under Laravel's API prefix; e2e polls it).
+- Project config `protected: <dir>` mirrored into `out` after generation.
+
+**Exit criteria:** OYL fixture generates with zero error gaps; PHP round-trip test
+(register → login → CRUD/upsert → cross-owner 404) green; existing goldens unchanged when
+`apiStyle` is absent.
+
 ---
 
 ## Sequencing rationale (quick reference)

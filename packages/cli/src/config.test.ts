@@ -7,6 +7,7 @@ const fakeIo = (files: Record<string, string>): Io => ({
     p in files ? Promise.resolve(files[p]!) : Promise.reject(new Error(`ENOENT ${p}`)),
   writeFile: () => Promise.resolve(),
   materialize: () => Promise.resolve(),
+  copyDir: () => Promise.resolve(),
   exec: () => Promise.resolve(0),
   out: () => {},
   cwd: "/proj",
@@ -67,5 +68,31 @@ describe("loadConfig — roles", () => {
     const cfg = await loadConfig(io, "camis.config.json");
     expect(cfg.ok).toBe(true);
     if (cfg.ok) expect(cfg.value.roles).toBeUndefined();
+  });
+});
+
+describe("loadConfig — apiStyle + protected", () => {
+  it("accepts apiStyle on a target and resolves protected relative to the config", async () => {
+    const io = fakeIo({
+      "/proj/camis.config.json": JSON.stringify({
+        ir: "./camis.json",
+        protected: "./overlay",
+        targets: [{ target: "filament", out: "./laravel", apiStyle: "strapi" }],
+      }),
+    });
+    const r = await loadConfig(io, "camis.config.json");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.protected).toBe("/proj/overlay");
+    expect(r.value.targets[0]?.apiStyle).toBe("strapi");
+  });
+  it("rejects an unknown apiStyle", async () => {
+    const io = fakeIo({
+      "/proj/camis.config.json": JSON.stringify({
+        ir: "./camis.json",
+        targets: [{ target: "filament", out: "./laravel", apiStyle: "graphql" }],
+      }),
+    });
+    expect((await loadConfig(io, "camis.config.json")).ok).toBe(false);
   });
 });

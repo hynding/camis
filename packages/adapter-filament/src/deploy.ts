@@ -42,6 +42,9 @@ The generated JSON API in \`routes/api.php\` requires Laravel's API layer
 (\`php artisan install:api\`) — \`camis scaffold filament\` runs it for you; add it manually on
 an existing app. Custom endpoints belong in \`routes/api-custom.php\` (never overwritten).
 
+The Strapi API style adds a NOT NULL unique \`username\` column to \`users\`; run its migration
+against an empty users table, or backfill usernames first.
+
 \`\`\`sh
 composer install --no-dev --optimize-autoloader
 php artisan key:generate

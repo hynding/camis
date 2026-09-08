@@ -1,0 +1,65 @@
+<?php
+
+// @camis:generated — do not edit. Custom routes belong in routes/api-custom.php.
+
+declare(strict_types=1);
+
+use App\Http\Controllers\Api\ActivityApiController;
+use App\Http\Controllers\Api\ActivitySessionApiController;
+use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\NoteApiController;
+use App\Http\Controllers\Api\TagApiController;
+use App\Http\Controllers\Api\TransactionApiController;
+use App\Http\Middleware\StrapiErrors;
+use Illuminate\Support\Facades\Route;
+
+// Laravel's middleware priority sort moves Authenticate and ThrottleRequests ahead of any
+// unprioritised route middleware, so applying StrapiErrors to the group below would leave it
+// running last — an unauthenticated or throttled request would never reach it, and would return
+// Laravel's default error body. Prepending it to the 'api' group makes it the first pipe for
+// every route in the group; the resolved list is deduplicated, so it still runs exactly once.
+Route::prependMiddlewareToGroup('api', StrapiErrors::class);
+
+Route::middleware([StrapiErrors::class])->group(function (): void {
+    Route::get('/_health', fn () => response()->noContent());
+    // The only unauthenticated credential endpoints: throttled so they are not a guessing oracle.
+    Route::post('/auth/local', [AuthController::class, 'login'])->middleware('throttle:10,1');
+    Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware('throttle:10,1');
+
+    Route::middleware('auth:sanctum')->group(function (): void {
+        Route::get('/users/me', [AuthController::class, 'me']);
+
+        Route::get('/activities', [ActivityApiController::class, 'index']);
+        Route::post('/activities', [ActivityApiController::class, 'store']);
+        Route::get('/activities/{key}', [ActivityApiController::class, 'show']);
+        Route::put('/activities/{key}', [ActivityApiController::class, 'update']);
+        Route::delete('/activities/{key}', [ActivityApiController::class, 'destroy']);
+
+        Route::get('/activity-sessions', [ActivitySessionApiController::class, 'index']);
+        Route::post('/activity-sessions', [ActivitySessionApiController::class, 'store']);
+        Route::get('/activity-sessions/{key}', [ActivitySessionApiController::class, 'show']);
+        Route::put('/activity-sessions/{key}', [ActivitySessionApiController::class, 'update']);
+        Route::delete('/activity-sessions/{key}', [ActivitySessionApiController::class, 'destroy']);
+
+        Route::get('/notes', [NoteApiController::class, 'index']);
+        Route::post('/notes', [NoteApiController::class, 'store']);
+        Route::get('/notes/{key}', [NoteApiController::class, 'show']);
+        Route::put('/notes/{key}', [NoteApiController::class, 'update']);
+        Route::delete('/notes/{key}', [NoteApiController::class, 'destroy']);
+
+        Route::get('/tags', [TagApiController::class, 'index']);
+        Route::post('/tags', [TagApiController::class, 'store']);
+        Route::get('/tags/{key}', [TagApiController::class, 'show']);
+        Route::put('/tags/{key}', [TagApiController::class, 'update']);
+        Route::delete('/tags/{key}', [TagApiController::class, 'destroy']);
+
+        Route::get('/transactions', [TransactionApiController::class, 'index']);
+        Route::post('/transactions', [TransactionApiController::class, 'store']);
+        Route::get('/transactions/{key}', [TransactionApiController::class, 'show']);
+        Route::put('/transactions/{key}', [TransactionApiController::class, 'update']);
+        Route::delete('/transactions/{key}', [TransactionApiController::class, 'destroy']);
+    });
+
+    // Inside the group so hand-written routes inherit the Strapi error envelope.
+    require __DIR__.'/api-custom.php';
+});

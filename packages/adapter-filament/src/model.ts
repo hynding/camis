@@ -9,6 +9,7 @@ export const emitModel = (
   observed = false,
   extraEmits: FieldEmit[] = [],
   fkNames: string[] = [],
+  extraMethods: string[] = [],
 ): string => {
   const names = filamentNames(ct);
   const emits = [
@@ -28,13 +29,18 @@ export const emitModel = (
     casts.length > 0
       ? `\n    protected function casts(): array\n    {\n        return [\n${casts}\n        ];\n    }\n`
       : "";
-  const relImports = [...new Set(relations.map((r) => r.import))]
+  const extraImports =
+    extraMethods.length > 0 ? ["App\\Models\\User", "Illuminate\\Database\\Eloquent\\Builder"] : [];
+  const relImports = [...new Set([...relations.map((r) => r.import), ...extraImports])]
     .sort()
     .map((i) => `use ${i};`)
     .join("\n");
   const relUse = relImports ? `${relImports}\n` : "";
   const observerUse = observed ? `use App\\Observers\\${names.model}Observer;\n` : "";
-  const relMethods = relations.length > 0 ? `\n${relations.map((r) => r.php).join("\n\n")}\n` : "";
+  const relMethods =
+    relations.length > 0 || extraMethods.length > 0
+      ? `\n${[...relations.map((r) => r.php), ...extraMethods].join("\n\n")}\n`
+      : "";
   // Preserve the original `${relUse}\n` blank-line idiom. observerUse appended alongside relUse
   // so when observed=false both are "", leaving the template identical to before (byte-exact golden).
   // When observed=true, observedAttr appears on its own line with a trailing \n before `class`.

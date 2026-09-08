@@ -20,6 +20,8 @@ export interface FilamentPermissions {
   permissionKeys: string[];
   roleGrants: { role: string; keys: string[] }[];
   policies: PolicySpec[];
+  readConditions: Map<string, Expression>;
+  assigns: Map<string, string[]>;
   gaps: CapabilityGap[];
 }
 
@@ -43,6 +45,7 @@ export const projectFilamentPermissions = (doc: IrDocument, roles: Role[]): Fila
   const gaps: CapabilityGap[] = [];
   const roleGrants: { role: string; keys: string[] }[] = [];
   const condByCa = new Map<string, Expression>();
+  const assigns = new Map<string, Set<string>>();
   const actionsByCt = new Map<string, Set<string>>();
 
   for (const role of roles) {
@@ -94,6 +97,11 @@ export const projectFilamentPermissions = (doc: IrDocument, roles: Role[]): Fila
           }
         }
       }
+      if (grant.assign) {
+        const cur = assigns.get(grant.contentType) ?? new Set<string>();
+        Object.keys(grant.assign).forEach((k) => cur.add(k));
+        assigns.set(grant.contentType, cur);
+      }
     }
     roleGrants.push({ role: role.name, keys: [...roleKeys].sort() });
   }
@@ -126,6 +134,12 @@ export const projectFilamentPermissions = (doc: IrDocument, roles: Role[]): Fila
     permissionKeys: [...keys].sort(),
     roleGrants: roleGrants.sort((a, b) => a.role.localeCompare(b.role)),
     policies,
+    readConditions: new Map(
+      [...condByCa.entries()]
+        .filter(([ca]) => ca.endsWith(".read"))
+        .map(([ca, cond]) => [ca.slice(0, -".read".length), cond]),
+    ),
+    assigns: new Map([...assigns.entries()].map(([ct, s]) => [ct, [...s].sort()])),
     gaps,
   };
 };

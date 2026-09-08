@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -17,6 +17,7 @@ const memIo = (
     return Promise.resolve();
   },
   materialize: () => Promise.resolve(),
+  copyDir: () => Promise.resolve(),
   exec: () => Promise.resolve(0),
   out: (l) => lines.push(l),
   cwd: "/p",
@@ -67,5 +68,25 @@ describe("importCommand", () => {
     const code = await importCommand("strapi", dir, join(dir, "ir.json"), io);
     expect(code).toBe(0);
     expect(Object.values(written)[0]).toContain('"Article"');
+  });
+  it("passes --upsert-by through to the Strapi importer", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "camis-import-"));
+    await mkdir(join(dir, "src/api/note/content-types/note"), { recursive: true });
+    await writeFile(
+      join(dir, "src/api/note/content-types/note/schema.json"),
+      JSON.stringify({
+        kind: "collectionType",
+        collectionName: "notes",
+        info: { singularName: "note", pluralName: "notes", displayName: "Note" },
+        attributes: { recordId: { type: "string", unique: true } },
+      }),
+    );
+    const lines: string[] = [];
+    const written: Record<string, string> = {};
+    const code = await importCommand("strapi", dir, "/p/out.json", memIo({}, lines, written), {
+      upsertBy: "recordId",
+    });
+    expect(code).toBe(0);
+    expect(JSON.parse(written["/p/out.json"]!).contentTypes[0].options.upsertBy).toBe("recordId");
   });
 });

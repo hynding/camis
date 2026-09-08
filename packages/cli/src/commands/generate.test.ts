@@ -27,6 +27,7 @@ const io = (lines: string[], materializeSpy = vi.fn(() => Promise.resolve())): I
   readFile: (p) => Promise.resolve(p.endsWith("camis.config.json") ? config : ir),
   writeFile: () => Promise.resolve(),
   materialize: materializeSpy,
+  copyDir: () => Promise.resolve(),
   exec: () => Promise.resolve(0),
   out: (l) => lines.push(l),
   cwd: "/p",
@@ -61,6 +62,7 @@ describe("printGaps", () => {
       readFile: () => Promise.resolve(""),
       writeFile: () => Promise.resolve(),
       materialize: () => Promise.resolve(),
+      copyDir: () => Promise.resolve(),
       exec: () => Promise.resolve(0),
       out: (l) => lines.push(l),
       cwd: "/p",
@@ -109,6 +111,7 @@ describe("generateCommand — roles", () => {
       ),
     writeFile: () => Promise.resolve(),
     materialize: () => Promise.resolve(),
+    copyDir: () => Promise.resolve(),
     exec: () => Promise.resolve(0),
     out: (l) => lines.push(l),
     cwd: "/p",
@@ -150,5 +153,79 @@ describe("generateCommand — roles", () => {
     });
     expect(code).toBe(1);
     expect(lines.join("\n")).toContain("roles");
+  });
+
+  // "expected a Role[]" left the author hunting for the mistake by hand; the zod issue names it.
+  it("reports the zod issue path for a bad value inside a grant", async () => {
+    const lines: string[] = [];
+    const badActions = JSON.stringify({
+      roles: [{ name: "admin", grants: [{ contentType: "Note", actions: ["fly"] }] }],
+    });
+    const code = await generateCommand("camis.config.json", rolesIo(lines, badActions), {
+      write: false,
+    });
+    expect(code).toBe(1);
+    expect(lines.join("\n")).toContain("✗ roles: roles.0.grants.0.actions.0");
+  });
+});
+
+const rolesObj = JSON.stringify({
+  defaultRole: "authenticated",
+  roles: [{ name: "authenticated", grants: [{ contentType: "Article", actions: ["read"] }] }],
+});
+const filamentConfig = JSON.stringify({
+  ir: "./camis.json",
+  roles: "./roles.json",
+  protected: "./overlay",
+  targets: [{ target: "filament", out: "./laravel", apiStyle: "strapi" }],
+});
+const plainIr = JSON.stringify({
+  version: 1,
+  contentTypes: [
+    { name: "Article", kind: "collection", fields: [{ type: "string", name: "title" }] },
+  ],
+  components: [],
+});
+
+describe("generateCommand strapi style", () => {
+  const files: Record<string, string> = {
+    "/p/camis.config.json": filamentConfig,
+    "/p/camis.json": plainIr,
+    "/p/roles.json": rolesObj,
+  };
+  const mk = (
+    lines: string[],
+    materializeSpy = vi.fn(() => Promise.resolve()),
+    copySpy = vi.fn(() => Promise.resolve()),
+  ): Io => ({
+    readFile: (p) =>
+      p in files ? Promise.resolve(files[p]!) : Promise.reject(new Error(`ENOENT ${p}`)),
+    writeFile: () => Promise.resolve(),
+    materialize: materializeSpy,
+    copyDir: copySpy,
+    exec: () => Promise.resolve(0),
+    out: (l) => lines.push(l),
+    cwd: "/p",
+  });
+  it("accepts the roles-file object form and emits the Strapi-style auth controller", async () => {
+    const lines: string[] = [];
+    const spy = vi.fn(() => Promise.resolve()) as MockedFunction<
+      (r: GenerationResult, d: string) => Promise<void>
+    >;
+    const code = await generateCommand("camis.config.json", mk(lines, spy), { write: true });
+    expect(code).toBe(0);
+    const paths = spy.mock.calls[0]![0].files.map((f) => f.path);
+    expect(paths).toContain("app/Http/Controllers/Api/AuthController.php");
+  });
+  it("mirrors the protected directory into out after materializing", async () => {
+    const lines: string[] = [];
+    const copy = vi.fn(() => Promise.resolve());
+    await generateCommand("camis.config.json", mk(lines, undefined, copy), { write: true });
+    expect(copy).toHaveBeenCalledWith("/p/overlay", "/p/laravel");
+  });
+  it("does not copy on dry-run", async () => {
+    const copy = vi.fn(() => Promise.resolve());
+    await generateCommand("camis.config.json", mk([], undefined, copy), { write: false });
+    expect(copy).not.toHaveBeenCalled();
   });
 });
