@@ -6,10 +6,9 @@ declare(strict_types=1);
 namespace App\Http\Middleware;
 
 use Closure;
-use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Contracts\Debug\ExceptionHandler;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -19,8 +18,6 @@ use Throwable;
 
 class StrapiErrors
 {
-    private static bool $registered = false;
-
     public function __construct(private readonly ExceptionHandler $handler)
     {
     }
@@ -32,13 +29,11 @@ class StrapiErrors
         return $next($request);
     }
 
-    /** Registered once per process: the callback closes over $this and stays valid for every request. */
     private function registerRenderer(): void
     {
-        if (self::$registered || ! method_exists($this->handler, 'renderable')) {
+        if (! method_exists($this->handler, 'renderable')) {
             return;
         }
-        self::$registered = true;
 
         $this->handler->renderable(function (Throwable $e, Request $request): ?JsonResponse {
             if (! $request->is('api/*')) {
@@ -48,12 +43,27 @@ class StrapiErrors
             return match (true) {
                 $e instanceof ValidationException => $this->error(400, 'ValidationError', collect($e->errors())->flatten()->first() ?? 'Validation failed'),
                 $e instanceof AuthenticationException => $this->error(401, 'UnauthorizedError', 'Missing or invalid credentials'),
-                $e instanceof AuthorizationException => $this->error(403, 'ForbiddenError', 'Forbidden'),
-                $e instanceof ModelNotFoundException => $this->error(404, 'NotFoundError', 'Not Found'),
-                $e instanceof HttpExceptionInterface => $this->error($e->getStatusCode(), 'HttpError', $e->getMessage() !== '' ? $e->getMessage() : 'Error'),
+                $e instanceof HttpResponseException => null,
+                $e instanceof HttpExceptionInterface => $this->errorForStatus($e->getStatusCode(), $e->getMessage()),
                 default => $this->error(500, 'InternalServerError', 'Internal Server Error'),
             };
         });
+    }
+
+    /**
+     * Handler::render() rewrites certain framework exceptions (a missing Eloquent model, a failed
+     * policy check) into equivalent HTTP exceptions before this callback ever runs, so they only
+     * ever reach us here as an HttpExceptionInterface — name by the status code that survives
+     * that rewrite, not by the original (already-lost) exception class.
+     */
+    private function errorForStatus(int $status, string $message): JsonResponse
+    {
+        return match ($status) {
+            401 => $this->error(401, 'UnauthorizedError', 'Missing or invalid credentials'),
+            403 => $this->error(403, 'ForbiddenError', 'Forbidden'),
+            404 => $this->error(404, 'NotFoundError', 'Not Found'),
+            default => $this->error($status, 'HttpError', $message !== '' ? $message : 'Error'),
+        };
     }
 
     private function error(int $status, string $name, string $message): JsonResponse

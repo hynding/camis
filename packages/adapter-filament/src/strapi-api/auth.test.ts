@@ -44,4 +44,32 @@ describe("strapi-api auth", () => {
     expect(php).toContain("->renderable(");
     expect(php).not.toMatch(/try\s*\{\s*return \$next\(\$request\);/);
   });
+  // Handler::render() calls prepareException($e) BEFORE renderViaCallbacks(), rewriting
+  // ModelNotFoundException -> NotFoundHttpException and AuthorizationException ->
+  // AccessDeniedHttpException — so by the time our callback runs, neither instanceof check can
+  // ever be true; both always land in the generic HttpExceptionInterface arm. Name by HTTP status
+  // instead of (already-lost) exception class, and delete the dead arms/imports.
+  it("names HttpExceptionInterface errors by status code, not by the (already-rewritten) original exception class", () => {
+    const php = emitStrapiErrorsMiddleware();
+    expect(php).toContain("NotFoundError");
+    expect(php).toContain("ForbiddenError");
+    expect(php).not.toContain("ModelNotFoundException");
+    expect(php).not.toContain("AuthorizationException");
+  });
+  // Under Octane/RoadRunner the container (and its bound ExceptionHandler) is restored from the
+  // boot snapshot between requests, but a `static` survives across requests in the same worker —
+  // so a static "already registered" guard silently stops registering after request #1, and every
+  // later API error reverts to Laravel's default shape. Re-registering per request is free under
+  // FPM, so there must be no such guard.
+  it("has no process-lifetime static guard around registration", () => {
+    expect(emitStrapiErrorsMiddleware()).not.toContain("static bool $registered");
+  });
+  // HttpResponseException does not implement HttpExceptionInterface, so without an explicit arm
+  // it falls into `default` and gets mis-shaped as a 500 — it must instead pass through (return
+  // null) so Laravel's default handling emits the response the exception already carries.
+  it("passes HttpResponseException through instead of mis-shaping it as a 500", () => {
+    const php = emitStrapiErrorsMiddleware();
+    expect(php).toContain("HttpResponseException");
+    expect(php).toMatch(/HttpResponseException\s*=>\s*null/);
+  });
 });

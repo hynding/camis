@@ -64,7 +64,11 @@ TB=$(echo "$B" | body | jq -r .jwt)
 [[ "$(req GET /notes "$TB" | body | jq '.data|length')" == "0" ]] || fail "bob list empty"
 
 [[ "$(req DELETE /notes/n1 "$TA" | status)" == "204" ]] || fail "delete"
-[[ "$(req GET /notes/nope "$TA" | body | jq -r .error.name)" == "HttpError" ]] || fail "404 shape"
+[[ "$(req GET /notes/nope "$TA" | body | jq -r .error.name)" == "NotFoundError" ]] || fail "404 shape"
 [[ "$(req GET /notes '' | status)" == "401" ]] || fail "unauthenticated"
+
+# Tag has a read-only grant in the fixture (no create): creating one is a policy-denied 403.
+FORBIDDEN=$(req POST /tags "$TA" '{"data":{"label":"x"}}')
+[[ "$(echo "$FORBIDDEN" | status)" == "403" && "$(echo "$FORBIDDEN" | body | jq -r .error.name)" == "ForbiddenError" ]] || fail "forbidden shape: $FORBIDDEN"
 
 echo "SMOKE OK"
