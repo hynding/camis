@@ -85,3 +85,5 @@ merge.
 - The `username` migration assumes an empty `users` table; the first deploy runs it before any
   registration.
 - Set `SANCTUM_TOKEN_EXPIRATION` in production; tokens do not expire by default.
+
+- **`StrapiErrors` overwrites the client `Accept` header with `application/json` for every `api`-group request**, including hand-written `routes/api-custom.php` routes; a custom route that needs real content negotiation (CSV export, downloads) must live outside the `api` group. Document this beside the `api-custom.php` seed comment.
