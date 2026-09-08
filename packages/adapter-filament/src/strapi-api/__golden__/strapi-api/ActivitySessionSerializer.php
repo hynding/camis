@@ -15,10 +15,10 @@ final class ActivitySessionSerializer
         return self::omitNulls([
             'id' => $m->id,
             'recordId' => $m->record_id,
-            'quantities' => $m->quantities->map(fn ($c) => self::omitNulls([
-            'amount' => $c->amount === null ? null : (float) $c->amount,
-            'unit' => $c->unit,
-        ]))->values()->all(),
+            'quantities' => $m->quantities->map(fn ($c) => self::nested([
+                'amount' => $c->amount === null ? null : (float) $c->amount,
+                'unit' => $c->unit,
+            ]))->filter(fn ($r) => $r !== null)->values()->all(),
             'createdAt' => $m->created_at?->toJSON(),
             'updatedAt' => $m->updated_at?->toJSON(),
         ]);
@@ -30,12 +30,13 @@ final class ActivitySessionSerializer
         $columns = array_filter([
             'record_id' => self::dig($data, ['recordId']),
         ], fn ($v) => $v !== null);
-        $children = [
-            'quantities' => array_map(fn (array $row) => array_filter([
-            'amount' => self::dig($row, ['amount']),
-            'unit' => self::dig($row, ['unit']),
-            ], fn ($v) => $v !== null), is_array($data['quantities'] ?? null) ? $data['quantities'] : []),
-        ];
+        $children = [];
+        if (array_key_exists('quantities', $data)) {
+            $children['quantities'] = array_map(fn (array $row) => array_filter([
+                'amount' => self::dig($row, ['amount']),
+                'unit' => self::dig($row, ['unit']),
+            ], fn ($v) => $v !== null), is_array($data['quantities']) ? $data['quantities'] : []);
+        }
 
         return ['columns' => $columns, 'children' => $children];
     }
@@ -51,6 +52,14 @@ final class ActivitySessionSerializer
     private static function omitNulls(array $a): array
     {
         return array_filter($a, fn ($v) => $v !== null);
+    }
+
+    /** Like omitNulls, but an all-null result collapses to null so the parent array drops the key. */
+    private static function nested(array $a): ?array
+    {
+        $a = self::omitNulls($a);
+
+        return $a === [] ? null : $a;
     }
 
     private static function dig(array $a, array $path): mixed

@@ -18,7 +18,7 @@ final class TransactionSerializer
             'fee' => $m->fee === null ? null : (float) $m->fee,
             'createdAt' => $m->created_at?->toJSON(),
             'updatedAt' => $m->updated_at?->toJSON(),
-            'amount' => self::omitNulls([
+            'amount' => self::nested([
                 'minor' => $m->amount_minor === null ? null : (int) $m->amount_minor,
                 'currency' => $m->amount_currency,
             ]),
@@ -34,21 +34,26 @@ final class TransactionSerializer
             'amount_minor' => self::dig($data, ['amount', 'minor']),
             'amount_currency' => self::dig($data, ['amount', 'currency']),
         ], fn ($v) => $v !== null);
-        $children = [
-
-        ];
+        $children = [];
 
         return ['columns' => $columns, 'children' => $children];
     }
 
     public static function syncChildren(Transaction $m, array $children): void
     {
-
     }
 
     private static function omitNulls(array $a): array
     {
         return array_filter($a, fn ($v) => $v !== null);
+    }
+
+    /** Like omitNulls, but an all-null result collapses to null so the parent array drops the key. */
+    private static function nested(array $a): ?array
+    {
+        $a = self::omitNulls($a);
+
+        return $a === [] ? null : $a;
     }
 
     private static function dig(array $a, array $path): mixed

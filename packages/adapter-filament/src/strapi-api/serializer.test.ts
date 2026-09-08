@@ -26,4 +26,23 @@ describe("emitSerializer", () => {
     expect(php).toContain("'occurredAt' => $m->occurred_at?->toJSON()");
     expect(php).toContain("'createdAt' => $m->created_at?->toJSON()");
   });
+  it("fromWire only sets a child key when the wire payload mentions it (partial-update safe)", () => {
+    const php = emitSerializer(shape("ActivitySession"));
+    expect(php).toContain("$children = [];");
+    expect(php).toContain("if (array_key_exists('quantities', $data)) {");
+    expect(php).toContain("$children['quantities'] = array_map(");
+  });
+  it("uses self::nested for component/child branches so an all-null branch is omitted, not []", () => {
+    const transaction = emitSerializer(shape("Transaction"));
+    expect(transaction).toContain("self::nested(");
+    const activitySession = emitSerializer(shape("ActivitySession"));
+    expect(activitySession).toContain("->filter(fn ($r) => $r !== null)->values()->all()");
+  });
+  it("emits a clean empty $children array and an empty syncChildren body with no children", () => {
+    const php = emitSerializer(shape("Transaction"));
+    expect(php).toContain("$children = [];\n");
+    expect(php).toContain(
+      "public static function syncChildren(Transaction $m, array $children): void\n    {\n    }\n",
+    );
+  });
 });
