@@ -11,6 +11,13 @@ use App\Http\Controllers\Api\TagApiController;
 use App\Http\Middleware\StrapiErrors;
 use Illuminate\Support\Facades\Route;
 
+// Laravel's middleware priority sort moves Authenticate and ThrottleRequests ahead of any
+// unprioritised route middleware, so applying StrapiErrors to the group below would leave it
+// running last — an unauthenticated or throttled request would never reach it, and would return
+// Laravel's default error body. Prepending it to the 'api' group makes it the first pipe for
+// every route in the group; the resolved list is deduplicated, so it still runs exactly once.
+Route::prependMiddlewareToGroup('api', StrapiErrors::class);
+
 Route::middleware([StrapiErrors::class])->group(function (): void {
     Route::get('/_health', fn () => response()->noContent());
     // The only unauthenticated credential endpoints: throttled so they are not a guessing oracle.

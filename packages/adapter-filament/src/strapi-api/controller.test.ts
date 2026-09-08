@@ -44,6 +44,23 @@ describe("strapi-api controllers", () => {
       ),
     ).toMatchFileSnapshot("./__golden__/strapi-api/routes.api.php");
   });
+  // Laravel sorts route middleware by its priority map, which moves Authenticate and
+  // ThrottleRequests ahead of any unprioritised middleware — so StrapiErrors applied only to the
+  // route group ran LAST, and an unauthenticated request never reached it at all: a 401 returned
+  // Laravel's default {"message":"Unauthenticated."} instead of the envelope (proven against a
+  // real Laravel 12 app). Prepending it to the `api` group makes it the first pipe for every
+  // route in the group; the resolved middleware list is deduplicated, so it still runs once.
+  it("prepends StrapiErrors to the api middleware group so it runs before Authenticate", () => {
+    const php = emitStrapiRoutes(
+      doc.contentTypes.filter((c) => c.builtin === undefined),
+      true,
+    );
+    const lines = php.split("\n");
+    const prepend = lines.indexOf("Route::prependMiddlewareToGroup('api', StrapiErrors::class);");
+    const group = lines.findIndex((l) => l.startsWith("Route::middleware([StrapiErrors::class])"));
+    expect(prepend).toBeGreaterThan(-1);
+    expect(prepend).toBeLessThan(group);
+  });
   // Unauthenticated credential endpoints are the one place an unbounded request rate is a
   // password-guessing oracle; everything else already sits behind auth:sanctum.
   it("throttles the login and register routes", () => {
