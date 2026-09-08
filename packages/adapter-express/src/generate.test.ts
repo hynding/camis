@@ -303,8 +303,12 @@ describe("component fields", () => {
     );
     expect(result.gaps.gaps).toEqual([]);
     const schema = result.files.find((f) => f.path === "src/db/schema.ts")!.content;
-    expect(schema).toContain("amount_minor: integer('amount_minor').notNull(),");
-    expect(schema).toContain("amount_currency: text('amount_currency').notNull(),");
+    // `amount` is an optional component reference, so its inner required-ness cannot reach the
+    // flattened columns — a record without an amount at all has to be storable.
+    expect(schema).toContain("amount_minor: integer('amount_minor'),");
+    expect(schema).toContain("amount_currency: text('amount_currency'),");
+    // A repeatable's child-table row exists only when the item does, so NOT NULL still holds.
+    expect(schema).toContain("amount: numeric('amount').notNull(),");
     expect(schema).toContain(
       'export const activity_sessions_quantities = sqliteTable("activity_sessions_quantities", {',
     );

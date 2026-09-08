@@ -291,8 +291,10 @@ describe("component fields — embedded columns", () => {
     );
     expect(result.gaps.gaps).toEqual([]);
     const migration = result.files.find((f) => f.path.includes("create_transactions_table"))!;
-    expect(migration.content).toContain("$table->bigInteger('amount_minor')");
-    expect(migration.content).toContain("$table->string('amount_currency')");
+    // `amount` is an optional component reference: a transaction may carry no amount at all,
+    // so the flattened columns stay nullable however required their fields are inside Money.
+    expect(migration.content).toContain("$table->bigInteger('amount_minor')->nullable()");
+    expect(migration.content).toContain("$table->string('amount_currency')->nullable()");
     expect(migration.content).toContain(
       "$table->integer('amount_exponent')->nullable()->default(2)",
     );
@@ -300,9 +302,32 @@ describe("component fields — embedded columns", () => {
     expect(model.content).toContain("'amount_minor',");
     expect(model.content).toContain("'amount_currency',");
     const form = result.files.find((f) => f.path.endsWith("Schemas/TransactionForm.php"))!;
-    expect(form.content).toContain("TextInput::make('amount_minor')->numeric()->required()");
+    expect(form.content).toContain("TextInput::make('amount_minor')->numeric(),");
+    expect(form.content).not.toContain("->required()");
     const table = result.files.find((f) => f.path.endsWith("Schemas/TransactionsTable.php"))!;
     expect(table.content).toContain("TextColumn::make('amount_currency')");
+  });
+
+  it("keeps the columns NOT NULL when the component reference itself is required", () => {
+    const required = {
+      ...moneyDoc,
+      contentTypes: [
+        {
+          ...moneyDoc.contentTypes[0]!,
+          fields: [
+            moneyDoc.contentTypes[0]!.fields[0]!,
+            { ...moneyDoc.contentTypes[0]!.fields[1]!, required: true },
+          ],
+        },
+      ],
+    };
+    const result = filamentAdapter.generate(
+      { document: required, roles: [] },
+      { projectName: "t" },
+    );
+    const migration = result.files.find((f) => f.path.includes("create_transactions_table"))!;
+    expect(migration.content).toContain("$table->bigInteger('amount_minor');");
+    expect(migration.content).toContain("$table->string('amount_currency');");
   });
 });
 
