@@ -120,7 +120,26 @@ describe("validateBundle assign", () => {
     if (!r.ok) expect(r.errors[0]?.code).toBe("assign_not_user_relation");
   });
   it("carries defaultRole through", () => {
-    const r = validateBundle({ document: ownedDoc, roles: [], defaultRole: "a" });
+    const r = validateBundle({
+      document: ownedDoc,
+      roles: [{ name: "a", grants: [] }],
+      defaultRole: "a",
+    });
     expect(r.ok && r.value.defaultRole).toBe("a");
+  });
+  // defaultRole is assigned verbatim on /auth/local/register; a typo there produces an app that
+  // silently registers users with no role at all, which only shows up as a 403 much later.
+  it("rejects a defaultRole that does not name a declared role", () => {
+    const r = validateBundle({
+      document: ownedDoc,
+      roles: [{ name: "authenticated", grants: [] }],
+      defaultRole: "authenticatd",
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.errors[0]?.code).toBe("unknown_default_role");
+      expect(r.errors[0]?.path).toEqual(["defaultRole"]);
+      expect(r.errors[0]?.location.rule).toBe("authenticatd");
+    }
   });
 });

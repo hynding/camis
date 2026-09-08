@@ -64,5 +64,16 @@ export const validateBundle = (bundle: IrBundle): Result<IrBundle> => {
       });
     });
   });
+  if (
+    bundle.defaultRole !== undefined &&
+    !bundle.roles.some((r) => r.name === bundle.defaultRole)
+  ) {
+    errors.push({
+      code: "unknown_default_role",
+      message: `defaultRole "${bundle.defaultRole}" does not name a declared role`,
+      location: { rule: bundle.defaultRole },
+      path: ["defaultRole"],
+    });
+  }
   return errors.length > 0 ? fail(errors) : ok(bundle);
 };
