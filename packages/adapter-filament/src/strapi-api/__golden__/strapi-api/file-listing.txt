@@ -53,6 +53,7 @@ overwrite app/Policies/NotePolicy.php
 overwrite app/Policies/TagPolicy.php
 overwrite app/Policies/TransactionPolicy.php
 overwrite app/Support/Ring1.php
+overwrite config/camis.php
 overwrite database/migrations/0001_01_02_000000_add_username_to_users_table.php
 overwrite database/migrations/0001_01_02_000001_create_notes_table.php
 overwrite database/migrations/0001_01_02_000002_create_transactions_table.php

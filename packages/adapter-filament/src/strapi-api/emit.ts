@@ -6,7 +6,7 @@ import { projectFilamentPermissions } from "../permissions/project";
 import { emitAuthController, emitUsernameMigration, USERNAME_MIGRATION_PATH } from "./auth";
 import { emitGeneratedController, emitProtectedController } from "./controller";
 import { emitStrapiErrorsMiddleware } from "./errors";
-import { emitStrapiRoutes } from "./routes";
+import { emitApiConfig, emitStrapiRoutes } from "./routes";
 import { emitScopeMethod } from "./scope";
 import { emitSerializer } from "./serializer";
 import { wireShape } from "./wire-shape";
@@ -64,6 +64,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
   }
 
   files.push({ path: "routes/api.php", content: emitStrapiRoutes(emitted, secured) });
+  files.push({ path: "config/camis.php", content: emitApiConfig() });
   files.push({
     path: "app/Http/Controllers/Api/AuthController.php",
     content: emitAuthController(bundle.defaultRole),

@@ -2,8 +2,28 @@ import type { ContentType } from "@camis/ir-schema";
 import { filamentNames } from "../names";
 import { routePath } from "./names";
 
-/** Requests per minute per IP allowed on the unauthenticated credential endpoints. */
-const AUTH_THROTTLE = "throttle:10,1";
+/** Default requests per minute allowed on the unauthenticated credential endpoints. */
+const AUTH_THROTTLE_PER_MINUTE = 10;
+
+/**
+ * Laravel's unnamed `throttle:N,1` keys on the client IP alone, so one hard-coded rate is
+ * wrong for every deployment at once — too loose behind a per-user address, low enough to
+ * lock out a shared NAT or an acceptance suite that registers an account per test. The rate
+ * is an operational knob, so it lives in config (env-overridable, and read through `config()`
+ * so `config:cache` keeps working).
+ */
+export const emitApiConfig = (): string => `<?php
+
+// @camis:generated — do not edit.
+
+declare(strict_types=1);
+
+return [
+    // Requests per minute allowed on the unauthenticated credential endpoints
+    // (POST /auth/local and /auth/local/register), keyed by client address.
+    'auth_throttle_per_minute' => (int) env('CAMIS_AUTH_THROTTLE_PER_MINUTE', ${AUTH_THROTTLE_PER_MINUTE}),
+];
+`;
 
 export const emitStrapiRoutes = (cts: ContentType[], secured: boolean): string => {
   const sorted = [...cts].sort((a, b) => routePath(a).localeCompare(routePath(b)));
@@ -43,11 +63,14 @@ ${uses}
 // every route in the group; the resolved list is deduplicated, so it still runs exactly once.
 Route::prependMiddlewareToGroup('api', StrapiErrors::class);
 
-Route::middleware([StrapiErrors::class])->group(function (): void {
+// The only unauthenticated credential endpoints: throttled so they are not a guessing oracle.
+// The rate is deployment-specific — see config/camis.php.
+$authThrottle = 'throttle:'.(int) config('camis.auth_throttle_per_minute', ${AUTH_THROTTLE_PER_MINUTE}).',1';
+
+Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle): void {
     Route::get('/_health', fn () => response()->noContent());
-    // The only unauthenticated credential endpoints: throttled so they are not a guessing oracle.
-    Route::post('/auth/local', [AuthController::class, 'login'])->middleware('${AUTH_THROTTLE}');
-    Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware('${AUTH_THROTTLE}');
+    Route::post('/auth/local', [AuthController::class, 'login'])->middleware($authThrottle);
+    Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware($authThrottle);
 
     ${guard}->group(function (): void {
         Route::get('/users/me', [AuthController::class, 'me']);
