@@ -53,7 +53,9 @@ describe("strapi-api controllers", () => {
       scoped: false,
     });
     expect(php).toContain("private const KEY = 'id';");
-    expect(php).not.toContain("wasRecentlyCreated");
+    expect(php).not.toContain("claimed by another scope");
+    expect(php).not.toContain("$m->{self::KEY} = $key");
+    expect(php).toContain("        abort(404);\n    }");
     expect(php).not.toContain("->forUser(");
   });
 });
