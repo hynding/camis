@@ -51,9 +51,11 @@ S=$(req POST /activity-sessions "$TA" '{"data":{"recordId":"s1","quantities":[{"
 [[ "$(echo "$S" | body | jq '[.data.quantities[]|.amount] == [2.5,30]')" == "true" ]] || fail "child round trip: $S"
 
 # Embedded component + null omission
-T=$(req POST /transactions "$TA" '{"data":{"recordId":"t1","amount":{"minor":1999,"currency":"USD"}}}')
+T=$(req POST /transactions "$TA" '{"data":{"recordId":"t1","amount":{"minor":1999,"currency":"USD"},"occurredOn":"2026-09-08"}}')
 [[ "$(echo "$T" | body | jq -c '.data.amount')" == '{"minor":1999,"currency":"USD"}' ]] || fail "embedded: $T"
 [[ "$(echo "$T" | body | jq '.data|has("fee")')" == "false" ]] || fail "null omitted: $T"
+# A `date` field round trips as YYYY-MM-DD, never as a full ISO datetime.
+[[ "$(echo "$T" | body | jq -r '.data.occurredOn')" == "2026-09-08" ]] || fail "date round trip: $T"
 
 # Catalog scoping: bob sees alice's public activity but not her private one
 req POST /activities "$TA" '{"data":{"recordId":"a1","name":"run","visibility":"public"}}' >/dev/null

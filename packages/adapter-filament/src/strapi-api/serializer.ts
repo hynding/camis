@@ -3,7 +3,9 @@ import type { WireChild, WireScalar, WireShape } from "./wire-shape";
 
 const NUMERIC_INT = new Set(["integer", "bigInteger"]);
 const NUMERIC_FLOAT = new Set(["float", "decimal"]);
-const DATETIME = new Set(["dateTime", "timestamp", "date"]);
+const DATETIME = new Set(["dateTime", "timestamp"]);
+// Strapi renders a `date` attribute as YYYY-MM-DD; toJSON() would append a fabricated time.
+const DATE_ONLY = new Set(["date"]);
 
 // One PSR-12 indent level.
 const UNIT = "    ";
@@ -13,6 +15,7 @@ const read = (s: WireScalar, src: string): string => {
   const col = `${src}->${s.column}`;
   if (NUMERIC_INT.has(s.type)) return `${col} === null ? null : (int) ${col}`;
   if (NUMERIC_FLOAT.has(s.type)) return `${col} === null ? null : (float) ${col}`;
+  if (DATE_ONLY.has(s.type)) return `${col}?->toDateString()`;
   if (DATETIME.has(s.type)) return `${col}?->toJSON()`;
   return col;
 };

@@ -58,6 +58,7 @@ export const strapiApiBundle: IrBundle = {
           { type: "string", name: "recordId", required: true, unique: true },
           { type: "component", name: "amount", component: "Money", repeatable: false },
           { type: "decimal", name: "fee" },
+          { type: "date", name: "occurredOn" },
           { type: "relation", name: "owner", relationKind: "manyToOne", target: "User" },
         ],
       },

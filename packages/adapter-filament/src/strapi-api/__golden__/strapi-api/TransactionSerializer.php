@@ -16,6 +16,7 @@ final class TransactionSerializer
             'id' => $m->id,
             'recordId' => $m->record_id,
             'fee' => $m->fee === null ? null : (float) $m->fee,
+            'occurredOn' => $m->occurred_on?->toDateString(),
             'createdAt' => $m->created_at?->toJSON(),
             'updatedAt' => $m->updated_at?->toJSON(),
             'amount' => self::nested([
@@ -31,6 +32,7 @@ final class TransactionSerializer
         $columns = array_filter([
             'record_id' => self::dig($data, ['recordId']),
             'fee' => self::dig($data, ['fee']),
+            'occurred_on' => self::dig($data, ['occurredOn']),
             'amount_minor' => self::dig($data, ['amount', 'minor']),
             'amount_currency' => self::dig($data, ['amount', 'currency']),
         ], fn ($v) => $v !== null);

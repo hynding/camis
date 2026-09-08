@@ -19,6 +19,13 @@ describe("emitSerializer", () => {
       "./__golden__/strapi-api/ActivitySessionSerializer.php",
     );
   });
+  // Strapi renders a `date` attribute as YYYY-MM-DD; toJSON() would send a full ISO datetime with
+  // a fabricated midnight-UTC time component that no client asked for.
+  it("serializes a date field as YYYY-MM-DD, not a full ISO datetime", () => {
+    const php = emitSerializer(shape("Transaction"));
+    expect(php).toContain("'occurredOn' => $m->occurred_on?->toDateString()");
+    expect(php).not.toContain("$m->occurred_on?->toJSON()");
+  });
   it("omits nulls via the shared helper and never emits relation FKs", () => {
     const php = emitSerializer(shape("Note"));
     expect(php).toContain("self::omitNulls(");
