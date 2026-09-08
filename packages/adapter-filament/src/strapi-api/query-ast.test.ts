@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Expression } from "@camis/expr";
+import type { ContentType } from "@camis/ir-schema";
 import { renderEloquent, renderSql, toWhereNode, whereContext } from "./query-ast";
 import { strapiApiBundle } from "./__fixtures__/strapi-api";
 
@@ -57,6 +58,33 @@ describe("toWhereNode", () => {
     expect(
       toWhereNode({ kind: "eq", left: v("record.visibility"), right: lit(1) }, ctx),
     ).toBeNull();
+  });
+});
+
+// A scalar `creatorId` and a manyToOne relation `creator` both claim the Ring 1 name
+// `record.creatorId` but mean different columns. Silently letting one win compiles a condition
+// against the wrong column — dropping the key instead makes toWhereNode return null, which takes
+// the documented per-record policy fallback (with its listScopeFallback gap).
+describe("whereContext key collisions", () => {
+  const colliding: ContentType = {
+    name: "Thing",
+    kind: "collection",
+    fields: [
+      { type: "string", name: "creatorId" },
+      { type: "relation", name: "creator", relationKind: "manyToOne", target: "User" },
+    ],
+  };
+  it("drops a key claimed by both a scalar and a relation rather than picking a winner", () => {
+    const c = whereContext(colliding);
+    expect(c.columns.has("record.creatorId")).toBe(false);
+    expect(
+      toWhereNode({ kind: "eq", left: v("record.creatorId"), right: v("user.id") }, c),
+    ).toBeNull();
+  });
+  it("leaves non-colliding keys intact", () => {
+    const c = whereContext(colliding);
+    expect(whereContext(activity).columns.get("record.creatorId")?.column).toBe("creator_id");
+    expect(c.columns.size).toBe(0);
   });
 });
 

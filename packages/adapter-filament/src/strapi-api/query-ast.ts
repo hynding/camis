@@ -30,19 +30,32 @@ const STRINGY = new Set<FieldType>([
   "timestamp",
 ]);
 
-/** Maps Ring 1 `record.*` variable names to their SQL column + IR type for one content type. */
+/**
+ * Maps Ring 1 `record.*` variable names to their SQL column + IR type for one content type.
+ *
+ * A scalar `creatorId` and a manyToOne relation `creator` both claim the name `record.creatorId`
+ * while meaning different columns. Rather than let one silently win — which would compile the
+ * condition against the wrong column — a contested key is dropped entirely, so `toWhereNode`
+ * returns null for it and the caller takes the documented fetch-then-filter fallback.
+ */
 export const whereContext = (ct: ContentType): WhereContext => {
   const columns = new Map<string, { column: string; type: FieldType }>();
+  const collided = new Set<string>();
+  const claim = (key: string, entry: { column: string; type: FieldType }): void => {
+    if (columns.has(key)) collided.add(key);
+    columns.set(key, entry);
+  };
   for (const f of ct.fields) {
     if (f.type === "relation") {
       if (f.relationKind === "manyToOne" || f.relationKind === "oneToOne") {
-        columns.set(`record.${f.name}Id`, { column: `${snakeColumn(f.name)}_id`, type: "integer" });
+        claim(`record.${f.name}Id`, { column: `${snakeColumn(f.name)}_id`, type: "integer" });
       }
       continue;
     }
     if (f.type === "component" || f.type === "dynamicZone") continue;
-    columns.set(`record.${f.name}`, { column: snakeColumn(f.name), type: f.type });
+    claim(`record.${f.name}`, { column: snakeColumn(f.name), type: f.type });
   }
+  for (const key of collided) columns.delete(key);
   return { columns };
 };
 
