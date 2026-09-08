@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { role } from "./model";
+import { grant, parseRolesFile, role } from "./model";
 
 describe("role schema", () => {
   it("accepts a role with a field rule and a condition", () => {
@@ -32,5 +32,36 @@ describe("role schema", () => {
       grants: [{ contentType: "Article", actions: ["read"], condition: { kind: "loop" } }],
     });
     expect(r.success).toBe(false);
+  });
+});
+
+describe("grant.assign", () => {
+  it("accepts assign entries whose value is user.id", () => {
+    const r = grant.safeParse({
+      contentType: "Note",
+      actions: ["create"],
+      assign: { owner: "user.id" },
+    });
+    expect(r.success).toBe(true);
+  });
+  it("rejects assign values other than user.id", () => {
+    const r = grant.safeParse({ contentType: "Note", actions: ["create"], assign: { owner: "x" } });
+    expect(r.success).toBe(false);
+  });
+});
+
+describe("parseRolesFile", () => {
+  const roles = [{ name: "authenticated", grants: [] }];
+  it("accepts the bare array form with no defaultRole", () => {
+    expect(parseRolesFile(roles)).toEqual({ roles });
+  });
+  it("accepts the object form with defaultRole", () => {
+    expect(parseRolesFile({ defaultRole: "authenticated", roles })).toEqual({
+      defaultRole: "authenticated",
+      roles,
+    });
+  });
+  it("returns undefined on malformed input", () => {
+    expect(parseRolesFile({ roles: "nope" })).toBeUndefined();
   });
 });
