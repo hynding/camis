@@ -7,7 +7,7 @@ import type { RelationMethod } from "./relations";
 const studlySegment = (segment: string): string =>
   segment.charAt(0).toUpperCase() + segment.slice(1);
 
-const camelPath = (path: string[]): string =>
+export const camelPath = (path: string[]): string =>
   path.map((s, i) => (i === 0 ? s : studlySegment(s))).join("");
 
 export interface ChildTableEmit {

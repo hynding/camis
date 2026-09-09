@@ -1,7 +1,7 @@
 import type { ContentType } from "@camis/ir-schema";
 import { pluralize } from "@camis/ir-core";
 
-const kebab = (name: string): string =>
+export const kebab = (name: string): string =>
   name
     .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
     .replace(/[_\s]+/g, "-")
