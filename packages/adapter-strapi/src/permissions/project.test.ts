@@ -49,6 +49,20 @@ describe("projectPermissions", () => {
     expect(fieldEntry.conditions).toEqual([expect.stringMatching(/^camis-cond-/)]);
     expect(out.conditions.length).toBe(1);
   });
+  // The generated bootstrap reads `role.description` off the roles.json import, and TypeScript
+  // infers that module's type from the emitted JSON: a role without the key makes the generated
+  // src/index.ts fail to compile, which stops Strapi from booting at all.
+  it("always emits a description key so the bootstrap compiles against roles.json", () => {
+    const out = projectPermissions(doc, [editor]);
+    expect(Object.keys(out.roles[0]!)).toContain("description");
+    expect(out.roles[0]!.description).toBe("");
+  });
+
+  it("keeps a role's own description", () => {
+    const out = projectPermissions(doc, [{ ...editor, description: "editorial staff" }]);
+    expect(out.roles[0]!.description).toBe("editorial staff");
+  });
+
   it("gaps a predicate that references vars outside user.*", () => {
     const r: Role = {
       name: "R",

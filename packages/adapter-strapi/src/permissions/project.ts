@@ -21,7 +21,12 @@ export interface PermissionEntry {
 }
 export interface EmittedRole {
   name: string;
-  description?: string;
+  /**
+   * Always present, empty when the IR role carries none: the generated bootstrap reads it off the
+   * roles.json import, and TypeScript types that module from the emitted JSON, so an omitted key
+   * breaks the compile of the very project this emits.
+   */
+  description: string;
   permissions: PermissionEntry[];
 }
 export interface NamedCondition {
@@ -112,11 +117,7 @@ export const projectPermissions = (doc: IrDocument, roles: Role[]): ProjectionRe
       }
     }
     permissions.sort(sortEntries);
-    return {
-      name: role.name,
-      ...(role.description ? { description: role.description } : {}),
-      permissions,
-    };
+    return { name: role.name, description: role.description ?? "", permissions };
   });
 
   const named = [...conditions.entries()]
