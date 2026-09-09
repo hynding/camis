@@ -320,4 +320,47 @@ describe("component fields", () => {
       "activity_session: one(activity_sessions, { fields: [activity_sessions_quantities.activity_session_id], references: [activity_sessions.id] }),",
     );
   });
+
+  // A child-table row exists only when the repeatable item does, so a required scalar on the
+  // item is a genuine NOT NULL — but an OPTIONAL sub-component reference inside the item may
+  // still be absent, and the columns it flattens to are shared by the whole sub-component.
+  it("keeps an optional sub-component's child-table columns nullable", () => {
+    const orderDoc = {
+      version: 1 as const,
+      contentTypes: [
+        {
+          name: "Order",
+          kind: "collection" as const,
+          fields: [
+            { type: "component" as const, name: "items", component: "LineItem", repeatable: true },
+          ],
+        },
+      ],
+      components: [
+        {
+          name: "LineItem",
+          fields: [
+            { type: "integer" as const, name: "qty", required: true },
+            { type: "component" as const, name: "money", component: "Money", repeatable: false },
+          ],
+        },
+        {
+          name: "Money",
+          fields: [
+            { type: "bigInteger" as const, name: "minor", required: true },
+            { type: "string" as const, name: "currency", required: true },
+          ],
+        },
+      ],
+    };
+    const result = expressAdapterFor("sqlite").generate(
+      { document: orderDoc, roles: [] },
+      { projectName: "t" },
+    );
+    expect(result.gaps.gaps).toEqual([]);
+    const schema = result.files.find((f) => f.path === "src/db/schema.ts")!.content;
+    expect(schema).toContain("qty: integer('qty').notNull(),");
+    expect(schema).toContain("money_minor: integer('money_minor'),");
+    expect(schema).toContain("money_currency: text('money_currency'),");
+  });
 });

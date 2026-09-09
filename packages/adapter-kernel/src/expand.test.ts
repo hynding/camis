@@ -44,6 +44,11 @@ const doc: IrDocument = {
       ],
     },
     {
+      name: "Order",
+      kind: "collection",
+      fields: [{ type: "component", name: "items", component: "LineItem", repeatable: true }],
+    },
+    {
       name: "Shipment",
       kind: "collection",
       fields: [
@@ -97,6 +102,13 @@ const doc: IrDocument = {
           component: "AdditionalNutrient",
           repeatable: true,
         },
+      ],
+    },
+    {
+      name: "LineItem",
+      fields: [
+        { type: "integer", name: "qty", required: true },
+        { type: "component", name: "money", component: "Money", repeatable: false },
       ],
     },
     {
@@ -204,6 +216,20 @@ describe("expandComponents", () => {
     ).toEqual([
       ["slug", true, true],
       ["amount", undefined, true],
+    ]);
+  });
+
+  // The repeatable boundary resets the path, but it does not make everything below it
+  // unconditional: an OPTIONAL sub-component reference inside the item is still absent-able, so
+  // its scalars share a child-table column that has to stay nullable.
+  it("clears alwaysPresent for an optional sub-component inside a repeatable", () => {
+    const r = expandComponents(doc, ct("Order"));
+    expect(r.scalars).toEqual([]);
+    expect(r.tables).toHaveLength(1);
+    expect(r.tables[0]?.scalars.map((s) => [s.path, s.field.required, s.alwaysPresent])).toEqual([
+      [["qty"], true, true],
+      [["money", "minor"], true, false],
+      [["money", "currency"], true, false],
     ]);
   });
 
