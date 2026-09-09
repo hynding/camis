@@ -170,6 +170,17 @@ export default {
         const existing = await strapi.query("plugin::users-permissions.permission").findOne({ where: { action, role: role.id } });
         if (!existing) await strapi.query("plugin::users-permissions.permission").create({ data: { action, role: role.id } });
       }
+      // Revoke what camis no longer grants. Without this, a grant deleted from the IR survives in
+      // any database an earlier generation already seeded. Only "api::" rows are camis's to
+      // manage: the "plugin::" ones are Strapi's own defaults (users-permissions' user.me, the
+      // auth endpoints), and deleting those would break login itself.
+      const owned = await strapi.query("plugin::users-permissions.permission").findMany({ where: { role: role.id } });
+      for (const p of owned) {
+        if (typeof p.action !== "string") continue;
+        if (!p.action.startsWith("api::")) continue;
+        if (actions.includes(p.action)) continue;
+        await strapi.query("plugin::users-permissions.permission").delete({ where: { id: p.id } });
+      }
     };
     await grant("public", apiRoles.public);
     for (const r of apiRoles.roles) await grant(r.type, r.actions);
