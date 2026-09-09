@@ -82,6 +82,23 @@ describe("filamentAdapter storageLayout strapi — file set", () => {
     expect(result.files.find((f) => f.path === "routes/api-custom.php")?.mode).toBe("seed");
   });
 
+  // Two things the cross-backend run proved a deployer has to be told, because getting either
+  // wrong produces a silent 404 or a blanket 401 rather than a diagnosable error:
+  // firebase/php-jwt refuses an HMAC key shorter than 32 bytes (Strapi accepts any length), and
+  // this layout registers routes/api.php without `php artisan install:api` (which would drag in
+  // Sanctum).
+  it("tells the deployer the shared JWT secret must be at least 32 bytes", () => {
+    const deploy = content("DEPLOY.md").replace(/\s+/g, " ");
+    expect(deploy).toContain("at least 32 bytes");
+    expect(deploy).toContain("firebase/php-jwt");
+  });
+
+  it("does not claim the strapi layout runs php artisan install:api", () => {
+    const deploy = content("DEPLOY.md");
+    expect(deploy).not.toContain("install:api");
+    expect(deploy.replace(/\s+/g, " ")).toContain("bootstrap/app.php");
+  });
+
   it("wires the storage-layout variants into routes, config, model and DEPLOY.md", () => {
     expect(content("routes/api.php")).toContain("Route::middleware(StrapiJwtGuard::class)");
     expect(content("config/camis.php")).toContain("'jwt_secret'");

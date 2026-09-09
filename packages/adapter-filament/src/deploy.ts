@@ -28,13 +28,18 @@ column this app reads or writes is present.`
 
 const firstDeploy = (layout: StorageLayout): string =>
   layout === "strapi"
-    ? `The generated JSON API in \`routes/api.php\` requires Laravel's API layer
-(\`php artisan install:api\`) — \`camis scaffold filament\` runs it for you; add it manually on
-an existing app. Custom endpoints belong in \`routes/api-custom.php\` (never overwritten).
+    ? `The generated JSON API in \`routes/api.php\` needs Laravel to route it: this layout has
+\`camis scaffold filament --storage strapi\` add \`api: __DIR__.'/../routes/api.php'\` to
+\`bootstrap/app.php\` rather than run Laravel's API installer, which would also install Sanctum
+this layout does not use. Add that line by hand on an existing app. Custom endpoints belong in
+\`routes/api-custom.php\` (never overwritten).
 
 Sessions are the JWT Strapi's users-permissions plugin issues, so \`JWT_SECRET\` must hold the
 same HS256 secret as the Strapi instance — a session minted by either app is then accepted by
-both. \`CAMIS_EMAIL_CONFIRMATION\` mirrors Strapi's "Enable email confirmation" advanced
+both. It must be **at least 32 bytes**: firebase/php-jwt rejects a shorter HMAC key, and because
+that failure looks exactly like a bad token, every authenticated request would answer 401 with no
+other clue. Strapi imposes no such minimum, so a secret that works there can still be too short
+here. \`CAMIS_EMAIL_CONFIRMATION\` mirrors Strapi's "Enable email confirmation" advanced
 setting, and \`CAMIS_AUTH_THROTTLE_PER_MINUTE\` (default 10, floored at 1) sets the request rate
 allowed on \`/auth/local\` and \`/auth/local/register\` — one bucket per client address, shared
 by both routes. The throttle is read through the generated \`config/camis.php\`; after changing
