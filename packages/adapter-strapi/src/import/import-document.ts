@@ -10,7 +10,7 @@ import type {
 import { irComponent, irContentType } from "./schema";
 
 const CONTENT_TYPE_RE = /\/content-types\/[^/]+\/schema\.json$/;
-const COMPONENT_RE = /(?:^|\/)src\/components\/[^/]+\/([^/]+)\.json$/;
+const COMPONENT_RE = /(?:^|\/)src\/components\/([^/]+)\/([^/]+)\.json$/;
 
 const pascal = (kebab: string): string =>
   kebab
@@ -54,7 +54,11 @@ export const importDocument = (
     }
     const m = COMPONENT_RE.exec(file.path);
     if (m) {
-      const r = irComponent(pascal(m[1]!), JSON.parse(file.content) as Record<string, unknown>);
+      const r = irComponent(
+        pascal(m[2]!),
+        JSON.parse(file.content) as Record<string, unknown>,
+        m[1]!,
+      );
       components.push(r.component);
       gaps.push(...r.gaps);
     }

@@ -180,6 +180,30 @@ describe("strapiAdapter.generate — components + inverses", () => {
     expect(r.files.map((f) => f.path)).toContain("src/components/shared/seo-meta.json");
   });
 
+  it("honors component.names for the folder and collectionName", () => {
+    const named = {
+      ...doc,
+      components: [
+        {
+          name: "Money",
+          fields: [{ type: "bigInteger" as const, name: "minor" }],
+          names: { collection: "components_finance_money", group: "finance" },
+        },
+      ],
+    };
+    const r = strapiAdapter.generate({ document: named, roles: [] }, { projectName: "blog" });
+    const money = r.files.find((f) => f.path === "src/components/finance/money.json");
+    expect(money).toBeDefined();
+    expect(JSON.parse(money!.content).collectionName).toBe("components_finance_money");
+  });
+
+  it("falls back to the shared folder and default collectionName without names", () => {
+    const r = strapiAdapter.generate({ document: doc, roles: [] }, { projectName: "blog" });
+    const seo = r.files.find((f) => f.path === "src/components/shared/seo-meta.json");
+    expect(seo).toBeDefined();
+    expect(JSON.parse(seo!.content).collectionName).toBe("components_shared_seo_metas");
+  });
+
   it("adds the synthesized inverse attribute to the target type schema", () => {
     const r = strapiAdapter.generate({ document: doc, roles: [] }, { projectName: "blog" });
     const author = JSON.parse(r.files.find((f) => f.path.endsWith("author/schema.json"))!.content);

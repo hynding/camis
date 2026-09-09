@@ -72,7 +72,16 @@ export const contentType = z
   );
 
 export const component = z
-  .object({ name: typeName, fields: z.array(componentField) })
+  .object({
+    name: typeName,
+    names: z
+      .object({
+        collection: z.string().optional(),
+        group: z.string().optional(),
+      })
+      .optional(),
+    fields: z.array(componentField),
+  })
   .superRefine((c, ctx) =>
     nodeRefine(c.fields as { name: string; type: string; targetField?: string }[], ctx),
   );

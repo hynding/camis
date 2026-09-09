@@ -6,7 +6,8 @@ export const componentSchema = (
   component: Component,
   builtinUsers: ReadonlySet<string> = new Set(),
 ): Record<string, unknown> => ({
-  collectionName: `components_shared_${snakeCase(pluralize(component.name))}`,
+  collectionName:
+    component.names?.collection ?? `components_shared_${snakeCase(pluralize(component.name))}`,
   info: { displayName: humanize(component.name) },
   options: {},
   attributes: toAttributes(component.fields, builtinUsers),

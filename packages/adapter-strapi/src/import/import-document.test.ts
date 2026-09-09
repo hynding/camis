@@ -143,6 +143,25 @@ describe("importDocument — builtin user synthesis", () => {
   });
 });
 
+describe("importDocument — component names", () => {
+  it("imports component group and collectionName into names", () => {
+    const r = importDocument([
+      {
+        path: "src/components/finance/money.json",
+        content: JSON.stringify({
+          collectionName: "components_finance_money",
+          info: { displayName: "Money" },
+          attributes: { minor: { type: "biginteger" }, currency: { type: "string" } },
+        }),
+      },
+    ]).document;
+    expect(r.ok && r.value.components[0]?.names).toEqual({
+      collection: "components_finance_money",
+      group: "finance",
+    });
+  });
+});
+
 describe("importDocument upsertBy", () => {
   const note = JSON.stringify({
     kind: "collectionType",

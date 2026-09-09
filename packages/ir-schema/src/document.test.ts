@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contentType, irDocument } from "./document";
+import { component, contentType, irDocument } from "./document";
 
 const ct = (fields: unknown[]) =>
   contentType.safeParse({ name: "Article", kind: "collection", fields });
@@ -140,6 +140,29 @@ describe("field expression attachment points", () => {
       fields: [{ type: "string", name: "slug", computed: { kind: "loop" } }],
     });
     expect(r.success).toBe(false);
+  });
+});
+
+describe("component.names", () => {
+  it("accepts a component with names.collection and names.group", () => {
+    const r = component.safeParse({
+      name: "Money",
+      fields: [{ type: "bigInteger", name: "minor" }],
+      names: { collection: "components_finance_money", group: "finance" },
+    });
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.names).toEqual({ collection: "components_finance_money", group: "finance" });
+    }
+  });
+
+  it("accepts a component with no names (backward compatible)", () => {
+    const r = component.safeParse({
+      name: "Money",
+      fields: [{ type: "bigInteger", name: "minor" }],
+    });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.names).toBeUndefined();
   });
 });
 

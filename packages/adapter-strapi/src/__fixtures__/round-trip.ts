@@ -31,5 +31,11 @@ export const roundTrip: IrDocument = {
       fields: [{ type: "string", name: "name", required: true }],
     },
   ],
-  components: [{ name: "SeoMeta", fields: [{ type: "string", name: "metaTitle" }] }],
+  components: [
+    {
+      name: "SeoMeta",
+      names: { collection: "components_shared_seo_metas", group: "shared" },
+      fields: [{ type: "string", name: "metaTitle" }],
+    },
+  ],
 };

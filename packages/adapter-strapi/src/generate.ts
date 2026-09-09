@@ -33,7 +33,7 @@ const typeFiles = (
 };
 
 const componentFile = (component: Component, builtinUsers: ReadonlySet<string>): GeneratedFile => ({
-  path: `src/components/shared/${kebab(component.name)}.json`,
+  path: `src/components/${component.names?.group ?? "shared"}/${kebab(component.name)}.json`,
   content: stableJson(componentSchema(component, builtinUsers)),
 });
 

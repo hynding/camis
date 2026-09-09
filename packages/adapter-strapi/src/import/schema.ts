@@ -56,11 +56,21 @@ export const irContentType = (
 export const irComponent = (
   componentName: string,
   schema: Record<string, unknown>,
+  group?: string,
 ): { component: Component; gaps: CapabilityGap[] } => {
   const { fields, gaps } = fieldsFromAttributes(asRecord(schema.attributes), {
     component: componentName,
   });
-  // dynamicZone fields are routed to gaps by irField (components disallow dynamicZone per D6),
-  // so the fields array is safely narrowed to ComponentFieldT at runtime.
-  return { component: { name: componentName, fields: fields as ComponentFieldT[] }, gaps };
+  const collection = str(schema.collectionName);
+  const names: { collection?: string; group?: string } = {};
+  if (collection !== "") names.collection = collection;
+  if (group !== undefined && group !== "") names.group = group;
+  const component: Component = {
+    name: componentName,
+    // dynamicZone fields are routed to gaps by irField (components disallow dynamicZone per
+    // D6), so the fields array is safely narrowed to ComponentFieldT at runtime.
+    fields: fields as ComponentFieldT[],
+    ...(Object.keys(names).length > 0 ? { names } : {}),
+  };
+  return { component, gaps };
 };

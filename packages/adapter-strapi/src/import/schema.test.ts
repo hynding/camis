@@ -49,6 +49,24 @@ describe("irComponent", () => {
       attributes: { metaTitle: { type: "string" } },
     };
     const { component } = irComponent("SeoMeta", schema);
-    expect(component).toEqual({ name: "SeoMeta", fields: [{ type: "string", name: "metaTitle" }] });
+    expect(component).toEqual({
+      name: "SeoMeta",
+      names: { collection: "components_shared_seo_metas" },
+      fields: [{ type: "string", name: "metaTitle" }],
+    });
+  });
+
+  it("also captures the folder as names.group when given", () => {
+    const schema = {
+      collectionName: "components_finance_money",
+      info: { displayName: "Money" },
+      options: {},
+      attributes: { minor: { type: "biginteger" } },
+    };
+    const { component } = irComponent("Money", schema, "finance");
+    expect(component.names).toEqual({
+      collection: "components_finance_money",
+      group: "finance",
+    });
   });
 });
