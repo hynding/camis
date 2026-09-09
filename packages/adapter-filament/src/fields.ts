@@ -1,5 +1,6 @@
 import type { Field } from "@camis/ir-schema";
 import { snakeColumn } from "./names";
+import { phpSingleQuoted } from "./php-literal";
 
 export interface FieldEmit {
   column: string;
@@ -34,10 +35,6 @@ const SUPPORTED = new Set<string>([
   "media",
 ]);
 export const isSupportedField = (t: string): boolean => SUPPORTED.has(t);
-
-// Wrap an author-controlled string as a single-quoted PHP literal, escaping backslashes and single
-// quotes so it cannot break out of (or inject code into) the generated PHP.
-const phpSingleQuoted = (s: string): string => `'${s.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
 
 const phpDefault = (v: unknown): string =>
   typeof v === "boolean"

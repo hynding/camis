@@ -164,6 +164,22 @@ describe("emitPolicy — strapi storage layout", () => {
     expect(emitPolicy(orphan, noteCt, "strapi")).toContain("        return false;");
   });
 
+  // Role names and permission keys come from the IR, which a human (or the AI authoring path)
+  // writes. Interpolated raw, a quote in either closes the PHP literal and the rest becomes source.
+  it("escapes a quote in a role name and in a permission key", () => {
+    const nasty: PolicySpec = {
+      contentType: "Note",
+      model: "Note",
+      methods: [
+        { method: "create", key: "note.o'brien", record: false, roles: ["o'brien", "editor"] },
+      ],
+    };
+    expect(emitPolicy(nasty, noteCt, "strapi")).toContain(
+      "in_array($user->roleType(), ['o\\'brien', 'editor'], true)",
+    );
+    expect(emitPolicy(nasty, noteCt)).toContain("$user->can('note.o\\'brien')");
+  });
+
   it("leaves the Laravel layout on Spatie checks", () => {
     const laravel = emitPolicy(noteSpec, noteCt);
     expect(laravel).toContain("$user->can('note.read')");

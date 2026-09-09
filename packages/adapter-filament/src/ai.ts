@@ -2,6 +2,7 @@ import type { GeneratedFile } from "@camis/adapter-kernel";
 import { aiPlaceholders, type ContentType, type Field, type IrDocument } from "@camis/ir-schema";
 import { PHP_MARKER } from "./hooks/names";
 import { filamentNames, snakeColumn } from "./names";
+import { phpSingleQuoted } from "./php-literal";
 
 type AiField = Field & { ai?: { model?: string; prompt: string; trigger: string } };
 const aiOf = (f: Field): AiField["ai"] | undefined => (f as AiField).ai;
@@ -10,9 +11,6 @@ export const aiFieldContentTypes = (doc: IrDocument): ContentType[] =>
   doc.contentTypes.filter((ct) => ct.fields.some((f) => aiOf(f) !== undefined));
 
 export const hasAiField = (doc: IrDocument): boolean => aiFieldContentTypes(doc).length > 0;
-
-// Wrap an author-controlled string as a single-quoted PHP literal (escape \\ and ').
-const phpSingleQuoted = (s: string): string => `'${s.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
 
 // Protected PHP provider seam: deterministic + offline by default (no network / API key in dev/CI).
 const PROVIDER = `<?php

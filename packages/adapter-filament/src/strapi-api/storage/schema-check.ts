@@ -1,6 +1,7 @@
 import type { ContentType, IrDocument } from "@camis/ir-schema";
 import { emitField } from "../../fields";
 import { PHP_MARKER } from "../../hooks/names";
+import { phpSingleQuoted } from "../../php-literal";
 import { componentMap, type MappedComponent } from "./component-map";
 import { ownerLinks, strapiTable } from "./names";
 
@@ -115,14 +116,10 @@ export const expectedSchema = (
 
 const sp = (n: number): string => " ".repeat(n);
 
-// Wrap an author-controlled string as a single-quoted PHP literal, escaping backslashes and single
-// quotes so it cannot break out of (or inject code into) the generated PHP.
-const phpString = (s: string): string => `'${s.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
-
 const expectedLiteral = (expected: Record<string, string[]>): string => {
   const entries = Object.entries(expected).map(([table, columns]) => {
-    const cols = columns.map((c) => `${sp(12)}${phpString(c)},`).join("\n");
-    return `${sp(8)}${phpString(table)} => [\n${cols}\n${sp(8)}],`;
+    const cols = columns.map((c) => `${sp(12)}${phpSingleQuoted(c)},`).join("\n");
+    return `${sp(8)}${phpSingleQuoted(table)} => [\n${cols}\n${sp(8)}],`;
   });
   return entries.length === 0 ? "[]" : `[\n${entries.join("\n")}\n${sp(4)}]`;
 };

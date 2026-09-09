@@ -1,5 +1,6 @@
 import { PHP_MARKER } from "../../hooks/names";
-import { phpSingleQuoted, strapiUser } from "../auth";
+import { phpSingleQuoted } from "../../php-literal";
+import { strapiUser } from "../auth";
 
 /** Strapi's own default role for a freshly registered user, when the caller supplies none. */
 const STRAPI_DEFAULT_ROLE = "authenticated";

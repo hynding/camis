@@ -1,9 +1,10 @@
+import { phpSingleQuoted } from "../../php-literal";
 import { authLine, NESTED_STMT, STMT } from "../controller-shared";
 import type { ControllerLink, ControllerParts, ControllerSpec } from "../controller";
 
 /** A PHP single-quoted string literal, or `null` for an absent value. */
 const nullableString = (value: string | undefined): string =>
-  value === undefined ? "null" : `'${value}'`;
+  value === undefined ? "null" : phpSingleQuoted(value);
 
 /**
  * The Strapi-storage half of `emitGeneratedController`. Nothing here touches a foreign-key
@@ -34,7 +35,7 @@ export const strapiControllerParts = (spec: ControllerSpec): ControllerParts => 
   });
 
   const linkLine = (indent: string, l: ControllerLink): string =>
-    `${indent}StrapiRows::link($m, '${l.table}', '${l.local}', '${l.foreign}', $request->user()->id, ${nullableString(l.ord)});`;
+    `${indent}StrapiRows::link($m, ${phpSingleQuoted(l.table)}, ${phpSingleQuoted(l.local)}, ${phpSingleQuoted(l.foreign)}, $request->user()->id, ${nullableString(l.ord)});`;
 
   /**
    * The row-creating transaction body, shared by store() and update()'s create branch. The key
@@ -88,7 +89,10 @@ ${reload(STMT)}
         abort(404);`;
 
   const unlinks = links
-    .map((l) => `${NESTED_STMT}StrapiRows::unlinkAll($m, '${l.table}', '${l.local}');`)
+    .map(
+      (l) =>
+        `${NESTED_STMT}StrapiRows::unlinkAll($m, ${phpSingleQuoted(l.table)}, ${phpSingleQuoted(l.local)});`,
+    )
     .join("\n");
 
   return {
@@ -100,7 +104,9 @@ ${reload(STMT)}
     // Every owning relation is eager-loaded: the policy conditions and the ownership accessors
     // read them per row, which is one query each on a lazy relation.
     query: `${scoped ? `${M}::query()->forUser($request->user())` : `${M}::query()`}${
-      links.length > 0 ? `->with([${links.map((l) => `'${l.relation}'`).join(", ")}])` : ""
+      links.length > 0
+        ? `->with([${links.map((l) => phpSingleQuoted(l.relation)).join(", ")}])`
+        : ""
     }`,
     indexBody: `${auth(`$this->authorize('viewAny', ${M}::class);`)}        $rows = $this->scoped($request)->get();
         StrapiComponents::load($rows, ${MAP});

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Expression } from "@camis/expr";
 import type { ContentType } from "@camis/ir-schema";
-import { renderEloquent, renderSql, toWhereNode, whereContext } from "./query-ast";
+import { renderEloquent, renderSql, toWhereNode, whereContext, type WhereNode } from "./query-ast";
 import { strapiApiBundle } from "./__fixtures__/strapi-api";
 import { storageBundle } from "./storage/__fixtures__/storage";
 
@@ -203,5 +203,38 @@ describe("renderers", () => {
     const n = toWhereNode({ kind: "eq", left: v("record.name"), right: lit(null) }, ctx)!;
     expect(renderEloquent(n, "$q", "$user")).toBe("$q->whereNull('name');");
     expect(renderSql(n, 1)).toBe("(name IS NULL)");
+  });
+});
+
+// Column, table and link-column names all come from the IR, which a human or the AI authoring
+// path writes. Interpolated raw, a name carrying a single quote closes the PHP literal early and
+// the remainder of the name becomes PHP source.
+describe("renderEloquent escapes author-controlled names", () => {
+  it("escapes a quote in a plain column name and in a string literal", () => {
+    const n: WhereNode = {
+      kind: "eq",
+      column: "o'brien",
+      value: { kind: "lit", value: "it's" },
+    };
+    expect(renderEloquent(n, "$q", "$user")).toBe("$q->where('o\\'brien', '=', 'it\\'s');");
+  });
+
+  it("escapes a quote in a null column name", () => {
+    const n: WhereNode = { kind: "eq", column: "o'brien", value: { kind: "lit", value: null } };
+    expect(renderEloquent(n, "$q", "$user")).toBe("$q->whereNull('o\\'brien');");
+  });
+
+  it("escapes quotes in every link-table and link-column name", () => {
+    const n: WhereNode = {
+      kind: "eq",
+      column: "owner_id",
+      value: { kind: "userId" },
+      link: { table: "a'a", local: "b'b", foreign: "c'c", owner: "d'd" },
+    };
+    const php = renderEloquent(n, "$q", "$user");
+    expect(php).toContain("->from('a\\'a')");
+    expect(php).toContain("->whereColumn('a\\'a.b\\'b', 'd\\'d.id')");
+    expect(php).toContain("->where('a\\'a.c\\'c', $user->id)");
+    expect(php).not.toContain("'a'a");
   });
 });

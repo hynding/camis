@@ -1,4 +1,5 @@
 import { PHP_MARKER } from "../hooks/names";
+import { phpSingleQuoted } from "../php-literal";
 
 export const USERNAME_MIGRATION_PATH =
   "database/migrations/0001_01_02_000000_add_username_to_users_table.php";
@@ -34,11 +35,6 @@ return new class extends Migration
 // reuse the identical wire shape and injection-safe quoting instead of redefining them.
 export const strapiUser =
   "['id' => $user->id, 'username' => $user->username, 'email' => $user->email]";
-
-// Wrap an author-controlled string as a single-quoted PHP literal, escaping backslashes and single
-// quotes so it cannot break out of (or inject code into) the generated PHP.
-export const phpSingleQuoted = (s: string): string =>
-  `'${s.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
 
 export const emitAuthController = (defaultRole: string | undefined): string => `<?php
 ${PHP_MARKER}

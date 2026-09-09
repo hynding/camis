@@ -2,6 +2,7 @@ import type { StorageLayout } from "@camis/adapter-kernel";
 import { emitPhp } from "@camis/expr-php-emit";
 import type { ContentType } from "@camis/ir-schema";
 import { snakeColumn } from "../names";
+import { phpSingleQuoted } from "../php-literal";
 import type { PolicyMethodSpec, PolicySpec } from "./project";
 
 // On a Strapi database there is no Spatie permission table: a user's only authorization datum is
@@ -18,7 +19,10 @@ const userData = (layout: StorageLayout): string[] => [
 const recordData = (ct: ContentType, layout: StorageLayout): string[] => [
   ...ct.fields
     .filter((f) => f.type !== "relation" && f.type !== "component")
-    .map((f) => `            'record.${f.name}' => $record->${snakeColumn(f.name)},`),
+    .map(
+      (f) =>
+        `            ${phpSingleQuoted(`record.${f.name}`)} => $record->${snakeColumn(f.name)},`,
+    ),
   // Owning relations expose their FK as record.<name>Id so conditions can express ownership.
   // On the Strapi layout the FK is a link-table row, not a column, so the model's accessor is
   // the only way to reach it.
@@ -29,7 +33,7 @@ const recordData = (ct: ContentType, layout: StorageLayout): string[] => [
     )
     .map(
       (f) =>
-        `            'record.${f.name}Id' => $record->${
+        `            ${phpSingleQuoted(`record.${f.name}Id`)} => $record->${
           layout === "strapi" ? `${f.name}Id` : `${snakeColumn(f.name)}_id`
         },`,
     ),
@@ -44,9 +48,9 @@ const alwaysDenies = (m: PolicyMethodSpec, layout: StorageLayout): boolean =>
 
 /** The boolean expression that decides whether $user holds the method's grant at all. */
 const grantCheck = (m: PolicyMethodSpec, layout: StorageLayout): string => {
-  if (layout !== "strapi") return `$user->can('${m.key}')`;
+  if (layout !== "strapi") return `$user->can(${phpSingleQuoted(m.key)})`;
   if (m.roles.length === 0) return "false";
-  return `in_array($user->roleType(), [${m.roles.map((r) => `'${r}'`).join(", ")}], true)`;
+  return `in_array($user->roleType(), [${m.roles.map(phpSingleQuoted).join(", ")}], true)`;
 };
 
 /** Whether the method's body actually evaluates its condition (and so needs Ring1). */

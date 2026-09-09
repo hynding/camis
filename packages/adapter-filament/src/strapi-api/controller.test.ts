@@ -324,6 +324,23 @@ describe("strapi storage layout — assign without a link", () => {
   });
 });
 
+// Link table and column names are derived from IR type and field names, which a human or the AI
+// authoring path writes; interpolated raw, a quote in one closes the PHP literal early.
+describe("strapi storage layout — author-controlled link names", () => {
+  it("escapes a quote in every link table, column and relation name it emits", () => {
+    const php = emitGeneratedController({
+      ...storageSpec("Note", ["own'er"]),
+      links: [{ relation: "own'er", table: "a'a", local: "b'b", foreign: "c'c", ord: "d'd" }],
+    });
+    expect(php).toContain(
+      "StrapiRows::link($m, 'a\\'a', 'b\\'b', 'c\\'c', $request->user()->id, 'd\\'d');",
+    );
+    expect(php).toContain("StrapiRows::unlinkAll($m, 'a\\'a', 'b\\'b');");
+    expect(php).toContain("->with(['own\\'er'])");
+    expect(php).not.toContain("'a'a'");
+  });
+});
+
 describe("strapi storage layout — no owning relations", () => {
   const tagSpec = {
     shape: wireShape(doc, ct("Tag"), []),

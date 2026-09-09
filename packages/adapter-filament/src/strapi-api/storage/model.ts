@@ -2,6 +2,7 @@ import type { ContentType, IrDocument } from "@camis/ir-schema";
 import { emitField } from "../../fields";
 import { PHP_MARKER } from "../../hooks/names";
 import { filamentNames } from "../../names";
+import { phpSingleQuoted } from "../../php-literal";
 import type { MappedComponent, MappedScalar } from "./component-map";
 import { linkColumns, linkTable, strapiTable, type RelationField } from "./names";
 
@@ -11,9 +12,6 @@ const STRAPI_DATETIME_COLUMNS = ["created_at", "updated_at", "published_at"];
 
 const sp = (n: number): string => " ".repeat(n);
 
-// Wrap an author-controlled string as a single-quoted PHP literal, escaping backslashes and single
-// quotes so it cannot break out of (or inject code into) the generated PHP.
-const phpString = (s: string): string => `'${s.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
 const phpBool = (b: boolean): string => (b ? "true" : "false");
 const capitalize = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -26,9 +24,9 @@ const scalarLiteral = (s: MappedScalar, indent: number): string => {
   const kv = indent + 4;
   return [
     `${sp(indent)}[`,
-    `${sp(kv)}'column' => ${phpString(s.column)},`,
-    `${sp(kv)}'flatAttribute' => ${phpString(s.flatAttribute)},`,
-    `${sp(kv)}'type' => ${phpString(s.type)},`,
+    `${sp(kv)}'column' => ${phpSingleQuoted(s.column)},`,
+    `${sp(kv)}'flatAttribute' => ${phpSingleQuoted(s.flatAttribute)},`,
+    `${sp(kv)}'type' => ${phpSingleQuoted(s.type)},`,
     `${sp(indent)}],`,
   ].join("\n");
 };
@@ -42,14 +40,14 @@ const scalarLiteral = (s: MappedScalar, indent: number): string => {
 const componentLiteral = (c: MappedComponent, indent: number): string => {
   const kv = indent + 4;
   const lines = [`${sp(indent)}[`];
-  lines.push(`${sp(kv)}'field' => ${phpString(c.field)},`);
+  lines.push(`${sp(kv)}'field' => ${phpSingleQuoted(c.field)},`);
   lines.push(`${sp(kv)}'repeatable' => ${phpBool(c.repeatable)},`);
   if (c.repeatable && c.relationName !== undefined) {
-    lines.push(`${sp(kv)}'relationName' => ${phpString(c.relationName)},`);
+    lines.push(`${sp(kv)}'relationName' => ${phpSingleQuoted(c.relationName)},`);
   }
-  lines.push(`${sp(kv)}'table' => ${phpString(c.table)},`);
-  lines.push(`${sp(kv)}'type' => ${phpString(c.type)},`);
-  lines.push(`${sp(kv)}'cmpsTable' => ${phpString(c.cmpsTable)},`);
+  lines.push(`${sp(kv)}'table' => ${phpSingleQuoted(c.table)},`);
+  lines.push(`${sp(kv)}'type' => ${phpSingleQuoted(c.type)},`);
+  lines.push(`${sp(kv)}'cmpsTable' => ${phpSingleQuoted(c.cmpsTable)},`);
   const scalars = c.scalars.map((s) => scalarLiteral(s, kv + 4));
   lines.push(`${sp(kv)}'scalars' => ${listLiteral(kv, scalars)},`);
   const nested = c.nested.map((n) => componentLiteral(n, kv + 4));
@@ -67,7 +65,7 @@ const componentMapLiteral = (map: MappedComponent[]): string =>
 const stringListLiteral = (items: string[]): string =>
   items.length === 0
     ? "[]"
-    : `[\n${items.map((s) => `${sp(8)}${phpString(s)},`).join("\n")}\n${sp(4)}]`;
+    : `[\n${items.map((s) => `${sp(8)}${phpSingleQuoted(s)},`).join("\n")}\n${sp(4)}]`;
 
 /**
  * `COMPONENT_ATTRIBUTES` (every non-repeatable scalar's `flatAttribute`, at any nesting depth) and
@@ -128,7 +126,7 @@ export const emitStorageModel = (
     "published_at",
     "locale",
   ].filter((c, i, arr) => arr.indexOf(c) === i);
-  const fillableLines = fillableCols.map((c) => `        '${c}',`).join("\n");
+  const fillableLines = fillableCols.map((c) => `        ${phpSingleQuoted(c)},`).join("\n");
 
   const castPairs: Array<[string, string]> = [];
   const seenCastColumns = new Set<string>();
@@ -152,7 +150,7 @@ export const emitStorageModel = (
     }
   }
   const castLines = castPairs
-    .map(([column, cast]) => `            '${column}' => ${cast},`)
+    .map(([column, cast]) => `            ${phpSingleQuoted(column)} => ${cast},`)
     .join("\n");
 
   const { attributes, relations } = collectComponentNames(map);
@@ -172,7 +170,7 @@ export const emitStorageModel = (
     relationBlocks.push(
       `    public function ${f.name}(): BelongsToMany\n` +
         `    {\n` +
-        `        return $this->belongsToMany(${targetModel}::class, '${linkTableName}', '${cols.local}', '${cols.foreign}');\n` +
+        `        return $this->belongsToMany(${targetModel}::class, ${phpSingleQuoted(linkTableName)}, ${phpSingleQuoted(cols.local)}, ${phpSingleQuoted(cols.foreign)});\n` +
         `    }\n\n` +
         `    public function ${accessor}(): ?int\n` +
         `    {\n` +
@@ -215,7 +213,7 @@ ${observedAttr}class ${modelName} extends Model
 {
     use StrapiComponentAttributes;
 
-    protected $table = '${table}';
+    protected $table = ${phpSingleQuoted(table)};
 
     protected $fillable = [
 ${fillableLines}
