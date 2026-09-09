@@ -8,6 +8,7 @@
 // Every secret below is a placeholder for a throwaway temp-directory instance; nothing here ever
 // touches a real .env.
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { createHmac } from "node:crypto";
 import { once } from "node:events";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -32,6 +33,17 @@ const JWT_SECRET = "crosscheck-shared-hs256-placeholder";
 const PASSWORD = "crosscheck-password";
 const STRAPI_BOOT_TIMEOUT_MS = 600_000;
 const PHP_BOOT_TIMEOUT_MS = 60_000;
+
+// A valid HS256 JWT signed with the wrong key — the one thing a token check must reject that a
+// malformed string does not prove. Hand-rolled rather than pulling in a JWT library: the script
+// only ever needs to *mis*-sign, and the emitted guard is what is under test.
+const forgeJwt = (payload: Record<string, unknown>, secret: string): string => {
+  const b64 = (value: object): string => Buffer.from(JSON.stringify(value)).toString("base64url");
+  const signingInput = `${b64({ alg: "HS256", typ: "JWT" })}.${b64(payload)}`;
+  const signature = createHmac("sha256", secret).update(signingInput).digest("base64url");
+
+  return `${signingInput}.${signature}`;
+};
 
 class CrosscheckError extends Error {
   constructor(
@@ -285,6 +297,47 @@ const READ_QUERY: Record<string, string> = {
   consumables: "?populate[facts][populate]=*",
 };
 
+// The same populate keys, as a sorted list read: the second Strapi boot checks what PHP wrote.
+const LIST_QUERY: Record<string, string> = {
+  notes: "?sort=recordId",
+  transactions: "?populate[amount]=true&sort=recordId",
+  consumables: "?populate[facts][populate]=*&sort=recordId",
+};
+
+// What the PHP app writes on its own. `owner`/`creator` are absent by design: the grant's
+// `assign` fills them server-side, and a client that had to send them would prove nothing about
+// the link-table write. Every component shape is covered — a flat one (Money), a nested one with
+// a repeatable child (NutritionFacts) — alongside a `date`, a `dateTime` and a `bigInteger`.
+const PHP_TRANSACTION_T2 = {
+  recordId: "t2",
+  amount: { minor: 9900, currency: "EUR" },
+  fee: 2.5,
+  occurredOn: "2026-09-10",
+};
+
+const PHP_CONSUMABLE_C2 = {
+  recordId: "c2",
+  facts: {
+    calories: 410,
+    servingSize: { amount: 2.25 },
+    additional: [
+      { slug: "carbs", amount: 44.5 },
+      { slug: "fiber", amount: 6.75 },
+    ],
+  },
+};
+
+// A re-PUT of a row Strapi created: `StrapiComponents::apply` has to clear the whole existing
+// subtree and rewrite it, so the two nutrients Strapi wrote must end up as exactly this one.
+const PHP_CONSUMABLE_C1_REVISED = {
+  recordId: "c1",
+  facts: {
+    calories: 275,
+    servingSize: { amount: 1.5 },
+    additional: [{ slug: "protein", amount: 13.5 }],
+  },
+};
+
 const main = async (): Promise<void> => {
   const root = await mkdtemp(join(tmpdir(), "camis-crosscheck-"));
   const dbPath = join(root, "shared.db");
@@ -508,17 +561,65 @@ const main = async (): Promise<void> => {
       (phpRows.transactions as { amount?: { minor?: unknown } }).amount?.minor,
     );
 
-    step("PHP writes a second note and issues its own JWT");
-    const putNote = expectStatus(
-      await request(PHP_URL, "PUT", "/api/notes/n2", {
-        token: strapiJwt,
-        body: { data: notePayload("n2", "written by php", "2026-09-09T11:30:00.000Z") },
-      }),
-      200,
-      "php PUT /api/notes/n2",
+    // A syntactically valid HS256 token for a real user, signed with a secret this app does not
+    // hold. Rejecting a malformed string proves nothing; rejecting this proves the signature is
+    // actually verified rather than the payload merely decoded.
+    step("a JWT signed with a different secret is rejected");
+    const now = Math.floor(Date.now() / 1000);
+    const forged = forgeJwt(
+      { id: userId, iat: now, exp: now + 3600 },
+      "crosscheck-WRONG-hs256-placeholder-key",
     );
-    const phpNote = envelope(putNote, "php PUT /api/notes/n2");
+    expectStatus(
+      await request(PHP_URL, "GET", "/api/users/me", { token: forged }),
+      401,
+      "php /api/users/me with a JWT signed by another secret",
+    );
+    note("php rejects a foreign-signed JWT ✓");
+
+    step("PHP writes rows of every shape and issues its own JWT");
+    const phpWrites: Record<string, unknown> = {};
+    const put = async (path: string, body: unknown): Promise<unknown> => {
+      const res = expectStatus(
+        await request(PHP_URL, "PUT", path, { token: strapiJwt, body: { data: body } }),
+        200,
+        `php PUT ${path}`,
+      );
+      const data = envelope(res, `php PUT ${path}`);
+      note(`php PUT ${path}: ${show(data)}`);
+      return data;
+    };
+
+    const phpNote = await put(
+      "/api/notes/n2",
+      notePayload("n2", "written by php", "2026-09-09T11:30:00.000Z"),
+    );
     assertEqual("php note n2 recordId", "n2", (phpNote as { recordId?: string }).recordId);
+
+    // n3 survives to the end; n2 is deleted below, so the final list proves both directions.
+    phpWrites.notes = await put(
+      "/api/notes/n3",
+      notePayload("n3", "also written by php", "2026-09-09T12:45:00.000Z"),
+    );
+    phpWrites.transactions = await put("/api/transactions/t2", PHP_TRANSACTION_T2);
+    phpWrites.consumables = await put("/api/consumables/c2", PHP_CONSUMABLE_C2);
+    const revisedC1 = await put("/api/consumables/c1", PHP_CONSUMABLE_C1_REVISED);
+    // Prove the re-PUT actually replaced the subtree before Strapi is asked to agree with it.
+    const revisedFacts = (revisedC1 as { facts?: { calories?: unknown; additional?: unknown[] } })
+      .facts;
+    assertEqual("php consumables/c1 calories after re-PUT", 275, revisedFacts?.calories);
+    assertEqual(
+      "php consumables/c1 nutrient count after re-PUT",
+      1,
+      revisedFacts?.additional?.length,
+    );
+
+    expectStatus(
+      await request(PHP_URL, "DELETE", "/api/notes/n2", { token: strapiJwt }),
+      204,
+      "php DELETE /api/notes/n2",
+    );
+    note("php deleted notes/n2 ✓");
 
     const login = expectStatus(
       await request(PHP_URL, "POST", "/api/auth/local", {
@@ -540,19 +641,63 @@ const main = async (): Promise<void> => {
     step("re-booting Strapi on the same database file");
     strapi = await bootStrapi("strapi (second boot)");
 
-    step("Strapi accepts the PHP JWT and lists both notes");
-    const list = expectStatus(
-      await request(STRAPI_URL, "GET", "/api/notes?sort=recordId", { token: phpJwt }),
-      200,
-      "strapi GET /api/notes with the php jwt",
-    );
-    const notes = envelope(list, "strapi GET /api/notes") as { recordId?: string }[];
+    step("Strapi reads back everything PHP wrote, on the same file");
+    const strapiList = async (plural: string): Promise<Record<string, unknown>[]> => {
+      const res = expectStatus(
+        await request(STRAPI_URL, "GET", `/api/${plural}${LIST_QUERY[plural] ?? ""}`, {
+          token: phpJwt,
+        }),
+        200,
+        `strapi GET /api/${plural} with the php jwt`,
+      );
+
+      return envelope(res, `strapi GET /api/${plural}`) as Record<string, unknown>[];
+    };
+    const byRecordId = (rows: Record<string, unknown>[], key: string): unknown => {
+      const found = rows.find((r) => r.recordId === key);
+      if (found === undefined) {
+        throw new CrosscheckError(`strapi has no row with recordId ${key}`, key, show(rows));
+      }
+      return found;
+    };
+
+    // n2 was created and then deleted through PHP; n3 was created and kept. Listing exactly
+    // ["n1", "n3"] proves both halves — a delete that silently did nothing would leave n2 here.
+    const notes = await strapiList("notes");
     assertEqual(
-      "strapi lists both notes",
-      ["n1", "n2"],
+      "strapi lists n1 and n3, with the PHP-deleted n2 gone",
+      ["n1", "n3"],
       notes.map((n) => n.recordId),
     );
-    assertSame("notes/n2 written by PHP, read by Strapi", phpNote, notes[1]);
+    assertSame("notes/n3 written by PHP, read by Strapi", phpWrites.notes, byRecordId(notes, "n3"));
+
+    const transactions = await strapiList("transactions");
+    assertSame(
+      "transactions/t2 written by PHP, read by Strapi",
+      phpWrites.transactions,
+      byRecordId(transactions, "t2"),
+    );
+
+    const consumables = await strapiList("consumables");
+    assertSame(
+      "consumables/c2 written by PHP, read by Strapi",
+      phpWrites.consumables,
+      byRecordId(consumables, "c2"),
+    );
+    // The clear-and-rewrite: Strapi must see the revised calories and exactly the one nutrient
+    // that replaced the two it wrote itself, not a merge of the two sets.
+    assertSame(
+      "consumables/c1 re-PUT by PHP, read by Strapi",
+      revisedC1,
+      byRecordId(consumables, "c1"),
+    );
+    const c1Facts = (
+      byRecordId(consumables, "c1") as {
+        facts?: { calories?: unknown; additional?: unknown[] };
+      }
+    ).facts;
+    assertEqual("strapi consumables/c1 calories", 275, c1Facts?.calories);
+    assertEqual("strapi consumables/c1 nutrient count", 1, c1Facts?.additional?.length);
 
     const strapiMe = expectStatus(
       await request(STRAPI_URL, "GET", "/api/users/me", { token: phpJwt }),
