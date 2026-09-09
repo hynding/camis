@@ -56,12 +56,18 @@ const toWireBody = (shape: WireShape, indent: string): string => {
   for (const c of shape.children) {
     const inner = node();
     for (const s of c.scalars) insert(inner, s.key, read(s, "$c"));
-    const rowIndent = `${indent}${UNIT}`;
+    // The child's own row is rendered by `render` one branch level per path segment above
+    // it (depth = c.key.length - 1), matching how it indents a nested `self::nested([`
+    // branch body — so the map's rows sit a further level in, and its closing
+    // `]))...` aligns with the row it hangs off, not with the toplevel `indent`.
+    const depth = c.key.length;
+    const rowIndent = `${indent}${UNIT.repeat(depth)}`;
+    const closeIndent = `${indent}${UNIT.repeat(depth - 1)}`;
     // Drop an all-null row from the list (self::nested → null) rather than emit `[]` for it.
     insert(
       root,
       c.key,
-      `$m->${c.relation}->map(fn ($c) => self::nested([\n${render(inner, rowIndent)}\n${indent}]))->filter(fn ($r) => $r !== null)->values()->all()`,
+      `$m->${c.relation}->map(fn ($c) => self::nested([\n${render(inner, rowIndent)}\n${closeIndent}]))->filter(fn ($r) => $r !== null)->values()->all()`,
     );
   }
   insert(root, ["createdAt"], "$m->created_at?->toJSON()");

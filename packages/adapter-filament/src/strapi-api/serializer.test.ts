@@ -91,4 +91,9 @@ describe("emitSerializer", () => {
     expect(php).toContain("if (self::has($data, ['facts', 'additional'])) {");
     expect(php).toContain("self::dig($data, ['facts', 'additional'])");
   });
+  it("ConsumableNested serializer golden (repeatable nested under a non-repeatable branch, PSR-12 indentation)", async () => {
+    await expect(
+      emitSerializer(wireShape(nestedDoc, nestedDoc.contentTypes[0]!, [])),
+    ).toMatchFileSnapshot("./__golden__/strapi-api/ConsumableNestedSerializer.php");
+  });
 });
