@@ -89,7 +89,9 @@ describe("filamentAdapter storageLayout strapi — file set", () => {
     expect(content("app/Http/Controllers/Api/Generated/NoteApiController.php")).toContain(
       "notes_owner_lnk",
     );
-    expect(content("DEPLOY.md")).toContain(
+    // Markdown wraps the paragraph, so compare on the reflowed prose rather than the source line
+    // breaks — the sentence is the contract, its column width is not.
+    expect(content("DEPLOY.md").replace(/\s+/g, " ")).toContain(
       "Strapi owns the schema: boot Strapi against this database before the first deploy and " +
         "after each schema change; run `php artisan camis:strapi-schema-check`",
     );

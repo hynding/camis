@@ -1,4 +1,4 @@
-import type { GeneratedFile } from "@camis/adapter-kernel";
+import type { GeneratedFile, StorageLayout } from "@camis/adapter-kernel";
 import type { CapabilityGap, ContentType, IrDocument } from "@camis/ir-schema";
 import type { Role } from "@camis/permissions";
 import { emitPolicy } from "./policy";
@@ -11,20 +11,32 @@ export interface PermissionEmission {
   gaps: CapabilityGap[];
 }
 
-export const emitPermissions = (doc: IrDocument, roles: Role[]): PermissionEmission => {
+/**
+ * Policies (and Ring1 behind them) are emitted on every layout. The Spatie seeder is not: a Strapi
+ * database has no permission tables to seed, and the policies gate on the user's `up_roles` type
+ * instead — so seeding one would create rows Strapi does not know about and nothing ever reads.
+ */
+export const emitPermissions = (
+  doc: IrDocument,
+  roles: Role[],
+  layout: StorageLayout = "laravel",
+): PermissionEmission => {
   if (roles.length === 0) return { files: [], gaps: [] };
   const byName = new Map(doc.contentTypes.map((ct) => [ct.name, ct]));
   const { permissionKeys, roleGrants, policies, gaps } = projectFilamentPermissions(doc, roles);
-  const files: GeneratedFile[] = [
-    {
-      path: "database/seeders/RolePermissionSeeder.php",
-      content: emitSeeder(permissionKeys, roleGrants),
-    },
-  ];
+  const files: GeneratedFile[] =
+    layout === "strapi"
+      ? []
+      : [
+          {
+            path: "database/seeders/RolePermissionSeeder.php",
+            content: emitSeeder(permissionKeys, roleGrants),
+          },
+        ];
   for (const spec of policies) {
     files.push({
       path: `app/Policies/${spec.model}Policy.php`,
-      content: emitPolicy(spec, byName.get(spec.contentType) as ContentType),
+      content: emitPolicy(spec, byName.get(spec.contentType) as ContentType, layout),
     });
   }
   if (policies.some((p) => p.methods.some((m) => m.condition !== undefined))) {

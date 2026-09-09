@@ -4,17 +4,12 @@ import { PHP_MARKER } from "../hooks/names";
 import { snakeColumn } from "../names";
 import { authLine, NESTED_STMT, STMT } from "./controller-shared";
 import { strapiControllerParts } from "./storage/controller-storage";
+import type { ControllerLink } from "./storage/names";
 import type { WireShape } from "./wire-shape";
 
-/** One owning relation's Strapi link table, named by `storage/names.ts`. */
-export interface ControllerLink {
-  relation: string;
-  table: string;
-  local: string;
-  foreign: string;
-  /** Present only when the relation declares an inverse (Strapi orders the inverse list). */
-  ord?: string;
-}
+// The link shape is named by `storage/names.ts` (alongside `ownerLinks`, which builds it);
+// re-exported here so a controller caller needs only one import.
+export type { ControllerLink };
 
 export interface ControllerSpec {
   shape: WireShape;

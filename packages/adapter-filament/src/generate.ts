@@ -34,16 +34,34 @@ import { filamentNames, snakeColumn } from "./names";
 import { resolveRelations } from "./relations";
 import { emitResourceFiles } from "./resource";
 import { emitStrapiApi } from "./strapi-api/emit";
+import { emitStrapiStorage } from "./strapi-api/storage/emit";
 
 export const filamentAdapter: GenerateAdapter = {
   target: "filament",
   generate: (ir, options): GenerationResult => {
     const apiStyle = options.apiStyle ?? "laravel";
+    const requestedStorage = options.storageLayout ?? "laravel";
+    // The Strapi storage layout is inseparable from the Strapi API style: its controllers,
+    // serializers and link-table writers are the strapi-api emitters. The CLI already rejects the
+    // combination; this is the adapter-level guard, and it downgrades rather than throwing so a
+    // misconfigured build still produces a working app plus a report saying what was ignored.
+    const storage =
+      requestedStorage === "strapi" && apiStyle !== "strapi" ? "laravel" : requestedStorage;
     const doc = normalize(ir.document);
     const rel = resolveRelations(doc);
     const hooks = emitHookFiles(doc);
     const files: GeneratedFile[] = [];
     const gaps: CapabilityGap[] = [];
+    if (storage !== requestedStorage) {
+      gaps.push({
+        feature: "storageLayoutRequiresStrapiApi",
+        location: {},
+        severity: "error",
+        message:
+          'storageLayout "strapi" requires apiStyle "strapi"; the laravel storage layout was ' +
+          "generated instead.",
+      });
+    }
 
     const aiObservedModels = new Set<string>();
     const aiGenFiles: GeneratedFile[] = [];
@@ -71,9 +89,12 @@ export const filamentAdapter: GenerateAdapter = {
     // Builtin content types (the target's native user model) map onto the stock Laravel
     // User/users table; the host app owns those files, so nothing is emitted for them.
     const emitted = doc.contentTypes.filter((ct) => ct.builtin === undefined);
+    const strapiInput = { doc, bundle: ir, emitted, fkNames: rel.fkNames };
     const strapi =
       apiStyle === "strapi"
-        ? emitStrapiApi({ doc, bundle: ir, emitted, fkNames: rel.fkNames })
+        ? storage === "strapi"
+          ? emitStrapiStorage(strapiInput)
+          : emitStrapiApi(strapiInput)
         : undefined;
     const children: { ct: (typeof emitted)[number]; child: ChildTableEmit }[] = [];
     emitted.forEach((ct, i) => {
@@ -90,6 +111,9 @@ export const filamentAdapter: GenerateAdapter = {
       }
       const expansion = expandComponents(doc, ct);
       gaps.push(...expansion.gaps);
+      // On the Strapi storage layout the schema, the admin panel and the models are Strapi's:
+      // `emitStrapiStorage` owns every per-content-type file, so nothing below applies.
+      if (storage === "strapi") return;
       // A shared embedded column is NOT NULL only when the component is always present;
       // `s.field.required` alone still speaks for validation, not for the column.
       const embeddedEmits = expansion.scalars.map((s) =>
@@ -155,26 +179,30 @@ export const filamentAdapter: GenerateAdapter = {
     }
     files.push(apiCustomSeed());
 
-    [...rel.pivots]
-      .sort((a, b) => a.table.localeCompare(b.table))
-      .forEach((p, j) => {
-        files.push({
-          path: pivotMigrationFilename(p, emitted.length + 1 + j),
-          content: emitPivotMigration(p),
+    // Pivot and child tables are Strapi's `_lnk` and component tables on the Strapi layout, so
+    // there is nothing here to migrate.
+    if (storage !== "strapi") {
+      [...rel.pivots]
+        .sort((a, b) => a.table.localeCompare(b.table))
+        .forEach((p, j) => {
+          files.push({
+            path: pivotMigrationFilename(p, emitted.length + 1 + j),
+            content: emitPivotMigration(p),
+          });
         });
-      });
 
-    [...children]
-      .sort((a, b) => a.child.table.localeCompare(b.child.table))
-      .forEach(({ ct, child }, k) => {
-        files.push({
-          path: childMigrationFilename(child, emitted.length + rel.pivots.length + 1 + k),
-          content: emitChildMigration(ct, child),
+      [...children]
+        .sort((a, b) => a.child.table.localeCompare(b.child.table))
+        .forEach(({ ct, child }, k) => {
+          files.push({
+            path: childMigrationFilename(child, emitted.length + rel.pivots.length + 1 + k),
+            content: emitChildMigration(ct, child),
+          });
         });
-      });
+    }
 
-    const perm = emitPermissions(doc, ir.roles);
-    const allFiles = [...files, ...hooks.files, ...perm.files, ...aiGenFiles, deployFile()];
+    const perm = emitPermissions(doc, ir.roles, storage);
+    const allFiles = [...files, ...hooks.files, ...perm.files, ...aiGenFiles, deployFile(storage)];
     return {
       files: allFiles,
       manifest: buildManifest(allFiles),

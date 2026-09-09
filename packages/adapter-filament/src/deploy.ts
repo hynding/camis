@@ -1,18 +1,95 @@
-import type { GeneratedFile } from "@camis/adapter-kernel";
+import type { GeneratedFile, StorageLayout } from "@camis/adapter-kernel";
+
+/**
+ * The paragraphs that differ per storage layout: what the overlay contains, who owns the database
+ * it points at, and what the first deploy actually runs. On the Strapi layout camis emits no
+ * migrations and no seeder at all — Strapi's own boot creates and alters every table — so the
+ * guide has to say where the schema comes from and how to check it, or an operator would look for
+ * a `php artisan migrate` step that does not exist.
+ */
+const intro = (layout: StorageLayout): string =>
+  layout === "strapi"
+    ? `This directory is a standard Laravel 12 application with a camis-generated overlay
+(models, JSON API controllers, policies) that reads and writes a **Strapi 5** database
+directly. No migrations and no Filament admin panel are generated: Strapi owns the schema,
+and Strapi's own admin panel owns content editing.`
+    : `This directory is a standard Laravel 12 application with a camis-generated overlay
+(models, migrations, Filament resources, policies). Deployment is stock Laravel.`;
+
+const databaseIntro = (layout: StorageLayout): string =>
+  layout === "strapi"
+    ? `Point the connection at the same database the Strapi instance uses; no code changes between
+environments.
+
+Strapi owns the schema: boot Strapi against this database before the first deploy and after
+each schema change; run \`php artisan camis:strapi-schema-check\` to verify every table and
+column this app reads or writes is present.`
+    : `Set the connection in \`.env\`; no code changes between environments.`;
+
+const firstDeploy = (layout: StorageLayout): string =>
+  layout === "strapi"
+    ? `The generated JSON API in \`routes/api.php\` requires Laravel's API layer
+(\`php artisan install:api\`) — \`camis scaffold filament\` runs it for you; add it manually on
+an existing app. Custom endpoints belong in \`routes/api-custom.php\` (never overwritten).
+
+Sessions are the JWT Strapi's users-permissions plugin issues, so \`JWT_SECRET\` must hold the
+same HS256 secret as the Strapi instance — a session minted by either app is then accepted by
+both. \`CAMIS_EMAIL_CONFIRMATION\` mirrors Strapi's "Enable email confirmation" advanced
+setting, and \`CAMIS_AUTH_THROTTLE_PER_MINUTE\` (default 10, floored at 1) sets the request rate
+allowed on \`/auth/local\` and \`/auth/local/register\` — one bucket per client address, shared
+by both routes. The throttle is read through the generated \`config/camis.php\`; after changing
+it re-run \`php artisan config:cache\`, and \`php artisan route:cache\` too if routes are cached —
+the rate is baked into the cached route definition.
+
+\`\`\`sh
+composer install --no-dev --optimize-autoloader
+php artisan key:generate
+# Strapi created the schema; verify this app's view of it before serving traffic:
+php artisan camis:strapi-schema-check
+php artisan config:cache
+\`\`\``
+    : `The generated JSON API in \`routes/api.php\` requires Laravel's API layer
+(\`php artisan install:api\`) — \`camis scaffold filament\` runs it for you; add it manually on
+an existing app. Custom endpoints belong in \`routes/api-custom.php\` (never overwritten).
+
+The Strapi API style adds a NOT NULL unique \`username\` column to \`users\`; run its migration
+against an empty users table, or backfill usernames first. Two \`.env\` knobs govern its auth
+endpoints: \`SANCTUM_TOKEN_EXPIRATION\` bounds token lifetime (tokens do not expire by default),
+and \`CAMIS_AUTH_THROTTLE_PER_MINUTE\` (default 10, floored at 1) sets the request rate allowed
+on \`/auth/local\` and \`/auth/local/register\` — one bucket per client address, shared by both
+routes. The throttle is read through the generated \`config/camis.php\`; after changing it
+re-run \`php artisan config:cache\`, and \`php artisan route:cache\` too if routes are cached —
+the rate is baked into the cached route definition.
+
+\`\`\`sh
+composer install --no-dev --optimize-autoloader
+php artisan key:generate
+php artisan migrate
+# only when roles were configured (database/seeders/RolePermissionSeeder.php exists):
+php artisan db:seed --class=RolePermissionSeeder
+php artisan filament:optimize
+php artisan config:cache
+\`\`\``;
+
+const offlineStep = (layout: StorageLayout): string =>
+  layout === "strapi"
+    ? `Run \`php artisan camis:strapi-schema-check\` via your host's one-off
+job runner, or locally against the production database.`
+    : `Run the migrate/seed steps via your host's one-off job runner, or
+locally against the production database.`;
 
 // Generator-owned deployment guide for the overlaid Laravel app. Regenerated on every run.
-export const deployFile = (): GeneratedFile => ({
+export const deployFile = (layout: StorageLayout = "laravel"): GeneratedFile => ({
   path: "DEPLOY.md",
   content: `<!-- @camis:generated — do not edit -->
 
 # Deploying this camis-generated Filament app
 
-This directory is a standard Laravel 12 application with a camis-generated overlay
-(models, migrations, Filament resources, policies). Deployment is stock Laravel.
+${intro(layout)}
 
 ## Database — selected purely by environment
 
-Set the connection in \`.env\`; no code changes between environments.
+${databaseIntro(layout)}
 
 \`\`\`ini
 # sqlite (simplest; shared hosting friendly)
@@ -38,35 +115,13 @@ DB_PASSWORD=secret
 
 ## First deploy
 
-The generated JSON API in \`routes/api.php\` requires Laravel's API layer
-(\`php artisan install:api\`) — \`camis scaffold filament\` runs it for you; add it manually on
-an existing app. Custom endpoints belong in \`routes/api-custom.php\` (never overwritten).
-
-The Strapi API style adds a NOT NULL unique \`username\` column to \`users\`; run its migration
-against an empty users table, or backfill usernames first. Two \`.env\` knobs govern its auth
-endpoints: \`SANCTUM_TOKEN_EXPIRATION\` bounds token lifetime (tokens do not expire by default),
-and \`CAMIS_AUTH_THROTTLE_PER_MINUTE\` (default 10, floored at 1) sets the request rate allowed
-on \`/auth/local\` and \`/auth/local/register\` — one bucket per client address, shared by both
-routes. The throttle is read through the generated \`config/camis.php\`; after changing it
-re-run \`php artisan config:cache\`, and \`php artisan route:cache\` too if routes are cached —
-the rate is baked into the cached route definition.
-
-\`\`\`sh
-composer install --no-dev --optimize-autoloader
-php artisan key:generate
-php artisan migrate
-# only when roles were configured (database/seeders/RolePermissionSeeder.php exists):
-php artisan db:seed --class=RolePermissionSeeder
-php artisan filament:optimize
-php artisan config:cache
-\`\`\`
+${firstDeploy(layout)}
 
 ## Shared hosting (no shell)
 
 Build locally (scaffold + \`camis build\` + \`composer install\`), upload the whole app
 directory, and point the document root at \`public/\`. Laravel's \`.htaccess\` ships in
-\`public/\` for Apache. Run the migrate/seed steps via your host's one-off job runner, or
-locally against the production database.
+\`public/\` for Apache. ${offlineStep(layout)}
 
 ## Regeneration
 

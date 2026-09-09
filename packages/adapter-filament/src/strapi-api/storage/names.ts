@@ -40,6 +40,33 @@ export const linkColumns = (
     : { local, foreign };
 };
 
+/** One owning relation's Strapi link table, named by this module. */
+export interface ControllerLink {
+  relation: string;
+  table: string;
+  local: string;
+  foreign: string;
+  /** Present only when the relation declares an inverse (Strapi orders the inverse list). */
+  ord?: string;
+}
+
+/**
+ * A relation this content type owns — the side whose link-table row the generated code writes.
+ * `manyToMany`/`oneToMany` are not owning in that sense (Task 11 reports them as capability
+ * gaps), so only `manyToOne`/`oneToOne` survive.
+ */
+const isOwningRelation = (f: Field): f is RelationField =>
+  f.type === "relation" && (f.relationKind === "manyToOne" || f.relationKind === "oneToOne");
+
+/**
+ * Every owning relation's link table, in IR field order — the single description of a content
+ * type's link tables shared by the storage controller, the schema check and their tests.
+ */
+export const ownerLinks = (ct: ContentType): ControllerLink[] =>
+  ct.fields
+    .filter(isOwningRelation)
+    .map((f) => ({ relation: f.name, table: linkTable(ct, f.name), ...linkColumns(ct, f) }));
+
 /** The generic component-link table Strapi creates on a table that owns component fields. */
 export const cmpsTable = (table: string): string => `${table}_cmps`;
 

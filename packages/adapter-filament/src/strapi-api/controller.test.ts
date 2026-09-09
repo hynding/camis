@@ -7,13 +7,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { normalize } from "@camis/ir-core";
 import type { ContentType } from "@camis/ir-schema";
 import { strapiApiBundle } from "./__fixtures__/strapi-api";
-import {
-  emitGeneratedController,
-  emitProtectedController,
-  type ControllerLink,
-} from "./controller";
+import { emitGeneratedController, emitProtectedController } from "./controller";
 import { emitApiConfig, emitStrapiRoutes } from "./routes";
-import { linkColumns, linkTable, type RelationField } from "./storage/names";
+import { ownerLinks } from "./storage/names";
 import { storageBundle } from "./storage/__fixtures__/storage";
 import { wireShape } from "./wire-shape";
 
@@ -36,15 +32,6 @@ const storageCt = (n: string): ContentType => {
   return found;
 };
 
-/** One entry per owning relation, in IR order — what Task 11 will hand the emitter. */
-const storageLinks = (owner: ContentType): ControllerLink[] =>
-  owner.fields
-    .filter(
-      (f): f is RelationField =>
-        f.type === "relation" && (f.relationKind === "manyToOne" || f.relationKind === "oneToOne"),
-    )
-    .map((f) => ({ relation: f.name, table: linkTable(owner, f.name), ...linkColumns(owner, f) }));
-
 const storageSpec = (name: string, assigns: string[]) => ({
   shape: wireShape(storageDoc, storageCt(name), []),
   ct: storageCt(name),
@@ -52,7 +39,7 @@ const storageSpec = (name: string, assigns: string[]) => ({
   secured: true,
   scoped: true,
   layout: "strapi" as const,
-  links: storageLinks(storageCt(name)),
+  links: ownerLinks(storageCt(name)),
 });
 
 describe("strapi-api controllers", () => {
