@@ -19,8 +19,8 @@ final class ActivitySessionSerializer
                 'amount' => $c->amount === null ? null : (float) $c->amount,
                 'unit' => $c->unit,
             ]))->filter(fn ($r) => $r !== null)->values()->all(),
-            'createdAt' => $m->created_at?->toJSON(),
-            'updatedAt' => $m->updated_at?->toJSON(),
+            'createdAt' => $m->created_at?->toIso8601ZuluString('millisecond'),
+            'updatedAt' => $m->updated_at?->toIso8601ZuluString('millisecond'),
         ]);
     }
 

@@ -15,8 +15,8 @@ final class ConsumableSerializer
         return self::omitNulls([
             'id' => $m->id,
             'recordId' => $m->record_id,
-            'createdAt' => $m->created_at?->toJSON(),
-            'updatedAt' => $m->updated_at?->toJSON(),
+            'createdAt' => $m->created_at?->toIso8601ZuluString('millisecond'),
+            'updatedAt' => $m->updated_at?->toIso8601ZuluString('millisecond'),
             'facts' => self::nested([
                 'calories' => $m->facts_calories === null ? null : (float) $m->facts_calories,
                 'additional' => $m->factsAdditional->map(fn ($c) => self::nested([

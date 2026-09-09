@@ -61,8 +61,27 @@ describe("emitSerializer", () => {
     const php = emitSerializer(shape("Note"));
     expect(php).toContain("self::omitNulls(");
     expect(php).not.toContain("owner_id");
-    expect(php).toContain("'occurredAt' => $m->occurred_at?->toJSON()");
-    expect(php).toContain("'createdAt' => $m->created_at?->toJSON()");
+  });
+
+  // Strapi renders a datetime the way JavaScript does — three fractional digits, Zulu — while
+  // Carbon's toJSON() emits six. The cross-backend run reads the same row through both apps, so
+  // the difference is a wire divergence, not cosmetics.
+  it("serializes a datetime with millisecond precision in UTC, as Strapi does", () => {
+    const php = emitSerializer(shape("Note"));
+    expect(php).toContain("'occurredAt' => $m->occurred_at?->toIso8601ZuluString('millisecond')");
+    expect(php).toContain("'createdAt' => $m->created_at?->toIso8601ZuluString('millisecond')");
+    expect(php).toContain("'updatedAt' => $m->updated_at?->toIso8601ZuluString('millisecond')");
+    expect(php).not.toContain("toJSON()");
+  });
+
+  // Strapi returns a biginteger as a string — a 64-bit value does not survive a JSON number — so
+  // an int cast here would answer 1250 where Strapi answers "1250".
+  it("serializes a bigInteger as a string and a plain integer as a number", () => {
+    const php = emitSerializer(shape("Transaction"));
+    expect(php).toContain(
+      "'minor' => $m->amount_minor === null ? null : (string) $m->amount_minor",
+    );
+    expect(php).not.toContain("(int) $m->amount_minor");
   });
   it("fromWire only sets a child key when the wire payload mentions it (partial-update safe)", () => {
     const php = emitSerializer(shape("ActivitySession"));

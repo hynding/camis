@@ -1,11 +1,16 @@
 import { PHP_MARKER } from "../hooks/names";
 import type { WireChild, WireScalar, WireShape } from "./wire-shape";
 
-const NUMERIC_INT = new Set(["integer", "bigInteger"]);
+const NUMERIC_INT = new Set(["integer"]);
+// Strapi renders a `biginteger` as a string: a 64-bit value does not survive a JSON number.
+const NUMERIC_STRING = new Set(["bigInteger"]);
 const NUMERIC_FLOAT = new Set(["float", "decimal"]);
 const DATETIME = new Set(["dateTime", "timestamp"]);
-// Strapi renders a `date` attribute as YYYY-MM-DD; toJSON() would append a fabricated time.
+// Strapi renders a `date` attribute as YYYY-MM-DD; a datetime would append a fabricated time.
 const DATE_ONLY = new Set(["date"]);
+// Strapi renders a datetime the way JavaScript's Date#toISOString does — UTC, three fractional
+// digits. Carbon's toJSON() emits six, which is the same instant in a shape Strapi never sends.
+const ZULU_MS = "?->toIso8601ZuluString('millisecond')";
 
 // One PSR-12 indent level.
 const UNIT = "    ";
@@ -14,9 +19,10 @@ const UNIT = "    ";
 const read = (s: WireScalar, src: string): string => {
   const col = `${src}->${s.column}`;
   if (NUMERIC_INT.has(s.type)) return `${col} === null ? null : (int) ${col}`;
+  if (NUMERIC_STRING.has(s.type)) return `${col} === null ? null : (string) ${col}`;
   if (NUMERIC_FLOAT.has(s.type)) return `${col} === null ? null : (float) ${col}`;
   if (DATE_ONLY.has(s.type)) return `${col}?->toDateString()`;
-  if (DATETIME.has(s.type)) return `${col}?->toJSON()`;
+  if (DATETIME.has(s.type)) return `${col}${ZULU_MS}`;
   return col;
 };
 
@@ -70,8 +76,8 @@ const toWireBody = (shape: WireShape, indent: string): string => {
       `$m->${c.relation}->map(fn ($c) => self::nested([\n${render(inner, rowIndent)}\n${closeIndent}]))->filter(fn ($r) => $r !== null)->values()->all()`,
     );
   }
-  insert(root, ["createdAt"], "$m->created_at?->toJSON()");
-  insert(root, ["updatedAt"], "$m->updated_at?->toJSON()");
+  insert(root, ["createdAt"], `$m->created_at${ZULU_MS}`);
+  insert(root, ["updatedAt"], `$m->updated_at${ZULU_MS}`);
   return render(root, indent);
 };
 

@@ -17,10 +17,10 @@ final class TransactionSerializer
             'recordId' => $m->record_id,
             'fee' => $m->fee === null ? null : (float) $m->fee,
             'occurredOn' => $m->occurred_on?->toDateString(),
-            'createdAt' => $m->created_at?->toJSON(),
-            'updatedAt' => $m->updated_at?->toJSON(),
+            'createdAt' => $m->created_at?->toIso8601ZuluString('millisecond'),
+            'updatedAt' => $m->updated_at?->toIso8601ZuluString('millisecond'),
             'amount' => self::nested([
-                'minor' => $m->amount_minor === null ? null : (int) $m->amount_minor,
+                'minor' => $m->amount_minor === null ? null : (string) $m->amount_minor,
                 'currency' => $m->amount_currency,
             ]),
         ]);
