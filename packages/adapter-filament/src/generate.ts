@@ -89,7 +89,16 @@ export const filamentAdapter: GenerateAdapter = {
     // Builtin content types (the target's native user model) map onto the stock Laravel
     // User/users table; the host app owns those files, so nothing is emitted for them.
     const emitted = doc.contentTypes.filter((ct) => ct.builtin === undefined);
-    const strapiInput = { doc, bundle: ir, emitted, fkNames: rel.fkNames };
+    // The Strapi storage layout emits its own models, so the observer registration that
+    // `emitModel` writes on the Laravel layout has to travel with the input; `emitStrapiApi`
+    // ignores it, because on that layout `emitModel` still owns the model.
+    const strapiInput = {
+      doc,
+      bundle: ir,
+      emitted,
+      fkNames: rel.fkNames,
+      observedModels: new Set([...hooks.observedModels, ...aiObservedModels]),
+    };
     const strapi =
       apiStyle === "strapi"
         ? storage === "strapi"

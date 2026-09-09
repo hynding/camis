@@ -72,7 +72,7 @@ const contentTypeGaps = (ct: StrapiApiInput["emitted"][number]): CapabilityGap[]
  * scopes are already spliced into the models emitted here, so `generate.ts` never reads it.
  */
 export const emitStrapiStorage = (input: StrapiApiInput): StrapiApiEmission => {
-  const { doc, bundle, emitted } = input;
+  const { doc, bundle, emitted, observedModels } = input;
   const secured = bundle.roles.length > 0;
   const perm = secured
     ? projectFilamentPermissions(doc, bundle.roles)
@@ -116,7 +116,13 @@ export const emitStrapiStorage = (input: StrapiApiInput): StrapiApiEmission => {
     }
     files.push({
       path: `app/Models/${names.model}.php`,
-      content: emitStorageModel(ct, doc, componentMap(doc, ct), scopeMethod),
+      content: emitStorageModel(
+        ct,
+        doc,
+        componentMap(doc, ct),
+        scopeMethod,
+        observedModels?.has(ct.name) === true,
+      ),
     });
     gaps.push(...contentTypeGaps(ct));
   }

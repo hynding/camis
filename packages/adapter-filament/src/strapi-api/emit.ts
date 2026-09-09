@@ -16,6 +16,12 @@ export interface StrapiApiInput {
   bundle: IrBundle;
   emitted: ContentType[];
   fkNames: Map<string, string[]>;
+  /**
+   * Content types whose model must declare `#[ObservedBy]` — hook observers plus AI-field
+   * observers. Only the Strapi *storage* layout reads it: on the Laravel layout `emitModel`
+   * owns the model and already receives the flag directly.
+   */
+  observedModels?: ReadonlySet<string>;
 }
 export interface StrapiApiEmission {
   files: GeneratedFile[];

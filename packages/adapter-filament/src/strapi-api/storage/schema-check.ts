@@ -2,7 +2,7 @@ import type { ContentType, IrDocument } from "@camis/ir-schema";
 import { emitField } from "../../fields";
 import { PHP_MARKER } from "../../hooks/names";
 import { componentMap, type MappedComponent } from "./component-map";
-import { cmpsTable, ownerLinks, strapiTable } from "./names";
+import { ownerLinks, strapiTable } from "./names";
 
 /**
  * The columns Strapi 5 puts on every content row regardless of the IR. `id` is the physical
@@ -99,11 +99,9 @@ export const expectedSchema = (
       ]);
     }
 
-    const map = componentMap(doc, ct);
-    // The owner's `_cmps` table exists only when it actually owns component fields; `cmpsTable`
-    // on each mapped root already names it, so no separate check is needed.
-    if (map.length > 0) record(tables, cmpsTable(strapiTable(ct)), CMPS_COLUMNS);
-    recordComponents(tables, map);
+    // `recordComponents` records each node's own `cmpsTable`, which for a root component is
+    // exactly this table — so a content type with no component fields gets no `_cmps` entry.
+    recordComponents(tables, componentMap(doc, ct));
   }
 
   record(tables, "up_users", UP_USERS_COLUMNS);

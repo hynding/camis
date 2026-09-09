@@ -101,12 +101,17 @@ const collectComponentNames = (
  * owned columns, `casts()` with `StrapiDateTime` for every datetime column, the three constants
  * `StrapiComponentAttributes` (Task 6) reads, and a `BelongsToMany` + `?int` accessor for each
  * owning relation — the link tables Strapi itself created, not a foreign-key column on this table.
+ *
+ * `observed` mirrors `model.ts`: a Ring 2 hook or an AI field emits
+ * `app/Observers/<Model>Observer.php`, and Laravel only calls it when the model declares
+ * `#[ObservedBy]` — so without this the observer file would be dead code on this layout.
  */
 export const emitStorageModel = (
   ct: ContentType,
   doc: IrDocument,
   map: MappedComponent[],
   scopeMethod: string | undefined,
+  observed: boolean = false,
 ): string => {
   const byName = new Map(doc.contentTypes.map((c) => [c.name, c]));
   const modelName = filamentNames(ct).model;
@@ -177,6 +182,7 @@ export const emitStorageModel = (
   ]);
   if (usesBelongsToMany) imports.add("Illuminate\\Database\\Eloquent\\Relations\\BelongsToMany");
   if (scopeMethod !== undefined) imports.add("Illuminate\\Database\\Eloquent\\Builder");
+  if (observed) imports.add(`App\\Observers\\${modelName}Observer`);
   const importLines = [...imports]
     .sort()
     .map((i) => `use ${i};`)
@@ -184,6 +190,11 @@ export const emitStorageModel = (
 
   const methodBlocks = [...relationBlocks, ...(scopeMethod !== undefined ? [scopeMethod] : [])];
   const methodsSection = methodBlocks.length > 0 ? `\n${methodBlocks.join("\n\n")}\n` : "";
+
+  // Empty when not observed, leaving the template byte-identical to Task 7's goldens.
+  const observedAttr = observed
+    ? `#[\\Illuminate\\Database\\Eloquent\\Attributes\\ObservedBy([${modelName}Observer::class])]\n`
+    : "";
 
   return `<?php
 ${PHP_MARKER}
@@ -194,7 +205,7 @@ namespace App\\Models;
 
 ${importLines}
 
-class ${modelName} extends Model
+${observedAttr}class ${modelName} extends Model
 {
     use StrapiComponentAttributes;
 

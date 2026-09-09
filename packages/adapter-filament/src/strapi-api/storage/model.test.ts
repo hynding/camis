@@ -281,6 +281,12 @@ describe("php -l", () => {
     { name: "ActivitySession", emit: () => emit("ActivitySession") },
     { name: "Consumable", emit: () => emit("Consumable") },
     { name: "Task", emit: () => emit("Task") },
+    // The observer attribute sits between the imports and `class`, where a stray newline would
+    // be a parse error rather than a diff.
+    {
+      name: "NoteObserved",
+      emit: () => emitStorageModel(ct("Note"), doc, componentMap(doc, ct("Note")), undefined, true),
+    },
     { name: "User", emit: emitStorageUserModel },
     { name: "UpRole", emit: emitStorageUpRoleModel },
   ];
