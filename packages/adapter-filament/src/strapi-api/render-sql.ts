@@ -12,6 +12,14 @@ const sqlLit = (v: WhereValue, userId: number): string => {
 /** Test-only SQL WHERE body for `node`, with `user.id` inlined as `userId`. */
 export const renderSql = (node: WhereNode, userId: number): string => {
   if (node.kind === "eq") {
+    if (node.link !== undefined) {
+      const { table, local, foreign, owner } = node.link;
+      const join = `${table}.${local} = ${owner}.id`;
+      if (node.value.kind === "lit" && node.value.value === null) {
+        return `NOT EXISTS (SELECT 1 FROM ${table} WHERE ${join})`;
+      }
+      return `EXISTS (SELECT 1 FROM ${table} WHERE ${join} AND ${table}.${foreign} = ${sqlLit(node.value, userId)})`;
+    }
     if (node.value.kind === "lit" && node.value.value === null) return `(${node.column} IS NULL)`;
     return `(${node.column} = ${sqlLit(node.value, userId)})`;
   }

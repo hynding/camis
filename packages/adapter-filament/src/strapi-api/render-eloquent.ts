@@ -12,6 +12,19 @@ const phpLit = (v: WhereValue): string => {
 const stmt = (node: WhereNode, q: string, user: string, or: boolean): string => {
   const method = or ? "orWhere" : "where";
   if (node.kind === "eq") {
+    if (node.link !== undefined) {
+      const { table, local, foreign, owner } = node.link;
+      const isNull = node.value.kind === "lit" && node.value.value === null;
+      const existsMethod = isNull
+        ? or
+          ? "orWhereNotExists"
+          : "whereNotExists"
+        : or
+          ? "orWhereExists"
+          : "whereExists";
+      const extra = isNull ? "" : `->where('${table}.${foreign}', ${phpLit(node.value)})`;
+      return `${q}->${existsMethod}(function ($s) use (${user}) { $s->selectRaw('1')->from('${table}')->whereColumn('${table}.${local}', '${owner}.id')${extra}; });`;
+    }
     if (node.value.kind === "lit" && node.value.value === null) {
       return `${q}->${or ? "orWhereNull" : "whereNull"}('${node.column}');`;
     }
