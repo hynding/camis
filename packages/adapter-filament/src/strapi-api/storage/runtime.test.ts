@@ -65,7 +65,8 @@ describe("emitStrapiDateTime", () => {
 
   it("branches on the model's own connection driver, not the default connection", () => {
     const php = emitStrapiDateTime();
-    expect(php).toContain("$model->getConnection()->getDriverName() === 'sqlite'");
+    expect(php).toContain("$model->getConnection()->getDriverName()");
+    expect(php).toContain("$driver === 'sqlite'");
     expect(php).not.toContain("DB::connection()->getDriverName()");
   });
 
@@ -78,9 +79,25 @@ describe("emitStrapiDateTime", () => {
   it("reads milliseconds and datetime strings, and passes null through both ways", () => {
     const php = emitStrapiDateTime();
     expect(php).toContain("Carbon::createFromTimestampMs((int) $value)");
-    expect(php).toContain("Carbon::parse((string) $value)");
     expect(php).toContain("implements CastsAttributes");
-    expect(php).toContain("return $value === null ? null : self::toCarbon($value);");
+    expect(php).toContain("return self::fromStorage($value);");
+  });
+
+  it("exposes the conversion as static helpers, so the component writer can reuse it", () => {
+    const php = emitStrapiDateTime();
+    expect(php).toContain("public static function fromStorage(mixed $value): ?Carbon");
+    expect(php).toContain(
+      "public static function toStorage(mixed $value, string $driver): int|string|null",
+    );
+    expect(php).toContain(
+      "return self::toStorage($value, $model->getConnection()->getDriverName());",
+    );
+  });
+
+  it("parses a stored datetime string as UTC, not in the application timezone", () => {
+    const php = emitStrapiDateTime();
+    expect(php).toContain("Carbon::parse($value, 'UTC')");
+    expect(php).not.toContain("Carbon::parse((string) $value)");
   });
 });
 
@@ -91,7 +108,8 @@ describe("emitStrapiRows", () => {
 
   it("fills the Strapi-owned row columns before saving", () => {
     const php = emitStrapiRows();
-    expect(php).toContain("(string) new \\Visus\\Cuid2\\Cuid2(24)");
+    expect(php).toContain("use Visus\\Cuid2\\Cuid2;");
+    expect(php).toContain("(string) new Cuid2(24)");
     expect(php).toContain("$m->published_at = now();");
     expect(php).toContain("$m->locale = null;");
     expect(php).toContain("$m->save();");
@@ -146,7 +164,7 @@ describe("emitStrapiComponents", () => {
     expect(php).toContain("'order' => $order,");
     expect(php).toContain("self::link($connection, $c, $entityId, $id, $order);");
     expect(php).toContain(
-      "self::link($connection, $c, $entityId, self::insert($connection, $c, $columns, $children), null);",
+      "self::link($connection, $c, $entityId, self::insert($connection, $driver, $c, $columns, $children), null);",
     );
   });
 
@@ -160,6 +178,44 @@ describe("emitStrapiComponents", () => {
   it("treats an all-null single component as a removal", () => {
     const php = emitStrapiComponents();
     expect(php).toContain("if (self::isBlank($c, $columns, $children)) {");
+  });
+
+  it("converts component scalars by their IR type on both sides of the boundary", () => {
+    const php = emitStrapiComponents();
+    expect(php).toContain("use App\\Casts\\StrapiDateTime;");
+    expect(php).toContain("$driver = $m->getConnection()->getDriverName();");
+    expect(php).toContain("'dateTime', 'timestamp' => StrapiDateTime::fromStorage($value),");
+    expect(php).toContain("'dateTime', 'timestamp' => StrapiDateTime::toStorage($value, $driver),");
+    expect(php).toContain("json_decode($value, true)");
+    expect(php).toContain("json_encode($value)");
+    expect(php).toContain("'boolean' => (bool) $value,");
+    expect(php).toContain("self::fromStorage($row->{$s['column']} ?? null, $s['type'])");
+    expect(php).toContain(
+      "self::toStorage($columns[$s['flatAttribute']] ?? null, $s['type'], $driver)",
+    );
+  });
+
+  it("reads the level's link table without assuming the map is a 0-indexed list", () => {
+    const php = emitStrapiComponents();
+    expect(php).toContain("reset($map)['cmpsTable']");
+    expect(php).not.toContain("$map[0]");
+  });
+
+  it("skips the clear under a component row it just inserted", () => {
+    const php = emitStrapiComponents();
+    expect(php).toContain("bool $fresh");
+    expect(php).toContain("if (! $fresh) {");
+    expect(php).toContain(
+      "self::write($connection, $driver, $id, $child, $columns, $children, true);",
+    );
+  });
+
+  it("refuses to write components for a model that has no key yet", () => {
+    const php = emitStrapiComponents();
+    expect(php).toContain("use LogicException;");
+    expect(php).toContain(
+      "throw new LogicException('StrapiComponents::apply requires a saved model');",
+    );
   });
 
   it("strips component attributes — and only those — from the owner's columns", () => {
