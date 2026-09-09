@@ -88,10 +88,23 @@ describe("toAttributes — dynamicZone", () => {
 });
 
 describe("toAttribute — component", () => {
-  it("maps a component field to the shared category uid", () => {
+  it("falls back to the shared category when the component declares no group", () => {
     expect(
       toAttribute({ type: "component", name: "seo", component: "SeoMeta", repeatable: false }),
     ).toEqual({ type: "component", component: "shared.seo-meta", repeatable: false });
+  });
+
+  // The uid's category is the folder the component file is written to. Hardcoding "shared" while
+  // `names.group` moves the file elsewhere emits a reference to a component that does not exist,
+  // and Strapi refuses to boot on it.
+  it("uses the referenced component's own category", () => {
+    expect(
+      toAttribute(
+        { type: "component", name: "amount", component: "Money", repeatable: false },
+        new Set(),
+        new Map([["Money", "finance.money"]]),
+      ),
+    ).toEqual({ type: "component", component: "finance.money", repeatable: false });
   });
 });
 

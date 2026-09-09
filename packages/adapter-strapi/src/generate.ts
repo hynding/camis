@@ -11,7 +11,7 @@ import { aiFieldContentTypes, aiLifecycleFile, aiProviderFile, hasAiField } from
 import { apiFactoryFiles } from "./api-files";
 import { componentSchema } from "./component-schema";
 import { emitHookFiles } from "./hooks/emit";
-import { kebab, strapiNames } from "./names";
+import { componentCategory, componentUids, kebab, strapiNames } from "./names";
 import { emitPermissions } from "./permissions/emit";
 import { contentTypeSchema } from "./schema";
 import { synthesizedInverses } from "./relations";
@@ -21,20 +21,25 @@ const typeFiles = (
   ct: ContentType,
   extraAttributes: Record<string, unknown>,
   builtinUsers: ReadonlySet<string>,
+  uids: ReadonlyMap<string, string>,
 ): GeneratedFile[] => {
   const names = strapiNames(ct);
   return [
     {
       path: `src/api/${names.singularName}/content-types/${names.singularName}/schema.json`,
-      content: stableJson(contentTypeSchema(ct, extraAttributes, builtinUsers)),
+      content: stableJson(contentTypeSchema(ct, extraAttributes, builtinUsers, uids)),
     },
     ...apiFactoryFiles(names),
   ];
 };
 
-const componentFile = (component: Component, builtinUsers: ReadonlySet<string>): GeneratedFile => ({
-  path: `src/components/${component.names?.group ?? "shared"}/${kebab(component.name)}.json`,
-  content: stableJson(componentSchema(component, builtinUsers)),
+const componentFile = (
+  component: Component,
+  builtinUsers: ReadonlySet<string>,
+  uids: ReadonlyMap<string, string>,
+): GeneratedFile => ({
+  path: `src/components/${componentCategory(component)}/${kebab(component.name)}.json`,
+  content: stableJson(componentSchema(component, builtinUsers, uids)),
 });
 
 const softDeleteGaps = (doc: IrDocument): CapabilityGap[] =>
@@ -71,12 +76,13 @@ export const strapiAdapter: GenerateAdapter = {
     const builtinUsers = new Set(
       doc.contentTypes.filter((ct) => ct.builtin === "user").map((ct) => ct.name),
     );
+    const uids = componentUids(doc.components);
     const files: GeneratedFile[] = [
       ...skeletonFiles(options.projectName),
       ...doc.contentTypes
         .filter((ct) => ct.builtin === undefined)
-        .flatMap((ct) => typeFiles(ct, inverses.get(ct.name) ?? {}, builtinUsers)),
-      ...doc.components.map((c) => componentFile(c, builtinUsers)),
+        .flatMap((ct) => typeFiles(ct, inverses.get(ct.name) ?? {}, builtinUsers, uids)),
+      ...doc.components.map((c) => componentFile(c, builtinUsers, uids)),
     ];
     const perm = emitPermissions(doc, ir.roles);
     const withPerm =

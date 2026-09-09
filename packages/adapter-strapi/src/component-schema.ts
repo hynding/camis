@@ -5,10 +5,11 @@ import { toAttributes } from "./attributes";
 export const componentSchema = (
   component: Component,
   builtinUsers: ReadonlySet<string> = new Set(),
+  componentUids: ReadonlyMap<string, string> = new Map(),
 ): Record<string, unknown> => ({
   collectionName:
     component.names?.collection ?? `components_shared_${snakeCase(pluralize(component.name))}`,
   info: { displayName: humanize(component.name) },
   options: {},
-  attributes: toAttributes(component.fields, builtinUsers),
+  attributes: toAttributes(component.fields, builtinUsers, componentUids),
 });

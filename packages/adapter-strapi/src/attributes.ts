@@ -20,6 +20,7 @@ const PLUGIN_USER_UID = "plugin::users-permissions.user";
 export const toAttribute = (
   field: Field,
   builtinUsers: ReadonlySet<string> = new Set(),
+  componentUids: ReadonlyMap<string, string> = new Map(),
 ): Attribute => {
   const f = field as Field & Record<string, unknown>;
   const attr: Attribute = { type: TYPE_MAP[field.type] ?? field.type };
@@ -42,7 +43,7 @@ export const toAttribute = (
   }
 
   if (field.type === "component") {
-    attr.component = `shared.${kebab(field.component)}`;
+    attr.component = componentUids.get(field.component) ?? `shared.${kebab(field.component)}`;
     attr.repeatable = field.repeatable;
     return attr;
   }
@@ -63,11 +64,12 @@ export const toAttribute = (
 export const toAttributes = (
   fields: Field[],
   builtinUsers: ReadonlySet<string> = new Set(),
+  componentUids: ReadonlyMap<string, string> = new Map(),
 ): Record<string, Attribute> => {
   const out: Record<string, Attribute> = {};
   for (const field of fields) {
     if (field.type === "dynamicZone") continue; // deferred; generate emits a capability-gap
-    out[field.name] = toAttribute(field, builtinUsers);
+    out[field.name] = toAttribute(field, builtinUsers, componentUids);
   }
   return out;
 };

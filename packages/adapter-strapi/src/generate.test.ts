@@ -197,6 +197,43 @@ describe("strapiAdapter.generate — components + inverses", () => {
     expect(JSON.parse(money!.content).collectionName).toBe("components_finance_money");
   });
 
+  // A component reference names the file's folder, not a fixed "shared": the two must agree or
+  // Strapi cannot resolve the uid.
+  it("references a grouped component by its own category in every schema that uses it", () => {
+    const named = {
+      ...doc,
+      contentTypes: [
+        {
+          name: "Transaction",
+          kind: "collection" as const,
+          fields: [
+            { type: "component" as const, name: "amount", component: "Money", repeatable: false },
+          ],
+        },
+      ],
+      components: [
+        {
+          name: "Money",
+          fields: [
+            { type: "bigInteger" as const, name: "minor" },
+            { type: "component" as const, name: "seo", component: "SeoMeta", repeatable: false },
+          ],
+          names: { collection: "components_finance_money", group: "finance" },
+        },
+        { name: "SeoMeta", fields: [{ type: "string" as const, name: "metaTitle" }] },
+      ],
+    };
+    const r = strapiAdapter.generate({ document: named, roles: [] }, { projectName: "blog" });
+    const transaction = JSON.parse(
+      r.files.find((f) => f.path.endsWith("transaction/schema.json"))!.content,
+    );
+    expect(transaction.attributes.amount.component).toBe("finance.money");
+    const money = JSON.parse(
+      r.files.find((f) => f.path === "src/components/finance/money.json")!.content,
+    );
+    expect(money.attributes.seo.component).toBe("shared.seo-meta");
+  });
+
   it("falls back to the shared folder and default collectionName without names", () => {
     const r = strapiAdapter.generate({ document: doc, roles: [] }, { projectName: "blog" });
     const seo = r.files.find((f) => f.path === "src/components/shared/seo-meta.json");
