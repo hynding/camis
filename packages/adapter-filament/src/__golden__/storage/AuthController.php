@@ -79,6 +79,8 @@ class AuthController extends Controller
             'password' => ['required', 'string'],
         ]);
         $identifier = $data['identifier'];
+        // password_verify runs only for a user that exists — the same timing oracle Strapi's own
+        // callback/local controller has. Kept for parity rather than closed with a dummy hash.
         $user = User::query()->where('provider', 'local')->where('email', strtolower($identifier))->first()
             ?? User::query()->where('provider', 'local')->where('username', $identifier)->first();
         if ($user === null || ! password_verify($data['password'], (string) $user->password)) {

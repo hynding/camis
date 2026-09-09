@@ -99,6 +99,14 @@ describe("emitStorageAuthController", () => {
     expect(php).toContain("Email or Username are already taken");
   });
 
+  // The short-circuit is deliberate, not an oversight; say so where the next reader will look.
+  it("records that login's password_verify short-circuit is a parity decision", () => {
+    const php = emitStorageAuthController("authenticated");
+    expect(php).toContain(
+      "// password_verify runs only for a user that exists — the same timing oracle Strapi's own",
+    );
+  });
+
   it("uses Strapi's own login-failure messages, in Strapi's own order", () => {
     const php = emitStorageAuthController("authenticated");
     expect(php).toContain("Your account email is not confirmed");
