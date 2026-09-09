@@ -8,6 +8,7 @@ namespace App\Support;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
+use Visus\Cuid2\Cuid2;
 
 /**
  * The row bookkeeping Strapi does for every content row and every relation, done by hand because
@@ -29,7 +30,7 @@ final class StrapiRows
         $attributes = $m->getAttributes();
 
         if (! array_key_exists('document_id', $attributes) || $attributes['document_id'] === null) {
-            $m->document_id = (string) new \Visus\Cuid2\Cuid2(24);
+            $m->document_id = (string) new Cuid2(24);
         }
 
         if (! array_key_exists('published_at', $attributes) || $attributes['published_at'] === null) {

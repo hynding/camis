@@ -163,9 +163,8 @@ describe("emitStrapiComponents", () => {
     expect(php).toContain("'field' => $c['field'],");
     expect(php).toContain("'order' => $order,");
     expect(php).toContain("self::link($connection, $c, $entityId, $id, $order);");
-    expect(php).toContain(
-      "self::link($connection, $c, $entityId, self::insert($connection, $driver, $c, $columns, $children), null);",
-    );
+    expect(php).toContain("$id = self::insert($connection, $driver, $c, $columns, $children);");
+    expect(php).toContain("self::link($connection, $c, $entityId, $id, null);");
   });
 
   it("deletes the old subtree before re-inserting, and never opens its own transaction", () => {

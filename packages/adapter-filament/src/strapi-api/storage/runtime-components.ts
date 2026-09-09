@@ -13,10 +13,12 @@ declare(strict_types=1);
 
 namespace App\\Support;
 
+use App\\Casts\\StrapiDateTime;
 use Illuminate\\Database\\Eloquent\\Model;
 use Illuminate\\Database\\Query\\Builder;
 use Illuminate\\Support\\Collection;
 use Illuminate\\Support\\Facades\\DB;
+use LogicException;
 use stdClass;
 
 /**
@@ -86,16 +88,22 @@ final class StrapiComponents
      */
     public static function apply(Model $m, array $map, array $wire): void
     {
+        if ($m->getKey() === null) {
+            // Every link row keys off the owner's id; without one they would all be orphans.
+            throw new LogicException('StrapiComponents::apply requires a saved model');
+        }
+
         $columns = is_array($wire['columns'] ?? null) ? $wire['columns'] : [];
         $children = is_array($wire['children'] ?? null) ? $wire['children'] : [];
         $connection = $m->getConnectionName();
+        $driver = $m->getConnection()->getDriverName();
 
         foreach ($map as $c) {
             if (! self::mentioned($c, $columns, $children)) {
                 continue;
             }
 
-            self::write($connection, $m->getKey(), $c, $columns, $children);
+            self::write($connection, $driver, $m->getKey(), $c, $columns, $children, false);
         }
 
         self::forget($m, $map);
@@ -138,7 +146,9 @@ final class StrapiComponents
 
         // Every component at one level hangs off the same owner table, so a single query covers
         // all of them; ordering by \`order\` is what puts a repeatable's rows in Strapi's order.
-        $links = self::table($connection, $map[0]['cmpsTable'])
+        // reset() rather than [0]: the map is generated as a list, but nothing here needs to be
+        // the thing that breaks if it is ever built by key.
+        $links = self::table($connection, reset($map)['cmpsTable'])
             ->whereIn('entity_id', array_keys($entities))
             ->whereIn('field', $fields)
             ->orderBy('order')
@@ -207,7 +217,8 @@ final class StrapiComponents
             }
 
             foreach ($c['scalars'] as $s) {
-                self::put($target, $s['flatAttribute'], $row->{$s['column']} ?? null);
+                $value = self::fromStorage($row->{$s['column']} ?? null, $s['type']);
+                self::put($target, $s['flatAttribute'], $value);
             }
 
             // A single component is flattened onto the object that owns it, so anything nested
@@ -229,7 +240,7 @@ final class StrapiComponents
         $child->id = $row->id;
 
         foreach ($c['scalars'] as $s) {
-            $child->{$s['flatAttribute']} = $row->{$s['column']} ?? null;
+            $child->{$s['flatAttribute']} = self::fromStorage($row->{$s['column']} ?? null, $s['type']);
         }
 
         self::blank($child, $c['nested']);
@@ -306,12 +317,18 @@ final class StrapiComponents
      */
     private static function write(
         ?string $connection,
+        string $driver,
         int|string $entityId,
         array $c,
         array $columns,
-        array $children
+        array $children,
+        bool $fresh
     ): void {
-        self::clear($connection, $entityId, $c);
+        // $fresh says the owner row was inserted a statement ago, so it can own nothing yet and
+        // the clear would be a SELECT and two DELETEs that cannot match a row.
+        if (! $fresh) {
+            self::clear($connection, $entityId, $c);
+        }
 
         if ($c['repeatable']) {
             $rows = $children[$c['relationName']] ?? null;
@@ -319,7 +336,7 @@ final class StrapiComponents
             $order = 1;
 
             foreach ($rows as $row) {
-                $id = self::insert($connection, $c, (array) $row, []);
+                $id = self::insert($connection, $driver, $c, (array) $row, []);
                 self::link($connection, $c, $entityId, $id, $order);
                 $order++;
             }
@@ -333,25 +350,71 @@ final class StrapiComponents
             return;
         }
 
-        self::link($connection, $c, $entityId, self::insert($connection, $c, $columns, $children), null);
+        $id = self::insert($connection, $driver, $c, $columns, $children);
+        self::link($connection, $c, $entityId, $id, null);
     }
 
     /** Inserts a component row and everything nested under it; returns the new row's id. */
-    private static function insert(?string $connection, array $c, array $columns, array $children): int
-    {
+    private static function insert(
+        ?string $connection,
+        string $driver,
+        array $c,
+        array $columns,
+        array $children
+    ): int {
         $values = [];
 
         foreach ($c['scalars'] as $s) {
-            $values[$s['column']] = $columns[$s['flatAttribute']] ?? null;
+            $values[$s['column']] = self::toStorage($columns[$s['flatAttribute']] ?? null, $s['type'], $driver);
         }
 
         $id = (int) self::table($connection, $c['table'])->insertGetId($values);
 
         foreach ($c['nested'] as $child) {
-            self::write($connection, $id, $child, $columns, $children);
+            self::write($connection, $driver, $id, $child, $columns, $children, true);
         }
 
         return $id;
+    }
+
+    /**
+     * A component scalar never passes through a model cast: it is read from and written to its own
+     * table by the raw query builder. The per-type conversion the owner's $casts would have done
+     * therefore happens here, driven by the map's \`type\`.
+     *
+     * Numerics, strings and \`time\` are left alone — the serializer already casts what it needs to.
+     * \`date\` is a Carbon on the way in because the serializer calls \`?->toDateString()\` on it, but
+     * passes through on the way out: its column is a DATE, not one of Strapi's datetime columns.
+     */
+    private static function fromStorage(mixed $value, string $type): mixed
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        return match ($type) {
+            'dateTime', 'timestamp' => StrapiDateTime::fromStorage($value),
+            'date' => StrapiDateTime::fromStorage($value),
+            'json' => is_string($value) ? json_decode($value, true) : $value,
+            'boolean' => (bool) $value,
+            default => $value,
+        };
+    }
+
+    /** The write half of fromStorage(); the driver decides how a datetime is stored. */
+    private static function toStorage(mixed $value, string $type, string $driver): mixed
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        return match ($type) {
+            'dateTime', 'timestamp' => StrapiDateTime::toStorage($value, $driver),
+            'json' => is_string($value) ? $value : json_encode($value),
+            // The query builder binds a PHP bool as the integer or boolean the driver wants.
+            'boolean' => (bool) $value,
+            default => $value,
+        };
     }
 
     private static function link(

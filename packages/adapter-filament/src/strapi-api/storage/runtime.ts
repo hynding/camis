@@ -29,30 +29,30 @@ use Illuminate\\Support\\Carbon;
  *
  * The driver comes from the model's own connection rather than the default one, so a model bound
  * to a second connection still writes that connection's format.
+ *
+ * Both directions are also exposed as static helpers: a component scalar is read and written by
+ * the raw query builder, which never passes through a cast, so StrapiComponents calls these
+ * directly rather than reimplementing the same per-driver rules.
  */
 class StrapiDateTime implements CastsAttributes
 {
     public function get(Model $model, string $key, mixed $value, array $attributes): ?Carbon
     {
-        return $value === null ? null : self::toCarbon($value);
+        return self::fromStorage($value);
     }
 
     public function set(Model $model, string $key, mixed $value, array $attributes): int|string|null
+    {
+        return self::toStorage($value, $model->getConnection()->getDriverName());
+    }
+
+    /** Both stored forms land here: SQLite's millisecond integer and everyone else's string. */
+    public static function fromStorage(mixed $value): ?Carbon
     {
         if ($value === null) {
             return null;
         }
 
-        $date = self::toCarbon($value);
-
-        return $model->getConnection()->getDriverName() === 'sqlite'
-            ? (int) $date->getTimestampMs()
-            : $date->utc()->format('Y-m-d H:i:s.u');
-    }
-
-    /** Both forms reach this cast: milliseconds (from SQLite) and a datetime string (elsewhere). */
-    private static function toCarbon(mixed $value): Carbon
-    {
         if ($value instanceof DateTimeInterface) {
             return Carbon::instance($value);
         }
@@ -61,7 +61,23 @@ class StrapiDateTime implements CastsAttributes
             return Carbon::createFromTimestampMs((int) $value);
         }
 
-        return Carbon::parse((string) $value);
+        // The column holds UTC. Parsing without a zone would read it as the app's local time and
+        // shift every value by the app's offset.
+        return Carbon::parse($value, 'UTC');
+    }
+
+    /** The inverse: milliseconds on SQLite, a microsecond UTC string on MySQL and Postgres. */
+    public static function toStorage(mixed $value, string $driver): int|string|null
+    {
+        $date = self::fromStorage($value);
+
+        if ($date === null) {
+            return null;
+        }
+
+        return $driver === 'sqlite'
+            ? (int) $date->getTimestampMs()
+            : $date->utc()->format('Y-m-d H:i:s.u');
     }
 }
 `;
@@ -80,6 +96,7 @@ namespace App\\Support;
 use Illuminate\\Database\\Eloquent\\Model;
 use Illuminate\\Database\\Query\\Builder;
 use Illuminate\\Support\\Facades\\DB;
+use Visus\\Cuid2\\Cuid2;
 
 /**
  * The row bookkeeping Strapi does for every content row and every relation, done by hand because
@@ -101,7 +118,7 @@ final class StrapiRows
         $attributes = $m->getAttributes();
 
         if (! array_key_exists('document_id', $attributes) || $attributes['document_id'] === null) {
-            $m->document_id = (string) new \\Visus\\Cuid2\\Cuid2(24);
+            $m->document_id = (string) new Cuid2(24);
         }
 
         if (! array_key_exists('published_at', $attributes) || $attributes['published_at'] === null) {
