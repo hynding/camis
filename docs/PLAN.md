@@ -304,12 +304,12 @@ wire protocol. Driver: OYL; spec in the oyl repo at
 
 **Exit criteria:** existing goldens byte-identical without the option, with two deliberate
 exceptions — the cross-check found the Phase 16 wire forms diverging from Strapi's, and both were
-corrected rather than papered over: a datetime is now
-`toIso8601ZuluString('millisecond')` (`2026-09-08T10:00:00.000Z`, as Strapi and JavaScript send
-it) where Carbon's `toJSON()` emitted six fractional digits, and a `bigInteger` is now a JSON
-string (`"1250"`) where it was a JSON number. Both apply to `apiStyle: "strapi"` on either storage
-layout, so an existing Phase 16 deployment sees a wire-contract change; every other golden is
-byte-identical. A gated CI job generates a Strapi project from a fixture IR (with nested + repeatable components), boots it to create a SQLite
+corrected rather than papered over: a datetime is now `toIso8601ZuluString('millisecond')`
+(`2026-09-08T10:00:00.000Z`, as Strapi and JavaScript send it) where Carbon's `toJSON()` emitted six
+fractional digits, and a `bigInteger` is now a JSON string (`"1250"`) where it was a JSON number.
+Both apply to `apiStyle: "strapi"` on either storage layout, so an existing Phase 16 deployment sees
+a wire-contract change; every other golden is byte-identical. A gated CI job generates a Strapi
+project from a fixture IR (with nested + repeatable components), boots it to create a SQLite
 database, writes rows and mints a token through Strapi, then boots the PHP app on the same file and
 proves reads/writes and tokens interoperate in both directions. This job
 (`strapi-storage-crosscheck`, `pnpm --filter @camis/cli crosscheck`) is the phase gate; it passed

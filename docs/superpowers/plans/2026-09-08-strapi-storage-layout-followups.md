@@ -110,6 +110,14 @@ under `apiStyle`.
 - **No test for an empty roles/grants map**, **none for a relation-to-user target that is not the
   built-in `User`**, and **a missing component referenced by a content type is silently skipped**
   rather than reported as a gap. (Task 5 review.)
+- **The IR now rejects a `collectionName` or component folder that is not a lowercase
+  identifier** (`^[a-z0-9][a-z0-9_-]*$`), so `camis import strapi` fails loudly on a hand-written
+  camelCase `collectionName` instead of importing it. Every fixture passes; an external project
+  that hits it should rename the physical table (a bad physical name is worse than an import
+  error). (Final review.)
+- **The bootstrap's revocation `findMany` passes no `limit`.** Strapi's query engine does not
+  paginate `findMany` today; add `limit: -1` if that ever changes, or revocation silently becomes
+  partial (never destructive). (Final review.)
 - **Strapi warns at boot that `admin.secrets.encryptionKey` is missing** from the generated
   `config/admin.ts` (non-fatal; Strapi 5.48 boots anyway) — see "For the oyl side" below for the
   follow-up. (Task 12 "Observed Strapi behaviour".)
