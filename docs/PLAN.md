@@ -280,6 +280,33 @@ the oyl repo at `docs/superpowers/specs/2026-09-08-camis-php-oyl-design.md`.
 (register → login → CRUD/upsert → cross-owner 404) green; existing goldens unchanged when
 `apiStyle` is absent.
 
+## Phase 17 — Strapi storage layout (`ir-schema`, `adapter-strapi` import, `adapter-filament`, `cli`)
+
+**Goal:** a strapi-style generated Laravel app can run on the database a Strapi 5 app created and
+still uses, so both backends are interchangeable at the storage and session level, not just the
+wire protocol. Driver: OYL; spec in the oyl repo at
+`docs/superpowers/specs/2026-09-08-strapi-storage-layout-design.md`.
+
+- IR: `Component.names?: { collection, group }`, filled by the Strapi importer from the component
+  file's `collectionName` and folder; adapters derive Strapi's `component_type` from it.
+- Filament target option `storageLayout: "strapi"` (requires `apiStyle: "strapi"`): models map
+  onto Strapi's tables — owning relations through `_lnk` tables (with `_ord` only when the IR
+  relation has an inverse), components through `_cmps` links and component tables (nested and
+  repeatable), `document_id` (cuid2) + `published_at` on create, a `StrapiDateTime` cast
+  (millisecond integers on sqlite, native timestamps elsewhere), uniqueness enforced in code
+  (Strapi has no unique indexes), and the owned `User` model on `up_users` with roles read from
+  `up_users_role_lnk`.
+- Auth: Strapi-compatible HS256 JWTs (`{ id }`, 30d, shared `JWT_SECRET`) replace Sanctum;
+  register/login mirror Strapi's `provider`/`confirmed`/`blocked` semantics and 400 messages.
+- Emission: no content migrations, no Filament resources, no Spatie (downgrade gaps); a
+  regenerated `camis:strapi-schema-check` artisan command; scaffold `--storage strapi`.
+- Ring 1 → SQL: `record.<relation>Id == user.id` renders as `whereExists` on the link table.
+
+**Exit criteria:** existing goldens byte-identical without the option; a gated CI job generates a
+Strapi project from a fixture IR (with nested + repeatable components), boots it to create a SQLite
+database, writes rows and mints a token through Strapi, then boots the PHP app on the same file and
+proves reads/writes and tokens interoperate in both directions.
+
 ---
 
 ## Sequencing rationale (quick reference)
