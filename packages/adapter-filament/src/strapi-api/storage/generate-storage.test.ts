@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { normalize } from "@camis/ir-core";
 import { filamentAdapter } from "../../generate";
 import { catalog } from "../../__fixtures__/catalog";
+import { hooksBundle } from "../../__fixtures__/hooks";
 import { strapiApiBundle } from "../__fixtures__/strapi-api";
 import { storageBundle } from "./__fixtures__/storage";
 import { expectedSchema } from "./schema-check";
@@ -84,8 +85,12 @@ describe("filamentAdapter storageLayout strapi — file set", () => {
   it("wires the storage-layout variants into routes, config, model and DEPLOY.md", () => {
     expect(content("routes/api.php")).toContain("Route::middleware(StrapiJwtGuard::class)");
     expect(content("config/camis.php")).toContain("'jwt_secret'");
-    expect(content("app/Models/Note.php")).toContain("protected $table = 'notes';");
-    expect(content("app/Models/Note.php")).toContain("scopeForUser");
+    const note = content("app/Models/Note.php");
+    expect(note).toContain("protected $table = 'notes';");
+    expect(note).toContain("scopeForUser");
+    // The storage model, not the Laravel one: the owner is a link-table row, never a column.
+    expect(note).not.toContain("'owner_id'");
+    expect(note).toContain("belongsToMany(User::class, 'notes_owner_lnk', 'note_id', 'user_id')");
     expect(content("app/Http/Controllers/Api/Generated/NoteApiController.php")).toContain(
       "notes_owner_lnk",
     );
@@ -171,6 +176,33 @@ describe("storageLayout omitted leaves the laravel layout byte-identical", () =>
         storageLayout: "laravel",
       }),
     );
+  });
+});
+
+// A hook (or an AI field) emits app/Observers/<M>Observer.php, but Laravel never calls it unless
+// the model declares #[ObservedBy]. On the Laravel layout `emitModel` does that; the storage
+// layout emits its own models, so `generate.ts` has to thread the observed set through or every
+// Ring 2 hook on this layout is silently dead.
+describe("storageLayout strapi with a hook", () => {
+  const hooked = filamentAdapter.generate(hooksBundle, {
+    projectName: "oyl",
+    apiStyle: "strapi",
+    storageLayout: "strapi",
+  });
+  const hookedPaths = hooked.files.map((f) => f.path);
+
+  it("emits the observer file and registers it on the storage model", () => {
+    expect(hookedPaths).toContain("app/Observers/ArticleObserver.php");
+    const model = hooked.files.find((f) => f.path === "app/Models/Article.php")!.content;
+    expect(model).toContain("use App\\Observers\\ArticleObserver;");
+    expect(model).toContain(
+      "#[\\Illuminate\\Database\\Eloquent\\Attributes\\ObservedBy([ArticleObserver::class])]\nclass Article extends Model",
+    );
+  });
+
+  it("still emits the hook contract and its protected stub", () => {
+    expect(hookedPaths).toContain("app/Hooks/Contracts/TransformTitleHook.php");
+    expect(hooked.files.find((f) => f.path === "app/Hooks/TransformTitle.php")?.mode).toBe("seed");
   });
 });
 

@@ -173,6 +173,39 @@ describe("Task model", () => {
   });
 });
 
+// A hook or an AI field emits an observer class, but Laravel only calls it when the model says
+// so: on the Laravel layout `emitModel` writes the #[ObservedBy] attribute, and the storage model
+// has to do the same or the observer file is dead code.
+describe("observed models", () => {
+  const observed = (name: string): string =>
+    emitStorageModel(ct(name), doc, componentMap(doc, ct(name)), undefined, true);
+
+  it("declares the observer attribute and imports the observer class", () => {
+    const php = observed("Note");
+    expect(php).toContain("use App\\Observers\\NoteObserver;");
+    expect(php).toContain(
+      "#[\\Illuminate\\Database\\Eloquent\\Attributes\\ObservedBy([NoteObserver::class])]\nclass Note extends Model",
+    );
+  });
+
+  it("keeps the observer import in the sorted import block", () => {
+    const php = observed("Note");
+    const uses = php.split("\n").filter((l) => l.startsWith("use "));
+    expect(uses).toEqual([...uses].sort());
+    expect(uses).toContain("use App\\Observers\\NoteObserver;");
+  });
+
+  it("emits neither by default", () => {
+    const php = emit("Note");
+    expect(php).not.toContain("ObservedBy");
+    expect(php).not.toContain("NoteObserver");
+  });
+
+  it("is idempotent", () => {
+    expect(observed("Note")).toBe(observed("Note"));
+  });
+});
+
 describe("emitStorageUserModel", () => {
   it("golden", async () => {
     await expect(emitStorageUserModel()).toMatchFileSnapshot(
