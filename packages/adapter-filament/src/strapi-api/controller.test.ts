@@ -13,7 +13,6 @@ import {
   type ControllerLink,
 } from "./controller";
 import { emitApiConfig, emitStrapiRoutes } from "./routes";
-import { componentMap } from "./storage/component-map";
 import { linkColumns, linkTable, type RelationField } from "./storage/names";
 import { storageBundle } from "./storage/__fixtures__/storage";
 import { wireShape } from "./wire-shape";
@@ -53,7 +52,6 @@ const storageSpec = (name: string, assigns: string[]) => ({
   secured: true,
   scoped: true,
   layout: "strapi" as const,
-  map: componentMap(storageDoc, storageCt(name)),
   links: storageLinks(storageCt(name)),
 });
 
@@ -328,6 +326,45 @@ describe("strapi storage layout controllers", () => {
   });
 });
 
+describe("strapi storage layout — assign without a link", () => {
+  // An assign whose relation has no link entry would emit a store() that creates the row and
+  // never links it: the creator's own scope cannot see it again. That is a generator bug, and
+  // a silently orphaned row is the worst possible way to report it.
+  it("refuses to emit a controller whose assign has no owning link", () => {
+    expect(() => emitGeneratedController({ ...storageSpec("Note", ["owner"]), links: [] })).toThrow(
+      'Unknown assign relation "owner" on "Note" (no owning link)',
+    );
+  });
+});
+
+describe("strapi storage layout — no owning relations", () => {
+  const tagSpec = {
+    shape: wireShape(doc, ct("Tag"), []),
+    ct: ct("Tag"),
+    assigns: [],
+    secured: false,
+    scoped: false,
+    layout: "strapi" as const,
+    links: [],
+  };
+
+  it("Tag generated controller golden (no relations, no assigns, unsecured)", async () => {
+    await expect(emitGeneratedController(tagSpec)).toMatchFileSnapshot(
+      "../__golden__/storage/Generated.TagApiController.php",
+    );
+  });
+
+  it("omits ->with, the request capture and every unlink", () => {
+    const php = emitGeneratedController(tagSpec);
+    expect(php).toContain("return Tag::query();");
+    expect(php).not.toContain("->with([");
+    expect(php).toContain("DB::transaction(function () use ($m, $wire): void {");
+    expect(php).not.toContain("StrapiRows::link(");
+    expect(php).not.toContain("StrapiRows::unlinkAll(");
+    expect(php).toContain("StrapiRows::create($m);");
+  });
+});
+
 describe("strapi-jwt guarded routes", () => {
   const storageCts = storageDoc.contentTypes.filter((c) => c.builtin === undefined);
 
@@ -352,6 +389,16 @@ describe("strapi-jwt guarded routes", () => {
   });
 });
 
+const tagLintSpec = {
+  shape: wireShape(doc, ct("Tag"), []),
+  ct: ct("Tag"),
+  assigns: [],
+  secured: false,
+  scoped: false,
+  layout: "strapi" as const,
+  links: [],
+};
+
 describe("php -l — strapi storage layout", () => {
   let dir = "";
   beforeAll(() => {
@@ -370,6 +417,7 @@ describe("php -l — strapi storage layout", () => {
       name: "TaskApiController",
       emit: () => emitGeneratedController(storageSpec("Task", ["assignee"])),
     },
+    { name: "TagApiController", emit: () => emitGeneratedController(tagLintSpec) },
     {
       name: "routes",
       emit: () =>

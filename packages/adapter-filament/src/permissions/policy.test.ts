@@ -127,6 +127,34 @@ describe("emitPolicy — strapi storage layout", () => {
     expect(php).not.toContain("$record->owner_id");
   });
 
+  // `if (! false) { ... }` around a condition is not just noise: it makes the method read as if
+  // the condition still decides, when nothing can reach it.
+  it("short-circuits a conditional method to a bare denial when no role holds the key", () => {
+    const orphan: PolicySpec = {
+      contentType: "Note",
+      model: "Note",
+      methods: [
+        {
+          method: "view",
+          key: "note.read",
+          record: true,
+          roles: [],
+          condition: {
+            kind: "eq",
+            left: { kind: "var", name: "record.ownerId" },
+            right: { kind: "var", name: "user.id" },
+          },
+        },
+      ],
+    };
+    const denied = emitPolicy(orphan, noteCt, "strapi");
+    expect(denied).toContain(
+      "    public function view(User $user, Note $record): bool\n    {\n        return false;\n    }",
+    );
+    expect(denied).not.toContain("if (! false)");
+    expect(denied).not.toContain("Ring1::");
+  });
+
   it("denies outright when no role holds the key", () => {
     const orphan: PolicySpec = {
       contentType: "Note",
