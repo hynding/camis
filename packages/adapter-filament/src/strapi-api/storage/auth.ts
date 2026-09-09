@@ -11,7 +11,14 @@ const STRAPI_DEFAULT_ROLE = "authenticated";
  * the same HS256 JWT shape Strapi's users-permissions plugin issues, so a session minted by
  * either backend authenticates on both.
  */
-export const emitStorageAuthController = (defaultRole: string | undefined): string => `<?php
+export const emitStorageAuthController = (defaultRole: string | undefined): string => {
+  const roleType = defaultRole ?? STRAPI_DEFAULT_ROLE;
+  const role = phpSingleQuoted(roleType);
+  const missingRole = phpSingleQuoted(
+    `up_roles has no row with type '${roleType}'; boot Strapi against this database first`,
+  );
+
+  return `<?php
 ${PHP_MARKER}
 
 declare(strict_types=1);
@@ -25,6 +32,7 @@ use App\\Support\\StrapiRows;
 use Firebase\\JWT\\JWT;
 use Illuminate\\Http\\JsonResponse;
 use Illuminate\\Http\\Request;
+use Illuminate\\Support\\Facades\\DB;
 use Illuminate\\Validation\\ValidationException;
 
 /**
@@ -64,10 +72,22 @@ class AuthController extends Controller
         $user->provider = 'local';
         $user->confirmed = ! config('camis.email_confirmation');
         $user->blocked = false;
-        StrapiRows::create($user);
 
-        $role = UpRole::query()->where('type', ${phpSingleQuoted(defaultRole ?? STRAPI_DEFAULT_ROLE)})->firstOrFail();
-        StrapiRows::link($user, 'up_users_role_lnk', 'user_id', 'role_id', $role->id, 'user_ord');
+        // One transaction, role lookup first: an absent up_roles row must fail before the user row
+        // is written. Committing the insert without the link would leave an account that logs in
+        // but holds no role — every policy denies it — while burning the identifier, since the
+        // uniqueness check above would reject the retry.
+        DB::transaction(function () use ($user): void {
+            $role = UpRole::query()->where('type', ${role})->first();
+            if ($role === null) {
+                // A configuration error, not a missing resource: StrapiErrors renders it as a 500.
+                throw new \\RuntimeException(
+                    ${missingRole},
+                );
+            }
+            StrapiRows::create($user);
+            StrapiRows::link($user, 'up_users_role_lnk', 'user_id', 'role_id', $role->id, 'user_ord');
+        });
 
         return response()->json($this->session($user));
     }
@@ -118,3 +138,4 @@ class AuthController extends Controller
     }
 }
 `;
+};

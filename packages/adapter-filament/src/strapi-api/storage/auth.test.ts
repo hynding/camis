@@ -95,6 +95,49 @@ describe("emitStorageAuthController", () => {
     expect(php).toContain("config('camis.email_confirmation')");
   });
 
+  // Without a transaction, a missing (or renamed) up_roles row commits the user row and then
+  // fails on the link: the account can log in, every policy denies it because it has no role, and
+  // the identifier is burned for good — the uniqueness check would reject a retry.
+  it("registers the user and its role link in one transaction, looking the role up first", () => {
+    const php = emitStorageAuthController("authenticated");
+    const body = php.slice(
+      php.indexOf("public function register"),
+      php.indexOf("public function login"),
+    );
+    expect(body).toContain("DB::transaction(function () use ($user): void {");
+    // Role lookup, then insert, then link — in that order, all inside the closure.
+    const lookup = body.indexOf("UpRole::query()");
+    const create = body.indexOf("StrapiRows::create($user);");
+    const link = body.indexOf("StrapiRows::link(");
+    const open = body.indexOf("DB::transaction(");
+    const close = body.indexOf("});", link);
+    expect(open).toBeGreaterThan(-1);
+    expect(open).toBeLessThan(lookup);
+    expect(lookup).toBeLessThan(create);
+    expect(create).toBeLessThan(link);
+    expect(close).toBeGreaterThan(link);
+  });
+
+  it("imports the DB facade", () => {
+    expect(emitStorageAuthController("authenticated")).toContain(
+      "use Illuminate\\Support\\Facades\\DB;",
+    );
+  });
+
+  // firstOrFail() throws ModelNotFoundException, which Laravel rewrites to a 404 — indistinguishable
+  // from "no such route" and wrong besides: an absent up_roles row is a deployment/config error on
+  // the operator's side, which StrapiErrors renders as a 500.
+  it("names the missing up_roles row explicitly instead of firstOrFail's 404", () => {
+    const php = emitStorageAuthController("authenticated");
+    expect(php).not.toContain("firstOrFail()");
+    expect(php).toContain("$role = UpRole::query()->where('type', 'authenticated')->first();");
+    expect(php).toContain("if ($role === null) {");
+    expect(php).toContain(
+      "'up_roles has no row with type \\'authenticated\\'; boot Strapi against this database first'",
+    );
+    expect(php).toContain("throw new \\RuntimeException(");
+  });
+
   it("escapes a single quote in defaultRole so it cannot break out of the PHP string literal", () => {
     const php = emitStorageAuthController("o'brien");
     expect(php).toContain("'type', 'o\\'brien')");
