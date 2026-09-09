@@ -116,3 +116,47 @@ describe("run", () => {
     expect(lines.some((l) => l.includes("filament:"))).toBe(true);
   });
 });
+
+describe("run — scaffold --storage", () => {
+  const fakeIo = (): { io: Io; execCalls: string[][] } => {
+    const execCalls: string[][] = [];
+    const io: Io = {
+      readFile: (p) => Promise.reject(new Error(`ENOENT ${p}`)),
+      writeFile: () => Promise.resolve(),
+      materialize: () => Promise.resolve(),
+      copyDir: () => Promise.resolve(),
+      exec: (cmd, args) => {
+        execCalls.push([cmd, ...args]);
+        return Promise.resolve(0);
+      },
+      out: (l) => lines.push(l),
+      cwd: "/proj",
+    };
+    return { io, execCalls };
+  };
+
+  it("rejects a --storage value other than laravel or strapi", async () => {
+    const { io, execCalls } = fakeIo();
+    const code = await run(["scaffold", "filament", "app", "--storage", "cockroachdb"], io);
+    expect(code).toBe(1);
+    expect(lines.join("\n")).toContain("✗ scaffold --storage must be laravel or strapi");
+    expect(execCalls).toEqual([]);
+  });
+
+  it("passes --storage strapi through to scaffoldCommand", async () => {
+    const { io, execCalls } = fakeIo();
+    const code = await run(["scaffold", "filament", "app", "--storage", "strapi"], io);
+    expect(code).toBe(0);
+    expect(execCalls).toEqual([
+      ["composer", "create-project", "laravel/laravel:^12", "/proj/app", "--no-interaction"],
+      ["composer", "require", "firebase/php-jwt", "visus/cuid2", "--no-interaction"],
+    ]);
+  });
+
+  it("defaults --storage to laravel when omitted", async () => {
+    const { io, execCalls } = fakeIo();
+    const code = await run(["scaffold", "filament", "app"], io);
+    expect(code).toBe(1); // User.php read fails against this fake Io; sequence still runs first
+    expect(execCalls.length).toBeGreaterThan(2);
+  });
+});

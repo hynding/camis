@@ -144,3 +144,50 @@ describe("scaffoldCommand", () => {
     expect(lines.join("\n")).toContain("filament");
   });
 });
+
+describe("scaffoldCommand — storage strapi", () => {
+  it("runs only the two composer steps and never touches User.php", async () => {
+    const { io, calls, written } = fakeIo({});
+    const code = await scaffoldCommand("filament", "app", io, { storage: "strapi" });
+    expect(code).toBe(0);
+    expect(calls).toEqual([
+      {
+        cmd: "composer",
+        args: ["create-project", "laravel/laravel:^12", "/proj/app", "--no-interaction"],
+        cwd: "/proj",
+      },
+      {
+        cmd: "composer",
+        args: ["require", "firebase/php-jwt", "visus/cuid2", "--no-interaction"],
+        cwd: "/proj/app",
+      },
+    ]);
+    expect(written["/proj/app/app/Models/User.php"]).toBeUndefined();
+  });
+
+  it("aborts on the first failing step and never reaches the second", async () => {
+    const { io, calls } = fakeIo({ execResults: [1] });
+    const code = await scaffoldCommand("filament", "app", io, { storage: "strapi" });
+    expect(code).toBe(1);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("still refuses a directory that already has composer.json", async () => {
+    const { io, calls, lines } = fakeIo({
+      files: { "/proj/app/composer.json": "{}" },
+    });
+    const code = await scaffoldCommand("filament", "app", io, { storage: "strapi" });
+    expect(code).toBe(1);
+    expect(calls).toEqual([]);
+    expect(lines.join("\n")).toContain("already");
+  });
+
+  it("defaults to the laravel sequence (unchanged) when storage is omitted", async () => {
+    const { io, calls } = fakeIo({
+      files: { "/proj/app/app/Models/User.php": STOCK_USER },
+    });
+    const code = await scaffoldCommand("filament", "app", io);
+    expect(code).toBe(0);
+    expect(calls).toHaveLength(6);
+  });
+});

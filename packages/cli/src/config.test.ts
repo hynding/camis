@@ -96,3 +96,78 @@ describe("loadConfig — apiStyle + protected", () => {
     expect((await loadConfig(io, "camis.config.json")).ok).toBe(false);
   });
 });
+
+describe("loadConfig — storageLayout", () => {
+  it('accepts storageLayout "strapi" alongside apiStyle "strapi"', async () => {
+    const io = fakeIo({
+      "/proj/camis.config.json": JSON.stringify({
+        ir: "./camis.json",
+        targets: [
+          { target: "filament", out: "./laravel", apiStyle: "strapi", storageLayout: "strapi" },
+        ],
+      }),
+    });
+    const r = await loadConfig(io, "camis.config.json");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.targets[0]?.storageLayout).toBe("strapi");
+  });
+
+  it('accepts storageLayout "laravel" with any apiStyle', async () => {
+    const io = fakeIo({
+      "/proj/camis.config.json": JSON.stringify({
+        ir: "./camis.json",
+        targets: [{ target: "filament", out: "./laravel", storageLayout: "laravel" }],
+      }),
+    });
+    expect((await loadConfig(io, "camis.config.json")).ok).toBe(true);
+  });
+
+  it("leaves storageLayout undefined when omitted", async () => {
+    const io = fakeIo({
+      "/proj/camis.config.json": JSON.stringify({
+        ir: "./camis.json",
+        targets: [{ target: "filament", out: "./laravel" }],
+      }),
+    });
+    const r = await loadConfig(io, "camis.config.json");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.targets[0]?.storageLayout).toBeUndefined();
+  });
+
+  it("rejects an unknown storageLayout value", async () => {
+    const io = fakeIo({
+      "/proj/camis.config.json": JSON.stringify({
+        ir: "./camis.json",
+        targets: [{ target: "filament", out: "./laravel", storageLayout: "mysql" }],
+      }),
+    });
+    expect((await loadConfig(io, "camis.config.json")).ok).toBe(false);
+  });
+
+  it('rejects storageLayout "strapi" without apiStyle "strapi", naming the target index', async () => {
+    const io = fakeIo({
+      "/proj/camis.config.json": JSON.stringify({
+        ir: "./camis.json",
+        targets: [{ target: "filament", out: "./laravel", storageLayout: "strapi" }],
+      }),
+    });
+    const r = await loadConfig(io, "camis.config.json");
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toBe('targets.0: storageLayout "strapi" requires apiStyle "strapi"');
+  });
+
+  it('rejects storageLayout "strapi" when apiStyle is "laravel"', async () => {
+    const io = fakeIo({
+      "/proj/camis.config.json": JSON.stringify({
+        ir: "./camis.json",
+        targets: [
+          { target: "filament", out: "./laravel", apiStyle: "laravel", storageLayout: "strapi" },
+        ],
+      }),
+    });
+    expect((await loadConfig(io, "camis.config.json")).ok).toBe(false);
+  });
+});
