@@ -131,12 +131,19 @@ describe("Consumable model", () => {
     expect(php).toContain("'facts_serving_size_amount'");
   });
 
-  it("puts every repeatable's relationName in COMPONENT_RELATIONS, not its scalars", () => {
+  it("puts every repeatable's relationName in COMPONENT_RELATIONS, keeping its scalars out of COMPONENT_ATTRIBUTES", () => {
     const php = emit("Consumable");
     expect(php).toContain(
       "public const COMPONENT_RELATIONS = [\n        'factsAdditional',\n    ];",
     );
-    expect(php).not.toContain("'slug'");
+    const attributesBlock = php.slice(
+      php.indexOf("COMPONENT_ATTRIBUTES"),
+      php.indexOf("COMPONENT_RELATIONS"),
+    );
+    expect(attributesBlock).not.toContain("'slug'");
+    // The repeatable's own scalars still live in COMPONENT_MAP — the runtime loader needs them
+    // to hydrate each child row — just not flattened onto the owner as attributes.
+    expect(php).toContain("'slug'");
   });
 
   it("has the owning creator relation, not a creator_id fillable column", () => {
