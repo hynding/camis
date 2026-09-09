@@ -1,3 +1,4 @@
+import type { StorageLayout } from "@camis/adapter-kernel";
 import type { Expression } from "@camis/expr";
 import type { ContentType, FieldType } from "@camis/ir-schema";
 import { snakeColumn } from "../names";
@@ -5,6 +6,8 @@ import { linkColumns, linkTable, strapiTable, type RelationField } from "./stora
 
 export { renderEloquent } from "./render-eloquent";
 export { renderSql } from "./render-sql";
+// Re-exported for `scope.ts`, which reaches the layout distinction through this module.
+export type { StorageLayout };
 
 export type WhereValue =
   | { kind: "lit"; value: string | number | boolean | null }
@@ -29,8 +32,6 @@ export type WhereNode =
 export interface WhereContext {
   columns: Map<string, { column: string; type: FieldType; link?: LinkInfo }>;
 }
-
-export type StorageLayout = "laravel" | "strapi";
 
 const NUMERIC = new Set<FieldType>(["integer", "bigInteger", "float", "decimal"]);
 const STRINGY = new Set<FieldType>([
