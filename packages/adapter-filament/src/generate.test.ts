@@ -471,6 +471,9 @@ describe("DEPLOY.md", () => {
     const deploy = result.files.find((f) => f.path === "DEPLOY.md")!;
     expect(deploy.content).toContain("CAMIS_AUTH_THROTTLE_PER_MINUTE");
     expect(deploy.content).toContain("SANCTUM_TOKEN_EXPIRATION");
+    // The rate is interpolated into the middleware string at route registration, so a cached
+    // route file holds the old number: clearing only the config cache silently does nothing.
+    expect(deploy.content).toContain("the rate is baked into the cached route definition");
   });
 });
 
