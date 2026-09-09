@@ -1,5 +1,6 @@
 import { conditions } from "./permissions/conditions";
 import roles from "./permissions/roles.json";
+import apiRoles from "./permissions/api-roles.json";
 
 export default {
   async register() {},
@@ -12,5 +13,15 @@ export default {
         await strapi.query("admin::permission").create({ data: { ...p, role: record.id } });
       }
     }
+    const grant = async (type: string, actions: string[]) => {
+      let role = await strapi.query("plugin::users-permissions.role").findOne({ where: { type } });
+      if (!role) role = await strapi.query("plugin::users-permissions.role").create({ data: { name: type, type, description: "camis" } });
+      for (const action of actions) {
+        const existing = await strapi.query("plugin::users-permissions.permission").findOne({ where: { action, role: role.id } });
+        if (!existing) await strapi.query("plugin::users-permissions.permission").create({ data: { action, role: role.id } });
+      }
+    };
+    await grant("public", apiRoles.public);
+    for (const r of apiRoles.roles) await grant(r.type, r.actions);
   },
 };

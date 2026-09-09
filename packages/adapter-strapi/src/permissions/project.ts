@@ -3,7 +3,12 @@ import { freeVars } from "@camis/expr";
 import type { CapabilityGap, IrDocument } from "@camis/ir-schema";
 import type { Role } from "@camis/permissions";
 import { strapiNames } from "../names";
-import { FIELD_ACCESS_ACTIONS, STRAPI_ACTION_UID } from "./actions";
+import {
+  API_ACTION_SUFFIXES,
+  FIELD_ACCESS_ACTIONS,
+  PUBLIC_API_ACTIONS,
+  STRAPI_ACTION_UID,
+} from "./actions";
 import { conditionName } from "./condition-name";
 
 export const USER_CONTEXT = ["user.id", "user.email", "user.role"] as const;
@@ -118,4 +123,56 @@ export const projectPermissions = (doc: IrDocument, roles: Role[]): ProjectionRe
     .map(([name, predicate]): NamedCondition => ({ name, predicate }))
     .sort((a, b) => a.name.localeCompare(b.name));
   return { roles: emittedRoles, conditions: named, gaps };
+};
+
+export interface ApiRoleGrant {
+  type: string;
+  actions: string[];
+}
+export interface ApiRoleProjection {
+  roles: ApiRoleGrant[];
+  public: string[];
+  gaps: CapabilityGap[];
+}
+
+/**
+ * Projects IR roles onto the users-permissions REST API's own role/permission model — distinct
+ * from `projectPermissions`'s admin-panel projection: users-permissions actions carry no
+ * conditions and have no `publish` action (Strapi 5 publishes via `update` + a `status` param).
+ */
+export const projectApiRoles = (doc: IrDocument, roles: Role[]): ApiRoleProjection => {
+  const byName = new Map(doc.contentTypes.map((ct) => [ct.name, ct]));
+  const gaps: CapabilityGap[] = [];
+
+  const projected = roles.map((role): ApiRoleGrant => {
+    const actions = new Set<string>();
+    for (const grant of role.grants) {
+      const ct = byName.get(grant.contentType)!;
+      const uid = strapiNames(ct).uid;
+      for (const act of grant.actions) {
+        for (const suffix of API_ACTION_SUFFIXES[act] ?? []) {
+          actions.add(`${uid}.${suffix}`);
+        }
+      }
+      if (grant.actions.includes("publish") && !grant.actions.includes("update")) {
+        gaps.push({
+          feature: "publishAction",
+          location: { contentType: grant.contentType, rule: role.name },
+          severity: "downgrade",
+          message: `"${role.name}" grant on "${grant.contentType}" publishes without update; the users-permissions API has no separate publish action`,
+        });
+      }
+      if (grant.condition) {
+        gaps.push({
+          feature: "apiGrantCondition",
+          location: { contentType: grant.contentType, rule: role.name },
+          severity: "downgrade",
+          message: `"${role.name}" grant on "${grant.contentType}" is unconditioned at the users-permissions API; conditions apply to the admin panel only`,
+        });
+      }
+    }
+    return { type: role.name, actions: [...actions].sort() };
+  });
+
+  return { roles: projected, public: [...PUBLIC_API_ACTIONS], gaps };
 };

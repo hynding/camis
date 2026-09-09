@@ -1,0 +1,16 @@
+{
+  "roles": [
+    {
+      "type": "Editor",
+      "actions": [
+        "api::article.article.find",
+        "api::article.article.findOne",
+        "api::article.article.update"
+      ]
+    }
+  ],
+  "public": [
+    "plugin::users-permissions.auth.register",
+    "plugin::users-permissions.auth.callback"
+  ]
+}

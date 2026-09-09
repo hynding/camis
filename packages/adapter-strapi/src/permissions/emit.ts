@@ -3,7 +3,7 @@ import type { CapabilityGap, IrDocument } from "@camis/ir-schema";
 import type { Role } from "@camis/permissions";
 import { PERMISSIONS_INDEX_TS } from "../skeleton/templates";
 import { emitConditionsModule } from "./conditions";
-import { projectPermissions } from "./project";
+import { projectApiRoles, projectPermissions } from "./project";
 
 export interface PermissionEmission {
   files: GeneratedFile[];
@@ -15,8 +15,13 @@ export interface PermissionEmission {
 export const emitPermissions = (doc: IrDocument, roles: Role[]): PermissionEmission => {
   if (roles.length === 0) return { files: [], gaps: [] };
   const { roles: emittedRoles, conditions, gaps } = projectPermissions(doc, roles);
+  const apiRoles = projectApiRoles(doc, roles);
   const files: GeneratedFile[] = [
     { path: "src/permissions/roles.json", content: stableJson(emittedRoles) },
+    {
+      path: "src/permissions/api-roles.json",
+      content: stableJson({ roles: apiRoles.roles, public: apiRoles.public }),
+    },
   ];
   if (conditions.length > 0) {
     files.push({
@@ -24,5 +29,5 @@ export const emitPermissions = (doc: IrDocument, roles: Role[]): PermissionEmiss
       content: emitConditionsModule(conditions),
     });
   }
-  return { files, gaps, indexContent: PERMISSIONS_INDEX_TS };
+  return { files, gaps: [...gaps, ...apiRoles.gaps], indexContent: PERMISSIONS_INDEX_TS };
 };
