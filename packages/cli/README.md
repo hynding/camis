@@ -73,6 +73,9 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
   `app/Http/Controllers/Api/Generated/` plus a seed-mode subclass you may override. The Strapi
   API style adds a NOT NULL unique `username` column to `users`; run its migration against an
   empty users table, or backfill usernames first.
+- `storageLayout` (filament only): `laravel` (default) or `strapi`; `"strapi"` requires
+  `apiStyle: "strapi"` and is rejected otherwise (details on the Strapi-owned database layout
+  land in a later phase).
 - The roles file is either a bare `Role[]` or `{ "defaultRole": "<role>", "roles": [...] }`;
   `defaultRole` is assigned on `/auth/local/register`.
 - `camis import strapi <dir> --upsert-by recordId` sets `options.upsertBy` on every imported

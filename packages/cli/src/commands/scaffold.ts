@@ -1,4 +1,5 @@
 import { isAbsolute, dirname, join, resolve } from "node:path";
+import type { StorageLayout } from "@camis/adapter-kernel";
 import type { Io } from "../io";
 
 const STOCK_TRAIT_USE = "use HasFactory, Notifiable;";
@@ -61,11 +62,37 @@ const steps = (
   },
 ];
 
-export const scaffoldCommand = async (target: string, dir: string, io: Io): Promise<number> => {
+// The lean host for the Strapi storage layout: no Filament, no Spatie, no `install:api`, no
+// User model patch — the app runs atop a database Strapi already owns and authenticates with
+// its own JWT guard instead of Sanctum.
+const strapiSteps = (
+  appDir: string,
+  parentDir: string,
+  createArg: string,
+): { cmd: string; args: string[]; cwd: string }[] => [
+  {
+    cmd: "composer",
+    args: ["create-project", "laravel/laravel:^12", createArg, "--no-interaction"],
+    cwd: parentDir,
+  },
+  {
+    cmd: "composer",
+    args: ["require", "firebase/php-jwt", "visus/cuid2", "--no-interaction"],
+    cwd: appDir,
+  },
+];
+
+export const scaffoldCommand = async (
+  target: string,
+  dir: string,
+  io: Io,
+  options?: { storage?: StorageLayout },
+): Promise<number> => {
   if (target !== "filament") {
     io.out(`✗ "${target}" has no scaffold; only the filament target needs a host app`);
     return 1;
   }
+  const storage = options?.storage ?? "laravel";
   const appDir = isAbsolute(dir) ? dir : resolve(io.cwd, dir);
   try {
     await io.readFile(join(appDir, "composer.json"));
@@ -75,13 +102,24 @@ export const scaffoldCommand = async (target: string, dir: string, io: Io): Prom
     // no composer.json → safe to scaffold
   }
 
-  for (const step of steps(appDir, dirname(appDir), appDir)) {
+  const stepList =
+    storage === "strapi"
+      ? strapiSteps(appDir, dirname(appDir), appDir)
+      : steps(appDir, dirname(appDir), appDir);
+
+  for (const step of stepList) {
     io.out(`→ ${step.cmd} ${step.args.join(" ")}`);
     const code = await io.exec(step.cmd, step.args, step.cwd);
     if (code !== 0) {
       io.out(`✗ ${step.cmd} ${step.args.join(" ")} exited ${code}`);
       return 1;
     }
+  }
+
+  if (storage === "strapi") {
+    io.out(`✓ scaffolded Laravel 12 (Strapi storage) at ${dir}`);
+    io.out(`  next: point a filament target's "out" at ${dir} and run: camis build`);
+    return 0;
   }
 
   const userModelPath = join(appDir, "app/Models/User.php");

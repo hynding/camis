@@ -8,6 +8,7 @@ export const targetConfig = z.object({
   projectName: z.string().optional(),
   dialect: z.enum(["sqlite", "mysql", "pgsql"]).optional(),
   apiStyle: z.enum(["laravel", "strapi"]).optional(),
+  storageLayout: z.enum(["laravel", "strapi"]).optional(),
 });
 export type TargetConfig = z.infer<typeof targetConfig>;
 
@@ -37,6 +38,15 @@ export const loadConfig = async (io: Io, configPath: string): Promise<LoadResult
       error: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "),
     };
   }
+  for (const [i, t] of parsed.data.targets.entries()) {
+    if (t.storageLayout === "strapi" && t.apiStyle !== "strapi") {
+      return {
+        ok: false,
+        error: `targets.${i}: storageLayout "strapi" requires apiStyle "strapi"`,
+      };
+    }
+  }
+
   const base = dirname(abs);
   const value: ProjectConfig = {
     ir: resolve(base, parsed.data.ir),

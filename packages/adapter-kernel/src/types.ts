@@ -22,10 +22,15 @@ export interface Manifest {
 
 export type ApiStyle = "laravel" | "strapi";
 
+/** Filament only: which app owns the schema/database. Default "laravel". */
+export type StorageLayout = "laravel" | "strapi";
+
 export interface GenerateOptions {
   projectName: string;
   /** Filament only: shape of the generated JSON API. Default "laravel". */
   apiStyle?: ApiStyle;
+  /** Filament only: run atop a Strapi-owned database instead of a Laravel-owned one. */
+  storageLayout?: StorageLayout;
 }
 
 export interface GenerationResult {

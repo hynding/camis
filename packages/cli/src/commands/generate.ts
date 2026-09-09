@@ -74,7 +74,11 @@ export const generateCommand = async (
     const projectName = t.projectName ?? basename(t.out);
     const result = adapterFor(t).generate(
       { document, roles, ...(defaultRole !== undefined ? { defaultRole } : {}) },
-      { projectName, ...(t.apiStyle !== undefined ? { apiStyle: t.apiStyle } : {}) },
+      {
+        projectName,
+        ...(t.apiStyle !== undefined ? { apiStyle: t.apiStyle } : {}),
+        ...(t.storageLayout !== undefined ? { storageLayout: t.storageLayout } : {}),
+      },
     );
     const errorGap = printGaps(io, result.gaps.gaps);
     if (errorGap) {

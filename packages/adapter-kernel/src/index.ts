@@ -7,6 +7,7 @@ export type {
   GenerationResult,
   Manifest,
   ManifestEntry,
+  StorageLayout,
 } from "./types";
 export { columnField, expandComponents } from "./expand";
 export type { ExpandedContentType, ExpandedScalar, ExpandedTable } from "./expand";
