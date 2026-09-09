@@ -23,6 +23,23 @@ export const patchUserModel = (source: string): string => {
   return source.replace(STOCK_TRAIT_USE, PATCHED_TRAIT_USE);
 };
 
+const STOCK_ROUTING_CONSOLE = "commands: __DIR__.'/../routes/console.php',";
+const ROUTING_WITH_API = `api: __DIR__.'/../routes/api.php',\n        ${STOCK_ROUTING_CONSOLE}`;
+
+/**
+ * Register `routes/api.php` in Laravel 12's bootstrap/app.php. Idempotent.
+ *
+ * The stock skeleton routes only `web` and `console`; on the Laravel layout `php artisan
+ * install:api` adds the API entry, but that command also installs Sanctum, which the Strapi
+ * storage layout must not have. This is the same edit install:api makes, without the package.
+ * A source matching neither form is returned unchanged; the caller treats that as a failure
+ * rather than reporting a patch that never happened.
+ */
+export const patchBootstrapApp = (source: string): string => {
+  if (source.includes("routes/api.php")) return source;
+  return source.replace(STOCK_ROUTING_CONSOLE, ROUTING_WITH_API);
+};
+
 // The exact sequence proven by the adapter-filament boot CI workflow.
 const steps = (
   appDir: string,
@@ -117,6 +134,22 @@ export const scaffoldCommand = async (
   }
 
   if (storage === "strapi") {
+    const bootstrapPath = join(appDir, "bootstrap/app.php");
+    try {
+      const source = await io.readFile(bootstrapPath);
+      const patched = patchBootstrapApp(source);
+      if (patched === source && !source.includes("routes/api.php")) {
+        io.out(
+          "✗ could not patch bootstrap/app.php: no recognised `commands: …/routes/console.php` routing line",
+        );
+        return 1;
+      }
+      await io.writeFile(bootstrapPath, patched);
+      io.out("✓ patched bootstrap/app.php to route routes/api.php");
+    } catch (e) {
+      io.out(`✗ cannot patch ${bootstrapPath}: ${(e as Error).message}`);
+      return 1;
+    }
     io.out(`✓ scaffolded Laravel 12 (Strapi storage) at ${dir}`);
     io.out(`  next: point a filament target's "out" at ${dir} and run: camis build`);
     return 0;

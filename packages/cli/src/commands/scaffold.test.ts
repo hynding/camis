@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Io } from "../io";
-import { patchUserModel, scaffoldCommand } from "./scaffold";
+import { patchBootstrapApp, patchUserModel, scaffoldCommand } from "./scaffold";
 
 interface ExecCall {
   cmd: string;
@@ -77,6 +77,51 @@ describe("patchUserModel", () => {
   });
 });
 
+const STOCK_BOOTSTRAP = `<?php
+
+use Illuminate\\Foundation\\Application;
+use Illuminate\\Foundation\\Configuration\\Exceptions;
+use Illuminate\\Foundation\\Configuration\\Middleware;
+
+return Application::configure(basePath: dirname(__DIR__))
+    ->withRouting(
+        web: __DIR__.'/../routes/web.php',
+        commands: __DIR__.'/../routes/console.php',
+        health: '/up',
+    )
+    ->withMiddleware(function (Middleware $middleware): void {
+        //
+    })
+    ->withExceptions(function (Exceptions $exceptions): void {
+        //
+    })->create();
+`;
+
+// Laravel 12's stock bootstrap/app.php registers no API routes; on the laravel layout
+// `php artisan install:api` adds them, but the strapi layout skips that step (it would install
+// Sanctum), so without this patch every generated /api route 404s.
+describe("patchBootstrapApp", () => {
+  it("registers routes/api.php on the stock Laravel 12 bootstrap", () => {
+    expect(patchBootstrapApp(STOCK_BOOTSTRAP)).toContain("api: __DIR__.'/../routes/api.php',");
+  });
+
+  it("keeps the console and web entries", () => {
+    const patched = patchBootstrapApp(STOCK_BOOTSTRAP);
+    expect(patched).toContain("web: __DIR__.'/../routes/web.php',");
+    expect(patched).toContain("commands: __DIR__.'/../routes/console.php',");
+  });
+
+  it("is idempotent", () => {
+    const once = patchBootstrapApp(STOCK_BOOTSTRAP);
+    expect(patchBootstrapApp(once)).toBe(once);
+  });
+
+  it("leaves an unrecognised bootstrap unchanged so the caller can fail loudly", () => {
+    const hand = STOCK_BOOTSTRAP.replace("commands: __DIR__.'/../routes/console.php',", "");
+    expect(patchBootstrapApp(hand)).toBe(hand);
+  });
+});
+
 describe("scaffoldCommand", () => {
   it("runs the composer/artisan sequence in order and patches User.php", async () => {
     const { io, calls, written } = fakeIo({
@@ -147,7 +192,9 @@ describe("scaffoldCommand", () => {
 
 describe("scaffoldCommand — storage strapi", () => {
   it("runs only the two composer steps and never touches User.php", async () => {
-    const { io, calls, written } = fakeIo({});
+    const { io, calls, written } = fakeIo({
+      files: { "/proj/app/bootstrap/app.php": STOCK_BOOTSTRAP },
+    });
     const code = await scaffoldCommand("filament", "app", io, { storage: "strapi" });
     expect(code).toBe(0);
     expect(calls).toEqual([
@@ -163,6 +210,22 @@ describe("scaffoldCommand — storage strapi", () => {
       },
     ]);
     expect(written["/proj/app/app/Models/User.php"]).toBeUndefined();
+    expect(written["/proj/app/bootstrap/app.php"]).toContain("api: __DIR__.'/../routes/api.php',");
+  });
+
+  it("fails when bootstrap/app.php cannot be patched, rather than leaving dead api routes", async () => {
+    const { io, lines, written } = fakeIo({
+      files: {
+        "/proj/app/bootstrap/app.php": STOCK_BOOTSTRAP.replace(
+          "commands: __DIR__.'/../routes/console.php',",
+          "",
+        ),
+      },
+    });
+    const code = await scaffoldCommand("filament", "app", io, { storage: "strapi" });
+    expect(code).toBe(1);
+    expect(lines.join("\n")).toContain("bootstrap/app.php");
+    expect(written["/proj/app/bootstrap/app.php"]).toBeUndefined();
   });
 
   it("aborts on the first failing step and never reaches the second", async () => {

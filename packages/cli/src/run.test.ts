@@ -118,10 +118,23 @@ describe("run", () => {
 });
 
 describe("run — scaffold --storage", () => {
+  // Only bootstrap/app.php exists: the composer.json probe must still miss (or the scaffold
+  // refuses the directory), while the strapi path's bootstrap patch must find its file.
+  const BOOTSTRAP = `return Application::configure(basePath: dirname(__DIR__))
+    ->withRouting(
+        web: __DIR__.'/../routes/web.php',
+        commands: __DIR__.'/../routes/console.php',
+        health: '/up',
+    )->create();
+`;
+
   const fakeIo = (): { io: Io; execCalls: string[][] } => {
     const execCalls: string[][] = [];
     const io: Io = {
-      readFile: (p) => Promise.reject(new Error(`ENOENT ${p}`)),
+      readFile: (p) =>
+        p.endsWith("bootstrap/app.php")
+          ? Promise.resolve(BOOTSTRAP)
+          : Promise.reject(new Error(`ENOENT ${p}`)),
       writeFile: () => Promise.resolve(),
       materialize: () => Promise.resolve(),
       copyDir: () => Promise.resolve(),
