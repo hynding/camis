@@ -1,0 +1,113 @@
+import { PHP_MARKER } from "../../hooks/names";
+import { phpSingleQuoted, strapiUser } from "../auth";
+
+/** Strapi's own default role for a freshly registered user, when the caller supplies none. */
+const STRAPI_DEFAULT_ROLE = "authenticated";
+
+/**
+ * The Strapi-storage layout's `App\Http\Controllers\Api\AuthController` — same FQCN as the
+ * Sanctum one (`../auth.ts`); only one is ever emitted per generated app, chosen by storage
+ * layout. It reads and writes `up_users`/`up_roles` directly (through `StrapiRows`) and mints
+ * the same HS256 JWT shape Strapi's users-permissions plugin issues, so a session minted by
+ * either backend authenticates on both.
+ */
+export const emitStorageAuthController = (defaultRole: string | undefined): string => `<?php
+${PHP_MARKER}
+
+declare(strict_types=1);
+
+namespace App\\Http\\Controllers\\Api;
+
+use App\\Http\\Controllers\\Controller;
+use App\\Models\\UpRole;
+use App\\Models\\User;
+use App\\Support\\StrapiRows;
+use Firebase\\JWT\\JWT;
+use Illuminate\\Http\\JsonResponse;
+use Illuminate\\Http\\Request;
+use Illuminate\\Support\\Facades\\Hash;
+use Illuminate\\Validation\\ValidationException;
+
+/**
+ * Strapi users-permissions–shaped auth over the shared \`up_users\` table. Unlike the Sanctum
+ * layout's AuthController, this one issues the JWT Strapi itself would issue (see session())
+ * and enforces uniqueness in code rather than in a database index, exactly as Strapi does.
+ */
+class AuthController extends Controller
+{
+    public function register(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'username' => ['required', 'string', 'min:3'],
+            'email' => ['required', 'email'],
+            'password' => ['required', 'string', 'min:6'],
+        ]);
+        $username = $data['username'];
+        $email = strtolower($data['email']);
+
+        if (User::query()->where('email', $email)->orWhere('username', $username)->exists()) {
+            throw ValidationException::withMessages(['email' => 'Email or Username are already taken']);
+        }
+
+        $user = new User([
+            'username' => $username,
+            'email' => $email,
+            'password' => Hash::make($data['password']),
+        ]);
+        $user->provider = 'local';
+        $user->confirmed = ! config('camis.email_confirmation');
+        $user->blocked = false;
+        StrapiRows::create($user);
+
+        $role = UpRole::query()->where('type', ${phpSingleQuoted(defaultRole ?? STRAPI_DEFAULT_ROLE)})->firstOrFail();
+        StrapiRows::link($user, 'up_users_role_lnk', 'user_id', 'role_id', $role->id, 'user_ord');
+
+        return response()->json($this->session($user));
+    }
+
+    public function login(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'identifier' => ['required', 'string'],
+            'password' => ['required', 'string'],
+        ]);
+        $identifier = $data['identifier'];
+        $user = User::query()->where('provider', 'local')->where('email', strtolower($identifier))->first()
+            ?? User::query()->where('provider', 'local')->where('username', $identifier)->first();
+        if ($user === null || ! Hash::check($data['password'], $user->password)) {
+            throw ValidationException::withMessages(['identifier' => 'Invalid identifier or password']);
+        }
+        if (config('camis.email_confirmation') && ! $user->confirmed) {
+            throw ValidationException::withMessages(['identifier' => 'Your account email is not confirmed']);
+        }
+        if ($user->blocked) {
+            throw ValidationException::withMessages([
+                'identifier' => 'Your account has been blocked by an administrator',
+            ]);
+        }
+
+        return response()->json($this->session($user));
+    }
+
+    public function me(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        return response()->json(${strapiUser});
+    }
+
+    private function session(User $user): array
+    {
+        $now = time();
+
+        return [
+            'jwt' => JWT::encode(
+                ['id' => $user->id, 'iat' => $now, 'exp' => $now + 30 * 86400],
+                (string) config('camis.jwt_secret'),
+                'HS256',
+            ),
+            'user' => ${strapiUser},
+        ];
+    }
+}
+`;

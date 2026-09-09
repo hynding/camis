@@ -1,3 +1,4 @@
+import type { StorageLayout } from "@camis/adapter-kernel";
 import type { ContentType } from "@camis/ir-schema";
 import { filamentNames } from "../names";
 import { routePath } from "./names";
@@ -12,8 +13,25 @@ const AUTH_THROTTLE_PER_MINUTE = 10;
  * is an operational knob, so it lives in config (env-overridable, and read through `config()`
  * so `config:cache` keeps working). It is floored at 1: `(int)` turns an empty or non-numeric
  * env value into 0, and `throttle:0,1` means "reject everything", not "no limit".
+ *
+ * On the Strapi storage layout, two more keys are appended: `jwt_secret`, the HS256 secret
+ * shared with the Strapi instance so a session minted by either app is accepted by both (read
+ * by `App\Http\Middleware\StrapiJwtGuard` and the Strapi-storage `AuthController::session()`),
+ * and `email_confirmation`, mirroring Strapi's own users-permissions advanced setting.
  */
-export const emitApiConfig = (): string => `<?php
+export const emitApiConfig = (layout: StorageLayout = "laravel"): string => {
+  const strapiKeys =
+    layout === "strapi"
+      ? `
+
+    // Shared with Strapi: the HS256 secret both apps sign and verify JWTs with.
+    'jwt_secret' => (string) env('JWT_SECRET', ''),
+
+    // Mirrors Strapi's own users-permissions "Enable email confirmation" advanced setting.
+    'email_confirmation' => (bool) env('CAMIS_EMAIL_CONFIRMATION', false),`
+      : "";
+
+  return `<?php
 
 // @camis:generated — do not edit.
 
@@ -22,9 +40,10 @@ declare(strict_types=1);
 return [
     // Requests per minute allowed on the unauthenticated credential endpoints
     // (POST /auth/local and /auth/local/register), keyed by client address.
-    'auth_throttle_per_minute' => max(1, (int) env('CAMIS_AUTH_THROTTLE_PER_MINUTE', ${AUTH_THROTTLE_PER_MINUTE})),
+    'auth_throttle_per_minute' => max(1, (int) env('CAMIS_AUTH_THROTTLE_PER_MINUTE', ${AUTH_THROTTLE_PER_MINUTE})),${strapiKeys}
 ];
 `;
+};
 
 /**
  * The guard on the authenticated route group. `auth:sanctum` is the Laravel-layout default; the

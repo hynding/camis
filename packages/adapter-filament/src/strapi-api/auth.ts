@@ -30,11 +30,15 @@ return new class extends Migration
 };
 `;
 
-const strapiUser = "['id' => $user->id, 'username' => $user->username, 'email' => $user->email]";
+// Exported so the Strapi storage layout's own AuthController (strapi-api/storage/auth.ts) can
+// reuse the identical wire shape and injection-safe quoting instead of redefining them.
+export const strapiUser =
+  "['id' => $user->id, 'username' => $user->username, 'email' => $user->email]";
 
 // Wrap an author-controlled string as a single-quoted PHP literal, escaping backslashes and single
 // quotes so it cannot break out of (or inject code into) the generated PHP.
-const phpSingleQuoted = (s: string): string => `'${s.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
+export const phpSingleQuoted = (s: string): string =>
+  `'${s.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
 
 export const emitAuthController = (defaultRole: string | undefined): string => `<?php
 ${PHP_MARKER}
