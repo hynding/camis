@@ -72,7 +72,8 @@ describe("emitStorageAuthController", () => {
   it("verifies and writes bcrypt directly rather than through the configured hash driver", () => {
     const php = emitStorageAuthController("authenticated");
     expect(php).toContain("password_verify($data['password'], (string) $user->password)");
-    expect(php).toContain("password_hash($data['password'], PASSWORD_BCRYPT)");
+    expect(php).toContain("password_hash($data['password'], PASSWORD_BCRYPT, [");
+    expect(php).toContain("config('hashing.bcrypt.rounds', 10)");
     expect(php).not.toContain("Hash::check(");
     expect(php).not.toContain("Hash::make(");
     expect(php).not.toContain("use Illuminate\\Support\\Facades\\Hash;");

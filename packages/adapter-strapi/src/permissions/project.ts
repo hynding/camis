@@ -181,7 +181,7 @@ export const projectApiRoles = (doc: IrDocument, roles: Role[]): ApiRoleProjecti
           feature: "userRelationWrite",
           location: { contentType: grant.contentType, rule: role.name },
           severity: "downgrade",
-          message: `"${role.name}" writes a relation to the built-in user on "${grant.contentType}"; Strapi validates that against the user type's find scope, so the role also gets ${USER_RELATION_WRITE_ACTION} — which exposes the user list at GET /api/users`,
+          message: `"${role.name}" writes a relation to the built-in user on "${grant.contentType}"; Strapi validates that against the user type's find scope, so the role also gets ${USER_RELATION_WRITE_ACTION} — which exposes every user's username and email at GET /api/users${role.name === "public" ? ", and since this is the public role, unauthenticated" : ""}`,
         });
       }
       if (grant.condition) {

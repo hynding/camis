@@ -74,6 +74,16 @@ const killAll = (): void => {
   running.clear();
 };
 process.on("exit", killAll);
+// Without this, Ctrl-C (or a CI job cancellation) leaves Strapi and `php artisan serve` running in
+// their own detached process groups, orphaned and still holding ports 1447/8765 for the next run.
+// `killAll` is idempotent (it clears `running` after signalling), so both handlers firing in any
+// order — or the `finally` block's own stop() calls having already run — is harmless.
+for (const sig of ["SIGINT", "SIGTERM"] as const) {
+  process.on(sig, () => {
+    killAll();
+    process.exit(130);
+  });
+}
 
 const start = (cmd: string, args: string[], cwd: string, env: NodeJS.ProcessEnv): ChildProcess => {
   const child = spawn(cmd, args, { cwd, env, stdio: "inherit", detached: true });
@@ -445,9 +455,22 @@ const main = async (): Promise<void> => {
     exec("php", ["artisan", "camis:strapi-schema-check"], phpDir);
 
     step("booting the PHP app on the same database file");
-    php = start("php", ["artisan", "serve", "--host=127.0.0.1", `--port=${PHP_PORT}`], phpDir, {
-      ...process.env,
-    });
+    // Deliberately not `{ ...process.env }`: Laravel's dotenv only fills in what a real
+    // environment variable doesn't already override, so a stray DB_*/JWT_SECRET/APP_* in this
+    // process's own environment could silently replace the .env this script just wrote. PATH is
+    // needed to find `php` (and anything it shells out to), HOME because PHP/Composer-installed
+    // tooling expects it, TMPDIR (when set) for the same reason PHP itself may consult it.
+    const phpEnv: NodeJS.ProcessEnv = {
+      PATH: process.env.PATH ?? "",
+      HOME: process.env.HOME ?? "",
+    };
+    if (process.env.TMPDIR !== undefined) phpEnv.TMPDIR = process.env.TMPDIR;
+    php = start(
+      "php",
+      ["artisan", "serve", "--host=127.0.0.1", `--port=${PHP_PORT}`],
+      phpDir,
+      phpEnv,
+    );
     await waitForHealth(`${PHP_URL}/api/_health`, php, PHP_BOOT_TIMEOUT_MS, "php");
 
     step("the Strapi JWT authenticates against the PHP app");
@@ -465,18 +488,25 @@ const main = async (): Promise<void> => {
       "activity-sessions": "s1",
       consumables: "c1",
     };
+    const phpRows: Record<string, unknown> = {};
     for (const [plural, key] of Object.entries(keys)) {
       const read = expectStatus(
         await request(PHP_URL, "GET", `/api/${plural}/${key}`, { token: strapiJwt }),
         200,
         `php read ${plural}/${key}`,
       );
-      assertSame(
-        `${plural}/${key}`,
-        strapiRows[plural],
-        envelope(read, `php read ${plural}/${key}`),
-      );
+      phpRows[plural] = envelope(read, `php read ${plural}/${key}`);
+      assertSame(`${plural}/${key}`, strapiRows[plural], phpRows[plural]);
     }
+
+    // A deep-equal comparison alone cannot catch two backends independently dropping the same
+    // key: {} matches {} even though the caller sent 1250. Pin the exact literal `rowPayloads`
+    // sent for transactions/t1, in the biginteger wire form (a JSON string) both sides must use.
+    assertEqual(
+      "transactions/t1 amount.minor",
+      "1250",
+      (phpRows.transactions as { amount?: { minor?: unknown } }).amount?.minor,
+    );
 
     step("PHP writes a second note and issues its own JWT");
     const putNote = expectStatus(

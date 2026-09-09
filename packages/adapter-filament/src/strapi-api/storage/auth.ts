@@ -52,10 +52,14 @@ class AuthController extends Controller
             throw ValidationException::withMessages(['email' => 'Email or Username are already taken']);
         }
 
+        // Must stay PASSWORD_BCRYPT (never a driver-selected algorithm): Strapi's bcryptjs can
+        // only verify a bcrypt hash, whatever cost it was written at.
         $user = new User([
             'username' => $username,
             'email' => $email,
-            'password' => password_hash($data['password'], PASSWORD_BCRYPT),
+            'password' => password_hash($data['password'], PASSWORD_BCRYPT, [
+                'cost' => (int) config('hashing.bcrypt.rounds', 10),
+            ]),
         ]);
         $user->provider = 'local';
         $user->confirmed = ! config('camis.email_confirmation');

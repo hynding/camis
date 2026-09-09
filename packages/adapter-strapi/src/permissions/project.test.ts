@@ -123,7 +123,44 @@ describe("projectApiRoles", () => {
       { name: "authenticated", grants: [{ contentType: "Note", actions: ["create", "read"] }] },
     ]);
     expect(out.roles[0]!.actions).toContain("plugin::users-permissions.user.find");
-    expect(out.gaps.map((g) => g.feature)).toContain("userRelationWrite");
+    const gap = out.gaps.find((g) => g.feature === "userRelationWrite");
+    expect(gap?.message).toBe(
+      '"authenticated" writes a relation to the built-in user on "Note"; Strapi validates that ' +
+        "against the user type's find scope, so the role also gets " +
+        "plugin::users-permissions.user.find — which exposes every user's username and email at " +
+        "GET /api/users",
+    );
+  });
+
+  // The public role's grants apply with no Authorization header at all, so the same relation-write
+  // gap is worse there: the user list becomes readable by anyone, not merely other authenticated
+  // users.
+  it("notes the gap is unauthenticated when the relation-writing role is literally 'public'", () => {
+    const withUser: IrDocument = {
+      version: 1,
+      contentTypes: [
+        {
+          name: "Note",
+          kind: "collection",
+          fields: [{ type: "relation", name: "owner", relationKind: "manyToOne", target: "User" }],
+        },
+        {
+          name: "User",
+          kind: "collection",
+          builtin: "user",
+          fields: [{ type: "string", name: "username" }],
+        },
+      ],
+      components: [],
+    };
+    const out = projectApiRoles(withUser, [
+      { name: "public", grants: [{ contentType: "Note", actions: ["create", "read"] }] },
+    ]);
+    const gap = out.gaps.find((g) => g.feature === "userRelationWrite");
+    expect(gap?.message).toContain(
+      "which exposes every user's username and email at GET /api/users, and since this is the " +
+        "public role, unauthenticated",
+    );
   });
 
   it("does not grant user.find for a read-only grant, nor without a user relation", () => {
