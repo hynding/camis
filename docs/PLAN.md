@@ -305,7 +305,10 @@ wire protocol. Driver: OYL; spec in the oyl repo at
 **Exit criteria:** existing goldens byte-identical without the option; a gated CI job generates a
 Strapi project from a fixture IR (with nested + repeatable components), boots it to create a SQLite
 database, writes rows and mints a token through Strapi, then boots the PHP app on the same file and
-proves reads/writes and tokens interoperate in both directions.
+proves reads/writes and tokens interoperate in both directions. This job
+(`strapi-storage-crosscheck`, `pnpm --filter @camis/cli crosscheck`) is the phase gate; it passed
+locally on 2026-09-09 (`CROSSCHECK OK`). The CI workflow has not yet run on GitHub — nothing has
+been pushed.
 
 ---
 

@@ -11,7 +11,9 @@
   Relations targeting `plugin::users-permissions.user` map to a synthesized `builtin: "user"`
   content type named `User` (each target resolves it to its native user model — Strapi's plugin
   user, Laravel's stock `App\Models\User`). Other `plugin::` relation targets are reported as
-  downgrade gaps and skipped.
+  downgrade gaps and skipped. The Strapi importer also records each component's `Component.names`
+  (`collection`, its `collectionName`, and `group`, the folder it lives in); the Strapi target
+  honors both on regeneration instead of defaulting them.
 
 On the relational targets (Filament, Express), `component` fields generate real structure:
 non-repeatable components flatten into prefixed embedded columns (`amount.minor` →
@@ -49,7 +51,16 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
 - `roles` (optional) points at a JSON array of roles (`@camis/permissions` shape:
   `{ name, grants: [{ contentType, actions, condition?, fieldRules? }] }`). When present, the
   roles are cross-validated against the IR and drive permission emission: the Spatie seeder +
-  Ring-1-backed policies on Filament, and the JWT/enforcement layer on Express.
+  Ring-1-backed policies on Filament, and the JWT/enforcement layer on Express. On the Strapi
+  target, the generated bootstrap (`src/index.ts`) also grants users-permissions API actions per
+  role from `src/permissions/api-roles.json`: the `public` role always gets
+  `users-permissions.auth.register` and `.auth.callback`, and a role that creates or updates a
+  content type owning a relation to the built-in user additionally gets
+  `users-permissions.user.find` — Strapi validates a relation write against the target's `find`
+  scope, so without it the write is rejected; this is reported as a `userRelationWrite` gap
+  because it also exposes `GET /api/users`. A content type whose relation inverts onto the user
+  also gets a generated `src/extensions/users-permissions/strapi-server.ts`, declaring the other
+  side of that relation on the plugin's own content type.
 - `protected` (optional) is a directory mirrored into every target's `out` after generation —
   the home for hand-written seams (`routes/api-custom.php`, protected controller subclasses,
   hook implementations) so the generated app itself can stay git-ignored.
@@ -74,8 +85,28 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
   API style adds a NOT NULL unique `username` column to `users`; run its migration against an
   empty users table, or backfill usernames first.
 - `storageLayout` (filament only): `laravel` (default) or `strapi`; `"strapi"` requires
-  `apiStyle: "strapi"` and is rejected otherwise (details on the Strapi-owned database layout
-  land in a later phase).
+  `apiStyle: "strapi"` and is rejected otherwise. On this layout Strapi owns the schema: boot
+  Strapi against the database before the first deploy and after every schema change, and the
+  generated app never migrates it. Emitted: models mapped onto Strapi's tables (owning relations
+  through `_lnk` link tables, components through `_cmps` links and component tables), an owned
+  `app/Models/User.php` and `UpRole` model reading `up_users`/`up_users_role_lnk`, the
+  `StrapiRows`/`StrapiComponents`/`StrapiDateTime`/`StrapiJwtGuard` runtime, a JWT-backed
+  `AuthController`, controllers/routes/policies, and a regenerated `camis:strapi-schema-check`
+  artisan command that verifies every table and column the app reads or writes is present. Not
+  emitted: content migrations, Filament resources, or a Spatie seeder — each reported as a
+  capability gap, including a project-level `adminPanelNotEmitted` gap. Two `.env` knobs: `JWT_SECRET`
+  must hold the same HS256 secret as the Strapi instance and be **at least 32 bytes** (firebase/php-jwt
+  refuses a shorter HMAC key, and that failure looks exactly like a bad token, so every
+  authenticated request would answer 401 with no other clue); `CAMIS_EMAIL_CONFIRMATION` mirrors
+  Strapi's "Enable email confirmation" advanced setting and defaults off, so users are confirmed
+  on registration. Role names in the roles file must equal the corresponding `up_roles.type`.
+  `camis scaffold filament <dir> --storage strapi` builds a Laravel 12 app with
+  `firebase/php-jwt` and `visus/cuid2` and no Filament, Spatie, or Sanctum, and registers
+  `routes/api.php` in `bootstrap/app.php` (this layout skips `php artisan install:api`, which
+  would also install Sanctum). Updating a component field on this layout replaces its whole
+  subtree rather than flattening per scalar, matching Strapi's own update semantics. `date` and
+  `time` fields pass through as plain strings; their exact storage form against a live Strapi
+  database is not yet verified (only `dateTime`/`timestamp` and `biginteger` wire forms are).
 - The roles file is either a bare `Role[]` or `{ "defaultRole": "<role>", "roles": [...] }`;
   `defaultRole` is assigned on `/auth/local/register`.
 - `camis import strapi <dir> --upsert-by recordId` sets `options.upsertBy` on every imported
