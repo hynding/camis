@@ -416,6 +416,14 @@ describe("DEPLOY.md", () => {
     expect(deploy!.content).toContain("RolePermissionSeeder");
     expect(deploy!.content).toContain("public/");
   });
+  // The auth throttle is an operational knob, so an operator must be able to find it without
+  // reading the generated config: too low locks out an office NAT, too high is a guessing oracle.
+  it("documents the Strapi-style auth env knobs", () => {
+    const result = filamentAdapter.generate(bundle, { projectName: "blog" });
+    const deploy = result.files.find((f) => f.path === "DEPLOY.md")!;
+    expect(deploy.content).toContain("CAMIS_AUTH_THROTTLE_PER_MINUTE");
+    expect(deploy.content).toContain("SANCTUM_TOKEN_EXPIRATION");
+  });
 });
 
 describe("Filament v5 resource compatibility", () => {

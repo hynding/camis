@@ -43,7 +43,12 @@ The generated JSON API in \`routes/api.php\` requires Laravel's API layer
 an existing app. Custom endpoints belong in \`routes/api-custom.php\` (never overwritten).
 
 The Strapi API style adds a NOT NULL unique \`username\` column to \`users\`; run its migration
-against an empty users table, or backfill usernames first.
+against an empty users table, or backfill usernames first. Two \`.env\` knobs govern its auth
+endpoints: \`SANCTUM_TOKEN_EXPIRATION\` bounds token lifetime (tokens do not expire by default),
+and \`CAMIS_AUTH_THROTTLE_PER_MINUTE\` (default 10, floored at 1) sets the request rate allowed
+on \`/auth/local\` and \`/auth/local/register\` — one bucket per client address, shared by both
+routes. The throttle is read through the generated \`config/camis.php\`, so \`config:cache\` and
+\`route:cache\` keep working; re-run \`php artisan config:cache\` after changing it.
 
 \`\`\`sh
 composer install --no-dev --optimize-autoloader

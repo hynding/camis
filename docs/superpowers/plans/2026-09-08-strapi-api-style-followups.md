@@ -48,6 +48,30 @@ merge.
 - **`generate.ts`**: double `Map.get` with `!`; asymmetric `apiStyle === "laravel"` vs
   `if (strapi)` guards.
 
+### Post-merge review of the Phase 16 fix wave (2026-09-08)
+
+- **Login and register share one per-IP throttle bucket.** `throttle:N,1` is an unnamed
+  limiter, so `POST /auth/local` and `POST /auth/local/register` draw down the same counter and
+  a burst of registrations can lock out logins from that address. A named limiter
+  (`RateLimiter::for('camis-auth-login', …)` / `…-register`, referenced as
+  `throttle:camis-auth-login`) would split the buckets and would also resolve the rate *per
+  request* instead of baking the config value into the route definition — which is what
+  `php artisan route:cache` does to the current `$authThrottle` string.
+- **`config/camis.php` uses a hand-written header** instead of `PHP_MARKER` — the second
+  instance after `routes.api.php`; both should move to the shared marker constant together.
+- **Nullability changes reach only regenerated `create_*` migrations.** Flipping a component
+  reference between required and optional changes the emitted `create_…_table` migration, not
+  any `ALTER`; a database that has already migrated keeps the old NOT NULL/nullable columns.
+  Reaching the new shape needs `php artisan migrate:fresh` (destructive) or a hand-written
+  change migration. Emitting diff migrations is out of scope for the current one-way generator,
+  so this is a documentation/ops gap, not a bug.
+- **Filament forms could enforce all-or-nothing component entry.** Subfields flattened out of an
+  *optional* component reference are emitted without `->required()`, because the component may
+  be absent entirely — but nothing then stops a user from filling half of it. `->requiredWith(…)`
+  on each subfield (naming its siblings) would keep the column nullable while making the
+  component all-or-nothing in the UI, matching what the IR's inner `required` actually means.
+  `ExpandedScalar.alwaysPresent` now carries the distinction the emitter would need.
+
 ## CLI / permissions / kernel
 
 - **`ParsedRolesFile` is not re-exported** from `@camis/permissions`.
