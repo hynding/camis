@@ -137,7 +137,7 @@ export const storageBundle: IrBundle = {
       },
       {
         name: "Nutrient",
-        names: { collection: "components_nutrition_additional_nutrients" },
+        names: { collection: "components_nutrition_additional_nutrients", group: "nutrition" },
         fields: [
           { type: "string", name: "slug" },
           { type: "decimal", name: "amount" },

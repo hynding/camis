@@ -91,7 +91,7 @@ describe("componentMap", () => {
     expect(additional!.relationName).toBe("factsAdditional");
     expect(additional!.wireKey).toEqual(["facts", "additional"]);
     expect(additional!.table).toBe("components_nutrition_additional_nutrients");
-    expect(additional!.type).toBe("shared.nutrient");
+    expect(additional!.type).toBe("nutrition.nutrient");
     expect(additional!.cmpsTable).toBe("components_nutrition_nutrition_facts_cmps");
     expect(additional!.scalars).toEqual([
       {
@@ -108,5 +108,9 @@ describe("componentMap", () => {
       },
     ]);
     expect(additional!.nested).toEqual([]);
+  });
+
+  it("Task: a content type with no component fields maps to an empty array", () => {
+    expect(componentMap(storageBundle.document, ct("Task"))).toEqual([]);
   });
 });
