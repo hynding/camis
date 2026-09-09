@@ -12,7 +12,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "crosscheck": "tsx scripts/strapi-storage-crosscheck.ts"
   },
   "dependencies": {
     "@camis/adapter-express": "workspace:*",

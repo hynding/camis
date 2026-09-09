@@ -1,0 +1,23 @@
+name: strapi-storage-crosscheck
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 4 * * *"
+jobs:
+  crosscheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: pdo_sqlite, sqlite3, mbstring
+          tools: composer
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @camis/cli crosscheck
