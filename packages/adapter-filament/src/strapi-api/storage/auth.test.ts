@@ -79,6 +79,21 @@ describe("emitStorageAuthController", () => {
     expect(php).not.toContain("use Illuminate\\Support\\Facades\\Hash;");
   });
 
+  // firebase/php-jwt refuses an HMAC key shorter than 32 bytes, and Strapi signs with any length.
+  // Without this guard a short (or unset) shared secret surfaces as a blanket 401 on every
+  // authenticated request — indistinguishable from a bad token, with no clue where to look.
+  it("refuses to mint a session when camis.jwt_secret is missing or under 32 bytes", () => {
+    const php = emitStorageAuthController("authenticated");
+    const session = php.slice(php.indexOf("private function session"));
+    expect(session).toContain("$secret = (string) config('camis.jwt_secret');");
+    expect(session).toContain("if (strlen($secret) < 32) {");
+    expect(session).toContain("'camis.jwt_secret must be set (>= 32 bytes) — see DEPLOY.md'");
+    // The guard must come before the encode, not after it.
+    expect(session.indexOf("strlen($secret)")).toBeLessThan(session.indexOf("JWT::encode("));
+    // …and the checked value is the one actually signed with.
+    expect(session).toContain("                $secret,");
+  });
+
   it("rejects a duplicate email or username with Strapi's own message", () => {
     const php = emitStorageAuthController("authenticated");
     expect(php).toContain("Email or Username are already taken");

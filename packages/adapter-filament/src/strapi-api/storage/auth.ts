@@ -125,12 +125,19 @@ class AuthController extends Controller
 
     private function session(User $user): array
     {
+        // firebase/php-jwt refuses an HMAC key under 32 bytes, while Strapi signs with any length.
+        // Left to JWT::encode, a short or unset secret surfaces as a blanket 401 on every
+        // authenticated request, indistinguishable from a bad token.
+        $secret = (string) config('camis.jwt_secret');
+        if (strlen($secret) < 32) {
+            throw new \\RuntimeException('camis.jwt_secret must be set (>= 32 bytes) — see DEPLOY.md');
+        }
         $now = time();
 
         return [
             'jwt' => JWT::encode(
                 ['id' => $user->id, 'iat' => $now, 'exp' => $now + 30 * 86400],
-                (string) config('camis.jwt_secret'),
+                $secret,
                 'HS256',
             ),
             'user' => ${strapiUser},
