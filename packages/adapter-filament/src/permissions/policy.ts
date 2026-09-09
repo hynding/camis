@@ -35,19 +35,30 @@ const recordData = (ct: ContentType, layout: StorageLayout): string[] => [
     ),
 ];
 
+/**
+ * No role holds the key, so nothing the method could evaluate can grant it. Wrapping a condition
+ * in `if (! false)` would leave unreachable code reading as if the condition still decided.
+ */
+const alwaysDenies = (m: PolicyMethodSpec, layout: StorageLayout): boolean =>
+  layout === "strapi" && m.roles.length === 0;
+
 /** The boolean expression that decides whether $user holds the method's grant at all. */
 const grantCheck = (m: PolicyMethodSpec, layout: StorageLayout): string => {
   if (layout !== "strapi") return `$user->can('${m.key}')`;
-  if (m.roles.length === 0) return "false"; // no role holds this key: nobody may act
+  if (m.roles.length === 0) return "false";
   return `in_array($user->roleType(), [${m.roles.map((r) => `'${r}'`).join(", ")}], true)`;
 };
+
+/** Whether the method's body actually evaluates its condition (and so needs Ring1). */
+const evaluatesCondition = (m: PolicyMethodSpec, layout: StorageLayout): boolean =>
+  m.condition !== undefined && !alwaysDenies(m, layout);
 
 const method = (m: PolicyMethodSpec, ct: ContentType, layout: StorageLayout): string => {
   const sig = m.record
     ? `    public function ${m.method}(User $user, ${ct.name} $record): bool`
     : `    public function ${m.method}(User $user): bool`;
   const check = grantCheck(m, layout);
-  if (!m.condition) {
+  if (m.condition === undefined || alwaysDenies(m, layout)) {
     return `${sig}\n    {\n        return ${check};\n    }`;
   }
   const data = [...userData(layout), ...(m.record ? recordData(ct, layout) : [])].join("\n");
@@ -69,7 +80,7 @@ export const emitPolicy = (
   ct: ContentType,
   layout: StorageLayout = "laravel",
 ): string => {
-  const hasCondition = spec.methods.some((m) => m.condition !== undefined);
+  const hasCondition = spec.methods.some((m) => evaluatesCondition(m, layout));
   const ring1Use = hasCondition ? "use App\\Support\\Ring1;\n" : "";
   const body = spec.methods.map((m) => method(m, ct, layout)).join("\n\n");
   return `<?php

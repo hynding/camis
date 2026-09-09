@@ -2,7 +2,7 @@ import type { StorageLayout } from "@camis/adapter-kernel";
 import type { ContentType } from "@camis/ir-schema";
 import { PHP_MARKER } from "../hooks/names";
 import { snakeColumn } from "../names";
-import type { MappedComponent } from "./storage/component-map";
+import { authLine, NESTED_STMT, STMT } from "./controller-shared";
 import { strapiControllerParts } from "./storage/controller-storage";
 import type { WireShape } from "./wire-shape";
 
@@ -24,8 +24,6 @@ export interface ControllerSpec {
   scoped: boolean;
   /** Defaults to the Laravel layout, whose output this task leaves byte-identical. */
   layout?: StorageLayout;
-  /** Strapi layout only: the content type's component map (`storage/component-map.ts`). */
-  map?: MappedComponent[];
   /** Strapi layout only: one entry per owning relation, in IR order. */
   links?: ControllerLink[];
 }
@@ -42,19 +40,6 @@ export interface ControllerParts {
   updateBody: string;
   destroyBody: string;
 }
-
-// PSR-12 indent levels inside a method body.
-export const STMT = "        "; // 8 spaces: a top-level statement in a method body
-export const NESTED_STMT = "            "; // 12 spaces: a statement inside a method-body if-block
-
-/**
- * `indent` lets a single call site emit at whatever nesting depth it sits in (the update()
- * create branch and the update() if-block sit one level apart).
- */
-export const authLine =
-  (secured: boolean) =>
-  (line: string, indent: string = STMT): string =>
-    secured ? `${indent}${line}\n` : "";
 
 const laravelParts = (spec: ControllerSpec): ControllerParts => {
   const { shape, secured, scoped } = spec;

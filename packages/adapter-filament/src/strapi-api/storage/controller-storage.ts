@@ -1,11 +1,5 @@
-import {
-  authLine,
-  NESTED_STMT,
-  STMT,
-  type ControllerLink,
-  type ControllerParts,
-  type ControllerSpec,
-} from "../controller";
+import { authLine, NESTED_STMT, STMT } from "../controller-shared";
+import type { ControllerLink, ControllerParts, ControllerSpec } from "../controller";
 
 /** A PHP single-quoted string literal, or `null` for an absent value. */
 const nullableString = (value: string | undefined): string =>
@@ -27,9 +21,17 @@ export const strapiControllerParts = (spec: ControllerSpec): ControllerParts => 
   const upsert = shape.keyColumn !== "id";
 
   // The assign grants name relations; the link entry carries the physical table they write to.
-  const assignLinks = spec.assigns
-    .map((relation) => links.find((l) => l.relation === relation))
-    .filter((l): l is ControllerLink => l !== undefined);
+  // A missing entry cannot be skipped: the row would be created with no ownership link at all,
+  // invisible to the caller that just created it.
+  const assignLinks = spec.assigns.map((relation) => {
+    const link = links.find((l) => l.relation === relation);
+    if (link === undefined) {
+      throw new Error(
+        `Unknown assign relation "${relation}" on "${spec.ct.name}" (no owning link)`,
+      );
+    }
+    return link;
+  });
 
   const linkLine = (indent: string, l: ControllerLink): string =>
     `${indent}StrapiRows::link($m, '${l.table}', '${l.local}', '${l.foreign}', $request->user()->id, ${nullableString(l.ord)});`;
