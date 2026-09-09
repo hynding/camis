@@ -26,12 +26,25 @@ return [
 ];
 `;
 
-export const emitStrapiRoutes = (cts: ContentType[], secured: boolean): string => {
+/**
+ * The guard on the authenticated route group. `auth:sanctum` is the Laravel-layout default; the
+ * Strapi storage layout authenticates the JWT Strapi itself issued, so it swaps in the generated
+ * `StrapiJwtGuard` middleware instead of a Laravel guard name.
+ */
+export type RouteGuard = "auth:sanctum" | "strapi-jwt";
+
+export const emitStrapiRoutes = (
+  cts: ContentType[],
+  secured: boolean,
+  guard: RouteGuard = "auth:sanctum",
+): string => {
+  const jwt = secured && guard === "strapi-jwt";
   const sorted = [...cts].sort((a, b) => routePath(a).localeCompare(routePath(b)));
   const uses = [
     "App\\Http\\Controllers\\Api\\AuthController",
     ...sorted.map((ct) => `App\\Http\\Controllers\\Api\\${filamentNames(ct).model}ApiController`),
     "App\\Http\\Middleware\\StrapiErrors",
+    ...(jwt ? ["App\\Http\\Middleware\\StrapiJwtGuard"] : []),
     "Illuminate\\Support\\Facades\\Route",
   ]
     .sort()
@@ -48,7 +61,11 @@ export const emitStrapiRoutes = (cts: ContentType[], secured: boolean): string =
         Route::delete('/${p}/{key}', [${c}, 'destroy']);`;
     })
     .join("\n\n");
-  const guard = secured ? "Route::middleware('auth:sanctum')" : "Route::middleware([])";
+  const group = !secured
+    ? "Route::middleware([])"
+    : jwt
+      ? "Route::middleware(StrapiJwtGuard::class)"
+      : "Route::middleware('auth:sanctum')";
   return `<?php
 
 // @camis:generated — do not edit. Custom routes belong in routes/api-custom.php.
@@ -73,7 +90,7 @@ Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle):
     Route::post('/auth/local', [AuthController::class, 'login'])->middleware($authThrottle);
     Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware($authThrottle);
 
-    ${guard}->group(function (): void {
+    ${group}->group(function (): void {
         Route::get('/users/me', [AuthController::class, 'me']);
 
 ${resources}

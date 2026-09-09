@@ -1,7 +1,20 @@
+import type { StorageLayout } from "@camis/adapter-kernel";
 import type { ContentType } from "@camis/ir-schema";
 import { PHP_MARKER } from "../hooks/names";
 import { snakeColumn } from "../names";
+import type { MappedComponent } from "./storage/component-map";
+import { strapiControllerParts } from "./storage/controller-storage";
 import type { WireShape } from "./wire-shape";
+
+/** One owning relation's Strapi link table, named by `storage/names.ts`. */
+export interface ControllerLink {
+  relation: string;
+  table: string;
+  local: string;
+  foreign: string;
+  /** Present only when the relation declares an inverse (Strapi orders the inverse list). */
+  ord?: string;
+}
 
 export interface ControllerSpec {
   shape: WireShape;
@@ -9,13 +22,41 @@ export interface ControllerSpec {
   assigns: string[];
   secured: boolean;
   scoped: boolean;
+  /** Defaults to the Laravel layout, whose output this task leaves byte-identical. */
+  layout?: StorageLayout;
+  /** Strapi layout only: the content type's component map (`storage/component-map.ts`). */
+  map?: MappedComponent[];
+  /** Strapi layout only: one entry per owning relation, in IR order. */
+  links?: ControllerLink[];
+}
+
+/** The per-layout halves of the controller; everything else is the shared class scaffold. */
+export interface ControllerParts {
+  /** Fully-qualified imports this layout needs on top of the shared ones. */
+  uses: string[];
+  /** The expression `scoped()` returns. */
+  query: string;
+  indexBody: string;
+  showBody: string;
+  storeBody: string;
+  updateBody: string;
+  destroyBody: string;
 }
 
 // PSR-12 indent levels inside a method body.
-const STMT = "        "; // 8 spaces: a top-level statement in a method body
-const NESTED_STMT = "            "; // 12 spaces: a statement inside a method-body if-block
+export const STMT = "        "; // 8 spaces: a top-level statement in a method body
+export const NESTED_STMT = "            "; // 12 spaces: a statement inside a method-body if-block
 
-export const emitGeneratedController = (spec: ControllerSpec): string => {
+/**
+ * `indent` lets a single call site emit at whatever nesting depth it sits in (the update()
+ * create branch and the update() if-block sit one level apart).
+ */
+export const authLine =
+  (secured: boolean) =>
+  (line: string, indent: string = STMT): string =>
+    secured ? `${indent}${line}\n` : "";
+
+const laravelParts = (spec: ControllerSpec): ControllerParts => {
   const { shape, secured, scoped } = spec;
   const M = shape.model;
   const S = `${M}Serializer`;
@@ -27,11 +68,7 @@ export const emitGeneratedController = (spec: ControllerSpec): string => {
 ${indent}    ${save}
 ${indent}    ${S}::syncChildren($m, $wire['children']);
 ${indent}});`;
-  // `indent` lets a single call site emit at whatever nesting depth it sits in
-  // (the update() create branch and the update() if-block sit one level apart).
-  const auth = (line: string, indent: string = STMT): string =>
-    secured ? `${indent}${line}\n` : "";
-  const query = scoped ? `${M}::query()->forUser($request->user())` : `${M}::query()`;
+  const auth = authLine(secured);
   const assign = spec.assigns
     .map((name) => `${STMT}$m->${snakeColumn(name)}_id = $request->user()->id;`)
     .join("\n");
@@ -51,10 +88,45 @@ ${assignBlock}${persist("$m->save();")}
     : `
         abort(404);`;
 
+  return {
+    uses: [],
+    query: scoped ? `${M}::query()->forUser($request->user())` : `${M}::query()`,
+    indexBody: `${auth(`$this->authorize('viewAny', ${M}::class);`)}        $rows = $this->scoped($request)->get()${secured ? `->filter(fn (${M} $m) => $request->user()->can('view', $m))` : ""};
+
+        return response()->json(['data' => $rows->map(fn (${M} $m) => ${S}::toWire($m))->values()->all()]);`,
+    showBody: `        $m = $this->find($request, $key);
+
+        return response()->json(['data' => ${S}::toWire($m)]);`,
+    storeBody: `${auth(`$this->authorize('create', ${M}::class);`)}        $wire = ${S}::fromWire((array) $request->input('data', []));
+        $m = new ${M}($wire['columns']);
+${assignBlock}${persist("$m->save();")}
+
+        return response()->json(['data' => ${S}::toWire($m->fresh())], 201);`,
+    updateBody: `        $wire = ${S}::fromWire((array) $request->input('data', []));
+        $m = $this->scoped($request)->where(self::KEY, $key)->first();
+        if ($m !== null${secured ? ` && $request->user()->can('view', $m)` : ""}) {
+${auth(`$this->authorize('update', $m);`, NESTED_STMT)}${persist("$m->fill($wire['columns'])->save();", NESTED_STMT)}
+
+            return response()->json(['data' => ${S}::toWire($m->fresh())]);
+        }
+${createBranch}`,
+    destroyBody: `        $m = $this->find($request, $key);
+${auth(`$this->authorize('delete', $m);`)}        $m->delete();
+
+        return response()->json(null, 204);`,
+  };
+};
+
+export const emitGeneratedController = (spec: ControllerSpec): string => {
+  const { shape, secured } = spec;
+  const M = shape.model;
+  const parts = spec.layout === "strapi" ? strapiControllerParts(spec) : laravelParts(spec);
+
   const uses = [
     "App\\Http\\Controllers\\Controller",
-    `App\\Http\\Serializers\\${S}`,
+    `App\\Http\\Serializers\\${M}Serializer`,
     `App\\Models\\${M}`,
+    ...parts.uses,
     ...(secured ? ["Illuminate\\Foundation\\Auth\\Access\\AuthorizesRequests"] : []),
     "Illuminate\\Database\\Eloquent\\Builder",
     "Illuminate\\Http\\JsonResponse",
@@ -80,7 +152,7 @@ ${secured ? "    use AuthorizesRequests;\n\n" : ""}    private const KEY = '${sh
 
     protected function scoped(Request $request): Builder
     {
-        return ${query};
+        return ${parts.query};
     }
 
     /** Fail closed: a row outside the caller's view is indistinguishable from a missing one. */
@@ -96,45 +168,27 @@ ${secured ? "    use AuthorizesRequests;\n\n" : ""}    private const KEY = '${sh
 
     public function index(Request $request): JsonResponse
     {
-${auth(`$this->authorize('viewAny', ${M}::class);`)}        $rows = $this->scoped($request)->get()${secured ? `->filter(fn (${M} $m) => $request->user()->can('view', $m))` : ""};
-
-        return response()->json(['data' => $rows->map(fn (${M} $m) => ${S}::toWire($m))->values()->all()]);
+${parts.indexBody}
     }
 
     public function show(Request $request, string $key): JsonResponse
     {
-        $m = $this->find($request, $key);
-
-        return response()->json(['data' => ${S}::toWire($m)]);
+${parts.showBody}
     }
 
     public function store(Request $request): JsonResponse
     {
-${auth(`$this->authorize('create', ${M}::class);`)}        $wire = ${S}::fromWire((array) $request->input('data', []));
-        $m = new ${M}($wire['columns']);
-${assignBlock}${persist("$m->save();")}
-
-        return response()->json(['data' => ${S}::toWire($m->fresh())], 201);
+${parts.storeBody}
     }
 
     public function update(Request $request, string $key): JsonResponse
     {
-        $wire = ${S}::fromWire((array) $request->input('data', []));
-        $m = $this->scoped($request)->where(self::KEY, $key)->first();
-        if ($m !== null${secured ? ` && $request->user()->can('view', $m)` : ""}) {
-${auth(`$this->authorize('update', $m);`, NESTED_STMT)}${persist("$m->fill($wire['columns'])->save();", NESTED_STMT)}
-
-            return response()->json(['data' => ${S}::toWire($m->fresh())]);
-        }
-${createBranch}
+${parts.updateBody}
     }
 
     public function destroy(Request $request, string $key): JsonResponse
     {
-        $m = $this->find($request, $key);
-${auth(`$this->authorize('delete', $m);`)}        $m->delete();
-
-        return response()->json(null, 204);
+${parts.destroyBody}
     }
 }
 `;

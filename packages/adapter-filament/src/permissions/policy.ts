@@ -1,38 +1,59 @@
+import type { StorageLayout } from "@camis/adapter-kernel";
 import { emitPhp } from "@camis/expr-php-emit";
 import type { ContentType } from "@camis/ir-schema";
 import { snakeColumn } from "../names";
 import type { PolicyMethodSpec, PolicySpec } from "./project";
 
-const userData = [
+// On a Strapi database there is no Spatie permission table: a user's only authorization datum is
+// the `type` of the up_roles row it links to, so a grant check becomes role membership.
+const userRole = (layout: StorageLayout): string =>
+  layout === "strapi" ? "$user->roleType()" : "$user->getRoleNames()->first()";
+
+const userData = (layout: StorageLayout): string[] => [
   "            'user.id' => $user->id,",
   "            'user.email' => $user->email,",
-  "            'user.role' => $user->getRoleNames()->first(),",
+  `            'user.role' => ${userRole(layout)},`,
 ];
 
-const recordData = (ct: ContentType): string[] => [
+const recordData = (ct: ContentType, layout: StorageLayout): string[] => [
   ...ct.fields
     .filter((f) => f.type !== "relation" && f.type !== "component")
     .map((f) => `            'record.${f.name}' => $record->${snakeColumn(f.name)},`),
   // Owning relations expose their FK as record.<name>Id so conditions can express ownership.
+  // On the Strapi layout the FK is a link-table row, not a column, so the model's accessor is
+  // the only way to reach it.
   ...ct.fields
     .filter(
       (f) =>
         f.type === "relation" && (f.relationKind === "manyToOne" || f.relationKind === "oneToOne"),
     )
-    .map((f) => `            'record.${f.name}Id' => $record->${snakeColumn(f.name)}_id,`),
+    .map(
+      (f) =>
+        `            'record.${f.name}Id' => $record->${
+          layout === "strapi" ? `${f.name}Id` : `${snakeColumn(f.name)}_id`
+        },`,
+    ),
 ];
 
-const method = (m: PolicyMethodSpec, ct: ContentType): string => {
+/** The boolean expression that decides whether $user holds the method's grant at all. */
+const grantCheck = (m: PolicyMethodSpec, layout: StorageLayout): string => {
+  if (layout !== "strapi") return `$user->can('${m.key}')`;
+  if (m.roles.length === 0) return "false"; // no role holds this key: nobody may act
+  return `in_array($user->roleType(), [${m.roles.map((r) => `'${r}'`).join(", ")}], true)`;
+};
+
+const method = (m: PolicyMethodSpec, ct: ContentType, layout: StorageLayout): string => {
   const sig = m.record
     ? `    public function ${m.method}(User $user, ${ct.name} $record): bool`
     : `    public function ${m.method}(User $user): bool`;
+  const check = grantCheck(m, layout);
   if (!m.condition) {
-    return `${sig}\n    {\n        return $user->can('${m.key}');\n    }`;
+    return `${sig}\n    {\n        return ${check};\n    }`;
   }
-  const data = [...userData, ...(m.record ? recordData(ct) : [])].join("\n");
+  const data = [...userData(layout), ...(m.record ? recordData(ct, layout) : [])].join("\n");
   return `${sig}
     {
-        if (! $user->can('${m.key}')) {
+        if (! ${check}) {
             return false;
         }
         $data = [
@@ -43,10 +64,14 @@ ${data}
     }`;
 };
 
-export const emitPolicy = (spec: PolicySpec, ct: ContentType): string => {
+export const emitPolicy = (
+  spec: PolicySpec,
+  ct: ContentType,
+  layout: StorageLayout = "laravel",
+): string => {
   const hasCondition = spec.methods.some((m) => m.condition !== undefined);
   const ring1Use = hasCondition ? "use App\\Support\\Ring1;\n" : "";
-  const body = spec.methods.map((m) => method(m, ct)).join("\n\n");
+  const body = spec.methods.map((m) => method(m, ct, layout)).join("\n\n");
   return `<?php
 
 declare(strict_types=1);

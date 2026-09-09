@@ -9,6 +9,11 @@ export interface PolicyMethodSpec {
   method: string;
   key: string;
   record: boolean;
+  /**
+   * Names of the roles whose grants hold `key`, sorted. A layout with no permission table
+   * (Strapi) gates on role membership instead of a Spatie check; the Laravel layout ignores it.
+   */
+  roles: string[];
   condition?: Expression;
 }
 export interface PolicySpec {
@@ -106,6 +111,11 @@ export const projectFilamentPermissions = (doc: IrDocument, roles: Role[]): Fila
     roleGrants.push({ role: role.name, keys: [...roleKeys].sort() });
   }
 
+  const rolesByKey = new Map<string, string[]>();
+  for (const { role, keys } of roleGrants) {
+    for (const key of keys) rolesByKey.set(key, [...(rolesByKey.get(key) ?? []), role]);
+  }
+
   const policies: PolicySpec[] = [...actionsByCt.entries()]
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([ctName, actions]): PolicySpec => {
@@ -115,10 +125,12 @@ export const projectFilamentPermissions = (doc: IrDocument, roles: Role[]): Fila
           // Record-scoped conditions govern access to a record; methods without a $record
           // (create, viewAny) cannot evaluate them and must not fail closed on their absence.
           const condition = pm.record ? condByCa.get(`${ctName}.${action}`) : undefined;
+          const key = permissionKey(ctName, action as never);
           methods.push({
             method: pm.method,
-            key: permissionKey(ctName, action as never),
+            key,
             record: pm.record,
+            roles: [...(rolesByKey.get(key) ?? [])].sort(),
             ...(condition ? { condition } : {}),
           });
         }
