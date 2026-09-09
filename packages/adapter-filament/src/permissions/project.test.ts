@@ -38,6 +38,9 @@ describe("projectFilamentPermissions", () => {
     expect(out.roleGrants).toEqual([{ role: "Editor", keys: ["article.read", "article.update"] }]);
     const article = out.policies.find((p) => p.contentType === "Article")!;
     expect(article.methods.map((m) => m.method)).toEqual(["viewAny", "view", "update"]);
+    // Every method carries the roles whose grants hold its key, so a layout without a
+    // permission table can gate on role membership instead.
+    expect(article.methods.map((m) => m.roles)).toEqual([["Editor"], ["Editor"], ["Editor"]]);
     expect(article.methods.find((m) => m.method === "view")!.condition).toEqual(condition);
     expect(out.gaps).toEqual([]);
   });
@@ -66,6 +69,18 @@ describe("projectFilamentPermissions", () => {
     expect(
       projectFilamentPermissions(doc, roles).gaps.some((g) => g.feature === "conditionContext"),
     ).toBe(true);
+  });
+  it("lists every role holding a key, sorted, and none for a key no role grants", () => {
+    const roles: Role[] = [
+      { name: "Zeta", grants: [{ contentType: "Article", actions: ["read"] }] },
+      { name: "Alpha", grants: [{ contentType: "Article", actions: ["read", "update"] }] },
+    ];
+    const out = projectFilamentPermissions(doc, roles);
+    const byMethod = Object.fromEntries(
+      out.policies.find((p) => p.contentType === "Article")!.methods.map((m) => [m.method, m]),
+    );
+    expect(byMethod.viewAny!.roles).toEqual(["Alpha", "Zeta"]);
+    expect(byMethod.update!.roles).toEqual(["Alpha"]);
   });
   it("gaps a divergent multi-role condition on the same action (first wins)", () => {
     const condA = {

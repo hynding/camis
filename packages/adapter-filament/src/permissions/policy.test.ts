@@ -1,7 +1,22 @@
-import { describe, expect, it } from "vitest";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { ContentType } from "@camis/ir-schema";
+import { storageBundle } from "../strapi-api/storage/__fixtures__/storage";
 import type { PolicySpec } from "./project";
+import { projectFilamentPermissions } from "./project";
 import { emitPolicy } from "./policy";
+
+const hasPhp = (): boolean => {
+  try {
+    execFileSync("php", ["--version"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 const article: ContentType = {
   name: "Article",
@@ -12,18 +27,19 @@ const spec: PolicySpec = {
   contentType: "Article",
   model: "Article",
   methods: [
-    { method: "viewAny", key: "article.read", record: false },
+    { method: "viewAny", key: "article.read", record: false, roles: ["Editor"] },
     {
       method: "view",
       key: "article.read",
       record: true,
+      roles: ["Editor"],
       condition: {
         kind: "eq",
         left: { kind: "var", name: "record.status" },
         right: { kind: "lit", value: "published" },
       },
     },
-    { method: "create", key: "article.create", record: false },
+    { method: "create", key: "article.create", record: false, roles: ["Editor"] },
   ],
 };
 
@@ -70,6 +86,7 @@ describe("emitPolicy — ownership via relation FKs", () => {
         method: "view",
         key: "note.read",
         record: true,
+        roles: ["member"],
         condition: {
           kind: "eq",
           left: { kind: "var", name: "record.ownerId" },
@@ -82,5 +99,65 @@ describe("emitPolicy — ownership via relation FKs", () => {
   it("exposes owning-relation FKs as record.<name>Id in the policy data", () => {
     const php = emitPolicy(ownerSpec, note);
     expect(php).toContain("'record.ownerId' => $record->owner_id,");
+  });
+});
+
+describe("emitPolicy — strapi storage layout", () => {
+  const doc = storageBundle.document;
+  const noteCt = doc.contentTypes.find((c) => c.name === "Note") as ContentType;
+  const projected = projectFilamentPermissions(doc, storageBundle.roles);
+  const noteSpec = projected.policies.find((p) => p.contentType === "Note") as PolicySpec;
+  const php = emitPolicy(noteSpec, noteCt, "strapi");
+
+  it("golden", async () => {
+    await expect(php).toMatchFileSnapshot("../__golden__/storage/NotePolicy.storage.php");
+  });
+
+  // There is no Spatie permission table on a Strapi database: the only thing a row carries is
+  // its up_roles type, so the grant check becomes membership of the roles that hold the key.
+  it("gates on the Strapi role type instead of a Spatie permission", () => {
+    expect(php).toContain("in_array($user->roleType(), ['authenticated'], true)");
+    expect(php).not.toContain("$user->can(");
+    expect(php).toContain("'user.role' => $user->roleType(),");
+  });
+
+  // The FK lives in a link table, not on the row, so the condition reads the model accessor.
+  it("reads owning relations through the model accessor, not a FK column", () => {
+    expect(php).toContain("'record.ownerId' => $record->ownerId,");
+    expect(php).not.toContain("$record->owner_id");
+  });
+
+  it("denies outright when no role holds the key", () => {
+    const orphan: PolicySpec = {
+      contentType: "Note",
+      model: "Note",
+      methods: [{ method: "create", key: "note.create", record: false, roles: [] }],
+    };
+    expect(emitPolicy(orphan, noteCt, "strapi")).toContain("        return false;");
+  });
+
+  it("leaves the Laravel layout on Spatie checks", () => {
+    const laravel = emitPolicy(noteSpec, noteCt);
+    expect(laravel).toContain("$user->can('note.read')");
+    expect(laravel).toContain("'user.role' => $user->getRoleNames()->first(),");
+    expect(laravel).toContain("'record.ownerId' => $record->owner_id,");
+    expect(laravel).not.toContain("roleType()");
+  });
+
+  describe("php -l", () => {
+    let dir = "";
+    beforeAll(() => {
+      dir = mkdtempSync(join(tmpdir(), "storage-policy-"));
+    });
+    afterAll(() => {
+      if (dir) rmSync(dir, { recursive: true, force: true });
+    });
+
+    it.skipIf(!hasPhp())("NotePolicy lints clean", () => {
+      const file = join(dir, "NotePolicy.php");
+      writeFileSync(file, php);
+      const out = execFileSync("php", ["-l", file], { encoding: "utf8" });
+      expect(out).toContain("No syntax errors detected");
+    });
   });
 });
