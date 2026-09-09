@@ -156,6 +156,30 @@ describe("component.names", () => {
     }
   });
 
+  it.each(["Money", "finance money", "money;drop table", "_money", ""])(
+    "rejects the collection name %s",
+    (bad) => {
+      const r = component.safeParse({
+        name: "Money",
+        fields: [{ type: "bigInteger", name: "minor" }],
+        names: { collection: bad, group: "finance" },
+      });
+      expect(r.success).toBe(false);
+    },
+  );
+
+  it.each(["Finance", "fin ance", "finance;drop", "-finance", ""])(
+    "rejects the group name %s",
+    (bad) => {
+      const r = component.safeParse({
+        name: "Money",
+        fields: [{ type: "bigInteger", name: "minor" }],
+        names: { collection: "components_finance_money", group: bad },
+      });
+      expect(r.success).toBe(false);
+    },
+  );
+
   it("accepts a component with no names (backward compatible)", () => {
     const r = component.safeParse({
       name: "Money",
@@ -164,6 +188,31 @@ describe("component.names", () => {
     expect(r.success).toBe(true);
     if (r.success) expect(r.data.names).toBeUndefined();
   });
+});
+
+describe("contentType.names.collection", () => {
+  it("accepts a lowercase collection name", () => {
+    const r = contentType.safeParse({
+      name: "ActivitySession",
+      kind: "collection",
+      names: { plural: "ActivitySessions", collection: "activity_sessions" },
+      fields: [{ type: "string", name: "recordId" }],
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it.each(["ActivitySessions", "activity sessions", "activity;drop", ""])(
+    "rejects the collection name %s",
+    (bad) => {
+      const r = contentType.safeParse({
+        name: "ActivitySession",
+        kind: "collection",
+        names: { collection: bad },
+        fields: [{ type: "string", name: "recordId" }],
+      });
+      expect(r.success).toBe(false);
+    },
+  );
 });
 
 describe("options.upsertBy", () => {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { contentType as contentTypeSchema } from "@camis/ir-schema";
 import { irComponent, irContentType } from "./schema";
 
 describe("irContentType", () => {
@@ -68,5 +69,27 @@ describe("irComponent", () => {
       collection: "components_finance_money",
       group: "finance",
     });
+  });
+});
+
+// A schema.json may omit collectionName (Strapi derives the table itself). "" is not a physical
+// name, and `Component.names.collection` / `ContentType.names.collection` now reject it — so the
+// importer must leave the key out rather than carry an empty string into the IR.
+describe("irContentType with no collectionName", () => {
+  const schema = {
+    kind: "collectionType",
+    info: { singularName: "article", pluralName: "articles", displayName: "Article" },
+    attributes: { title: { type: "string", required: true } },
+  };
+
+  it("omits names.collection instead of setting it to an empty string", () => {
+    const { contentType } = irContentType(schema);
+    expect(contentType.names).toEqual({ display: "Article", plural: "Articles" });
+    expect(contentType.names && "collection" in contentType.names).toBe(false);
+  });
+
+  it("still parses as a valid IR content type", () => {
+    const { contentType } = irContentType(schema);
+    expect(contentTypeSchema.safeParse(contentType).success).toBe(true);
   });
 });

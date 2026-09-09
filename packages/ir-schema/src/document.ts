@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { componentField, field } from "./fields";
 import { hook } from "./hooks";
-import { fieldName, typeName } from "./identifiers";
+import { collectionName, fieldName, typeName } from "./identifiers";
 
 const RESERVED_FIELD_NAMES = new Set(["id"]);
 
@@ -54,7 +54,7 @@ export const contentType = z
       .object({
         plural: z.string().optional(),
         display: z.string().optional(),
-        collection: z.string().optional(),
+        collection: collectionName.optional(),
       })
       .optional(),
     fields: z.array(field),
@@ -76,8 +76,8 @@ export const component = z
     name: typeName,
     names: z
       .object({
-        collection: z.string().optional(),
-        group: z.string().optional(),
+        collection: collectionName.optional(),
+        group: collectionName.optional(),
       })
       .optional(),
     fields: z.array(componentField),

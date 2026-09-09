@@ -6,7 +6,7 @@ export { component, contentType, irDocument } from "./document";
 export type { Component, ContentType, IrDocument } from "./document";
 export { parseDocument } from "./parse";
 export type { CapabilityDescriptor, CapabilityGap, CapabilityGapReport } from "./capability";
-export { fieldName, typeName } from "./identifiers";
+export { collectionName, fieldName, typeName } from "./identifiers";
 export { HOOK_SCALARS, hook, shapeField } from "./hooks";
 export type { Hook, HookScalar, ShapeField } from "./hooks";
 export { ai, aiPlaceholders, AI_TRIGGERS } from "./ai";

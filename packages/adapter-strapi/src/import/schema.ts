@@ -39,13 +39,17 @@ export const irContentType = (
   const { fields, gaps, usesBuiltinUser } = fieldsFromAttributes(asRecord(schema.attributes), {
     contentType: name,
   });
+  // A schema.json may omit collectionName (Strapi then derives the table itself). Carrying it
+  // through as "" would put an empty physical name in the IR, which is not a name at all — omit
+  // the key instead, exactly as irComponent already does.
+  const collection = str(schema.collectionName);
   const contentType: ContentType = {
     name,
     kind: schema.kind === "singleType" ? "single" : "collection",
     names: {
       display: str(info.displayName),
       plural: irName(str(info.pluralName)),
-      collection: str(schema.collectionName),
+      ...(collection === "" ? {} : { collection }),
     },
     fields,
   };
