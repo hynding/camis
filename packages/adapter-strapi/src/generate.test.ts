@@ -241,6 +241,52 @@ describe("strapiAdapter.generate — components + inverses", () => {
     expect(JSON.parse(seo!.content).collectionName).toBe("components_shared_seo_metas");
   });
 
+  // Strapi owns the users-permissions user content type, so the inverse of a relation that
+  // targets it cannot be declared in a schema.json this generator writes. Without the plugin
+  // extension Strapi refuses to boot: "inversedBy attribute … not found target".
+  it("routes an inverse on the builtin user into the users-permissions plugin extension", () => {
+    const withUser = {
+      version: 1 as const,
+      contentTypes: [
+        {
+          name: "Task",
+          kind: "collection" as const,
+          fields: [
+            {
+              type: "relation" as const,
+              name: "assignee",
+              relationKind: "manyToOne" as const,
+              target: "User",
+              inverse: "tasks",
+            },
+          ],
+        },
+        {
+          name: "User",
+          kind: "collection" as const,
+          builtin: "user" as const,
+          fields: [{ type: "string" as const, name: "username" }],
+        },
+      ],
+      components: [],
+    };
+    const r = strapiAdapter.generate({ document: withUser, roles: [] }, { projectName: "blog" });
+    const ext = r.files.find((f) => f.path === "src/extensions/users-permissions/strapi-server.ts");
+    expect(ext).toBeDefined();
+    expect(ext!.content).toContain('"mappedBy": "assignee"');
+    expect(ext!.content).toContain('"target": "api::task.task"');
+    // The owning side still declares inversedBy; the extension is what makes it resolvable.
+    const task = JSON.parse(r.files.find((f) => f.path.endsWith("task/schema.json"))!.content);
+    expect(task.attributes.assignee.inversedBy).toBe("tasks");
+  });
+
+  it("emits no plugin extension when nothing inverts onto the builtin user", () => {
+    const r = strapiAdapter.generate({ document: doc, roles: [] }, { projectName: "blog" });
+    expect(r.files.map((f) => f.path)).not.toContain(
+      "src/extensions/users-permissions/strapi-server.ts",
+    );
+  });
+
   it("adds the synthesized inverse attribute to the target type schema", () => {
     const r = strapiAdapter.generate({ document: doc, roles: [] }, { projectName: "blog" });
     const author = JSON.parse(r.files.find((f) => f.path.endsWith("author/schema.json"))!.content);

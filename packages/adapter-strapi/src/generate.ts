@@ -10,6 +10,7 @@ import type { CapabilityGap, Component, ContentType, IrDocument } from "@camis/i
 import { aiFieldContentTypes, aiLifecycleFile, aiProviderFile, hasAiField } from "./ai";
 import { apiFactoryFiles } from "./api-files";
 import { componentSchema } from "./component-schema";
+import { usersPermissionsExtensionFile } from "./extensions";
 import { emitHookFiles } from "./hooks/emit";
 import { componentCategory, componentUids, kebab, strapiNames } from "./names";
 import { emitPermissions } from "./permissions/emit";
@@ -77,12 +78,20 @@ export const strapiAdapter: GenerateAdapter = {
       doc.contentTypes.filter((ct) => ct.builtin === "user").map((ct) => ct.name),
     );
     const uids = componentUids(doc.components);
+    // Inverses that land on a plugin content type have no schema.json of ours to live in.
+    const userInverses = [...builtinUsers].reduce<Record<string, unknown>>(
+      (acc, name) => ({ ...acc, ...(inverses.get(name) ?? {}) }),
+      {},
+    );
     const files: GeneratedFile[] = [
       ...skeletonFiles(options.projectName),
       ...doc.contentTypes
         .filter((ct) => ct.builtin === undefined)
         .flatMap((ct) => typeFiles(ct, inverses.get(ct.name) ?? {}, builtinUsers, uids)),
       ...doc.components.map((c) => componentFile(c, builtinUsers, uids)),
+      ...(Object.keys(userInverses).length > 0
+        ? [usersPermissionsExtensionFile(userInverses)]
+        : []),
     ];
     const perm = emitPermissions(doc, ir.roles);
     const withPerm =
