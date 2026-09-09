@@ -8,7 +8,7 @@ export type {
   Manifest,
   ManifestEntry,
 } from "./types";
-export { expandComponents } from "./expand";
+export { columnField, expandComponents } from "./expand";
 export type { ExpandedContentType, ExpandedScalar, ExpandedTable } from "./expand";
 export { stableJson } from "./stable-json";
 export { TS_MARKER, withMarker } from "./marker";

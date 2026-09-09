@@ -302,8 +302,10 @@ describe("component fields — embedded columns", () => {
     expect(model.content).toContain("'amount_minor',");
     expect(model.content).toContain("'amount_currency',");
     const form = result.files.find((f) => f.path.endsWith("Schemas/TransactionForm.php"))!;
+    // Scoped to the embedded fields: an optional component reference makes its subfields
+    // optional in the form too, whatever the rest of the form contains.
     expect(form.content).toContain("TextInput::make('amount_minor')->numeric(),");
-    expect(form.content).not.toContain("->required()");
+    expect(form.content).toContain("TextInput::make('amount_currency'),");
     const table = result.files.find((f) => f.path.endsWith("Schemas/TransactionsTable.php"))!;
     expect(table.content).toContain("TextColumn::make('amount_currency')");
   });
@@ -328,6 +330,10 @@ describe("component fields — embedded columns", () => {
     const migration = result.files.find((f) => f.path.includes("create_transactions_table"))!;
     expect(migration.content).toContain("$table->bigInteger('amount_minor');");
     expect(migration.content).toContain("$table->string('amount_currency');");
+    // …and the form asks for them again, since the component is now always there.
+    const form = result.files.find((f) => f.path.endsWith("Schemas/TransactionForm.php"))!;
+    expect(form.content).toContain("TextInput::make('amount_minor')->numeric()->required(),");
+    expect(form.content).toContain("TextInput::make('amount_currency')->required(),");
   });
 });
 

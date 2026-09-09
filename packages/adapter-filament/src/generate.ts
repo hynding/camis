@@ -1,5 +1,6 @@
 import {
   buildManifest,
+  columnField,
   expandComponents,
   type GenerateAdapter,
   type GeneratedFile,
@@ -89,8 +90,10 @@ export const filamentAdapter: GenerateAdapter = {
       }
       const expansion = expandComponents(doc, ct);
       gaps.push(...expansion.gaps);
+      // A shared embedded column is NOT NULL only when the component is always present;
+      // `s.field.required` alone still speaks for validation, not for the column.
       const embeddedEmits = expansion.scalars.map((s) =>
-        emitField(s.field, s.path.map(snakeColumn).join("_")),
+        emitField(columnField(s), s.path.map(snakeColumn).join("_")),
       );
       const ctChildren = expansion.tables.map((t) => childTableEmit(ct, t));
       ctChildren.forEach((child) => children.push({ ct, child }));
