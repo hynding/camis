@@ -21,4 +21,7 @@ export const skeletonFiles = (projectName: string): GeneratedFile[] => [
   { path: "config/database.ts", content: DATABASE_TS },
   { path: "src/index.ts", content: SRC_INDEX_TS },
   { path: ".env", content: ENV, mode: "seed" },
+  // Strapi's local upload provider fails to register if public/uploads is absent; the folder is
+  // runtime data, so it is seeded once and never rewritten.
+  { path: "public/uploads/.gitkeep", content: "", mode: "seed" },
 ];

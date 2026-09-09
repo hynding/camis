@@ -14,9 +14,18 @@ describe("skeletonFiles", () => {
       "config/middlewares.ts",
       "config/server.ts",
       "package.json",
+      "public/uploads/.gitkeep",
       "src/index.ts",
       "tsconfig.json",
     ]);
+  });
+
+  // Strapi's local upload provider refuses to register when public/uploads is missing, so a
+  // generated project without this placeholder cannot boot at all.
+  it("creates public/uploads so the local upload provider can register", () => {
+    const keep = skeletonFiles("blog").find((f) => f.path === "public/uploads/.gitkeep")!;
+    expect(keep).toBeDefined();
+    expect(keep.mode).toBe("seed");
   });
 
   it("pins @strapi/strapi to an exact version and sets the project name", () => {
@@ -34,5 +43,17 @@ describe("skeletonFiles", () => {
   it("database.ts defaults to sqlite", () => {
     const db = skeletonFiles("blog").find((f) => f.path === "config/database.ts")!;
     expect(db.content).toContain("sqlite");
+  });
+
+  // path.join would splice an absolute DATABASE_FILENAME under the project root and open a
+  // different, empty file — the exact failure mode of pointing Strapi at a database another app
+  // already owns. path.resolve honors an absolute value and still resolves a relative one against
+  // the project root.
+  it("database.ts resolves DATABASE_FILENAME so an absolute path is honored", () => {
+    const db = skeletonFiles("blog").find((f) => f.path === "config/database.ts")!;
+    expect(db.content).toContain(
+      "path.resolve(__dirname, '..', '..', env('DATABASE_FILENAME', '.tmp/data.db'))",
+    );
+    expect(db.content).not.toContain("path.join(");
   });
 });

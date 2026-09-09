@@ -15,3 +15,4 @@ overwrite src/api/author/services/author.ts
 overwrite src/index.ts
 overwrite tsconfig.json
 seed .env
+seed public/uploads/.gitkeep
