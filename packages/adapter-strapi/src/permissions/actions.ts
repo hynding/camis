@@ -32,3 +32,9 @@ export const PUBLIC_API_ACTIONS = [
   "plugin::users-permissions.auth.register",
   "plugin::users-permissions.auth.callback",
 ] as const;
+
+// Strapi validates a relation *write* against the target content type's `find` scope
+// (@strapi/utils validate/visitors/throw-restricted-relations), so a role that may create or
+// update a row owning a relation to the built-in user needs this action or the write is rejected
+// with "Invalid key <relation>".
+export const USER_RELATION_WRITE_ACTION = "plugin::users-permissions.user.find";

@@ -1,13 +1,14 @@
 import type { Expression } from "@camis/expr";
 import { freeVars } from "@camis/expr";
 import type { CapabilityGap, IrDocument } from "@camis/ir-schema";
-import type { Role } from "@camis/permissions";
+import type { Action, Role } from "@camis/permissions";
 import { strapiNames } from "../names";
 import {
   API_ACTION_SUFFIXES,
   FIELD_ACCESS_ACTIONS,
   PUBLIC_API_ACTIONS,
   STRAPI_ACTION_UID,
+  USER_RELATION_WRITE_ACTION,
 } from "./actions";
 import { conditionName } from "./condition-name";
 
@@ -144,6 +145,14 @@ export interface ApiRoleProjection {
 export const projectApiRoles = (doc: IrDocument, roles: Role[]): ApiRoleProjection => {
   const byName = new Map(doc.contentTypes.map((ct) => [ct.name, ct]));
   const gaps: CapabilityGap[] = [];
+  const builtinUsers = new Set(
+    doc.contentTypes.filter((ct) => ct.builtin === "user").map((ct) => ct.name),
+  );
+  const ownsUserRelation = (name: string): boolean =>
+    (byName.get(name)?.fields ?? []).some(
+      (f) => f.type === "relation" && builtinUsers.has(f.target),
+    );
+  const WRITE_ACTIONS: Action[] = ["create", "update"];
 
   const projected = roles.map((role): ApiRoleGrant => {
     const actions = new Set<string>();
@@ -161,6 +170,18 @@ export const projectApiRoles = (doc: IrDocument, roles: Role[]): ApiRoleProjecti
           location: { contentType: grant.contentType, rule: role.name },
           severity: "downgrade",
           message: `"${role.name}" grant on "${grant.contentType}" publishes without update; the users-permissions API has no separate publish action`,
+        });
+      }
+      if (
+        ownsUserRelation(grant.contentType) &&
+        grant.actions.some((act) => WRITE_ACTIONS.includes(act))
+      ) {
+        actions.add(USER_RELATION_WRITE_ACTION);
+        gaps.push({
+          feature: "userRelationWrite",
+          location: { contentType: grant.contentType, rule: role.name },
+          severity: "downgrade",
+          message: `"${role.name}" writes a relation to the built-in user on "${grant.contentType}"; Strapi validates that against the user type's find scope, so the role also gets ${USER_RELATION_WRITE_ACTION} — which exposes the user list at GET /api/users`,
         });
       }
       if (grant.condition) {

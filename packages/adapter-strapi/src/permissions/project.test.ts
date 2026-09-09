@@ -98,6 +98,63 @@ describe("projectApiRoles", () => {
       },
     ]);
   });
+  // Strapi validates a relation write against the *target's* `find` scope
+  // (@strapi/utils throw-restricted-relations), so a role that may create a row owning a
+  // relation to the built-in user cannot set that owner without it: "Invalid key owner".
+  it("grants users-permissions user.find to a role that writes a relation to the builtin user", () => {
+    const withUser: IrDocument = {
+      version: 1,
+      contentTypes: [
+        {
+          name: "Note",
+          kind: "collection",
+          fields: [{ type: "relation", name: "owner", relationKind: "manyToOne", target: "User" }],
+        },
+        {
+          name: "User",
+          kind: "collection",
+          builtin: "user",
+          fields: [{ type: "string", name: "username" }],
+        },
+      ],
+      components: [],
+    };
+    const out = projectApiRoles(withUser, [
+      { name: "authenticated", grants: [{ contentType: "Note", actions: ["create", "read"] }] },
+    ]);
+    expect(out.roles[0]!.actions).toContain("plugin::users-permissions.user.find");
+    expect(out.gaps.map((g) => g.feature)).toContain("userRelationWrite");
+  });
+
+  it("does not grant user.find for a read-only grant, nor without a user relation", () => {
+    const withUser: IrDocument = {
+      version: 1,
+      contentTypes: [
+        {
+          name: "Note",
+          kind: "collection",
+          fields: [{ type: "relation", name: "owner", relationKind: "manyToOne", target: "User" }],
+        },
+        {
+          name: "User",
+          kind: "collection",
+          builtin: "user",
+          fields: [{ type: "string", name: "username" }],
+        },
+      ],
+      components: [],
+    };
+    const readOnly = projectApiRoles(withUser, [
+      { name: "reader", grants: [{ contentType: "Note", actions: ["read"] }] },
+    ]);
+    expect(readOnly.roles[0]!.actions).not.toContain("plugin::users-permissions.user.find");
+    expect(readOnly.gaps).toEqual([]);
+    const noRelation = projectApiRoles(doc, [
+      { name: "writer", grants: [{ contentType: "Article", actions: ["create"] }] },
+    ]);
+    expect(noRelation.roles[0]!.actions).not.toContain("plugin::users-permissions.user.find");
+  });
+
   it("lists the public actions needed for registration and login, in that order", () => {
     const out = projectApiRoles(doc, [editor]);
     expect(out.public).toEqual([
