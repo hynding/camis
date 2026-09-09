@@ -6,6 +6,22 @@ the branch head after the cross-check gate went green (2026-09-09). Everything C
 was fixed on the branch; these are the Minor items and the deliberate deferrals, grouped by where
 the fix belongs. None blocks merge.
 
+## Wire-contract changes to Phase 16 (not a follow-up — already landed)
+
+The cross-check compared the same row read through both backends and found two Phase 16 wire forms
+that did not match Strapi's. Both were corrected on the PHP side rather than papered over, so
+`apiStyle: "strapi"` on **either** storage layout now serves:
+
+- a datetime as `2026-09-08T10:00:00.000Z` — `toIso8601ZuluString('millisecond')`, three
+  fractional digits as Strapi and JavaScript send it, where Carbon's `toJSON()` emitted six;
+- a `bigInteger` as a JSON string (`"1250"`) rather than a JSON number, because a 64-bit value
+  does not survive a JSON number.
+
+**A Phase 16 deployment generated before this change serves the new forms after a regeneration**,
+so a client that parses either type strictly may need updating. Every other golden in the repo is
+byte-identical. Recorded in `docs/PLAN.md`'s Phase 17 exit criteria and in `packages/cli/README.md`
+under `apiStyle`.
+
 ## Generated app behavior (adapter-filament / strapi-api / storage)
 
 - **A component with no scalar fields cannot be inserted** — parked rather than fixed; no fixture
@@ -29,17 +45,21 @@ the fix belongs. None blocks merge.
   fixture covers the serializer and the controller separately; a combined fixture would catch a
   shape mismatch between the two that neither test alone would. (Task 9 review; flagged as
   something Task 11 needed to close and worth re-checking now that Task 11 has landed.)
-- **`session()` (the JWT guard) does not fail fast on an empty `jwt_secret`** — the guard already
-  refuses to verify a token signed with an empty secret, so this is an earlier, clearer error
-  location rather than a correctness gap. (Task 10 review.)
+- ~~**`session()` does not fail fast on an empty `jwt_secret`**~~ — **fixed.** It now throws
+  `RuntimeException('camis.jwt_secret must be set (>= 32 bytes) — see DEPLOY.md')` before
+  `JWT::encode`, so a short or unset secret names itself instead of surfacing as a blanket 401 on
+  every later request. The *verify* side (`StrapiJwtGuard`) still has no such guard. (Task 10
+  review.)
 - **A missing `up_roles` row during login renders Laravel's generic 404** instead of a Strapi-style
   error body; worth a comment or a follow-up fix once the exact 404 shape matters to a client.
   (Task 10 review.)
-- **`date`/`time` field storage is unverified against a live Strapi database.** Both types pass
-  through the storage layout as plain strings with no cast (only `dateTime`/`timestamp` get the
-  `StrapiDateTime` cast, and `biginteger` gets its string-wire-form fix) — deliberate, since no
-  crosscheck fixture exercises `date`/`time` yet. Confirm the wire form once such a fixture exists,
-  the way divergence 9 (Task 12) settled `dateTime` and `biginteger`.
+- ~~**`date`/`time` field storage is unverified against a live Strapi database**~~ — **verified,
+  and the cast removed.** The storage model used to carry Laravel's `'date'` cast, which writes
+  `Y-m-d H:i:s` into a column Strapi fills with a bare `Y-m-d`; spec 17i wants both types to pass
+  through as strings, so the model now emits no cast for either, the serializer reads a `date`
+  straight through on this layout, and `StrapiComponents` no longer hydrates a component `date` to
+  a Carbon. The cross-check writes a `date` through PHP and reads it back through Strapi. `time`
+  still has no fixture of its own — only a unit test pinning that it stays uncast.
 - **Component update replaces the whole component subtree, per top-level component field, on every
   update** — deliberate, for Strapi parity (Strapi has no partial-component-update concept); this
   differs from the Laravel storage layout, which flattens a component into per-scalar columns and
@@ -47,8 +67,12 @@ the fix belongs. None blocks merge.
 
 ## Emitters / tests
 
-- **`phpString`/`phpBool` in `storage/model.ts` duplicate `fields.ts`'s `phpSingleQuoted`** —
-  worth consolidating into one shared PHP-literal helper. (Tasks 7/8 review.)
+- ~~**`phpString`/`phpBool` in `storage/model.ts` duplicate `fields.ts`'s `phpSingleQuoted`**~~ —
+  **fixed.** `packages/adapter-filament/src/php-literal.ts` now owns `phpSingleQuoted` (and
+  `sqlSingleQuoted`); all five copies import it, and four emitters that quoted nothing at all
+  (`render-eloquent`, `storage/controller-storage`, `permissions/policy`, plus the raw name
+  interpolations in `storage/model`) route their names through it. `phpBool` stays local — it is
+  two characters of boolean, not an escape. (Tasks 7/8 review.)
 - **A redundant `RelationField` cast appears in more than one emitter** (Tasks 7, 8, 9) — could be
   narrowed once the underlying type is refined upstream.
 - **Missing tests/goldens**: no golden for a content type with no relation and no component, none
@@ -58,9 +82,8 @@ the fix belongs. None blocks merge.
   Strapi one, and no golden asserting the generated file listing is sorted (Task 11). Storage
   goldens live under `packages/adapter-filament/src/__golden__/storage/` rather than beside their
   emitters — accepted as the convention new storage goldens should follow too (Task 10).
-- **The local `StorageLayout` type alias in `query-ast.ts` was parked instead of importing the
-  kernel's own type** — Tasks 9 and 11 both import the kernel type directly; `query-ast.ts` should
-  follow once it needs the same distinction elsewhere. (Task 8 review.)
+- ~~**The local `StorageLayout` type alias in `query-ast.ts`**~~ — **fixed.** It imports the
+  kernel's type and re-exports it for `scope.ts`. (Task 8 review.)
 - **The ~35-line per-content-type emit loop is duplicated between `strapi-api/emit.ts` (the
   Sanctum-backed API-only path from Phase 16) and `strapi-api/storage/emit.ts` (this phase's
   storage-owning path)** — deliberately not unified: the Phase 16 path is frozen (its goldens and
@@ -75,8 +98,10 @@ the fix belongs. None blocks merge.
 
 - **`normalize()` does not default `Component.names`** — every consumer instead falls back with
   `??` at the read site; centralizing the default would remove that repetition. (Task 2 review.)
-- **No test covers an explicitly empty `collectionName` on import** (as opposed to it being
-  absent). (Task 2 review.)
+- ~~**No test covers an explicitly empty `collectionName` on import**~~ — **fixed, and it was a
+  bug.** `irContentType` wrote `collection: ""` when the schema omitted `collectionName`; the IR
+  now constrains collection/group names to `^[a-z0-9][a-z0-9_-]*$`, which rejects that, and the
+  importer omits the key instead (as `irComponent` already did). (Task 2 review.)
 - **The `byName` map is built separately in `projectPermissions` and `projectApiRoles`** in
   `packages/adapter-strapi/src/permissions/project.ts` — both derive the same `Map` from
   `doc.contentTypes`; worth extracting once a third consumer needs it. (Task 3 review.)
@@ -98,11 +123,10 @@ the fix belongs. None blocks merge.
   server) are free before launching children** — a stale process holding either port currently
   fails the run with a raw "Address already in use" rather than a clear preflight error. (Task 12
   review; a leftover `php artisan serve` hit exactly this during the Task 12 run.)
-- **The 32-byte `JWT_SECRET` minimum is documented (README, DEPLOY.md) but not enforced at
-  runtime** — a shorter secret currently fails as an indistinguishable blanket 401 on every
-  authenticated request instead of a clear boot-time or first-request error. A guard in
-  `StrapiJwtGuard` (or a scaffold/deploy check) that fails fast with a named error would close
-  this. (Divergence 8, Task 12.)
+- **The 32-byte `JWT_SECRET` minimum is enforced when minting, not when verifying** — the storage
+  `AuthController::session()` now throws a named error before signing, but `StrapiJwtGuard` still
+  answers a plain 401 when the configured secret is too short to verify with. Closing that (or a
+  boot-time check) would make every path say the same thing. (Divergence 8, Task 12.)
 - **`storageLayout` is currently accepted (and ignored) on non-filament targets**, mirroring how
   `apiStyle` already behaves — deliberate parity, not a bug, but worth a validation error if a
   future target adds its own same-named option with different semantics. (Task 4 review.)
@@ -130,7 +154,7 @@ the fix belongs. None blocks merge.
 - **`$m->fresh()` nullability is unhandled in both storage layouts** (the Strapi one and the
   pre-existing Laravel one) — see "Generated app behavior" above; recorded as a shared, not
   strapi-specific, gap.
-- **The 32-byte `JWT_SECRET` minimum is documented, not enforced at runtime** — see
+- **The 32-byte `JWT_SECRET` minimum is enforced on the minting path only** — see
   "CLI / cross-check" above.
 - **Strapi's `admin.secrets.encryptionKey` warning in the generated `config/admin.ts` is left
   unset** — see "For the oyl side" below; non-fatal today, so left as a follow-up rather than

@@ -84,6 +84,12 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
   `app/Http/Controllers/Api/Generated/` plus a seed-mode subclass you may override. The Strapi
   API style adds a NOT NULL unique `username` column to `users`; run its migration against an
   empty users table, or backfill usernames first.
+  **Wire-contract change (a client may need updating):** the cross-backend check found two wire
+  forms that did not match Strapi's, and both were corrected — a datetime is now
+  `2026-09-08T10:00:00.000Z` (three fractional digits, as Strapi and JavaScript send it) rather
+  than Carbon's six, and a `bigInteger` is now a JSON string (`"1250"`) rather than a JSON number,
+  because a 64-bit value does not survive a JSON number. Both apply on either storage layout, so a
+  deployment generated before this change serves the new forms after a regeneration.
 - `storageLayout` (filament only): `laravel` (default) or `strapi`; `"strapi"` requires
   `apiStyle: "strapi"` and is rejected otherwise. On this layout Strapi owns the schema: boot
   Strapi against the database before the first deploy and after every schema change, and the
