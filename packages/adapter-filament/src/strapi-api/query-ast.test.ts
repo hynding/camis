@@ -3,11 +3,15 @@ import type { Expression } from "@camis/expr";
 import type { ContentType } from "@camis/ir-schema";
 import { renderEloquent, renderSql, toWhereNode, whereContext } from "./query-ast";
 import { strapiApiBundle } from "./__fixtures__/strapi-api";
+import { storageBundle } from "./storage/__fixtures__/storage";
 
 const activity = strapiApiBundle.document.contentTypes.find((c) => c.name === "Activity")!;
 const ctx = whereContext(activity);
 const v = (name: string): Expression => ({ kind: "var", name });
 const lit = (value: string | number | boolean | null): Expression => ({ kind: "lit", value });
+
+const note = storageBundle.document.contentTypes.find((c) => c.name === "Note")!;
+const noteLink = { table: "notes_owner_lnk", local: "note_id", foreign: "user_id", owner: "notes" };
 
 describe("toWhereNode", () => {
   it("compiles record.field == literal", () => {
@@ -85,6 +89,94 @@ describe("whereContext key collisions", () => {
     const c = whereContext(colliding);
     expect(whereContext(activity).columns.get("record.creatorId")?.column).toBe("creator_id");
     expect(c.columns.size).toBe(0);
+  });
+});
+
+describe("whereContext storage layout", () => {
+  it("carries link metadata for owning relations in the strapi layout", () => {
+    const strapiCtx = whereContext(note, "strapi");
+    expect(strapiCtx.columns.get("record.ownerId")).toEqual({
+      column: "owner_id",
+      type: "integer",
+      link: noteLink,
+    });
+  });
+  it("omits link metadata in the (default) laravel layout", () => {
+    const laravelCtx = whereContext(note);
+    expect(laravelCtx.columns.get("record.ownerId")).toEqual({
+      column: "owner_id",
+      type: "integer",
+    });
+    expect(laravelCtx.columns.get("record.ownerId")).not.toHaveProperty("link");
+  });
+});
+
+describe("toWhereNode with link metadata", () => {
+  it("copies link onto the compiled eq node", () => {
+    const strapiCtx = whereContext(note, "strapi");
+    const n = toWhereNode(
+      { kind: "eq", left: v("record.ownerId"), right: v("user.id") },
+      strapiCtx,
+    );
+    expect(n).toEqual({
+      kind: "eq",
+      column: "owner_id",
+      value: { kind: "userId" },
+      link: noteLink,
+    });
+  });
+  it("returns null for a string literal against a link key (not expressible as an integer FK)", () => {
+    const strapiCtx = whereContext(note, "strapi");
+    expect(
+      toWhereNode({ kind: "eq", left: v("record.ownerId"), right: lit("abc") }, strapiCtx),
+    ).toBeNull();
+  });
+});
+
+describe("renderers over link metadata (strapi layout)", () => {
+  const strapiCtx = whereContext(note, "strapi");
+  it("renderEloquent emits whereExists for record.ownerId == user.id", () => {
+    const n = toWhereNode(
+      { kind: "eq", left: v("record.ownerId"), right: v("user.id") },
+      strapiCtx,
+    )!;
+    expect(renderEloquent(n, "$q", "$user")).toBe(
+      "$q->whereExists(function ($s) use ($user) { $s->selectRaw('1')->from('notes_owner_lnk')->whereColumn('notes_owner_lnk.note_id', 'notes.id')->where('notes_owner_lnk.user_id', $user->id); });",
+    );
+  });
+  it("renderSql emits an EXISTS subquery for record.ownerId == user.id", () => {
+    const n = toWhereNode(
+      { kind: "eq", left: v("record.ownerId"), right: v("user.id") },
+      strapiCtx,
+    )!;
+    expect(renderSql(n, 7)).toBe(
+      "EXISTS (SELECT 1 FROM notes_owner_lnk WHERE notes_owner_lnk.note_id = notes.id AND notes_owner_lnk.user_id = 7)",
+    );
+  });
+  it("renderEloquent emits whereNotExists for record.ownerId == null", () => {
+    const n = toWhereNode({ kind: "eq", left: v("record.ownerId"), right: lit(null) }, strapiCtx)!;
+    expect(renderEloquent(n, "$q", "$user")).toBe(
+      "$q->whereNotExists(function ($s) use ($user) { $s->selectRaw('1')->from('notes_owner_lnk')->whereColumn('notes_owner_lnk.note_id', 'notes.id'); });",
+    );
+  });
+  it("renderSql emits NOT EXISTS for record.ownerId == null", () => {
+    const n = toWhereNode({ kind: "eq", left: v("record.ownerId"), right: lit(null) }, strapiCtx)!;
+    expect(renderSql(n, 1)).toBe(
+      "NOT EXISTS (SELECT 1 FROM notes_owner_lnk WHERE notes_owner_lnk.note_id = notes.id)",
+    );
+  });
+  it("renderEloquent emits orWhereExists at an or position alongside a scalar predicate", () => {
+    const e: Expression = {
+      kind: "or",
+      args: [
+        { kind: "eq", left: v("record.text"), right: lit("hello") },
+        { kind: "eq", left: v("record.ownerId"), right: v("user.id") },
+      ],
+    };
+    const n = toWhereNode(e, strapiCtx)!;
+    expect(renderEloquent(n, "$q", "$user")).toBe(
+      "$q->where(function ($q) use ($user) { $q->where('text', '=', 'hello'); $q->orWhereExists(function ($s) use ($user) { $s->selectRaw('1')->from('notes_owner_lnk')->whereColumn('notes_owner_lnk.note_id', 'notes.id')->where('notes_owner_lnk.user_id', $user->id); }); });",
+    );
   });
 });
 
