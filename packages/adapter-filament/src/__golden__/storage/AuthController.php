@@ -12,13 +12,16 @@ use App\Support\StrapiRows;
 use Firebase\JWT\JWT;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 
 /**
  * Strapi users-permissions–shaped auth over the shared `up_users` table. Unlike the Sanctum
  * layout's AuthController, this one issues the JWT Strapi itself would issue (see session())
  * and enforces uniqueness in code rather than in a database index, exactly as Strapi does.
+ *
+ * The password column is shared with Strapi, so bcrypt is used directly rather than through the
+ * configured hash driver: Strapi hashes with bcryptjs, whose `$2a$` prefix Laravel's BcryptHasher
+ * rejects outright, and a non-bcrypt HASH_DRIVER here would write a hash Strapi cannot read.
  */
 class AuthController extends Controller
 {
@@ -39,7 +42,7 @@ class AuthController extends Controller
         $user = new User([
             'username' => $username,
             'email' => $email,
-            'password' => Hash::make($data['password']),
+            'password' => password_hash($data['password'], PASSWORD_BCRYPT),
         ]);
         $user->provider = 'local';
         $user->confirmed = ! config('camis.email_confirmation');
@@ -61,7 +64,7 @@ class AuthController extends Controller
         $identifier = $data['identifier'];
         $user = User::query()->where('provider', 'local')->where('email', strtolower($identifier))->first()
             ?? User::query()->where('provider', 'local')->where('username', $identifier)->first();
-        if ($user === null || ! Hash::check($data['password'], $user->password)) {
+        if ($user === null || ! password_verify($data['password'], (string) $user->password)) {
             throw ValidationException::withMessages(['identifier' => 'Invalid identifier or password']);
         }
         if (config('camis.email_confirmation') && ! $user->confirmed) {

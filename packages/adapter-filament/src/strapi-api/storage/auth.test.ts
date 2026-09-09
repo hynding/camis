@@ -64,6 +64,20 @@ describe("emitStorageAuthController", () => {
     expect(php).toContain("'password' => ['required', 'string', 'min:6']");
   });
 
+  // Strapi hashes with bcryptjs, which writes the `$2a$` prefix; PHP's password_get_info reports
+  // that as "unknown", so Laravel's BcryptHasher refuses it outright ("This password does not use
+  // the Bcrypt algorithm") and every Strapi-registered user gets a 500 at login. password_verify
+  // accepts every bcrypt minor, exactly as bcryptjs does, and password_hash(PASSWORD_BCRYPT)
+  // guarantees the column stays readable by Strapi whatever HASH_DRIVER the app is configured with.
+  it("verifies and writes bcrypt directly rather than through the configured hash driver", () => {
+    const php = emitStorageAuthController("authenticated");
+    expect(php).toContain("password_verify($data['password'], (string) $user->password)");
+    expect(php).toContain("password_hash($data['password'], PASSWORD_BCRYPT)");
+    expect(php).not.toContain("Hash::check(");
+    expect(php).not.toContain("Hash::make(");
+    expect(php).not.toContain("use Illuminate\\Support\\Facades\\Hash;");
+  });
+
   it("rejects a duplicate email or username with Strapi's own message", () => {
     const php = emitStorageAuthController("authenticated");
     expect(php).toContain("Email or Username are already taken");
