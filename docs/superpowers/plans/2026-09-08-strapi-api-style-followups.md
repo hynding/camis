@@ -111,3 +111,5 @@ merge.
 - Set `SANCTUM_TOKEN_EXPIRATION` in production; tokens do not expire by default.
 
 - **`StrapiErrors` overwrites the client `Accept` header with `application/json` for every `api`-group request**, including hand-written `routes/api-custom.php` routes; a custom route that needs real content negotiation (CSV export, downloads) must live outside the `api` group. Document this beside the `api-custom.php` seed comment.
+
+- **Scaffolded `config/sanctum.php` keeps the stock literal `'expiration' => null`**, so `SANCTUM_TOKEN_EXPIRATION` in a host `.env` is a no-op. `camis scaffold filament` (or the Strapi-style emitter) should patch it to `env('SANCTUM_TOKEN_EXPIRATION')` so the documented knob works. Found by the oyl final review (2026-09-08).
