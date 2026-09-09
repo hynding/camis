@@ -19,8 +19,20 @@ describe("permissions golden", () => {
     const index = result.files.find((f) => f.path === "src/index.ts")!.content;
     await expect(index).toMatchFileSnapshot("../__golden__/permissions.index.ts.txt");
   });
-  it("gap report is empty for the user.* fixture", () => {
-    expect(result.gaps.gaps).toEqual([]);
+  it("api-roles.json matches the golden", async () => {
+    const apiRoles = result.files.find((f) => f.path === "src/permissions/api-roles.json")!.content;
+    await expect(apiRoles).toMatchFileSnapshot("../__golden__/permissions.api-roles.json");
+  });
+  it("gap report lists only the API-condition downgrade", () => {
+    expect(result.gaps.gaps).toEqual([
+      {
+        feature: "apiGrantCondition",
+        location: { contentType: "Article", rule: "Editor" },
+        severity: "downgrade",
+        message:
+          '"Editor" grant on "Article" is unconditioned at the users-permissions API; conditions apply to the admin panel only',
+      },
+    ]);
   });
   it("regeneration is idempotent", () => {
     const again = strapiAdapter.generate(permissionsBundle, { projectName: "blog" });

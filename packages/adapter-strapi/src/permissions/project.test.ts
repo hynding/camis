@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { IrDocument } from "@camis/ir-schema";
 import type { Role } from "@camis/permissions";
-import { projectPermissions } from "./project";
+import { projectApiRoles, projectPermissions } from "./project";
 
 const doc: IrDocument = {
   version: 1,
@@ -67,5 +67,78 @@ describe("projectPermissions", () => {
     const r: Role = { name: "R", grants: [{ contentType: "Article", actions: ["publish"] }] };
     const out = projectPermissions(doc, [r]);
     expect(out.gaps.map((g) => g.feature)).toContain("publishWithoutDraft");
+  });
+});
+
+describe("projectApiRoles", () => {
+  it("maps grant actions to users-permissions API actions, deduped and sorted", () => {
+    const out = projectApiRoles(doc, [editor]);
+    expect(out.roles).toEqual([
+      {
+        type: "Editor",
+        actions: [
+          "api::article.article.find",
+          "api::article.article.findOne",
+          "api::article.article.update",
+        ],
+      },
+    ]);
+  });
+  it("lists the public actions needed for registration and login, in that order", () => {
+    const out = projectApiRoles(doc, [editor]);
+    expect(out.public).toEqual([
+      "plugin::users-permissions.auth.register",
+      "plugin::users-permissions.auth.callback",
+    ]);
+  });
+  it("gaps a conditioned grant as unconditioned at the users-permissions API", () => {
+    const out = projectApiRoles(doc, [editor]);
+    expect(out.gaps).toEqual([
+      {
+        feature: "apiGrantCondition",
+        location: { contentType: "Article", rule: "Editor" },
+        severity: "downgrade",
+        message:
+          '"Editor" grant on "Article" is unconditioned at the users-permissions API; conditions apply to the admin panel only',
+      },
+    ]);
+  });
+  it("does not gap a field rule's condition at the API level", () => {
+    const r: Role = {
+      name: "R",
+      grants: [
+        {
+          contentType: "Article",
+          actions: ["read"],
+          fieldRules: [
+            {
+              field: "secret",
+              access: "read",
+              when: { kind: "var", name: "user.role" },
+            },
+          ],
+        },
+      ],
+    };
+    const out = projectApiRoles(doc, [r]);
+    expect(out.gaps).toEqual([]);
+  });
+  it("gaps a publish grant that lacks update as a downgrade", () => {
+    const r: Role = { name: "R", grants: [{ contentType: "Article", actions: ["publish"] }] };
+    const out = projectApiRoles(doc, [r]);
+    expect(out.gaps.map((g) => g.feature)).toContain("publishAction");
+  });
+  it("does not gap publishAction when update is also granted", () => {
+    const r: Role = {
+      name: "R",
+      grants: [{ contentType: "Article", actions: ["update", "publish"] }],
+    };
+    const out = projectApiRoles(doc, [r]);
+    expect(out.gaps.map((g) => g.feature)).not.toContain("publishAction");
+  });
+  it("ignores actions with no users-permissions API equivalent (publish alone)", () => {
+    const r: Role = { name: "R", grants: [{ contentType: "Article", actions: ["publish"] }] };
+    const out = projectApiRoles(doc, [r]);
+    expect(out.roles).toEqual([{ type: "R", actions: [] }]);
   });
 });
