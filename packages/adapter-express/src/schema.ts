@@ -1,4 +1,4 @@
-import { withMarker, type ExpandedContentType } from "@camis/adapter-kernel";
+import { columnField, withMarker, type ExpandedContentType } from "@camis/adapter-kernel";
 import type { ContentType, Field } from "@camis/ir-schema";
 import { DIALECTS, type Dialect } from "./dialect";
 import { column, isSupportedField } from "./fields";
@@ -31,8 +31,10 @@ export const emitSchemaFile = (
   for (const ct of cts) {
     const n = expressNames(ct);
     const expansion = expansions.get(ct.name);
+    // A shared embedded column is NOT NULL only when the component is always present;
+    // `s.field.required` alone still speaks for validation, not for the column.
     const embedded = (expansion?.scalars ?? []).map((s) =>
-      column(dialect, { ...s.field, name: snakePath(s.path) } as Field),
+      column(dialect, { ...columnField(s), name: snakePath(s.path) } as Field),
     );
     const cols = [
       ...ct.fields.filter((f) => isSupportedField(f.type)).map((f) => column(dialect, f)),
@@ -55,7 +57,7 @@ ${body}
       const fkCol = `${snakeColumn(ct.name)}_id`;
       importNames.add(fkImport);
       const childCols = t.scalars.map((s) =>
-        column(dialect, { ...s.field, name: snakePath(s.path) } as Field),
+        column(dialect, { ...columnField(s), name: snakePath(s.path) } as Field),
       );
       childCols.forEach((c) => importNames.add(c.import));
       const childColLines = childCols.map((c) => `  ${c.column}: ${c.drizzle},`).join("\n");

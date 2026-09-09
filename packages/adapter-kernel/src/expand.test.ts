@@ -43,6 +43,31 @@ const doc: IrDocument = {
         { type: "component", name: "discount", component: "Money", repeatable: false },
       ],
     },
+    {
+      name: "Order",
+      kind: "collection",
+      fields: [{ type: "component", name: "items", component: "LineItem", repeatable: true }],
+    },
+    {
+      name: "Shipment",
+      kind: "collection",
+      fields: [
+        {
+          type: "component",
+          name: "loose",
+          component: "OptionalMoneyEnvelope",
+          repeatable: false,
+          required: true,
+        },
+        {
+          type: "component",
+          name: "firm",
+          component: "RequiredMoneyEnvelope",
+          repeatable: false,
+          required: true,
+        },
+      ],
+    },
   ],
   components: [
     {
@@ -80,6 +105,29 @@ const doc: IrDocument = {
       ],
     },
     {
+      name: "LineItem",
+      fields: [
+        { type: "integer", name: "qty", required: true },
+        { type: "component", name: "money", component: "Money", repeatable: false },
+      ],
+    },
+    {
+      name: "OptionalMoneyEnvelope",
+      fields: [{ type: "component", name: "inner", component: "Money", repeatable: false }],
+    },
+    {
+      name: "RequiredMoneyEnvelope",
+      fields: [
+        {
+          type: "component",
+          name: "inner",
+          component: "Money",
+          repeatable: false,
+          required: true,
+        },
+      ],
+    },
+    {
       name: "Quantity",
       fields: [
         { type: "decimal", name: "amount" },
@@ -98,8 +146,10 @@ describe("expandComponents", () => {
       ["amount", "minor"],
       ["amount", "currency"],
     ]);
-    // Transaction.amount is itself optional, so its inner required-ness cannot reach the column.
-    expect(r.scalars[0]?.field).toEqual({ type: "bigInteger", name: "minor" });
+    // Transaction.amount is itself optional, so the column cannot be NOT NULL — but the IR's
+    // own `required` survives on the field for the validation layer to use.
+    expect(r.scalars[0]?.field).toEqual({ type: "bigInteger", name: "minor", required: true });
+    expect(r.scalars[0]?.alwaysPresent).toBe(false);
     expect(r.tables).toEqual([]);
     expect(r.gaps).toEqual([]);
   });
@@ -107,31 +157,79 @@ describe("expandComponents", () => {
   // A flattened column is shared by the whole embedded component: when the component reference
   // is optional the component may simply be absent, and a NOT NULL column then rejects every
   // record without it (SQLSTATE 23000 on insert). Required-ness inside an optional component
-  // constrains the component when present, which is a validation concern, not a column one.
-  it("keeps inner required only when every enclosing component reference is required", () => {
+  // constrains the component when present, which is a validation concern, not a column one —
+  // so `alwaysPresent` carries the column answer and `field.required` stays untouched.
+  it("marks a scalar alwaysPresent only when every enclosing component reference is required", () => {
     const r = expandComponents(doc, ct("Invoice"));
-    expect(r.scalars.map((s) => [s.path, s.field.required])).toEqual([
+    expect(r.scalars.map((s) => [s.path, s.alwaysPresent])).toEqual([
       [["total", "minor"], true],
       [["total", "currency"], true],
-      [["discount", "minor"], undefined],
-      [["discount", "currency"], undefined],
+      [["discount", "minor"], false],
+      [["discount", "currency"], false],
     ]);
+    // The IR constraint is preserved on every scalar regardless of the column answer.
+    expect(r.scalars.map((s) => s.field.required)).toEqual([true, true, true, true]);
   });
 
-  it("drops inner required as soon as one link in a nested path is optional", () => {
+  it("clears alwaysPresent as soon as one link in a nested path is optional", () => {
     const r = expandComponents(doc, ct("Consumable"));
     const servingSize = r.scalars.filter((s) => s.path[1] === "servingSize");
     expect(servingSize.map((s) => s.path[2])).toEqual(["amount", "unit"]);
-    for (const s of servingSize) expect(s.field.required).toBeUndefined();
+    for (const s of servingSize) {
+      expect(s.alwaysPresent).toBe(false);
+      expect(s.field.required).toBe(true);
+    }
+  });
+
+  it("clears alwaysPresent for a required outer reference through an optional inner one", () => {
+    const r = expandComponents(doc, ct("Shipment"));
+    const loose = r.scalars.filter((s) => s.path[0] === "loose");
+    expect(loose.map((s) => s.path)).toEqual([
+      ["loose", "inner", "minor"],
+      ["loose", "inner", "currency"],
+    ]);
+    for (const s of loose) {
+      expect(s.alwaysPresent).toBe(false);
+      expect(s.field.required).toBe(true);
+    }
+  });
+
+  it("keeps alwaysPresent when every reference on a depth-2 path is required", () => {
+    const r = expandComponents(doc, ct("Shipment"));
+    const firm = r.scalars.filter((s) => s.path[0] === "firm");
+    expect(firm.map((s) => s.path)).toEqual([
+      ["firm", "inner", "minor"],
+      ["firm", "inner", "currency"],
+    ]);
+    for (const s of firm) {
+      expect(s.alwaysPresent).toBe(true);
+      expect(s.field.required).toBe(true);
+    }
   });
 
   // A child-table row exists only when the repeatable item does, so required-ness inside it is
   // a genuine NOT NULL — nothing is being made optional by the parent reference here.
   it("keeps required inside a repeatable component's child table", () => {
     const r = expandComponents(doc, ct("Consumable"));
-    expect(r.tables[0]?.scalars.map((s) => [s.field.name, s.field.required])).toEqual([
-      ["slug", true],
-      ["amount", undefined],
+    expect(
+      r.tables[0]?.scalars.map((s) => [s.field.name, s.field.required, s.alwaysPresent]),
+    ).toEqual([
+      ["slug", true, true],
+      ["amount", undefined, true],
+    ]);
+  });
+
+  // The repeatable boundary resets the path, but it does not make everything below it
+  // unconditional: an OPTIONAL sub-component reference inside the item is still absent-able, so
+  // its scalars share a child-table column that has to stay nullable.
+  it("clears alwaysPresent for an optional sub-component inside a repeatable", () => {
+    const r = expandComponents(doc, ct("Order"));
+    expect(r.scalars).toEqual([]);
+    expect(r.tables).toHaveLength(1);
+    expect(r.tables[0]?.scalars.map((s) => [s.path, s.field.required, s.alwaysPresent])).toEqual([
+      [["qty"], true, true],
+      [["money", "minor"], true, false],
+      [["money", "currency"], true, false],
     ]);
   });
 

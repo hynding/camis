@@ -4,6 +4,16 @@ import type { CapabilityGap, Component, ContentType, Field, IrDocument } from "@
 export interface ExpandedScalar {
   path: string[];
   field: Field;
+  /**
+   * True when every non-repeatable component reference on the path to this scalar is required,
+   * so a row of the owning table always carries the scalar. Inside a repeatable component's own
+   * child table the path restarts: the row exists only when the item does.
+   *
+   * A flattened column is shared by the whole embedded component, so it can only be NOT NULL
+   * when both `field.required` and this hold. `field.required` alone is the IR's constraint on
+   * the component *when present* — a validation concern the emitters must not lose.
+   */
+  alwaysPresent: boolean;
 }
 
 /** A repeatable component reference, realized as a child table of the content type. */
@@ -35,14 +45,14 @@ const stripAi = (field: Field): Field => {
 };
 
 /**
- * A flattened column is shared by the whole embedded component, so it can only be NOT NULL if
- * the component is always there. Behind an optional component reference the component may be
- * absent entirely, and required-ness inside it constrains the component when present — a
- * validation concern, not a column one.
+ * The field as a column emitter must see it: a flattened column is shared by the whole embedded
+ * component, so it can only be NOT NULL when the component is always there. Behind an optional
+ * component reference the component may be absent entirely, and `required` then constrains the
+ * component when present — a validation concern, not a column one.
  */
-const stripRequired = (field: Field): Field => {
-  if (field.required === undefined) return field;
-  const rest = { ...field };
+export const columnField = (scalar: ExpandedScalar): Field => {
+  if (scalar.alwaysPresent || scalar.field.required === undefined) return scalar.field;
+  const rest = { ...scalar.field };
   delete rest.required;
   return rest;
 };
@@ -52,7 +62,8 @@ const stripRequired = (field: Field): Field => {
  * Non-repeatable components flatten (recursively) into prefixed embedded scalars; repeatable
  * components become child tables. Relations and AI attachments inside components, and
  * repeatables nested inside repeatables, are bounded out as downgrade gaps. A flattened scalar
- * keeps its `required` only when every component reference above it is required.
+ * keeps its `required` verbatim and reports, via `alwaysPresent`, whether every component
+ * reference above it is required.
  */
 export const expandComponents = (doc: IrDocument, ct: ContentType): ExpandedContentType => {
   const byName = new Map<string, Component>(doc.components.map((c) => [c.name, c]));
@@ -116,8 +127,7 @@ export const expandComponents = (doc: IrDocument, ct: ContentType): ExpandedCont
           ),
         );
       }
-      const scalar = alwaysPresent ? stripAi(field) : stripRequired(stripAi(field));
-      sink.push({ path: [...path, field.name], field: scalar });
+      sink.push({ path: [...path, field.name], field: stripAi(field), alwaysPresent });
     }
   };
 

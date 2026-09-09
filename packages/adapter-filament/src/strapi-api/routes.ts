@@ -10,7 +10,8 @@ const AUTH_THROTTLE_PER_MINUTE = 10;
  * wrong for every deployment at once — too loose behind a per-user address, low enough to
  * lock out a shared NAT or an acceptance suite that registers an account per test. The rate
  * is an operational knob, so it lives in config (env-overridable, and read through `config()`
- * so `config:cache` keeps working).
+ * so `config:cache` keeps working). It is floored at 1: `(int)` turns an empty or non-numeric
+ * env value into 0, and `throttle:0,1` means "reject everything", not "no limit".
  */
 export const emitApiConfig = (): string => `<?php
 
@@ -21,7 +22,7 @@ declare(strict_types=1);
 return [
     // Requests per minute allowed on the unauthenticated credential endpoints
     // (POST /auth/local and /auth/local/register), keyed by client address.
-    'auth_throttle_per_minute' => (int) env('CAMIS_AUTH_THROTTLE_PER_MINUTE', ${AUTH_THROTTLE_PER_MINUTE}),
+    'auth_throttle_per_minute' => max(1, (int) env('CAMIS_AUTH_THROTTLE_PER_MINUTE', ${AUTH_THROTTLE_PER_MINUTE})),
 ];
 `;
 

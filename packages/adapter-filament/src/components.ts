@@ -1,4 +1,4 @@
-import type { ExpandedTable } from "@camis/adapter-kernel";
+import { columnField, type ExpandedTable } from "@camis/adapter-kernel";
 import type { ContentType } from "@camis/ir-schema";
 import { emitField, type FieldEmit } from "./fields";
 import { filamentNames, snake, snakeColumn } from "./names";
@@ -26,7 +26,7 @@ export const childTableEmit = (ct: ContentType, table: ExpandedTable): ChildTabl
     model: `${parent.model}${table.path.map(studlySegment).join("")}`,
     fk: `${snake(ct.name)}_id`,
     relationName: camelPath(table.path),
-    emits: table.scalars.map((s) => emitField(s.field, s.path.map(snakeColumn).join("_"))),
+    emits: table.scalars.map((s) => emitField(columnField(s), s.path.map(snakeColumn).join("_"))),
   };
 };
 

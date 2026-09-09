@@ -90,6 +90,15 @@ describe("strapi-api controllers", () => {
     );
     expect(php).not.toContain("throttle:10,1");
   });
+  // `(int) env(...)` casts an unset, empty or non-numeric value to 0, and `throttle:0,1` is not
+  // "no limit" — Laravel rejects every request to the credential endpoints with a 429, locking
+  // logins out of the deployment. A typo in .env must not be able to do that, so the value is
+  // floored at one request per minute.
+  it("floors the configured auth throttle at 1 per minute", () => {
+    expect(emitApiConfig()).toContain(
+      "'auth_throttle_per_minute' => max(1, (int) env('CAMIS_AUTH_THROTTLE_PER_MINUTE', 10)),",
+    );
+  });
   it("api config golden (auth throttle rate, env-overridable)", async () => {
     await expect(emitApiConfig()).toMatchFileSnapshot("./__golden__/strapi-api/config.camis.php");
   });

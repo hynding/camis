@@ -302,8 +302,10 @@ describe("component fields — embedded columns", () => {
     expect(model.content).toContain("'amount_minor',");
     expect(model.content).toContain("'amount_currency',");
     const form = result.files.find((f) => f.path.endsWith("Schemas/TransactionForm.php"))!;
+    // Scoped to the embedded fields: an optional component reference makes its subfields
+    // optional in the form too, whatever the rest of the form contains.
     expect(form.content).toContain("TextInput::make('amount_minor')->numeric(),");
-    expect(form.content).not.toContain("->required()");
+    expect(form.content).toContain("TextInput::make('amount_currency'),");
     const table = result.files.find((f) => f.path.endsWith("Schemas/TransactionsTable.php"))!;
     expect(table.content).toContain("TextColumn::make('amount_currency')");
   });
@@ -328,6 +330,10 @@ describe("component fields — embedded columns", () => {
     const migration = result.files.find((f) => f.path.includes("create_transactions_table"))!;
     expect(migration.content).toContain("$table->bigInteger('amount_minor');");
     expect(migration.content).toContain("$table->string('amount_currency');");
+    // …and the form asks for them again, since the component is now always there.
+    const form = result.files.find((f) => f.path.endsWith("Schemas/TransactionForm.php"))!;
+    expect(form.content).toContain("TextInput::make('amount_minor')->numeric()->required(),");
+    expect(form.content).toContain("TextInput::make('amount_currency')->required(),");
   });
 });
 
@@ -398,6 +404,54 @@ describe("component fields — repeatable child tables", () => {
     expect(form.content).toContain("->relationship()");
     expect(form.content).toContain("TextInput::make('amount')->numeric()->required()");
   });
+
+  // A repeatable's child-table row exists only when the item does, so required scalars on the
+  // item itself are genuine NOT NULLs — but an OPTIONAL sub-component reference inside the item
+  // may still be absent, and its flattened columns are shared by the whole sub-component. They
+  // have to stay nullable, or every line item without a price is rejected on insert.
+  it("keeps an optional sub-component's columns nullable inside the child table", () => {
+    const orderDoc = {
+      version: 1 as const,
+      contentTypes: [
+        {
+          name: "Order",
+          kind: "collection" as const,
+          fields: [
+            { type: "component" as const, name: "items", component: "LineItem", repeatable: true },
+          ],
+        },
+      ],
+      components: [
+        {
+          name: "LineItem",
+          fields: [
+            { type: "integer" as const, name: "qty", required: true },
+            { type: "component" as const, name: "money", component: "Money", repeatable: false },
+          ],
+        },
+        {
+          name: "Money",
+          fields: [
+            { type: "bigInteger" as const, name: "minor", required: true },
+            { type: "string" as const, name: "currency", required: true },
+          ],
+        },
+      ],
+    };
+    const result = filamentAdapter.generate(
+      { document: orderDoc, roles: [] },
+      { projectName: "t" },
+    );
+    expect(result.gaps.gaps).toEqual([]);
+    const childMig = result.files.find((f) => f.path.endsWith("create_orders_items_table.php"))!;
+    expect(childMig).toBeDefined();
+    expect(childMig.content).toContain("$table->integer('qty');");
+    expect(childMig.content).toContain("$table->bigInteger('money_minor')->nullable();");
+    expect(childMig.content).toContain("$table->string('money_currency')->nullable();");
+    const form = result.files.find((f) => f.path.endsWith("Schemas/OrderForm.php"))!;
+    expect(form.content).toContain("TextInput::make('qty')->numeric()->required(),");
+    expect(form.content).toContain("TextInput::make('money_minor')->numeric(),");
+  });
 });
 
 describe("DEPLOY.md", () => {
@@ -409,6 +463,17 @@ describe("DEPLOY.md", () => {
     expect(deploy!.content).toContain("php artisan migrate");
     expect(deploy!.content).toContain("RolePermissionSeeder");
     expect(deploy!.content).toContain("public/");
+  });
+  // The auth throttle is an operational knob, so an operator must be able to find it without
+  // reading the generated config: too low locks out an office NAT, too high is a guessing oracle.
+  it("documents the Strapi-style auth env knobs", () => {
+    const result = filamentAdapter.generate(bundle, { projectName: "blog" });
+    const deploy = result.files.find((f) => f.path === "DEPLOY.md")!;
+    expect(deploy.content).toContain("CAMIS_AUTH_THROTTLE_PER_MINUTE");
+    expect(deploy.content).toContain("SANCTUM_TOKEN_EXPIRATION");
+    // The rate is interpolated into the middleware string at route registration, so a cached
+    // route file holds the old number: clearing only the config cache silently does nothing.
+    expect(deploy.content).toContain("the rate is baked into the cached route definition");
   });
 });
 
