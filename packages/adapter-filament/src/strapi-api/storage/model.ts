@@ -141,6 +141,12 @@ export const emitStorageModel = (
   for (const { field, emit } of emits) {
     if (field.type === "dateTime" || field.type === "timestamp") {
       addCast(emit.column, "StrapiDateTime::class");
+    } else if (field.type === "date" || field.type === "time") {
+      // Deliberately uncast (spec 17i): Strapi stores a `date` as a bare `Y-m-d` and a `time` as
+      // `H:i:s.SSS`, and serves them back verbatim. Laravel's 'date' cast would hydrate a Carbon
+      // and write `Y-m-d H:i:s` into the same column, so the two backends would disagree on the
+      // value they each read. Passing the string through keeps them identical.
+      continue;
     } else if (emit.cast !== undefined) {
       addCast(emit.column, emit.cast);
     }

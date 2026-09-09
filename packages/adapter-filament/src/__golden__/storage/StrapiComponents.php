@@ -374,9 +374,10 @@ final class StrapiComponents
      * table by the raw query builder. The per-type conversion the owner's $casts would have done
      * therefore happens here, driven by the map's `type`.
      *
-     * Numerics, strings and `time` are left alone — the serializer already casts what it needs to.
-     * `date` is a Carbon on the way in because the serializer calls `?->toDateString()` on it, but
-     * passes through on the way out: its column is a DATE, not one of Strapi's datetime columns.
+     * Numerics, strings, `date` and `time` are left alone — the serializer already casts what it
+     * needs to. `date` and `time` pass through in both directions: Strapi writes a bare `Y-m-d`
+     * (and `H:i:s.SSS`) into columns that are not one of its datetime columns, and this layout
+     * deliberately leaves them uncast on the owner model too, so both backends read one string.
      */
     private static function fromStorage(mixed $value, string $type): mixed
     {
@@ -386,7 +387,6 @@ final class StrapiComponents
 
         return match ($type) {
             'dateTime', 'timestamp' => StrapiDateTime::fromStorage($value),
-            'date' => StrapiDateTime::fromStorage($value),
             'json' => is_string($value) ? json_decode($value, true) : $value,
             'boolean' => (bool) $value,
             default => $value,

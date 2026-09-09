@@ -57,6 +57,17 @@ describe("emitSerializer", () => {
     expect(php).toContain("'occurredOn' => $m->occurred_on?->toDateString()");
     expect(php).not.toContain("$m->occurred_on?->toJSON()");
   });
+  // On the Strapi storage layout a `date` column carries no model cast (spec 17i) — Laravel's
+  // would write `Y-m-d H:i:s` into a column Strapi fills with a bare `Y-m-d`. The attribute is
+  // therefore already the string Strapi itself serves, and `?->toDateString()` on it would be a
+  // fatal "call to a member function on string".
+  it("passes a date straight through on the strapi storage layout, where it is uncast", () => {
+    const php = emitSerializer(shape("Transaction"), "strapi");
+    expect(php).toContain("'occurredOn' => $m->occurred_on,");
+    expect(php).not.toContain("toDateString");
+    // Datetimes still go through Carbon there: they keep the StrapiDateTime cast.
+    expect(php).toContain("$m->created_at?->toIso8601ZuluString('millisecond')");
+  });
   it("omits nulls via the shared helper and never emits relation FKs", () => {
     const php = emitSerializer(shape("Note"));
     expect(php).toContain("self::omitNulls(");

@@ -125,6 +125,16 @@ describe("filamentAdapter storageLayout strapi — file set", () => {
     expect(content("app/Http/Serializers/NoteSerializer.php")).not.toContain("owner_id");
   });
 
+  // The models on this layout leave `date`/`time` uncast (spec 17i), so the serializers the same
+  // generate() call emits must read them as the plain strings they are — a `?->toDateString()`
+  // here would be a fatal call on a string the first time a Transaction is serialized.
+  it("emits serializers that pass an uncast date column straight through", () => {
+    const php = content("app/Http/Serializers/TransactionSerializer.php");
+    expect(php).toContain("'occurredOn' => $m->occurred_on,");
+    expect(php).not.toContain("toDateString");
+    expect(content("app/Models/Transaction.php")).not.toContain("'occurred_on' =>");
+  });
+
   it("reports exactly one project-level adminPanelNotEmitted gap and nothing else", () => {
     expect(result.gaps.gaps).toEqual([
       {

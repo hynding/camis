@@ -110,6 +110,44 @@ describe("Note model", () => {
   });
 });
 
+// Spec 17i: `date` and `time` pass through this layout as plain strings. Laravel's 'date' cast
+// would hand Eloquent a Carbon instance and write it back as `Y-m-d H:i:s`, where Strapi stores
+// (and serves) a bare `Y-m-d` — the same column read two different ways by the two backends.
+describe("Transaction model", () => {
+  it("golden", async () => {
+    await expect(emit("Transaction")).toMatchFileSnapshot(
+      "../../__golden__/storage/Transaction.model.php",
+    );
+  });
+
+  it("gives a date field no cast at all", () => {
+    const php = emit("Transaction");
+    expect(php).toContain("'occurred_on',"); // the column is still fillable
+    expect(php).not.toContain("'occurred_on' =>");
+    expect(php).not.toContain("'date'");
+  });
+
+  it("still casts decimals and the Strapi-owned datetimes", () => {
+    const php = emit("Transaction");
+    expect(php).toContain("'fee' => 'decimal:2',");
+    expect(php).toContain("'created_at' => StrapiDateTime::class,");
+  });
+
+  it("gives a time field no cast either", () => {
+    const timely: ContentType = {
+      name: "Timely",
+      kind: "collection",
+      fields: [
+        { type: "string", name: "recordId", required: true },
+        { type: "time", name: "startsAt" },
+      ],
+    };
+    const php = emitStorageModel(timely, doc, [], undefined);
+    expect(php).toContain("'starts_at',");
+    expect(php).not.toContain("'starts_at' =>");
+  });
+});
+
 describe("Consumable model", () => {
   it("golden", async () => {
     await expect(emit("Consumable")).toMatchFileSnapshot(

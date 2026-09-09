@@ -194,6 +194,15 @@ describe("emitStrapiComponents", () => {
     );
   });
 
+  // Spec 17i: `date`/`time` are strings end to end on this layout — the owner model leaves them
+  // uncast and the serializer passes them through, so converting a component's copy to a Carbon
+  // here would make the same IR type render two different ways depending on where it sits.
+  it("leaves a date component scalar as the string Strapi stored, in both directions", () => {
+    const php = emitStrapiComponents();
+    expect(php).not.toContain("'date' => StrapiDateTime::fromStorage($value),");
+    expect(php).not.toContain("'date' =>");
+  });
+
   it("reads the level's link table without assuming the map is a 0-indexed list", () => {
     const php = emitStrapiComponents();
     expect(php).toContain("reset($map)['cmpsTable']");

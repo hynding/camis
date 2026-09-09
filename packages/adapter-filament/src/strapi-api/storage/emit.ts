@@ -88,7 +88,7 @@ export const emitStrapiStorage = (input: StrapiApiInput): StrapiApiEmission => {
     const shape = wireShape(doc, ct, []);
     files.push({
       path: `app/Http/Serializers/${names.model}Serializer.php`,
-      content: emitSerializer(shape),
+      content: emitSerializer(shape, "strapi"),
     });
     files.push({
       path: `app/Http/Controllers/Api/Generated/${names.model}ApiController.php`,

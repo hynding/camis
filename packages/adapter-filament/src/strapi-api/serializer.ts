@@ -1,3 +1,4 @@
+import type { StorageLayout } from "@camis/adapter-kernel";
 import { PHP_MARKER } from "../hooks/names";
 import type { WireChild, WireScalar, WireShape } from "./wire-shape";
 
@@ -16,12 +17,17 @@ const ZULU_MS = "?->toIso8601ZuluString('millisecond')";
 const UNIT = "    ";
 
 // PHP expression producing the wire value for one column of `$src`.
-const read = (s: WireScalar, src: string): string => {
+//
+// `layout` decides only what a `date` already is. On the Laravel storage layout it arrives as a
+// Carbon (the model's 'date' cast, and StrapiComponents' matching component-scalar conversion);
+// on the Strapi one it is deliberately uncast (spec 17i) and already holds Strapi's own `Y-m-d`
+// string, which `?->toDateString()` would fatal on.
+const read = (s: WireScalar, src: string, layout: StorageLayout): string => {
   const col = `${src}->${s.column}`;
   if (NUMERIC_INT.has(s.type)) return `${col} === null ? null : (int) ${col}`;
   if (NUMERIC_STRING.has(s.type)) return `${col} === null ? null : (string) ${col}`;
   if (NUMERIC_FLOAT.has(s.type)) return `${col} === null ? null : (float) ${col}`;
-  if (DATE_ONLY.has(s.type)) return `${col}?->toDateString()`;
+  if (DATE_ONLY.has(s.type)) return layout === "strapi" ? col : `${col}?->toDateString()`;
   if (DATETIME.has(s.type)) return `${col}${ZULU_MS}`;
   return col;
 };
@@ -55,13 +61,13 @@ const render = (n: Node, indent: string): string => {
   return rows.join("\n");
 };
 
-const toWireBody = (shape: WireShape, indent: string): string => {
+const toWireBody = (shape: WireShape, indent: string, layout: StorageLayout): string => {
   const root = node();
   insert(root, ["id"], "$m->id");
-  for (const s of shape.scalars) insert(root, s.key, read(s, "$m"));
+  for (const s of shape.scalars) insert(root, s.key, read(s, "$m", layout));
   for (const c of shape.children) {
     const inner = node();
-    for (const s of c.scalars) insert(inner, s.key, read(s, "$c"));
+    for (const s of c.scalars) insert(inner, s.key, read(s, "$c", layout));
     // The child's own row is rendered by `render` one branch level per path segment above
     // it (depth = c.key.length - 1), matching how it indents a nested `self::nested([`
     // branch body — so the map's rows sit a further level in, and its closing
@@ -135,7 +141,7 @@ const hasHelper = `
         return true;
     }`;
 
-export const emitSerializer = (shape: WireShape): string => {
+export const emitSerializer = (shape: WireShape, layout: StorageLayout = "laravel"): string => {
   const l2 = `${UNIT}${UNIT}`; // method-body statements
   const l3 = `${UNIT}${UNIT}${UNIT}`; // array literal entries
   const syncChildrenBody = shape.children.length === 0 ? "" : `\n${syncBody(shape.children, l2)}`;
@@ -155,7 +161,7 @@ final class ${shape.model}Serializer
     public static function toWire(${shape.model} $m): array
     {
         return self::omitNulls([
-${toWireBody(shape, l3)}
+${toWireBody(shape, l3, layout)}
         ]);
     }
 
