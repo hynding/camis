@@ -60,7 +60,7 @@ const toWireBody = (shape: WireShape, indent: string): string => {
     // Drop an all-null row from the list (self::nested → null) rather than emit `[]` for it.
     insert(
       root,
-      [c.key],
+      c.key,
       `$m->${c.relation}->map(fn ($c) => self::nested([\n${render(inner, rowIndent)}\n${indent}]))->filter(fn ($r) => $r !== null)->values()->all()`,
     );
   }
@@ -86,10 +86,11 @@ const fromWireChildStatements = (children: WireChild[], indent: string): string 
   const blocks = children.map((c) => {
     const assignIndent = `${indent}${UNIT}`;
     const rowIndent = `${assignIndent}${UNIT}`;
-    return `${indent}if (array_key_exists('${c.key}', $data)) {
+    const path = c.key.map((k) => `'${k}'`).join(", ");
+    return `${indent}if (self::has($data, [${path}])) {
 ${assignIndent}$children['${c.relation}'] = array_map(fn (array $row) => array_filter([
 ${fromWireColumns(c.scalars, "$row", rowIndent)}
-${assignIndent}], fn ($v) => $v !== null), is_array($data['${c.key}']) ? $data['${c.key}'] : []);
+${assignIndent}], fn ($v) => $v !== null), is_array(self::dig($data, [${path}])) ? self::dig($data, [${path}]) : []);
 ${indent}}`;
   });
   return [`${indent}$children = [];`, ...blocks].join("\n");
@@ -105,10 +106,28 @@ ${indent}}`,
     )
     .join("\n");
 
+// `self::has` is only ever called from `fromWireChildStatements`, so a childless shape
+// (no `self::has` call site) omits it rather than leave an unused private method.
+const hasHelper = `
+
+    private static function has(array $a, array $path): bool
+    {
+        $cur = $a;
+        foreach ($path as $seg) {
+            if (! is_array($cur) || ! array_key_exists($seg, $cur)) {
+                return false;
+            }
+            $cur = $cur[$seg];
+        }
+
+        return true;
+    }`;
+
 export const emitSerializer = (shape: WireShape): string => {
   const l2 = `${UNIT}${UNIT}`; // method-body statements
   const l3 = `${UNIT}${UNIT}${UNIT}`; // array literal entries
   const syncChildrenBody = shape.children.length === 0 ? "" : `\n${syncBody(shape.children, l2)}`;
+  const hasHelperBody = shape.children.length === 0 ? "" : hasHelper;
   return `<?php
 ${PHP_MARKER}
 
@@ -167,7 +186,7 @@ ${fromWireChildStatements(shape.children, l2)}
         }
 
         return $cur;
-    }
+    }${hasHelperBody}
 }
 `;
 };

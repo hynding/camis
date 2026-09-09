@@ -31,11 +31,11 @@ final class ActivitySessionSerializer
             'record_id' => self::dig($data, ['recordId']),
         ], fn ($v) => $v !== null);
         $children = [];
-        if (array_key_exists('quantities', $data)) {
+        if (self::has($data, ['quantities'])) {
             $children['quantities'] = array_map(fn (array $row) => array_filter([
                 'amount' => self::dig($row, ['amount']),
                 'unit' => self::dig($row, ['unit']),
-            ], fn ($v) => $v !== null), is_array($data['quantities']) ? $data['quantities'] : []);
+            ], fn ($v) => $v !== null), is_array(self::dig($data, ['quantities'])) ? self::dig($data, ['quantities']) : []);
         }
 
         return ['columns' => $columns, 'children' => $children];
@@ -73,5 +73,18 @@ final class ActivitySessionSerializer
         }
 
         return $cur;
+    }
+
+    private static function has(array $a, array $path): bool
+    {
+        $cur = $a;
+        foreach ($path as $seg) {
+            if (! is_array($cur) || ! array_key_exists($seg, $cur)) {
+                return false;
+            }
+            $cur = $cur[$seg];
+        }
+
+        return true;
     }
 }

@@ -10,7 +10,7 @@ export interface WireScalar {
   type: FieldType;
 }
 export interface WireChild {
-  key: string;
+  key: string[];
   relation: string;
   model: string;
   scalars: WireScalar[];
@@ -39,7 +39,7 @@ export const wireShape = (doc: IrDocument, ct: ContentType, _fkNames: string[]):
   const children: WireChild[] = expansion.tables.map((t) => {
     const child = childTableEmit(ct, t);
     return {
-      key: camelKey(t.path.join(".")),
+      key: t.path.map(camelKey),
       relation: child.relationName,
       model: child.model,
       scalars: t.scalars.map((s) => ({
