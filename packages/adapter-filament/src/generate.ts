@@ -29,6 +29,7 @@ import {
   migrationFilename,
   pivotMigrationFilename,
 } from "./migration";
+import { migrationOrder } from "./migration-order";
 import { emitModel } from "./model";
 import { filamentNames, snakeColumn } from "./names";
 import { resolveRelations } from "./relations";
@@ -89,6 +90,13 @@ export const filamentAdapter: GenerateAdapter = {
     // Builtin content types (the target's native user model) map onto the stock Laravel
     // User/users table; the host app owns those files, so nothing is emitted for them.
     const emitted = doc.contentTypes.filter((ct) => ct.builtin === undefined);
+    // The Strapi storage layout emits no migrations (`emitStrapiStorage` owns its own schema),
+    // so ordering create-table migrations only matters — and only needs reporting — on the
+    // laravel storage layout.
+    const { order: migrationTypeOrder, gaps: migrationOrderGaps } =
+      storage === "strapi" ? { order: emitted, gaps: [] } : migrationOrder(doc, emitted);
+    gaps.push(...migrationOrderGaps);
+    const migrationOrdinal = new Map(migrationTypeOrder.map((ct, i) => [ct.name, i + 1]));
     // The Strapi storage layout emits its own models, so the observer registration that
     // `emitModel` writes on the Laravel layout has to travel with the input; `emitStrapiApi`
     // ignores it, because on that layout `emitModel` still owns the model.
@@ -106,7 +114,7 @@ export const filamentAdapter: GenerateAdapter = {
           : emitStrapiApi(strapiInput)
         : undefined;
     const children: { ct: (typeof emitted)[number]; child: ChildTableEmit }[] = [];
-    emitted.forEach((ct, i) => {
+    emitted.forEach((ct) => {
       for (const f of ct.fields) {
         if (f.type === "relation" || f.type === "component") continue;
         if (!isSupportedField(f.type)) {
@@ -145,7 +153,7 @@ export const filamentAdapter: GenerateAdapter = {
         ),
       });
       files.push({
-        path: migrationFilename(ct, i + 1),
+        path: migrationFilename(ct, migrationOrdinal.get(ct.name)!),
         content: emitMigration(ct, rel.fkColumns.get(ct.name) ?? [], embeddedEmits),
       });
       files.push(

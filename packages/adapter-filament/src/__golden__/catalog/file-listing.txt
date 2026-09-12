@@ -23,8 +23,8 @@ overwrite app/Http/Controllers/Api/TagApiController.php
 overwrite app/Models/Article.php
 overwrite app/Models/Author.php
 overwrite app/Models/Tag.php
-overwrite database/migrations/0001_01_02_000001_create_articles_table.php
-overwrite database/migrations/0001_01_02_000002_create_authors_table.php
+overwrite database/migrations/0001_01_02_000001_create_authors_table.php
+overwrite database/migrations/0001_01_02_000002_create_articles_table.php
 overwrite database/migrations/0001_01_02_000003_create_tags_table.php
 overwrite database/migrations/0001_01_02_000004_create_article_tag_table.php
 overwrite routes/api.php
