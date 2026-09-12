@@ -18,8 +18,20 @@ describe("catalog golden", () => {
   });
   it("articles migration golden", async () => {
     await expect(
-      content("database/migrations/0001_01_02_000001_create_articles_table.php"),
+      content("database/migrations/0001_01_02_000002_create_articles_table.php"),
     ).toMatchFileSnapshot("./__golden__/catalog/create_articles_table.php");
+  });
+  // Article.author is a manyToOne to Author: the authors migration must run before articles'
+  // so `->constrained('authors')` resolves. Author has no dependency of its own, so it is
+  // ordered first even though Article comes first in the IR.
+  it("orders create-table migrations by foreign-key dependency, not IR position", () => {
+    const paths = result.files.map((f) => f.path);
+    expect(paths).toContain("database/migrations/0001_01_02_000001_create_authors_table.php");
+    expect(paths).toContain("database/migrations/0001_01_02_000002_create_articles_table.php");
+    expect(paths).toContain("database/migrations/0001_01_02_000003_create_tags_table.php");
+    expect(content("database/migrations/0001_01_02_000002_create_articles_table.php")).toContain(
+      "->constrained('authors')",
+    );
   });
   it("pivot migration golden", async () => {
     await expect(
