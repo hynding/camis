@@ -69,6 +69,27 @@ describe("importCommand", () => {
     expect(code).toBe(0);
     expect(Object.values(written)[0]).toContain('"Article"');
   });
+  // A dropped attribute must be visible: otherwise an import silently loses fields.
+  it("prints the capability gaps of a Strapi import", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "camis-cli-strapi-gaps-"));
+    const ctDir = join(dir, "src/api/page/content-types/page");
+    await mkdir(ctDir, { recursive: true });
+    await writeFile(
+      join(ctDir, "schema.json"),
+      JSON.stringify({
+        kind: "collectionType",
+        info: { singularName: "page", pluralName: "pages", displayName: "Page" },
+        attributes: {
+          title: { type: "string" },
+          blocks: { type: "dynamiczone", components: ["shared.quote"] },
+        },
+      }),
+    );
+    const lines: string[] = [];
+    const code = await importCommand("strapi", dir, join(dir, "ir.json"), memIo({}, lines, {}));
+    expect(code).toBe(0);
+    expect(lines.join("\n")).toMatch(/⚠ dynamiczone @ Page\.blocks/);
+  });
   it("passes --upsert-by through to the Strapi importer", async () => {
     const dir = await mkdtemp(join(tmpdir(), "camis-import-"));
     await mkdir(join(dir, "src/api/note/content-types/note"), { recursive: true });
