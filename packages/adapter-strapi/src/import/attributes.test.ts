@@ -45,9 +45,11 @@ describe("irField — scalars", () => {
   });
   // Projects generated before the emitter wrote plural kinds carry the singular form.
   it("accepts media kinds already in the IR's singular form", () => {
-    expect(
-      irField("cover", { type: "media", allowedTypes: ["image"] }, loc).field,
-    ).toEqual({ type: "media", name: "cover", allowedTypes: ["image"] });
+    expect(irField("cover", { type: "media", allowedTypes: ["image"] }, loc).field).toEqual({
+      type: "media",
+      name: "cover",
+      allowedTypes: ["image"],
+    });
   });
   it("reverses uid targetField", () => {
     expect(irField("slug", { type: "uid", targetField: "title" }, loc).field).toEqual({
