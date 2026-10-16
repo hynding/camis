@@ -29,10 +29,25 @@ describe("irField — scalars", () => {
         .field,
     ).toEqual({ type: "enumeration", name: "status", values: ["draft", "live"], default: "draft" });
   });
-  it("reverses media", () => {
+  it("reverses media, mapping Strapi's plural kinds to the IR's", () => {
     expect(
-      irField("cover", { type: "media", multiple: true, allowedTypes: ["image"] }, loc).field,
-    ).toEqual({ type: "media", name: "cover", multiple: true, allowedTypes: ["image"] });
+      irField(
+        "cover",
+        { type: "media", multiple: true, allowedTypes: ["images", "files", "videos", "audios"] },
+        loc,
+      ).field,
+    ).toEqual({
+      type: "media",
+      name: "cover",
+      multiple: true,
+      allowedTypes: ["image", "file", "video", "audio"],
+    });
+  });
+  // Projects generated before the emitter wrote plural kinds carry the singular form.
+  it("accepts media kinds already in the IR's singular form", () => {
+    expect(
+      irField("cover", { type: "media", allowedTypes: ["image"] }, loc).field,
+    ).toEqual({ type: "media", name: "cover", allowedTypes: ["image"] });
   });
   it("reverses uid targetField", () => {
     expect(irField("slug", { type: "uid", targetField: "title" }, loc).field).toEqual({
