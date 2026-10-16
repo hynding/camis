@@ -335,6 +335,77 @@ whose IR and roles validate together and builds both targets; a second `camis bu
 project regenerates byte-identical output; the generated Strapi schema carries Strapi's plural media
 kinds, and the importer maps them back to the IR's.
 
+## Strapi feature parity on the Filament target (Phases 19–30)
+
+**Goal:** a project migrated off strapi-php onto camis's Filament target (`apiStyle: "strapi"`,
+laravel storage layout — what `camis new` generates) keeps every Strapi feature strapi-php gives
+it, while staying deployable on plain shared hosting. strapi-php is the feature checklist
+(its README table and `parity.json`); upstream's `tests/api` suite, as strapi-php runs it, is the
+behavioural oracle for the wire format.
+
+**Shared-hosting guardrails (every phase, enforced in review and by the boot CI job):**
+
+- PHP-FPM / LSAPI only: nothing may require a long-running process (no queue worker, no
+  websocket server, no Octane/FrankenPHP). Work that Strapi does in the background (webhooks,
+  image formats, emails) runs inline or after the response (`dispatchAfterResponse`), with
+  `QUEUE_CONNECTION=sync` the supported default.
+- Cron is optional: the scheduler (`schedule:run`) may add conveniences, never correctness.
+- No Node at deploy or at runtime. Filament's assets are prebuilt; nothing new may add an npm step.
+- No PHP extension beyond Laravel's defaults; `gd` is optional (image formats degrade to the
+  original file without it, and the gap is reported).
+- Per-request cost stays Laravel's: generated code must survive `config:cache`, `route:cache`,
+  `view:cache`, `event:cache`, `filament:optimize` and `composer --classmap-authoritative`, and
+  runtime helpers are plain classes, not service-provider boot work.
+- SQLite is the default database; MySQL and Postgres by env var only.
+
+| Phase | Strapi feature (strapi-php package) | Notes |
+| --- | --- | --- |
+| 19 | REST query core: `documentId`, `filters`, `sort`, `pagination`, `fields`, `meta`, error envelope (`strapi/utils`, `core-api`) | below |
+| 20 | Relations on the wire and `populate` (components, relations, media unpopulated by default, as in Strapi 5); `connect`/`disconnect`/`set` writes | changes today's always-nested components |
+| 21 | Draft & Publish: Strapi 5's two-row document model, `status=draft\|published`, publish/unpublish/discard in Filament (`core` document service) | today `draftPublish` is silently dropped on this layout |
+| 22 | Internationalization: IR `localized` content types and fields, `locale` param, locales settings, Filament locale switcher (`strapi/i18n`) | IR change |
+| 23 | Media library and Upload API: Strapi's `files` shape, `/api/upload`, formats via GD, local disk default, S3 and Cloudinary through Laravel filesystems (`strapi/upload`) | |
+| 24 | Users & Permissions completion: forgot/reset/change password, email confirmation, refresh sessions, OAuth providers, blocked users, roles × actions matrix editor (`plugin-users-permissions`) | |
+| 25 | API tokens (read-only, full-access, custom; salted hashes; expiry; `lastUsedAt`) and transfer tokens (`strapi/admin`) | |
+| 26 | Webhooks and lifecycle events (`entry.*`, `media.*`), sent after the response (`strapi/admin`, `core`) | no worker |
+| 27 | Dynamic zones on relational targets, plus the importer gaps that block strapi-php projects (snake_case attribute names, morph relations) | see `docs/` import limits |
+| 28 | GraphQL (opt-in, `webonyx/graphql-php` like strapi-php; same schema naming as Strapi's plugin) (`plugin-graphql`) | |
+| 29 | OpenAPI document + Swagger UI, data export/import archives compatible with Strapi's (`strapi/openapi`, `plugin-documentation`, `strapi/data-transfer`) | |
+| 30 | Strapi-like admin in Filament: Content Manager navigation, Settings area, Strapi wording | admin choice pending with the owner |
+
+Not planned: content-releases, review-workflows, content history, audit logs, preview (Enterprise,
+strapi-php does not port them either). The Content-Type Builder stays the camis CLI and AI
+authoring: the IR is the source of truth and generation is one-way, so a runtime schema editor
+would need Node and codegen on the server.
+
+## Phase 19 — Strapi REST query core (`adapter-filament`, `cli`)
+
+**Goal:** a Strapi 5 client's list and detail requests behave the same against the generated app
+as against strapi-php, on the laravel storage layout.
+
+- Every content type gets a `document_id` column (cuid2, 24 chars, unique, filled on create by a
+  generated `HasDocumentId` trait, including from Filament), serialized as `documentId`; it is the
+  route key unless `options.upsertBy` names another field.
+- A generated runtime, `App\Support\StrapiQuery`, ports strapi-php's query semantics: `filters`
+  with every attribute operator (`$eq` … `$notContainsi`, `$null`, `$notNull`, `$in`, `$notIn`,
+  `$between`, `$not`) and the logical `$and`/`$or`/`$not`, over top-level scalars, embedded
+  component scalars and repeatable components (`whereHas`); value casting per field type;
+  `sort` (string, list, object forms; default `id` order); `pagination` (page/pageSize and
+  start/limit, `withCount`, defaults 25 / no max, `limit=-1`, the mixed-form error); `fields`.
+  Unknown keys are 400 `ValidationError`s worded as Strapi's (`Invalid key x`).
+- Every response carries `meta` (`{ pagination }` on lists, `{}` otherwise); every error carries
+  Strapi's full envelope `{ data: null, error: { status, name, message, details } }`.
+- Each serializer exports its wire-key → column map (`FIELDS`), the runtime's only per-type input.
+
+**Exit criteria:** a canonical vector file (query string → expected ids and `meta`) runs against
+the booted app in the `strapi-api` boot job and passes; goldens change only where this phase says
+(new column, `documentId`, `meta`, error envelope); regeneration is idempotent.
+
+Known gaps left for later phases: the strapi storage layout keeps its own query path (no
+`filters`/`sort`/`pagination` yet); nulls are still omitted from the wire (a Phase 16 choice that
+diverges from Strapi, revisit with Phase 20); a secured list post-filters each page through the
+policy when the read condition has no SQL form, so its `total` can overcount.
+
 ---
 
 ## Sequencing rationale (quick reference)
