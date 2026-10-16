@@ -65,15 +65,20 @@ describe("toAttribute — uid targetField", () => {
 });
 
 describe("toAttribute — media", () => {
-  it("carries multiple and allowedTypes", () => {
+  // Strapi's content-type builder only accepts the plural media kinds.
+  it("carries multiple and allowedTypes in Strapi's plural form", () => {
     expect(
       toAttribute({
         type: "media",
         name: "cover",
         multiple: true,
-        allowedTypes: ["image", "video"],
+        allowedTypes: ["image", "video", "audio", "file"],
       }),
-    ).toEqual({ type: "media", multiple: true, allowedTypes: ["image", "video"] });
+    ).toEqual({
+      type: "media",
+      multiple: true,
+      allowedTypes: ["images", "videos", "audios", "files"],
+    });
   });
 });
 

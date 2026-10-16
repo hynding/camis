@@ -2,6 +2,7 @@ import type { GenerationResult } from "@camis/adapter-kernel";
 
 export interface Io {
   readFile(path: string): Promise<string>;
+  /** Write a file, creating its parent directories. */
   writeFile(path: string, content: string): Promise<void>;
   materialize(result: GenerationResult, destDir: string): Promise<void>;
   /** Recursively copy a directory tree, overwriting files that already exist. */

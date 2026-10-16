@@ -1,6 +1,6 @@
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { materialize } from "@camis/adapter-kernel";
 import type { Io } from "./io";
@@ -171,5 +171,74 @@ describe("run — scaffold --storage", () => {
     const code = await run(["scaffold", "filament", "app"], io);
     expect(code).toBe(1); // User.php read fails against this fake Io; sequence still runs first
     expect(execCalls.length).toBeGreaterThan(2);
+  });
+});
+
+describe("run — new", () => {
+  const fsIo = (cwd: string): Io => ({
+    ...realIo(cwd),
+    writeFile: async (p, c) => {
+      await mkdir(dirname(p), { recursive: true });
+      await writeFile(p, c);
+    },
+  });
+
+  it("needs a directory", async () => {
+    const io = fsIo("/nowhere");
+    expect(await run(["new"], io)).toBe(1);
+    expect(lines.join("\n")).toContain("✗ new needs <dir>");
+  });
+
+  it("EXIT CRITERIA: creates the example project and builds Strapi + Express from it", async () => {
+    tmp = await mkdtemp(join(tmpdir(), "camis-cli-new-"));
+    const code = await run(
+      ["new", "blog", "--template", "example", "--targets", "strapi,express"],
+      fsIo(tmp),
+    );
+    expect(code).toBe(0);
+    const article = await readFile(
+      join(tmp, "blog/generated/strapi/src/api/article/content-types/article/schema.json"),
+      "utf8",
+    );
+    expect(JSON.parse(article).attributes.cover.allowedTypes).toEqual([
+      "images",
+      "files",
+      "videos",
+    ]);
+    expect(await readFile(join(tmp, "blog/generated/express/package.json"), "utf8")).toBeTruthy();
+
+    // A later `camis build` from inside the project regenerates the same output.
+    const projectIo = fsIo(join(tmp, "blog"));
+    expect(await run(["build"], projectIo)).toBe(0);
+    expect(
+      await readFile(
+        join(tmp, "blog/generated/strapi/src/api/article/content-types/article/schema.json"),
+        "utf8",
+      ),
+    ).toBe(article);
+  });
+
+  it("parses --targets, --dialect and the skip flags", async () => {
+    tmp = await mkdtemp(join(tmpdir(), "camis-cli-new-flags-"));
+    const code = await run(
+      [
+        "new",
+        "api",
+        "--targets",
+        "filament,express",
+        "--dialect",
+        "mysql",
+        "--skip-scaffold",
+        "--skip-build",
+      ],
+      fsIo(tmp),
+    );
+    expect(code).toBe(0);
+    const config = JSON.parse(await readFile(join(tmp, "api/camis.config.json"), "utf8"));
+    expect(config.targets.map((t: { target: string }) => t.target)).toEqual([
+      "filament",
+      "express",
+    ]);
+    expect(config.targets[1].dialect).toBe("mysql");
   });
 });

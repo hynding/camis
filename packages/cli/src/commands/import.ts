@@ -3,8 +3,9 @@ import { stableJson } from "@camis/adapter-kernel";
 import { importExpressProject } from "@camis/adapter-express";
 import { readStrapiProject } from "@camis/adapter-strapi";
 import { validate } from "@camis/ir-core";
-import type { IrDocument, Result } from "@camis/ir-schema";
+import type { CapabilityGap, IrDocument, Result } from "@camis/ir-schema";
 import type { Io } from "../io";
+import { printGaps } from "./generate";
 import { locStr } from "./validate";
 
 const abs = (io: Io, p: string): string => (isAbsolute(p) ? p : resolve(io.cwd, p));
@@ -18,8 +19,11 @@ export const importCommand = async (
 ): Promise<number> => {
   const dir = abs(io, projectDir);
   let imported: Result<IrDocument>;
+  let gaps: CapabilityGap[] = [];
   if (target === "strapi") {
-    imported = (await readStrapiProject(dir, opts)).document;
+    const read = await readStrapiProject(dir, opts);
+    imported = read.document;
+    gaps = read.gaps.gaps;
   } else if (target === "express") {
     let content: string;
     try {
@@ -47,5 +51,6 @@ export const importCommand = async (
   const out = abs(io, outPath);
   await io.writeFile(out, stableJson(revalidated.value));
   io.out(`✓ imported → ${outPath}`);
+  printGaps(io, gaps);
   return 0;
 };

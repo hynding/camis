@@ -1,12 +1,16 @@
 import { spawn } from "node:child_process";
-import { cp, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import { materialize } from "@camis/adapter-kernel";
 import type { Io } from "./io";
 import { run } from "./run";
 
 const io: Io = {
   readFile: (p) => readFile(p, "utf8"),
-  writeFile: (p, c) => writeFile(p, c),
+  writeFile: async (p, c) => {
+    await mkdir(dirname(p), { recursive: true });
+    await writeFile(p, c);
+  },
   materialize,
   copyDir: (s, d) => cp(s, d, { recursive: true, force: true }),
   exec: (cmd, args, cwd) =>

@@ -4,10 +4,28 @@
 
 ## Commands
 
+- `camis new <dir>` — create a project, like `create-strapi-app`: writes `camis.json` (the IR),
+  `roles.json` (Strapi's `public` and `authenticated` roles, `authenticated` as the default),
+  `camis.config.json`, an empty `protected/`, a `.gitignore` for `generated/`, and a README; then
+  scaffolds the Laravel host app when a filament target is chosen and runs `camis build`. Refuses to
+  run over a directory that already has `camis.json` or `camis.config.json`. Options:
+  - `--template vanilla|example` — `vanilla` (default) starts with an empty content model;
+    `example` is create-strapi-app's blog (Article, Author, Category, About, Global and the
+    `shared` components), with public read access on every content type. Upstream's `blocks`
+    dynamic zones are left out because no target generates dynamic zones yet.
+  - `--from-strapi <dir>` — import the content model from an existing Strapi or strapi-php
+    project instead of a template, printing every attribute the importer had to drop.
+  - `--targets strapi,filament,express` — default `strapi`. Each target is generated into
+    `generated/<target>`; a filament target gets `apiStyle: "strapi"` so a Strapi client can use it.
+  - `--dialect sqlite|mysql|pgsql` — the express target's database (default `sqlite`).
+  - `--skip-scaffold`, `--skip-build` — write the project files only; the closing line names the
+    commands left to run.
 - `camis validate <ir.json>` — validate an IR document against the schema + invariants.
 - `camis import <strapi|express> <projectDir> [--out ir.json] [--upsert-by <field>]` — import a
   **declarative** source (a Strapi project's `schema.json`, or an Express project's
-  `camis.schema.json`) into IR. Filament is generate-only (no importer).
+  `camis.schema.json`) into IR, then lists any attribute it had to drop (dynamic zones, relations
+  to plugin types other than the user). Filament is generate-only (no importer). Media
+  `allowedTypes` map between Strapi's plural kinds (`images`) and the IR's singular (`image`).
   Relations targeting `plugin::users-permissions.user` map to a synthesized `builtin: "user"`
   content type named `User` (each target resolves it to its native user model — Strapi's plugin
   user, Laravel's stock `App\Models\User`). Other `plugin::` relation targets are reported as

@@ -1,4 +1,5 @@
 import { FIELD_TYPES, type CapabilityGap, type Field } from "@camis/ir-schema";
+import { fromStrapiMediaKinds } from "../media-kinds";
 import { irName } from "./names";
 
 export interface IrFieldResult {
@@ -91,6 +92,8 @@ export const irField = (
   const field: Record<string, unknown> = { type: irType, name };
   for (const k of SCALAR_CONSTRAINTS) if (attr[k] !== undefined) field[k] = attr[k];
   if (irType === "enumeration") field.values = attr.enum;
-  if (irType === "media" && attr.allowedTypes !== undefined) field.allowedTypes = attr.allowedTypes;
+  if (irType === "media" && Array.isArray(attr.allowedTypes)) {
+    field.allowedTypes = fromStrapiMediaKinds(attr.allowedTypes);
+  }
   return { field: field as Field };
 };

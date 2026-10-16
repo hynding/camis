@@ -1,12 +1,17 @@
 import type { Io } from "./io";
 import { generateCommand } from "./commands/generate";
 import { importCommand } from "./commands/import";
+import { newCommand } from "./commands/new";
 import { scaffoldCommand } from "./commands/scaffold";
 import { validateCommand } from "./commands/validate";
 
 const USAGE = `camis — content-model build tool
 
 Usage:
+  camis new <dir> [--template vanilla|example | --from-strapi <strapiProjectDir>]
+                  [--targets strapi,filament,express] [--dialect sqlite|mysql|pgsql]
+                  [--skip-scaffold] [--skip-build]
+                                                 (create a project, then scaffold and build it)
   camis validate <ir.json>
   camis import <strapi|express> <projectDir> [--out ir.json] [--upsert-by <field>]
   camis scaffold filament <dir> [--storage laravel|strapi]
@@ -20,9 +25,32 @@ const flag = (args: string[], name: string, fallback: string): string => {
   return v ?? fallback;
 };
 
+const optionalFlag = (args: string[], name: string): string | undefined => {
+  const value = flag(args, name, "");
+  return value === "" ? undefined : value;
+};
+
 export const run = async (argv: string[], io: Io): Promise<number> => {
   const [cmd, ...rest] = argv;
   switch (cmd) {
+    case "new": {
+      if (!rest[0] || rest[0].startsWith("--")) {
+        io.out("✗ new needs <dir>");
+        return 1;
+      }
+      const template = optionalFlag(rest, "--template");
+      const targets = optionalFlag(rest, "--targets");
+      const dialect = optionalFlag(rest, "--dialect");
+      const fromStrapi = optionalFlag(rest, "--from-strapi");
+      return newCommand(rest[0], io, {
+        ...(template !== undefined ? { template } : {}),
+        ...(targets !== undefined ? { targets: targets.split(",") } : {}),
+        ...(dialect !== undefined ? { dialect } : {}),
+        ...(fromStrapi !== undefined ? { fromStrapi } : {}),
+        skipScaffold: rest.includes("--skip-scaffold"),
+        skipBuild: rest.includes("--skip-build"),
+      });
+    }
     case "validate": {
       if (!rest[0]) {
         io.out("✗ validate needs <ir.json>");

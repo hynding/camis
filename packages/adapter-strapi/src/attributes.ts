@@ -1,4 +1,5 @@
 import type { Field } from "@camis/ir-schema";
+import { toStrapiMediaKinds } from "./media-kinds";
 import { kebab } from "./names";
 
 type Attribute = Record<string, unknown>;
@@ -57,7 +58,9 @@ export const toAttribute = (
   put(attr, "default", f.default);
   put(attr, "targetField", f.targetField);
   put(attr, "multiple", f.multiple);
-  put(attr, "allowedTypes", f.allowedTypes);
+  if (field.type === "media" && field.allowedTypes !== undefined) {
+    attr.allowedTypes = toStrapiMediaKinds(field.allowedTypes);
+  }
   return attr;
 };
 

@@ -1,0 +1,218 @@
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import type { Io } from "../io";
+import { newCommand } from "./new";
+
+interface ExecCall {
+  cmd: string;
+  args: string[];
+  cwd: string;
+}
+
+// Written files are readable back, so `new` can build from the files it just wrote.
+const memoryIo = (opts: { files?: Record<string, string>; execResults?: number[] } = {}) => {
+  const files: Record<string, string> = { ...opts.files };
+  const execResults = opts.execResults ?? [];
+  const calls: ExecCall[] = [];
+  const lines: string[] = [];
+  const materialized: string[] = [];
+  const copied: { src: string; dest: string }[] = [];
+  const io: Io = {
+    readFile: (p) =>
+      p in files ? Promise.resolve(files[p]!) : Promise.reject(new Error(`ENOENT ${p}`)),
+    writeFile: (p, c) => {
+      files[p] = c;
+      return Promise.resolve();
+    },
+    materialize: (_result, dest) => {
+      materialized.push(dest);
+      return Promise.resolve();
+    },
+    copyDir: (src, dest) => {
+      copied.push({ src, dest });
+      return Promise.resolve();
+    },
+    exec: (cmd, args, cwd) => {
+      calls.push({ cmd, args, cwd });
+      return Promise.resolve(execResults[calls.length - 1] ?? 0);
+    },
+    out: (l) => lines.push(l),
+    cwd: "/work",
+  };
+  return { io, files, calls, lines, materialized, copied };
+};
+
+const json = (files: Record<string, string>, path: string): Record<string, unknown> =>
+  JSON.parse(files[path]!) as Record<string, unknown>;
+
+describe("newCommand — project files", () => {
+  it("writes the IR, config, roles and project files for the vanilla template", async () => {
+    const { io, files } = memoryIo();
+    expect(await newCommand("my-project", io, {})).toBe(0);
+    expect(Object.keys(files).sort()).toEqual([
+      "/work/my-project/.gitignore",
+      "/work/my-project/README.md",
+      "/work/my-project/camis.config.json",
+      "/work/my-project/camis.json",
+      "/work/my-project/protected/.gitkeep",
+      "/work/my-project/roles.json",
+    ]);
+    expect(json(files, "/work/my-project/camis.json")).toEqual({
+      version: 1,
+      contentTypes: [],
+      components: [],
+    });
+    expect(files["/work/my-project/.gitignore"]).toContain("generated/");
+  });
+
+  it("targets Strapi by default, named after the project directory", async () => {
+    const { io, files } = memoryIo();
+    await newCommand("my-project", io, {});
+    expect(json(files, "/work/my-project/camis.config.json")).toEqual({
+      ir: "./camis.json",
+      roles: "./roles.json",
+      protected: "./protected",
+      targets: [{ target: "strapi", out: "./generated/strapi", projectName: "my-project" }],
+    });
+  });
+
+  it("serves the Strapi API style from a filament target and honors the express dialect", async () => {
+    const { io, files } = memoryIo();
+    await newCommand("blog", io, { targets: ["filament", "express"], dialect: "pgsql" });
+    const config = json(files, "/work/blog/camis.config.json");
+    expect(config.targets).toEqual([
+      { target: "filament", out: "./generated/filament", projectName: "blog", apiStyle: "strapi" },
+      { target: "express", out: "./generated/express", projectName: "blog", dialect: "pgsql" },
+    ]);
+  });
+
+  it("writes create-strapi-app's blog for the example template", async () => {
+    const { io, files } = memoryIo();
+    await newCommand("blog", io, { template: "example" });
+    const ir = json(files, "/work/blog/camis.json") as { contentTypes: { name: string }[] };
+    expect(ir.contentTypes.map((ct) => ct.name)).toContain("Article");
+  });
+
+  it("refuses to write over an existing camis project", async () => {
+    const { io, files, lines } = memoryIo({
+      files: { "/work/taken/camis.config.json": "{}" },
+    });
+    expect(await newCommand("taken", io, {})).toBe(1);
+    expect(lines.join("\n")).toContain("already contains a camis project");
+    expect(files["/work/taken/camis.config.json"]).toBe("{}");
+  });
+
+  it("rejects an unknown template", async () => {
+    const { io, lines } = memoryIo();
+    expect(await newCommand("p", io, { template: "nope" })).toBe(1);
+    expect(lines.join("\n")).toContain('unknown template "nope"');
+  });
+
+  it("rejects an unknown target", async () => {
+    const { io, lines } = memoryIo();
+    expect(await newCommand("p", io, { targets: ["drupal"] })).toBe(1);
+    expect(lines.join("\n")).toContain('unknown target "drupal"');
+  });
+
+  it("rejects --dialect without an express target", async () => {
+    const { io, lines } = memoryIo();
+    expect(await newCommand("p", io, { dialect: "mysql" })).toBe(1);
+    expect(lines.join("\n")).toContain("--dialect applies only to the express target");
+  });
+});
+
+describe("newCommand — from an existing Strapi project", () => {
+  const strapiProject = async (): Promise<string> => {
+    const dir = await mkdtemp(join(tmpdir(), "camis-new-from-strapi-"));
+    const ctDir = join(dir, "src/api/page/content-types/page");
+    await mkdir(ctDir, { recursive: true });
+    await writeFile(
+      join(ctDir, "schema.json"),
+      JSON.stringify({
+        kind: "collectionType",
+        info: { singularName: "page", pluralName: "pages", displayName: "Page" },
+        attributes: {
+          title: { type: "string", required: true },
+          blocks: { type: "dynamiczone", components: ["shared.quote"] },
+        },
+      }),
+    );
+    return dir;
+  };
+
+  it("imports the content model and reports what it dropped", async () => {
+    const source = await strapiProject();
+    const { io, files, lines } = memoryIo();
+    expect(await newCommand("migrated", io, { fromStrapi: source })).toBe(0);
+    const ir = json(files, "/work/migrated/camis.json") as { contentTypes: { name: string }[] };
+    expect(ir.contentTypes.map((ct) => ct.name)).toEqual(["Page"]);
+    expect(lines.join("\n")).toMatch(/⚠ dynamiczone @ Page\.blocks/);
+  });
+
+  it("does not combine with --template", async () => {
+    const source = await strapiProject();
+    const { io, lines } = memoryIo();
+    expect(await newCommand("p", io, { fromStrapi: source, template: "example" })).toBe(1);
+    expect(lines.join("\n")).toContain("--from-strapi and --template");
+  });
+
+  it("fails on a directory with no Strapi schemas", async () => {
+    const empty = await mkdtemp(join(tmpdir(), "camis-new-empty-"));
+    const { io, lines } = memoryIo();
+    expect(await newCommand("p", io, { fromStrapi: empty })).toBe(1);
+    expect(lines.join("\n")).toContain("no Strapi content types or components");
+  });
+});
+
+describe("newCommand — scaffold and build", () => {
+  it("builds every target into generated/", async () => {
+    const { io, materialized } = memoryIo();
+    expect(await newCommand("p", io, { targets: ["strapi", "express"] })).toBe(0);
+    expect(materialized).toEqual(["/work/p/generated/strapi", "/work/p/generated/express"]);
+  });
+
+  it("scaffolds the Laravel host app before building a filament target", async () => {
+    const { io, files, calls, materialized } = memoryIo();
+    files["/work/p/generated/filament/app/Models/User.php"] =
+      "class User\n{\n    use HasFactory, Notifiable;\n}\n";
+    expect(await newCommand("p", io, { targets: ["filament"] })).toBe(0);
+    expect(calls[0]).toMatchObject({
+      cmd: "composer",
+      args: [
+        "create-project",
+        "laravel/laravel:^12",
+        "/work/p/generated/filament",
+        "--no-interaction",
+      ],
+    });
+    expect(materialized).toEqual(["/work/p/generated/filament"]);
+  });
+
+  it("stops before building when the scaffold fails", async () => {
+    const { io, materialized, lines } = memoryIo({ execResults: [1] });
+    expect(await newCommand("p", io, { targets: ["filament"] })).toBe(1);
+    expect(materialized).toEqual([]);
+    expect(lines.join("\n")).toContain("exited 1");
+  });
+
+  it("skips the scaffold and the build when asked", async () => {
+    const { io, calls, materialized, lines } = memoryIo();
+    const code = await newCommand("p", io, {
+      targets: ["filament"],
+      skipScaffold: true,
+      skipBuild: true,
+    });
+    expect(code).toBe(0);
+    expect(calls).toEqual([]);
+    expect(materialized).toEqual([]);
+    expect(lines.join("\n")).toContain("camis scaffold filament generated/filament");
+  });
+
+  it("finishes with the next steps", async () => {
+    const { io, lines } = memoryIo();
+    await newCommand("p", io, {});
+    expect(lines.join("\n")).toContain("✓ created camis project p");
+  });
+});
