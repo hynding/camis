@@ -19,7 +19,7 @@ export const strapiControllerParts = (spec: ControllerSpec): ControllerParts => 
   const MAP = `${M}::COMPONENT_MAP`;
   const links = spec.links ?? [];
   const auth = authLine(secured);
-  const upsert = shape.keyColumn !== "id";
+  const upsert = shape.upsert;
 
   // The assign grants name relations; the link entry carries the physical table they write to.
   // A missing entry cannot be skipped: the row would be created with no ownership link at all,

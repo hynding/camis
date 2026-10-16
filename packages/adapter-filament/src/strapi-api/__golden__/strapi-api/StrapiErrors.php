@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 namespace App\Http\Middleware;
 
+use App\Support\StrapiError;
 use Closure;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Contracts\Debug\ExceptionHandler;
@@ -44,6 +45,7 @@ class StrapiErrors
             }
 
             return match (true) {
+                $e instanceof StrapiError => $this->error($e->status, $e->name, $e->getMessage(), $e->details),
                 $e instanceof ValidationException => $this->error(400, 'ValidationError', collect($e->errors())->flatten()->first() ?? 'Validation failed'),
                 $e instanceof QueryException => $this->error(400, 'ValidationError', 'Validation failed'),
                 $e instanceof AuthenticationException => $this->error(401, 'UnauthorizedError', 'Missing or invalid credentials'),
@@ -70,8 +72,11 @@ class StrapiErrors
         };
     }
 
-    private function error(int $status, string $name, string $message): JsonResponse
+    /** Strapi's error body: `data` is always null and `details` always an object. */
+    private function error(int $status, string $name, string $message, array $details = []): JsonResponse
     {
-        return response()->json(['error' => ['status' => $status, 'name' => $name, 'message' => $message]], $status);
+        $details = $details === [] ? new \stdClass() : $details;
+
+        return response()->json(['data' => null, 'error' => ['status' => $status, 'name' => $name, 'message' => $message, 'details' => $details]], $status);
     }
 }

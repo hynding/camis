@@ -150,11 +150,14 @@ export const filamentAdapter: GenerateAdapter = {
           strapi?.scopeMethods.get(ct.name) !== undefined
             ? [strapi.scopeMethods.get(ct.name)!]
             : [],
+          apiStyle === "strapi" ? ["App\\Models\\Concerns\\HasDocumentId"] : [],
         ),
       });
       files.push({
         path: migrationFilename(ct, migrationOrdinal.get(ct.name)!),
-        content: emitMigration(ct, rel.fkColumns.get(ct.name) ?? [], embeddedEmits),
+        content: emitMigration(ct, rel.fkColumns.get(ct.name) ?? [], embeddedEmits, {
+          documentId: apiStyle === "strapi",
+        }),
       });
       files.push(
         ...emitResourceFiles(

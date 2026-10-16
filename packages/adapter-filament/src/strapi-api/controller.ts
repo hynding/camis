@@ -34,6 +34,8 @@ export interface ControllerParts {
   storeBody: string;
   updateBody: string;
   destroyBody: string;
+  /** Extra protected helpers this layout's bodies call, rendered after `find()`. */
+  helpers?: string;
 }
 
 const laravelParts = (spec: ControllerSpec): ControllerParts => {
@@ -53,7 +55,7 @@ ${indent}});`;
     .map((name) => `${STMT}$m->${snakeColumn(name)}_id = $request->user()->id;`)
     .join("\n");
   const assignBlock = assign ? `${assign}\n` : "";
-  const upsert = shape.keyColumn !== "id";
+  const upsert = shape.upsert;
 
   const createBranch = upsert
     ? `
@@ -64,36 +66,47 @@ ${auth(`$this->authorize('create', ${M}::class);`)}        $m = new ${M}($wire['
         $m->{self::KEY} = $key;
 ${assignBlock}${persist("$m->save();")}
 
-        return response()->json(['data' => ${S}::toWire($m->fresh())], 200);`
+        return response()->json(['data' => $this->wire($request, $m->fresh()), 'meta' => new \\stdClass()], 200);`
     : `
         abort(404);`;
 
   return {
-    uses: [],
+    uses: ["App\\Support\\StrapiQuery"],
     query: scoped ? `${M}::query()->forUser($request->user())` : `${M}::query()`,
-    indexBody: `${auth(`$this->authorize('viewAny', ${M}::class);`)}        $rows = $this->scoped($request)->get()${secured ? `->filter(fn (${M} $m) => $request->user()->can('view', $m))` : ""};
+    indexBody: `${auth(`$this->authorize('viewAny', ${M}::class);`)}        $found = StrapiQuery::find($this->scoped($request), $request->query(), ${S}::FIELDS);
+        $rows = $found['rows']${secured ? `->filter(fn (${M} $m) => $request->user()->can('view', $m))` : ""};
 
-        return response()->json(['data' => $rows->map(fn (${M} $m) => ${S}::toWire($m))->values()->all()]);`,
+        return response()->json([
+            'data' => $rows->map(fn (${M} $m) => $this->wire($request, $m))->values()->all(),
+            'meta' => ['pagination' => $found['pagination']],
+        ]);`,
     showBody: `        $m = $this->find($request, $key);
 
-        return response()->json(['data' => ${S}::toWire($m)]);`,
+        return response()->json(['data' => $this->wire($request, $m), 'meta' => new \\stdClass()]);`,
     storeBody: `${auth(`$this->authorize('create', ${M}::class);`)}        $wire = ${S}::fromWire((array) $request->input('data', []));
         $m = new ${M}($wire['columns']);
 ${assignBlock}${persist("$m->save();")}
 
-        return response()->json(['data' => ${S}::toWire($m->fresh())], 201);`,
+        return response()->json(['data' => $this->wire($request, $m->fresh()), 'meta' => new \\stdClass()], 201);`,
     updateBody: `        $wire = ${S}::fromWire((array) $request->input('data', []));
         $m = $this->scoped($request)->where(self::KEY, $key)->first();
         if ($m !== null${secured ? ` && $request->user()->can('view', $m)` : ""}) {
 ${auth(`$this->authorize('update', $m);`, NESTED_STMT)}${persist("$m->fill($wire['columns'])->save();", NESTED_STMT)}
 
-            return response()->json(['data' => ${S}::toWire($m->fresh())]);
+            return response()->json(['data' => $this->wire($request, $m->fresh()), 'meta' => new \\stdClass()]);
         }
 ${createBranch}`,
     destroyBody: `        $m = $this->find($request, $key);
 ${auth(`$this->authorize('delete', $m);`)}        $m->delete();
 
         return response()->json(null, 204);`,
+    helpers: `
+    /** One row on the wire, narrowed by the request's \`fields\` parameter. */
+    protected function wire(Request $request, ${M} $m): array
+    {
+        return StrapiQuery::select(${S}::toWire($m), $request->query(), ${S}::FIELDS);
+    }
+`,
   };
 };
 
@@ -145,7 +158,7 @@ ${secured ? "    use AuthorizesRequests;\n\n" : ""}    private const KEY = '${sh
 
         return $m;
     }
-
+${parts.helpers ?? ""}
     public function index(Request $request): JsonResponse
     {
 ${parts.indexBody}

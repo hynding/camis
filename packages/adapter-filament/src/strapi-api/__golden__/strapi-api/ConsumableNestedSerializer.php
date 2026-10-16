@@ -9,11 +9,26 @@ use App\Models\Consumable;
 
 final class ConsumableSerializer
 {
+    /** Wire path → column, for StrapiQuery's filters, sort and fields. */
+    public const FIELDS = [
+        'id' => ['column' => 'id', 'type' => 'integer'],
+        'documentId' => ['column' => 'document_id', 'type' => 'string'],
+        'recordId' => ['column' => 'record_id', 'type' => 'string'],
+        'facts.calories' => ['column' => 'facts_calories', 'type' => 'decimal'],
+        'facts.additional' => ['relation' => 'factsAdditional', 'fields' => [
+            'slug' => ['column' => 'slug', 'type' => 'string'],
+            'amount' => ['column' => 'amount', 'type' => 'decimal'],
+        ]],
+        'createdAt' => ['column' => 'created_at', 'type' => 'dateTime'],
+        'updatedAt' => ['column' => 'updated_at', 'type' => 'dateTime'],
+    ];
+
     /** Strapi-shaped wire object: camelCase keys, nested components, nulls omitted. */
     public static function toWire(Consumable $m): array
     {
         return self::omitNulls([
             'id' => $m->id,
+            'documentId' => $m->document_id,
             'recordId' => $m->record_id,
             'createdAt' => $m->created_at?->toIso8601ZuluString('millisecond'),
             'updatedAt' => $m->updated_at?->toIso8601ZuluString('millisecond'),

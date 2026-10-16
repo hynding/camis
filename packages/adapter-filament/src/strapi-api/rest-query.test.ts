@@ -141,10 +141,10 @@ describe("Strapi error envelope", () => {
 });
 
 describe("REST config", () => {
-  it("mirrors Strapi's api.rest defaults (defaultLimit 25, no maxLimit, withCount on)", () => {
+  it("mirrors a new Strapi project's api.rest config (defaultLimit 25, maxLimit 100, withCount on)", () => {
     const config = content("config/camis.php");
     expect(config).toContain("'default_limit' => (int) env('CAMIS_REST_DEFAULT_LIMIT', 25),");
-    expect(config).toContain("'max_limit' => env('CAMIS_REST_MAX_LIMIT') === null");
+    expect(config).toContain("'max_limit' => (int) env('CAMIS_REST_MAX_LIMIT', 100),");
     expect(config).toContain("'with_count' => (bool) env('CAMIS_REST_WITH_COUNT', true),");
   });
 });

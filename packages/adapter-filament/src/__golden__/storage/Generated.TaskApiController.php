@@ -20,7 +20,7 @@ class TaskApiController extends Controller
 {
     use AuthorizesRequests;
 
-    private const KEY = 'id';
+    private const KEY = 'document_id';
 
     protected function scoped(Request $request): Builder
     {

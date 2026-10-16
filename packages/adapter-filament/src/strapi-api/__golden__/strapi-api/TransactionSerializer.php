@@ -9,11 +9,25 @@ use App\Models\Transaction;
 
 final class TransactionSerializer
 {
+    /** Wire path → column, for StrapiQuery's filters, sort and fields. */
+    public const FIELDS = [
+        'id' => ['column' => 'id', 'type' => 'integer'],
+        'documentId' => ['column' => 'document_id', 'type' => 'string'],
+        'recordId' => ['column' => 'record_id', 'type' => 'string'],
+        'fee' => ['column' => 'fee', 'type' => 'decimal'],
+        'occurredOn' => ['column' => 'occurred_on', 'type' => 'date'],
+        'amount.minor' => ['column' => 'amount_minor', 'type' => 'bigInteger'],
+        'amount.currency' => ['column' => 'amount_currency', 'type' => 'string'],
+        'createdAt' => ['column' => 'created_at', 'type' => 'dateTime'],
+        'updatedAt' => ['column' => 'updated_at', 'type' => 'dateTime'],
+    ];
+
     /** Strapi-shaped wire object: camelCase keys, nested components, nulls omitted. */
     public static function toWire(Transaction $m): array
     {
         return self::omitNulls([
             'id' => $m->id,
+            'documentId' => $m->document_id,
             'recordId' => $m->record_id,
             'fee' => $m->fee === null ? null : (float) $m->fee,
             'occurredOn' => $m->occurred_on?->toDateString(),

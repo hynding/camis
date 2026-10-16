@@ -17,7 +17,10 @@ export interface WireChild {
 }
 export interface WireShape {
   model: string;
-  keyColumn: "id" | string;
+  /** The route key's column: `options.upsertBy`'s, else Strapi 5's `document_id`. */
+  keyColumn: string;
+  /** Whether `PUT /:key` on a missing key creates the row (only when `upsertBy` names the key). */
+  upsert: boolean;
   scalars: WireScalar[];
   children: WireChild[];
 }
@@ -52,7 +55,8 @@ export const wireShape = (doc: IrDocument, ct: ContentType, _fkNames: string[]):
   const upsertBy = ct.options?.upsertBy;
   return {
     model: names.model,
-    keyColumn: upsertBy !== undefined ? snakeColumn(upsertBy) : "id",
+    keyColumn: upsertBy !== undefined ? snakeColumn(upsertBy) : "document_id",
+    upsert: upsertBy !== undefined,
     scalars: [...top, ...embedded],
     children,
   };

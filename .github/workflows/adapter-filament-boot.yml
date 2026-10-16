@@ -132,6 +132,12 @@ jobs:
           curl -sf -o /dev/null http://127.0.0.1:8765/api/_health || { cat serve.log; exit 1; }
       - name: HTTP round trip
         run: bash packages/adapter-filament/scripts/strapi-api-smoke.sh http://127.0.0.1:8765/api
+      - name: Strapi REST query vectors (also pass against strapi-php)
+        run: |
+          T=$(curl -s -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' \
+            --data '{"username":"vectors","email":"vectors@example.test","password":"secret1"}' \
+            http://127.0.0.1:8765/api/auth/local/register | jq -r .jwt)
+          bash packages/adapter-filament/scripts/strapi-rest-vectors.sh http://127.0.0.1:8765/api "$T"
       - name: Server log on failure
         if: failure()
         run: cat app/serve.log app/storage/logs/laravel.log || true

@@ -15,8 +15,13 @@ export const emitMigration = (
   ct: ContentType,
   fkColumns: string[] = [],
   extraEmits: FieldEmit[] = [],
+  options: { documentId?: boolean } = {},
 ): string => {
   const names = filamentNames(ct);
+  // Strapi 5 addresses a document by documentId, so the Strapi API style needs the column.
+  const documentIdCol = options.documentId
+    ? "\n            $table->string('document_id', 24)->unique();"
+    : "";
   const fieldCols = [
     ...ct.fields
       .filter((f) => f.type !== "relation" && f.type !== "component")
@@ -38,7 +43,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('${names.table}', function (Blueprint $table): void {
-            $table->id();
+            $table->id();${documentIdCol}
 ${columns}
             $table->timestamps();
         });

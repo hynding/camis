@@ -29,7 +29,15 @@ export const emitApiConfig = (layout: StorageLayout = "laravel"): string => {
 
     // Mirrors Strapi's own users-permissions "Enable email confirmation" advanced setting.
     'email_confirmation' => (bool) env('CAMIS_EMAIL_CONFIRMATION', false),`
-      : "";
+      : `
+
+    // Strapi's api.rest config, as a new Strapi project ships it: the page size when a request
+    // names none, the largest one allowed (0 = no cap), and whether lists count their total.
+    'rest' => [
+        'default_limit' => (int) env('CAMIS_REST_DEFAULT_LIMIT', 25),
+        'max_limit' => (int) env('CAMIS_REST_MAX_LIMIT', 100),
+        'with_count' => (bool) env('CAMIS_REST_WITH_COUNT', true),
+    ],`;
 
   return `<?php
 

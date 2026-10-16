@@ -66,8 +66,11 @@ describe("wireShape", () => {
     });
     expect(s.children[0]!.scalars.map((x) => x.column)).toEqual(["amount", "unit"]);
   });
-  it("uses id as the key column without upsertBy", () => {
-    expect(wireShape(doc, ct("Tag"), []).keyColumn).toBe("id");
+  it("keys by Strapi 5's documentId without upsertBy, and does not upsert", () => {
+    expect(wireShape(doc, ct("Tag"), [])).toMatchObject({
+      keyColumn: "document_id",
+      upsert: false,
+    });
   });
   it("a repeatable nested in a non-repeatable keys by path", () => {
     const s = wireShape(nestedDoc, nestedDoc.contentTypes[0]!, []);

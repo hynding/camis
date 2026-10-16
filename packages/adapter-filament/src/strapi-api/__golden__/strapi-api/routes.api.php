@@ -7,6 +7,7 @@ declare(strict_types=1);
 use App\Http\Controllers\Api\ActivityApiController;
 use App\Http\Controllers\Api\ActivitySessionApiController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\BookApiController;
 use App\Http\Controllers\Api\NoteApiController;
 use App\Http\Controllers\Api\TagApiController;
 use App\Http\Controllers\Api\TransactionApiController;
@@ -43,6 +44,12 @@ Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle):
         Route::get('/activity-sessions/{key}', [ActivitySessionApiController::class, 'show']);
         Route::put('/activity-sessions/{key}', [ActivitySessionApiController::class, 'update']);
         Route::delete('/activity-sessions/{key}', [ActivitySessionApiController::class, 'destroy']);
+
+        Route::get('/books', [BookApiController::class, 'index']);
+        Route::post('/books', [BookApiController::class, 'store']);
+        Route::get('/books/{key}', [BookApiController::class, 'show']);
+        Route::put('/books/{key}', [BookApiController::class, 'update']);
+        Route::delete('/books/{key}', [BookApiController::class, 'destroy']);
 
         Route::get('/notes', [NoteApiController::class, 'index']);
         Route::post('/notes', [NoteApiController::class, 'store']);

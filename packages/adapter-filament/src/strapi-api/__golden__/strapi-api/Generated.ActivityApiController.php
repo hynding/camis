@@ -8,6 +8,7 @@ namespace App\Http\Controllers\Api\Generated;
 use App\Http\Controllers\Controller;
 use App\Http\Serializers\ActivitySerializer;
 use App\Models\Activity;
+use App\Support\StrapiQuery;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
@@ -36,19 +37,29 @@ class ActivityApiController extends Controller
         return $m;
     }
 
+    /** One row on the wire, narrowed by the request's `fields` parameter. */
+    protected function wire(Request $request, Activity $m): array
+    {
+        return StrapiQuery::select(ActivitySerializer::toWire($m), $request->query(), ActivitySerializer::FIELDS);
+    }
+
     public function index(Request $request): JsonResponse
     {
         $this->authorize('viewAny', Activity::class);
-        $rows = $this->scoped($request)->get()->filter(fn (Activity $m) => $request->user()->can('view', $m));
+        $found = StrapiQuery::find($this->scoped($request), $request->query(), ActivitySerializer::FIELDS);
+        $rows = $found['rows']->filter(fn (Activity $m) => $request->user()->can('view', $m));
 
-        return response()->json(['data' => $rows->map(fn (Activity $m) => ActivitySerializer::toWire($m))->values()->all()]);
+        return response()->json([
+            'data' => $rows->map(fn (Activity $m) => $this->wire($request, $m))->values()->all(),
+            'meta' => ['pagination' => $found['pagination']],
+        ]);
     }
 
     public function show(Request $request, string $key): JsonResponse
     {
         $m = $this->find($request, $key);
 
-        return response()->json(['data' => ActivitySerializer::toWire($m)]);
+        return response()->json(['data' => $this->wire($request, $m), 'meta' => new \stdClass()]);
     }
 
     public function store(Request $request): JsonResponse
@@ -62,7 +73,7 @@ class ActivityApiController extends Controller
             ActivitySerializer::syncChildren($m, $wire['children']);
         });
 
-        return response()->json(['data' => ActivitySerializer::toWire($m->fresh())], 201);
+        return response()->json(['data' => $this->wire($request, $m->fresh()), 'meta' => new \stdClass()], 201);
     }
 
     public function update(Request $request, string $key): JsonResponse
@@ -76,7 +87,7 @@ class ActivityApiController extends Controller
                 ActivitySerializer::syncChildren($m, $wire['children']);
             });
 
-            return response()->json(['data' => ActivitySerializer::toWire($m->fresh())]);
+            return response()->json(['data' => $this->wire($request, $m->fresh()), 'meta' => new \stdClass()]);
         }
 
         if (Activity::query()->where(self::KEY, $key)->exists()) {
@@ -91,7 +102,7 @@ class ActivityApiController extends Controller
             ActivitySerializer::syncChildren($m, $wire['children']);
         });
 
-        return response()->json(['data' => ActivitySerializer::toWire($m->fresh())], 200);
+        return response()->json(['data' => $this->wire($request, $m->fresh()), 'meta' => new \stdClass()], 200);
     }
 
     public function destroy(Request $request, string $key): JsonResponse
