@@ -120,13 +120,24 @@ jobs:
           grep -q HasApiTokens app/Models/User.php || { echo "User model patch did not apply"; exit 1; }
       - name: Overlay (apiStyle strapi)
         run: pnpm --filter @camis/adapter-filament overlay "$GITHUB_WORKSPACE/app" --style strapi
-      - name: Migrate + seed + serve
+      - name: Patch bootstrap/app.php as camis scaffold does
+        run: >-
+          pnpm --filter @camis/cli exec tsx -e "import { readFileSync, writeFileSync } from 'node:fs';
+          import { patchBootstrapMiddleware } from './src/commands/scaffold';
+          const f = process.env.GITHUB_WORKSPACE + '/app/bootstrap/app.php';
+          writeFileSync(f, patchBootstrapMiddleware(readFileSync(f, 'utf8')));"
+      - name: Migrate + seed + cache (as a shared-host deploy does) + serve
         run: |
           cd app
+          grep -q "prependToGroup('api'" bootstrap/app.php || { echo "bootstrap/app.php patch did not apply"; exit 1; }
           echo "DB_CONNECTION=sqlite" >> .env
           touch database/database.sqlite
           php artisan migrate --force
           php artisan db:seed --class="Database\\Seeders\\RolePermissionSeeder" --force
+          php artisan config:cache
+          php artisan route:cache
+          php artisan event:cache
+          php artisan view:cache
           (php artisan serve --host=127.0.0.1 --port=8765 > serve.log 2>&1 &)
           for _ in $(seq 1 30); do curl -sf -o /dev/null http://127.0.0.1:8765/api/_health && break; sleep 1; done
           curl -sf -o /dev/null http://127.0.0.1:8765/api/_health || { cat serve.log; exit 1; }

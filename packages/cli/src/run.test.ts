@@ -125,7 +125,10 @@ describe("run — scaffold --storage", () => {
         web: __DIR__.'/../routes/web.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
-    )->create();
+    )
+    ->withMiddleware(function (Middleware $middleware): void {
+        //
+    })->create();
 `;
 
   const fakeIo = (): { io: Io; execCalls: string[][] } => {

@@ -206,7 +206,10 @@ describe("scaffoldCommand", () => {
       "use HasFactory, Notifiable, SomeOtherTrait;",
     );
     const { io, lines, written } = fakeIo({
-      files: { "/proj/app/app/Models/User.php": unrecognised },
+      files: {
+        "/proj/app/app/Models/User.php": unrecognised,
+        "/proj/app/bootstrap/app.php": STOCK_BOOTSTRAP,
+      },
     });
     const code = await scaffoldCommand("filament", "app", io);
     expect(code).toBe(1);
@@ -281,7 +284,10 @@ describe("scaffoldCommand — storage strapi", () => {
 
   it("defaults to the laravel sequence (unchanged) when storage is omitted", async () => {
     const { io, calls } = fakeIo({
-      files: { "/proj/app/app/Models/User.php": STOCK_USER },
+      files: {
+        "/proj/app/app/Models/User.php": STOCK_USER,
+        "/proj/app/bootstrap/app.php": STOCK_BOOTSTRAP,
+      },
     });
     const code = await scaffoldCommand("filament", "app", io);
     expect(code).toBe(0);
