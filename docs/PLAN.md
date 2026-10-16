@@ -401,6 +401,14 @@ as against strapi-php, on the laravel storage layout.
 the booted app in the `strapi-api` boot job and passes; goldens change only where this phase says
 (new column, `documentId`, `meta`, error envelope); regeneration is idempotent.
 
+Found while proving the guardrails: `routes/api.php` prepended `StrapiErrors` to the `api` group at
+route-file load, which `route:cache` skips, so a cached app 500'd unauthenticated requests.
+`camis scaffold` now adds the same line to `bootstrap/app.php`, and the boot job serves the app
+with config, route, event and view caches on.
+
+**Status (2026-10-16):** the 72 vector checks pass against strapi-php and against a Laravel 12 +
+Filament v5 app (SQLite, all caches on); the existing smoke passes unchanged.
+
 Known gaps left for later phases: the strapi storage layout keeps its own query path (no
 `filters`/`sort`/`pagination` yet); nulls are still omitted from the wire (a Phase 16 choice that
 diverges from Strapi, revisit with Phase 20); a secured list post-filters each page through the
