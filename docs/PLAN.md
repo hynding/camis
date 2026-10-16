@@ -316,6 +316,25 @@ proves reads/writes and tokens interoperate in both directions. This job
 locally on 2026-09-09 (`CROSSCHECK OK`). The CI workflow has not yet run on GitHub — nothing has
 been pushed.
 
+## Phase 18 — New-project generator (`cli`, `adapter-strapi` import)
+
+**Goal:** one command creates a camis project from scratch, the way `create-strapi-app` creates a
+Strapi project, so a team never has to hand-write the first IR and config.
+
+- `camis new <dir>`: writes `camis.json`, `roles.json` (Strapi's `public` + `authenticated`,
+  `authenticated` the default), `camis.config.json` (targets under `generated/<target>`, named
+  after the directory), `protected/`, `.gitignore`, README; scaffolds a filament host app; builds.
+- Content from a template (`vanilla` empty, `example` = create-strapi-app's blog minus its
+  dynamic zones) or `--from-strapi <dir>` via the existing declarative importer.
+- Importer fixes found by importing upstream's own example: media `allowedTypes` map between
+  Strapi's plural kinds and the IR's singular in both directions, and `camis import` prints the
+  attributes it drops instead of discarding them silently.
+
+**Exit criteria:** `camis new blog --template example --targets strapi,express` writes a project
+whose IR and roles validate together and builds both targets; a second `camis build` inside the
+project regenerates byte-identical output; the generated Strapi schema carries Strapi's plural media
+kinds, and the importer maps them back to the IR's.
+
 ---
 
 ## Sequencing rationale (quick reference)

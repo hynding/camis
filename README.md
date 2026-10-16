@@ -34,8 +34,10 @@ primitive.
 
 ## Using the CLI
 
-`@camis/cli` wires everything into one entry point — `camis validate | import | generate | build`,
-driven by a `camis.config.json` that selects target(s) and output dirs. See
+`@camis/cli` wires everything into one entry point — `camis new | validate | import | generate |
+build`, driven by a `camis.config.json` that selects target(s) and output dirs. Start a project
+with `camis new my-project` (add `--template example` for Strapi's blog, or `--from-strapi <dir>`
+to bring an existing Strapi project's content model). See
 [`packages/cli/README.md`](./packages/cli/README.md).
 
 ## Status
