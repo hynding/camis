@@ -5,12 +5,15 @@ declare(strict_types=1);
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Concerns\HasDocumentId;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Note extends Model
 {
+    use HasDocumentId;
+
     protected $table = 'notes';
 
     protected $fillable = [

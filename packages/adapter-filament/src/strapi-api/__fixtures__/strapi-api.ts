@@ -98,6 +98,23 @@ export const strapiApiBundle: IrBundle = {
         ],
       },
       { name: "Tag", kind: "collection", fields: [{ type: "string", name: "label" }] },
+      // Every scalar kind Strapi's REST filters cast differently, plus an embedded and a
+      // repeatable component: the type the REST query vectors (rest-query-vectors.json) run on.
+      {
+        name: "Book",
+        kind: "collection",
+        names: { plural: "Books" },
+        fields: [
+          { type: "string", name: "title", required: true },
+          { type: "integer", name: "pages" },
+          { type: "float", name: "rating" },
+          { type: "boolean", name: "inStock" },
+          { type: "date", name: "publishedOn" },
+          { type: "dateTime", name: "releasedAt" },
+          { type: "component", name: "price", component: "Money", repeatable: false },
+          { type: "component", name: "editions", component: "Quantity", repeatable: true },
+        ],
+      },
     ],
     components: [
       {
@@ -146,6 +163,7 @@ export const strapiApiBundle: IrBundle = {
           assign: { creator: "user.id" },
         },
         { contentType: "Tag", actions: ["read"] },
+        { contentType: "Book", actions: ["create", "read", "update", "delete"] },
       ],
     },
   ],

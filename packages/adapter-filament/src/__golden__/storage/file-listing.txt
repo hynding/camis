@@ -29,6 +29,7 @@ overwrite app/Policies/TransactionPolicy.php
 overwrite app/Support/Ring1.php
 overwrite app/Support/StrapiComponentAttributes.php
 overwrite app/Support/StrapiComponents.php
+overwrite app/Support/StrapiError.php
 overwrite app/Support/StrapiRows.php
 overwrite config/camis.php
 overwrite routes/api.php

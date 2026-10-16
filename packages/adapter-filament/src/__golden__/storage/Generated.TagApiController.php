@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\DB;
 
 class TagApiController extends Controller
 {
-    private const KEY = 'id';
+    private const KEY = 'document_id';
 
     protected function scoped(Request $request): Builder
     {

@@ -34,6 +34,13 @@ const firstDeploy = (layout: StorageLayout): string =>
 this layout does not use. Add that line by hand on an existing app. Custom endpoints belong in
 \`routes/api-custom.php\` (never overwritten).
 
+With the Strapi API style, \`camis scaffold filament\` also prepends the generated
+\`StrapiErrors\` middleware to the \`api\` group in \`bootstrap/app.php\`; on an existing app add
+\`$middleware->prependToGroup('api', \\App\\Http\\Middleware\\StrapiErrors::class);\` inside
+\`->withMiddleware(...)\` by hand. \`routes/api.php\` does the same, but \`route:cache\` stops
+Laravel reading route files, so without the bootstrap line a cached app loses Strapi's error
+envelope.
+
 Sessions are the JWT Strapi's users-permissions plugin issues, so \`JWT_SECRET\` must hold the
 same HS256 secret as the Strapi instance — a session minted by either app is then accepted by
 both. It must be **at least 32 bytes**: firebase/php-jwt rejects a shorter HMAC key, and because
@@ -52,10 +59,18 @@ php artisan key:generate
 # Strapi created the schema; verify this app's view of it before serving traffic:
 php artisan camis:strapi-schema-check
 php artisan config:cache
+php artisan route:cache
 \`\`\``
     : `The generated JSON API in \`routes/api.php\` requires Laravel's API layer
 (\`php artisan install:api\`) — \`camis scaffold filament\` runs it for you; add it manually on
 an existing app. Custom endpoints belong in \`routes/api-custom.php\` (never overwritten).
+
+With the Strapi API style, \`camis scaffold filament\` also prepends the generated
+\`StrapiErrors\` middleware to the \`api\` group in \`bootstrap/app.php\`; on an existing app add
+\`$middleware->prependToGroup('api', \\App\\Http\\Middleware\\StrapiErrors::class);\` inside
+\`->withMiddleware(...)\` by hand. \`routes/api.php\` does the same, but \`route:cache\` stops
+Laravel reading route files, so without the bootstrap line a cached app loses Strapi's error
+envelope.
 
 The Strapi API style adds a NOT NULL unique \`username\` column to \`users\`; run its migration
 against an empty users table, or backfill usernames first. Two \`.env\` knobs govern its auth
@@ -74,6 +89,7 @@ php artisan migrate
 php artisan db:seed --class=RolePermissionSeeder
 php artisan filament:optimize
 php artisan config:cache
+php artisan route:cache
 \`\`\``;
 
 const offlineStep = (layout: StorageLayout): string =>

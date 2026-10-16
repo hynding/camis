@@ -178,7 +178,7 @@ describe("strapi-api controllers", () => {
     expect(syncLines).toHaveLength(3);
     for (const line of syncLines) expect(line).toMatch(/^ {12,}NoteSerializer::syncChildren\(/);
   });
-  it("without upsertBy the key is id and PUT has no create branch", () => {
+  it("without upsertBy the key is documentId and PUT has no create branch", () => {
     const php = emitGeneratedController({
       shape: wireShape(doc, ct("Tag"), []),
       ct: ct("Tag"),
@@ -186,7 +186,7 @@ describe("strapi-api controllers", () => {
       secured: false,
       scoped: false,
     });
-    expect(php).toContain("private const KEY = 'id';");
+    expect(php).toContain("private const KEY = 'document_id';");
     expect(php).not.toContain("claimed by another scope");
     expect(php).not.toContain("$m->{self::KEY} = $key");
     expect(php).toContain("        abort(404);\n    }");
@@ -201,7 +201,7 @@ describe("strapi storage layout controllers", () => {
     );
   });
 
-  it("Task generated controller golden (id key, ordered inverse link)", async () => {
+  it("Task generated controller golden (documentId key, ordered inverse link)", async () => {
     await expect(emitGeneratedController(storageSpec("Task", ["assignee"]))).toMatchFileSnapshot(
       "../__golden__/storage/Generated.TaskApiController.php",
     );
@@ -270,10 +270,10 @@ describe("strapi storage layout controllers", () => {
     );
   });
 
-  it("omits the duplicate-key guard (and its import) when the key is id", () => {
+  it("omits the duplicate-key guard (and its import) when the key is documentId", () => {
     const php = emitGeneratedController(storageSpec("Task", ["assignee"]));
     expect(php).not.toContain("ValidationException");
-    expect(php).toContain("private const KEY = 'id';");
+    expect(php).toContain("private const KEY = 'document_id';");
   });
 
   it("deletes components and link rows with the row, inside one transaction", () => {

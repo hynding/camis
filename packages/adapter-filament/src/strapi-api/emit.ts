@@ -6,6 +6,7 @@ import { projectFilamentPermissions } from "../permissions/project";
 import { emitAuthController, emitUsernameMigration, USERNAME_MIGRATION_PATH } from "./auth";
 import { emitGeneratedController, emitProtectedController } from "./controller";
 import { emitStrapiErrorsMiddleware } from "./errors";
+import { emitHasDocumentId, emitStrapiError, emitStrapiQuery } from "./rest-runtime";
 import { emitApiConfig, emitStrapiRoutes } from "./routes";
 import { emitScopeMethod } from "./scope";
 import { emitSerializer } from "./serializer";
@@ -80,5 +81,8 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     path: "app/Http/Middleware/StrapiErrors.php",
     content: emitStrapiErrorsMiddleware(),
   });
+  files.push({ path: "app/Support/StrapiError.php", content: emitStrapiError() });
+  files.push({ path: "app/Support/StrapiQuery.php", content: emitStrapiQuery() });
+  files.push({ path: "app/Models/Concerns/HasDocumentId.php", content: emitHasDocumentId() });
   return { files, gaps, scopeMethods };
 };

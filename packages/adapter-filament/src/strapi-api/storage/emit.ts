@@ -5,6 +5,7 @@ import { projectFilamentPermissions } from "../../permissions/project";
 import { emitGeneratedController, emitProtectedController } from "../controller";
 import type { StrapiApiEmission, StrapiApiInput } from "../emit";
 import { emitStrapiErrorsMiddleware } from "../errors";
+import { emitStrapiError } from "../rest-runtime";
 import { emitApiConfig, emitStrapiRoutes } from "../routes";
 import { emitScopeMethod } from "../scope";
 import { emitSerializer } from "../serializer";
@@ -153,6 +154,8 @@ export const emitStrapiStorage = (input: StrapiApiInput): StrapiApiEmission => {
     path: "app/Http/Middleware/StrapiErrors.php",
     content: emitStrapiErrorsMiddleware(),
   });
+  // The middleware renders it; this layout's controllers do not throw one yet.
+  files.push({ path: "app/Support/StrapiError.php", content: emitStrapiError() });
   files.push({
     path: "app/Console/Commands/CamisStrapiSchemaCheck.php",
     content: emitSchemaCheck(expectedSchema(doc, emitted)),

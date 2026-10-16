@@ -166,6 +166,20 @@ describe("newCommand — from an existing Strapi project", () => {
   });
 });
 
+// Laravel 12's skeleton, the shape scaffold patches.
+const STOCK_BOOTSTRAP = `<?php
+
+return Application::configure(basePath: dirname(__DIR__))
+    ->withRouting(
+        web: __DIR__.'/../routes/web.php',
+        commands: __DIR__.'/../routes/console.php',
+        health: '/up',
+    )
+    ->withMiddleware(function (Middleware $middleware): void {
+        //
+    })->create();
+`;
+
 describe("newCommand — scaffold and build", () => {
   it("builds every target into generated/", async () => {
     const { io, materialized } = memoryIo();
@@ -177,6 +191,7 @@ describe("newCommand — scaffold and build", () => {
     const { io, files, calls, materialized } = memoryIo();
     files["/work/p/generated/filament/app/Models/User.php"] =
       "class User\n{\n    use HasFactory, Notifiable;\n}\n";
+    files["/work/p/generated/filament/bootstrap/app.php"] = STOCK_BOOTSTRAP;
     expect(await newCommand("p", io, { targets: ["filament"] })).toBe(0);
     expect(calls[0]).toMatchObject({
       cmd: "composer",

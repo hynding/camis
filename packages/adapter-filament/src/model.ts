@@ -10,6 +10,7 @@ export const emitModel = (
   extraEmits: FieldEmit[] = [],
   fkNames: string[] = [],
   extraMethods: string[] = [],
+  traits: string[] = [],
 ): string => {
   const names = filamentNames(ct);
   const emits = [
@@ -31,7 +32,7 @@ export const emitModel = (
       : "";
   const extraImports =
     extraMethods.length > 0 ? ["App\\Models\\User", "Illuminate\\Database\\Eloquent\\Builder"] : [];
-  const relImports = [...new Set([...relations.map((r) => r.import), ...extraImports])]
+  const relImports = [...new Set([...relations.map((r) => r.import), ...extraImports, ...traits])]
     .sort()
     .map((i) => `use ${i};`)
     .join("\n");
@@ -47,6 +48,7 @@ export const emitModel = (
   const observedAttr = observed
     ? `#[\\Illuminate\\Database\\Eloquent\\Attributes\\ObservedBy([${names.model}Observer::class])]\n`
     : "";
+  const traitUse = traits.map((t) => `    use ${t.slice(t.lastIndexOf("\\") + 1)};\n\n`).join("");
   return `<?php
 
 declare(strict_types=1);
@@ -57,7 +59,7 @@ use Illuminate\\Database\\Eloquent\\Model;
 ${relUse}${observerUse}
 ${observedAttr}class ${names.model} extends Model
 {
-    protected $table = '${names.table}';
+${traitUse}    protected $table = '${names.table}';
 
     protected $fillable = [
 ${fillable}

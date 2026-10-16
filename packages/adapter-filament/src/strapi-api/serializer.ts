@@ -64,6 +64,7 @@ const render = (n: Node, indent: string): string => {
 const toWireBody = (shape: WireShape, indent: string, layout: StorageLayout): string => {
   const root = node();
   insert(root, ["id"], "$m->id");
+  insert(root, ["documentId"], "$m->document_id");
   for (const s of shape.scalars) insert(root, s.key, read(s, "$m", layout));
   for (const c of shape.children) {
     const inner = node();
@@ -141,6 +142,35 @@ const hasHelper = `
         return true;
     }`;
 
+const fieldEntry = (s: WireScalar, indent: string): string =>
+  `${indent}'${s.key.join(".")}' => ['column' => '${s.column}', 'type' => '${s.type}'],`;
+
+/**
+ * The wire path → column map `App\Support\StrapiQuery` filters, sorts and selects by: every
+ * scalar Strapi exposes (`id`, `documentId`, the timestamps, embedded component scalars as dotted
+ * paths), and each repeatable component as its child relation with the child's own map.
+ */
+const fieldsConstant = (shape: WireShape): string => {
+  const l2 = `${UNIT}${UNIT}`;
+  const l3 = `${l2}${UNIT}`;
+  const id: WireScalar = { key: ["id"], column: "id", type: "integer" };
+  const documentId: WireScalar = { key: ["documentId"], column: "document_id", type: "string" };
+  const timestamps: WireScalar[] = [
+    { key: ["createdAt"], column: "created_at", type: "dateTime" },
+    { key: ["updatedAt"], column: "updated_at", type: "dateTime" },
+  ];
+  const children = shape.children.map(
+    (c) =>
+      `${l2}'${c.key.join(".")}' => ['relation' => '${c.relation}', 'fields' => [\n${c.scalars.map((s) => fieldEntry(s, l3)).join("\n")}\n${l2}]],`,
+  );
+  const rows = [
+    ...[id, documentId, ...shape.scalars].map((s) => fieldEntry(s, l2)),
+    ...children,
+    ...timestamps.map((s) => fieldEntry(s, l2)),
+  ];
+  return `\n    /** Wire path → column, for StrapiQuery's filters, sort and fields. */\n    public const FIELDS = [\n${rows.join("\n")}\n    ];\n`;
+};
+
 export const emitSerializer = (shape: WireShape, layout: StorageLayout = "laravel"): string => {
   const l2 = `${UNIT}${UNIT}`; // method-body statements
   const l3 = `${UNIT}${UNIT}${UNIT}`; // array literal entries
@@ -156,7 +186,7 @@ namespace App\\Http\\Serializers;
 use App\\Models\\${shape.model};
 
 final class ${shape.model}Serializer
-{
+{${layout === "laravel" ? fieldsConstant(shape) : ""}
     /** Strapi-shaped wire object: camelCase keys, nested components, nulls omitted. */
     public static function toWire(${shape.model} $m): array
     {

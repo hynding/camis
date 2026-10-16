@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { Io } from "../io";
-import { patchBootstrapApp, patchUserModel, scaffoldCommand } from "./scaffold";
+import {
+  patchBootstrapApp,
+  patchBootstrapMiddleware,
+  patchUserModel,
+  scaffoldCommand,
+} from "./scaffold";
 
 interface ExecCall {
   cmd: string;
@@ -122,13 +127,41 @@ describe("patchBootstrapApp", () => {
   });
 });
 
+// routes/api.php prepends StrapiErrors to the `api` group, but `php artisan route:cache` skips route
+// files on every later request, so a cached app lost the error envelope and 500'd unauthenticated
+// requests. bootstrap/app.php runs on every request, cached or not.
+describe("patchBootstrapMiddleware", () => {
+  const LINE = "$middleware->prependToGroup('api', \\App\\Http\\Middleware\\StrapiErrors::class);";
+  it("prepends StrapiErrors to the api group when the generated middleware exists", () => {
+    const patched = patchBootstrapMiddleware(STOCK_BOOTSTRAP);
+    expect(patched).toContain("if (class_exists(\\App\\Http\\Middleware\\StrapiErrors::class)) {");
+    expect(patched).toContain(LINE);
+    expect(patched).not.toContain("        //\n    })\n    ->withExceptions");
+  });
+  it("is idempotent", () => {
+    const once = patchBootstrapMiddleware(STOCK_BOOTSTRAP);
+    expect(patchBootstrapMiddleware(once)).toBe(once);
+  });
+  it("leaves a customised withMiddleware unchanged so the caller can fail loudly", () => {
+    const hand = STOCK_BOOTSTRAP.replace(
+      "        //\n",
+      "        $middleware->trustProxies(at: '*');\n",
+    );
+    expect(patchBootstrapMiddleware(hand)).toBe(hand);
+  });
+});
+
 describe("scaffoldCommand", () => {
   it("runs the composer/artisan sequence in order and patches User.php", async () => {
     const { io, calls, written } = fakeIo({
-      files: { "/proj/app/app/Models/User.php": STOCK_USER },
+      files: {
+        "/proj/app/app/Models/User.php": STOCK_USER,
+        "/proj/app/bootstrap/app.php": STOCK_BOOTSTRAP,
+      },
     });
     const code = await scaffoldCommand("filament", "app", io);
     expect(code).toBe(0);
+    expect(written["/proj/app/bootstrap/app.php"]).toContain("prependToGroup('api'");
     expect(calls.map((c) => `${c.cmd} ${c.args[0] ?? ""}`.trim())).toEqual([
       "composer create-project",
       "composer require",
@@ -173,7 +206,10 @@ describe("scaffoldCommand", () => {
       "use HasFactory, Notifiable, SomeOtherTrait;",
     );
     const { io, lines, written } = fakeIo({
-      files: { "/proj/app/app/Models/User.php": unrecognised },
+      files: {
+        "/proj/app/app/Models/User.php": unrecognised,
+        "/proj/app/bootstrap/app.php": STOCK_BOOTSTRAP,
+      },
     });
     const code = await scaffoldCommand("filament", "app", io);
     expect(code).toBe(1);
@@ -197,6 +233,7 @@ describe("scaffoldCommand — storage strapi", () => {
     });
     const code = await scaffoldCommand("filament", "app", io, { storage: "strapi" });
     expect(code).toBe(0);
+    expect(written["/proj/app/bootstrap/app.php"]).toContain("prependToGroup('api'");
     expect(calls).toEqual([
       {
         cmd: "composer",
@@ -247,7 +284,10 @@ describe("scaffoldCommand — storage strapi", () => {
 
   it("defaults to the laravel sequence (unchanged) when storage is omitted", async () => {
     const { io, calls } = fakeIo({
-      files: { "/proj/app/app/Models/User.php": STOCK_USER },
+      files: {
+        "/proj/app/app/Models/User.php": STOCK_USER,
+        "/proj/app/bootstrap/app.php": STOCK_BOOTSTRAP,
+      },
     });
     const code = await scaffoldCommand("filament", "app", io);
     expect(code).toBe(0);

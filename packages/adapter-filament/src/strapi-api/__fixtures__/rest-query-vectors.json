@@ -1,0 +1,593 @@
+{
+  "_comment": "Strapi 5 REST query semantics on the Book fixture, checked against strapi-php (pass on both). Row order is part of every expectation; titles identify rows. 'keys' lists a row's scalar keys (components excluded: Strapi leaves them out unless populated).",
+  "path": "/books",
+  "componentKeys": ["price", "editions"],
+  "seed": [
+    {
+      "title": "Alpha",
+      "pages": 100,
+      "rating": 4.5,
+      "inStock": true,
+      "publishedOn": "2020-01-15",
+      "releasedAt": "2020-01-15T10:00:00.000Z",
+      "price": {
+        "minor": 1999,
+        "currency": "USD"
+      },
+      "editions": [
+        {
+          "amount": 1,
+          "unit": "hardcover"
+        }
+      ]
+    },
+    {
+      "title": "beta",
+      "pages": 250,
+      "rating": 3.0,
+      "inStock": false,
+      "publishedOn": "2021-06-01",
+      "releasedAt": "2021-06-01T08:30:00.000Z",
+      "price": {
+        "minor": 2500,
+        "currency": "EUR"
+      },
+      "editions": [
+        {
+          "amount": 2,
+          "unit": "paperback"
+        },
+        {
+          "amount": 1,
+          "unit": "ebook"
+        }
+      ]
+    },
+    {
+      "title": "Gamma 100%",
+      "pages": 50,
+      "rating": 5.0,
+      "inStock": true,
+      "publishedOn": "2022-03-10",
+      "releasedAt": "2022-03-10T12:00:00.000Z",
+      "price": {
+        "minor": 999,
+        "currency": "USD"
+      }
+    },
+    {
+      "title": "delta_x",
+      "rating": 2.5,
+      "inStock": false,
+      "publishedOn": "2019-11-30",
+      "releasedAt": "2019-11-30T23:59:59.000Z"
+    },
+    {
+      "title": "Epsilon",
+      "pages": 400,
+      "rating": 4.0,
+      "inStock": true,
+      "publishedOn": "2023-08-20",
+      "releasedAt": "2023-08-20T00:00:00.000Z",
+      "price": {
+        "minor": 3000,
+        "currency": "GBP"
+      },
+      "editions": [
+        {
+          "amount": 3,
+          "unit": "hardcover"
+        }
+      ]
+    }
+  ],
+  "vectors": [
+    {
+      "name": "no parameters: every row, id order, default page meta",
+      "query": "",
+      "titles": ["Alpha", "beta", "Gamma 100%", "delta_x", "Epsilon"],
+      "meta": {
+        "pagination": {
+          "page": 1,
+          "pageSize": 25,
+          "pageCount": 1,
+          "total": 5
+        }
+      }
+    },
+    {
+      "name": "implicit $eq",
+      "query": "filters[title]=Alpha",
+      "titles": ["Alpha"]
+    },
+    {
+      "name": "$eq",
+      "query": "filters[title][$eq]=beta",
+      "titles": ["beta"]
+    },
+    {
+      "name": "$eqi",
+      "query": "filters[title][$eqi]=ALPHA",
+      "titles": ["Alpha"]
+    },
+    {
+      "name": "$ne",
+      "query": "filters[title][$ne]=Alpha",
+      "titles": ["beta", "Gamma 100%", "delta_x", "Epsilon"]
+    },
+    {
+      "name": "$nei",
+      "query": "filters[title][$nei]=BETA",
+      "titles": ["Alpha", "Gamma 100%", "delta_x", "Epsilon"]
+    },
+    {
+      "name": "$lt on an integer skips nulls",
+      "query": "filters[pages][$lt]=100",
+      "titles": ["Gamma 100%"]
+    },
+    {
+      "name": "$lte",
+      "query": "filters[pages][$lte]=100",
+      "titles": ["Alpha", "Gamma 100%"]
+    },
+    {
+      "name": "$gt",
+      "query": "filters[pages][$gt]=250",
+      "titles": ["Epsilon"]
+    },
+    {
+      "name": "$gte",
+      "query": "filters[pages][$gte]=250",
+      "titles": ["beta", "Epsilon"]
+    },
+    {
+      "name": "$in",
+      "query": "filters[pages][$in][0]=100&filters[pages][$in][1]=400",
+      "titles": ["Alpha", "Epsilon"]
+    },
+    {
+      "name": "$notIn skips nulls",
+      "query": "filters[pages][$notIn][0]=100",
+      "titles": ["beta", "Gamma 100%", "Epsilon"]
+    },
+    {
+      "name": "$null true",
+      "query": "filters[pages][$null]=true",
+      "titles": ["delta_x"]
+    },
+    {
+      "name": "$null false",
+      "query": "filters[pages][$null]=false",
+      "titles": ["Alpha", "beta", "Gamma 100%", "Epsilon"]
+    },
+    {
+      "name": "$notNull true",
+      "query": "filters[pages][$notNull]=true",
+      "titles": ["Alpha", "beta", "Gamma 100%", "Epsilon"]
+    },
+    {
+      "name": "$between is inclusive",
+      "query": "filters[pages][$between][0]=50&filters[pages][$between][1]=100",
+      "titles": ["Alpha", "Gamma 100%"]
+    },
+    {
+      "name": "$startsWith",
+      "query": "filters[title][$startsWith]=Gam",
+      "titles": ["Gamma 100%"]
+    },
+    {
+      "name": "$startsWithi",
+      "query": "filters[title][$startsWithi]=gam",
+      "titles": ["Gamma 100%"]
+    },
+    {
+      "name": "$endsWith",
+      "query": "filters[title][$endsWith]=lon",
+      "titles": ["Epsilon"]
+    },
+    {
+      "name": "$endsWithi",
+      "query": "filters[title][$endsWithi]=LON",
+      "titles": ["Epsilon"]
+    },
+    {
+      "name": "$contains",
+      "query": "filters[title][$contains]=et",
+      "titles": ["beta"]
+    },
+    {
+      "name": "$contains escapes %",
+      "query": "filters[title][$contains]=%25",
+      "titles": ["Gamma 100%"]
+    },
+    {
+      "name": "$contains escapes _",
+      "query": "filters[title][$contains]=_",
+      "titles": ["delta_x"]
+    },
+    {
+      "name": "$notContains",
+      "query": "filters[title][$notContains]=a",
+      "titles": ["Epsilon"]
+    },
+    {
+      "name": "$containsi",
+      "query": "filters[title][$containsi]=ALP",
+      "titles": ["Alpha"]
+    },
+    {
+      "name": "$notContainsi",
+      "query": "filters[title][$notContainsi]=A",
+      "titles": ["Epsilon"]
+    },
+    {
+      "name": "boolean true",
+      "query": "filters[inStock][$eq]=true",
+      "titles": ["Alpha", "Gamma 100%", "Epsilon"]
+    },
+    {
+      "name": "boolean false, implicit $eq",
+      "query": "filters[inStock]=false",
+      "titles": ["beta", "delta_x"]
+    },
+    {
+      "name": "float",
+      "query": "filters[rating][$gte]=4.5",
+      "titles": ["Alpha", "Gamma 100%"]
+    },
+    {
+      "name": "date",
+      "query": "filters[publishedOn][$gt]=2021-01-01",
+      "titles": ["beta", "Gamma 100%", "Epsilon"]
+    },
+    {
+      "name": "datetime $lt",
+      "query": "filters[releasedAt][$lt]=2021-06-01T08:30:00.000Z",
+      "titles": ["Alpha", "delta_x"]
+    },
+    {
+      "name": "datetime $eq",
+      "query": "filters[releasedAt][$eq]=2021-06-01T08:30:00.000Z",
+      "titles": ["beta"]
+    },
+    {
+      "name": "id $in",
+      "query": "filters[id][$in][0]=2&filters[id][$in][1]=4",
+      "titles": ["beta", "delta_x"]
+    },
+    {
+      "name": "createdAt $notNull",
+      "query": "filters[createdAt][$notNull]=true",
+      "titles": ["Alpha", "beta", "Gamma 100%", "delta_x", "Epsilon"]
+    },
+    {
+      "name": "embedded component scalar",
+      "query": "filters[price][currency][$eq]=USD",
+      "titles": ["Alpha", "Gamma 100%"]
+    },
+    {
+      "name": "embedded component bigInteger",
+      "query": "filters[price][minor][$gte]=2500",
+      "titles": ["beta", "Epsilon"]
+    },
+    {
+      "name": "repeatable component scalar",
+      "query": "filters[editions][unit][$eq]=hardcover",
+      "titles": ["Alpha", "Epsilon"]
+    },
+    {
+      "name": "repeatable component number",
+      "query": "filters[editions][amount][$gt]=1",
+      "titles": ["beta", "Epsilon"]
+    },
+    {
+      "name": "$or",
+      "query": "filters[$or][0][title][$eq]=Alpha&filters[$or][1][pages][$eq]=400",
+      "titles": ["Alpha", "Epsilon"]
+    },
+    {
+      "name": "$and",
+      "query": "filters[$and][0][inStock]=true&filters[$and][1][pages][$gt]=60",
+      "titles": ["Alpha", "Epsilon"]
+    },
+    {
+      "name": "logical $not",
+      "query": "filters[$not][inStock]=true",
+      "titles": ["beta", "delta_x"]
+    },
+    {
+      "name": "attribute $not",
+      "query": "filters[title][$not][$eq]=Alpha",
+      "titles": ["beta", "Gamma 100%", "delta_x", "Epsilon"]
+    },
+    {
+      "name": "sibling keys are and-ed",
+      "query": "filters[inStock]=true&filters[rating][$lt]=5",
+      "titles": ["Alpha", "Epsilon"]
+    },
+    {
+      "name": "sort string desc",
+      "query": "sort=pages:desc&filters[pages][$notNull]=true",
+      "titles": ["Epsilon", "beta", "Alpha", "Gamma 100%"]
+    },
+    {
+      "name": "sort list",
+      "query": "sort[0]=inStock:asc&sort[1]=rating:desc",
+      "titles": ["beta", "delta_x", "Gamma 100%", "Alpha", "Epsilon"]
+    },
+    {
+      "name": "sort object",
+      "query": "sort[rating]=asc",
+      "titles": ["delta_x", "beta", "Epsilon", "Alpha", "Gamma 100%"]
+    },
+    {
+      "name": "sort comma list",
+      "query": "sort=inStock:desc,rating:asc",
+      "titles": ["Epsilon", "Alpha", "Gamma 100%", "delta_x", "beta"]
+    },
+    {
+      "name": "sort order is case-insensitive",
+      "query": "sort=rating:DESC",
+      "titles": ["Gamma 100%", "Alpha", "Epsilon", "beta", "delta_x"]
+    },
+    {
+      "name": "sort embedded component path",
+      "query": "sort=price.minor:asc&filters[price][minor][$notNull]=true",
+      "titles": ["Gamma 100%", "Alpha", "beta", "Epsilon"]
+    },
+    {
+      "name": "page pagination",
+      "query": "pagination[page]=2&pagination[pageSize]=2",
+      "titles": ["Gamma 100%", "delta_x"],
+      "meta": {
+        "pagination": {
+          "page": 2,
+          "pageSize": 2,
+          "pageCount": 3,
+          "total": 5
+        }
+      }
+    },
+    {
+      "name": "pageSize alone is page 1",
+      "query": "pagination[pageSize]=2",
+      "titles": ["Alpha", "beta"],
+      "meta": {
+        "pagination": {
+          "page": 1,
+          "pageSize": 2,
+          "pageCount": 3,
+          "total": 5
+        }
+      }
+    },
+    {
+      "name": "last page",
+      "query": "pagination[page]=3&pagination[pageSize]=2",
+      "titles": ["Epsilon"],
+      "meta": {
+        "pagination": {
+          "page": 3,
+          "pageSize": 2,
+          "pageCount": 3,
+          "total": 5
+        }
+      }
+    },
+    {
+      "name": "page past the end",
+      "query": "pagination[page]=9&pagination[pageSize]=2",
+      "titles": [],
+      "meta": {
+        "pagination": {
+          "page": 9,
+          "pageSize": 2,
+          "pageCount": 3,
+          "total": 5
+        }
+      }
+    },
+    {
+      "name": "offset pagination",
+      "query": "pagination[start]=1&pagination[limit]=2",
+      "titles": ["beta", "Gamma 100%"],
+      "meta": {
+        "pagination": {
+          "start": 1,
+          "limit": 2,
+          "total": 5
+        }
+      }
+    },
+    {
+      "name": "limit -1 is maxLimit",
+      "query": "pagination[limit]=-1",
+      "titles": ["Alpha", "beta", "Gamma 100%", "delta_x", "Epsilon"],
+      "meta": {
+        "pagination": {
+          "start": 0,
+          "limit": 100,
+          "total": 5
+        }
+      }
+    },
+    {
+      "name": "withCount false drops total and pageCount",
+      "query": "pagination[withCount]=false&pagination[pageSize]=2",
+      "titles": ["Alpha", "beta"],
+      "meta": {
+        "pagination": {
+          "page": 1,
+          "pageSize": 2
+        }
+      }
+    },
+    {
+      "name": "pagination composes with filters",
+      "query": "filters[inStock]=true&pagination[pageSize]=2",
+      "titles": ["Alpha", "Gamma 100%"],
+      "meta": {
+        "pagination": {
+          "page": 1,
+          "pageSize": 2,
+          "pageCount": 2,
+          "total": 3
+        }
+      }
+    },
+    {
+      "name": "fields keeps id and documentId",
+      "query": "fields[0]=title&filters[title]=Alpha",
+      "titles": ["Alpha"],
+      "keys": ["documentId", "id", "title"]
+    },
+    {
+      "name": "fields as a comma string",
+      "query": "fields=title,pages&filters[title]=Alpha",
+      "titles": ["Alpha"],
+      "keys": ["documentId", "id", "pages", "title"]
+    },
+    {
+      "name": "both pagination forms",
+      "query": "pagination[page]=1&pagination[limit]=2",
+      "status": 400,
+      "error": {
+        "name": "PaginationError",
+        "message": "Cannot use both page & offset pagination in the same query"
+      }
+    },
+    {
+      "name": "invalid withCount",
+      "query": "pagination[withCount]=maybe",
+      "status": 400,
+      "error": {
+        "name": "ValidationError",
+        "message": "Invalid withCount parameter. Expected \"t\",\"1\",\"true\",\"false\",\"0\",\"f\""
+      }
+    },
+    {
+      "name": "unknown filter key",
+      "query": "filters[nope][$eq]=1",
+      "status": 400,
+      "error": {
+        "name": "ValidationError",
+        "message": "Invalid key nope",
+        "details": {
+          "key": "nope",
+          "path": null,
+          "source": "query",
+          "param": "filters"
+        }
+      }
+    },
+    {
+      "name": "unknown sort key",
+      "query": "sort=nope:asc",
+      "status": 400,
+      "error": {
+        "name": "ValidationError",
+        "message": "Invalid key nope",
+        "details": {
+          "key": "nope",
+          "path": null,
+          "source": "query",
+          "param": "sort"
+        }
+      }
+    },
+    {
+      "name": "invalid sort order",
+      "query": "sort=title:up",
+      "status": 400,
+      "error": {
+        "name": "ValidationError",
+        "message": "Invalid order. order can only be one of asc|desc|ASC|DESC"
+      }
+    },
+    {
+      "name": "unknown fields key",
+      "query": "fields[0]=nope",
+      "status": 400,
+      "error": {
+        "name": "ValidationError",
+        "message": "Invalid key nope",
+        "details": {
+          "key": "nope",
+          "path": null,
+          "source": "query",
+          "param": "fields"
+        }
+      }
+    },
+    {
+      "name": "unknown key inside a component",
+      "query": "filters[price][nope]=1",
+      "status": 400,
+      "error": {
+        "name": "ValidationError",
+        "message": "Invalid key nope at price",
+        "details": {
+          "key": "nope",
+          "path": "price",
+          "source": "query",
+          "param": "filters"
+        }
+      }
+    },
+    {
+      "name": "unknown operator",
+      "query": "filters[title][$like]=1",
+      "status": 400,
+      "error": {
+        "name": "ValidationError",
+        "message": "Invalid key $like at title",
+        "details": {
+          "key": "$like",
+          "path": "title",
+          "source": "query",
+          "param": "filters"
+        }
+      }
+    },
+    {
+      "name": "filters must be an object",
+      "query": "filters=abc",
+      "status": 400,
+      "error": {
+        "name": "ValidationError",
+        "message": "The filters parameter must be an object or an array",
+        "details": {}
+      }
+    },
+    {
+      "name": "sort on a component needs a field",
+      "query": "sort[0]=price:asc",
+      "status": 400,
+      "error": {
+        "name": "ValidationError",
+        "message": "Invalid key asc at price",
+        "details": {
+          "key": "asc",
+          "path": "price",
+          "source": "query",
+          "param": "sort"
+        }
+      }
+    },
+    {
+      "name": "fields cannot name a component",
+      "query": "fields[0]=price",
+      "status": 400,
+      "error": {
+        "name": "ValidationError",
+        "message": "Invalid key price",
+        "details": {
+          "key": "price",
+          "path": "price",
+          "source": "query",
+          "param": "fields"
+        }
+      }
+    }
+  ]
+}

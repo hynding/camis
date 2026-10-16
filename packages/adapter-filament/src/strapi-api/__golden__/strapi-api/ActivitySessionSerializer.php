@@ -9,11 +9,25 @@ use App\Models\ActivitySession;
 
 final class ActivitySessionSerializer
 {
+    /** Wire path → column, for StrapiQuery's filters, sort and fields. */
+    public const FIELDS = [
+        'id' => ['column' => 'id', 'type' => 'integer'],
+        'documentId' => ['column' => 'document_id', 'type' => 'string'],
+        'recordId' => ['column' => 'record_id', 'type' => 'string'],
+        'quantities' => ['relation' => 'quantities', 'fields' => [
+            'amount' => ['column' => 'amount', 'type' => 'decimal'],
+            'unit' => ['column' => 'unit', 'type' => 'string'],
+        ]],
+        'createdAt' => ['column' => 'created_at', 'type' => 'dateTime'],
+        'updatedAt' => ['column' => 'updated_at', 'type' => 'dateTime'],
+    ];
+
     /** Strapi-shaped wire object: camelCase keys, nested components, nulls omitted. */
     public static function toWire(ActivitySession $m): array
     {
         return self::omitNulls([
             'id' => $m->id,
+            'documentId' => $m->document_id,
             'recordId' => $m->record_id,
             'quantities' => $m->quantities->map(fn ($c) => self::nested([
                 'amount' => $c->amount === null ? null : (float) $c->amount,

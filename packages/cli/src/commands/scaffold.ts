@@ -40,6 +40,66 @@ export const patchBootstrapApp = (source: string): string => {
   return source.replace(STOCK_ROUTING_CONSOLE, ROUTING_WITH_API);
 };
 
+const STOCK_WITH_MIDDLEWARE = `->withMiddleware(function (Middleware $middleware): void {
+        //
+    })`;
+const STRAPI_ERRORS_FIRST = `->withMiddleware(function (Middleware $middleware): void {
+        // camis: the Strapi error envelope must wrap every API route, ahead of auth and throttling.
+        if (class_exists(\\App\\Http\\Middleware\\StrapiErrors::class)) {
+            $middleware->prependToGroup('api', \\App\\Http\\Middleware\\StrapiErrors::class);
+        }
+    })`;
+
+/**
+ * Prepend the generated StrapiErrors middleware to the `api` group in bootstrap/app.php.
+ * Idempotent.
+ *
+ * routes/api.php does the same at load time, but `php artisan route:cache` (which every shared
+ * host deploy should run) stops Laravel loading route files, so that call is lost and Authenticate
+ * then runs before the envelope, 500ing on the missing `login` route. bootstrap/app.php runs on
+ * every request. The class_exists guard keeps a laravel-API-style app, which has no StrapiErrors,
+ * booting. A source not matching the stock skeleton is returned unchanged; the caller fails loudly.
+ */
+export const patchBootstrapMiddleware = (source: string): string => {
+  if (source.includes("StrapiErrors::class")) return source;
+  return source.replace(STOCK_WITH_MIDDLEWARE, STRAPI_ERRORS_FIRST);
+};
+
+/**
+ * One read and one write of bootstrap/app.php: the api routes entry on the Strapi storage layout
+ * (which skips `install:api`), and StrapiErrors first on the api group on both layouts.
+ */
+const patchBootstrap = async (appDir: string, io: Io, storage: StorageLayout): Promise<boolean> => {
+  const bootstrapPath = join(appDir, "bootstrap/app.php");
+  try {
+    const source = await io.readFile(bootstrapPath);
+    let patched = source;
+    if (storage === "strapi") {
+      patched = patchBootstrapApp(patched);
+      if (!patched.includes("routes/api.php")) {
+        io.out(
+          "✗ could not patch bootstrap/app.php: no recognised `commands: …/routes/console.php` routing line",
+        );
+        return false;
+      }
+    }
+    patched = patchBootstrapMiddleware(patched);
+    if (!patched.includes("StrapiErrors::class")) {
+      io.out(
+        "✗ could not patch bootstrap/app.php: `->withMiddleware(...)` is not the stock Laravel 12 form",
+      );
+      return false;
+    }
+    await io.writeFile(bootstrapPath, patched);
+    if (storage === "strapi") io.out("✓ patched bootstrap/app.php to route routes/api.php");
+    io.out("✓ patched bootstrap/app.php to run StrapiErrors first on API routes");
+    return true;
+  } catch (e) {
+    io.out(`✗ cannot patch ${bootstrapPath}: ${(e as Error).message}`);
+    return false;
+  }
+};
+
 // The exact sequence proven by the adapter-filament boot CI workflow.
 const steps = (
   appDir: string,
@@ -133,23 +193,9 @@ export const scaffoldCommand = async (
     }
   }
 
+  if (!(await patchBootstrap(appDir, io, storage))) return 1;
+
   if (storage === "strapi") {
-    const bootstrapPath = join(appDir, "bootstrap/app.php");
-    try {
-      const source = await io.readFile(bootstrapPath);
-      const patched = patchBootstrapApp(source);
-      if (patched === source && !source.includes("routes/api.php")) {
-        io.out(
-          "✗ could not patch bootstrap/app.php: no recognised `commands: …/routes/console.php` routing line",
-        );
-        return 1;
-      }
-      await io.writeFile(bootstrapPath, patched);
-      io.out("✓ patched bootstrap/app.php to route routes/api.php");
-    } catch (e) {
-      io.out(`✗ cannot patch ${bootstrapPath}: ${(e as Error).message}`);
-      return 1;
-    }
     io.out(`✓ scaffolded Laravel 12 (Strapi storage) at ${dir}`);
     io.out(`  next: point a filament target's "out" at ${dir} and run: camis build`);
     return 0;

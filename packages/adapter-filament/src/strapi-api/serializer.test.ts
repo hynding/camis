@@ -117,7 +117,8 @@ describe("emitSerializer", () => {
     const php = emitSerializer(wireShape(nestedDoc, nestedDoc.contentTypes[0]!, []));
     expect(php).toContain("'facts' => self::nested([");
     expect(php).toContain("'additional' => $m->factsAdditional->map(");
-    expect(php).not.toContain("'facts.additional'");
+    // Only the FIELDS map (the query runtime's lookup table) spells the path with a dot.
+    expect(php.slice(php.indexOf("function toWire"))).not.toContain("'facts.additional'");
     expect(php).toContain("if (self::has($data, ['facts', 'additional'])) {");
     expect(php).toContain("self::dig($data, ['facts', 'additional'])");
   });

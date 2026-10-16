@@ -8,6 +8,7 @@ namespace App\Http\Controllers\Api\Generated;
 use App\Http\Controllers\Controller;
 use App\Http\Serializers\NoteSerializer;
 use App\Models\Note;
+use App\Support\StrapiQuery;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
@@ -36,19 +37,29 @@ class NoteApiController extends Controller
         return $m;
     }
 
+    /** One row on the wire, narrowed by the request's `fields` parameter. */
+    protected function wire(Request $request, Note $m): array
+    {
+        return StrapiQuery::select(NoteSerializer::toWire($m), $request->query(), NoteSerializer::FIELDS);
+    }
+
     public function index(Request $request): JsonResponse
     {
         $this->authorize('viewAny', Note::class);
-        $rows = $this->scoped($request)->get()->filter(fn (Note $m) => $request->user()->can('view', $m));
+        $found = StrapiQuery::find($this->scoped($request), $request->query(), NoteSerializer::FIELDS);
+        $rows = $found['rows']->filter(fn (Note $m) => $request->user()->can('view', $m));
 
-        return response()->json(['data' => $rows->map(fn (Note $m) => NoteSerializer::toWire($m))->values()->all()]);
+        return response()->json([
+            'data' => $rows->map(fn (Note $m) => $this->wire($request, $m))->values()->all(),
+            'meta' => ['pagination' => $found['pagination']],
+        ]);
     }
 
     public function show(Request $request, string $key): JsonResponse
     {
         $m = $this->find($request, $key);
 
-        return response()->json(['data' => NoteSerializer::toWire($m)]);
+        return response()->json(['data' => $this->wire($request, $m), 'meta' => new \stdClass()]);
     }
 
     public function store(Request $request): JsonResponse
@@ -62,7 +73,7 @@ class NoteApiController extends Controller
             NoteSerializer::syncChildren($m, $wire['children']);
         });
 
-        return response()->json(['data' => NoteSerializer::toWire($m->fresh())], 201);
+        return response()->json(['data' => $this->wire($request, $m->fresh()), 'meta' => new \stdClass()], 201);
     }
 
     public function update(Request $request, string $key): JsonResponse
@@ -76,7 +87,7 @@ class NoteApiController extends Controller
                 NoteSerializer::syncChildren($m, $wire['children']);
             });
 
-            return response()->json(['data' => NoteSerializer::toWire($m->fresh())]);
+            return response()->json(['data' => $this->wire($request, $m->fresh()), 'meta' => new \stdClass()]);
         }
 
         if (Note::query()->where(self::KEY, $key)->exists()) {
@@ -91,7 +102,7 @@ class NoteApiController extends Controller
             NoteSerializer::syncChildren($m, $wire['children']);
         });
 
-        return response()->json(['data' => NoteSerializer::toWire($m->fresh())], 200);
+        return response()->json(['data' => $this->wire($request, $m->fresh()), 'meta' => new \stdClass()], 200);
     }
 
     public function destroy(Request $request, string $key): JsonResponse
