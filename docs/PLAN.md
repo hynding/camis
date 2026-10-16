@@ -371,7 +371,7 @@ behavioural oracle for the wire format.
 | 27 | Dynamic zones on relational targets, plus the importer gaps that block strapi-php projects (snake_case attribute names, morph relations) | see `docs/` import limits |
 | 28 | GraphQL (opt-in, `webonyx/graphql-php` like strapi-php; same schema naming as Strapi's plugin) (`plugin-graphql`) | |
 | 29 | OpenAPI document + Swagger UI, data export/import archives compatible with Strapi's (`strapi/openapi`, `plugin-documentation`, `strapi/data-transfer`) | |
-| 30 | Strapi-like admin in Filament: Content Manager navigation, Settings area, Strapi wording | admin choice pending with the owner |
+| 30 | Strapi-like admin in Filament: Content Manager navigation, Settings area, Strapi wording | Filament stays the admin (owner's call, 2026-10-16); no Strapi React bundle |
 
 Not planned: content-releases, review-workflows, content history, audit logs, preview (Enterprise,
 strapi-php does not port them either). The Content-Type Builder stays the camis CLI and AI
