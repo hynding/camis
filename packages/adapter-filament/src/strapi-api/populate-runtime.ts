@@ -9,10 +9,17 @@ const header = `<?php\n${PHP_MARKER}\n\ndeclare(strict_types=1);\n\nnamespace Ap
  * populate validation do. Each relation is eager-loaded once per level for the whole page, so a
  * list costs one query per populated relation rather than one per row — what keeps it cheap on
  * shared hosting. The canonical check is `populate-vectors.json`, recorded from strapi-php.
+ *
+ * Draft and publish: every level shows the version the request's status names. Links between two
+ * versioned types, and from a versioned type to a plain one, are held per version, so they load
+ * as they are. A link a plain type holds to a versioned one points at the target's draft and is
+ * shown as its published version; a link a plain type holds to a versioned one's draft is reached
+ * from the published version through that draft (`draft-publish-vectors.json`).
  */
 export const emitStrapiPopulate = (): string =>
   header +
   String.raw`
+use Closure;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -32,17 +39,19 @@ final class StrapiPopulate
     /** @return list<array> */
     public static function many(Collection $rows, array $params, string $serializer, ?Authenticatable $viewer): array
     {
-        return self::rendered($rows, $params, self::tree($params['populate'] ?? null, $serializer, $viewer, null), $serializer, $viewer);
+        $tree = self::tree($params['populate'] ?? null, $serializer, $viewer, null);
+
+        return self::rendered($rows, $params, $tree, $serializer, $viewer, ! StrapiDocuments::draftOnly($params));
     }
 
     /** @return list<array> */
-    private static function rendered(Collection $rows, array $params, array $tree, string $serializer, ?Authenticatable $viewer): array
+    private static function rendered(Collection $rows, array $params, array $tree, string $serializer, ?Authenticatable $viewer, bool $published): array
     {
         $loaded = [];
         foreach ($tree as $key => $sub) {
             $relation = $serializer::FIELDS[$key] ?? [];
             if (isset($relation['relation'])) {
-                $loaded[$key] = self::load($rows, $relation, $sub, $viewer, $key);
+                $loaded[$key] = self::load($rows, $serializer, $relation, $sub, $viewer, $key, $published);
             }
         }
 
@@ -158,36 +167,129 @@ final class StrapiPopulate
      * Eager-loads one relation for every row, inside the target's read scope and the populate
      * entry's filters and sort, then renders each distinct target row once.
      *
-     * @return array{count: bool, wires: array<int|string, array>}
+     * @return array{count: bool, links: array<int|string, list<int|string>|int>, wires: array<int|string, array>}
      */
-    private static function load(Collection $rows, array $relation, array $sub, ?Authenticatable $viewer, string $at): array
+    private static function load(Collection $rows, string $serializer, array $relation, array $sub, ?Authenticatable $viewer, string $at, bool $published): array
+    {
+        $narrow = function (Builder $query) use ($relation, $sub, $viewer, $at): void {
+            StrapiQuery::scope($query, $viewer);
+            StrapiQuery::filter($query, $sub, $relation['serializer']::FIELDS, $viewer, $at);
+            StrapiQuery::order($query, $sub['sort'] ?? null, $relation['serializer']::FIELDS, $viewer);
+        };
+        $count = self::counted($sub);
+        $links = match (self::projection($relation, $serializer::DRAFT_PUBLISH, $published)) {
+            'forward' => self::forward($rows, $relation, $narrow, $count),
+            'parent' => self::parent($rows, $relation, $narrow, $count),
+            default => self::linked($rows, $relation, $relation['draftPublish'] ? $published : null, $narrow, $count),
+        };
+        if ($count) {
+            return ['count' => true, 'links' => $links, 'wires' => []];
+        }
+        $targets = new Collection();
+        foreach ($links as $key => $linked) {
+            $visible = array_values(array_filter($linked, fn (Model $target) => StrapiQuery::visible($target, $viewer)));
+            foreach ($visible as $target) {
+                $targets[$target->getKey()] = $target;
+            }
+            $links[$key] = array_map(fn (Model $target) => $target->getKey(), $visible);
+        }
+        $params = array_intersect_key($sub, array_flip(['fields']));
+        $wires = self::rendered($targets->values(), $params, $sub['tree'] ?? [], $relation['serializer'], $viewer, $published);
+
+        return ['count' => false, 'links' => $links, 'wires' => array_combine($targets->keys()->all(), $wires) ?: []];
+    }
+
+    /**
+     * How a relation's link reaches the version wanted. 'forward': a plain type's link to a
+     * versioned target holds its draft, shown as its published version. 'parent': a plain target's
+     * link to a versioned type holds the draft, so a published row reaches it through its draft.
+     */
+    private static function projection(array $relation, bool $versioned, bool $published): string
+    {
+        if (! $published) {
+            return 'linked';
+        }
+        if ($relation['holder'] === 'self' && ! $versioned && $relation['draftPublish']) {
+            return 'forward';
+        }
+
+        return $relation['holder'] === 'target' && $versioned && ! $relation['draftPublish'] ? 'parent' : 'linked';
+    }
+
+    /**
+     * The relation as stored, narrowed to one status when the target is versioned.
+     *
+     * @return array<int|string, list<Model>|int> row key → its targets, or their number when counted
+     */
+    private static function linked(Collection $rows, array $relation, ?bool $status, Closure $narrow, bool $count): array
     {
         $name = $relation['relation'];
         // load() hands the closure the relation, loadCount() the target's own query.
-        $constrain = function (Relation|Builder $query) use ($relation, $sub, $viewer, $at): void {
+        $constrain = function (Relation|Builder $query) use ($status, $narrow): void {
             $builder = $query instanceof Relation ? $query->getQuery() : $query;
-            StrapiQuery::scope($builder, $viewer);
-            StrapiQuery::filter($builder, $sub, $relation['serializer']::FIELDS, $viewer, $at);
-            StrapiQuery::order($builder, $sub['sort'] ?? null, $relation['serializer']::FIELDS, $viewer);
+            if ($status !== null) {
+                StrapiDocuments::withStatus($builder, $status);
+            }
+            $narrow($builder);
         };
-        if (self::counted($sub)) {
+        $links = [];
+        if ($count) {
             $rows->loadCount([$name => $constrain]);
+            foreach ($rows as $row) {
+                $links[$row->getKey()] = (int) $row->getAttribute("{$name}_count");
+            }
 
-            return ['count' => true, 'wires' => []];
+            return $links;
         }
         $rows->load([$name => $constrain]);
-        $targets = new Collection();
         foreach ($rows as $row) {
-            foreach (self::targets($row, $name) as $target) {
-                if (StrapiQuery::visible($target, $viewer)) {
-                    $targets[$target->getKey()] = $target;
-                }
-            }
+            $links[$row->getKey()] = self::targets($row, $name);
         }
-        $params = array_intersect_key($sub, array_flip(['fields']));
-        $wires = self::rendered($targets->values(), $params, $sub['tree'] ?? [], $relation['serializer'], $viewer);
 
-        return ['count' => false, 'wires' => array_combine($targets->keys()->all(), $wires) ?: []];
+        return $links;
+    }
+
+    /** @return array<int|string, list<Model>|int> */
+    private static function forward(Collection $rows, array $relation, Closure $narrow, bool $count): array
+    {
+        $name = $relation['relation'];
+        $rows->load($name);
+        $documents = [];
+        foreach ($rows as $row) {
+            $documents[$row->getKey()] = array_map(fn (Model $draft) => $draft->getAttribute('document_id'), self::targets($row, $name));
+        }
+        $query = $relation['model']::query();
+        $query->whereIn($query->qualifyColumn('document_id'), array_values(array_unique(array_merge([], ...array_values($documents)))));
+        StrapiDocuments::withStatus($query, true);
+        $narrow($query);
+        $published = $query->get();
+        $links = [];
+        foreach ($documents as $key => $ids) {
+            $linked = $published->filter(fn (Model $target) => in_array($target->getAttribute('document_id'), $ids, true))->values()->all();
+            $links[$key] = $count ? count($linked) : $linked;
+        }
+
+        return $links;
+    }
+
+    /** @return array<int|string, list<Model>|int> */
+    private static function parent(Collection $rows, array $relation, Closure $narrow, bool $count): array
+    {
+        $first = $rows->first();
+        if ($first === null) {
+            return [];
+        }
+        $query = $first->newQuery();
+        $drafts = StrapiDocuments::withStatus($query->whereIn($query->qualifyColumn('document_id'), $rows->pluck('document_id')->unique()->values()->all()), false)->get();
+        $byDraft = self::linked($drafts, $relation, null, $narrow, $count);
+        $draftOf = $drafts->pluck($first->getKeyName(), 'document_id')->all();
+        $links = [];
+        foreach ($rows as $row) {
+            $draft = $draftOf[$row->getAttribute('document_id')] ?? null;
+            $links[$row->getKey()] = $draft === null ? ($count ? 0 : []) : $byDraft[$draft];
+        }
+
+        return $links;
     }
 
     /** @return list<Model> */
@@ -221,18 +323,14 @@ final class StrapiPopulate
         }
         $wire = StrapiQuery::select($wire, $params, $serializer::FIELDS);
         foreach ($loaded as $key => $result) {
-            $relation = $serializer::FIELDS[$key];
+            $linked = $result['links'][$row->getKey()] ?? [];
             if ($result['count']) {
-                $wire[$key] = ['count' => (int) $row->getAttribute("{$relation['relation']}_count")];
+                $wire[$key] = ['count' => (int) $linked];
                 continue;
             }
-            $wires = [];
-            foreach (self::targets($row, $relation['relation']) as $target) {
-                if (array_key_exists($target->getKey(), $result['wires'])) {
-                    $wires[] = $result['wires'][$target->getKey()];
-                }
-            }
-            $wire[$key] = in_array($relation['kind'], ['hasMany', 'belongsToMany'], true) ? $wires : ($wires[0] ?? null);
+            $wires = array_map(fn (int|string $target) => $result['wires'][$target], $linked);
+            $kind = $serializer::FIELDS[$key]['kind'];
+            $wire[$key] = in_array($kind, ['hasMany', 'belongsToMany'], true) ? $wires : ($wires[0] ?? null);
         }
 
         return $wire;
@@ -284,7 +382,9 @@ final class StrapiPopulate
  * the whole request with Strapi's 400 and changes nothing.
  *
  * Gap: `connect` positions (before/after/start/end) are accepted but not kept — to-many
- * relations list in id order, where Strapi keeps the order they were linked in.
+ * relations list in id order, where Strapi keeps the order they were linked in. *
+ * A draft-and-publish target is linked through its draft, whichever version the reference names:
+ * publishing maps the links onto published versions (`StrapiDocuments`).
  */
 export const emitStrapiRelations = (): string =>
   header +
@@ -336,6 +436,10 @@ final class StrapiRelations
                 continue;
             }
             $eloquent = $row->{$relation['relation']}();
+            // Published versions keep the links they were published with until the next publish.
+            if ($relation['draftPublish']) {
+                $eloquent->whereNull($eloquent->getRelated()->qualifyColumn('published_at'));
+            }
             $current = array_map('intval', $eloquent->pluck($eloquent->getRelated()->getQualifiedKeyName())->all());
             $wanted = $relation['kind'] === 'hasOne'
                 ? array_values(array_filter([self::single($current[0] ?? null, $link)]))
@@ -455,10 +559,14 @@ final class StrapiRelations
             throw StrapiError::validation($message, ['errors' => [['path' => [], 'message' => $message, 'name' => 'ValidationError']]]);
         }
 
+        if ($relation['draftPublish']) {
+            $byId = self::drafts($relation, $byId);
+        }
+
         $resolved = [];
         foreach ($references as $reference) {
             $reference = is_array($reference) ? ($reference['documentId'] ?? $reference['id']) : $reference;
-            $resolved[] = is_string($reference) && ! ctype_digit($reference) ? $byDocumentId[$reference] : (int) $reference;
+            $resolved[] = is_string($reference) && ! ctype_digit($reference) ? $byDocumentId[$reference] : $byId[(int) $reference];
         }
 
         return array_values(array_unique($resolved));
@@ -471,6 +579,9 @@ final class StrapiRelations
             return [];
         }
         $query = $relation['model']::query()->whereIn($column, array_values(array_unique($values)));
+        if ($relation['draftPublish'] && $column === 'document_id') {
+            $query->whereNull('published_at');
+        }
         StrapiQuery::scope($query, $viewer);
         $rows = [];
         foreach ($query->get() as $row) {
@@ -480,6 +591,28 @@ final class StrapiRelations
         }
 
         return $rows;
+    }
+
+    /**
+     * @param array<int, int> $byId
+     * @return array<int, int> each id → its document's draft id
+     */
+    private static function drafts(array $relation, array $byId): array
+    {
+        if ($byId === []) {
+            return [];
+        }
+        $documents = $relation['model']::query()->whereKey(array_keys($byId))->pluck('document_id', 'id');
+        $drafts = $relation['model']::query()
+            ->whereIn('document_id', $documents->unique()->values()->all())
+            ->whereNull('published_at')
+            ->pluck('id', 'document_id');
+        $mapped = [];
+        foreach (array_keys($byId) as $id) {
+            $mapped[$id] = (int) $drafts[$documents[$id]];
+        }
+
+        return $mapped;
     }
 }
 `;

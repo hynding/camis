@@ -35,7 +35,18 @@ const method = (rel: string, name: string, target: string, args: string): Relati
 
 type RelationField = Extract<Field, { type: "relation" }>;
 
-export const resolveRelations = (doc: IrDocument): ResolvedRelations => {
+/** Admin pickers for a draft-and-publish target offer its drafts, which every link goes through. */
+const draftsOnly = (versioned: boolean): string =>
+  versioned ? ", modifyQueryUsing: fn ($query) => $query->whereNull('published_at')" : "";
+
+/**
+ * `versioned` names the draft-and-publish content types: their published versions come and go
+ * (unpublish deletes one), so a nullable foreign key to such a row unlinks rather than blocks.
+ */
+export const resolveRelations = (
+  doc: IrDocument,
+  versioned: ReadonlySet<string> = new Set(),
+): ResolvedRelations => {
   const out: ResolvedRelations = {
     methods: new Map(),
     formFields: new Map(),
@@ -66,13 +77,13 @@ export const resolveRelations = (doc: IrDocument): ResolvedRelations => {
         push(
           out.fkColumns,
           owner,
-          `$table->foreignId('${fk}')${required ? "" : "->nullable()"}${unique}->constrained('${targetN.table}')`,
+          `$table->foreignId('${fk}')${required ? "" : "->nullable()"}${unique}->constrained('${targetN.table}')${!required && versioned.has(target) ? "->nullOnDelete()" : ""}`,
         );
         push(out.fkNames, owner, fk);
         push(
           out.formFields,
           owner,
-          `Select::make('${fk}')->relationship(name: '${f.name}', titleAttribute: 'id')`,
+          `Select::make('${fk}')->relationship(name: '${f.name}', titleAttribute: 'id'${draftsOnly(versioned.has(target))})`,
         );
         if (f.inverse !== undefined) {
           push(
@@ -88,7 +99,7 @@ export const resolveRelations = (doc: IrDocument): ResolvedRelations => {
         push(
           out.fkColumns,
           target,
-          `$table->foreignId('${fk}')->nullable()->constrained('${ownerN.table}')`,
+          `$table->foreignId('${fk}')->nullable()->constrained('${ownerN.table}')${versioned.has(owner) ? "->nullOnDelete()" : ""}`,
         );
         push(out.fkNames, target, fk);
         if (f.inverse !== undefined) {
@@ -96,7 +107,7 @@ export const resolveRelations = (doc: IrDocument): ResolvedRelations => {
           push(
             out.formFields,
             target,
-            `Select::make('${fk}')->relationship(name: '${f.inverse}', titleAttribute: 'id')`,
+            `Select::make('${fk}')->relationship(name: '${f.inverse}', titleAttribute: 'id'${draftsOnly(versioned.has(owner))})`,
           );
         }
       } else {
@@ -115,7 +126,7 @@ export const resolveRelations = (doc: IrDocument): ResolvedRelations => {
         push(
           out.formFields,
           owner,
-          `Select::make('${f.name}')->multiple()->relationship(name: '${f.name}', titleAttribute: 'id')`,
+          `Select::make('${f.name}')->multiple()->relationship(name: '${f.name}', titleAttribute: 'id'${draftsOnly(versioned.has(target))})`,
         );
         if (f.inverse !== undefined) {
           push(
@@ -131,7 +142,7 @@ export const resolveRelations = (doc: IrDocument): ResolvedRelations => {
           push(
             out.formFields,
             target,
-            `Select::make('${f.inverse}')->multiple()->relationship(name: '${f.inverse}', titleAttribute: 'id')`,
+            `Select::make('${f.inverse}')->multiple()->relationship(name: '${f.inverse}', titleAttribute: 'id'${draftsOnly(versioned.has(owner))})`,
           );
         }
         if (!seenPivot.has(pivot)) {

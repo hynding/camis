@@ -116,8 +116,9 @@ describe("controllers of draft-and-publish types", () => {
   const post = content("app/Http/Controllers/Api/Generated/PostApiController.php");
   it("read the version the status parameter names, published by default", () => {
     expect(post).toContain(
-      "return StrapiDocuments::version(Post::query()->forUser($request->user()), $request->query());",
+      "return StrapiDocuments::version($this->documents($request), $request->query());",
     );
+    expect(post).toContain("return Post::query()->forUser($request->user());");
   });
   it("write the draft, then publish it unless status=draft, behind the publish grant", () => {
     expect(post).toContain("if (! StrapiDocuments::draftOnly($request->query())) {");
@@ -125,7 +126,7 @@ describe("controllers of draft-and-publish types", () => {
     expect(post).toContain("$m = StrapiDocuments::publish($m, PostSerializer::class);");
   });
   it("edit through the draft row", () => {
-    expect(post).toContain("$m = StrapiDocuments::draft($this->scoped($request), $key);");
+    expect(post).toContain("$m = StrapiDocuments::draft($this->documents($request), $key);");
   });
   it("delete every version of the document", () => {
     expect(post).toContain("StrapiDocuments::destroy($m);");
@@ -145,14 +146,14 @@ describe("the Filament admin edits drafts", () => {
     );
   });
   it("shows each document's status", () => {
-    expect(content("app/Filament/Resources/Posts/Schemas/PostTable.php")).toContain(
+    expect(content("app/Filament/Resources/Posts/Schemas/PostsTable.php")).toContain(
       "TextColumn::make('status')->state(fn ($record) => StrapiDocuments::status($record))->badge()",
     );
   });
   it("publishes, unpublishes and discards from the edit page, behind the grants", () => {
     const edit = content("app/Filament/Resources/Posts/Pages/EditPost.php");
     expect(edit).toContain("Action::make('publish')");
-    expect(edit).toContain("->authorize('publish')");
+    expect(edit).toContain("Gate::allows('publish', $this->record)");
     expect(edit).toContain("StrapiDocuments::publish($this->record, PostSerializer::class)");
     expect(edit).toContain("Action::make('unpublish')");
     expect(edit).toContain("StrapiDocuments::unpublish($this->record)");

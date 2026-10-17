@@ -5,6 +5,7 @@ import { filamentNames } from "../names";
 import { projectFilamentPermissions } from "../permissions/project";
 import { emitAuthController, emitUsernameMigration, USERNAME_MIGRATION_PATH } from "./auth";
 import { emitGeneratedController, emitProtectedController } from "./controller";
+import { emitHasDraftAndPublish, emitStrapiDocuments } from "./draft-publish-runtime";
 import { emitStrapiErrorsMiddleware } from "./errors";
 import { emitStrapiPopulate, emitStrapiRelations } from "./populate-runtime";
 import { emitHasDocumentId, emitStrapiError, emitStrapiQuery } from "./rest-runtime";
@@ -18,6 +19,8 @@ export interface StrapiApiInput {
   bundle: IrBundle;
   emitted: ContentType[];
   fkNames: Map<string, string[]>;
+  /** Draft-and-publish content types kept as two rows per document (`draftPublishPlan`). */
+  versioned?: ReadonlySet<string>;
   /** The default of `camis.rest.always_populate_components` (GenerateOptions). */
   alwaysPopulateComponents?: boolean;
   /**
@@ -36,6 +39,7 @@ export interface StrapiApiEmission {
 
 export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
   const { doc, bundle, emitted, fkNames } = input;
+  const versioned = input.versioned ?? new Set<string>();
   const secured = bundle.roles.length > 0;
   const perm = secured
     ? projectFilamentPermissions(doc, bundle.roles)
@@ -46,7 +50,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
 
   for (const ct of emitted) {
     const names = filamentNames(ct);
-    const shape = wireShape(doc, ct, fkNames.get(ct.name) ?? []);
+    const shape = wireShape(doc, ct, fkNames.get(ct.name) ?? [], versioned);
     files.push({
       path: `app/Http/Serializers/${names.model}Serializer.php`,
       content: emitSerializer(shape),
@@ -92,5 +96,12 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
   files.push({ path: "app/Support/StrapiPopulate.php", content: emitStrapiPopulate() });
   files.push({ path: "app/Support/StrapiRelations.php", content: emitStrapiRelations() });
   files.push({ path: "app/Models/Concerns/HasDocumentId.php", content: emitHasDocumentId() });
+  if (versioned.size > 0) {
+    files.push({ path: "app/Support/StrapiDocuments.php", content: emitStrapiDocuments() });
+    files.push({
+      path: "app/Models/Concerns/HasDraftAndPublish.php",
+      content: emitHasDraftAndPublish(),
+    });
+  }
   return { files, gaps, scopeMethods };
 };

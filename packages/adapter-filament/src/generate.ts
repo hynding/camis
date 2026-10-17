@@ -34,6 +34,7 @@ import { emitModel } from "./model";
 import { filamentNames, snakeColumn } from "./names";
 import { resolveRelations } from "./relations";
 import { emitResourceFiles } from "./resource";
+import { draftPublishPlan } from "./strapi-api/draft-publish";
 import { emitStrapiApi } from "./strapi-api/emit";
 import { emitStrapiStorage } from "./strapi-api/storage/emit";
 
@@ -49,10 +50,12 @@ export const filamentAdapter: GenerateAdapter = {
     const storage =
       requestedStorage === "strapi" && apiStyle !== "strapi" ? "laravel" : requestedStorage;
     const doc = normalize(ir.document);
-    const rel = resolveRelations(doc);
+    const draftPublish = draftPublishPlan(doc, apiStyle, storage);
+    const versioned = draftPublish.versioned;
+    const rel = resolveRelations(doc, versioned);
     const hooks = emitHookFiles(doc);
     const files: GeneratedFile[] = [];
-    const gaps: CapabilityGap[] = [];
+    const gaps: CapabilityGap[] = [...draftPublish.gaps];
     if (storage !== requestedStorage) {
       gaps.push({
         feature: "storageLayoutRequiresStrapiApi",
@@ -105,6 +108,7 @@ export const filamentAdapter: GenerateAdapter = {
       bundle: ir,
       emitted,
       fkNames: rel.fkNames,
+      versioned,
       alwaysPopulateComponents: options.alwaysPopulateComponents === true,
       observedModels: new Set([...hooks.observedModels, ...aiObservedModels]),
     };
@@ -151,13 +155,17 @@ export const filamentAdapter: GenerateAdapter = {
           strapi?.scopeMethods.get(ct.name) !== undefined
             ? [strapi.scopeMethods.get(ct.name)!]
             : [],
-          apiStyle === "strapi" ? ["App\\Models\\Concerns\\HasDocumentId"] : [],
+          [
+            ...(apiStyle === "strapi" ? ["App\\Models\\Concerns\\HasDocumentId"] : []),
+            ...(versioned.has(ct.name) ? ["App\\Models\\Concerns\\HasDraftAndPublish"] : []),
+          ],
         ),
       });
       files.push({
         path: migrationFilename(ct, migrationOrdinal.get(ct.name)!),
         content: emitMigration(ct, rel.fkColumns.get(ct.name) ?? [], embeddedEmits, {
           documentId: apiStyle === "strapi",
+          draftPublish: versioned.has(ct.name),
         }),
       });
       files.push(
@@ -166,6 +174,7 @@ export const filamentAdapter: GenerateAdapter = {
           rel.formFields.get(ct.name) ?? [],
           embeddedEmits,
           ctChildren.map(repeaterComponent),
+          { versioned: versioned.has(ct.name), secured: ir.roles.length > 0 },
         ),
       );
       ctChildren.forEach((child) => {
