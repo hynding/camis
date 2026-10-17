@@ -451,7 +451,9 @@ Known gaps: `connect` positions are accepted but not kept, and to-many relations
 where Strapi keeps link order (the pivot has no order column); `populate` inside a relation ignores
 `pagination`; a component nested in a component comes with its parent rather than needing its own
 `populate`; relations to the built-in user cannot be populated (no user serializer yet, Phase 24);
-the strapi storage layout still always sends components.
+the strapi storage layout still always sends components; relation filters and sort trust the
+target's `forUser` scope, so a read condition with no SQL form (the Phase 19 overcount gap) can be
+probed through them.
 
 ---
 
