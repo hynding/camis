@@ -6,6 +6,7 @@ import { projectFilamentPermissions } from "../permissions/project";
 import { emitAuthController, emitUsernameMigration, USERNAME_MIGRATION_PATH } from "./auth";
 import { emitGeneratedController, emitProtectedController } from "./controller";
 import { emitStrapiErrorsMiddleware } from "./errors";
+import { emitStrapiPopulate, emitStrapiRelations } from "./populate-runtime";
 import { emitHasDocumentId, emitStrapiError, emitStrapiQuery } from "./rest-runtime";
 import { emitApiConfig, emitStrapiRoutes } from "./routes";
 import { emitScopeMethod } from "./scope";
@@ -17,6 +18,8 @@ export interface StrapiApiInput {
   bundle: IrBundle;
   emitted: ContentType[];
   fkNames: Map<string, string[]>;
+  /** The default of `camis.rest.always_populate_components` (GenerateOptions). */
+  alwaysPopulateComponents?: boolean;
   /**
    * Content types whose model must declare `#[ObservedBy]` — hook observers plus AI-field
    * observers. Only the Strapi *storage* layout reads it: on the Laravel layout `emitModel`
@@ -71,7 +74,10 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
   }
 
   files.push({ path: "routes/api.php", content: emitStrapiRoutes(emitted, secured) });
-  files.push({ path: "config/camis.php", content: emitApiConfig() });
+  files.push({
+    path: "config/camis.php",
+    content: emitApiConfig("laravel", input.alwaysPopulateComponents === true),
+  });
   files.push({
     path: "app/Http/Controllers/Api/AuthController.php",
     content: emitAuthController(bundle.defaultRole),
@@ -83,6 +89,8 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
   });
   files.push({ path: "app/Support/StrapiError.php", content: emitStrapiError() });
   files.push({ path: "app/Support/StrapiQuery.php", content: emitStrapiQuery() });
+  files.push({ path: "app/Support/StrapiPopulate.php", content: emitStrapiPopulate() });
+  files.push({ path: "app/Support/StrapiRelations.php", content: emitStrapiRelations() });
   files.push({ path: "app/Models/Concerns/HasDocumentId.php", content: emitHasDocumentId() });
   return { files, gaps, scopeMethods };
 };

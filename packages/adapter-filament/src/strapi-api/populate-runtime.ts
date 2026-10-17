@@ -1,0 +1,485 @@
+import { PHP_MARKER } from "../hooks/names";
+
+const header = `<?php\n${PHP_MARKER}\n\ndeclare(strict_types=1);\n\nnamespace App\\Support;\n`;
+
+/**
+ * Strapi 5's `populate` over Eloquent: components and relations stay off the wire unless the
+ * request names them (`populate=*`, `populate=a,b`, `populate[0]=a.b`, `populate[a][fields]`,
+ * `[filters]`, `[sort]`, `[populate]`, `[count]`), as strapi-php's `convert-query-params` and
+ * populate validation do. Each relation is eager-loaded once per level for the whole page, so a
+ * list costs one query per populated relation rather than one per row — what keeps it cheap on
+ * shared hosting. The canonical check is `populate-vectors.json`, recorded from strapi-php.
+ */
+export const emitStrapiPopulate = (): string =>
+  header +
+  String.raw`
+use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Relation;
+
+/** $serializer is a generated serializer class: toWire(), FIELDS and COMPONENTS. */
+final class StrapiPopulate
+{
+    private const PARAMS = ['fields', 'filters', 'sort', 'populate', 'count'];
+
+    public static function one(Model $row, array $params, string $serializer, ?Authenticatable $viewer): array
+    {
+        return self::many(new Collection([$row]), $params, $serializer, $viewer)[0];
+    }
+
+    /** @return list<array> */
+    public static function many(Collection $rows, array $params, string $serializer, ?Authenticatable $viewer): array
+    {
+        return self::rendered($rows, $params, self::tree($params['populate'] ?? null, $serializer, $viewer, null), $serializer, $viewer);
+    }
+
+    /** @return list<array> */
+    private static function rendered(Collection $rows, array $params, array $tree, string $serializer, ?Authenticatable $viewer): array
+    {
+        $loaded = [];
+        foreach ($tree as $key => $sub) {
+            $relation = $serializer::FIELDS[$key] ?? [];
+            if (isset($relation['relation'])) {
+                $loaded[$key] = self::load($rows, $relation, $sub, $viewer, $key);
+            }
+        }
+
+        return $rows->map(fn (Model $row) => self::render($row, $params, $tree, $loaded, $serializer))->values()->all();
+    }
+
+    // ------------------------------------------------------------------------------ the tree
+
+    /**
+     * The populate parameter as key → that key's own parameters, keeping only relations the caller
+     * may read: Strapi drops the others silently. $at is the relation path it sits under.
+     *
+     * @return array<string, array>
+     */
+    private static function tree(mixed $populate, string $serializer, ?Authenticatable $viewer, ?string $at): array
+    {
+        if ($populate === null || $populate === '' || $populate === []) {
+            return [];
+        }
+        if ($populate === '*') {
+            $tree = array_fill_keys($serializer::COMPONENTS, []);
+            foreach ($serializer::FIELDS as $key => $field) {
+                if (isset($field['relation']) && StrapiQuery::readable($field, $viewer)) {
+                    $tree[$key] = [];
+                }
+            }
+
+            return $tree;
+        }
+        if (is_string($populate)) {
+            $populate = array_map('trim', explode(',', $populate));
+        }
+        if (! is_array($populate)) {
+            throw StrapiError::validation('Invalid populate parameter. Expected a string, an array of strings, a populate object');
+        }
+        $tree = [];
+        if (array_is_list($populate)) {
+            foreach ($populate as $item) {
+                if (! is_string($item)) {
+                    throw StrapiError::validation('Invalid populate parameter. Expected a string, an array of strings, a populate object');
+                }
+                self::dotted($tree, $item, $serializer, $viewer, $at);
+            }
+
+            return $tree;
+        }
+        foreach ($populate as $key => $value) {
+            $key = (string) $key;
+            self::known($key, $serializer, self::join($at, null), $at);
+            if ($value === false || $value === 'false') {
+                continue;
+            }
+            $sub = is_array($value) ? array_intersect_key($value, array_flip(self::PARAMS)) : [];
+            if (self::allowed($key, $serializer, $viewer)) {
+                $sub['tree'] = self::subtree($key, $sub, $serializer, $viewer, $at);
+                $tree[$key] = $sub;
+            }
+        }
+
+        return $tree;
+    }
+
+    /** 'books.genres' → books populated, with genres populated inside it. */
+    private static function dotted(array &$tree, string $item, string $serializer, ?Authenticatable $viewer, ?string $at): void
+    {
+        [$key, $rest] = array_pad(explode('.', $item, 2), 2, null);
+        self::known($key, $serializer, self::join($at, $key), $at);
+        if (! self::allowed($key, $serializer, $viewer)) {
+            return;
+        }
+        $sub = $tree[$key] ?? ['tree' => []];
+        if ($rest !== null && isset($serializer::FIELDS[$key]['relation'])) {
+            self::dotted($sub['tree'], $rest, $serializer::FIELDS[$key]['serializer'], $viewer, self::join($at, $key));
+        }
+        $tree[$key] = $sub;
+    }
+
+    private static function subtree(string $key, array $sub, string $serializer, ?Authenticatable $viewer, ?string $at): array
+    {
+        $field = $serializer::FIELDS[$key] ?? [];
+        if (! isset($field['relation']) || ! array_key_exists('populate', $sub)) {
+            return [];
+        }
+
+        return self::tree($sub['populate'], $field['serializer'], $viewer, self::join($at, $key));
+    }
+
+    /** A key populate may name: a component or a relation. $path is what the error reports. */
+    private static function known(string $key, string $serializer, ?string $path, ?string $at): void
+    {
+        if (! in_array($key, $serializer::COMPONENTS, true) && ! isset($serializer::FIELDS[$key]['relation'])) {
+            throw StrapiError::invalidKey($key, $path ?? $at, 'populate');
+        }
+    }
+
+    private static function allowed(string $key, string $serializer, ?Authenticatable $viewer): bool
+    {
+        $field = $serializer::FIELDS[$key] ?? [];
+
+        return ! isset($field['relation']) || StrapiQuery::readable($field, $viewer);
+    }
+
+    private static function join(?string $a, ?string $b): ?string
+    {
+        $parts = array_filter([$a, $b], fn ($p) => $p !== null && $p !== '');
+
+        return $parts === [] ? null : implode('.', $parts);
+    }
+
+    // ------------------------------------------------------------------------------ loading
+
+    /**
+     * Eager-loads one relation for every row, inside the target's read scope and the populate
+     * entry's filters and sort, then renders each distinct target row once.
+     *
+     * @return array{count: bool, wires: array<int|string, array>}
+     */
+    private static function load(Collection $rows, array $relation, array $sub, ?Authenticatable $viewer, string $at): array
+    {
+        $name = $relation['relation'];
+        // load() hands the closure the relation, loadCount() the target's own query.
+        $constrain = function (Relation|Builder $query) use ($relation, $sub, $viewer, $at): void {
+            $builder = $query instanceof Relation ? $query->getQuery() : $query;
+            StrapiQuery::scope($builder, $viewer);
+            StrapiQuery::filter($builder, $sub, $relation['serializer']::FIELDS, $viewer, $at);
+            StrapiQuery::order($builder, $sub['sort'] ?? null, $relation['serializer']::FIELDS, $viewer);
+        };
+        if (self::counted($sub)) {
+            $rows->loadCount([$name => $constrain]);
+
+            return ['count' => true, 'wires' => []];
+        }
+        $rows->load([$name => $constrain]);
+        $targets = new Collection();
+        foreach ($rows as $row) {
+            foreach (self::targets($row, $name) as $target) {
+                if (StrapiQuery::visible($target, $viewer)) {
+                    $targets[$target->getKey()] = $target;
+                }
+            }
+        }
+        $params = array_intersect_key($sub, array_flip(['fields']));
+        $wires = self::rendered($targets->values(), $params, $sub['tree'] ?? [], $relation['serializer'], $viewer);
+
+        return ['count' => false, 'wires' => array_combine($targets->keys()->all(), $wires) ?: []];
+    }
+
+    /** @return list<Model> */
+    private static function targets(Model $row, string $name): array
+    {
+        $value = $row->getRelation($name);
+        if ($value instanceof Collection) {
+            return $value->all();
+        }
+
+        return $value instanceof Model ? [$value] : [];
+    }
+
+    private static function counted(array $sub): bool
+    {
+        return in_array($sub['count'] ?? null, [true, 'true', '1', 1], true);
+    }
+
+    // ---------------------------------------------------------------------------- rendering
+
+    private static function render(Model $row, array $params, array $tree, array $loaded, string $serializer): array
+    {
+        $wire = $serializer::toWire($row);
+        $always = (bool) config('camis.rest.always_populate_components', false);
+        foreach ($serializer::COMPONENTS as $key) {
+            if (array_key_exists($key, $tree)) {
+                $wire[$key] = self::component($wire[$key] ?? null, $key, $tree[$key], $serializer);
+            } elseif (! $always) {
+                unset($wire[$key]);
+            }
+        }
+        $wire = StrapiQuery::select($wire, $params, $serializer::FIELDS);
+        foreach ($loaded as $key => $result) {
+            $relation = $serializer::FIELDS[$key];
+            if ($result['count']) {
+                $wire[$key] = ['count' => (int) $row->getAttribute("{$relation['relation']}_count")];
+                continue;
+            }
+            $wires = [];
+            foreach (self::targets($row, $relation['relation']) as $target) {
+                if (array_key_exists($target->getKey(), $result['wires'])) {
+                    $wires[] = $result['wires'][$target->getKey()];
+                }
+            }
+            $wire[$key] = in_array($relation['kind'], ['hasMany', 'belongsToMany'], true) ? $wires : ($wires[0] ?? null);
+        }
+
+        return $wire;
+    }
+
+    /** A populated component: null or [] when empty, as Strapi sends it, narrowed by its fields. */
+    private static function component(mixed $value, string $key, array $sub, string $serializer): ?array
+    {
+        $repeatable = isset($serializer::FIELDS[$key]['component']);
+        if ($value === null) {
+            return $repeatable ? [] : null;
+        }
+        if (! array_key_exists('fields', $sub)) {
+            return $value;
+        }
+        $wanted = is_string($sub['fields']) ? array_map('trim', explode(',', $sub['fields'])) : (array) $sub['fields'];
+        $known = $repeatable ? array_keys($serializer::FIELDS[$key]['fields']) : self::embedded($key, $serializer);
+        foreach ($wanted as $field) {
+            if (! is_string($field) || ! in_array($field, $known, true)) {
+                throw StrapiError::invalidKey((string) $field, $key, 'fields');
+            }
+        }
+        $keep = array_flip($wanted);
+
+        return $repeatable
+            ? array_map(fn (array $item) => array_intersect_key($item, $keep), $value)
+            : array_intersect_key($value, $keep);
+    }
+
+    /** @return list<string> the scalar keys of an embedded component, relative to it */
+    private static function embedded(string $key, string $serializer): array
+    {
+        $keys = [];
+        foreach (array_keys($serializer::FIELDS) as $path) {
+            if (str_starts_with($path, "{$key}.")) {
+                $keys[] = explode('.', substr($path, strlen($key) + 1))[0];
+            }
+        }
+
+        return $keys;
+    }
+}
+`;
+
+/**
+ * Strapi 5's relation input on create and update: a documentId, a numeric id or an object holding
+ * one; a list (which replaces the set); or `{ connect, disconnect, set }`. Every reference is
+ * resolved within the caller's view of the target before anything is written, so a bad one fails
+ * the whole request with Strapi's 400 and changes nothing.
+ *
+ * Gap: `connect` positions (before/after/start/end) are accepted but not kept — to-many
+ * relations list in id order, where Strapi keeps the order they were linked in.
+ */
+export const emitStrapiRelations = (): string =>
+  header +
+  String.raw`
+use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Database\Eloquent\Model;
+
+final class StrapiRelations
+{
+    /**
+     * The relation keys of a request's data, resolved to target ids.
+     *
+     * @return array<string, array{relation: array, set: ?list<int>, connect: list<int>, disconnect: list<int>}>
+     */
+    public static function read(array $data, array $fields, ?Authenticatable $viewer): array
+    {
+        $links = [];
+        foreach ($fields as $key => $relation) {
+            if (! isset($relation['relation']) || ! array_key_exists($key, $data)) {
+                continue;
+            }
+            if (! StrapiQuery::readable($relation, $viewer)) {
+                throw StrapiError::validation("Invalid key {$key}", ['key' => $key, 'path' => $key, 'source' => 'body']);
+            }
+            $links[$key] = self::instruction($relation, $data[$key], $viewer);
+        }
+
+        return $links;
+    }
+
+    /** To-one foreign keys on the row itself: set before it is saved, so a required one holds. */
+    public static function associate(Model $row, array $links): void
+    {
+        foreach ($links as $link) {
+            if ($link['relation']['kind'] !== 'belongsTo') {
+                continue;
+            }
+            $column = $link['relation']['foreignKey'];
+            $row->setAttribute($column, self::single($row->getAttribute($column), $link));
+        }
+    }
+
+    /** Pivot rows and the other side's foreign keys: written once the row has its id. */
+    public static function link(Model $row, array $links): void
+    {
+        foreach ($links as $link) {
+            $relation = $link['relation'];
+            if ($relation['kind'] === 'belongsTo') {
+                continue;
+            }
+            $eloquent = $row->{$relation['relation']}();
+            $current = array_map('intval', $eloquent->pluck($eloquent->getRelated()->getQualifiedKeyName())->all());
+            $wanted = $relation['kind'] === 'hasOne'
+                ? array_values(array_filter([self::single($current[0] ?? null, $link)]))
+                : self::many($current, $link);
+            $relation['kind'] === 'belongsToMany'
+                ? $eloquent->sync($wanted)
+                : self::moveForeignKeys($row, $relation, $current, $wanted);
+        }
+    }
+
+    /**
+     * @param list<int> $current
+     * @param list<int> $wanted
+     */
+    private static function moveForeignKeys(Model $row, array $relation, array $current, array $wanted): void
+    {
+        $target = $relation['model']::query();
+        $fk = $relation['foreignKey'];
+        $released = array_values(array_diff($current, $wanted));
+        if ($released !== []) {
+            (clone $target)->whereKey($released)->update([$fk => null]);
+        }
+        $claimed = array_values(array_diff($wanted, $current));
+        if ($claimed !== []) {
+            (clone $target)->whereKey($claimed)->update([$fk => $row->getKey()]);
+        }
+    }
+
+    private static function single(mixed $current, array $link): mixed
+    {
+        if ($link['set'] !== null) {
+            return $link['set'] === [] ? null : end($link['set']);
+        }
+        if ($link['connect'] !== []) {
+            return end($link['connect']);
+        }
+
+        return in_array((int) $current, $link['disconnect'], true) ? null : $current;
+    }
+
+    /**
+     * @param list<int> $current
+     * @return list<int>
+     */
+    private static function many(array $current, array $link): array
+    {
+        if ($link['set'] !== null) {
+            return $link['set'];
+        }
+        $ids = array_values(array_diff($current, $link['disconnect']));
+        foreach ($link['connect'] as $id) {
+            if (! in_array($id, $ids, true)) {
+                $ids[] = $id;
+            }
+        }
+
+        return $ids;
+    }
+
+    // ----------------------------------------------------------------------------- reading
+
+    /** @return array{relation: array, set: ?list<int>, connect: list<int>, disconnect: list<int>} */
+    private static function instruction(array $relation, mixed $value, ?Authenticatable $viewer): array
+    {
+        $link = ['relation' => $relation, 'set' => null, 'connect' => [], 'disconnect' => []];
+        if ($value === null) {
+            $link['set'] = [];
+        } elseif (! is_array($value) || array_is_list($value)) {
+            $link['set'] = self::resolve($relation, is_array($value) ? $value : [$value], $viewer);
+        } elseif (array_key_exists('documentId', $value) || array_key_exists('id', $value)) {
+            $link['set'] = self::resolve($relation, [$value], $viewer);
+        } elseif (array_key_exists('set', $value)) {
+            $link['set'] = self::resolve($relation, self::references($value['set']), $viewer);
+        } else {
+            $link['connect'] = self::resolve($relation, self::references($value['connect'] ?? []), $viewer);
+            $link['disconnect'] = self::resolve($relation, self::references($value['disconnect'] ?? []), $viewer);
+        }
+
+        return $link;
+    }
+
+    private static function references(mixed $value): array
+    {
+        return is_array($value) && array_is_list($value) ? $value : [$value];
+    }
+
+    /**
+     * documentIds and numeric ids to the target's ids, in the order given, counting only rows the
+     * caller can see.
+     *
+     * @return list<int>
+     */
+    private static function resolve(array $relation, array $references, ?Authenticatable $viewer): array
+    {
+        $documentIds = [];
+        $ids = [];
+        foreach ($references as $reference) {
+            $reference = is_array($reference) ? ($reference['documentId'] ?? $reference['id'] ?? null) : $reference;
+            if (is_string($reference) && ! ctype_digit($reference)) {
+                $documentIds[] = $reference;
+            } elseif (is_int($reference) || (is_string($reference) && ctype_digit($reference))) {
+                $ids[] = (int) $reference;
+            } else {
+                throw StrapiError::validation('Invalid relation reference');
+            }
+        }
+        $byDocumentId = self::visibleRows($relation, 'document_id', $documentIds, $viewer);
+        foreach ($documentIds as $documentId) {
+            if (! array_key_exists($documentId, $byDocumentId)) {
+                throw StrapiError::validation("Document with id \"{$documentId}\", locale \"\" not found");
+            }
+        }
+        $byId = self::visibleRows($relation, 'id', $ids, $viewer);
+        $missing = count(array_diff(array_unique($ids), array_keys($byId)));
+        if ($missing > 0) {
+            $message = "{$missing} relation(s) of type {$relation['uid']} associated with this entity do not exist";
+            throw StrapiError::validation($message, ['errors' => [['path' => [], 'message' => $message, 'name' => 'ValidationError']]]);
+        }
+
+        $resolved = [];
+        foreach ($references as $reference) {
+            $reference = is_array($reference) ? ($reference['documentId'] ?? $reference['id']) : $reference;
+            $resolved[] = is_string($reference) && ! ctype_digit($reference) ? $byDocumentId[$reference] : (int) $reference;
+        }
+
+        return array_values(array_unique($resolved));
+    }
+
+    /** @return array<int|string, int> column value → id */
+    private static function visibleRows(array $relation, string $column, array $values, ?Authenticatable $viewer): array
+    {
+        if ($values === []) {
+            return [];
+        }
+        $query = $relation['model']::query()->whereIn($column, array_values(array_unique($values)));
+        StrapiQuery::scope($query, $viewer);
+        $rows = [];
+        foreach ($query->get() as $row) {
+            if (StrapiQuery::visible($row, $viewer)) {
+                $rows[$row->getAttribute($column)] = (int) $row->getKey();
+            }
+        }
+
+        return $rows;
+    }
+}
+`;

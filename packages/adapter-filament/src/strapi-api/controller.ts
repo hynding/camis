@@ -42,14 +42,19 @@ const laravelParts = (spec: ControllerSpec): ControllerParts => {
   const { shape, secured, scoped } = spec;
   const M = shape.model;
   const S = `${M}Serializer`;
+  // The caller whose grants reach a relation's target; none in a project without roles.
+  const viewer = secured ? "$request->user()" : "null";
   // syncChildren deletes the existing child rows before re-inserting them, so a failing insert
-  // outside a transaction would leave the parent persisted with its children gone. Both halves
-  // must commit or roll back together.
-  const persist = (save: string, indent: string = STMT): string =>
-    `${indent}DB::transaction(function () use ($m, $wire): void {
-${indent}    ${save}
+  // outside a transaction would leave the parent persisted with its children gone. The row, its
+  // children and its relation links must commit or roll back together.
+  const persist = (fill: string, indent: string = STMT): string =>
+    `${indent}DB::transaction(function () use ($m, $wire, $links): void {
+${indent}    ${fill}StrapiRelations::associate($m, $links);
+${indent}    $m->save();
 ${indent}    ${S}::syncChildren($m, $wire['children']);
+${indent}    StrapiRelations::link($m, $links);
 ${indent}});`;
+  const readLinks = `${STMT}$links = StrapiRelations::read((array) $request->input('data', []), ${S}::FIELDS, ${viewer});`;
   const auth = authLine(secured);
   const assign = spec.assigns
     .map((name) => `${STMT}$m->${snakeColumn(name)}_id = $request->user()->id;`)
@@ -64,34 +69,40 @@ ${indent}});`;
         }
 ${auth(`$this->authorize('create', ${M}::class);`)}        $m = new ${M}($wire['columns']);
         $m->{self::KEY} = $key;
-${assignBlock}${persist("$m->save();")}
+${assignBlock}${persist("")}
 
         return response()->json(['data' => $this->wire($request, $m->fresh()), 'meta' => new \\stdClass()], 200);`
     : `
         abort(404);`;
 
   return {
-    uses: ["App\\Support\\StrapiQuery"],
+    uses: [
+      "App\\Support\\StrapiPopulate",
+      "App\\Support\\StrapiQuery",
+      "App\\Support\\StrapiRelations",
+    ],
     query: scoped ? `${M}::query()->forUser($request->user())` : `${M}::query()`,
-    indexBody: `${auth(`$this->authorize('viewAny', ${M}::class);`)}        $found = StrapiQuery::find($this->scoped($request), $request->query(), ${S}::FIELDS);
+    indexBody: `${auth(`$this->authorize('viewAny', ${M}::class);`)}        $found = StrapiQuery::find($this->scoped($request), $request->query(), ${S}::FIELDS, ${viewer});
         $rows = $found['rows']${secured ? `->filter(fn (${M} $m) => $request->user()->can('view', $m))` : ""};
 
         return response()->json([
-            'data' => $rows->map(fn (${M} $m) => $this->wire($request, $m))->values()->all(),
+            'data' => StrapiPopulate::many($rows, $request->query(), ${S}::class, ${viewer}),
             'meta' => ['pagination' => $found['pagination']],
         ]);`,
     showBody: `        $m = $this->find($request, $key);
 
         return response()->json(['data' => $this->wire($request, $m), 'meta' => new \\stdClass()]);`,
     storeBody: `${auth(`$this->authorize('create', ${M}::class);`)}        $wire = ${S}::fromWire((array) $request->input('data', []));
+${readLinks}
         $m = new ${M}($wire['columns']);
-${assignBlock}${persist("$m->save();")}
+${assignBlock}${persist("")}
 
         return response()->json(['data' => $this->wire($request, $m->fresh()), 'meta' => new \\stdClass()], 201);`,
     updateBody: `        $wire = ${S}::fromWire((array) $request->input('data', []));
+${readLinks}
         $m = $this->scoped($request)->where(self::KEY, $key)->first();
         if ($m !== null${secured ? ` && $request->user()->can('view', $m)` : ""}) {
-${auth(`$this->authorize('update', $m);`, NESTED_STMT)}${persist("$m->fill($wire['columns'])->save();", NESTED_STMT)}
+${auth(`$this->authorize('update', $m);`, NESTED_STMT)}${persist("$m->fill($wire['columns']);\n" + NESTED_STMT + "    ", NESTED_STMT)}
 
             return response()->json(['data' => $this->wire($request, $m->fresh()), 'meta' => new \\stdClass()]);
         }
@@ -101,10 +112,10 @@ ${auth(`$this->authorize('delete', $m);`)}        $m->delete();
 
         return response()->json(null, 204);`,
     helpers: `
-    /** One row on the wire, narrowed by the request's \`fields\` parameter. */
+    /** One row on the wire, shaped by the request's \`fields\` and \`populate\` parameters. */
     protected function wire(Request $request, ${M} $m): array
     {
-        return StrapiQuery::select(${S}::toWire($m), $request->query(), ${S}::FIELDS);
+        return StrapiPopulate::one($m, $request->query(), ${S}::class, ${viewer});
     }
 `,
   };

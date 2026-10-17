@@ -19,7 +19,10 @@ const AUTH_THROTTLE_PER_MINUTE = 10;
  * by `App\Http\Middleware\StrapiJwtGuard` and the Strapi-storage `AuthController::session()`),
  * and `email_confirmation`, mirroring Strapi's own users-permissions advanced setting.
  */
-export const emitApiConfig = (layout: StorageLayout = "laravel"): string => {
+export const emitApiConfig = (
+  layout: StorageLayout = "laravel",
+  alwaysPopulateComponents = false,
+): string => {
   const strapiKeys =
     layout === "strapi"
       ? `
@@ -37,6 +40,9 @@ export const emitApiConfig = (layout: StorageLayout = "laravel"): string => {
         'default_limit' => (int) env('CAMIS_REST_DEFAULT_LIMIT', 25),
         'max_limit' => (int) env('CAMIS_REST_MAX_LIMIT', 100),
         'with_count' => (bool) env('CAMIS_REST_WITH_COUNT', true),
+        // Strapi 5 sends components only when populate names them; true keeps sending them
+        // always, as camis did before, for clients written against that.
+        'always_populate_components' => (bool) env('CAMIS_REST_ALWAYS_POPULATE_COMPONENTS', ${alwaysPopulateComponents}),
     ],`;
 
   return `<?php

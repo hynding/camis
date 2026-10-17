@@ -31,6 +31,12 @@ export interface GenerateOptions {
   apiStyle?: ApiStyle;
   /** Filament only: run atop a Strapi-owned database instead of a Laravel-owned one. */
   storageLayout?: StorageLayout;
+  /**
+   * Filament, Strapi API style only: send components without `populate` asking for them, as
+   * camis did before it matched Strapi 5. Default false. A deployment can still flip it with
+   * CAMIS_REST_ALWAYS_POPULATE_COMPONENTS.
+   */
+  alwaysPopulateComponents?: boolean;
 }
 
 export interface GenerationResult {

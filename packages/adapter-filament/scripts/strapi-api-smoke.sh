@@ -44,14 +44,16 @@ U2=$(req PUT /notes/n2 "$TA" '{"data":{"text":"upsert-updated","occurredAt":"202
 
 [[ "$(req GET /notes "$TA" | body | jq '.data|length')" == "2" ]] || fail "list count"
 
-# Repeatable component round trip
-S=$(req POST /activity-sessions "$TA" '{"data":{"recordId":"s1","quantities":[{"amount":2.5,"unit":"km"},{"amount":30,"unit":"min"}]}}')
+# Repeatable component round trip. As on Strapi 5, a component is sent only when populate names it.
+S=$(req POST '/activity-sessions?populate=*' "$TA" '{"data":{"recordId":"s1","quantities":[{"amount":2.5,"unit":"km"},{"amount":30,"unit":"min"}]}}')
 # jq 1.7.1 (local) preserves "30.0" literally; jq 1.6 (Ubuntu/CI) prints "30" for the same float.
 # Compare numerically instead of string-comparing the rendered JSON so both are stable across jq versions.
 [[ "$(echo "$S" | body | jq '[.data.quantities[]|.amount] == [2.5,30]')" == "true" ]] || fail "child round trip: $S"
 
+[[ "$(req GET /activity-sessions/s1 "$TA" | body | jq '.data|has("quantities")')" == "false" ]] || fail "component without populate"
+
 # Embedded component + null omission
-T=$(req POST /transactions "$TA" '{"data":{"recordId":"t1","amount":{"minor":1999,"currency":"USD"},"occurredOn":"2026-09-08"}}')
+T=$(req POST '/transactions?populate=amount' "$TA" '{"data":{"recordId":"t1","amount":{"minor":1999,"currency":"USD"},"occurredOn":"2026-09-08"}}')
 [[ "$(echo "$T" | body | jq -c '.data.amount')" == '{"minor":"1999","currency":"USD"}' ]] || fail "embedded: $T"
 [[ "$(echo "$T" | body | jq '.data|has("fee")')" == "false" ]] || fail "null omitted: $T"
 # A `date` field round trips as YYYY-MM-DD, never as a full ISO datetime.

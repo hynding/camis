@@ -96,6 +96,29 @@ jobs:
           '
   strapi-api:
     runs-on: ubuntu-latest
+    # The REST and populate vectors build SQL per dialect (LIKE escapes, casts, relation
+    # subqueries), so they run on all three databases.
+    strategy:
+      fail-fast: false
+      matrix:
+        db: [sqlite, mysql, pgsql]
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_DATABASE: camis
+          MYSQL_ROOT_PASSWORD: camis
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=5
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: camis
+          POSTGRES_PASSWORD: camis
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready" --health-interval=10s --health-timeout=5s --health-retries=5
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
@@ -126,12 +149,15 @@ jobs:
           import { patchBootstrapMiddleware } from './src/commands/scaffold';
           const f = process.env.GITHUB_WORKSPACE + '/app/bootstrap/app.php';
           writeFileSync(f, patchBootstrapMiddleware(readFileSync(f, 'utf8')));"
-      - name: Migrate + seed + cache (as a shared-host deploy does) + serve
+      - name: Migrate + seed + cache (as a shared-host deploy does) + serve (${{ matrix.db }})
         run: |
           cd app
           grep -q "prependToGroup('api'" bootstrap/app.php || { echo "bootstrap/app.php patch did not apply"; exit 1; }
-          echo "DB_CONNECTION=sqlite" >> .env
-          touch database/database.sqlite
+          case "${{ matrix.db }}" in
+            sqlite) echo "DB_CONNECTION=sqlite" >> .env; touch database/database.sqlite ;;
+            mysql)  printf 'DB_CONNECTION=mysql\nDB_HOST=127.0.0.1\nDB_PORT=3306\nDB_DATABASE=camis\nDB_USERNAME=root\nDB_PASSWORD=camis\n' >> .env ;;
+            pgsql)  printf 'DB_CONNECTION=pgsql\nDB_HOST=127.0.0.1\nDB_PORT=5432\nDB_DATABASE=camis\nDB_USERNAME=postgres\nDB_PASSWORD=camis\n' >> .env ;;
+          esac
           php artisan migrate --force
           php artisan db:seed --class="Database\\Seeders\\RolePermissionSeeder" --force
           php artisan config:cache
@@ -149,6 +175,15 @@ jobs:
             --data '{"username":"vectors","email":"vectors@example.test","password":"secret1"}' \
             http://127.0.0.1:8765/api/auth/local/register | jq -r .jwt)
           bash packages/adapter-filament/scripts/strapi-rest-vectors.sh http://127.0.0.1:8765/api "$T"
+      - name: Strapi populate and relation vectors (recorded from strapi-php)
+        run: |
+          cd app
+          php artisan migrate:fresh --force
+          php artisan db:seed --class="Database\\Seeders\\RolePermissionSeeder" --force
+          T=$(curl -s -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' \
+            --data '{"username":"populate","email":"populate@example.test","password":"secret1"}' \
+            http://127.0.0.1:8765/api/auth/local/register | jq -r .jwt)
+          node ../packages/adapter-filament/scripts/strapi-populate-vectors.mjs http://127.0.0.1:8765/api --token "$T"
       - name: Server log on failure
         if: failure()
         run: cat app/serve.log app/storage/logs/laravel.log || true
