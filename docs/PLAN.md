@@ -416,6 +416,45 @@ policy when the read condition has no SQL form, so its `total` can overcount.
 
 ---
 
+## Phase 20 — Relations on the wire and `populate` (`adapter-filament`, `cli`)
+
+**Goal:** a Strapi 5 client reads and writes relations and components the same way against the
+generated app as against strapi-php, on the laravel storage layout.
+
+- Components and relations are left off the wire unless `populate` names them: `*`, a comma list,
+  a list (with dotted nesting, `books.genres`), or an object whose entries take `fields`,
+  `filters`, `sort`, a nested `populate` and `count`. Unknown keys are Strapi's 400s.
+- Relations appear from both sides (an inverse such as `Author.books` too), as their target's wire
+  object; a to-many in id order. Relations to the built-in user stay off the wire.
+- A generated runtime, `App\Support\StrapiPopulate`, eager-loads each populated relation once per
+  level for the whole page, so a list costs one query per populated relation, not one per row.
+- Reads of a target go through its read grant (`viewAny`), its `forUser` scope and its `view`
+  policy; a relation the caller cannot read is dropped from `populate`, and is an invalid key in
+  `filters` and in a write, as on Strapi.
+- `filters` reach relations (`filters[author][name][$eq]`, ids, `$null`/`$notNull`); `sort` takes a
+  related field (`author.name:desc`) through a correlated subquery.
+- `App\Support\StrapiRelations` takes Strapi's relation input on create and update — a documentId,
+  an id, an object holding one, a list, `{ connect, disconnect, set }` — on either side of a
+  relation, resolving every reference within the caller's view before writing anything.
+- `alwaysPopulateComponents` on a Filament target (or `CAMIS_REST_ALWAYS_POPULATE_COMPONENTS`) keeps
+  sending components without `populate`, for clients written against camis before this phase.
+
+**Exit criteria:** `populate-vectors.json`, whose expected outcomes are recorded from strapi-php
+(`strapi-populate-vectors.mjs --record`), passes against the booted app in the `strapi-api` boot
+job, which now runs on SQLite, MySQL and Postgres; the REST vectors and the smoke still pass.
+
+**Status (2026-10-17):** the 50 populate checks and the 72 REST checks pass against a Laravel 12 +
+Filament v5 app on SQLite and Postgres with all caches on. A StrapiError is no longer logged: the
+vectors showed every client 400 landing in `laravel.log`.
+
+Known gaps: `connect` positions are accepted but not kept, and to-many relations list in id order
+where Strapi keeps link order (the pivot has no order column); `populate` inside a relation ignores
+`pagination`; a component nested in a component comes with its parent rather than needing its own
+`populate`; relations to the built-in user cannot be populated (no user serializer yet, Phase 24);
+the strapi storage layout still always sends components.
+
+---
+
 ## Sequencing rationale (quick reference)
 
 1. **Strapi first** — mature schema validates the IR fastest, with the thinnest adapter.
