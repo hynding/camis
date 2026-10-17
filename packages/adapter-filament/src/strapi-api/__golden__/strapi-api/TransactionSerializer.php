@@ -22,6 +22,9 @@ final class TransactionSerializer
         'updatedAt' => ['column' => 'updated_at', 'type' => 'dateTime'],
     ];
 
+    /** Component keys, which Strapi leaves off the wire unless populate names them. */
+    public const COMPONENTS = ['amount'];
+
     /** Strapi-shaped wire object: camelCase keys, nested components, nulls omitted. */
     public static function toWire(Transaction $m): array
     {

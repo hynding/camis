@@ -1,0 +1,825 @@
+{
+  "no populate: components and relations are left out": {
+    "status": 200,
+    "data": [
+      {
+        "pages": 100,
+        "title": "Alpha"
+      },
+      {
+        "title": "Beta"
+      },
+      {
+        "title": "Gamma"
+      }
+    ]
+  },
+  "populate=*": {
+    "status": 200,
+    "data": [
+      {
+        "author": {
+          "name": "Ann"
+        },
+        "editions": [
+          {
+            "amount": 1,
+            "unit": "ea"
+          }
+        ],
+        "genres": [
+          {
+            "name": "Fantasy"
+          },
+          {
+            "name": "Horror"
+          }
+        ],
+        "pages": 100,
+        "price": {
+          "currency": "USD",
+          "minor": "100"
+        },
+        "title": "Alpha"
+      },
+      {
+        "author": {
+          "name": "Bob"
+        },
+        "editions": [],
+        "genres": [
+          {
+            "name": "Horror"
+          }
+        ],
+        "title": "Beta"
+      },
+      {
+        "editions": [],
+        "genres": [],
+        "title": "Gamma"
+      }
+    ]
+  },
+  "populate one relation by name": {
+    "status": 200,
+    "data": [
+      {
+        "author": {
+          "name": "Ann"
+        },
+        "title": "Alpha"
+      },
+      {
+        "author": {
+          "name": "Bob"
+        },
+        "title": "Beta"
+      },
+      {
+        "title": "Gamma"
+      }
+    ]
+  },
+  "populate a comma list": {
+    "status": 200,
+    "data": [
+      {
+        "genres": [
+          {
+            "name": "Fantasy"
+          },
+          {
+            "name": "Horror"
+          }
+        ],
+        "price": {
+          "currency": "USD",
+          "minor": "100"
+        },
+        "title": "Alpha"
+      },
+      {
+        "genres": [
+          {
+            "name": "Horror"
+          }
+        ],
+        "title": "Beta"
+      },
+      {
+        "genres": [],
+        "title": "Gamma"
+      }
+    ]
+  },
+  "populate a list": {
+    "status": 200,
+    "data": [
+      {
+        "author": {
+          "name": "Ann"
+        },
+        "editions": [
+          {
+            "amount": 1,
+            "unit": "ea"
+          }
+        ],
+        "title": "Alpha"
+      },
+      {
+        "author": {
+          "name": "Bob"
+        },
+        "editions": [],
+        "title": "Beta"
+      },
+      {
+        "editions": [],
+        "title": "Gamma"
+      }
+    ]
+  },
+  "populate an object with true": {
+    "status": 200,
+    "data": [
+      {
+        "price": {
+          "currency": "USD",
+          "minor": "100"
+        },
+        "title": "Alpha"
+      },
+      {
+        "title": "Beta"
+      },
+      {
+        "title": "Gamma"
+      }
+    ]
+  },
+  "fields inside a relation": {
+    "status": 200,
+    "data": [
+      {
+        "author": {
+          "name": "Ann"
+        },
+        "title": "Alpha"
+      },
+      {
+        "author": {
+          "name": "Bob"
+        },
+        "title": "Beta"
+      },
+      {
+        "title": "Gamma"
+      }
+    ]
+  },
+  "fields inside a component": {
+    "status": 200,
+    "data": [
+      {
+        "price": {
+          "currency": "USD"
+        },
+        "title": "Alpha"
+      },
+      {
+        "title": "Beta"
+      },
+      {
+        "title": "Gamma"
+      }
+    ]
+  },
+  "filters inside a populated relation": {
+    "status": 200,
+    "data": [
+      {
+        "genres": [
+          {
+            "name": "Horror"
+          }
+        ],
+        "title": "Alpha"
+      },
+      {
+        "genres": [
+          {
+            "name": "Horror"
+          }
+        ],
+        "title": "Beta"
+      },
+      {
+        "genres": [],
+        "title": "Gamma"
+      }
+    ]
+  },
+  "sort inside a populated relation": {
+    "status": 200,
+    "data": [
+      {
+        "genres": [
+          {
+            "name": "Horror"
+          },
+          {
+            "name": "Fantasy"
+          }
+        ],
+        "title": "Alpha"
+      },
+      {
+        "genres": [
+          {
+            "name": "Horror"
+          }
+        ],
+        "title": "Beta"
+      },
+      {
+        "genres": [],
+        "title": "Gamma"
+      }
+    ]
+  },
+  "count of a populated relation": {
+    "status": 200,
+    "data": [
+      {
+        "genres": {
+          "count": 2
+        },
+        "title": "Alpha"
+      },
+      {
+        "genres": {
+          "count": 1
+        },
+        "title": "Beta"
+      },
+      {
+        "genres": {
+          "count": 0
+        },
+        "title": "Gamma"
+      }
+    ]
+  },
+  "the inverse side of a relation": {
+    "status": 200,
+    "data": [
+      {
+        "books": [
+          {
+            "title": "Alpha"
+          }
+        ],
+        "name": "Ann"
+      },
+      {
+        "books": [
+          {
+            "title": "Beta"
+          }
+        ],
+        "name": "Bob"
+      }
+    ]
+  },
+  "nested populate": {
+    "status": 200,
+    "data": [
+      {
+        "books": [
+          {
+            "genres": [
+              {
+                "name": "Fantasy"
+              },
+              {
+                "name": "Horror"
+              }
+            ],
+            "title": "Alpha"
+          }
+        ],
+        "name": "Ann"
+      },
+      {
+        "books": [
+          {
+            "genres": [
+              {
+                "name": "Horror"
+              }
+            ],
+            "title": "Beta"
+          }
+        ],
+        "name": "Bob"
+      }
+    ]
+  },
+  "nested populate by dotted path": {
+    "status": 200,
+    "data": [
+      {
+        "books": [
+          {
+            "genres": [
+              {
+                "name": "Fantasy"
+              },
+              {
+                "name": "Horror"
+              }
+            ],
+            "pages": 100,
+            "title": "Alpha"
+          }
+        ],
+        "name": "Ann"
+      },
+      {
+        "books": [
+          {
+            "genres": [
+              {
+                "name": "Horror"
+              }
+            ],
+            "title": "Beta"
+          }
+        ],
+        "name": "Bob"
+      }
+    ]
+  },
+  "populate=* inside a relation": {
+    "status": 200,
+    "data": [
+      {
+        "author": {
+          "books": [
+            {
+              "pages": 100,
+              "title": "Alpha"
+            }
+          ],
+          "name": "Ann"
+        },
+        "title": "Alpha"
+      },
+      {
+        "author": {
+          "books": [
+            {
+              "title": "Beta"
+            }
+          ],
+          "name": "Bob"
+        },
+        "title": "Beta"
+      },
+      {
+        "title": "Gamma"
+      }
+    ]
+  },
+  "populate on one document": {
+    "status": 200,
+    "data": {
+      "author": {
+        "name": "Ann"
+      },
+      "editions": [
+        {
+          "amount": 1,
+          "unit": "ea"
+        }
+      ],
+      "genres": [
+        {
+          "name": "Fantasy"
+        },
+        {
+          "name": "Horror"
+        }
+      ],
+      "price": {
+        "currency": "USD",
+        "minor": "100"
+      },
+      "title": "Alpha"
+    }
+  },
+  "filter by a to-one relation's field": {
+    "status": 200,
+    "data": [
+      {
+        "title": "Beta"
+      }
+    ]
+  },
+  "filter by a to-many relation's field": {
+    "status": 200,
+    "data": [
+      {
+        "title": "Alpha"
+      }
+    ]
+  },
+  "filter by a relation's id": {
+    "status": 200,
+    "data": [
+      {
+        "title": "Alpha"
+      }
+    ]
+  },
+  "filter on a missing to-one relation": {
+    "status": 200,
+    "data": [
+      {
+        "title": "Gamma"
+      }
+    ]
+  },
+  "relation filters inside $or": {
+    "status": 200,
+    "data": [
+      {
+        "title": "Alpha"
+      },
+      {
+        "title": "Beta"
+      }
+    ]
+  },
+  "sort by a to-one relation's field": {
+    "status": 200,
+    "data": [
+      {
+        "title": "Beta"
+      },
+      {
+        "title": "Alpha"
+      }
+    ]
+  },
+  "populate an unknown key by name": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid key nope",
+      "details": {
+        "key": "nope",
+        "path": "nope",
+        "source": "query",
+        "param": "populate"
+      }
+    }
+  },
+  "populate an unknown key as an object": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid key nope",
+      "details": {
+        "key": "nope",
+        "path": null,
+        "source": "query",
+        "param": "populate"
+      }
+    }
+  },
+  "populate=true is not a key": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid key true",
+      "details": {
+        "key": "true",
+        "path": "true",
+        "source": "query",
+        "param": "populate"
+      }
+    }
+  },
+  "nested populate of an unknown key": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid key nope at author",
+      "details": {
+        "key": "nope",
+        "path": "author",
+        "source": "query",
+        "param": "populate"
+      }
+    }
+  },
+  "filter on an unknown key of a relation": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid key nope at author",
+      "details": {
+        "key": "nope",
+        "path": "author",
+        "source": "query",
+        "param": "filters"
+      }
+    }
+  },
+  "create with relations": {
+    "status": 201,
+    "data": {
+      "author": {
+        "name": "Bob"
+      },
+      "genres": [
+        {
+          "name": "Poetry"
+        }
+      ],
+      "title": "Delta"
+    }
+  },
+  "an update that leaves relations out keeps them": {
+    "status": 200,
+    "data": {
+      "author": {
+        "name": "Bob"
+      },
+      "genres": [
+        {
+          "name": "Poetry"
+        }
+      ],
+      "pages": 7,
+      "title": "Delta"
+    }
+  },
+  "to-one by documentId": {
+    "status": 200,
+    "data": {
+      "author": {
+        "name": "Ann"
+      },
+      "genres": [
+        {
+          "name": "Poetry"
+        }
+      ],
+      "pages": 7,
+      "title": "Delta"
+    }
+  },
+  "to-many shorthand replaces the set": {
+    "status": 200,
+    "data": {
+      "author": {
+        "name": "Ann"
+      },
+      "genres": [
+        {
+          "name": "Fantasy"
+        },
+        {
+          "name": "Horror"
+        }
+      ],
+      "pages": 7,
+      "title": "Delta"
+    }
+  },
+  "disconnect": {
+    "status": 200,
+    "data": {
+      "author": {
+        "name": "Ann"
+      },
+      "genres": [
+        {
+          "name": "Horror"
+        }
+      ],
+      "pages": 7,
+      "title": "Delta"
+    }
+  },
+  "connect appends": {
+    "status": 200,
+    "data": {
+      "author": {
+        "name": "Ann"
+      },
+      "genres": [
+        {
+          "name": "Horror"
+        },
+        {
+          "name": "Poetry"
+        }
+      ],
+      "pages": 7,
+      "title": "Delta"
+    }
+  },
+  "set replaces": {
+    "status": 200,
+    "data": {
+      "author": {
+        "name": "Ann"
+      },
+      "genres": [
+        {
+          "name": "Fantasy"
+        }
+      ],
+      "pages": 7,
+      "title": "Delta"
+    }
+  },
+  "set wins over connect": {
+    "status": 200,
+    "data": {
+      "author": {
+        "name": "Ann"
+      },
+      "genres": [
+        {
+          "name": "Horror"
+        }
+      ],
+      "pages": 7,
+      "title": "Delta"
+    }
+  },
+  "connect by numeric id": {
+    "status": 200,
+    "data": {
+      "author": {
+        "name": "Ann"
+      },
+      "genres": [
+        {
+          "name": "Horror"
+        },
+        {
+          "name": "Poetry"
+        }
+      ],
+      "pages": 7,
+      "title": "Delta"
+    }
+  },
+  "to-many shorthand of numeric ids": {
+    "status": 200,
+    "data": {
+      "author": {
+        "name": "Ann"
+      },
+      "genres": [
+        {
+          "name": "Fantasy"
+        }
+      ],
+      "pages": 7,
+      "title": "Delta"
+    }
+  },
+  "an empty list clears": {
+    "status": 200,
+    "data": {
+      "author": {
+        "name": "Ann"
+      },
+      "genres": [],
+      "pages": 7,
+      "title": "Delta"
+    }
+  },
+  "to-one null clears": {
+    "status": 200,
+    "data": {
+      "genres": [],
+      "pages": 7,
+      "title": "Delta"
+    }
+  },
+  "to-one set": {
+    "status": 200,
+    "data": {
+      "author": {
+        "name": "Bob"
+      },
+      "genres": [],
+      "pages": 7,
+      "title": "Delta"
+    }
+  },
+  "to-one disconnect": {
+    "status": 200,
+    "data": {
+      "genres": [],
+      "pages": 7,
+      "title": "Delta"
+    }
+  },
+  "to-one connect an object": {
+    "status": 200,
+    "data": {
+      "author": {
+        "name": "Ann"
+      },
+      "genres": [],
+      "pages": 7,
+      "title": "Delta"
+    }
+  },
+  "to-one as an object": {
+    "status": 200,
+    "data": {
+      "author": {
+        "name": "Bob"
+      },
+      "genres": [],
+      "pages": 7,
+      "title": "Delta"
+    }
+  },
+  "write the inverse side": {
+    "status": 200,
+    "data": {
+      "books": [
+        {
+          "title": "Alpha"
+        },
+        {
+          "title": "Delta"
+        }
+      ],
+      "name": "Ann"
+    }
+  },
+  "the inverse write moved the to-one": {
+    "status": 200,
+    "data": {
+      "author": {
+        "name": "Ann"
+      },
+      "genres": [],
+      "pages": 7,
+      "title": "Delta"
+    }
+  },
+  "disconnect on the inverse side": {
+    "status": 200,
+    "data": {
+      "books": [
+        {
+          "title": "Alpha"
+        }
+      ],
+      "name": "Ann"
+    }
+  },
+  "connect an unknown documentId": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Document with id \"nopenopenopenopenopenope\", locale \"\" not found"
+    }
+  },
+  "a to-one unknown documentId": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Document with id \"nopenopenopenopenopenope\", locale \"\" not found"
+    }
+  },
+  "connect an unknown numeric id": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "1 relation(s) of type api::genre.genre associated with this entity do not exist"
+    }
+  },
+  "a failed write changed nothing": {
+    "status": 200,
+    "data": {
+      "genres": [],
+      "pages": 7,
+      "title": "Delta"
+    }
+  }
+}

@@ -78,6 +78,9 @@ export const generateCommand = async (
         projectName,
         ...(t.apiStyle !== undefined ? { apiStyle: t.apiStyle } : {}),
         ...(t.storageLayout !== undefined ? { storageLayout: t.storageLayout } : {}),
+        ...(t.alwaysPopulateComponents !== undefined
+          ? { alwaysPopulateComponents: t.alwaysPopulateComponents }
+          : {}),
       },
     );
     const errorGap = printGaps(io, result.gaps.gaps);

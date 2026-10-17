@@ -98,8 +98,22 @@ export const strapiApiBundle: IrBundle = {
         ],
       },
       { name: "Tag", kind: "collection", fields: [{ type: "string", name: "label" }] },
+      // Relation targets for Book: a to-one with an inverse side, and a to-many without one.
+      {
+        name: "Author",
+        kind: "collection",
+        names: { plural: "Authors" },
+        fields: [{ type: "string", name: "name", required: true }],
+      },
+      {
+        name: "Genre",
+        kind: "collection",
+        names: { plural: "Genres" },
+        fields: [{ type: "string", name: "name", required: true }],
+      },
       // Every scalar kind Strapi's REST filters cast differently, plus an embedded and a
-      // repeatable component: the type the REST query vectors (rest-query-vectors.json) run on.
+      // repeatable component: the type the REST query vectors (rest-query-vectors.json) run on. Its
+      // relations are what the populate vectors (populate-vectors.json) run on.
       {
         name: "Book",
         kind: "collection",
@@ -113,6 +127,14 @@ export const strapiApiBundle: IrBundle = {
           { type: "dateTime", name: "releasedAt" },
           { type: "component", name: "price", component: "Money", repeatable: false },
           { type: "component", name: "editions", component: "Quantity", repeatable: true },
+          {
+            type: "relation",
+            name: "author",
+            relationKind: "manyToOne",
+            target: "Author",
+            inverse: "books",
+          },
+          { type: "relation", name: "genres", relationKind: "manyToMany", target: "Genre" },
         ],
       },
     ],
@@ -164,6 +186,8 @@ export const strapiApiBundle: IrBundle = {
         },
         { contentType: "Tag", actions: ["read"] },
         { contentType: "Book", actions: ["create", "read", "update", "delete"] },
+        { contentType: "Author", actions: ["create", "read", "update", "delete"] },
+        { contentType: "Genre", actions: ["create", "read", "update", "delete"] },
       ],
     },
   ],

@@ -29,7 +29,7 @@ export default tseslint.config(
     // not the browser; flat config applies no environment globals by default.
     files: ["**/*.mjs"],
     languageOptions: {
-      globals: { console: "readonly", process: "readonly" },
+      globals: { console: "readonly", process: "readonly", fetch: "readonly" },
     },
   },
   {

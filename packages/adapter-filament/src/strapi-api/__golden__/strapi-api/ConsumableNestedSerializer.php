@@ -15,13 +15,16 @@ final class ConsumableSerializer
         'documentId' => ['column' => 'document_id', 'type' => 'string'],
         'recordId' => ['column' => 'record_id', 'type' => 'string'],
         'facts.calories' => ['column' => 'facts_calories', 'type' => 'decimal'],
-        'facts.additional' => ['relation' => 'factsAdditional', 'fields' => [
+        'facts.additional' => ['component' => 'factsAdditional', 'fields' => [
             'slug' => ['column' => 'slug', 'type' => 'string'],
             'amount' => ['column' => 'amount', 'type' => 'decimal'],
         ]],
         'createdAt' => ['column' => 'created_at', 'type' => 'dateTime'],
         'updatedAt' => ['column' => 'updated_at', 'type' => 'dateTime'],
     ];
+
+    /** Component keys, which Strapi leaves off the wire unless populate names them. */
+    public const COMPONENTS = ['facts'];
 
     /** Strapi-shaped wire object: camelCase keys, nested components, nulls omitted. */
     public static function toWire(Consumable $m): array

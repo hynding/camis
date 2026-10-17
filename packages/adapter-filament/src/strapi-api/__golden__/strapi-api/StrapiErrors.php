@@ -39,6 +39,12 @@ class StrapiErrors
             return;
         }
 
+        // A StrapiError is the client's mistake (a bad query or relation reference): answering it
+        // is enough, and logging each one would fill a shared host's disk quota.
+        if (method_exists($this->handler, 'dontReport')) {
+            $this->handler->dontReport(StrapiError::class);
+        }
+
         $this->handler->renderable(function (Throwable $e, Request $request): ?JsonResponse {
             if (! $request->is('api/*')) {
                 return null;

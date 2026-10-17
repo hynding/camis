@@ -14,13 +14,16 @@ final class ActivitySessionSerializer
         'id' => ['column' => 'id', 'type' => 'integer'],
         'documentId' => ['column' => 'document_id', 'type' => 'string'],
         'recordId' => ['column' => 'record_id', 'type' => 'string'],
-        'quantities' => ['relation' => 'quantities', 'fields' => [
+        'quantities' => ['component' => 'quantities', 'fields' => [
             'amount' => ['column' => 'amount', 'type' => 'decimal'],
             'unit' => ['column' => 'unit', 'type' => 'string'],
         ]],
         'createdAt' => ['column' => 'created_at', 'type' => 'dateTime'],
         'updatedAt' => ['column' => 'updated_at', 'type' => 'dateTime'],
     ];
+
+    /** Component keys, which Strapi leaves off the wire unless populate names them. */
+    public const COMPONENTS = ['quantities'];
 
     /** Strapi-shaped wire object: camelCase keys, nested components, nulls omitted. */
     public static function toWire(ActivitySession $m): array

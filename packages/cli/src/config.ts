@@ -9,6 +9,7 @@ export const targetConfig = z.object({
   dialect: z.enum(["sqlite", "mysql", "pgsql"]).optional(),
   apiStyle: z.enum(["laravel", "strapi"]).optional(),
   storageLayout: z.enum(["laravel", "strapi"]).optional(),
+  alwaysPopulateComponents: z.boolean().optional(),
 });
 export type TargetConfig = z.infer<typeof targetConfig>;
 

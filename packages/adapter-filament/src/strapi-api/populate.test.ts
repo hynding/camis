@@ -1,0 +1,176 @@
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { PHP_MARKER } from "../hooks/names";
+import { filamentAdapter } from "../generate";
+import { strapiApiBundle } from "./__fixtures__/strapi-api";
+import { emitStrapiPopulate, emitStrapiRelations } from "./populate-runtime";
+
+const hasPhp = (): boolean => {
+  try {
+    execFileSync("php", ["--version"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const generate = (options: { alwaysPopulateComponents?: boolean } = {}) =>
+  filamentAdapter.generate(strapiApiBundle, { projectName: "oyl", apiStyle: "strapi", ...options });
+const result = generate();
+const content = (p: string, r = result): string => {
+  const f = r.files.find((x) => x.path === p);
+  if (!f) throw new Error(`not generated: ${p}`);
+  return f.content;
+};
+const serializer = (model: string): string =>
+  content(`app/Http/Serializers/${model}Serializer.php`);
+const controller = (model: string): string =>
+  content(`app/Http/Controllers/Api/Generated/${model}ApiController.php`);
+
+const runtimes = [
+  { path: "app/Support/StrapiPopulate.php", emit: emitStrapiPopulate },
+  { path: "app/Support/StrapiRelations.php", emit: emitStrapiRelations },
+];
+
+describe("populate and relation runtime files", () => {
+  it.each(runtimes)("$path is generated, marked, strict and namespaced", ({ path }) => {
+    const php = content(path);
+    expect(php.startsWith(`<?php\n${PHP_MARKER}\n\ndeclare(strict_types=1);\n`)).toBe(true);
+    expect(php).toContain("namespace App\\Support;");
+  });
+  it("StrapiPopulate golden", async () => {
+    await expect(emitStrapiPopulate()).toMatchFileSnapshot(
+      "./__golden__/strapi-api/StrapiPopulate.php",
+    );
+  });
+  it("StrapiRelations golden", async () => {
+    await expect(emitStrapiRelations()).toMatchFileSnapshot(
+      "./__golden__/strapi-api/StrapiRelations.php",
+    );
+  });
+
+  describe.skipIf(!hasPhp())("php -l", () => {
+    let dir = "";
+    beforeAll(() => {
+      dir = mkdtempSync(join(tmpdir(), "camis-populate-runtime-"));
+    });
+    afterAll(() => rmSync(dir, { recursive: true, force: true }));
+    it.each(runtimes)("$path parses", ({ emit }) => {
+      const file = join(dir, "f.php");
+      writeFileSync(file, emit());
+      expect(execFileSync("php", ["-l", file], { encoding: "utf8" })).toContain("No syntax errors");
+    });
+  });
+});
+
+describe("serializer relation and component maps", () => {
+  it("lists the top-level components populate can name", () => {
+    expect(serializer("Book")).toContain("public const COMPONENTS = ['price', 'editions'];");
+    expect(serializer("Tag")).toContain("public const COMPONENTS = [];");
+  });
+  it("marks a repeatable component as a component, not a relation", () => {
+    expect(serializer("Book")).toContain("'editions' => ['component' => 'editions', 'fields' => [");
+  });
+  it("maps a to-one relation to its target serializer, model, foreign key and Strapi uid", () => {
+    expect(serializer("Book")).toContain(
+      "'author' => ['relation' => 'author', 'kind' => 'belongsTo', 'model' => \\App\\Models\\Author::class, 'serializer' => AuthorSerializer::class, 'foreignKey' => 'author_id', 'uid' => 'api::author.author'],",
+    );
+  });
+  it("maps a to-many relation through its pivot", () => {
+    expect(serializer("Book")).toContain(
+      "'genres' => ['relation' => 'genres', 'kind' => 'belongsToMany', 'model' => \\App\\Models\\Genre::class, 'serializer' => GenreSerializer::class, 'foreignKey' => null, 'uid' => 'api::genre.genre'],",
+    );
+  });
+  it("maps the inverse side of a relation, whose foreign key lives on the other table", () => {
+    expect(serializer("Author")).toContain(
+      "'books' => ['relation' => 'books', 'kind' => 'hasMany', 'model' => \\App\\Models\\Book::class, 'serializer' => BookSerializer::class, 'foreignKey' => 'author_id', 'uid' => 'api::book.book'],",
+    );
+  });
+  it("leaves out relations to the built-in user, which has no serializer to expose it through", () => {
+    expect(serializer("Note")).not.toContain("'owner' =>");
+  });
+});
+
+describe("controllers render through populate and write relations", () => {
+  const book = controller("Book");
+  it("renders lists and single documents through StrapiPopulate with the caller", () => {
+    expect(book).toContain(
+      "'data' => StrapiPopulate::many($rows, $request->query(), BookSerializer::class, $request->user()),",
+    );
+    expect(book).toContain(
+      "return StrapiPopulate::one($m, $request->query(), BookSerializer::class, $request->user());",
+    );
+  });
+  it("resolves relation input before saving and links it inside the transaction", () => {
+    expect(book).toContain(
+      "$links = StrapiRelations::read((array) $request->input('data', []), BookSerializer::FIELDS, $request->user());",
+    );
+    expect(book).toContain("StrapiRelations::link($m, $links);");
+  });
+  it("lets list filters and sort reach relations as the caller", () => {
+    expect(book).toContain(
+      "StrapiQuery::find($this->scoped($request), $request->query(), BookSerializer::FIELDS, $request->user());",
+    );
+  });
+  it("passes no caller when the project has no roles, so nothing is filtered by grants", () => {
+    const open = filamentAdapter.generate(
+      { ...strapiApiBundle, roles: [] },
+      { projectName: "oyl", apiStyle: "strapi" },
+    );
+    expect(content("app/Http/Controllers/Api/Generated/BookApiController.php", open)).toContain(
+      "StrapiPopulate::many($rows, $request->query(), BookSerializer::class, null)",
+    );
+  });
+});
+
+describe("always-populated components (a per-project option)", () => {
+  it("is off by default, as on Strapi 5", () => {
+    expect(content("config/camis.php")).toContain(
+      "'always_populate_components' => (bool) env('CAMIS_REST_ALWAYS_POPULATE_COMPONENTS', false),",
+    );
+  });
+  it("defaults on when the project asks for it", () => {
+    expect(content("config/camis.php", generate({ alwaysPopulateComponents: true }))).toContain(
+      "'always_populate_components' => (bool) env('CAMIS_REST_ALWAYS_POPULATE_COMPONENTS', true),",
+    );
+  });
+});
+
+interface Seed {
+  path: string;
+  as: string;
+  data: Record<string, unknown>;
+}
+const fixture = (name: string): string =>
+  readFileSync(fileURLToPath(new URL(`./__fixtures__/${name}`, import.meta.url)), "utf8");
+const vectors = JSON.parse(fixture("populate-vectors.json")) as {
+  seed: Seed[];
+  reads: { name: string }[];
+  writes: { name: string }[];
+};
+const expected = JSON.parse(fixture("populate-vectors.expected.json")) as Record<string, unknown>;
+
+describe("populate conformance vectors", () => {
+  it("seed rows only use fields their content type declares", () => {
+    const byPath = new Map(
+      strapiApiBundle.document.contentTypes.map((ct) => [
+        `/${(ct.names?.plural ?? ct.name).toLowerCase()}`,
+        new Set(ct.fields.map((f) => f.name)),
+      ]),
+    );
+    for (const row of vectors.seed) {
+      const names = byPath.get(row.path);
+      expect(names, row.path).toBeDefined();
+      for (const k of Object.keys(row.data)) expect(names).toContain(k);
+    }
+  });
+  it("every read and write has a unique name and a recorded strapi-php outcome", () => {
+    const names = [...vectors.reads, ...vectors.writes].map((v) => v.name);
+    expect(new Set(names).size).toBe(names.length);
+    expect(Object.keys(expected).sort()).toEqual([...names].sort());
+  });
+});

@@ -15,5 +15,8 @@ return [
         'default_limit' => (int) env('CAMIS_REST_DEFAULT_LIMIT', 25),
         'max_limit' => (int) env('CAMIS_REST_MAX_LIMIT', 100),
         'with_count' => (bool) env('CAMIS_REST_WITH_COUNT', true),
+        // Strapi 5 sends components only when populate names them; true keeps sending them
+        // always, as camis did before, for clients written against that.
+        'always_populate_components' => (bool) env('CAMIS_REST_ALWAYS_POPULATE_COMPONENTS', false),
     ],
 ];

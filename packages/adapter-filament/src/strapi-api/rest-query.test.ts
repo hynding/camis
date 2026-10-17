@@ -107,7 +107,7 @@ describe("serializer FIELDS map", () => {
   });
   it("maps a repeatable component to its child relation and the child's own fields", () => {
     const php = content("app/Http/Serializers/ActivitySessionSerializer.php");
-    expect(php).toContain("'quantities' => ['relation' => 'quantities', 'fields' => [");
+    expect(php).toContain("'quantities' => ['component' => 'quantities', 'fields' => [");
     expect(php).toContain("'unit' => ['column' => 'unit', 'type' => 'string'],");
   });
 });
@@ -116,13 +116,13 @@ describe("controllers speak Strapi's REST query language", () => {
   const tag = content("app/Http/Controllers/Api/Generated/TagApiController.php");
   it("lists through StrapiQuery and returns meta.pagination", () => {
     expect(tag).toContain(
-      "$found = StrapiQuery::find($this->scoped($request), $request->query(), TagSerializer::FIELDS);",
+      "$found = StrapiQuery::find($this->scoped($request), $request->query(), TagSerializer::FIELDS, $request->user());",
     );
     expect(tag).toContain("'meta' => ['pagination' => $found['pagination']]");
   });
-  it("applies the fields parameter to every response and gives single results an empty meta", () => {
+  it("renders every response through populate and gives single results an empty meta", () => {
     expect(tag).toContain(
-      "StrapiQuery::select(TagSerializer::toWire($m), $request->query(), TagSerializer::FIELDS)",
+      "StrapiPopulate::one($m, $request->query(), TagSerializer::class, $request->user())",
     );
     expect(tag).toContain("'meta' => new \\stdClass()");
   });
@@ -137,6 +137,9 @@ describe("Strapi error envelope", () => {
   });
   it("renders a StrapiError with its own status, name and details", () => {
     expect(middleware).toContain("$e instanceof StrapiError =>");
+  });
+  it("does not log a StrapiError: it is the client's mistake, and logs fill a shared host's quota", () => {
+    expect(middleware).toContain("$this->handler->dontReport(StrapiError::class);");
   });
 });
 

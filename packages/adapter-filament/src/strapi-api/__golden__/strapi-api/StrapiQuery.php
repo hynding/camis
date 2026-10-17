@@ -6,13 +6,20 @@ declare(strict_types=1);
 namespace App\Support;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Query\Expression;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Gate;
 
 /**
  * $fields is a serializer's FIELDS map: a wire path ('title', 'price.currency') to
- * ['column' => ..., 'type' => <IR field type>], or a repeatable component to
- * ['relation' => <child relation>, 'fields' => <the child's own map>].
+ * ['column' => ..., 'type' => <IR field type>], a repeatable component to
+ * ['component' => <child relation>, 'fields' => <the child's own map>], or a relation to
+ * ['relation' => <Eloquent relation>, 'kind' => ..., 'model' => ..., 'serializer' => ...].
+ *
+ * $viewer is the caller in a project with roles, and null in one without: a relation's rows are
+ * then reached only through the target's read grant and its forUser scope, as on its own route.
  */
 final class StrapiQuery
 {
@@ -27,19 +34,14 @@ final class StrapiQuery
     private const LIKE_SPECIAL_CHARS = ['\\', '%', '_'];
 
     /** @return array{rows: Collection, pagination: array<string, int>} */
-    public static function find(Builder $query, array $params, array $fields): array
+    public static function find(Builder $query, array $params, array $fields, ?Authenticatable $viewer = null): array
     {
-        if (array_key_exists('filters', $params)) {
-            if (! is_array($params['filters'])) {
-                throw StrapiError::validation('The filters parameter must be an object or an array');
-            }
-            self::where($query, $params['filters'], $fields, null);
-        }
+        self::filter($query, $params, $fields, $viewer, null);
         $pagination = is_array($params['pagination'] ?? null) ? $params['pagination'] : [];
         ['start' => $start, 'limit' => $limit] = self::paginationInfo($pagination);
         // Counted before ordering: Postgres rejects an ORDER BY on an aggregate without GROUP BY.
         $total = self::shouldCount($pagination) ? (clone $query)->count() : null;
-        self::sort($query, $params['sort'] ?? null, $fields);
+        self::sort($query, $params['sort'] ?? null, $fields, $viewer);
 
         if ($limit >= 0) {
             $query->limit($limit);
@@ -54,6 +56,44 @@ final class StrapiQuery
             'rows' => $query->get(),
             'pagination' => self::paginationResponse($start, $limit, $total, self::isPaged($pagination)),
         ];
+    }
+
+    /** The filters parameter; $at is the populate path it sits under, for error messages. */
+    public static function filter(Builder $query, array $params, array $fields, ?Authenticatable $viewer, ?string $at): void
+    {
+        if (! array_key_exists('filters', $params)) {
+            return;
+        }
+        if (! is_array($params['filters'])) {
+            throw StrapiError::validation('The filters parameter must be an object or an array');
+        }
+        self::where($query, $params['filters'], $fields, null, $viewer, $at);
+    }
+
+    /** The sort parameter, or id order when there is none. */
+    public static function order(Builder $query, mixed $sort, array $fields, ?Authenticatable $viewer): void
+    {
+        self::sort($query, $sort, $fields, $viewer);
+    }
+
+    /** Whether the caller may read the target of a FIELDS relation entry at all. */
+    public static function readable(array $relation, ?Authenticatable $viewer): bool
+    {
+        return $viewer === null || Gate::forUser($viewer)->allows('viewAny', $relation['model']);
+    }
+
+    /** Whether the caller may see one row of a relation's target. */
+    public static function visible(mixed $row, ?Authenticatable $viewer): bool
+    {
+        return $viewer === null || Gate::forUser($viewer)->allows('view', $row);
+    }
+
+    /** Narrows a target's query to the rows the caller's grants let it list. */
+    public static function scope(mixed $query, ?Authenticatable $viewer): void
+    {
+        if ($viewer !== null) {
+            $query->forUser($viewer);
+        }
     }
 
     /** Keeps the scalars the fields parameter names, plus id and documentId; components stay. */
@@ -72,7 +112,7 @@ final class StrapiQuery
         foreach ($wanted as $key) {
             if (! isset($fields[$key]['column']) || str_contains($key, '.')) {
                 // Strapi names the path only when the key is a component it refused to select.
-                $isComponent = isset($fields[$key]['relation']) || self::isComponent($fields, $key);
+                $isComponent = isset($fields[$key]['component']) || self::isComponent($fields, $key);
                 throw StrapiError::invalidKey($key, $isComponent ? $key : null, 'fields');
             }
         }
@@ -88,13 +128,16 @@ final class StrapiQuery
 
     // -------------------------------------------------------------------------------- filters
 
-    /** One level of a filters object; $path is the wire path of the component it sits in. */
-    private static function where(Builder $query, array $filters, array $fields, ?string $path): void
+    /**
+     * One level of a filters object. $path is the wire path of the component it sits in; $at is
+     * the relation path it was reached through, which only error messages name.
+     */
+    private static function where(Builder $query, array $filters, array $fields, ?string $path, ?Authenticatable $viewer, ?string $at): void
     {
         if (array_is_list($filters)) {
             foreach ($filters as $item) {
                 if (is_array($item)) {
-                    $query->where(fn (Builder $q) => self::where($q, $item, $fields, $path));
+                    $query->where(fn (Builder $q) => self::where($q, $item, $fields, $path, $viewer, $at));
                 }
             }
 
@@ -104,44 +147,91 @@ final class StrapiQuery
         foreach ($filters as $key => $value) {
             $key = (string) $key;
             if (in_array($key, self::GROUP_OPERATORS, true)) {
-                self::group($query, $key, $value, $fields, $path);
+                self::group($query, $key, $value, $fields, $path, $viewer, $at);
                 continue;
             }
             if ($key === '$not') {
                 if (is_array($value)) {
-                    $query->whereNot(fn (Builder $q) => self::where($q, $value, $fields, $path));
+                    $query->whereNot(fn (Builder $q) => self::where($q, $value, $fields, $path, $viewer, $at));
                 }
                 continue;
             }
             $wirePath = $path === null ? $key : "{$path}.{$key}";
+            $errorPath = self::join($at, $path);
             $field = $fields[$wirePath] ?? null;
             if (isset($field['column'])) {
-                self::attribute($query, $field['column'], $field['type'], $value, $wirePath);
-            } elseif (isset($field['relation'])) {
+                self::attribute($query, $query->qualifyColumn($field['column']), $field['type'], $value, self::join($at, $wirePath));
+            } elseif (isset($field['component'])) {
                 if (is_array($value)) {
-                    $query->whereHas($field['relation'], fn (Builder $q) => self::where($q, $value, $field['fields'], null));
+                    $query->whereHas($field['component'], fn (Builder $q) => self::where($q, $value, $field['fields'], null, $viewer, self::join($at, $wirePath)));
                 }
+            } elseif (isset($field['relation'])) {
+                if (! self::readable($field, $viewer)) {
+                    throw StrapiError::invalidKey($key, self::join($at, $wirePath), 'filters');
+                }
+                self::relation($query, $field, $value, $viewer, self::join($at, $wirePath));
             } elseif (self::isComponent($fields, $wirePath)) {
                 if (is_array($value)) {
-                    self::where($query, $value, $fields, $wirePath);
+                    self::where($query, $value, $fields, $wirePath, $viewer, $at);
                 }
             } else {
-                throw StrapiError::invalidKey($key, $path, 'filters');
+                throw StrapiError::invalidKey($key, $errorPath, 'filters');
             }
         }
     }
 
-    private static function group(Builder $query, string $operator, mixed $value, array $fields, ?string $path): void
+    /**
+     * A filter on a relation: $null/$notNull on the link itself, a bare value or list on the
+     * target's id, anything else on the target's own fields — always within the caller's view.
+     */
+    private static function relation(Builder $query, array $relation, mixed $value, ?Authenticatable $viewer, string $at): void
+    {
+        $within = fn (Builder $q) => self::scope($q, $viewer);
+        if (! is_array($value) || array_is_list($value)) {
+            $ids = array_map(fn ($v) => self::cast('integer', $v), is_array($value) ? $value : [$value]);
+            $query->whereHas($relation['relation'], function (Builder $q) use ($within, $ids): void {
+                $within($q);
+                $q->whereIn($q->qualifyColumn('id'), $ids);
+            });
+
+            return;
+        }
+        $nested = $value;
+        foreach (['$null' => true, '$notNull' => false] as $operator => $missing) {
+            if (! array_key_exists($operator, $nested)) {
+                continue;
+            }
+            self::truthy($nested[$operator]) === $missing
+                ? $query->whereDoesntHave($relation['relation'], $within)
+                : $query->whereHas($relation['relation'], $within);
+            unset($nested[$operator]);
+        }
+        if ($nested !== []) {
+            $query->whereHas($relation['relation'], function (Builder $q) use ($within, $nested, $relation, $viewer, $at): void {
+                $within($q);
+                self::where($q, $nested, $relation['serializer']::FIELDS, null, $viewer, $at);
+            });
+        }
+    }
+
+    private static function join(?string $a, ?string $b): ?string
+    {
+        $parts = array_filter([$a, $b], fn ($p) => $p !== null && $p !== '');
+
+        return $parts === [] ? null : implode('.', $parts);
+    }
+
+    private static function group(Builder $query, string $operator, mixed $value, array $fields, ?string $path, ?Authenticatable $viewer, ?string $at): void
     {
         if (! is_array($value)) {
             return;
         }
-        $query->where(function (Builder $q) use ($operator, $value, $fields, $path): void {
+        $query->where(function (Builder $q) use ($operator, $value, $fields, $path, $viewer, $at): void {
             foreach ($value as $item) {
                 if (! is_array($item)) {
                     continue;
                 }
-                $nested = fn (Builder $sub) => self::where($sub, $item, $fields, $path);
+                $nested = fn (Builder $sub) => self::where($sub, $item, $fields, $path, $viewer, $at);
                 $operator === '$or' ? $q->orWhere($nested) : $q->where($nested);
             }
         });
@@ -277,17 +367,22 @@ final class StrapiQuery
 
     // ----------------------------------------------------------------------------------- sort
 
-    private static function sort(Builder $query, mixed $sort, array $fields): void
+    private static function sort(Builder $query, mixed $sort, array $fields, ?Authenticatable $viewer): void
     {
         $orders = self::sortOrders($sort);
         if ($orders === []) {
-            $query->orderBy('id');
+            $query->orderBy($query->qualifyColumn('id'));
 
             return;
         }
         foreach ($orders as [$path, $direction]) {
             $field = $fields[$path] ?? null;
-            if (isset($field['relation']) || (! isset($field['column']) && self::isComponent($fields, $path))) {
+            $head = explode('.', $path, 2);
+            if (! isset($field) && isset($head[1], $fields[$head[0]]['relation'])) {
+                self::sortByRelation($query, $fields[$head[0]], $head[0], $head[1], $direction, $viewer);
+                continue;
+            }
+            if (isset($field['component']) || isset($field['relation']) || (! isset($field['column']) && self::isComponent($fields, $path))) {
                 // Strapi reads 'price:asc' on a component as { price: 'asc' } and rejects 'asc'.
                 throw StrapiError::invalidKey($direction, $path, 'sort');
             }
@@ -296,8 +391,29 @@ final class StrapiQuery
                 $key = $parent === null ? $path : substr($path, strlen($parent) + 1);
                 throw StrapiError::invalidKey($key, $parent, 'sort');
             }
-            $query->orderBy($field['column'], strtolower($direction));
+            $query->orderBy($query->qualifyColumn($field['column']), strtolower($direction));
         }
+    }
+
+    /**
+     * 'author.name:desc': ordered by a correlated subquery on the target, so the row count never
+     * changes. A to-many relation orders by its smallest value ascending and its largest
+     * descending, the row a join would put first.
+     */
+    private static function sortByRelation(Builder $query, array $relation, string $key, string $rest, string $direction, ?Authenticatable $viewer): void
+    {
+        $column = $relation['serializer']::FIELDS[$rest]['column'] ?? null;
+        if (! self::readable($relation, $viewer) || $column === null) {
+            $parent = str_contains($rest, '.') ? $key.'.'.substr($rest, 0, (int) strrpos($rest, '.')) : $key;
+            throw StrapiError::invalidKey(str_contains($rest, '.') ? substr($rest, (int) strrpos($rest, '.') + 1) : $rest, $parent, 'sort');
+        }
+        $eloquent = $query->getModel()->{$relation['relation']}();
+        $target = $eloquent->getRelated()->newQuery();
+        $wrapped = $query->getQuery()->getGrammar()->wrap($target->qualifyColumn($column));
+        $aggregate = strtolower($direction) === 'desc' ? 'max' : 'min';
+        $sub = $eloquent->getRelationExistenceQuery($target, $query, new Expression("{$aggregate}({$wrapped})"));
+        self::scope($sub, $viewer);
+        $query->orderBy($sub->toBase(), strtolower($direction));
     }
 
     /** @return list<array{0: string, 1: string}> wire path and direction, in order */

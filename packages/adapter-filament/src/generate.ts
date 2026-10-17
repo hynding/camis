@@ -105,6 +105,7 @@ export const filamentAdapter: GenerateAdapter = {
       bundle: ir,
       emitted,
       fkNames: rel.fkNames,
+      alwaysPopulateComponents: options.alwaysPopulateComponents === true,
       observedModels: new Set([...hooks.observedModels, ...aiObservedModels]),
     };
     const strapi =

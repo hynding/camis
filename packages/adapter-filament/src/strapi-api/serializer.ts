@@ -1,6 +1,6 @@
 import type { StorageLayout } from "@camis/adapter-kernel";
 import { PHP_MARKER } from "../hooks/names";
-import type { WireChild, WireScalar, WireShape } from "./wire-shape";
+import type { WireChild, WireRelation, WireScalar, WireShape } from "./wire-shape";
 
 const NUMERIC_INT = new Set(["integer"]);
 // Strapi renders a `biginteger` as a string: a 64-bit value does not survive a JSON number.
@@ -145,10 +145,14 @@ const hasHelper = `
 const fieldEntry = (s: WireScalar, indent: string): string =>
   `${indent}'${s.key.join(".")}' => ['column' => '${s.column}', 'type' => '${s.type}'],`;
 
+const relationEntry = (r: WireRelation, indent: string): string =>
+  `${indent}'${r.key}' => ['relation' => '${r.relation}', 'kind' => '${r.kind}', 'model' => \\App\\Models\\${r.model}::class, 'serializer' => ${r.model}Serializer::class, 'foreignKey' => ${r.foreignKey === null ? "null" : `'${r.foreignKey}'`}, 'uid' => '${r.uid}'],`;
+
 /**
  * The wire path → column map `App\Support\StrapiQuery` filters, sorts and selects by: every
  * scalar Strapi exposes (`id`, `documentId`, the timestamps, embedded component scalars as dotted
- * paths), and each repeatable component as its child relation with the child's own map.
+ * paths), each repeatable component as its child relation with the child's own map, and each
+ * relation as its Eloquent relation, target and storage.
  */
 const fieldsConstant = (shape: WireShape): string => {
   const l2 = `${UNIT}${UNIT}`;
@@ -161,14 +165,16 @@ const fieldsConstant = (shape: WireShape): string => {
   ];
   const children = shape.children.map(
     (c) =>
-      `${l2}'${c.key.join(".")}' => ['relation' => '${c.relation}', 'fields' => [\n${c.scalars.map((s) => fieldEntry(s, l3)).join("\n")}\n${l2}]],`,
+      `${l2}'${c.key.join(".")}' => ['component' => '${c.relation}', 'fields' => [\n${c.scalars.map((s) => fieldEntry(s, l3)).join("\n")}\n${l2}]],`,
   );
   const rows = [
     ...[id, documentId, ...shape.scalars].map((s) => fieldEntry(s, l2)),
     ...children,
+    ...shape.relations.map((r) => relationEntry(r, l2)),
     ...timestamps.map((s) => fieldEntry(s, l2)),
   ];
-  return `\n    /** Wire path → column, for StrapiQuery's filters, sort and fields. */\n    public const FIELDS = [\n${rows.join("\n")}\n    ];\n`;
+  const components = shape.components.map((c) => `'${c}'`).join(", ");
+  return `\n    /** Wire path → column, for StrapiQuery's filters, sort and fields. */\n    public const FIELDS = [\n${rows.join("\n")}\n    ];\n\n    /** Component keys, which Strapi leaves off the wire unless populate names them. */\n    public const COMPONENTS = [${components}];\n`;
 };
 
 export const emitSerializer = (shape: WireShape, layout: StorageLayout = "laravel"): string => {

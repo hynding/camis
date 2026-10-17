@@ -8,7 +8,9 @@ namespace App\Http\Controllers\Api\Generated;
 use App\Http\Controllers\Controller;
 use App\Http\Serializers\NoteSerializer;
 use App\Models\Note;
+use App\Support\StrapiPopulate;
 use App\Support\StrapiQuery;
+use App\Support\StrapiRelations;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
@@ -37,20 +39,20 @@ class NoteApiController extends Controller
         return $m;
     }
 
-    /** One row on the wire, narrowed by the request's `fields` parameter. */
+    /** One row on the wire, shaped by the request's `fields` and `populate` parameters. */
     protected function wire(Request $request, Note $m): array
     {
-        return StrapiQuery::select(NoteSerializer::toWire($m), $request->query(), NoteSerializer::FIELDS);
+        return StrapiPopulate::one($m, $request->query(), NoteSerializer::class, $request->user());
     }
 
     public function index(Request $request): JsonResponse
     {
         $this->authorize('viewAny', Note::class);
-        $found = StrapiQuery::find($this->scoped($request), $request->query(), NoteSerializer::FIELDS);
+        $found = StrapiQuery::find($this->scoped($request), $request->query(), NoteSerializer::FIELDS, $request->user());
         $rows = $found['rows']->filter(fn (Note $m) => $request->user()->can('view', $m));
 
         return response()->json([
-            'data' => $rows->map(fn (Note $m) => $this->wire($request, $m))->values()->all(),
+            'data' => StrapiPopulate::many($rows, $request->query(), NoteSerializer::class, $request->user()),
             'meta' => ['pagination' => $found['pagination']],
         ]);
     }
@@ -66,11 +68,14 @@ class NoteApiController extends Controller
     {
         $this->authorize('create', Note::class);
         $wire = NoteSerializer::fromWire((array) $request->input('data', []));
+        $links = StrapiRelations::read((array) $request->input('data', []), NoteSerializer::FIELDS, $request->user());
         $m = new Note($wire['columns']);
         $m->owner_id = $request->user()->id;
-        DB::transaction(function () use ($m, $wire): void {
+        DB::transaction(function () use ($m, $wire, $links): void {
+            StrapiRelations::associate($m, $links);
             $m->save();
             NoteSerializer::syncChildren($m, $wire['children']);
+            StrapiRelations::link($m, $links);
         });
 
         return response()->json(['data' => $this->wire($request, $m->fresh()), 'meta' => new \stdClass()], 201);
@@ -79,12 +84,16 @@ class NoteApiController extends Controller
     public function update(Request $request, string $key): JsonResponse
     {
         $wire = NoteSerializer::fromWire((array) $request->input('data', []));
+        $links = StrapiRelations::read((array) $request->input('data', []), NoteSerializer::FIELDS, $request->user());
         $m = $this->scoped($request)->where(self::KEY, $key)->first();
         if ($m !== null && $request->user()->can('view', $m)) {
             $this->authorize('update', $m);
-            DB::transaction(function () use ($m, $wire): void {
-                $m->fill($wire['columns'])->save();
+            DB::transaction(function () use ($m, $wire, $links): void {
+                $m->fill($wire['columns']);
+                StrapiRelations::associate($m, $links);
+                $m->save();
                 NoteSerializer::syncChildren($m, $wire['children']);
+                StrapiRelations::link($m, $links);
             });
 
             return response()->json(['data' => $this->wire($request, $m->fresh()), 'meta' => new \stdClass()]);
@@ -97,9 +106,11 @@ class NoteApiController extends Controller
         $m = new Note($wire['columns']);
         $m->{self::KEY} = $key;
         $m->owner_id = $request->user()->id;
-        DB::transaction(function () use ($m, $wire): void {
+        DB::transaction(function () use ($m, $wire, $links): void {
+            StrapiRelations::associate($m, $links);
             $m->save();
             NoteSerializer::syncChildren($m, $wire['children']);
+            StrapiRelations::link($m, $links);
         });
 
         return response()->json(['data' => $this->wire($request, $m->fresh()), 'meta' => new \stdClass()], 200);
