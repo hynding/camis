@@ -97,6 +97,28 @@ describe("loadConfig — apiStyle + protected", () => {
   });
 });
 
+describe("loadConfig — alwaysPopulateComponents", () => {
+  it("accepts a boolean and rejects anything else", async () => {
+    const config = (value: unknown) =>
+      fakeIo({
+        "/proj/camis.config.json": JSON.stringify({
+          ir: "./camis.json",
+          targets: [
+            {
+              target: "filament",
+              out: "./laravel",
+              apiStyle: "strapi",
+              alwaysPopulateComponents: value,
+            },
+          ],
+        }),
+      });
+    const r = await loadConfig(config(true), "camis.config.json");
+    expect(r.ok && r.value.targets[0]?.alwaysPopulateComponents).toBe(true);
+    expect((await loadConfig(config("yes"), "camis.config.json")).ok).toBe(false);
+  });
+});
+
 describe("loadConfig — storageLayout", () => {
   it('accepts storageLayout "strapi" alongside apiStyle "strapi"', async () => {
     const io = fakeIo({
