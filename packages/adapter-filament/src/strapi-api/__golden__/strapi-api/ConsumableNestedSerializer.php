@@ -26,6 +26,9 @@ final class ConsumableSerializer
     /** Component keys, which Strapi leaves off the wire unless populate names them. */
     public const COMPONENTS = ['facts'];
 
+    /** Whether each document has a draft and, once published, a published version. */
+    public const DRAFT_PUBLISH = false;
+
     /** Strapi-shaped wire object: camelCase keys, nested components, nulls omitted. */
     public static function toWire(Consumable $m): array
     {
