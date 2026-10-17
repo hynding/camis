@@ -14,21 +14,22 @@ req() { # method path body → prints "<status>\n<body>"
 }
 st() { sed -n 1p; }
 body() { sed -n 2p; }
-drafts() { req GET '/posts?status=draft&fields[0]=title' | body | jq -r '[.data[].title] | join(",")'; }
+# Titles carry a prefix so posts other checks left in the database do not count.
+drafts() { req GET '/posts?status=draft&fields[0]=title' | body | jq -r '[.data[].title | select(startswith("grant:"))] | join(",")'; }
 
-DENIED=$(req POST /posts '{"data":{"title":"Denied"}}')
+DENIED=$(req POST /posts '{"data":{"title":"grant:Denied"}}')
 [[ "$(echo "$DENIED" | st)" == "403" && "$(echo "$DENIED" | body | jq -r .error.name)" == "ForbiddenError" ]] || fail "create that publishes: $DENIED"
 [[ "$(drafts)" == "" ]] || fail "a denied create left a draft: $(drafts)"
 
-DRAFT=$(req POST '/posts?status=draft' '{"data":{"title":"Draft"}}')
+DRAFT=$(req POST '/posts?status=draft' '{"data":{"title":"grant:Draft"}}')
 [[ "$(echo "$DRAFT" | st)" == "201" && "$(echo "$DRAFT" | body | jq -r .data.publishedAt)" == "null" ]] || fail "create a draft: $DRAFT"
 ID=$(echo "$DRAFT" | body | jq -r .data.documentId)
 
-UPDATE=$(req PUT "/posts/$ID" '{"data":{"title":"Changed"}}')
+UPDATE=$(req PUT "/posts/$ID" '{"data":{"title":"grant:Changed"}}')
 [[ "$(echo "$UPDATE" | st)" == "403" ]] || fail "update that publishes: $UPDATE"
-[[ "$(drafts)" == "Draft" ]] || fail "a denied update changed the draft: $(drafts)"
+[[ "$(drafts)" == "grant:Draft" ]] || fail "a denied update changed the draft: $(drafts)"
 [[ "$(req GET "/posts/$ID" | st)" == "404" ]] || fail "a denied update published the document"
 
-[[ "$(req PUT "/posts/$ID?status=draft" '{"data":{"title":"Changed"}}' | st)" == "200" ]] || fail "update the draft"
-[[ "$(drafts)" == "Changed" ]] || fail "draft update: $(drafts)"
+[[ "$(req PUT "/posts/$ID?status=draft" '{"data":{"title":"grant:Changed"}}' | st)" == "200" ]] || fail "update the draft"
+[[ "$(drafts)" == "grant:Changed" ]] || fail "draft update: $(drafts)"
 echo "PUBLISH GRANT OK"
