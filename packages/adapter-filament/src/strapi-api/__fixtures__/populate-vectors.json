@@ -1,0 +1,295 @@
+{
+  "about": "Strapi 5 populate, relation filters and relation writes, checked against strapi-php. Run on an empty database: seeds in order, then reads, then writes in order. '@type:Name' is that row's documentId, '#type:Name' its numeric id. Responses are compared after dropping null values and the id, documentId, createdAt, updatedAt and publishedAt keys.",
+  "seed": [
+    { "path": "/authors", "as": "authors:Ann", "data": { "name": "Ann" } },
+    { "path": "/authors", "as": "authors:Bob", "data": { "name": "Bob" } },
+    { "path": "/genres", "as": "genres:Fantasy", "data": { "name": "Fantasy" } },
+    { "path": "/genres", "as": "genres:Horror", "data": { "name": "Horror" } },
+    { "path": "/genres", "as": "genres:Poetry", "data": { "name": "Poetry" } },
+    {
+      "path": "/books",
+      "as": "books:Alpha",
+      "data": {
+        "title": "Alpha",
+        "pages": 100,
+        "price": { "minor": 100, "currency": "USD" },
+        "editions": [{ "amount": 1, "unit": "ea" }],
+        "author": "@authors:Ann",
+        "genres": ["@genres:Fantasy", "@genres:Horror"]
+      }
+    },
+    {
+      "path": "/books",
+      "as": "books:Beta",
+      "data": {
+        "title": "Beta",
+        "author": { "connect": ["@authors:Bob"] },
+        "genres": { "connect": [{ "documentId": "@genres:Horror" }] }
+      }
+    },
+    { "path": "/books", "as": "books:Gamma", "data": { "title": "Gamma" } }
+  ],
+  "reads": [
+    { "name": "no populate: components and relations are left out", "path": "/books", "query": "" },
+    { "name": "populate=*", "path": "/books", "query": "populate=*" },
+    {
+      "name": "populate one relation by name",
+      "path": "/books",
+      "query": "fields[0]=title&populate=author"
+    },
+    {
+      "name": "populate a comma list",
+      "path": "/books",
+      "query": "fields[0]=title&populate=price,genres"
+    },
+    {
+      "name": "populate a list",
+      "path": "/books",
+      "query": "fields[0]=title&populate[0]=editions&populate[1]=author"
+    },
+    {
+      "name": "populate an object with true",
+      "path": "/books",
+      "query": "fields[0]=title&populate[price]=true"
+    },
+    {
+      "name": "fields inside a relation",
+      "path": "/books",
+      "query": "fields[0]=title&populate[author][fields][0]=name"
+    },
+    {
+      "name": "fields inside a component",
+      "path": "/books",
+      "query": "fields[0]=title&populate[price][fields][0]=currency"
+    },
+    {
+      "name": "filters inside a populated relation",
+      "path": "/books",
+      "query": "fields[0]=title&populate[genres][filters][name][$eq]=Horror&populate[genres][fields][0]=name"
+    },
+    {
+      "name": "sort inside a populated relation",
+      "path": "/books",
+      "query": "fields[0]=title&populate[genres][sort]=name:desc&populate[genres][fields][0]=name"
+    },
+    {
+      "name": "count of a populated relation",
+      "path": "/books",
+      "query": "fields[0]=title&populate[genres][count]=true"
+    },
+    {
+      "name": "the inverse side of a relation",
+      "path": "/authors",
+      "query": "fields[0]=name&populate[books][fields][0]=title"
+    },
+    {
+      "name": "nested populate",
+      "path": "/authors",
+      "query": "fields[0]=name&populate[books][fields][0]=title&populate[books][populate][genres][fields][0]=name"
+    },
+    {
+      "name": "nested populate by dotted path",
+      "path": "/authors",
+      "query": "fields[0]=name&populate[0]=books.genres"
+    },
+    {
+      "name": "populate=* inside a relation",
+      "path": "/books",
+      "query": "fields[0]=title&populate[author][fields][0]=name&populate[author][populate]=*"
+    },
+    {
+      "name": "populate on one document",
+      "path": "/books/@books:Alpha",
+      "query": "fields[0]=title&populate=*"
+    },
+    {
+      "name": "filter by a to-one relation's field",
+      "path": "/books",
+      "query": "fields[0]=title&filters[author][name][$eq]=Bob"
+    },
+    {
+      "name": "filter by a to-many relation's field",
+      "path": "/books",
+      "query": "fields[0]=title&filters[genres][name][$eq]=Fantasy"
+    },
+    {
+      "name": "filter by a relation's id",
+      "path": "/books",
+      "query": "fields[0]=title&filters[author][id][$eq]=#authors:Ann"
+    },
+    {
+      "name": "filter on a missing to-one relation",
+      "path": "/books",
+      "query": "fields[0]=title&filters[author][$null]=true"
+    },
+    {
+      "name": "relation filters inside $or",
+      "path": "/books",
+      "query": "fields[0]=title&filters[$or][0][author][name][$eq]=Ann&filters[$or][1][genres][name][$eq]=Horror"
+    },
+    {
+      "name": "sort by a to-one relation's field",
+      "path": "/books",
+      "query": "fields[0]=title&filters[author][$notNull]=true&sort=author.name:desc"
+    },
+    { "name": "populate an unknown key by name", "path": "/books", "query": "populate=nope" },
+    {
+      "name": "populate an unknown key as an object",
+      "path": "/books",
+      "query": "populate[nope]=true"
+    },
+    { "name": "populate=true is not a key", "path": "/books", "query": "populate=true" },
+    {
+      "name": "nested populate of an unknown key",
+      "path": "/books",
+      "query": "populate[author][populate][nope]=true"
+    },
+    {
+      "name": "filter on an unknown key of a relation",
+      "path": "/books",
+      "query": "filters[author][nope][$eq]=1"
+    }
+  ],
+  "writes": [
+    {
+      "name": "create with relations",
+      "method": "POST",
+      "path": "/books",
+      "as": "books:Delta",
+      "data": {
+        "title": "Delta",
+        "author": "@authors:Bob",
+        "genres": { "connect": ["@genres:Poetry"] }
+      }
+    },
+    {
+      "name": "an update that leaves relations out keeps them",
+      "method": "PUT",
+      "path": "/books/@books:Delta",
+      "data": { "pages": 7 }
+    },
+    {
+      "name": "to-one by documentId",
+      "method": "PUT",
+      "path": "/books/@books:Delta",
+      "data": { "author": "@authors:Ann" }
+    },
+    {
+      "name": "to-many shorthand replaces the set",
+      "method": "PUT",
+      "path": "/books/@books:Delta",
+      "data": { "genres": ["@genres:Fantasy", "@genres:Horror"] }
+    },
+    {
+      "name": "disconnect",
+      "method": "PUT",
+      "path": "/books/@books:Delta",
+      "data": { "genres": { "disconnect": ["@genres:Fantasy"] } }
+    },
+    {
+      "name": "connect appends",
+      "method": "PUT",
+      "path": "/books/@books:Delta",
+      "data": { "genres": { "connect": ["@genres:Poetry"] } }
+    },
+    {
+      "name": "set replaces",
+      "method": "PUT",
+      "path": "/books/@books:Delta",
+      "data": { "genres": { "set": ["@genres:Fantasy"] } }
+    },
+    {
+      "name": "set wins over connect",
+      "method": "PUT",
+      "path": "/books/@books:Delta",
+      "data": { "genres": { "set": ["@genres:Horror"], "connect": ["@genres:Poetry"] } }
+    },
+    {
+      "name": "connect by numeric id",
+      "method": "PUT",
+      "path": "/books/@books:Delta",
+      "data": { "genres": { "connect": [{ "id": "#genres:Poetry" }] } }
+    },
+    {
+      "name": "to-many shorthand of numeric ids",
+      "method": "PUT",
+      "path": "/books/@books:Delta",
+      "data": { "genres": ["#genres:Fantasy"] }
+    },
+    {
+      "name": "an empty list clears",
+      "method": "PUT",
+      "path": "/books/@books:Delta",
+      "data": { "genres": [] }
+    },
+    {
+      "name": "to-one null clears",
+      "method": "PUT",
+      "path": "/books/@books:Delta",
+      "data": { "author": null }
+    },
+    {
+      "name": "to-one set",
+      "method": "PUT",
+      "path": "/books/@books:Delta",
+      "data": { "author": { "set": ["@authors:Bob"] } }
+    },
+    {
+      "name": "to-one disconnect",
+      "method": "PUT",
+      "path": "/books/@books:Delta",
+      "data": { "author": { "disconnect": ["@authors:Bob"] } }
+    },
+    {
+      "name": "to-one connect an object",
+      "method": "PUT",
+      "path": "/books/@books:Delta",
+      "data": { "author": { "connect": [{ "documentId": "@authors:Ann" }] } }
+    },
+    {
+      "name": "to-one as an object",
+      "method": "PUT",
+      "path": "/books/@books:Delta",
+      "data": { "author": { "documentId": "@authors:Bob" } }
+    },
+    {
+      "name": "write the inverse side",
+      "method": "PUT",
+      "path": "/authors/@authors:Ann",
+      "query": "fields[0]=name&populate[books][fields][0]=title",
+      "data": { "books": { "connect": ["@books:Delta"] } }
+    },
+    {
+      "name": "the inverse write moved the to-one",
+      "method": "GET",
+      "path": "/books/@books:Delta"
+    },
+    {
+      "name": "disconnect on the inverse side",
+      "method": "PUT",
+      "path": "/authors/@authors:Ann",
+      "query": "fields[0]=name&populate[books][fields][0]=title",
+      "data": { "books": { "disconnect": ["@books:Delta"] } }
+    },
+    {
+      "name": "connect an unknown documentId",
+      "method": "PUT",
+      "path": "/books/@books:Delta",
+      "data": { "genres": { "connect": ["nopenopenopenopenopenope"] } }
+    },
+    {
+      "name": "a to-one unknown documentId",
+      "method": "PUT",
+      "path": "/books/@books:Delta",
+      "data": { "author": "nopenopenopenopenopenope" }
+    },
+    {
+      "name": "connect an unknown numeric id",
+      "method": "PUT",
+      "path": "/books/@books:Delta",
+      "data": { "genres": { "connect": [{ "id": 999 }] } }
+    },
+    { "name": "a failed write changed nothing", "method": "GET", "path": "/books/@books:Delta" }
+  ],
+  "defaultQuery": "fields[0]=title&fields[1]=pages&populate[author][fields][0]=name&populate[genres][fields][0]=name"
+}
