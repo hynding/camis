@@ -138,6 +138,9 @@ describe("Strapi error envelope", () => {
   it("renders a StrapiError with its own status, name and details", () => {
     expect(middleware).toContain("$e instanceof StrapiError =>");
   });
+  it("does not log a StrapiError: it is the client's mistake, and logs fill a shared host's quota", () => {
+    expect(middleware).toContain("$this->handler->dontReport(StrapiError::class);");
+  });
 });
 
 describe("REST config", () => {
