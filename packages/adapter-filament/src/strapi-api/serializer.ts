@@ -146,7 +146,7 @@ const fieldEntry = (s: WireScalar, indent: string): string =>
   `${indent}'${s.key.join(".")}' => ['column' => '${s.column}', 'type' => '${s.type}'],`;
 
 const relationEntry = (r: WireRelation, indent: string): string =>
-  `${indent}'${r.key}' => ['relation' => '${r.relation}', 'kind' => '${r.kind}', 'model' => \\App\\Models\\${r.model}::class, 'serializer' => ${r.model}Serializer::class, 'foreignKey' => ${r.foreignKey === null ? "null" : `'${r.foreignKey}'`}, 'uid' => '${r.uid}'],`;
+  `${indent}'${r.key}' => ['relation' => '${r.relation}', 'kind' => '${r.kind}', 'model' => \\App\\Models\\${r.model}::class, 'serializer' => ${r.model}Serializer::class, 'foreignKey' => ${r.foreignKey === null ? "null" : `'${r.foreignKey}'`}, 'uid' => '${r.uid}', 'holder' => '${r.holder}', 'draftPublish' => ${r.draftPublish}],`;
 
 /**
  * The wire path → column map `App\Support\StrapiQuery` filters, sorts and selects by: every
@@ -162,6 +162,9 @@ const fieldsConstant = (shape: WireShape): string => {
   const timestamps: WireScalar[] = [
     { key: ["createdAt"], column: "created_at", type: "dateTime" },
     { key: ["updatedAt"], column: "updated_at", type: "dateTime" },
+    ...(shape.draftPublish
+      ? [{ key: ["publishedAt"], column: "published_at", type: "dateTime" as const }]
+      : []),
   ];
   const children = shape.children.map(
     (c) =>
@@ -174,7 +177,7 @@ const fieldsConstant = (shape: WireShape): string => {
     ...timestamps.map((s) => fieldEntry(s, l2)),
   ];
   const components = shape.components.map((c) => `'${c}'`).join(", ");
-  return `\n    /** Wire path → column, for StrapiQuery's filters, sort and fields. */\n    public const FIELDS = [\n${rows.join("\n")}\n    ];\n\n    /** Component keys, which Strapi leaves off the wire unless populate names them. */\n    public const COMPONENTS = [${components}];\n`;
+  return `\n    /** Wire path → column, for StrapiQuery's filters, sort and fields. */\n    public const FIELDS = [\n${rows.join("\n")}\n    ];\n\n    /** Component keys, which Strapi leaves off the wire unless populate names them. */\n    public const COMPONENTS = [${components}];\n\n    /** Whether each document has a draft and, once published, a published version. */\n    public const DRAFT_PUBLISH = ${shape.draftPublish};\n`;
 };
 
 export const emitSerializer = (shape: WireShape, layout: StorageLayout = "laravel"): string => {
@@ -193,12 +196,12 @@ use App\\Models\\${shape.model};
 
 final class ${shape.model}Serializer
 {${layout === "laravel" ? fieldsConstant(shape) : ""}
-    /** Strapi-shaped wire object: camelCase keys, nested components, nulls omitted. */
+    /** Strapi-shaped wire object: camelCase keys, nested components, nulls omitted${shape.draftPublish ? " (but publishedAt, null on a draft)" : ""}. */
     public static function toWire(${shape.model} $m): array
     {
         return self::omitNulls([
 ${toWireBody(shape, l3, layout)}
-        ]);
+        ])${shape.draftPublish && layout === "laravel" ? ` + [\n${l3}'publishedAt' => $m->published_at${ZULU_MS},\n        ]` : ""};
     }
 
     /** Inverse of toWire: ['columns' => [...], 'children' => [relation => list<row>]]. Unknown keys ignored. */

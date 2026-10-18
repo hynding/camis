@@ -75,7 +75,7 @@ ${assignBlock}${persist("")}
     : `
         abort(404);`;
 
-  return {
+  const base = {
     uses: [
       "App\\Support\\StrapiPopulate",
       "App\\Support\\StrapiQuery",
@@ -112,6 +112,85 @@ ${auth(`$this->authorize('delete', $m);`)}        $m->delete();
 
         return response()->json(null, 204);`,
     helpers: `
+    /** One row on the wire, shaped by the request's \`fields\` and \`populate\` parameters. */
+    protected function wire(Request $request, ${M} $m): array
+    {
+        return StrapiPopulate::one($m, $request->query(), ${S}::class, ${viewer});
+    }
+`,
+  };
+  return shape.draftPublish ? { ...base, ...versionedParts(spec, base.query, readLinks) } : base;
+};
+
+/**
+ * A draft-and-publish type reads the version its status parameter names and writes through the
+ * draft: create and update save the draft and then publish it unless status=draft (behind the
+ * publish grant, inside the same transaction), and delete removes every version.
+ */
+const versionedParts = (
+  spec: ControllerSpec,
+  documents: string,
+  readLinks: string,
+): Pick<
+  ControllerParts,
+  "uses" | "query" | "storeBody" | "updateBody" | "destroyBody" | "helpers"
+> => {
+  const { shape, secured } = spec;
+  const M = shape.model;
+  const S = `${M}Serializer`;
+  const viewer = secured ? "$request->user()" : "null";
+  const auth = authLine(secured);
+  const assign = spec.assigns
+    .map((name) => `${STMT}$m->${snakeColumn(name)}_id = $request->user()->id;`)
+    .join("\n");
+  const assignBlock = assign ? `${assign}\n` : "";
+  const persist = (
+    fill: string,
+  ): string => `${STMT}$m = DB::transaction(function () use ($request, $m, $wire, $links): ${M} {
+${fill}${STMT}    StrapiRelations::associate($m, $links);
+${STMT}    $m->save();
+${STMT}    ${S}::syncChildren($m, $wire['children']);
+${STMT}    StrapiRelations::link($m, $links);
+${STMT}    if (! StrapiDocuments::draftOnly($request->query())) {
+${auth(`$this->authorize('publish', $m);`, `${STMT}        `)}${STMT}        $m = StrapiDocuments::publish($m, ${S}::class);
+${STMT}    }
+
+${STMT}    return $m;
+${STMT}});`;
+  const draft = `        $m = StrapiDocuments::draft($this->documents($request), $key);
+        if ($m === null${secured ? ` || ! $request->user()->can('view', $m)` : ""}) {
+            abort(404);
+        }
+`;
+  return {
+    uses: [
+      "App\\Support\\StrapiDocuments",
+      "App\\Support\\StrapiPopulate",
+      "App\\Support\\StrapiQuery",
+      "App\\Support\\StrapiRelations",
+    ],
+    query: "StrapiDocuments::version($this->documents($request), $request->query())",
+    storeBody: `${auth(`$this->authorize('create', ${M}::class);`)}        $wire = ${S}::fromWire((array) $request->input('data', []));
+${readLinks}
+        $m = new ${M}($wire['columns']);
+${assignBlock}${persist("")}
+
+        return response()->json(['data' => $this->wire($request, $m->fresh()), 'meta' => new \\stdClass()], 201);`,
+    updateBody: `        $wire = ${S}::fromWire((array) $request->input('data', []));
+${readLinks}
+${draft}${auth(`$this->authorize('update', $m);`)}${persist(`${STMT}    $m->fill($wire['columns']);\n`)}
+
+        return response()->json(['data' => $this->wire($request, $m->fresh()), 'meta' => new \\stdClass()]);`,
+    destroyBody: `${draft}${auth(`$this->authorize('delete', $m);`)}        StrapiDocuments::destroy($m);
+
+        return response()->json(null, 204);`,
+    helpers: `
+    /** Every version of every document the caller may see; scoped() narrows it to one status. */
+    protected function documents(Request $request): Builder
+    {
+        return ${documents};
+    }
+
     /** One row on the wire, shaped by the request's \`fields\` and \`populate\` parameters. */
     protected function wire(Request $request, ${M} $m): array
     {

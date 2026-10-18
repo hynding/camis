@@ -11,7 +11,9 @@ use App\Http\Controllers\Api\AuthorApiController;
 use App\Http\Controllers\Api\BookApiController;
 use App\Http\Controllers\Api\GenreApiController;
 use App\Http\Controllers\Api\NoteApiController;
+use App\Http\Controllers\Api\PostApiController;
 use App\Http\Controllers\Api\TagApiController;
+use App\Http\Controllers\Api\TopicApiController;
 use App\Http\Controllers\Api\TransactionApiController;
 use App\Http\Middleware\StrapiErrors;
 use Illuminate\Support\Facades\Route;
@@ -71,11 +73,23 @@ Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle):
         Route::put('/notes/{key}', [NoteApiController::class, 'update']);
         Route::delete('/notes/{key}', [NoteApiController::class, 'destroy']);
 
+        Route::get('/posts', [PostApiController::class, 'index']);
+        Route::post('/posts', [PostApiController::class, 'store']);
+        Route::get('/posts/{key}', [PostApiController::class, 'show']);
+        Route::put('/posts/{key}', [PostApiController::class, 'update']);
+        Route::delete('/posts/{key}', [PostApiController::class, 'destroy']);
+
         Route::get('/tags', [TagApiController::class, 'index']);
         Route::post('/tags', [TagApiController::class, 'store']);
         Route::get('/tags/{key}', [TagApiController::class, 'show']);
         Route::put('/tags/{key}', [TagApiController::class, 'update']);
         Route::delete('/tags/{key}', [TagApiController::class, 'destroy']);
+
+        Route::get('/topics', [TopicApiController::class, 'index']);
+        Route::post('/topics', [TopicApiController::class, 'store']);
+        Route::get('/topics/{key}', [TopicApiController::class, 'show']);
+        Route::put('/topics/{key}', [TopicApiController::class, 'update']);
+        Route::delete('/topics/{key}', [TopicApiController::class, 'destroy']);
 
         Route::get('/transactions', [TransactionApiController::class, 'index']);
         Route::post('/transactions', [TransactionApiController::class, 'store']);

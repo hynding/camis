@@ -1,0 +1,235 @@
+{
+  "create publishes, linking only published targets": {
+    "status": 201,
+    "data": {
+      "author": {
+        "name": "Ann"
+      },
+      "publishedAt": "present",
+      "title": "First",
+      "topics": [
+        {
+          "name": "Live"
+        }
+      ],
+      "views": 1
+    }
+  },
+  "create with status=draft makes only a draft": {
+    "status": 201,
+    "data": {
+      "publishedAt": "absent",
+      "title": "Second"
+    }
+  },
+  "lists show published documents by default": {
+    "status": 200,
+    "data": [
+      {
+        "publishedAt": "present",
+        "title": "First"
+      }
+    ]
+  },
+  "status=published is the default spelled out": {
+    "status": 200,
+    "data": [
+      {
+        "title": "First"
+      }
+    ]
+  },
+  "status=draft lists every document's draft": {
+    "status": 200,
+    "data": [
+      {
+        "publishedAt": "absent",
+        "title": "First"
+      },
+      {
+        "publishedAt": "absent",
+        "title": "Second"
+      }
+    ]
+  },
+  "a draft links to drafts, published or not": {
+    "status": 200,
+    "data": {
+      "title": "First",
+      "topics": [
+        {
+          "name": "Live"
+        },
+        {
+          "name": "DraftOnly"
+        }
+      ]
+    }
+  },
+  "a document with no published version is not found by default": {
+    "status": 404,
+    "error": {
+      "name": "NotFoundError",
+      "message": "Not Found"
+    }
+  },
+  "its draft is found with status=draft": {
+    "status": 200,
+    "data": {
+      "title": "Second"
+    }
+  },
+  "update with status=draft edits only the draft": {
+    "status": 200,
+    "data": {
+      "publishedAt": "absent",
+      "title": "First, edited"
+    }
+  },
+  "the published version is unchanged": {
+    "status": 200,
+    "data": {
+      "author": {
+        "name": "Ann"
+      },
+      "publishedAt": "present",
+      "title": "First",
+      "topics": [
+        {
+          "name": "Live"
+        }
+      ],
+      "views": 1
+    }
+  },
+  "update without status publishes the draft with the change": {
+    "status": 200,
+    "data": {
+      "author": {
+        "name": "Ann"
+      },
+      "publishedAt": "present",
+      "title": "First, edited",
+      "topics": [
+        {
+          "name": "Live"
+        }
+      ],
+      "views": 2
+    }
+  },
+  "update without status publishes a draft-only document": {
+    "status": 200,
+    "data": {
+      "publishedAt": "present",
+      "title": "Second"
+    }
+  },
+  "both are listed once each": {
+    "status": 200,
+    "data": [
+      {
+        "title": "First, edited"
+      },
+      {
+        "title": "Second"
+      }
+    ]
+  },
+  "publish a topic": {
+    "status": 200,
+    "data": {
+      "name": "DraftOnly",
+      "publishedAt": "present"
+    }
+  },
+  "a published post keeps the links it was published with": {
+    "status": 200,
+    "data": {
+      "author": {
+        "name": "Ann"
+      },
+      "publishedAt": "present",
+      "title": "First, edited",
+      "topics": [
+        {
+          "name": "Live"
+        }
+      ],
+      "views": 2
+    }
+  },
+  "republishing picks up the newly published topic": {
+    "status": 200,
+    "data": {
+      "author": {
+        "name": "Ann"
+      },
+      "publishedAt": "present",
+      "title": "First, edited",
+      "topics": [
+        {
+          "name": "Live"
+        },
+        {
+          "name": "DraftOnly"
+        }
+      ],
+      "views": 2
+    }
+  },
+  "make a draft-only topic": {
+    "status": 201,
+    "data": {
+      "name": "Later"
+    }
+  },
+  "a type without draft and publish links a draft-only target as nothing yet": {
+    "status": 201,
+    "data": {
+      "title": "Bound"
+    }
+  },
+  "publish that topic": {
+    "status": 200,
+    "data": {
+      "name": "Later"
+    }
+  },
+  "the book now shows the published topic": {
+    "status": 200,
+    "data": {
+      "title": "Bound",
+      "topic": {
+        "name": "Later"
+      }
+    }
+  },
+  "edit the topic's draft": {
+    "status": 200,
+    "data": {
+      "name": "Later, edited"
+    }
+  },
+  "the book still shows the published topic": {
+    "status": 200,
+    "data": {
+      "title": "Bound",
+      "topic": {
+        "name": "Later"
+      }
+    }
+  },
+  "delete removes the draft and the published version": {
+    "status": 204,
+    "data": null
+  },
+  "only the other document is left": {
+    "status": 200,
+    "data": [
+      {
+        "title": "Second"
+      }
+    ]
+  }
+}

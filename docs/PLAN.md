@@ -362,7 +362,7 @@ behavioural oracle for the wire format.
 | --- | --- | --- |
 | 19 | REST query core: `documentId`, `filters`, `sort`, `pagination`, `fields`, `meta`, error envelope (`strapi/utils`, `core-api`) | below |
 | 20 | Relations on the wire and `populate` (components, relations, media unpopulated by default, as in Strapi 5); `connect`/`disconnect`/`set` writes | changes today's always-nested components |
-| 21 | Draft & Publish: Strapi 5's two-row document model, `status=draft\|published`, publish/unpublish/discard in Filament (`core` document service) | today `draftPublish` is silently dropped on this layout |
+| 21 | Draft & Publish: Strapi 5's two-row document model, `status=draft\|published`, publish/unpublish/discard in Filament (`core` document service) | below |
 | 22 | Internationalization: IR `localized` content types and fields, `locale` param, locales settings, Filament locale switcher (`strapi/i18n`) | IR change |
 | 23 | Media library and Upload API: Strapi's `files` shape, `/api/upload`, formats via GD, local disk default, S3 and Cloudinary through Laravel filesystems (`strapi/upload`) | |
 | 24 | Users & Permissions completion: forgot/reset/change password, email confirmation, refresh sessions, OAuth providers, blocked users, roles × actions matrix editor (`plugin-users-permissions`) | |
@@ -454,6 +454,47 @@ where Strapi keeps link order (the pivot has no order column); `populate` inside
 the strapi storage layout still always sends components; relation filters and sort trust the
 target's `forUser` scope, so a read condition with no SQL form (the Phase 19 overcount gap) can be
 probed through them.
+
+## Phase 21 — Draft & Publish (`adapter-filament`)
+
+**Goal:** a `draftPublish` content type behaves over REST as on Strapi 5, and the Filament admin
+edits drafts and publishes them, on the laravel storage layout with the Strapi API style.
+
+- Strapi 5's document model: every document has a draft row, which every write goes through, and
+  once published a second row with `published_at` set; the two share `document_id` (indexed, no
+  longer unique for these types). `App\Support\StrapiDocuments` publishes by copying the draft
+  over the published row (columns, repeatable components, the links the type holds), and
+  unpublishes, discards and deletes.
+- REST: reads show the published version unless `status=draft`; create and update write the draft
+  and publish it unless `status=draft`, behind the `publish` grant and inside the same transaction
+  (a denied publish writes nothing); delete removes both versions.
+- Links: between two versioned types, and from a versioned type to a plain one, each version holds
+  its own, and a published version links only to targets that were published when it was (a later
+  publish of the target shows on the next publish). A plain type's link to a versioned one holds
+  the target's draft and is shown as its published version; a plain target's link to a versioned
+  type is reached from the published version through its draft. Relation input names either
+  version and links the draft.
+- Admin: the resource lists one row per document (its draft) with a Draft / Published / Modified
+  badge; the edit page publishes (saving first), unpublishes and discards changes, each behind its
+  grant; relation pickers offer drafts.
+- Gaps reported, not dropped: the Laravel API style keeps one row per record; `upsertBy` or an own
+  `publishedAt` field disables draft and publish for the type; a unique field is not enforced by the
+  database (a draft and its published version share the value).
+- An `onPublish` hook also runs when a document's published version is first created.
+
+**Exit criteria:** `draft-publish-vectors.json`, recorded from strapi-php, passes in the
+`strapi-api` boot job on SQLite, MySQL and Postgres, with `strapi-publish-grant.sh` (the denied
+paths) and the admin's `DraftAdminTest`; the populate and REST vectors and the smoke still pass.
+
+**Status (2026-10-17):** the 24 Draft & Publish checks, the 50 populate checks, the 72 REST checks,
+the publish-grant checks and the admin test pass on SQLite and Postgres with all caches on.
+
+Known gaps: relation `filters` and `sort` read the stored link, so they do not follow the two
+projections above (a plain type filtering on a versioned target matches its draft); unpublish and
+discard are admin-only (Strapi's REST API has neither); Modified compares second-resolution
+timestamps, so an edit in the same second as the publish reads as Published; a required foreign
+key to a versioned type blocks unpublishing a target it links; the strapi storage layout keeps
+reporting draft and publish as a gap.
 
 ---
 

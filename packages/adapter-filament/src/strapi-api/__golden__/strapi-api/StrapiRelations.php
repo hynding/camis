@@ -52,6 +52,10 @@ final class StrapiRelations
                 continue;
             }
             $eloquent = $row->{$relation['relation']}();
+            // Published versions keep the links they were published with until the next publish.
+            if ($relation['draftPublish']) {
+                $eloquent->whereNull($eloquent->getRelated()->qualifyColumn('published_at'));
+            }
             $current = array_map('intval', $eloquent->pluck($eloquent->getRelated()->getQualifiedKeyName())->all());
             $wanted = $relation['kind'] === 'hasOne'
                 ? array_values(array_filter([self::single($current[0] ?? null, $link)]))
@@ -171,10 +175,14 @@ final class StrapiRelations
             throw StrapiError::validation($message, ['errors' => [['path' => [], 'message' => $message, 'name' => 'ValidationError']]]);
         }
 
+        if ($relation['draftPublish']) {
+            $byId = self::drafts($relation, $byId);
+        }
+
         $resolved = [];
         foreach ($references as $reference) {
             $reference = is_array($reference) ? ($reference['documentId'] ?? $reference['id']) : $reference;
-            $resolved[] = is_string($reference) && ! ctype_digit($reference) ? $byDocumentId[$reference] : (int) $reference;
+            $resolved[] = is_string($reference) && ! ctype_digit($reference) ? $byDocumentId[$reference] : $byId[(int) $reference];
         }
 
         return array_values(array_unique($resolved));
@@ -187,6 +195,9 @@ final class StrapiRelations
             return [];
         }
         $query = $relation['model']::query()->whereIn($column, array_values(array_unique($values)));
+        if ($relation['draftPublish'] && $column === 'document_id') {
+            $query->whereNull('published_at');
+        }
         StrapiQuery::scope($query, $viewer);
         $rows = [];
         foreach ($query->get() as $row) {
@@ -196,5 +207,27 @@ final class StrapiRelations
         }
 
         return $rows;
+    }
+
+    /**
+     * @param array<int, int> $byId
+     * @return array<int, int> each id → its document's draft id
+     */
+    private static function drafts(array $relation, array $byId): array
+    {
+        if ($byId === []) {
+            return [];
+        }
+        $documents = $relation['model']::query()->whereKey(array_keys($byId))->pluck('document_id', 'id');
+        $drafts = $relation['model']::query()
+            ->whereIn('document_id', $documents->unique()->values()->all())
+            ->whereNull('published_at')
+            ->pluck('id', 'document_id');
+        $mapped = [];
+        foreach (array_keys($byId) as $id) {
+            $mapped[$id] = (int) $drafts[$documents[$id]];
+        }
+
+        return $mapped;
     }
 }

@@ -62,15 +62,20 @@ const call = async (method, path, query, data) => {
   }
 };
 
-// Server-assigned and draft-and-publish keys differ between runs and runtimes; nulls are dropped
-// because camis leaves null scalars off the wire (a known gap, PLAN.md Phase 19).
-const VOLATILE = new Set(["id", "documentId", "createdAt", "updatedAt", "publishedAt"]);
+// Server-assigned keys differ between runs and runtimes; nulls are dropped because camis leaves
+// null scalars off the wire (a known gap, PLAN.md Phase 19). publishedAt is dropped too unless the
+// vector file asks for its presence: Strapi stamps it even on types without draft and publish.
+const publishedAtPresence = vectors.publishedAt === "presence";
+const VOLATILE = new Set(["id", "documentId", "createdAt", "updatedAt"]);
 const normalize = (value) => {
   if (Array.isArray(value)) return value.map(normalize);
   if (value !== null && typeof value === "object")
     return Object.fromEntries(
       Object.entries(value)
-        .filter(([k, v]) => v !== null && !VOLATILE.has(k))
+        .filter(
+          ([k, v]) => !VOLATILE.has(k) && (k === "publishedAt" ? publishedAtPresence : v !== null),
+        )
+        .map(([k, v]) => (k === "publishedAt" ? [k, v === null ? "absent" : "present"] : [k, v]))
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([k, v]) => [k, normalize(v)]),
     );
@@ -88,7 +93,7 @@ const outcome = ({ status, body }) => {
 };
 
 for (const row of vectors.seed) {
-  const { status, body } = await call("POST", row.path, "", row.data);
+  const { status, body } = await call("POST", row.path, row.query ?? "", row.data);
   if (status !== 200 && status !== 201) {
     console.error(`SEED FAIL ${row.as} (${status}): ${JSON.stringify(body)}`);
     process.exit(1);

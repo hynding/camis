@@ -9,6 +9,21 @@ export const emitHookObserver = (h: Hook, ct: ContentType): string => {
   const apply = h.output
     .map((f) => `            $record->${snakeColumn(f.name)} = $out['${f.name}'];`)
     .join("\n");
+  const run = `            $out = (new ${h.name}())->run([${inputArr}]);
+${apply}
+            $record->saveQuietly();`;
+  // A draft-and-publish document's published version is a row of its own, created on first publish.
+  const created =
+    ct.options?.draftPublish === true
+      ? `    public function created(${n.model} $record): void
+    {
+        if ($record->published_at !== null) {
+${run}
+        }
+    }
+
+`
+      : "";
   return `<?php
 ${PHP_MARKER}
 
@@ -21,12 +36,10 @@ use App\\Models\\${n.model};
 
 class ${n.model}Observer
 {
-    public function updated(${n.model} $record): void
+${created}    public function updated(${n.model} $record): void
     {
         if ($record->wasChanged('published_at') && $record->published_at !== null) {
-            $out = (new ${h.name}())->run([${inputArr}]);
-${apply}
-            $record->saveQuietly();
+${run}
         }
     }
 }

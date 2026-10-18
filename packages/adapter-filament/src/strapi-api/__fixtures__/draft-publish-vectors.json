@@ -1,0 +1,175 @@
+{
+  "about": "Strapi 5 Draft & Publish over REST, checked against strapi-php. Run on an empty database, in order, with strapi-populate-vectors.mjs. Post and Topic have draftAndPublish; Author and Book do not. publishedAt is compared as present or absent.",
+  "publishedAt": "presence",
+  "seed": [
+    { "path": "/authors", "as": "authors:Ann", "data": { "name": "Ann" } },
+    { "path": "/topics", "as": "topics:Live", "data": { "name": "Live" } },
+    {
+      "path": "/topics",
+      "query": "status=draft",
+      "as": "topics:DraftOnly",
+      "data": { "name": "DraftOnly" }
+    }
+  ],
+  "reads": [],
+  "defaultQuery": "fields[0]=title&fields[1]=views&fields[2]=publishedAt&populate[topics][fields][0]=name&populate[author][fields][0]=name",
+  "writes": [
+    {
+      "name": "create publishes, linking only published targets",
+      "method": "POST",
+      "path": "/posts",
+      "as": "posts:First",
+      "data": {
+        "title": "First",
+        "views": 1,
+        "author": "@authors:Ann",
+        "topics": ["@topics:Live", "@topics:DraftOnly"]
+      }
+    },
+    {
+      "name": "create with status=draft makes only a draft",
+      "method": "POST",
+      "path": "/posts",
+      "query": "status=draft&fields[0]=title&fields[1]=publishedAt",
+      "as": "posts:Second",
+      "data": { "title": "Second" }
+    },
+    {
+      "name": "lists show published documents by default",
+      "method": "GET",
+      "path": "/posts",
+      "query": "fields[0]=title&fields[1]=publishedAt"
+    },
+    {
+      "name": "status=published is the default spelled out",
+      "method": "GET",
+      "path": "/posts",
+      "query": "status=published&fields[0]=title"
+    },
+    {
+      "name": "status=draft lists every document's draft",
+      "method": "GET",
+      "path": "/posts",
+      "query": "status=draft&fields[0]=title&fields[1]=publishedAt"
+    },
+    {
+      "name": "a draft links to drafts, published or not",
+      "method": "GET",
+      "path": "/posts/@posts:First",
+      "query": "status=draft&fields[0]=title&populate[topics][fields][0]=name"
+    },
+    {
+      "name": "a document with no published version is not found by default",
+      "method": "GET",
+      "path": "/posts/@posts:Second"
+    },
+    {
+      "name": "its draft is found with status=draft",
+      "method": "GET",
+      "path": "/posts/@posts:Second",
+      "query": "status=draft&fields[0]=title"
+    },
+    {
+      "name": "update with status=draft edits only the draft",
+      "method": "PUT",
+      "path": "/posts/@posts:First",
+      "query": "status=draft&fields[0]=title&fields[1]=publishedAt",
+      "data": { "title": "First, edited" }
+    },
+    {
+      "name": "the published version is unchanged",
+      "method": "GET",
+      "path": "/posts/@posts:First"
+    },
+    {
+      "name": "update without status publishes the draft with the change",
+      "method": "PUT",
+      "path": "/posts/@posts:First",
+      "data": { "views": 2 }
+    },
+    {
+      "name": "update without status publishes a draft-only document",
+      "method": "PUT",
+      "path": "/posts/@posts:Second",
+      "query": "fields[0]=title&fields[1]=publishedAt",
+      "data": {}
+    },
+    {
+      "name": "both are listed once each",
+      "method": "GET",
+      "path": "/posts",
+      "query": "fields[0]=title"
+    },
+    {
+      "name": "publish a topic",
+      "method": "PUT",
+      "path": "/topics/@topics:DraftOnly",
+      "query": "fields[0]=name&fields[1]=publishedAt",
+      "data": {}
+    },
+    {
+      "name": "a published post keeps the links it was published with",
+      "method": "GET",
+      "path": "/posts/@posts:First"
+    },
+    {
+      "name": "republishing picks up the newly published topic",
+      "method": "PUT",
+      "path": "/posts/@posts:First",
+      "data": {}
+    },
+    {
+      "name": "make a draft-only topic",
+      "method": "POST",
+      "path": "/topics",
+      "query": "status=draft&fields[0]=name",
+      "as": "topics:Later",
+      "data": { "name": "Later" }
+    },
+    {
+      "name": "a type without draft and publish links a draft-only target as nothing yet",
+      "method": "POST",
+      "path": "/books",
+      "query": "fields[0]=title&populate[topic][fields][0]=name",
+      "as": "books:Bound",
+      "data": { "title": "Bound", "topic": "@topics:Later" }
+    },
+    {
+      "name": "publish that topic",
+      "method": "PUT",
+      "path": "/topics/@topics:Later",
+      "query": "fields[0]=name",
+      "data": {}
+    },
+    {
+      "name": "the book now shows the published topic",
+      "method": "GET",
+      "path": "/books/@books:Bound",
+      "query": "fields[0]=title&populate[topic][fields][0]=name"
+    },
+    {
+      "name": "edit the topic's draft",
+      "method": "PUT",
+      "path": "/topics/@topics:Later",
+      "query": "status=draft&fields[0]=name",
+      "data": { "name": "Later, edited" }
+    },
+    {
+      "name": "the book still shows the published topic",
+      "method": "GET",
+      "path": "/books/@books:Bound",
+      "query": "fields[0]=title&populate[topic][fields][0]=name"
+    },
+    {
+      "name": "delete removes the draft and the published version",
+      "method": "DELETE",
+      "path": "/posts/@posts:First"
+    },
+    {
+      "name": "only the other document is left",
+      "method": "GET",
+      "path": "/posts",
+      "query": "status=draft&fields[0]=title"
+    }
+  ]
+}

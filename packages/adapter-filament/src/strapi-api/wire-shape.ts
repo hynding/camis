@@ -28,6 +28,10 @@ export interface WireRelation {
   foreignKey: string | null;
   /** The target's Strapi uid (`api::genre.genre`), which Strapi's relation errors name. */
   uid: string;
+  /** Which side's rows hold the link: this one (its FK or its own pivot) or the target. */
+  holder: "self" | "target";
+  /** Whether the target keeps a draft and a published version (Phase 21). */
+  draftPublish: boolean;
 }
 export interface WireShape {
   model: string;
@@ -41,12 +45,18 @@ export interface WireShape {
   components: string[];
   /** Relations to other content types, both the sides this type declares and their inverses. */
   relations: WireRelation[];
+  /** Whether this type keeps a draft and a published version of each document. */
+  draftPublish: boolean;
 }
 
 // `_fkNames` is accepted for signature stability with the controller emitter (Task 5+);
 // relations are excluded by construction, so the current shape builder never reads it.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export const wireShape = (doc: IrDocument, ct: ContentType, _fkNames: string[]): WireShape => {
+export const wireShape = (
+  doc: IrDocument,
+  ct: ContentType,
+  _fkNames: string[],
+  versioned: ReadonlySet<string> = new Set(),
+): WireShape => {
   const names = filamentNames(ct);
   const expansion = expandComponents(doc, ct);
   const top: WireScalar[] = ct.fields
@@ -79,7 +89,8 @@ export const wireShape = (doc: IrDocument, ct: ContentType, _fkNames: string[]):
     scalars: [...top, ...embedded],
     children,
     components,
-    relations: wireRelations(doc, ct),
+    relations: wireRelations(doc, ct, versioned),
+    draftPublish: versioned.has(ct.name),
   };
 };
 
@@ -90,13 +101,18 @@ const strapiUid = (ct: ContentType): string => `api::${kebab(ct.name)}.${kebab(c
  * left out: there is no user serializer to expose it through, and the grant that assigns it
  * (`assign: { owner: "user.id" }`) already owns its writes.
  */
-const wireRelations = (doc: IrDocument, ct: ContentType): WireRelation[] => {
+const wireRelations = (
+  doc: IrDocument,
+  ct: ContentType,
+  versioned: ReadonlySet<string>,
+): WireRelation[] => {
   const byName = new Map(doc.contentTypes.map((c) => [c.name, c]));
   const entry = (
     name: string,
     kind: WireRelationKind,
     target: ContentType,
     foreignKey: string | null,
+    holder: WireRelation["holder"],
   ): WireRelation => ({
     key: camelKey(name),
     relation: name,
@@ -104,6 +120,8 @@ const wireRelations = (doc: IrDocument, ct: ContentType): WireRelation[] => {
     model: filamentNames(target).model,
     foreignKey,
     uid: strapiUid(target),
+    holder,
+    draftPublish: versioned.has(target.name),
   });
   const own: WireRelation[] = [];
   for (const f of ct.fields) {
@@ -111,11 +129,12 @@ const wireRelations = (doc: IrDocument, ct: ContentType): WireRelation[] => {
     const target = byName.get(f.target);
     if (target === undefined || target.builtin !== undefined) continue;
     if (f.relationKind === "manyToOne" || f.relationKind === "oneToOne") {
-      own.push(entry(f.name, "belongsTo", target, `${snakeColumn(f.name)}_id`));
+      own.push(entry(f.name, "belongsTo", target, `${snakeColumn(f.name)}_id`, "self"));
     } else if (f.relationKind === "oneToMany") {
-      own.push(entry(f.name, "hasMany", target, `${snakeColumn(f.inverse ?? snake(ct.name))}_id`));
+      const fk = `${snakeColumn(f.inverse ?? snake(ct.name))}_id`;
+      own.push(entry(f.name, "hasMany", target, fk, "target"));
     } else {
-      own.push(entry(f.name, "belongsToMany", target, null));
+      own.push(entry(f.name, "belongsToMany", target, null, "self"));
     }
   }
   const inverse: WireRelation[] = [];
@@ -124,13 +143,15 @@ const wireRelations = (doc: IrDocument, ct: ContentType): WireRelation[] => {
       for (const g of other.fields) {
         if (g.type !== "relation" || g.target !== ct.name || g.inverse === undefined) continue;
         if (g.relationKind === "manyToOne") {
-          inverse.push(entry(g.inverse, "hasMany", other, `${snakeColumn(g.name)}_id`));
+          inverse.push(entry(g.inverse, "hasMany", other, `${snakeColumn(g.name)}_id`, "target"));
         } else if (g.relationKind === "oneToOne") {
-          inverse.push(entry(g.inverse, "hasOne", other, `${snakeColumn(g.name)}_id`));
+          inverse.push(entry(g.inverse, "hasOne", other, `${snakeColumn(g.name)}_id`, "target"));
         } else if (g.relationKind === "oneToMany") {
-          inverse.push(entry(g.inverse, "belongsTo", other, `${snakeColumn(g.inverse)}_id`));
+          inverse.push(
+            entry(g.inverse, "belongsTo", other, `${snakeColumn(g.inverse)}_id`, "self"),
+          );
         } else {
-          inverse.push(entry(g.inverse, "belongsToMany", other, null));
+          inverse.push(entry(g.inverse, "belongsToMany", other, null, "target"));
         }
       }
     }

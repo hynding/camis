@@ -98,6 +98,27 @@ export const strapiApiBundle: IrBundle = {
         ],
       },
       { name: "Tag", kind: "collection", fields: [{ type: "string", name: "label" }] },
+      // Draft & Publish (draft-publish-vectors.json): Topic is a target with both versions, Post a
+      // source with both, linking a plain type (Author) and a draft-and-publish one (Topic).
+      {
+        name: "Topic",
+        kind: "collection",
+        names: { plural: "Topics" },
+        options: { draftPublish: true },
+        fields: [{ type: "string", name: "name", required: true }],
+      },
+      {
+        name: "Post",
+        kind: "collection",
+        names: { plural: "Posts" },
+        options: { draftPublish: true },
+        fields: [
+          { type: "string", name: "title", required: true },
+          { type: "integer", name: "views" },
+          { type: "relation", name: "author", relationKind: "manyToOne", target: "Author" },
+          { type: "relation", name: "topics", relationKind: "manyToMany", target: "Topic" },
+        ],
+      },
       // Relation targets for Book: a to-one with an inverse side, and a to-many without one.
       {
         name: "Author",
@@ -135,6 +156,8 @@ export const strapiApiBundle: IrBundle = {
             inverse: "books",
           },
           { type: "relation", name: "genres", relationKind: "manyToMany", target: "Genre" },
+          // A plain type linking a draft-and-publish one: it shows the target's published version.
+          { type: "relation", name: "topic", relationKind: "manyToOne", target: "Topic" },
         ],
       },
     ],
@@ -188,6 +211,8 @@ export const strapiApiBundle: IrBundle = {
         { contentType: "Book", actions: ["create", "read", "update", "delete"] },
         { contentType: "Author", actions: ["create", "read", "update", "delete"] },
         { contentType: "Genre", actions: ["create", "read", "update", "delete"] },
+        { contentType: "Topic", actions: ["create", "read", "update", "delete", "publish"] },
+        { contentType: "Post", actions: ["create", "read", "update", "delete", "publish"] },
       ],
     },
   ],
