@@ -163,11 +163,13 @@ final class StrapiPopulate
             StrapiQuery::order($query, $sub['sort'] ?? null, $relation['serializer']::FIELDS, $viewer);
         };
         $count = self::counted($sub);
-        $links = match (self::projection($relation, $serializer::DRAFT_PUBLISH, $published)) {
-            'forward' => self::forward($rows, $relation, $narrow, $count),
-            'parent' => self::parent($rows, $relation, $narrow, $count),
-            default => self::linked($rows, $relation, $relation['draftPublish'] ? $published : null, $narrow, $count),
-        };
+        $links = $relation['kind'] === 'localizations'
+            ? self::localizations($rows, $relation['draftPublish'] ? $published : null, $narrow, $count)
+            : match (self::projection($relation, $serializer::DRAFT_PUBLISH, $published)) {
+                'forward' => self::forward($rows, $relation, $narrow, $count),
+                'parent' => self::parent($rows, $relation, $narrow, $count),
+                default => self::linked($rows, $relation, $relation['draftPublish'] ? $published : null, $narrow, $count),
+            };
         if ($count) {
             return ['count' => true, 'links' => $links, 'wires' => []];
         }
@@ -240,18 +242,21 @@ final class StrapiPopulate
     {
         $name = $relation['relation'];
         $rows->load($name);
-        $documents = [];
+        $columns = $relation['localized'] ? ['document_id', 'locale'] : ['document_id'];
+        $drafts = [];
         foreach ($rows as $row) {
-            $documents[$row->getKey()] = array_map(fn (Model $draft) => $draft->getAttribute('document_id'), self::targets($row, $name));
+            $drafts[$row->getKey()] = self::targets($row, $name);
         }
         $query = $relation['model']::query();
-        $query->whereIn($query->qualifyColumn('document_id'), array_values(array_unique(array_merge([], ...array_values($documents)))));
+        $all = array_merge([], ...array_values($drafts));
+        $query->whereIn($query->qualifyColumn('document_id'), array_values(array_unique(array_map(fn (Model $draft) => $draft->getAttribute('document_id'), $all))));
         StrapiDocuments::withStatus($query, true);
         $narrow($query);
         $published = $query->get();
         $links = [];
-        foreach ($documents as $key => $ids) {
-            $linked = $published->filter(fn (Model $target) => in_array($target->getAttribute('document_id'), $ids, true))->values()->all();
+        foreach ($drafts as $key => $linkedDrafts) {
+            $versions = array_map(fn (Model $draft) => StrapiDocuments::versionKey($draft, $columns), $linkedDrafts);
+            $linked = $published->filter(fn (Model $target) => in_array(StrapiDocuments::versionKey($target, $columns), $versions, true))->values()->all();
             $links[$key] = $count ? count($linked) : $linked;
         }
 
@@ -273,6 +278,34 @@ final class StrapiPopulate
         foreach ($rows as $row) {
             $draft = $draftOf[$row->getAttribute('document_id')] ?? null;
             $links[$row->getKey()] = $draft === null ? ($count ? 0 : []) : $byDraft[$draft];
+        }
+
+        return $links;
+    }
+
+    /**
+     * Each row's document in its other locales, of the status asked for when it has versions.
+     *
+     * @return array<int|string, list<Model>|int>
+     */
+    private static function localizations(Collection $rows, ?bool $status, Closure $narrow, bool $count): array
+    {
+        $first = $rows->first();
+        if ($first === null) {
+            return [];
+        }
+        $query = $first->newQuery();
+        $query->whereIn($query->qualifyColumn('document_id'), $rows->pluck('document_id')->unique()->values()->all());
+        if ($status !== null) {
+            StrapiDocuments::withStatus($query, $status);
+        }
+        $narrow($query);
+        $siblings = $query->get();
+        $links = [];
+        foreach ($rows as $row) {
+            $linked = $siblings->filter(fn (Model $sibling) => $sibling->getAttribute('document_id') === $row->getAttribute('document_id')
+                && $sibling->getAttribute('locale') !== $row->getAttribute('locale'))->values()->all();
+            $links[$row->getKey()] = $count ? count($linked) : $linked;
         }
 
         return $links;
@@ -316,7 +349,7 @@ final class StrapiPopulate
             }
             $wires = array_map(fn (int|string $target) => $result['wires'][$target], $linked);
             $kind = $serializer::FIELDS[$key]['kind'];
-            $wire[$key] = in_array($kind, ['hasMany', 'belongsToMany'], true) ? $wires : ($wires[0] ?? null);
+            $wire[$key] = in_array($kind, ['hasMany', 'belongsToMany', 'localizations'], true) ? $wires : ($wires[0] ?? null);
         }
 
         return $wire;

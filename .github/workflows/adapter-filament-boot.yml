@@ -202,13 +202,25 @@ jobs:
           W=$(register writer)
           php artisan tinker --execute='\Spatie\Permission\Models\Role::findOrCreate("writer")->givePermissionTo(["post.create", "post.read", "post.update"]); \App\Models\User::where("username", "writer")->firstOrFail()->syncRoles(["writer"]);'
           bash ../packages/adapter-filament/scripts/strapi-publish-grant.sh http://127.0.0.1:8765/api "$W"
-      - name: Filament admin publishes drafts
+      - name: Strapi i18n vectors (recorded from strapi-php, locales en and fr)
+        run: |
+          cd app
+          php artisan migrate:fresh --force
+          php artisan db:seed --class="Database\\Seeders\\RolePermissionSeeder" --force
+          php artisan tinker --execute='\App\Models\Locale::create(["code" => "fr", "name" => "French (fr)"]);'
+          T=$(curl -s -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' \
+            --data '{"username":"locales","email":"locales@example.test","password":"secret1"}' \
+            http://127.0.0.1:8765/api/auth/local/register | jq -r .jwt)
+          F=../packages/adapter-filament/src/strapi-api/__fixtures__
+          node ../packages/adapter-filament/scripts/strapi-populate-vectors.mjs http://127.0.0.1:8765/api \
+            --token "$T" --vectors $F/i18n-vectors.json --expected $F/i18n-vectors.expected.json
+      - name: Filament admin publishes drafts and translates
         run: |
           cd app
           # The cached config would point the tests at the served database instead of :memory:.
           php artisan config:clear
-          cp ../packages/adapter-filament/scripts/php/DraftAdminTest.php tests/Feature/
-          php artisan test tests/Feature/DraftAdminTest.php
+          cp ../packages/adapter-filament/scripts/php/DraftAdminTest.php ../packages/adapter-filament/scripts/php/LocaleAdminTest.php tests/Feature/
+          php artisan test tests/Feature/DraftAdminTest.php tests/Feature/LocaleAdminTest.php
       - name: Server log on failure
         if: failure()
         run: cat app/serve.log app/storage/logs/laravel.log || true

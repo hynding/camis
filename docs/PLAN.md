@@ -496,6 +496,47 @@ timestamps, so an edit in the same second as the publish reads as Published; a r
 key to a versioned type blocks unpublishing a target it links; the strapi storage layout keeps
 reporting draft and publish as a gap.
 
+## Phase 22 — Internationalization (`ir-schema`, `adapter-strapi`, `adapter-filament`, `adapter-express`)
+
+**Goal:** a `localized` content type behaves over REST as on Strapi 5 with its i18n plugin, and
+the Filament admin lists, edits and translates one locale at a time, on the laravel storage layout
+with the Strapi API style.
+
+- IR: `options.localized` on a content type and `localized: false` on a field that every locale
+  shares (fields are localized by default, as in Strapi). A field that sets `localized` on a type
+  that is not localized is a validation error. The Strapi adapter emits and imports
+  `pluginOptions.i18n`; the Express adapter reports it as a gap.
+- Each locale of a document is a row sharing `document_id` (indexed, no longer unique), with a
+  `locale` column. Locales live in `i18n_locales`, seeded with the configured default
+  (`CAMIS_DEFAULT_LOCALE`, `en`), and are listed by `GET /api/i18n/locales`.
+- REST: `locale` narrows reads (the default locale when absent, `*` for all of them, an unknown one
+  finds nothing); create writes the requested locale; update in a locale the document lacks creates
+  it, copying the shared fields but not the links; a shared field written in one locale is written
+  to the document's other locales of the same status; delete removes the requested locale (both
+  versions when the type also has Draft & Publish). `localizations` populates the other locales.
+- Links: a localized source links a localized target in its own locale; a source without locales
+  links the target's default locale and shows it whatever locale is read. Draft & Publish works
+  per locale.
+- Admin: a Locales resource; a localized type's list shows one locale (the default first) with a
+  locale filter and badge; the form picks the locale on create; the edit page translates the
+  document into a locale it lacks, behind the create grant; relation pickers offer the record's
+  locale (the default one for a type without locales).
+- Gaps reported, not dropped: the Laravel API style keeps one row per record; `upsertBy`, a unique
+  field and a relation marked `localized: false` cannot be honored per document.
+
+**Exit criteria:** `i18n-vectors.json`, recorded from strapi-php, passes in the `strapi-api` boot
+job on SQLite, MySQL and Postgres, with the admin's `LocaleAdminTest`; the earlier vectors, the
+admin's `DraftAdminTest` and the smoke still pass.
+
+**Status (2026-10-18):** the 26 i18n checks, the 24 Draft & Publish checks, the 50 populate checks,
+the 72 REST checks, both admin tests and the smoke pass on SQLite and Postgres with all caches on.
+
+Known gaps: single types are not ported yet, so none is localized; writing to a locale that is
+not in `i18n_locales` is accepted, as strapi-php accepts it (Strapi rejects it); relation
+`filters` and `sort` on `localizations` match every locale of the document, the row's own included;
+the admin's translate action copies every field of the source locale rather than leaving the
+localized ones empty; the strapi storage layout is not run against these vectors.
+
 ---
 
 ## Sequencing rationale (quick reference)

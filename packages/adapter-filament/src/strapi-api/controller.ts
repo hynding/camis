@@ -119,18 +119,23 @@ ${auth(`$this->authorize('delete', $m);`)}        $m->delete();
     }
 `,
   };
-  return shape.draftPublish ? { ...base, ...versionedParts(spec, base.query, readLinks) } : base;
+  return shape.draftPublish || shape.localized
+    ? { ...base, ...documentParts(spec, base.query, readLinks) }
+    : base;
 };
 
 /**
- * A draft-and-publish type reads the version its status parameter names and writes through the
- * draft: create and update save the draft and then publish it unless status=draft (behind the
- * publish grant, inside the same transaction), and delete removes every version.
+ * A type whose documents span several rows. A draft-and-publish type reads the version its status
+ * parameter names and writes through the draft: create and update save the draft and then publish
+ * it unless status=draft (behind the publish grant, inside the same transaction), and delete
+ * removes every version. A localized type reads and writes the locale its locale parameter names
+ * (the default one otherwise); an update in a locale the document lacks creates it, and delete
+ * removes the requested locale's rows.
  */
-const versionedParts = (
+const documentParts = (
   spec: ControllerSpec,
-  documents: string,
-  readLinks: string,
+  query: string,
+  plainReadLinks: string,
 ): Pick<
   ControllerParts,
   "uses" | "query" | "storeBody" | "updateBody" | "destroyBody" | "helpers"
@@ -138,54 +143,90 @@ const versionedParts = (
   const { shape, secured } = spec;
   const M = shape.model;
   const S = `${M}Serializer`;
+  const versioned = shape.draftPublish;
+  const localized = shape.localized;
   const viewer = secured ? "$request->user()" : "null";
   const auth = authLine(secured);
   const assign = spec.assigns
     .map((name) => `${STMT}$m->${snakeColumn(name)}_id = $request->user()->id;`)
     .join("\n");
   const assignBlock = assign ? `${assign}\n` : "";
+  const forWrite = "StrapiLocales::forWrite($request->query())";
+  const readLinks = localized
+    ? `${STMT}$links = StrapiRelations::read((array) $request->input('data', []), ${S}::FIELDS, ${viewer}, ${forWrite});`
+    : plainReadLinks;
+  const publish = versioned
+    ? `${STMT}    if (! StrapiDocuments::draftOnly($request->query())) {
+${auth(`$this->authorize('publish', $m);`, `${STMT}        `)}${STMT}        $m = StrapiDocuments::publish($m, ${S}::class);
+${STMT}    }
+
+`
+    : "";
   const persist = (
     fill: string,
-  ): string => `${STMT}$m = DB::transaction(function () use ($request, $m, $wire, $links): ${M} {
+  ): string => `${STMT}$m = DB::transaction(function () use (${versioned ? "$request, " : ""}$m, $wire, $links): ${M} {
 ${fill}${STMT}    StrapiRelations::associate($m, $links);
 ${STMT}    $m->save();
 ${STMT}    ${S}::syncChildren($m, $wire['children']);
 ${STMT}    StrapiRelations::link($m, $links);
-${STMT}    if (! StrapiDocuments::draftOnly($request->query())) {
-${auth(`$this->authorize('publish', $m);`, `${STMT}        `)}${STMT}        $m = StrapiDocuments::publish($m, ${S}::class);
-${STMT}    }
-
-${STMT}    return $m;
+${publish}${STMT}    return $m;
 ${STMT}});`;
-  const draft = `        $m = StrapiDocuments::draft($this->documents($request), $key);
-        if ($m === null${secured ? ` || ! $request->user()->can('view', $m)` : ""}) {
+  const lookup = versioned
+    ? "StrapiDocuments::draft($this->documents($request), $key)"
+    : "$this->documents($request)->where(self::KEY, $key)->first()";
+  const visible = secured ? ` || ! $request->user()->can('view', $m)` : "";
+  const notFound = `        if ($m === null${visible}) {
             abort(404);
         }
 `;
+  // Strapi creates a locale the document lacks when an update is written in it.
+  const missingLocale = localized
+    ? `
+            ?? StrapiLocales::localization(${query}->where(self::KEY, $key), ${forWrite})`
+    : "";
+  const destroyBody = localized
+    ? `        $rows = $this->documents($request)->where(self::KEY, $key)->get()${secured ? `->filter(fn (${M} $m) => $request->user()->can('view', $m))` : ""};
+        if ($rows->isEmpty()) {
+            abort(404);
+        }
+${secured ? `        foreach ($rows as $m) {\n            $this->authorize('delete', $m);\n        }\n` : ""}        DB::transaction(fn () => $rows->each->delete());
+
+        return response()->json(null, 204);`
+    : `        $m = ${lookup};
+${notFound}${auth(`$this->authorize('delete', $m);`)}        StrapiDocuments::destroy($m);
+
+        return response()->json(null, 204);`;
+  const documents = localized ? `StrapiLocales::narrow(${query}, $request->query())` : query;
   return {
     uses: [
-      "App\\Support\\StrapiDocuments",
+      ...(versioned ? ["App\\Support\\StrapiDocuments"] : []),
+      ...(localized ? ["App\\Support\\StrapiLocales"] : []),
       "App\\Support\\StrapiPopulate",
       "App\\Support\\StrapiQuery",
       "App\\Support\\StrapiRelations",
     ],
-    query: "StrapiDocuments::version($this->documents($request), $request->query())",
+    query: versioned
+      ? "StrapiDocuments::version($this->documents($request), $request->query())"
+      : "$this->documents($request)",
     storeBody: `${auth(`$this->authorize('create', ${M}::class);`)}        $wire = ${S}::fromWire((array) $request->input('data', []));
 ${readLinks}
         $m = new ${M}($wire['columns']);
-${assignBlock}${persist("")}
+${localized ? `${STMT}$m->locale = ${forWrite};\n` : ""}${assignBlock}${persist("")}
 
         return response()->json(['data' => $this->wire($request, $m->fresh()), 'meta' => new \\stdClass()], 201);`,
     updateBody: `        $wire = ${S}::fromWire((array) $request->input('data', []));
 ${readLinks}
-${draft}${auth(`$this->authorize('update', $m);`)}${persist(`${STMT}    $m->fill($wire['columns']);\n`)}
+        $m = ${lookup}${missingLocale};
+${notFound}${auth(`$this->authorize('update', $m);`)}${persist(`${STMT}    $m->fill($wire['columns']);\n`)}
 
         return response()->json(['data' => $this->wire($request, $m->fresh()), 'meta' => new \\stdClass()]);`,
-    destroyBody: `${draft}${auth(`$this->authorize('delete', $m);`)}        StrapiDocuments::destroy($m);
-
-        return response()->json(null, 204);`,
+    destroyBody,
     helpers: `
-    /** Every version of every document the caller may see; scoped() narrows it to one status. */
+    /** ${
+      localized
+        ? `The requested locale's rows${versioned ? ", every version," : ""} of the documents the caller may see${versioned ? "; scoped() narrows them to one status" : ""}.`
+        : "Every version of every document the caller may see; scoped() narrows it to one status."
+    } */
     protected function documents(Request $request): Builder
     {
         return ${documents};

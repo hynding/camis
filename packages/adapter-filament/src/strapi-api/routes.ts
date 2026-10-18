@@ -22,7 +22,17 @@ const AUTH_THROTTLE_PER_MINUTE = 10;
 export const emitApiConfig = (
   layout: StorageLayout = "laravel",
   alwaysPopulateComponents = false,
+  localized = false,
 ): string => {
+  // The locale the locales table starts with, which reads and writes use when a request names none.
+  const i18nKeys = localized
+    ? `
+
+    'i18n' => [
+        'default_locale' => env('CAMIS_DEFAULT_LOCALE', 'en'),
+        'default_locale_name' => env('CAMIS_DEFAULT_LOCALE_NAME', 'English (en)'),
+    ],`
+    : "";
   const strapiKeys =
     layout === "strapi"
       ? `
@@ -54,7 +64,7 @@ declare(strict_types=1);
 return [
     // Requests per minute allowed on the unauthenticated credential endpoints
     // (POST /auth/local and /auth/local/register), keyed by client address.
-    'auth_throttle_per_minute' => max(1, (int) env('CAMIS_AUTH_THROTTLE_PER_MINUTE', ${AUTH_THROTTLE_PER_MINUTE})),${strapiKeys}
+    'auth_throttle_per_minute' => max(1, (int) env('CAMIS_AUTH_THROTTLE_PER_MINUTE', ${AUTH_THROTTLE_PER_MINUTE})),${strapiKeys}${i18nKeys}
 ];
 `;
 };
@@ -70,11 +80,13 @@ export const emitStrapiRoutes = (
   cts: ContentType[],
   secured: boolean,
   guard: RouteGuard = "auth:sanctum",
+  localized = false,
 ): string => {
   const jwt = secured && guard === "strapi-jwt";
   const sorted = [...cts].sort((a, b) => routePath(a).localeCompare(routePath(b)));
   const uses = [
     "App\\Http\\Controllers\\Api\\AuthController",
+    ...(localized ? ["App\\Http\\Controllers\\Api\\LocaleController"] : []),
     ...sorted.map((ct) => `App\\Http\\Controllers\\Api\\${filamentNames(ct).model}ApiController`),
     "App\\Http\\Middleware\\StrapiErrors",
     ...(jwt ? ["App\\Http\\Middleware\\StrapiJwtGuard"] : []),
@@ -121,7 +133,14 @@ $authThrottle = 'throttle:'.(int) config('camis.auth_throttle_per_minute', ${AUT
 Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle): void {
     Route::get('/_health', fn () => response()->noContent());
     Route::post('/auth/local', [AuthController::class, 'login'])->middleware($authThrottle);
-    Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware($authThrottle);
+    Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware($authThrottle);${
+      localized
+        ? `
+
+    // Strapi's i18n plugin lists the locales to anyone: they name no content.
+    Route::get('i18n/locales', [LocaleController::class, 'index']);`
+        : ""
+    }
 
     ${group}->group(function (): void {
         Route::get('/users/me', [AuthController::class, 'me']);

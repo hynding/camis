@@ -80,9 +80,13 @@ final class StrapiDocuments
         return $draft->getAttribute('updated_at') > $published->getAttribute('updated_at') ? 'Modified' : 'Published';
     }
 
+    /** The document's other version, in the same locale when the type keeps locales. */
     private static function sibling(Model $row, bool $published): ?Model
     {
         $query = $row->newQuery()->where('document_id', $row->getAttribute('document_id'));
+        if ($row->getAttribute('locale') !== null) {
+            $query->where('locale', $row->getAttribute('locale'));
+        }
 
         return ($published ? $query->whereNotNull('published_at') : $query->whereNull('published_at'))->first();
     }
@@ -120,7 +124,7 @@ final class StrapiDocuments
 
     /**
      * Link targets as the version being written should hold them: a draft-and-publish target's
-     * row of the same status (dropped when it has none), anything else unchanged.
+     * row of the same status and locale (dropped when it has none), anything else unchanged.
      *
      * @return list<int>
      */
@@ -130,19 +134,33 @@ final class StrapiDocuments
         if (! $relation['draftPublish'] || $ids === []) {
             return $ids;
         }
-        $documents = $relation['model']::query()->whereKey($ids)->pluck('document_id', 'id');
+        $columns = $relation['localized'] ? ['document_id', 'locale'] : ['document_id'];
+        $linked = $relation['model']::query()->whereKey($ids)->get(['id', ...$columns])->keyBy('id');
         $versions = $relation['model']::query()
-            ->whereIn('document_id', $documents->unique()->values()->all())
+            ->whereIn('document_id', $linked->pluck('document_id')->unique()->values()->all())
             ->{$published ? 'whereNotNull' : 'whereNull'}('published_at')
-            ->pluck('id', 'document_id');
+            ->get(['id', ...$columns])
+            ->keyBy(fn (Model $row) => self::versionKey($row, $columns));
         $mapped = [];
         foreach ($ids as $id) {
-            $version = $versions[$documents[$id] ?? ''] ?? null;
+            $row = $linked[$id] ?? null;
+            $version = $row === null ? null : ($versions[self::versionKey($row, $columns)] ?? null);
             if ($version !== null) {
-                $mapped[] = (int) $version;
+                $mapped[] = (int) $version->getKey();
             }
         }
 
         return $mapped;
+    }
+
+    /**
+     * What a document's versions share: its documentId and, for a type that keeps locales, its
+     * locale.
+     *
+     * @param list<string> $columns
+     */
+    public static function versionKey(Model $row, array $columns): string
+    {
+        return implode('|', array_map(fn (string $column): string => (string) $row->getAttribute($column), $columns));
     }
 }

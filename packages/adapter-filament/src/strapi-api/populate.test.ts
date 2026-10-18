@@ -77,17 +77,17 @@ describe("serializer relation and component maps", () => {
   });
   it("maps a to-one relation to its target serializer, model, foreign key and Strapi uid", () => {
     expect(serializer("Book")).toContain(
-      "'author' => ['relation' => 'author', 'kind' => 'belongsTo', 'model' => \\App\\Models\\Author::class, 'serializer' => AuthorSerializer::class, 'foreignKey' => 'author_id', 'uid' => 'api::author.author', 'holder' => 'self', 'draftPublish' => false],",
+      "'author' => ['relation' => 'author', 'kind' => 'belongsTo', 'model' => \\App\\Models\\Author::class, 'serializer' => AuthorSerializer::class, 'foreignKey' => 'author_id', 'uid' => 'api::author.author', 'holder' => 'self', 'draftPublish' => false, 'localized' => false],",
     );
   });
   it("maps a to-many relation through its pivot", () => {
     expect(serializer("Book")).toContain(
-      "'genres' => ['relation' => 'genres', 'kind' => 'belongsToMany', 'model' => \\App\\Models\\Genre::class, 'serializer' => GenreSerializer::class, 'foreignKey' => null, 'uid' => 'api::genre.genre', 'holder' => 'self', 'draftPublish' => false],",
+      "'genres' => ['relation' => 'genres', 'kind' => 'belongsToMany', 'model' => \\App\\Models\\Genre::class, 'serializer' => GenreSerializer::class, 'foreignKey' => null, 'uid' => 'api::genre.genre', 'holder' => 'self', 'draftPublish' => false, 'localized' => false],",
     );
   });
   it("maps the inverse side of a relation, whose foreign key lives on the other table", () => {
     expect(serializer("Author")).toContain(
-      "'books' => ['relation' => 'books', 'kind' => 'hasMany', 'model' => \\App\\Models\\Book::class, 'serializer' => BookSerializer::class, 'foreignKey' => 'author_id', 'uid' => 'api::book.book', 'holder' => 'target', 'draftPublish' => false],",
+      "'books' => ['relation' => 'books', 'kind' => 'hasMany', 'model' => \\App\\Models\\Book::class, 'serializer' => BookSerializer::class, 'foreignKey' => 'author_id', 'uid' => 'api::book.book', 'holder' => 'target', 'draftPublish' => false, 'localized' => false],",
     );
   });
   it("leaves out relations to the built-in user, which has no serializer to expose it through", () => {
