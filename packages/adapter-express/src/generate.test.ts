@@ -364,3 +364,29 @@ describe("component fields", () => {
     expect(schema).toContain("money_currency: text('money_currency'),");
   });
 });
+
+describe("localized content types", () => {
+  it("are reported: the Express target keeps one row per record, in no locale", () => {
+    const result = expressAdapter.generate(
+      {
+        roles: [],
+        document: {
+          version: 1,
+          components: [],
+          contentTypes: [
+            {
+              name: "Page",
+              kind: "collection",
+              options: { localized: true },
+              fields: [{ type: "string", name: "title" }],
+            },
+          ],
+        },
+      },
+      { projectName: "x" },
+    );
+    expect(result.gaps.gaps).toEqual([
+      expect.objectContaining({ feature: "localized", location: { contentType: "Page" } }),
+    ]);
+  });
+});

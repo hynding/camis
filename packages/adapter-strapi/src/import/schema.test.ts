@@ -93,3 +93,25 @@ describe("irContentType with no collectionName", () => {
     expect(contentTypeSchema.safeParse(contentType).success).toBe(true);
   });
 });
+
+describe("irContentType localization", () => {
+  it("reads the i18n plugin options back, keeping only the fields that do not vary", () => {
+    const { contentType } = irContentType({
+      kind: "collectionType",
+      collectionName: "articles",
+      info: { singularName: "article", pluralName: "articles", displayName: "Article" },
+      options: { draftAndPublish: true },
+      pluginOptions: { i18n: { localized: true } },
+      attributes: {
+        title: { type: "string", pluginOptions: { i18n: { localized: true } } },
+        code: { type: "string", pluginOptions: { i18n: { localized: false } } },
+      },
+    });
+    expect(contentType.options).toEqual({ draftPublish: true, localized: true });
+    expect(contentType.fields).toEqual([
+      { type: "string", name: "title" },
+      { type: "string", name: "code", localized: false },
+    ]);
+    expect(contentTypeSchema.safeParse(contentType).success).toBe(true);
+  });
+});
