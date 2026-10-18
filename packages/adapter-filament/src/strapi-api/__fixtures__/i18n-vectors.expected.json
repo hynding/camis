@@ -1,0 +1,233 @@
+{
+  "the locales list names the default": {
+    "status": 200,
+    "data": [
+      {
+        "code": "en",
+        "isDefault": true,
+        "name": "English (en)"
+      },
+      {
+        "code": "fr",
+        "isDefault": false,
+        "name": "French (fr)"
+      }
+    ]
+  },
+  "update in a new locale creates that locale of the document": {
+    "status": 200,
+    "data": {
+      "locale": "fr",
+      "name": "Actualités"
+    }
+  },
+  "lists show the default locale": {
+    "status": 200,
+    "data": [
+      {
+        "locale": "en",
+        "name": "News"
+      }
+    ]
+  },
+  "locale picks one": {
+    "status": 200,
+    "data": [
+      {
+        "locale": "fr",
+        "name": "Actualités"
+      }
+    ]
+  },
+  "locale=* lists every locale": {
+    "status": 200,
+    "data": [
+      {
+        "locale": "en",
+        "name": "News"
+      },
+      {
+        "locale": "fr",
+        "name": "Actualités"
+      }
+    ]
+  },
+  "an unknown locale lists nothing": {
+    "status": 200,
+    "data": []
+  },
+  "create writes the default locale": {
+    "status": 201,
+    "data": {
+      "category": {
+        "locale": "en",
+        "name": "News"
+      },
+      "code": "A1",
+      "genres": [
+        {
+          "name": "Verse"
+        }
+      ],
+      "locale": "en",
+      "title": "Hello"
+    }
+  },
+  "a new locale copies the shared fields but not the links": {
+    "status": 200,
+    "data": {
+      "code": "A1",
+      "genres": [],
+      "locale": "fr",
+      "title": "Bonjour"
+    }
+  },
+  "a link names its target in the source's locale": {
+    "status": 200,
+    "data": {
+      "category": {
+        "locale": "fr",
+        "name": "Actualités"
+      },
+      "title": "Bonjour"
+    }
+  },
+  "a shared field changed in one locale": {
+    "status": 200,
+    "data": {
+      "code": "A2",
+      "title": "Bonjour"
+    }
+  },
+  "changes in every locale": {
+    "status": 200,
+    "data": {
+      "category": {
+        "name": "News"
+      },
+      "code": "A2",
+      "title": "Hello"
+    }
+  },
+  "localizations lists the document's other locales": {
+    "status": 200,
+    "data": {
+      "localizations": [
+        {
+          "locale": "fr",
+          "title": "Bonjour"
+        }
+      ],
+      "title": "Hello"
+    }
+  },
+  "a locale the document lacks is not found": {
+    "status": 404,
+    "error": {
+      "name": "NotFoundError",
+      "message": "Not Found"
+    }
+  },
+  "create with a locale makes a document in that locale only": {
+    "status": 201,
+    "data": {
+      "locale": "fr",
+      "title": "Seul"
+    }
+  },
+  "so the default locale does not list it": {
+    "status": 200,
+    "data": [
+      {
+        "title": "Hello"
+      }
+    ]
+  },
+  "a type without locales links the default locale": {
+    "status": 201,
+    "data": {
+      "category": {
+        "locale": "en",
+        "name": "News"
+      },
+      "title": "Bound"
+    }
+  },
+  "whatever locale it is read in": {
+    "status": 200,
+    "data": {
+      "category": {
+        "name": "News"
+      },
+      "title": "Bound"
+    }
+  },
+  "a draft-and-publish type publishes in the default locale": {
+    "status": 201,
+    "data": {
+      "locale": "en",
+      "title": "Home"
+    }
+  },
+  "a new locale written as a draft": {
+    "status": 200,
+    "data": {
+      "locale": "fr",
+      "title": "Accueil"
+    }
+  },
+  "is not published": {
+    "status": 200,
+    "data": []
+  },
+  "until it is updated without status": {
+    "status": 200,
+    "data": {
+      "locale": "fr",
+      "title": "Accueil"
+    }
+  },
+  "each locale has its published version": {
+    "status": 200,
+    "data": [
+      {
+        "locale": "en",
+        "title": "Home"
+      },
+      {
+        "locale": "fr",
+        "title": "Accueil"
+      }
+    ]
+  },
+  "delete with a locale deletes that locale": {
+    "status": 204,
+    "data": null
+  },
+  "and both its versions": {
+    "status": 200,
+    "data": [
+      {
+        "locale": "en",
+        "title": "Home"
+      }
+    ]
+  },
+  "delete without a locale deletes the default locale": {
+    "status": 204,
+    "data": null
+  },
+  "leaving the other locales": {
+    "status": 200,
+    "data": [
+      {
+        "locale": "fr",
+        "title": "Bonjour"
+      },
+      {
+        "locale": "fr",
+        "title": "Seul"
+      }
+    ]
+  }
+}

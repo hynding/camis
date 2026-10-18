@@ -89,7 +89,8 @@ const outcome = ({ status, body }) => {
     const keyed = details && typeof details === "object" && "key" in details;
     return { status, error: { name, message, ...(keyed ? { details } : {}) } };
   }
-  return { status, data: normalize(body?.data ?? null) };
+  // A few plugin routes (the i18n locales list) answer with a bare array rather than { data }.
+  return { status, data: normalize(Array.isArray(body) ? body : (body?.data ?? null)) };
 };
 
 for (const row of vectors.seed) {
