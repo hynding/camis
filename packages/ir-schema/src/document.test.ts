@@ -248,7 +248,9 @@ describe("localization", () => {
     const r = localized([{ type: "string", name: "code", localized: false }], {});
     expect(r.success).toBe(false);
     if (!r.success) {
-      expect(r.error.issues[0]?.params).toEqual({ irCode: "localized_field_without_localized_type" });
+      expect((r.error.issues[0] as { params?: unknown } | undefined)?.params).toEqual({
+        irCode: "localized_field_without_localized_type",
+      });
       expect(r.error.issues[0]?.path).toEqual(["fields", 0, "localized"]);
     }
   });

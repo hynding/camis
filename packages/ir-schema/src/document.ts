@@ -64,12 +64,25 @@ export const contentType = z
         timestamps: z.boolean().optional(),
         softDelete: z.boolean().optional(),
         upsertBy: fieldName.optional(),
+        /** Each document keeps one version per locale. */
+        localized: z.boolean().optional(),
       })
       .optional(),
   })
-  .superRefine((ct, ctx) =>
-    nodeRefine(ct.fields as { name: string; type: string; targetField?: string }[], ctx),
-  );
+  .superRefine((ct, ctx) => {
+    nodeRefine(ct.fields as { name: string; type: string; targetField?: string }[], ctx);
+    if (ct.options?.localized === true) return;
+    ct.fields.forEach((f, i) => {
+      if ("localized" in f && f.localized !== undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `field "${f.name}" sets localized, but content type "${ct.name}" is not localized`,
+          params: { irCode: "localized_field_without_localized_type" },
+          path: ["fields", i, "localized"],
+        });
+      }
+    });
+  });
 
 export const component = z
   .object({

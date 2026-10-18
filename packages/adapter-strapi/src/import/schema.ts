@@ -54,6 +54,15 @@ export const irContentType = (
     fields,
   };
   if (options.draftAndPublish) contentType.options = { draftPublish: true };
+  if (asRecord(asRecord(schema.pluginOptions).i18n).localized === true) {
+    contentType.options = { ...contentType.options, localized: true };
+    const attributes = asRecord(schema.attributes);
+    contentType.fields = fields.map((f) =>
+      asRecord(asRecord(asRecord(attributes[f.name]).pluginOptions).i18n).localized === false
+        ? { ...f, localized: false }
+        : f,
+    );
+  }
   return { contentType, gaps, usesBuiltinUser };
 };
 
