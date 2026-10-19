@@ -85,6 +85,7 @@ const toWireBody = (shape: WireShape, indent: string, layout: StorageLayout): st
   }
   insert(root, ["createdAt"], `$m->created_at${ZULU_MS}`);
   insert(root, ["updatedAt"], `$m->updated_at${ZULU_MS}`);
+  if (shape.localized && layout === "laravel") insert(root, ["locale"], "$m->locale");
   return render(root, indent);
 };
 
@@ -146,7 +147,7 @@ const fieldEntry = (s: WireScalar, indent: string): string =>
   `${indent}'${s.key.join(".")}' => ['column' => '${s.column}', 'type' => '${s.type}'],`;
 
 const relationEntry = (r: WireRelation, indent: string): string =>
-  `${indent}'${r.key}' => ['relation' => '${r.relation}', 'kind' => '${r.kind}', 'model' => \\App\\Models\\${r.model}::class, 'serializer' => ${r.model}Serializer::class, 'foreignKey' => ${r.foreignKey === null ? "null" : `'${r.foreignKey}'`}, 'uid' => '${r.uid}', 'holder' => '${r.holder}', 'draftPublish' => ${r.draftPublish}],`;
+  `${indent}'${r.key}' => ['relation' => '${r.relation}', 'kind' => '${r.kind}', 'model' => \\App\\Models\\${r.model}::class, 'serializer' => ${r.model}Serializer::class, 'foreignKey' => ${r.foreignKey === null ? "null" : `'${r.foreignKey}'`}, 'uid' => '${r.uid}', 'holder' => '${r.holder}', 'draftPublish' => ${r.draftPublish}, 'localized' => ${r.localized}],`;
 
 /**
  * The wire path → column map `App\Support\StrapiQuery` filters, sorts and selects by: every
@@ -165,6 +166,7 @@ const fieldsConstant = (shape: WireShape): string => {
     ...(shape.draftPublish
       ? [{ key: ["publishedAt"], column: "published_at", type: "dateTime" as const }]
       : []),
+    ...(shape.localized ? [{ key: ["locale"], column: "locale", type: "string" as const }] : []),
   ];
   const children = shape.children.map(
     (c) =>
@@ -177,7 +179,7 @@ const fieldsConstant = (shape: WireShape): string => {
     ...timestamps.map((s) => fieldEntry(s, l2)),
   ];
   const components = shape.components.map((c) => `'${c}'`).join(", ");
-  return `\n    /** Wire path → column, for StrapiQuery's filters, sort and fields. */\n    public const FIELDS = [\n${rows.join("\n")}\n    ];\n\n    /** Component keys, which Strapi leaves off the wire unless populate names them. */\n    public const COMPONENTS = [${components}];\n\n    /** Whether each document has a draft and, once published, a published version. */\n    public const DRAFT_PUBLISH = ${shape.draftPublish};\n`;
+  return `\n    /** Wire path → column, for StrapiQuery's filters, sort and fields. */\n    public const FIELDS = [\n${rows.join("\n")}\n    ];\n\n    /** Component keys, which Strapi leaves off the wire unless populate names them. */\n    public const COMPONENTS = [${components}];\n\n    /** Whether each document has a draft and, once published, a published version. */\n    public const DRAFT_PUBLISH = ${shape.draftPublish};\n\n    /** Whether each document keeps one row per locale. */\n    public const LOCALIZED = ${shape.localized};\n`;
 };
 
 export const emitSerializer = (shape: WireShape, layout: StorageLayout = "laravel"): string => {

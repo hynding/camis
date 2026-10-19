@@ -16,7 +16,12 @@ export interface WireChild {
   scalars: WireScalar[];
 }
 /** How a relation is stored, from this side: the Eloquent relation type `relations.ts` declares. */
-export type WireRelationKind = "belongsTo" | "hasOne" | "hasMany" | "belongsToMany";
+export type WireRelationKind =
+  | "belongsTo"
+  | "hasOne"
+  | "hasMany"
+  | "belongsToMany"
+  | "localizations";
 export interface WireRelation {
   key: string;
   /** The Eloquent relation method on this model. */
@@ -32,6 +37,8 @@ export interface WireRelation {
   holder: "self" | "target";
   /** Whether the target keeps a draft and a published version (Phase 21). */
   draftPublish: boolean;
+  /** Whether the target keeps one row per locale (Phase 22). */
+  localized: boolean;
 }
 export interface WireShape {
   model: string;
@@ -47,6 +54,8 @@ export interface WireShape {
   relations: WireRelation[];
   /** Whether this type keeps a draft and a published version of each document. */
   draftPublish: boolean;
+  /** Whether this type keeps one row per locale of each document. */
+  localized: boolean;
 }
 
 // `_fkNames` is accepted for signature stability with the controller emitter (Task 5+);
@@ -56,6 +65,7 @@ export const wireShape = (
   ct: ContentType,
   _fkNames: string[],
   versioned: ReadonlySet<string> = new Set(),
+  localized: ReadonlySet<string> = new Set(),
 ): WireShape => {
   const names = filamentNames(ct);
   const expansion = expandComponents(doc, ct);
@@ -89,8 +99,27 @@ export const wireShape = (
     scalars: [...top, ...embedded],
     children,
     components,
-    relations: wireRelations(doc, ct, versioned),
+    relations: [
+      ...wireRelations(doc, ct, versioned, localized),
+      // Strapi's `localizations`: the document's other locales, populated like a relation.
+      ...(localized.has(ct.name)
+        ? [
+            {
+              key: "localizations",
+              relation: "localizations",
+              kind: "localizations" as const,
+              model: names.model,
+              foreignKey: null,
+              uid: strapiUid(ct),
+              holder: "self" as const,
+              draftPublish: versioned.has(ct.name),
+              localized: true,
+            },
+          ]
+        : []),
+    ],
     draftPublish: versioned.has(ct.name),
+    localized: localized.has(ct.name),
   };
 };
 
@@ -105,6 +134,7 @@ const wireRelations = (
   doc: IrDocument,
   ct: ContentType,
   versioned: ReadonlySet<string>,
+  localized: ReadonlySet<string>,
 ): WireRelation[] => {
   const byName = new Map(doc.contentTypes.map((c) => [c.name, c]));
   const entry = (
@@ -122,6 +152,7 @@ const wireRelations = (
     uid: strapiUid(target),
     holder,
     draftPublish: versioned.has(target.name),
+    localized: localized.has(target.name),
   });
   const own: WireRelation[] = [];
   for (const f of ct.fields) {

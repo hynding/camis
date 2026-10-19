@@ -17,6 +17,9 @@ trait HasDraftAndPublish
     /** The document's published row, from its draft. */
     public function publishedVersion(): HasOne
     {
-        return $this->hasOne(static::class, 'document_id', 'document_id')->whereNotNull('published_at');
+        $published = $this->hasOne(static::class, 'document_id', 'document_id')->whereNotNull('published_at');
+
+        // Lazily loaded only: an eager load would apply the first row's locale to every row.
+        return $this->getAttribute('locale') === null ? $published : $published->where('locale', $this->getAttribute('locale'));
     }
 }

@@ -36,6 +36,8 @@ const common = {
   validate: expression.optional(),
   visibleWhen: expression.optional(),
   computed: expression.optional(),
+  /** On a localized content type: whether the value varies per locale (it does by default). */
+  localized: z.boolean().optional(),
 };
 const len = {
   minLength: z.number().int().nonnegative().optional(),

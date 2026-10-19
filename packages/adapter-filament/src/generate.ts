@@ -35,6 +35,7 @@ import { filamentNames, snakeColumn } from "./names";
 import { resolveRelations } from "./relations";
 import { emitResourceFiles } from "./resource";
 import { draftPublishPlan } from "./strapi-api/draft-publish";
+import { localizationPlan, sharedAcrossLocalesMethod } from "./strapi-api/localization";
 import { emitStrapiApi } from "./strapi-api/emit";
 import { emitStrapiStorage } from "./strapi-api/storage/emit";
 
@@ -52,10 +53,12 @@ export const filamentAdapter: GenerateAdapter = {
     const doc = normalize(ir.document);
     const draftPublish = draftPublishPlan(doc, apiStyle, storage);
     const versioned = draftPublish.versioned;
-    const rel = resolveRelations(doc, versioned);
+    const localization = localizationPlan(doc, apiStyle, storage);
+    const localized = localization.localized;
+    const rel = resolveRelations(doc, versioned, localized);
     const hooks = emitHookFiles(doc);
     const files: GeneratedFile[] = [];
-    const gaps: CapabilityGap[] = [...draftPublish.gaps];
+    const gaps: CapabilityGap[] = [...draftPublish.gaps, ...localization.gaps];
     if (storage !== requestedStorage) {
       gaps.push({
         feature: "storageLayoutRequiresStrapiApi",
@@ -109,6 +112,7 @@ export const filamentAdapter: GenerateAdapter = {
       emitted,
       fkNames: rel.fkNames,
       versioned,
+      localized,
       alwaysPopulateComponents: options.alwaysPopulateComponents === true,
       observedModels: new Set([...hooks.observedModels, ...aiObservedModels]),
     };
@@ -158,7 +162,9 @@ export const filamentAdapter: GenerateAdapter = {
           [
             ...(apiStyle === "strapi" ? ["App\\Models\\Concerns\\HasDocumentId"] : []),
             ...(versioned.has(ct.name) ? ["App\\Models\\Concerns\\HasDraftAndPublish"] : []),
+            ...(localized.has(ct.name) ? ["App\\Models\\Concerns\\HasLocale"] : []),
           ],
+          localized.has(ct.name) ? [sharedAcrossLocalesMethod(ct)] : [],
         ),
       });
       files.push({
@@ -166,6 +172,7 @@ export const filamentAdapter: GenerateAdapter = {
         content: emitMigration(ct, rel.fkColumns.get(ct.name) ?? [], embeddedEmits, {
           documentId: apiStyle === "strapi",
           draftPublish: versioned.has(ct.name),
+          localized: localized.has(ct.name),
         }),
       });
       files.push(
@@ -174,7 +181,11 @@ export const filamentAdapter: GenerateAdapter = {
           rel.formFields.get(ct.name) ?? [],
           embeddedEmits,
           ctChildren.map(repeaterComponent),
-          { versioned: versioned.has(ct.name), secured: ir.roles.length > 0 },
+          {
+            versioned: versioned.has(ct.name),
+            localized: localized.has(ct.name),
+            secured: ir.roles.length > 0,
+          },
         ),
       );
       ctChildren.forEach((child) => {

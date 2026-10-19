@@ -119,6 +119,34 @@ export const strapiApiBundle: IrBundle = {
           { type: "relation", name: "topics", relationKind: "manyToMany", target: "Topic" },
         ],
       },
+      // Internationalization (i18n-vectors.json): Category and Article are localized, Article.code
+      // is shared by every locale, and Page is localized with draft and publish too.
+      {
+        name: "Category",
+        kind: "collection",
+        names: { plural: "Categories" },
+        options: { localized: true },
+        fields: [{ type: "string", name: "name" }],
+      },
+      {
+        name: "Article",
+        kind: "collection",
+        names: { plural: "Articles" },
+        options: { localized: true },
+        fields: [
+          { type: "string", name: "title" },
+          { type: "string", name: "code", localized: false },
+          { type: "relation", name: "category", relationKind: "manyToOne", target: "Category" },
+          { type: "relation", name: "genres", relationKind: "manyToMany", target: "Genre" },
+        ],
+      },
+      {
+        name: "Page",
+        kind: "collection",
+        names: { plural: "Pages" },
+        options: { localized: true, draftPublish: true },
+        fields: [{ type: "string", name: "title" }],
+      },
       // Relation targets for Book: a to-one with an inverse side, and a to-many without one.
       {
         name: "Author",
@@ -158,6 +186,8 @@ export const strapiApiBundle: IrBundle = {
           { type: "relation", name: "genres", relationKind: "manyToMany", target: "Genre" },
           // A plain type linking a draft-and-publish one: it shows the target's published version.
           { type: "relation", name: "topic", relationKind: "manyToOne", target: "Topic" },
+          // A plain type linking a localized one: it links the default locale.
+          { type: "relation", name: "category", relationKind: "manyToOne", target: "Category" },
         ],
       },
     ],
@@ -213,6 +243,9 @@ export const strapiApiBundle: IrBundle = {
         { contentType: "Genre", actions: ["create", "read", "update", "delete"] },
         { contentType: "Topic", actions: ["create", "read", "update", "delete", "publish"] },
         { contentType: "Post", actions: ["create", "read", "update", "delete", "publish"] },
+        { contentType: "Category", actions: ["create", "read", "update", "delete"] },
+        { contentType: "Article", actions: ["create", "read", "update", "delete"] },
+        { contentType: "Page", actions: ["create", "read", "update", "delete", "publish"] },
       ],
     },
   ],

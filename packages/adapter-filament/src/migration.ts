@@ -15,26 +15,30 @@ export const emitMigration = (
   ct: ContentType,
   fkColumns: string[] = [],
   extraEmits: FieldEmit[] = [],
-  options: { documentId?: boolean; draftPublish?: boolean } = {},
+  options: { documentId?: boolean; draftPublish?: boolean; localized?: boolean } = {},
 ): string => {
   const names = filamentNames(ct);
   // Strapi 5 addresses a document by documentId, so the Strapi API style needs the column. A
-  // draft-and-publish document has two rows, its draft and its published version, sharing it.
+  // draft-and-publish document has two rows, its draft and its published version, and a localized
+  // one a row per locale, all sharing it.
+  const manyRows = options.draftPublish === true || options.localized === true;
   const documentIdCol = options.documentId
-    ? `\n            $table->string('document_id', 24)->${options.draftPublish ? "index" : "unique"}();`
+    ? `\n            $table->string('document_id', 24)->${manyRows ? "index" : "unique"}();`
     : "";
-  // Both versions carry the same values, so a unique field cannot be unique per row (a reported gap).
+  // A document's rows can carry the same values, so a unique field cannot be unique per row (a
+  // reported gap).
   const migration = (e: FieldEmit): string =>
-    options.draftPublish ? e.migration.replace("->unique()", "") : e.migration;
+    manyRows ? e.migration.replace("->unique()", "") : e.migration;
   const fieldCols = [
     ...ct.fields
       .filter((f) => f.type !== "relation" && f.type !== "component")
       .map((f) => emitField(f)),
     ...extraEmits,
   ].map((e) => `            ${migration(e)};`);
-  const publishedAtCol = options.draftPublish
-    ? ["            $table->timestamp('published_at')->nullable();"]
-    : [];
+  const publishedAtCol = [
+    ...(options.draftPublish ? ["            $table->timestamp('published_at')->nullable();"] : []),
+    ...(options.localized ? ["            $table->string('locale', 16)->index();"] : []),
+  ];
   const fkCols = fkColumns.map((c) => `            ${c};`);
   const columns = [...fieldCols, ...fkCols, ...publishedAtCol].join("\n");
   return `<?php

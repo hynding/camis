@@ -11,6 +11,8 @@ export const emitModel = (
   fkNames: string[] = [],
   extraMethods: string[] = [],
   traits: string[] = [],
+  /** Further methods that need no imports of their own. */
+  members: string[] = [],
 ): string => {
   const names = filamentNames(ct);
   const emits = [
@@ -38,10 +40,8 @@ export const emitModel = (
     .join("\n");
   const relUse = relImports ? `${relImports}\n` : "";
   const observerUse = observed ? `use App\\Observers\\${names.model}Observer;\n` : "";
-  const relMethods =
-    relations.length > 0 || extraMethods.length > 0
-      ? `\n${[...relations.map((r) => r.php), ...extraMethods].join("\n\n")}\n`
-      : "";
+  const methods = [...relations.map((r) => r.php), ...extraMethods, ...members];
+  const relMethods = methods.length > 0 ? `\n${methods.join("\n\n")}\n` : "";
   // Preserve the original `${relUse}\n` blank-line idiom. observerUse appended alongside relUse
   // so when observed=false both are "", leaving the template identical to before (byte-exact golden).
   // When observed=true, observedAttr appears on its own line with a trailing \n before `class`.

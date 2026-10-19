@@ -15,9 +15,13 @@ export const emitResourceFiles = (
   relationFields: string[] = [],
   extraEmits: FieldEmit[] = [],
   repeaters: RepeaterEmit[] = [],
-  options: { versioned?: boolean; secured?: boolean } = {},
+  options: { versioned?: boolean; localized?: boolean; secured?: boolean } = {},
 ): GeneratedFile[] => {
   const versioned = options.versioned === true;
+  const localized = options.localized === true;
+  // A document's rows (versions, locales) share every value, so per-row uniqueness cannot hold.
+  const manyRows = versioned || localized;
+  const LOCALE_OPTIONS = "fn (): array => Locale::query()->pluck('name', 'code')->all()";
   const n = filamentNames(ct);
   const dir = `app/Filament/Resources/${n.resourceDir}`;
   const ns = `App\\Filament\\Resources\\${n.resourceDir}`;
@@ -38,7 +42,7 @@ export const emitResourceFiles = (
 
     public static function getEloquentQuery(): Builder
     {
-        return parent::getEloquentQuery()->whereNull('published_at')->with('publishedVersion');
+        return parent::getEloquentQuery()->whereNull('published_at')${localized ? "" : "->with('publishedVersion')"};
     }`;
 
   const resource = `<?php
@@ -88,15 +92,20 @@ class ${n.resourceClass} extends Resource
   const SELECT = "Filament\\Forms\\Components\\Select";
   const formImports = useBlock([
     ...emits.map((e) => e.formImport),
-    ...(relationFields.length > 0 ? [SELECT] : []),
+    ...(relationFields.length > 0 || localized ? [SELECT] : []),
+    ...(localized ? ["App\\Models\\Locale", "App\\Support\\StrapiLocales"] : []),
     ...repeaters.flatMap((r) => r.imports),
     "Filament\\Schemas\\Schema",
   ]);
   const formBody = [
-    // A draft and its published version share every value, so per-row uniqueness cannot hold.
+    ...(localized
+      ? [
+          `            Select::make('locale')->options(${LOCALE_OPTIONS})->default(fn (): string => StrapiLocales::default())->required()->disabledOn('edit'),`,
+        ]
+      : []),
     ...emits.map(
       (e) =>
-        `            ${versioned ? e.formComponent.replace("->unique()", "") : e.formComponent},`,
+        `            ${manyRows ? e.formComponent.replace("->unique()", "") : e.formComponent},`,
     ),
     ...relationFields.map((s) => `            ${s},`),
     ...repeaters.map((r) => `            ${r.component},`),
@@ -124,6 +133,14 @@ ${formBody}
   const tableImports = useBlock([
     ...emits.map((e) => e.tableImport),
     ...(versioned ? [TEXT_COLUMN, "App\\Support\\StrapiDocuments"] : []),
+    ...(localized
+      ? [
+          TEXT_COLUMN,
+          "App\\Models\\Locale",
+          "App\\Support\\StrapiLocales",
+          "Filament\\Tables\\Filters\\SelectFilter",
+        ]
+      : []),
     "Filament\\Tables\\Table",
   ]);
   const tableBody = [
@@ -133,7 +150,14 @@ ${formBody}
           "            TextColumn::make('status')->state(fn ($record) => StrapiDocuments::status($record))->badge(),",
         ]
       : []),
+    ...(localized ? ["            TextColumn::make('locale')->badge(),"] : []),
   ].join("\n");
+  // One locale at a time, the default one first, as Strapi's content manager lists them.
+  const tableFilters = localized
+    ? `->filters([
+            SelectFilter::make('locale')->options(${LOCALE_OPTIONS})->default(StrapiLocales::default()),
+        ])`
+    : "";
   const table = `<?php
 
 declare(strict_types=1);
@@ -148,7 +172,7 @@ class ${n.tableClass}
     {
         return $table->columns([
 ${tableBody}
-        ]);
+        ])${tableFilters};
     }
 }
 `;
@@ -182,50 +206,48 @@ class ${cls} extends ${base}
     },
     {
       path: `${dir}/Pages/${editPage}.php`,
-      content: versioned
-        ? versionedEditPage(ns, n.resourceClass, editPage, n.model, options.secured === true)
-        : page(editPage, "EditRecord", "Filament\\Resources\\Pages\\EditRecord"),
+      content:
+        versioned || localized
+          ? editPageWithActions(ns, n.resourceClass, editPage, n.model, {
+              secured: options.secured === true,
+              versioned,
+              localized,
+            })
+          : page(editPage, "EditRecord", "Filament\\Resources\\Pages\\EditRecord"),
     },
   ];
 };
 
 /**
  * The edit page of a draft-and-publish type edits the draft; its header actions publish it (saving
- * first), drop the published version, or reset the draft to it, each behind the caller's grant.
+ * first), drop the published version, or reset the draft to it. A localized type's edit page edits
+ * one locale and translates the document into a locale it lacks, as a copy to edit. Each action is
+ * behind the caller's grant.
  */
-const versionedEditPage = (
+const editPageWithActions = (
   ns: string,
   resourceClass: string,
   cls: string,
   model: string,
-  secured: boolean,
+  options: { secured: boolean; versioned: boolean; localized: boolean },
 ): string => {
-  const allowed = (ability: string): string =>
-    secured ? `Gate::allows('${ability}', $this->record)` : "true";
+  const { secured, versioned, localized } = options;
+  const allowed = (ability: string, subject = "$this->record"): string =>
+    secured ? `Gate::allows('${ability}', ${subject})` : "true";
   const published = "$this->record->publishedVersion()->exists()";
   const imports = useBlock([
     `${ns}\\${resourceClass}`,
-    `App\\Http\\Serializers\\${model}Serializer`,
-    "App\\Support\\StrapiDocuments",
     "Filament\\Actions\\Action",
     "Filament\\Resources\\Pages\\EditRecord",
+    ...(versioned
+      ? [`App\\Http\\Serializers\\${model}Serializer`, "App\\Support\\StrapiDocuments"]
+      : []),
+    ...(localized ? ["App\\Models\\Locale", "Filament\\Forms\\Components\\Select"] : []),
+    ...(localized && secured ? [`App\\Models\\${model}`] : []),
     ...(secured ? ["Illuminate\\Support\\Facades\\Gate"] : []),
   ]);
-  return `<?php
-
-declare(strict_types=1);
-
-namespace ${ns}\\Pages;
-
-${imports}
-
-class ${cls} extends EditRecord
-{
-    protected static string $resource = ${resourceClass}::class;
-
-    protected function getHeaderActions(): array
-    {
-        return [
+  const publishing = versioned
+    ? `
             Action::make('publish')
                 ->visible(fn (): bool => ${allowed("publish")})
                 ->action(function (): void {
@@ -243,7 +265,39 @@ class ${cls} extends EditRecord
                 ->action(function (): void {
                     $this->record = StrapiDocuments::discard($this->record, ${model}Serializer::class);
                     $this->fillForm();
-                }),
+                }),`
+    : "";
+  const translating = localized
+    ? `
+            Action::make('translate')
+                ->visible(fn (): bool => ${allowed("create", `${model}::class`)})
+                ->schema([
+                    Select::make('locale')
+                        ->options(fn (): array => Locale::query()->whereNotIn('code', $this->record->localizations()->pluck('locale'))->pluck('name', 'code')->all())
+                        ->required(),
+                ])
+                ->action(function (array $data): void {
+                    $copy = $this->record->replicate();
+                    $copy->locale = $data['locale'];
+                    $copy->save();
+                    $this->redirect(${resourceClass}::getUrl('edit', ['record' => $copy]));
+                }),`
+    : "";
+  return `<?php
+
+declare(strict_types=1);
+
+namespace ${ns}\\Pages;
+
+${imports}
+
+class ${cls} extends EditRecord
+{
+    protected static string $resource = ${resourceClass}::class;
+
+    protected function getHeaderActions(): array
+    {
+        return [${publishing}${translating}
         ];
     }
 }

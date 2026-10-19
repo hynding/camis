@@ -65,6 +65,14 @@ export const expressAdapterFor = (dialect: Dialect): GenerateAdapter => ({
 
     const expansions = new Map<string, ExpandedContentType>();
     doc.contentTypes.forEach((ct) => {
+      if (ct.options?.localized === true) {
+        gaps.push({
+          feature: "localized",
+          location: { contentType: ct.name },
+          severity: "downgrade",
+          message: `"${ct.name}" is localized; the Express target keeps one row per record, in no locale`,
+        });
+      }
       for (const f of ct.fields) {
         if (f.type === "relation" || f.type === "component") continue;
         if (!isSupportedField(f.type)) {

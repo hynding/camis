@@ -1,0 +1,183 @@
+{
+  "about": "Strapi 5 i18n over REST, checked against strapi-php. Run on an empty database whose locales are en (the default) and fr, in order, with strapi-populate-vectors.mjs. Category, Article and Page are localized (Article.code is shared by every locale; Page also has draft and publish); Book and Genre are not.",
+  "seed": [
+    { "path": "/categories", "as": "categories:News", "data": { "name": "News" } },
+    { "path": "/genres", "as": "genres:Verse", "data": { "name": "Verse" } }
+  ],
+  "reads": [],
+  "writes": [
+    {
+      "name": "the locales list names the default",
+      "method": "GET",
+      "path": "/i18n/locales"
+    },
+    {
+      "name": "update in a new locale creates that locale of the document",
+      "method": "PUT",
+      "path": "/categories/@categories:News",
+      "query": "locale=fr&fields[0]=name&fields[1]=locale",
+      "data": { "name": "Actualités" }
+    },
+    {
+      "name": "lists show the default locale",
+      "method": "GET",
+      "path": "/categories",
+      "query": "fields[0]=name&fields[1]=locale"
+    },
+    {
+      "name": "locale picks one",
+      "method": "GET",
+      "path": "/categories",
+      "query": "locale=fr&fields[0]=name&fields[1]=locale"
+    },
+    {
+      "name": "locale=* lists every locale",
+      "method": "GET",
+      "path": "/categories",
+      "query": "locale=*&fields[0]=name&fields[1]=locale"
+    },
+    {
+      "name": "an unknown locale lists nothing",
+      "method": "GET",
+      "path": "/categories",
+      "query": "locale=de"
+    },
+    {
+      "name": "create writes the default locale",
+      "method": "POST",
+      "path": "/articles",
+      "query": "fields[0]=title&fields[1]=code&fields[2]=locale&populate[category][fields][0]=name&populate[category][fields][1]=locale&populate[genres][fields][0]=name",
+      "as": "articles:Hello",
+      "data": {
+        "title": "Hello",
+        "code": "A1",
+        "category": "@categories:News",
+        "genres": ["@genres:Verse"]
+      }
+    },
+    {
+      "name": "a new locale copies the shared fields but not the links",
+      "method": "PUT",
+      "path": "/articles/@articles:Hello",
+      "query": "locale=fr&fields[0]=title&fields[1]=code&fields[2]=locale&populate[category][fields][0]=name&populate[genres][fields][0]=name",
+      "data": { "title": "Bonjour" }
+    },
+    {
+      "name": "a link names its target in the source's locale",
+      "method": "PUT",
+      "path": "/articles/@articles:Hello",
+      "query": "locale=fr&fields[0]=title&populate[category][fields][0]=name&populate[category][fields][1]=locale",
+      "data": { "category": "@categories:News" }
+    },
+    {
+      "name": "a shared field changed in one locale",
+      "method": "PUT",
+      "path": "/articles/@articles:Hello",
+      "query": "locale=fr&fields[0]=title&fields[1]=code",
+      "data": { "code": "A2" }
+    },
+    {
+      "name": "changes in every locale",
+      "method": "GET",
+      "path": "/articles/@articles:Hello",
+      "query": "fields[0]=title&fields[1]=code&populate[category][fields][0]=name"
+    },
+    {
+      "name": "localizations lists the document's other locales",
+      "method": "GET",
+      "path": "/articles/@articles:Hello",
+      "query": "fields[0]=title&populate[localizations][fields][0]=title&populate[localizations][fields][1]=locale"
+    },
+    {
+      "name": "a locale the document lacks is not found",
+      "method": "GET",
+      "path": "/articles/@articles:Hello",
+      "query": "locale=de"
+    },
+    {
+      "name": "create with a locale makes a document in that locale only",
+      "method": "POST",
+      "path": "/articles",
+      "query": "locale=fr&fields[0]=title&fields[1]=locale",
+      "as": "articles:Seul",
+      "data": { "title": "Seul" }
+    },
+    {
+      "name": "so the default locale does not list it",
+      "method": "GET",
+      "path": "/articles",
+      "query": "fields[0]=title"
+    },
+    {
+      "name": "a type without locales links the default locale",
+      "method": "POST",
+      "path": "/books",
+      "query": "fields[0]=title&populate[category][fields][0]=name&populate[category][fields][1]=locale",
+      "as": "books:Bound",
+      "data": { "title": "Bound", "category": "@categories:News" }
+    },
+    {
+      "name": "whatever locale it is read in",
+      "method": "GET",
+      "path": "/books/@books:Bound",
+      "query": "locale=fr&fields[0]=title&populate[category][fields][0]=name"
+    },
+    {
+      "name": "a draft-and-publish type publishes in the default locale",
+      "method": "POST",
+      "path": "/pages",
+      "query": "fields[0]=title&fields[1]=locale",
+      "as": "pages:Home",
+      "data": { "title": "Home" }
+    },
+    {
+      "name": "a new locale written as a draft",
+      "method": "PUT",
+      "path": "/pages/@pages:Home",
+      "query": "locale=fr&status=draft&fields[0]=title&fields[1]=locale",
+      "data": { "title": "Accueil" }
+    },
+    {
+      "name": "is not published",
+      "method": "GET",
+      "path": "/pages",
+      "query": "locale=fr&fields[0]=title"
+    },
+    {
+      "name": "until it is updated without status",
+      "method": "PUT",
+      "path": "/pages/@pages:Home",
+      "query": "locale=fr&fields[0]=title&fields[1]=locale",
+      "data": {}
+    },
+    {
+      "name": "each locale has its published version",
+      "method": "GET",
+      "path": "/pages",
+      "query": "locale=*&fields[0]=title&fields[1]=locale"
+    },
+    {
+      "name": "delete with a locale deletes that locale",
+      "method": "DELETE",
+      "path": "/pages/@pages:Home",
+      "query": "locale=fr"
+    },
+    {
+      "name": "and both its versions",
+      "method": "GET",
+      "path": "/pages",
+      "query": "locale=*&status=draft&fields[0]=title&fields[1]=locale"
+    },
+    {
+      "name": "delete without a locale deletes the default locale",
+      "method": "DELETE",
+      "path": "/articles/@articles:Hello"
+    },
+    {
+      "name": "leaving the other locales",
+      "method": "GET",
+      "path": "/articles",
+      "query": "locale=*&fields[0]=title&fields[1]=locale"
+    }
+  ]
+}

@@ -6,11 +6,14 @@ declare(strict_types=1);
 
 use App\Http\Controllers\Api\ActivityApiController;
 use App\Http\Controllers\Api\ActivitySessionApiController;
+use App\Http\Controllers\Api\ArticleApiController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AuthorApiController;
 use App\Http\Controllers\Api\BookApiController;
+use App\Http\Controllers\Api\CategoryApiController;
 use App\Http\Controllers\Api\GenreApiController;
 use App\Http\Controllers\Api\NoteApiController;
+use App\Http\Controllers\Api\PageApiController;
 use App\Http\Controllers\Api\PostApiController;
 use App\Http\Controllers\Api\TagApiController;
 use App\Http\Controllers\Api\TopicApiController;
@@ -49,6 +52,12 @@ Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle):
         Route::put('/activity-sessions/{key}', [ActivitySessionApiController::class, 'update']);
         Route::delete('/activity-sessions/{key}', [ActivitySessionApiController::class, 'destroy']);
 
+        Route::get('/articles', [ArticleApiController::class, 'index']);
+        Route::post('/articles', [ArticleApiController::class, 'store']);
+        Route::get('/articles/{key}', [ArticleApiController::class, 'show']);
+        Route::put('/articles/{key}', [ArticleApiController::class, 'update']);
+        Route::delete('/articles/{key}', [ArticleApiController::class, 'destroy']);
+
         Route::get('/authors', [AuthorApiController::class, 'index']);
         Route::post('/authors', [AuthorApiController::class, 'store']);
         Route::get('/authors/{key}', [AuthorApiController::class, 'show']);
@@ -61,6 +70,12 @@ Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle):
         Route::put('/books/{key}', [BookApiController::class, 'update']);
         Route::delete('/books/{key}', [BookApiController::class, 'destroy']);
 
+        Route::get('/categories', [CategoryApiController::class, 'index']);
+        Route::post('/categories', [CategoryApiController::class, 'store']);
+        Route::get('/categories/{key}', [CategoryApiController::class, 'show']);
+        Route::put('/categories/{key}', [CategoryApiController::class, 'update']);
+        Route::delete('/categories/{key}', [CategoryApiController::class, 'destroy']);
+
         Route::get('/genres', [GenreApiController::class, 'index']);
         Route::post('/genres', [GenreApiController::class, 'store']);
         Route::get('/genres/{key}', [GenreApiController::class, 'show']);
@@ -72,6 +87,12 @@ Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle):
         Route::get('/notes/{key}', [NoteApiController::class, 'show']);
         Route::put('/notes/{key}', [NoteApiController::class, 'update']);
         Route::delete('/notes/{key}', [NoteApiController::class, 'destroy']);
+
+        Route::get('/pages', [PageApiController::class, 'index']);
+        Route::post('/pages', [PageApiController::class, 'store']);
+        Route::get('/pages/{key}', [PageApiController::class, 'show']);
+        Route::put('/pages/{key}', [PageApiController::class, 'update']);
+        Route::delete('/pages/{key}', [PageApiController::class, 'destroy']);
 
         Route::get('/posts', [PostApiController::class, 'index']);
         Route::post('/posts', [PostApiController::class, 'store']);

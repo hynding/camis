@@ -227,3 +227,31 @@ describe("options.upsertBy", () => {
     if (r.success) expect(r.data.options?.upsertBy).toBe("recordId");
   });
 });
+
+describe("localization", () => {
+  const localized = (fields: unknown[], options: object = { localized: true }) =>
+    contentType.safeParse({ name: "Article", kind: "collection", options, fields });
+
+  it("accepts a localized content type whose fields say which ones vary per locale", () => {
+    const r = localized([
+      { type: "string", name: "title" },
+      { type: "string", name: "code", localized: false },
+    ]);
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.options?.localized).toBe(true);
+      expect(r.data.fields[1]).toMatchObject({ name: "code", localized: false });
+    }
+  });
+
+  it("rejects a per-field localized flag on a type that is not localized", () => {
+    const r = localized([{ type: "string", name: "code", localized: false }], {});
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      expect((r.error.issues[0] as { params?: unknown } | undefined)?.params).toEqual({
+        irCode: "localized_field_without_localized_type",
+      });
+      expect(r.error.issues[0]?.path).toEqual(["fields", 0, "localized"]);
+    }
+  });
+});

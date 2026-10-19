@@ -15,16 +15,18 @@ final class StrapiRelations
      *
      * @return array<string, array{relation: array, set: ?list<int>, connect: list<int>, disconnect: list<int>}>
      */
-    public static function read(array $data, array $fields, ?Authenticatable $viewer): array
+    public static function read(array $data, array $fields, ?Authenticatable $viewer, ?string $locale = null): array
     {
         $links = [];
         foreach ($fields as $key => $relation) {
-            if (! isset($relation['relation']) || ! array_key_exists($key, $data)) {
+            if (! isset($relation['relation']) || $relation['kind'] === 'localizations' || ! array_key_exists($key, $data)) {
                 continue;
             }
             if (! StrapiQuery::readable($relation, $viewer)) {
                 throw StrapiError::validation("Invalid key {$key}", ['key' => $key, 'path' => $key, 'source' => 'body']);
             }
+            // A target that keeps locales is linked in the writer's locale, else in its default one.
+            $relation['locale'] = $relation['localized'] ? ($locale ?? StrapiLocales::default()) : null;
             $links[$key] = self::instruction($relation, $data[$key], $viewer);
         }
 
@@ -165,7 +167,7 @@ final class StrapiRelations
         $byDocumentId = self::visibleRows($relation, 'document_id', $documentIds, $viewer);
         foreach ($documentIds as $documentId) {
             if (! array_key_exists($documentId, $byDocumentId)) {
-                throw StrapiError::validation("Document with id \"{$documentId}\", locale \"\" not found");
+                throw StrapiError::validation("Document with id \"{$documentId}\", locale \"{$relation['locale']}\" not found");
             }
         }
         $byId = self::visibleRows($relation, 'id', $ids, $viewer);
@@ -198,6 +200,9 @@ final class StrapiRelations
         if ($relation['draftPublish'] && $column === 'document_id') {
             $query->whereNull('published_at');
         }
+        if ($relation['locale'] !== null && $column === 'document_id') {
+            $query->where('locale', $relation['locale']);
+        }
         StrapiQuery::scope($query, $viewer);
         $rows = [];
         foreach ($query->get() as $row) {
@@ -211,21 +216,23 @@ final class StrapiRelations
 
     /**
      * @param array<int, int> $byId
-     * @return array<int, int> each id → its document's draft id
+     * @return array<int, int> each id → its document's draft id, in the same locale
      */
     private static function drafts(array $relation, array $byId): array
     {
         if ($byId === []) {
             return [];
         }
-        $documents = $relation['model']::query()->whereKey(array_keys($byId))->pluck('document_id', 'id');
+        $columns = $relation['localized'] ? ['document_id', 'locale'] : ['document_id'];
+        $linked = $relation['model']::query()->whereKey(array_keys($byId))->get(['id', ...$columns])->keyBy('id');
         $drafts = $relation['model']::query()
-            ->whereIn('document_id', $documents->unique()->values()->all())
+            ->whereIn('document_id', $linked->pluck('document_id')->unique()->values()->all())
             ->whereNull('published_at')
-            ->pluck('id', 'document_id');
+            ->get(['id', ...$columns])
+            ->keyBy(fn (Model $row) => StrapiDocuments::versionKey($row, $columns));
         $mapped = [];
         foreach (array_keys($byId) as $id) {
-            $mapped[$id] = (int) $drafts[$documents[$id]];
+            $mapped[$id] = (int) $drafts[StrapiDocuments::versionKey($linked[$id], $columns)]->getKey();
         }
 
         return $mapped;

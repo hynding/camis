@@ -28,6 +28,9 @@ final class TransactionSerializer
     /** Whether each document has a draft and, once published, a published version. */
     public const DRAFT_PUBLISH = false;
 
+    /** Whether each document keeps one row per locale. */
+    public const LOCALIZED = false;
+
     /** Strapi-shaped wire object: camelCase keys, nested components, nulls omitted. */
     public static function toWire(Transaction $m): array
     {
