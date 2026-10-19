@@ -243,6 +243,8 @@ export const strapiApiBundle: IrBundle = {
           assign: { creator: "user.id" },
         },
         { contentType: "Tag", actions: ["read"] },
+        // auth-vectors.json: the user list is readable; its writes are granted by the vectors' hook.
+        { contentType: "User", actions: ["read"] },
         { contentType: "File", actions: ["create", "read", "update", "delete"] },
         { contentType: "Book", actions: ["create", "read", "update", "delete"] },
         { contentType: "Author", actions: ["create", "read", "update", "delete"] },

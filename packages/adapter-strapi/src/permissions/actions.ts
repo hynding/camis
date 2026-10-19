@@ -33,6 +33,19 @@ export const FILE_API_ACTIONS: Record<Action, string[]> = {
   publish: [],
 };
 
+// users-permissions' own user actions, which a grant on the builtin user becomes at the Content API.
+export const USER_API_ACTIONS: Record<Action, string[]> = {
+  create: ["plugin::users-permissions.user.create"],
+  read: [
+    "plugin::users-permissions.user.find",
+    "plugin::users-permissions.user.findOne",
+    "plugin::users-permissions.user.count",
+  ],
+  update: ["plugin::users-permissions.user.update"],
+  delete: ["plugin::users-permissions.user.destroy"],
+  publish: [],
+};
+
 // Field access maps to the content-manager actions it gates.
 export const FIELD_ACCESS_ACTIONS: Record<"read" | "write", Action[]> = {
   read: ["read"],
@@ -61,3 +74,6 @@ export const PUBLIC_API_ACTIONS = [
 // update a row owning a relation to the built-in user needs this action or the write is rejected
 // with "Invalid key <relation>".
 export const USER_RELATION_WRITE_ACTION = "plugin::users-permissions.user.find";
+
+// The builtin user is users-permissions' own content type, so it is never an `api::` uid.
+export const PLUGIN_USER_UID = "plugin::users-permissions.user";

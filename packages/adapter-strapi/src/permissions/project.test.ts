@@ -84,6 +84,48 @@ describe("projectPermissions", () => {
   });
 });
 
+describe("grants on the builtin user type", () => {
+  const withUser: IrDocument = {
+    version: 1,
+    contentTypes: [
+      {
+        name: "User",
+        kind: "collection",
+        builtin: "user",
+        fields: [{ type: "string", name: "username" }],
+      },
+    ],
+    components: [],
+  };
+  const manager: Role = {
+    name: "authenticated",
+    grants: [{ contentType: "User", actions: ["create", "read", "update", "delete"] }],
+  };
+
+  it("become the users-permissions user actions, not an api:: uid", () => {
+    expect(projectApiRoles(withUser, [manager]).roles).toEqual([
+      {
+        type: "authenticated",
+        actions: [
+          "plugin::users-permissions.user.count",
+          "plugin::users-permissions.user.create",
+          "plugin::users-permissions.user.destroy",
+          "plugin::users-permissions.user.find",
+          "plugin::users-permissions.user.findOne",
+          "plugin::users-permissions.user.update",
+        ],
+      },
+    ]);
+  });
+
+  it("take the users-permissions user as their admin subject", () => {
+    const out = projectPermissions(withUser, [manager]);
+    expect(new Set(out.roles[0]!.permissions.map((p) => p.subject))).toEqual(
+      new Set(["plugin::users-permissions.user"]),
+    );
+  });
+});
+
 describe("grants on the builtin file type", () => {
   const withFile: IrDocument = {
     version: 1,

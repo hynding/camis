@@ -87,7 +87,7 @@ class MediaAdminTest extends TestCase
     public function test_the_library_is_denied_without_the_file_grants(): void
     {
         $this->login(['book.read']);
-        $this->get('/admin/files')->assertForbidden();
-        $this->get('/admin/files/create')->assertForbidden();
+        Livewire::test(ListFiles::class)->assertForbidden();
+        Livewire::test(CreateFile::class)->assertForbidden();
     }
 }

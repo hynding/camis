@@ -159,6 +159,8 @@ jobs:
             mysql)  printf 'DB_CONNECTION=mysql\nDB_HOST=127.0.0.1\nDB_PORT=3306\nDB_DATABASE=camis\nDB_USERNAME=root\nDB_PASSWORD=camis\n' >> .env ;;
             pgsql)  printf 'DB_CONNECTION=pgsql\nDB_HOST=127.0.0.1\nDB_PORT=5432\nDB_DATABASE=camis\nDB_USERNAME=postgres\nDB_PASSWORD=camis\n' >> .env ;;
           esac
+          # The auth vectors make more credential requests in a minute than the default allows.
+          echo "CAMIS_AUTH_THROTTLE_PER_MINUTE=600" >> .env
           php artisan migrate --force
           php artisan db:seed --class="Database\\Seeders\\RolePermissionSeeder" --force
           php artisan config:cache
@@ -226,14 +228,21 @@ jobs:
           F=../packages/adapter-filament/src/strapi-api/__fixtures__
           node ../packages/adapter-filament/scripts/strapi-populate-vectors.mjs http://127.0.0.1:8765/api \
             --token "$T" --vectors $F/media-vectors.json --expected $F/media-vectors.expected.json
-      - name: Filament admin publishes drafts, translates and keeps the media library
+      - name: Strapi users-permissions vectors (recorded from strapi-php)
+        run: |
+          cd app
+          php artisan migrate:fresh --force
+          php artisan db:seed --class="Database\\Seeders\\RolePermissionSeeder" --force
+          node ../packages/adapter-filament/scripts/strapi-auth-vectors.mjs http://127.0.0.1:8765/api \
+            --hook "bash ../packages/adapter-filament/scripts/strapi-auth-hook.sh"
+      - name: Filament admin publishes drafts, translates, keeps the media library and manages users
         run: |
           cd app
           # The cached config would point the tests at the served database instead of :memory:.
           php artisan config:clear
           S=../packages/adapter-filament/scripts/php
-          cp $S/DraftAdminTest.php $S/LocaleAdminTest.php $S/MediaAdminTest.php tests/Feature/
-          php artisan test tests/Feature/DraftAdminTest.php tests/Feature/LocaleAdminTest.php tests/Feature/MediaAdminTest.php
+          cp $S/DraftAdminTest.php $S/LocaleAdminTest.php $S/MediaAdminTest.php $S/UsersAdminTest.php tests/Feature/
+          php artisan test tests/Feature/DraftAdminTest.php tests/Feature/LocaleAdminTest.php tests/Feature/MediaAdminTest.php tests/Feature/UsersAdminTest.php
       - name: Server log on failure
         if: failure()
         run: cat app/serve.log app/storage/logs/laravel.log || true

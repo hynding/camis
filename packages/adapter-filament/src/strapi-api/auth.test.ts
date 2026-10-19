@@ -12,13 +12,16 @@ describe("strapi-api auth", () => {
     expect(emitAuthController(undefined)).not.toContain("assignRole");
   });
   it("escapes a defaultRole containing a single quote and backslash", () => {
-    expect(emitAuthController("it's-role")).toContain("assignRole('it\\'s-role')");
-    expect(emitAuthController("back\\slash")).toContain("assignRole('back\\\\slash')");
+    expect(emitAuthController("it's-role")).toContain("where('name', 'it\\'s-role')");
+    expect(emitAuthController("back\\slash")).toContain("where('name', 'back\\\\slash')");
   });
-  it("resolves login by email first, falling back to username, deterministically", () => {
+  // Strapi's callback: a local account whose lowercased email or exact username is the identifier.
+  it("resolves login by lowercased email or username among local accounts", () => {
     const php = emitAuthController(undefined);
-    expect(php).toContain("User::query()->where('email', $data['identifier'])->first()");
-    expect(php).not.toContain("->orWhere('username'");
+    expect(php).toContain("User::query()->where('provider', 'local')");
+    expect(php).toContain(
+      "$q->where('email', mb_strtolower($identifier))->orWhere('username', $identifier)",
+    );
   });
   it("username migration golden sorts before the generated tables", async () => {
     expect(USERNAME_MIGRATION_PATH < "database/migrations/0001_01_02_000001_x.php").toBe(true);

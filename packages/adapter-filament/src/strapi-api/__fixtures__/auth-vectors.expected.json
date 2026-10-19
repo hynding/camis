@@ -1,0 +1,662 @@
+[
+  {
+    "name": "register",
+    "status": 200,
+    "body": {
+      "jwt": "<jwt>",
+      "user": {
+        "blocked": false,
+        "confirmed": true,
+        "email": "alice@example.test",
+        "provider": "local",
+        "username": "alice"
+      }
+    }
+  },
+  {
+    "name": "register taken",
+    "status": 400,
+    "error": {
+      "name": "ApplicationError",
+      "message": "Email or Username are already taken",
+      "details": {}
+    }
+  },
+  {
+    "name": "register taken email",
+    "status": 400,
+    "error": {
+      "name": "ApplicationError",
+      "message": "Email or Username are already taken",
+      "details": {}
+    }
+  },
+  {
+    "name": "register invalid email",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "email must be a valid email",
+      "details": {
+        "errors": [
+          {
+            "path": ["email"],
+            "message": "email must be a valid email",
+            "name": "ValidationError",
+            "value": "not-an-email"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "register without username",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "username is a required field",
+      "details": {
+        "errors": [
+          {
+            "path": ["username"],
+            "message": "username is a required field",
+            "name": "ValidationError"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "register without password",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "password is a required field",
+      "details": {
+        "errors": [
+          {
+            "path": ["password"],
+            "message": "password is a required field",
+            "name": "ValidationError"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "register with a role",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid parameters: role",
+      "details": {}
+    }
+  },
+  {
+    "name": "login wrong password",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid identifier or password",
+      "details": {}
+    }
+  },
+  {
+    "name": "login unknown identifier",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid identifier or password",
+      "details": {}
+    }
+  },
+  {
+    "name": "login without password",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "password is a required field",
+      "details": {
+        "errors": [
+          {
+            "path": ["password"],
+            "message": "password is a required field",
+            "name": "ValidationError"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "login by email",
+    "status": 200,
+    "body": {
+      "jwt": "<jwt>",
+      "user": {
+        "blocked": false,
+        "confirmed": true,
+        "email": "alice@example.test",
+        "provider": "local",
+        "username": "alice"
+      }
+    }
+  },
+  {
+    "name": "me",
+    "status": 200,
+    "body": {
+      "blocked": false,
+      "confirmed": true,
+      "email": "alice@example.test",
+      "provider": "local",
+      "username": "alice"
+    }
+  },
+  {
+    "name": "me without a session",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "change password wrong current",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "The provided current password is invalid",
+      "details": {}
+    }
+  },
+  {
+    "name": "change password mismatch",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Passwords do not match",
+      "details": {
+        "errors": [
+          {
+            "path": ["passwordConfirmation"],
+            "message": "Passwords do not match",
+            "name": "ValidationError",
+            "value": "secret3"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "change password unchanged",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Your new password must be different than your current password",
+      "details": {}
+    }
+  },
+  {
+    "name": "change password without a session",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "change password",
+    "status": 200,
+    "body": {
+      "jwt": "<jwt>",
+      "user": {
+        "blocked": false,
+        "confirmed": true,
+        "email": "alice@example.test",
+        "provider": "local",
+        "username": "alice"
+      }
+    }
+  },
+  {
+    "name": "login old password",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid identifier or password",
+      "details": {}
+    }
+  },
+  {
+    "name": "forgot password",
+    "status": 200,
+    "body": {
+      "ok": true
+    }
+  },
+  {
+    "name": "forgot password unknown email",
+    "status": 200,
+    "body": {
+      "ok": true
+    }
+  },
+  {
+    "name": "forgot password invalid email",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "email must be a valid email",
+      "details": {
+        "errors": [
+          {
+            "path": ["email"],
+            "message": "email must be a valid email",
+            "name": "ValidationError",
+            "value": "nope"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "reset password wrong code",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Incorrect code provided",
+      "details": {}
+    }
+  },
+  {
+    "name": "reset password mismatch",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Passwords do not match",
+      "details": {
+        "errors": [
+          {
+            "path": ["passwordConfirmation"],
+            "message": "Passwords do not match",
+            "name": "ValidationError",
+            "value": "secret4"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "reset password",
+    "status": 200,
+    "body": {
+      "jwt": "<jwt>",
+      "user": {
+        "blocked": false,
+        "confirmed": true,
+        "email": "alice@example.test",
+        "provider": "local",
+        "username": "alice"
+      }
+    }
+  },
+  {
+    "name": "reset password code reused",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Incorrect code provided",
+      "details": {}
+    }
+  },
+  {
+    "name": "login new password",
+    "status": 200,
+    "body": {
+      "jwt": "<jwt>",
+      "user": {
+        "blocked": false,
+        "confirmed": true,
+        "email": "alice@example.test",
+        "provider": "local",
+        "username": "alice"
+      }
+    }
+  },
+  {
+    "name": "register bob",
+    "status": 200,
+    "body": {
+      "jwt": "<jwt>",
+      "user": {
+        "blocked": false,
+        "confirmed": true,
+        "email": "bob@example.test",
+        "provider": "local",
+        "username": "bob"
+      }
+    }
+  },
+  {
+    "name": "users",
+    "status": 200,
+    "body": [
+      {
+        "blocked": false,
+        "confirmed": true,
+        "email": "alice@example.test",
+        "provider": "local",
+        "username": "alice"
+      },
+      {
+        "blocked": false,
+        "confirmed": true,
+        "email": "bob@example.test",
+        "provider": "local",
+        "username": "bob"
+      }
+    ]
+  },
+  {
+    "name": "users filtered",
+    "status": 200,
+    "body": [
+      {
+        "username": "bob"
+      }
+    ]
+  },
+  {
+    "name": "users count",
+    "status": 200,
+    "body": 2
+  },
+  {
+    "name": "user",
+    "status": 200,
+    "body": {
+      "blocked": false,
+      "confirmed": true,
+      "email": "bob@example.test",
+      "provider": "local",
+      "username": "bob"
+    }
+  },
+  {
+    "name": "user missing",
+    "status": 204,
+    "body": ""
+  },
+  {
+    "name": "users without a session",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "create user denied",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "update user denied",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "delete user denied",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "create user without a role",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "role is a required field",
+      "details": {
+        "errors": [
+          {
+            "path": ["role"],
+            "message": "role is a required field",
+            "name": "ValidationError"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "create user invalid email",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "email must be a valid email",
+      "details": {
+        "errors": [
+          {
+            "path": ["email"],
+            "message": "email must be a valid email",
+            "name": "ValidationError",
+            "value": "nope"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "create user email taken",
+    "status": 400,
+    "error": {
+      "name": "ApplicationError",
+      "message": "Email already taken",
+      "details": {}
+    }
+  },
+  {
+    "name": "create user",
+    "status": 201,
+    "body": {
+      "blocked": false,
+      "confirmed": false,
+      "email": "made@example.test",
+      "provider": "local",
+      "username": "made"
+    }
+  },
+  {
+    "name": "login created user",
+    "status": 200,
+    "body": {
+      "jwt": "<jwt>",
+      "user": {
+        "blocked": false,
+        "confirmed": false,
+        "email": "made@example.test",
+        "provider": "local",
+        "username": "made"
+      }
+    }
+  },
+  {
+    "name": "update user",
+    "status": 200,
+    "body": {
+      "blocked": false,
+      "confirmed": true,
+      "email": "robert@example.test",
+      "provider": "local",
+      "username": "robert"
+    }
+  },
+  {
+    "name": "update user username taken",
+    "status": 400,
+    "error": {
+      "name": "ApplicationError",
+      "message": "Username already taken",
+      "details": {}
+    }
+  },
+  {
+    "name": "update user email taken",
+    "status": 400,
+    "error": {
+      "name": "ApplicationError",
+      "message": "Email already taken",
+      "details": {}
+    }
+  },
+  {
+    "name": "update user empty password",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "password.notNull",
+      "details": {}
+    }
+  },
+  {
+    "name": "update user missing",
+    "status": 404,
+    "error": {
+      "name": "NotFoundError",
+      "message": "User not found",
+      "details": {}
+    }
+  },
+  {
+    "name": "delete user",
+    "status": 200,
+    "body": {
+      "blocked": false,
+      "confirmed": false,
+      "email": "made@example.test",
+      "provider": "local",
+      "username": "made"
+    }
+  },
+  {
+    "name": "users after delete",
+    "status": 200,
+    "body": 2
+  },
+  {
+    "name": "login blocked",
+    "status": 400,
+    "error": {
+      "name": "ApplicationError",
+      "message": "Your account has been blocked by an administrator",
+      "details": {}
+    }
+  },
+  {
+    "name": "me blocked",
+    "status": 401,
+    "error": {
+      "name": "UnauthorizedError",
+      "message": "Invalid credentials",
+      "details": {}
+    }
+  },
+  {
+    "name": "register unconfirmed",
+    "status": 200,
+    "body": {
+      "user": {
+        "blocked": false,
+        "confirmed": false,
+        "email": "carol@example.test",
+        "provider": "local",
+        "username": "carol"
+      }
+    }
+  },
+  {
+    "name": "login unconfirmed",
+    "status": 400,
+    "error": {
+      "name": "ApplicationError",
+      "message": "Your account email is not confirmed",
+      "details": {}
+    }
+  },
+  {
+    "name": "send confirmation",
+    "status": 200,
+    "body": {
+      "email": "carol@example.test",
+      "sent": true
+    }
+  },
+  {
+    "name": "send confirmation unknown email",
+    "status": 200,
+    "body": {
+      "email": "nobody@example.test",
+      "sent": true
+    }
+  },
+  {
+    "name": "confirm wrong token",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid token",
+      "details": {}
+    }
+  },
+  {
+    "name": "confirm",
+    "status": 302,
+    "location": "http://localhost:3000/confirmed"
+  },
+  {
+    "name": "login confirmed",
+    "status": 200,
+    "body": {
+      "jwt": "<jwt>",
+      "user": {
+        "blocked": false,
+        "confirmed": true,
+        "email": "carol@example.test",
+        "provider": "local",
+        "username": "carol"
+      }
+    }
+  },
+  {
+    "name": "send confirmation already confirmed",
+    "status": 400,
+    "error": {
+      "name": "ApplicationError",
+      "message": "Already confirmed",
+      "details": {}
+    }
+  },
+  {
+    "name": "register closed",
+    "status": 400,
+    "error": {
+      "name": "ApplicationError",
+      "message": "Register action is currently disabled",
+      "details": {}
+    }
+  }
+]

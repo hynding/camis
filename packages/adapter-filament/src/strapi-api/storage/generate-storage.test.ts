@@ -135,7 +135,7 @@ describe("filamentAdapter storageLayout strapi — file set", () => {
     expect(content("app/Models/Transaction.php")).not.toContain("'occurred_on' =>");
   });
 
-  it("reports exactly one project-level adminPanelNotEmitted gap and nothing else", () => {
+  it("reports the admin panel and the account routes it leaves to Strapi, and nothing else", () => {
     expect(result.gaps.gaps).toEqual([
       {
         feature: "adminPanelNotEmitted",
@@ -144,6 +144,14 @@ describe("filamentAdapter storageLayout strapi — file set", () => {
         message:
           "Filament admin panel resources are not emitted in the strapi storage layout; " +
           "Strapi's own admin panel owns content editing.",
+      },
+      {
+        feature: "usersPermissionsAccounts",
+        location: {},
+        severity: "downgrade",
+        message:
+          "the Strapi storage layout serves register, login and /users/me only; password reset " +
+          "and change, email confirmation, blocked users and /users are left to the Strapi instance",
       },
     ]);
   });

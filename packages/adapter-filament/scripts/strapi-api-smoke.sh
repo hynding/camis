@@ -85,17 +85,22 @@ APUT=$(req PUT /activities/a1 "$TA" '{"data":{"name":"run harder"}}')
 
 [[ "$(req DELETE /notes/n1 "$TA" | status)" == "204" ]] || fail "delete"
 [[ "$(req GET /notes/nope "$TA" | body | jq -r .error.name)" == "NotFoundError" ]] || fail "404 shape"
+# Without credentials Strapi answers with the public role's verdict (granted nothing: 403); a token
+# that does not verify is a 401.
 UNAUTH=$(req GET /notes '')
-[[ "$(echo "$UNAUTH" | status)" == "401" ]] || fail "unauthenticated status: $UNAUTH"
-[[ "$(echo "$UNAUTH" | body | jq -r .error.name)" == "UnauthorizedError" ]] || fail "unauthenticated shape: $UNAUTH"
+[[ "$(echo "$UNAUTH" | status)" == "403" ]] || fail "unauthenticated status: $UNAUTH"
+[[ "$(echo "$UNAUTH" | body | jq -r .error.name)" == "ForbiddenError" ]] || fail "unauthenticated shape: $UNAUTH"
+BADTOKEN=$(req GET /notes 'not-a-token')
+[[ "$(echo "$BADTOKEN" | status)" == "401" ]] || fail "bad token status: $BADTOKEN"
+[[ "$(echo "$BADTOKEN" | body | jq -r .error.name)" == "UnauthorizedError" ]] || fail "bad token shape: $BADTOKEN"
 
 # Same check with no Accept header at all (the OYL browser client never sends one): StrapiErrors
 # must force Accept: application/json before $next($request) so Authenticate::unauthenticated()
-# sees expectsJson() and throws AuthenticationException (→ 401), instead of calling
+# sees expectsJson() and throws AuthenticationException, instead of calling
 # redirectTo() -> route('login') (a route this app never defines) and 500ing.
 NOACCEPT_STATUS=$(curl -s -o /tmp/body -w '%{http_code}' "$BASE/notes")
-[[ "$NOACCEPT_STATUS" == "401" ]] || fail "unauthenticated (no Accept header) status: $NOACCEPT_STATUS $(cat /tmp/body)"
-[[ "$(jq -r .error.name /tmp/body)" == "UnauthorizedError" ]] || fail "unauthenticated (no Accept header) shape: $(cat /tmp/body)"
+[[ "$NOACCEPT_STATUS" == "403" ]] || fail "unauthenticated (no Accept header) status: $NOACCEPT_STATUS $(cat /tmp/body)"
+[[ "$(jq -r .error.name /tmp/body)" == "ForbiddenError" ]] || fail "unauthenticated (no Accept header) shape: $(cat /tmp/body)"
 
 # Tag has a read-only grant in the fixture (no create): creating one is a policy-denied 403.
 FORBIDDEN=$(req POST /tags "$TA" '{"data":{"label":"x"}}')

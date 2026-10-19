@@ -579,6 +579,47 @@ the strapi storage layout is not run against these vectors.
 
 ---
 
+## Phase 24 — Users & Permissions, part 1: accounts (`adapter-strapi`, `adapter-filament`)
+
+**Goal:** the account routes of Strapi 5's users-permissions plugin behave over REST as on Strapi,
+on the laravel storage layout with the Strapi API style, and the Filament admin manages users and
+the plugin's settings. Sessions stay legacy JWTs (Sanctum tokens), Strapi's default.
+
+- The users table gains Strapi's `document_id`, `provider`, `confirmed`, `blocked`,
+  `reset_password_token` and `confirmation_token` (accounts made before the migration stay
+  confirmed). Users go on the wire as Strapi sanitizes them.
+- REST: register and login with Strapi's checks in Strapi's order and its yup messages (closed
+  sign-ups, unknown body keys, taken email or username, unconfirmed and blocked accounts);
+  `change-password`, `forgot-password`, `reset-password`, `email-confirmation` (a redirect) and
+  `send-email-confirmation`, mailing Strapi's templates through Laravel's mailer; a blocked or
+  unconfirmed session is refused on every route; `/users` list, count, read, create, update and
+  delete behind the builtin user's grants.
+- A request without credentials gets Strapi's answer for a public role that is granted nothing,
+  403 `ForbiddenError`; a token that does not verify stays a 401.
+- Settings: Strapi's advanced settings and email templates have config defaults
+  (`CAMIS_ALLOW_REGISTER`, `CAMIS_EMAIL_CONFIRMATION`, …) and a runtime override in
+  `strapi_settings`, edited on the admin's Users & Permissions page by whoever may update users.
+- Admin: a Users resource (username, email, password, confirmed, blocked, roles) behind the
+  builtin user's grants.
+- The Strapi adapter maps grants on the builtin user to `plugin::users-permissions.user.*` (it
+  emitted `api::user.user.*`, which nothing checks).
+
+**Exit criteria:** `auth-vectors.json`, recorded from strapi-php, passes in the `strapi-api` boot
+job on SQLite, MySQL and Postgres, with the admin's `UsersAdminTest`; the earlier vectors, admin
+tests and the smoke still pass.
+
+**Status (2026-10-19):** the 60 auth checks, every earlier suite and the smoke pass on SQLite and
+Postgres with all caches on; the four admin tests pass.
+
+Known gaps, for part 2: refresh-token sessions (`/auth/refresh`, `logout`, `sessions`), OAuth
+providers (`/connect/:provider`), the public role (grants to unauthenticated callers), and `/roles`
+and `/permissions`, whose roles live in the IR rather than in an editable matrix. Also: `/users`
+ignores pagination and `populate`; a register body takes no extra user fields
+(`register.allowedFields`); email senders default to Laravel's `mail.from` rather than Strapi's
+no-reply address; the strapi storage layout keeps register, login and `/users/me` only (reported).
+
+---
+
 ## Sequencing rationale (quick reference)
 
 1. **Strapi first** — mature schema validates the IR fastest, with the thinnest adapter.

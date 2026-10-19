@@ -85,6 +85,9 @@ class StrapiErrors
                 $e instanceof StrapiError => $this->error($e->status, $e->name, $e->getMessage(), $e->details),
                 $e instanceof ValidationException => $this->error(400, 'ValidationError', collect($e->errors())->flatten()->first() ?? 'Validation failed'),
                 $e instanceof QueryException => $this->error(400, 'ValidationError', 'Validation failed'),
+                // Without credentials Strapi answers with the public role's verdict, and the public
+                // role is granted nothing here; a token that does not verify is a 401.
+                $e instanceof AuthenticationException && $request->bearerToken() === null => $this->error(403, 'ForbiddenError', 'Forbidden'),
                 $e instanceof AuthenticationException => $this->error(401, 'UnauthorizedError', 'Missing or invalid credentials'),
                 $e instanceof HttpResponseException => null,
                 $e instanceof HttpExceptionInterface => $this->errorForStatus($e->getStatusCode(), $e->getMessage()),

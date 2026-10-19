@@ -8,6 +8,8 @@ import {
   FIELD_ACCESS_ACTIONS,
   FILE_ADMIN_ACTIONS,
   FILE_API_ACTIONS,
+  PLUGIN_USER_UID,
+  USER_API_ACTIONS,
   PUBLIC_API_ACTIONS,
   STRAPI_ACTION_UID,
   USER_RELATION_WRITE_ACTION,
@@ -94,7 +96,7 @@ export const projectPermissions = (doc: IrDocument, roles: Role[]): ProjectionRe
         for (const action of actions) permissions.push({ action, subject: null });
         continue;
       }
-      const subject = strapiNames(ct).uid;
+      const subject = ct.builtin === "user" ? PLUGIN_USER_UID : strapiNames(ct).uid;
       const grantConditions = grant.condition
         ? [register(grant.condition, { contentType: grant.contentType, rule: role.name })]
         : undefined;
@@ -179,6 +181,11 @@ export const projectApiRoles = (doc: IrDocument, roles: Role[]): ApiRoleProjecti
       if (ct.builtin === "file") {
         for (const act of grant.actions)
           for (const action of FILE_API_ACTIONS[act]) actions.add(action);
+        continue;
+      }
+      if (ct.builtin === "user") {
+        for (const act of grant.actions)
+          for (const action of USER_API_ACTIONS[act]) actions.add(action);
         continue;
       }
       const uid = strapiNames(ct).uid;
