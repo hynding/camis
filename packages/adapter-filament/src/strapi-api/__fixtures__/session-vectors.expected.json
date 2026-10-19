@@ -1,0 +1,451 @@
+[
+  {
+    "name": "register",
+    "status": 200,
+    "body": {
+      "jwt": "<jwt>",
+      "refreshToken": "<token>",
+      "user": {
+        "blocked": false,
+        "confirmed": true,
+        "email": "alice@example.test",
+        "provider": "local",
+        "username": "alice"
+      }
+    }
+  },
+  {
+    "name": "register with a device",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid parameters: deviceId",
+      "details": {}
+    }
+  },
+  {
+    "name": "me",
+    "status": 200,
+    "body": {
+      "blocked": false,
+      "confirmed": true,
+      "email": "alice@example.test",
+      "provider": "local",
+      "username": "alice"
+    }
+  },
+  {
+    "name": "login on a phone",
+    "status": 200,
+    "body": {
+      "jwt": "<jwt>",
+      "refreshToken": "<token>",
+      "user": {
+        "blocked": false,
+        "confirmed": true,
+        "email": "alice@example.test",
+        "provider": "local",
+        "username": "alice"
+      }
+    }
+  },
+  {
+    "name": "login in a browser",
+    "status": 200,
+    "body": {
+      "jwt": "<jwt>",
+      "refreshToken": "<token>",
+      "user": {
+        "blocked": false,
+        "confirmed": true,
+        "email": "alice@example.test",
+        "provider": "local",
+        "username": "alice"
+      }
+    }
+  },
+  {
+    "name": "login without a device",
+    "status": 200,
+    "body": {
+      "jwt": "<jwt>",
+      "refreshToken": "<token>",
+      "user": {
+        "blocked": false,
+        "confirmed": true,
+        "email": "alice@example.test",
+        "provider": "local",
+        "username": "alice"
+      }
+    }
+  },
+  {
+    "name": "sessions",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "current": true,
+          "deviceId": "phone",
+          "lastActiveAt": "<date>",
+          "loginAt": "<date>"
+        },
+        {
+          "current": false,
+          "lastActiveAt": "<date>",
+          "loginAt": "<date>"
+        },
+        {
+          "current": false,
+          "deviceId": "tablet",
+          "deviceName": "Chrome on macOS",
+          "lastActiveAt": "<date>",
+          "loginAt": "<date>"
+        },
+        {
+          "current": false,
+          "deviceId": "<uuid>",
+          "lastActiveAt": "<date>",
+          "loginAt": "<date>"
+        }
+      ]
+    }
+  },
+  {
+    "name": "sessions from the browser",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "current": true,
+          "deviceId": "tablet",
+          "deviceName": "Chrome on macOS",
+          "lastActiveAt": "<date>",
+          "loginAt": "<date>"
+        },
+        {
+          "current": false,
+          "lastActiveAt": "<date>",
+          "loginAt": "<date>"
+        },
+        {
+          "current": false,
+          "deviceId": "phone",
+          "lastActiveAt": "<date>",
+          "loginAt": "<date>"
+        },
+        {
+          "current": false,
+          "deviceId": "<uuid>",
+          "lastActiveAt": "<date>",
+          "loginAt": "<date>"
+        }
+      ]
+    }
+  },
+  {
+    "name": "refresh",
+    "status": 200,
+    "body": {
+      "jwt": "<jwt>",
+      "refreshToken": "<token>"
+    }
+  },
+  {
+    "name": "refresh reused",
+    "status": 401,
+    "error": {
+      "name": "UnauthorizedError",
+      "message": "Invalid refresh token",
+      "details": {}
+    }
+  },
+  {
+    "name": "refresh without a token",
+    "status": 400,
+    "error": {
+      "name": "BadRequestError",
+      "message": "Missing refresh token",
+      "details": {}
+    }
+  },
+  {
+    "name": "refresh with a bad token",
+    "status": 401,
+    "error": {
+      "name": "UnauthorizedError",
+      "message": "Invalid refresh token",
+      "details": {}
+    }
+  },
+  {
+    "name": "refresh with an access token",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "sessions after refresh",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "current": true,
+          "deviceId": "phone",
+          "lastActiveAt": "<date>",
+          "loginAt": "<date>"
+        },
+        {
+          "current": false,
+          "lastActiveAt": "<date>",
+          "loginAt": "<date>"
+        },
+        {
+          "current": false,
+          "deviceId": "tablet",
+          "deviceName": "Chrome on macOS",
+          "lastActiveAt": "<date>",
+          "loginAt": "<date>"
+        },
+        {
+          "current": false,
+          "deviceId": "<uuid>",
+          "lastActiveAt": "<date>",
+          "loginAt": "<date>"
+        }
+      ]
+    }
+  },
+  {
+    "name": "revoke session",
+    "status": 200,
+    "body": {
+      "data": {}
+    }
+  },
+  {
+    "name": "revoke session again",
+    "status": 404,
+    "error": {
+      "name": "NotFoundError",
+      "message": "Session not found",
+      "details": {}
+    }
+  },
+  {
+    "name": "revoke unknown session",
+    "status": 404,
+    "error": {
+      "name": "NotFoundError",
+      "message": "Session not found",
+      "details": {}
+    }
+  },
+  {
+    "name": "refresh revoked",
+    "status": 401,
+    "error": {
+      "name": "UnauthorizedError",
+      "message": "Invalid refresh token",
+      "details": {}
+    }
+  },
+  {
+    "name": "logout",
+    "status": 200,
+    "body": {
+      "ok": true
+    }
+  },
+  {
+    "name": "refresh after logout",
+    "status": 401,
+    "error": {
+      "name": "UnauthorizedError",
+      "message": "Invalid refresh token",
+      "details": {}
+    }
+  },
+  {
+    "name": "sessions after logout",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "current": true,
+          "deviceId": "<uuid>",
+          "lastActiveAt": "<date>",
+          "loginAt": "<date>"
+        },
+        {
+          "current": false,
+          "lastActiveAt": "<date>",
+          "loginAt": "<date>"
+        }
+      ]
+    }
+  },
+  {
+    "name": "logout without a session",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "sessions without a session",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "sessions with a bad token",
+    "status": 401,
+    "error": {
+      "name": "UnauthorizedError",
+      "message": "Missing or invalid credentials",
+      "details": {}
+    }
+  },
+  {
+    "name": "revoke without a session",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "login with a cookie",
+    "status": 200,
+    "body": {
+      "jwt": "<jwt>",
+      "user": {
+        "blocked": false,
+        "confirmed": true,
+        "email": "alice@example.test",
+        "provider": "local",
+        "username": "alice"
+      }
+    },
+    "cookie": "<set>"
+  },
+  {
+    "name": "refresh with the cookie",
+    "status": 200,
+    "body": {
+      "jwt": "<jwt>"
+    },
+    "cookie": "<set>"
+  },
+  {
+    "name": "logout with the cookie",
+    "status": 200,
+    "body": {
+      "ok": true
+    },
+    "cookie": "<cleared>"
+  },
+  {
+    "name": "refresh with the cleared cookie",
+    "status": 401,
+    "error": {
+      "name": "UnauthorizedError",
+      "message": "Invalid refresh token",
+      "details": {}
+    }
+  },
+  {
+    "name": "change password",
+    "status": 200,
+    "body": {
+      "jwt": "<jwt>",
+      "refreshToken": "<token>",
+      "user": {
+        "blocked": false,
+        "confirmed": true,
+        "email": "alice@example.test",
+        "provider": "local",
+        "username": "alice"
+      }
+    }
+  },
+  {
+    "name": "refresh from before the change",
+    "status": 401,
+    "error": {
+      "name": "UnauthorizedError",
+      "message": "Invalid refresh token",
+      "details": {}
+    }
+  },
+  {
+    "name": "sessions after the change",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "current": true,
+          "deviceId": "<uuid>",
+          "lastActiveAt": "<date>"
+        }
+      ]
+    }
+  },
+  {
+    "name": "refresh after the change",
+    "status": 200,
+    "body": {
+      "jwt": "<jwt>",
+      "refreshToken": "<token>"
+    }
+  },
+  {
+    "name": "forgot password",
+    "status": 200,
+    "body": {
+      "ok": true
+    }
+  },
+  {
+    "name": "reset password",
+    "status": 200,
+    "body": {
+      "jwt": "<jwt>",
+      "refreshToken": "<token>",
+      "user": {
+        "blocked": false,
+        "confirmed": true,
+        "email": "alice@example.test",
+        "provider": "local",
+        "username": "alice"
+      }
+    }
+  },
+  {
+    "name": "refresh after the reset",
+    "status": 200,
+    "body": {
+      "jwt": "<jwt>",
+      "refreshToken": "<token>"
+    }
+  },
+  {
+    "name": "refresh from before the reset",
+    "status": 401,
+    "error": {
+      "name": "UnauthorizedError",
+      "message": "Invalid refresh token",
+      "details": {}
+    }
+  }
+]

@@ -658,5 +658,344 @@
       "message": "Register action is currently disabled",
       "details": {}
     }
+  },
+  {
+    "name": "author with a session",
+    "status": 201,
+    "body": {
+      "data": {
+        "name": "Frank Herbert"
+      },
+      "meta": {}
+    }
+  },
+  {
+    "name": "book with a session",
+    "status": 201,
+    "body": {
+      "data": {
+        "inStock": null,
+        "pages": null,
+        "publishedOn": null,
+        "rating": null,
+        "releasedAt": null,
+        "title": "Dune"
+      },
+      "meta": {}
+    }
+  },
+  {
+    "name": "books without a session",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "title": "Dune"
+        }
+      ],
+      "meta": {
+        "pagination": {
+          "page": 1,
+          "pageCount": 1,
+          "pageSize": 25,
+          "total": 1
+        }
+      }
+    }
+  },
+  {
+    "name": "book without a session",
+    "status": 200,
+    "body": {
+      "data": {
+        "title": "Dune"
+      },
+      "meta": {}
+    }
+  },
+  {
+    "name": "books without a session populate unreadable",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "title": "Dune"
+        }
+      ],
+      "meta": {
+        "pagination": {
+          "page": 1,
+          "pageCount": 1,
+          "pageSize": 25,
+          "total": 1
+        }
+      }
+    }
+  },
+  {
+    "name": "books without a session filter unreadable",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid key author",
+      "details": {
+        "key": "author",
+        "path": "author",
+        "source": "query",
+        "param": "filters"
+      }
+    }
+  },
+  {
+    "name": "books without a session sort unreadable",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid key author",
+      "details": {
+        "key": "author",
+        "path": "author",
+        "source": "query",
+        "param": "sort"
+      }
+    }
+  },
+  {
+    "name": "books with a session populate",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "author": {
+            "name": "Frank Herbert"
+          },
+          "title": "Dune"
+        }
+      ],
+      "meta": {
+        "pagination": {
+          "page": 1,
+          "pageCount": 1,
+          "pageSize": 25,
+          "total": 1
+        }
+      }
+    }
+  },
+  {
+    "name": "books with a bad token",
+    "status": 401,
+    "error": {
+      "name": "UnauthorizedError",
+      "message": "Missing or invalid credentials",
+      "details": {}
+    }
+  },
+  {
+    "name": "create book without a session",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "update book without a session",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "delete book without a session",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "authors without a session",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "author without a session",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "login with a session",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "login with a bad token",
+    "status": 401,
+    "error": {
+      "name": "UnauthorizedError",
+      "message": "Missing or invalid credentials",
+      "details": {}
+    }
+  },
+  {
+    "name": "forgot password with a session",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "refresh in legacy mode",
+    "status": 404,
+    "error": {
+      "name": "NotFoundError",
+      "message": "Not Found",
+      "details": {}
+    }
+  },
+  {
+    "name": "refresh with a session",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "logout without a session",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "logout in legacy mode",
+    "status": 404,
+    "error": {
+      "name": "NotFoundError",
+      "message": "Not Found",
+      "details": {}
+    }
+  },
+  {
+    "name": "sessions without a session",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "sessions in legacy mode",
+    "status": 404,
+    "error": {
+      "name": "NotFoundError",
+      "message": "Not Found",
+      "details": {}
+    }
+  },
+  {
+    "name": "revoke session in legacy mode",
+    "status": 404,
+    "error": {
+      "name": "NotFoundError",
+      "message": "Not Found",
+      "details": {}
+    }
+  },
+  {
+    "name": "roles without a session",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "roles",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "role",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "create role",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "update role",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "delete role",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "permissions",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "permissions without a session",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
   }
 ]

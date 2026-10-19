@@ -1,0 +1,308 @@
+{
+  "steps": [
+    {
+      "name": "register",
+      "path": "/auth/local/register",
+      "body": {
+        "username": "alice",
+        "email": "alice@example.test",
+        "password": "secret1"
+      },
+      "save": "alice",
+      "keep": {
+        "first": "refreshToken"
+      }
+    },
+    {
+      "name": "register with a device",
+      "path": "/auth/local/register",
+      "body": {
+        "username": "bob",
+        "email": "bob@example.test",
+        "password": "secret1",
+        "deviceId": "laptop"
+      }
+    },
+    {
+      "name": "me",
+      "method": "GET",
+      "path": "/users/me",
+      "as": "alice"
+    },
+    {
+      "name": "login on a phone",
+      "path": "/auth/local",
+      "body": {
+        "identifier": "alice",
+        "password": "secret1",
+        "deviceId": "phone"
+      },
+      "save": "phone",
+      "keep": {
+        "phoneToken": "refreshToken"
+      }
+    },
+    {
+      "name": "login in a browser",
+      "path": "/auth/local",
+      "headers": {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
+      },
+      "body": {
+        "identifier": "alice",
+        "password": "secret1",
+        "deviceId": "tablet"
+      },
+      "save": "tablet",
+      "keep": {
+        "tabletToken": "refreshToken"
+      }
+    },
+    {
+      "name": "login without a device",
+      "path": "/auth/local",
+      "body": {
+        "identifier": "alice",
+        "password": "secret1"
+      },
+      "save": "plain"
+    },
+    {
+      "name": "sessions",
+      "method": "GET",
+      "path": "/auth/sessions",
+      "as": "phone"
+    },
+    {
+      "name": "sessions from the browser",
+      "method": "GET",
+      "path": "/auth/sessions",
+      "as": "tablet",
+      "keep": {
+        "tabletSession": "data.0.id"
+      }
+    },
+    {
+      "name": "refresh",
+      "path": "/auth/refresh",
+      "body": {
+        "refreshToken": "$phoneToken"
+      },
+      "save": "phone",
+      "keep": {
+        "phoneToken2": "refreshToken"
+      }
+    },
+    {
+      "name": "refresh reused",
+      "path": "/auth/refresh",
+      "body": {
+        "refreshToken": "$phoneToken"
+      }
+    },
+    {
+      "name": "refresh without a token",
+      "path": "/auth/refresh",
+      "body": {}
+    },
+    {
+      "name": "refresh with a bad token",
+      "path": "/auth/refresh",
+      "body": {
+        "refreshToken": "not-a-token"
+      }
+    },
+    {
+      "name": "refresh with an access token",
+      "path": "/auth/refresh",
+      "body": {
+        "refreshToken": "$phoneToken2"
+      },
+      "as": "plain"
+    },
+    {
+      "name": "sessions after refresh",
+      "method": "GET",
+      "path": "/auth/sessions",
+      "as": "phone"
+    },
+    {
+      "name": "revoke session",
+      "method": "DELETE",
+      "path": "/auth/sessions/$tabletSession",
+      "as": "phone"
+    },
+    {
+      "name": "revoke session again",
+      "method": "DELETE",
+      "path": "/auth/sessions/$tabletSession",
+      "as": "phone"
+    },
+    {
+      "name": "revoke unknown session",
+      "method": "DELETE",
+      "path": "/auth/sessions/0123456789abcdef0123456789abcdef",
+      "as": "phone"
+    },
+    {
+      "name": "refresh revoked",
+      "path": "/auth/refresh",
+      "body": {
+        "refreshToken": "$tabletToken"
+      }
+    },
+    {
+      "name": "logout",
+      "path": "/auth/logout",
+      "body": {},
+      "as": "phone"
+    },
+    {
+      "name": "refresh after logout",
+      "path": "/auth/refresh",
+      "body": {
+        "refreshToken": "$phoneToken2"
+      }
+    },
+    {
+      "name": "sessions after logout",
+      "method": "GET",
+      "path": "/auth/sessions",
+      "as": "alice"
+    },
+    {
+      "name": "logout without a session",
+      "path": "/auth/logout",
+      "body": {}
+    },
+    {
+      "name": "sessions without a session",
+      "method": "GET",
+      "path": "/auth/sessions"
+    },
+    {
+      "name": "sessions with a bad token",
+      "method": "GET",
+      "path": "/auth/sessions",
+      "bearer": "not-a-token"
+    },
+    {
+      "name": "revoke without a session",
+      "method": "DELETE",
+      "path": "/auth/sessions/abc"
+    },
+    {
+      "name": "login with a cookie",
+      "path": "/auth/local",
+      "headers": {
+        "x-strapi-refresh-cookie": "httpOnly"
+      },
+      "body": {
+        "identifier": "alice",
+        "password": "secret1",
+        "deviceId": "web"
+      },
+      "save": "web",
+      "cookie": "strapi_up_refresh"
+    },
+    {
+      "name": "refresh with the cookie",
+      "path": "/auth/refresh",
+      "headers": {
+        "x-strapi-refresh-cookie": "httpOnly",
+        "Cookie": "strapi_up_refresh=$strapi_up_refresh"
+      },
+      "body": {},
+      "cookie": "strapi_up_refresh"
+    },
+    {
+      "name": "logout with the cookie",
+      "path": "/auth/logout",
+      "headers": {
+        "x-strapi-refresh-cookie": "httpOnly",
+        "Cookie": "strapi_up_refresh=$strapi_up_refresh"
+      },
+      "body": {},
+      "as": "web",
+      "cookie": "strapi_up_refresh"
+    },
+    {
+      "name": "refresh with the cleared cookie",
+      "path": "/auth/refresh",
+      "body": {
+        "refreshToken": "$strapi_up_refresh"
+      }
+    },
+    {
+      "name": "change password",
+      "path": "/auth/change-password",
+      "body": {
+        "currentPassword": "secret1",
+        "password": "secret2",
+        "passwordConfirmation": "secret2"
+      },
+      "as": "alice",
+      "save": "alice",
+      "keep": {
+        "changed": "refreshToken"
+      }
+    },
+    {
+      "name": "refresh from before the change",
+      "path": "/auth/refresh",
+      "body": {
+        "refreshToken": "$first"
+      }
+    },
+    {
+      "name": "sessions after the change",
+      "method": "GET",
+      "path": "/auth/sessions",
+      "as": "alice"
+    },
+    {
+      "name": "refresh after the change",
+      "path": "/auth/refresh",
+      "body": {
+        "refreshToken": "$changed"
+      }
+    },
+    {
+      "name": "forgot password",
+      "path": "/auth/forgot-password",
+      "body": {
+        "email": "alice@example.test"
+      }
+    },
+    {
+      "hook": ["lookup", "reset", "alice"],
+      "into": "code"
+    },
+    {
+      "name": "reset password",
+      "path": "/auth/reset-password",
+      "body": {
+        "code": "$code",
+        "password": "secret3",
+        "passwordConfirmation": "secret3"
+      },
+      "keep": {
+        "reset": "refreshToken"
+      }
+    },
+    {
+      "name": "refresh after the reset",
+      "path": "/auth/refresh",
+      "body": {
+        "refreshToken": "$reset"
+      }
+    },
+    {
+      "name": "refresh from before the reset",
+      "path": "/auth/refresh",
+      "body": {
+        "refreshToken": "$changed"
+      }
+    }
+  ]
+}
