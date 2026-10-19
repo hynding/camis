@@ -31,7 +31,7 @@ describe("users-permissions sessions", () => {
       "database/migrations/0001_01_02_000003_create_strapi_sessions_table.php",
     );
     expect(migration).toContain("$table->string('session_id', 32)->unique();");
-    expect(migration).toContain("$table->timestamp('created_at', 3);");
+    expect(migration).toContain("$table->dateTime('created_at', 3);");
     await expect(migration).toMatchFileSnapshot(
       "./__golden__/strapi-api/create_strapi_sessions_table.php",
     );
@@ -39,7 +39,7 @@ describe("users-permissions sessions", () => {
 
   it("mints an expiring Sanctum token per session and a hashed refresh token", async () => {
     const sessions = content("app/Support/StrapiSessions.php");
-    expect(sessions).toContain("createToken('session:'.$sessionId, ['*'], now()->addSeconds(");
+    expect(sessions).toContain("createToken(self::PREFIX.$sessionId, ['*'], now()->addSeconds(");
     expect(sessions).toContain("hash('sha256', $secret)");
     expect(sessions).toContain("hash_equals(");
     await expect(sessions).toMatchFileSnapshot("./__golden__/strapi-api/StrapiSessions.php");
@@ -63,7 +63,7 @@ describe("users-permissions sessions", () => {
   it("issues sessions from login, registration and a password change or reset", () => {
     const auth = content("app/Http/Controllers/Api/AuthController.php");
     expect(auth).toContain("StrapiSessions::login($request, $user)");
-    expect(auth).toContain("StrapiSessions::registered($user)");
+    expect(auth).toContain("StrapiSessions::registered($request, $user)");
     expect(auth.match(/StrapiSessions::reissue\(\$user\)/g)).toHaveLength(2);
   });
 
