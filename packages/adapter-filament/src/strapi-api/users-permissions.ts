@@ -1,4 +1,5 @@
 import { PHP_MARKER } from "../hooks/names";
+import { sessionsConfigKeys } from "./sessions";
 
 /**
  * Strapi's users-permissions plugin on the Laravel users table: the user wire shape, the advanced
@@ -113,7 +114,7 @@ export const usersPermissionsConfigKeys = (): string => `
 
     // Strapi's users-permissions settings as a new project starts with them; the admin's
     // Users & Permissions settings page overrides them at runtime (strapi_settings).
-    'users_permissions' => [
+    'users_permissions' => [${sessionsConfigKeys()}
         'advanced' => [
             'unique_email' => true,
             'allow_register' => (bool) env('CAMIS_ALLOW_REGISTER', true),

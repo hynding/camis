@@ -108,6 +108,8 @@ overwrite app/Http/Controllers/Api/Generated/TagApiController.php
 overwrite app/Http/Controllers/Api/Generated/TopicApiController.php
 overwrite app/Http/Controllers/Api/Generated/TransactionApiController.php
 overwrite app/Http/Controllers/Api/LocaleController.php
+overwrite app/Http/Controllers/Api/RoleController.php
+overwrite app/Http/Controllers/Api/SessionController.php
 overwrite app/Http/Controllers/Api/UploadController.php
 overwrite app/Http/Controllers/Api/UserController.php
 overwrite app/Http/Middleware/StrapiActiveUser.php
@@ -171,6 +173,7 @@ overwrite app/Support/StrapiLocales.php
 overwrite app/Support/StrapiPopulate.php
 overwrite app/Support/StrapiQuery.php
 overwrite app/Support/StrapiRelations.php
+overwrite app/Support/StrapiSessions.php
 overwrite app/Support/StrapiSettings.php
 overwrite app/Support/StrapiUpload.php
 overwrite app/Support/StrapiUsers.php
@@ -183,6 +186,7 @@ overwrite database/migrations/0001_01_02_000001_create_notes_table.php
 overwrite database/migrations/0001_01_02_000002_create_strapi_settings_table.php
 overwrite database/migrations/0001_01_02_000002_create_transactions_table.php
 overwrite database/migrations/0001_01_02_000003_create_activity_sessions_table.php
+overwrite database/migrations/0001_01_02_000003_create_strapi_sessions_table.php
 overwrite database/migrations/0001_01_02_000004_create_activities_table.php
 overwrite database/migrations/0001_01_02_000005_create_tags_table.php
 overwrite database/migrations/0001_01_02_000006_create_topics_table.php

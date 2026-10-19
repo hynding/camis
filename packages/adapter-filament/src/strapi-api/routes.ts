@@ -107,6 +107,8 @@ export const emitStrapiRoutes = (
     ...(upload ? ["App\\Http\\Controllers\\Api\\UploadController"] : []),
     ...(usersPermissions
       ? [
+          "App\\Http\\Controllers\\Api\\RoleController",
+          "App\\Http\\Controllers\\Api\\SessionController",
           "App\\Http\\Controllers\\Api\\UserController",
           "App\\Http\\Middleware\\StrapiActiveUser",
           "App\\Http\\Middleware\\StrapiCredentials",
@@ -157,7 +159,15 @@ export const emitStrapiRoutes = (
     Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware(${throttled});
     Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])->middleware(${throttled});
     Route::get('/auth/email-confirmation', [AuthController::class, 'emailConfirmation'])->middleware(StrapiCredentials::class.':guest');
-    Route::post('/auth/send-email-confirmation', [AuthController::class, 'sendEmailConfirmation'])->middleware(${throttled});`
+    Route::post('/auth/send-email-confirmation', [AuthController::class, 'sendEmailConfirmation'])->middleware(${throttled});
+    Route::post('/auth/refresh', [SessionController::class, 'refresh'])->middleware(StrapiCredentials::class.':guest');
+
+    // Roles live in the IR, so no grant opens these: Strapi forbids them to the roles it ships.
+    Route::middleware([StrapiCredentials::class.':optional', StrapiActiveUser::class])->group(function (): void {
+        Route::match(['get', 'post'], '/users-permissions/roles', RoleController::class);
+        Route::match(['get', 'put', 'delete'], '/users-permissions/roles/{role}', RoleController::class);
+        Route::get('/users-permissions/permissions', RoleController::class);
+    });`
     : "";
   // Without roles nothing would guard who lists or makes accounts, so the routes are left out.
   const userRoutes = `
@@ -168,7 +178,10 @@ export const emitStrapiRoutes = (
         Route::put('/users/{id}', [UserController::class, 'update']);
         Route::delete('/users/{id}', [UserController::class, 'destroy']);`;
   const ownRoutes = `Route::get('/users/me', [UserController::class, 'me'])${own};
-        Route::post('/auth/change-password', [AuthController::class, 'changePassword'])${own};`;
+        Route::post('/auth/change-password', [AuthController::class, 'changePassword'])${own};
+        Route::post('/auth/logout', [SessionController::class, 'logout'])${own};
+        Route::get('/auth/sessions', [SessionController::class, 'sessions'])${own};
+        Route::delete('/auth/sessions/{sessionId}', [SessionController::class, 'revoke'])${own};`;
   const sessionRoutes = usersPermissions
     ? `${ownRoutes}${secured && !guests ? userRoutes : ""}`
     : "Route::get('/users/me', [AuthController::class, 'me']);";

@@ -33,6 +33,13 @@ import { emitHasDocumentId, emitStrapiError, emitStrapiQuery } from "./rest-runt
 import { emitApiConfig, emitStrapiRoutes } from "./routes";
 import { emitScopeMethod } from "./scope";
 import { emitSerializer } from "./serializer";
+import {
+  emitRoleController,
+  emitSessionController,
+  emitSessionsMigration,
+  emitStrapiSessions,
+  SESSIONS_MIGRATION_PATH,
+} from "./sessions";
 import { kebab } from "./names";
 import { wireShape } from "./wire-shape";
 import { emitUserResourceFiles, emitUsersPermissionsSettingsPage } from "./users-permissions-admin";
@@ -187,6 +194,10 @@ const usersPermissionsFiles = (secured: boolean, guests: boolean): GeneratedFile
   { path: "app/Http/Middleware/StrapiCredentials.php", content: emitStrapiCredentials() },
   { path: USERS_PERMISSIONS_MIGRATION_PATH, content: emitUsersPermissionsMigration() },
   { path: SETTINGS_MIGRATION_PATH, content: emitSettingsMigration() },
+  { path: "app/Support/StrapiSessions.php", content: emitStrapiSessions() },
+  { path: "app/Http/Controllers/Api/SessionController.php", content: emitSessionController() },
+  { path: "app/Http/Controllers/Api/RoleController.php", content: emitRoleController() },
+  { path: SESSIONS_MIGRATION_PATH, content: emitSessionsMigration() },
   ...emitUserResourceFiles(secured),
   {
     path: "app/Filament/Pages/UsersPermissionsSettings.php",
