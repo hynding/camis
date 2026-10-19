@@ -20,6 +20,9 @@ export const grant = z.object({
 });
 export type Grant = z.infer<typeof grant>;
 
+/** The role a caller without a session acts as; every target that serves guests reads it. */
+export const PUBLIC_ROLE = "public";
+
 export const role = z.object({
   name: z.string().min(1),
   description: z.string().optional(),

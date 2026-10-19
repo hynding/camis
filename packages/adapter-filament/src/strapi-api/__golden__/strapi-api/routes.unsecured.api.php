@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\TagApiController;
 use App\Http\Controllers\Api\UploadController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Middleware\StrapiActiveUser;
+use App\Http\Middleware\StrapiCredentials;
 use App\Http\Middleware\StrapiErrors;
 use Illuminate\Support\Facades\Route;
 
@@ -27,12 +28,12 @@ $authThrottle = 'throttle:'.(int) config('camis.auth_throttle_per_minute', 10).'
 
 Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle): void {
     Route::get('/_health', fn () => response()->noContent());
-    Route::post('/auth/local', [AuthController::class, 'login'])->middleware($authThrottle);
-    Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware($authThrottle);
-    Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware($authThrottle);
-    Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])->middleware($authThrottle);
-    Route::get('/auth/email-confirmation', [AuthController::class, 'emailConfirmation']);
-    Route::post('/auth/send-email-confirmation', [AuthController::class, 'sendEmailConfirmation'])->middleware($authThrottle);
+    Route::post('/auth/local', [AuthController::class, 'login'])->middleware([$authThrottle, StrapiCredentials::class.':guest']);
+    Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware([$authThrottle, StrapiCredentials::class.':guest']);
+    Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware([$authThrottle, StrapiCredentials::class.':guest']);
+    Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])->middleware([$authThrottle, StrapiCredentials::class.':guest']);
+    Route::get('/auth/email-confirmation', [AuthController::class, 'emailConfirmation'])->middleware(StrapiCredentials::class.':guest');
+    Route::post('/auth/send-email-confirmation', [AuthController::class, 'sendEmailConfirmation'])->middleware([$authThrottle, StrapiCredentials::class.':guest']);
 
     Route::middleware([])->group(function (): void {
         Route::get('/users/me', [UserController::class, 'me'])->middleware(['auth:sanctum', StrapiActiveUser::class]);

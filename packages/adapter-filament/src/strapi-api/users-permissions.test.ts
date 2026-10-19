@@ -115,7 +115,7 @@ describe("users-permissions routes", () => {
   });
   it("throttles the unauthenticated email endpoints with the credential ones", () => {
     expect(routes).toContain(
-      "Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware($authThrottle);",
+      "Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware([$authThrottle, StrapiCredentials::class.':guest']);",
     );
   });
 });

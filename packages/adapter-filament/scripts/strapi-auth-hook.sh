@@ -2,7 +2,7 @@
 # The camis side of strapi-auth-vectors.mjs --hook, run from the generated app's directory: reads
 # what only the database knows and changes what only an administrator can, through artisan tinker.
 # usage: strapi-auth-hook.sh lookup reset|confirmation <username> | lookup role <name>
-#        | settings <json> | block <username> | allow create|update|destroy
+#        | settings <json> | block <username> | allow create|update|destroy | role <name> <action>...
 set -euo pipefail
 php_string() { printf "'%s'" "$(printf '%s' "$1" | sed "s/\\\\/\\\\\\\\/g; s/'/\\\\'/g")"; }
 case "$1" in
@@ -17,6 +17,8 @@ case "$1" in
   allow)
     action="$2"; [[ "$action" == destroy ]] && action=delete
     code="Spatie\\Permission\\Models\\Role::findByName('authenticated')->givePermissionTo(Spatie\\Permission\\Models\\Permission::findOrCreate('user.$action'));" ;;
+  # strapi-php's roles start empty; camis's are seeded from the IR, which already grants these.
+  role) exit 0 ;;
   *) echo "unknown hook $1" >&2; exit 1 ;;
 esac
 php artisan tinker --execute="$code"

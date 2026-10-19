@@ -57,7 +57,7 @@ ${indent}});`;
   const readLinks = `${STMT}$links = StrapiRelations::read((array) $request->input('data', []), ${S}::FIELDS, ${viewer});`;
   const auth = authLine(secured);
   const assign = spec.assigns
-    .map((name) => `${STMT}$m->${snakeColumn(name)}_id = $request->user()->id;`)
+    .map((name) => `${STMT}$m->${snakeColumn(name)}_id = $request->user()?->id;`)
     .join("\n");
   const assignBlock = assign ? `${assign}\n` : "";
   const upsert = shape.upsert;
@@ -83,13 +83,14 @@ ${assignBlock}${persist("")}
     ],
     query: scoped ? `${M}::query()->forUser($request->user())` : `${M}::query()`,
     indexBody: `${auth(`$this->authorize('viewAny', ${M}::class);`)}        $found = StrapiQuery::find($this->scoped($request), $request->query(), ${S}::FIELDS, ${viewer});
-        $rows = $found['rows']${secured ? `->filter(fn (${M} $m) => $request->user()->can('view', $m))` : ""};
+        $rows = $found['rows']${secured ? `->filter(fn (${M} $m) => Gate::allows('view', $m))` : ""};
 
         return response()->json([
             'data' => StrapiPopulate::many($rows, $request->query(), ${S}::class, ${viewer}),
             'meta' => ['pagination' => $found['pagination']],
         ]);`,
-    showBody: `        $m = $this->find($request, $key);
+    // Strapi checks the route's read grant before it looks for the row.
+    showBody: `${auth(`$this->authorize('viewAny', ${M}::class);`)}        $m = $this->find($request, $key);
 
         return response()->json(['data' => $this->wire($request, $m), 'meta' => new \\stdClass()]);`,
     storeBody: `${auth(`$this->authorize('create', ${M}::class);`)}        $wire = ${S}::fromWire((array) $request->input('data', []));
@@ -101,7 +102,7 @@ ${assignBlock}${persist("")}
     updateBody: `        $wire = ${S}::fromWire((array) $request->input('data', []));
 ${readLinks}
         $m = $this->scoped($request)->where(self::KEY, $key)->first();
-        if ($m !== null${secured ? ` && $request->user()->can('view', $m)` : ""}) {
+        if ($m !== null${secured ? ` && Gate::allows('view', $m)` : ""}) {
 ${auth(`$this->authorize('update', $m);`, NESTED_STMT)}${persist("$m->fill($wire['columns']);\n" + NESTED_STMT + "    ", NESTED_STMT)}
 
             return response()->json(['data' => $this->wire($request, $m->fresh()), 'meta' => new \\stdClass()]);
@@ -148,7 +149,7 @@ const documentParts = (
   const viewer = secured ? "$request->user()" : "null";
   const auth = authLine(secured);
   const assign = spec.assigns
-    .map((name) => `${STMT}$m->${snakeColumn(name)}_id = $request->user()->id;`)
+    .map((name) => `${STMT}$m->${snakeColumn(name)}_id = $request->user()?->id;`)
     .join("\n");
   const assignBlock = assign ? `${assign}\n` : "";
   const forWrite = "StrapiLocales::forWrite($request->query())";
@@ -174,7 +175,7 @@ ${STMT}});`;
   const lookup = versioned
     ? "StrapiDocuments::draft($this->documents($request), $key)"
     : "$this->documents($request)->where(self::KEY, $key)->first()";
-  const visible = secured ? ` || ! $request->user()->can('view', $m)` : "";
+  const visible = secured ? ` || ! Gate::allows('view', $m)` : "";
   const notFound = `        if ($m === null${visible}) {
             abort(404);
         }
@@ -185,7 +186,7 @@ ${STMT}});`;
             ?? StrapiLocales::localization(${query}->where(self::KEY, $key), ${forWrite})`
     : "";
   const destroyBody = localized
-    ? `        $rows = $this->documents($request)->where(self::KEY, $key)->get()${secured ? `->filter(fn (${M} $m) => $request->user()->can('view', $m))` : ""};
+    ? `        $rows = $this->documents($request)->where(self::KEY, $key)->get()${secured ? `->filter(fn (${M} $m) => Gate::allows('view', $m))` : ""};
         if ($rows->isEmpty()) {
             abort(404);
         }
@@ -256,6 +257,8 @@ export const emitGeneratedController = (spec: ControllerSpec): string => {
     "Illuminate\\Http\\JsonResponse",
     "Illuminate\\Http\\Request",
     "Illuminate\\Support\\Facades\\DB",
+    // The gate answers for a caller without a session too, which the user object cannot.
+    ...(secured ? ["Illuminate\\Support\\Facades\\Gate"] : []),
   ]
     .sort()
     .map((u) => `use ${u};`)
@@ -283,7 +286,7 @@ ${secured ? "    use AuthorizesRequests;\n\n" : ""}    private const KEY = '${sh
     protected function find(Request $request, string $key): ${M}
     {
         $m = $this->scoped($request)->where(self::KEY, $key)->first();
-        if ($m === null${secured ? ` || ! $request->user()->can('view', $m)` : ""}) {
+        if ($m === null${secured ? ` || ! Gate::allows('view', $m)` : ""}) {
             abort(404);
         }
 

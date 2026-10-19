@@ -17,6 +17,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 
 class UploadController extends Controller
 {
@@ -64,7 +65,7 @@ class UploadController extends Controller
         StrapiQuery::filter($query, $params, FileSerializer::FIELDS, $request->user(), null);
         StrapiQuery::order($query, $params['sort'] ?? null, FileSerializer::FIELDS, $request->user());
 
-        return response()->json($query->get()->filter(fn (File $file) => $request->user()->can('view', $file))
+        return response()->json($query->get()->filter(fn (File $file) => Gate::allows('view', $file))
             ->map(fn (File $file) => StrapiQuery::select(StrapiUpload::wire($file), $params, FileSerializer::FIELDS))
             ->values()
             ->all());
@@ -104,7 +105,7 @@ class UploadController extends Controller
     private function file(Request $request, string $id, string $missing): File
     {
         $file = ctype_digit($id) ? $this->files($request)->find((int) $id) : null;
-        if ($file === null || ! $request->user()->can('view', $file)) {
+        if ($file === null || ! Gate::allows('view', $file)) {
             throw new StrapiError(404, 'NotFoundError', $missing);
         }
 
@@ -155,7 +156,7 @@ class UploadController extends Controller
         $query = $modelClass::query();
         $query->forUser($request->user());
         $row = $query->find($request->input('refId'));
-        if ($row === null || ! $request->user()->can('view', $row)) {
+        if ($row === null || ! Gate::allows('view', $row)) {
             throw new StrapiError(404, 'NotFoundError', 'Entity not found');
         }
         $this->authorize('update', $row);

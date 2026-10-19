@@ -337,6 +337,45 @@ final class StrapiUsers
 }
 `;
 
+/**
+ * How a route takes credentials beyond Laravel's own guard. `optional`: a request may come without
+ * a session (it then acts as the public role), but a token that does not verify is refused, as
+ * Strapi refuses it on every route. `guest`: a route Strapi grants to its public role alone
+ * (logging in, registering, recovering a password), which a session is forbidden.
+ */
+export const emitStrapiCredentials = (): string => `<?php
+${PHP_MARKER}
+
+declare(strict_types=1);
+
+namespace App\\Http\\Middleware;
+
+use App\\Support\\StrapiError;
+use Closure;
+use Illuminate\\Http\\Request;
+use Illuminate\\Support\\Facades\\Auth;
+use Symfony\\Component\\HttpFoundation\\Response;
+
+final class StrapiCredentials
+{
+    public function handle(Request $request, Closure $next, string $mode): Response
+    {
+        if ($request->bearerToken() === null) {
+            return $next($request);
+        }
+        if (Auth::guard('sanctum')->user() === null) {
+            throw new StrapiError(401, 'UnauthorizedError', 'Missing or invalid credentials');
+        }
+        if ($mode === 'guest') {
+            throw new StrapiError(403, 'ForbiddenError', 'Forbidden');
+        }
+        Auth::shouldUse('sanctum');
+
+        return $next($request);
+    }
+}
+`;
+
 /** users-permissions' strategy refuses a session whose user was blocked or is unconfirmed. */
 export const emitStrapiActiveUser = (): string => `<?php
 ${PHP_MARKER}
@@ -369,7 +408,8 @@ final class StrapiActiveUser
  * users-permissions' /users routes: the list, count and read are the builtin user's read grant,
  * and its writes its create, update and delete grants. /users/me is every session's.
  */
-export const emitUserController = (secured: boolean): string => {
+/** `guests`: the list is served without a session too, on the public role's user grants. */
+export const emitUserController = (secured: boolean, guests = false): string => {
   const allow = (permission: string): string =>
     secured ? `\n        $this->allow($request, '${permission}');` : "";
   const roleRule = secured ? ", 'role' => ['required']" : "";
@@ -389,7 +429,7 @@ declare(strict_types=1);
 namespace App\\Http\\Controllers\\Api;
 
 use App\\Http\\Controllers\\Controller;
-use App\\Models\\User;
+use App\\Models\\User;${guests ? "\nuse App\\Support\\PublicRole;" : ""}
 use App\\Support\\StrapiError;
 use App\\Support\\StrapiQuery;
 use App\\Support\\StrapiUsers;
@@ -495,7 +535,7 @@ ${assignRole}        $user = StrapiUsers::add([...$body, 'password' => Hash::mak
 
     private function allow(Request $request, string $permission): void
     {
-        if (! $request->user()->can($permission)) {
+        if (! ${guests ? "PublicRole::allows($request->user(), $permission)" : "$request->user()->can($permission)"}) {
             throw new StrapiError(403, 'ForbiddenError', 'Forbidden');
         }
     }`

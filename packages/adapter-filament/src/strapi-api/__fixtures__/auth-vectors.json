@@ -560,7 +560,7 @@
     },
     {
       "name": "book with a session",
-      "path": "/books",
+      "path": "/books?fields[0]=title",
       "as": "alice",
       "body": {
         "data": {

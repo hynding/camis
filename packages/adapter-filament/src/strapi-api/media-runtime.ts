@@ -457,11 +457,8 @@ export const emitUploadController = (
   const S = `${model}Serializer`;
   const auth = (statement: string): string => (secured ? `        ${statement}\n` : "");
   const files = secured ? `${model}::query()->forUser($request->user())` : `${model}::query()`;
-  const visible = (v: string): string =>
-    secured ? ` || ! $request->user()->can('view', ${v})` : "";
-  const listed = secured
-    ? `->filter(fn (${model} $file) => $request->user()->can('view', $file))`
-    : "";
+  const visible = (v: string): string => (secured ? ` || ! Gate::allows('view', ${v})` : "");
+  const listed = secured ? `->filter(fn (${model} $file) => Gate::allows('view', $file))` : "";
   const target = targets
     .map(
       (t) =>
@@ -486,7 +483,7 @@ use Illuminate\\Foundation\\Auth\\Access\\AuthorizesRequests;
 use Illuminate\\Http\\JsonResponse;
 use Illuminate\\Http\\Request;
 use Illuminate\\Http\\UploadedFile;
-use Illuminate\\Support\\Facades\\DB;
+use Illuminate\\Support\\Facades\\DB;${secured ? "\nuse Illuminate\\Support\\Facades\\Gate;" : ""}
 
 class UploadController extends Controller
 {

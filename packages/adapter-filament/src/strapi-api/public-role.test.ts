@@ -49,6 +49,12 @@ describe("the public role on the Strapi API style", () => {
     );
   });
 
+  it("refuses one row to a caller who may not list them, before looking it up", () => {
+    expect(content("app/Http/Controllers/Api/Generated/AuthorApiController.php")).toContain(
+      "$this->authorize('viewAny', Author::class);\n        $m = $this->find($request, $key);",
+    );
+  });
+
   it("checks relations for a guest too: null is a caller, not an unsecured project", () => {
     const query = content("app/Support/StrapiQuery.php");
     expect(query).not.toContain("$viewer === null ||");

@@ -110,7 +110,7 @@ ${reload(STMT)}
     }`,
     indexBody: `${auth(`$this->authorize('viewAny', ${M}::class);`)}        $rows = $this->scoped($request)->get();
         StrapiComponents::load($rows, ${MAP});
-${secured ? `        $rows = $rows->filter(fn (${M} $m) => $request->user()->can('view', $m));\n` : ""}
+${secured ? `        $rows = $rows->filter(fn (${M} $m) => Gate::allows('view', $m));\n` : ""}
         return response()->json(['data' => $rows->map(fn (${M} $m) => ${S}::toWire($m))->values()->all()]);`,
     showBody: `        $m = $this->find($request, $key);
         StrapiComponents::loadOne($m, ${MAP});
@@ -125,7 +125,7 @@ ${reload(STMT)}
         return response()->json(['data' => ${S}::toWire($fresh)], 201);`,
     updateBody: `        $wire = ${S}::fromWire((array) $request->input('data', []));
         $m = $this->scoped($request)->where(self::KEY, $key)->first();
-        if ($m !== null${secured ? ` && $request->user()->can('view', $m)` : ""}) {
+        if ($m !== null${secured ? ` && Gate::allows('view', $m)` : ""}) {
 ${auth(`$this->authorize('update', $m);`, NESTED_STMT)}${NESTED_STMT}DB::transaction(function () use ($m, $wire): void {
 ${NESTED_STMT}    $m->fill(StrapiComponents::columnsOf($wire, ${MAP}))->save();
 ${NESTED_STMT}    StrapiComponents::apply($m, ${MAP}, $wire);

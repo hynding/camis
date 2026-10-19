@@ -111,6 +111,7 @@ overwrite app/Http/Controllers/Api/LocaleController.php
 overwrite app/Http/Controllers/Api/UploadController.php
 overwrite app/Http/Controllers/Api/UserController.php
 overwrite app/Http/Middleware/StrapiActiveUser.php
+overwrite app/Http/Middleware/StrapiCredentials.php
 overwrite app/Http/Middleware/StrapiErrors.php
 overwrite app/Http/Serializers/ActivitySerializer.php
 overwrite app/Http/Serializers/ActivitySessionSerializer.php
@@ -162,6 +163,7 @@ overwrite app/Policies/TagPolicy.php
 overwrite app/Policies/TopicPolicy.php
 overwrite app/Policies/TransactionPolicy.php
 overwrite app/Policies/UserPolicy.php
+overwrite app/Support/PublicRole.php
 overwrite app/Support/Ring1.php
 overwrite app/Support/StrapiDocuments.php
 overwrite app/Support/StrapiError.php

@@ -15,6 +15,7 @@ use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 
 class NoteApiController extends Controller
@@ -32,7 +33,7 @@ class NoteApiController extends Controller
     protected function find(Request $request, string $key): Note
     {
         $m = $this->scoped($request)->where(self::KEY, $key)->first();
-        if ($m === null || ! $request->user()->can('view', $m)) {
+        if ($m === null || ! Gate::allows('view', $m)) {
             abort(404);
         }
 
@@ -44,7 +45,7 @@ class NoteApiController extends Controller
         $this->authorize('viewAny', Note::class);
         $rows = $this->scoped($request)->get();
         StrapiComponents::load($rows, Note::COMPONENT_MAP);
-        $rows = $rows->filter(fn (Note $m) => $request->user()->can('view', $m));
+        $rows = $rows->filter(fn (Note $m) => Gate::allows('view', $m));
 
         return response()->json(['data' => $rows->map(fn (Note $m) => NoteSerializer::toWire($m))->values()->all()]);
     }
@@ -82,7 +83,7 @@ class NoteApiController extends Controller
     {
         $wire = NoteSerializer::fromWire((array) $request->input('data', []));
         $m = $this->scoped($request)->where(self::KEY, $key)->first();
-        if ($m !== null && $request->user()->can('view', $m)) {
+        if ($m !== null && Gate::allows('view', $m)) {
             $this->authorize('update', $m);
             DB::transaction(function () use ($m, $wire): void {
                 $m->fill(StrapiComponents::columnsOf($wire, Note::COMPONENT_MAP))->save();

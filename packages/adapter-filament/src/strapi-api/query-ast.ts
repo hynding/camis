@@ -154,3 +154,19 @@ export const toWhereNode = (expr: Expression, ctx: WhereContext): WhereNode | nu
       return null;
   }
 };
+
+/**
+ * `node` for a caller without a session, whose absent `user.id` equals no row: each equality with
+ * it folds to false, and true or false is returned when nothing is left to ask the database. Ring 1
+ * fails such a comparison closed rather than false, which can only deny more, and the policy
+ * re-checks every row the scope lets through, so the scope is never the looser of the two.
+ */
+export const withoutUser = (node: WhereNode): WhereNode | boolean => {
+  if (node.kind === "eq") return node.value.kind === "userId" ? false : node;
+  const absorbing = node.kind === "and" ? false : true;
+  const args = node.args.map(withoutUser);
+  if (args.includes(absorbing)) return absorbing;
+  const rest = args.filter((a): a is WhereNode => typeof a !== "boolean");
+  if (rest.length === 0) return !absorbing;
+  return rest.length === 1 ? rest[0]! : { kind: node.kind, args: rest };
+};
