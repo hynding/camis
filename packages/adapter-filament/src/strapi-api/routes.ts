@@ -23,7 +23,19 @@ export const emitApiConfig = (
   layout: StorageLayout = "laravel",
   alwaysPopulateComponents = false,
   localized = false,
+  upload = false,
 ): string => {
+  // Where the media library keeps its files: unset, public/uploads, served at /uploads as Strapi's
+  // local provider serves it; else a Laravel disk name (s3, …). The limit is Strapi's default.
+  const uploadKeys = upload
+    ? `
+
+    'upload' => [
+        'disk' => env('CAMIS_UPLOAD_DISK'),
+        'provider' => env('CAMIS_UPLOAD_PROVIDER'),
+        'size_limit' => (int) env('CAMIS_UPLOAD_SIZE_LIMIT', 209715200),
+    ],`
+    : "";
   // The locale the locales table starts with, which reads and writes use when a request names none.
   const i18nKeys = localized
     ? `
@@ -64,7 +76,7 @@ declare(strict_types=1);
 return [
     // Requests per minute allowed on the unauthenticated credential endpoints
     // (POST /auth/local and /auth/local/register), keyed by client address.
-    'auth_throttle_per_minute' => max(1, (int) env('CAMIS_AUTH_THROTTLE_PER_MINUTE', ${AUTH_THROTTLE_PER_MINUTE})),${strapiKeys}${i18nKeys}
+    'auth_throttle_per_minute' => max(1, (int) env('CAMIS_AUTH_THROTTLE_PER_MINUTE', ${AUTH_THROTTLE_PER_MINUTE})),${strapiKeys}${i18nKeys}${uploadKeys}
 ];
 `;
 };
@@ -81,12 +93,14 @@ export const emitStrapiRoutes = (
   secured: boolean,
   guard: RouteGuard = "auth:sanctum",
   localized = false,
+  upload = false,
 ): string => {
   const jwt = secured && guard === "strapi-jwt";
   const sorted = [...cts].sort((a, b) => routePath(a).localeCompare(routePath(b)));
   const uses = [
     "App\\Http\\Controllers\\Api\\AuthController",
     ...(localized ? ["App\\Http\\Controllers\\Api\\LocaleController"] : []),
+    ...(upload ? ["App\\Http\\Controllers\\Api\\UploadController"] : []),
     ...sorted.map((ct) => `App\\Http\\Controllers\\Api\\${filamentNames(ct).model}ApiController`),
     "App\\Http\\Middleware\\StrapiErrors",
     ...(jwt ? ["App\\Http\\Middleware\\StrapiJwtGuard"] : []),
@@ -106,6 +120,14 @@ export const emitStrapiRoutes = (
         Route::delete('/${p}/{key}', [${c}, 'destroy']);`;
     })
     .join("\n\n");
+  const uploads = upload
+    ? `
+
+        Route::post('/upload', [UploadController::class, 'upload']);
+        Route::get('/upload/files', [UploadController::class, 'find']);
+        Route::get('/upload/files/{id}', [UploadController::class, 'findOne']);
+        Route::delete('/upload/files/{id}', [UploadController::class, 'destroy']);`
+    : "";
   const group = !secured
     ? "Route::middleware([])"
     : jwt
@@ -145,7 +167,7 @@ Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle):
     ${group}->group(function (): void {
         Route::get('/users/me', [AuthController::class, 'me']);
 
-${resources}
+${resources}${uploads}
     });
 
     // Inside the group so hand-written routes inherit the Strapi error envelope.

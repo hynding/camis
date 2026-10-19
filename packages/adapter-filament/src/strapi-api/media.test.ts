@@ -125,8 +125,9 @@ describe("the media library", () => {
     expect(resource).toContain("protected static ?string $model = File::class;");
     expect(resource).toContain("'Media Library'");
     expect(content("app/Filament/Resources/Files/Pages/CreateFile.php")).toContain(
-      "StrapiUpload::",
+      "return MediaPicker::store($data);",
     );
+    expect(content("app/Filament/Support/MediaPicker.php")).toContain("StrapiUpload::storePath(");
   });
 });
 

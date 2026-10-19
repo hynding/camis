@@ -2,6 +2,7 @@ import { expandComponents } from "@camis/adapter-kernel";
 import type { ContentType, FieldType, IrDocument } from "@camis/ir-schema";
 import { childTableEmit } from "../components";
 import { filamentNames, snake, snakeColumn } from "../names";
+import { FILE_UID } from "./media-runtime";
 import { camelKey, kebab } from "./names";
 
 export interface WireScalar {
@@ -21,7 +22,9 @@ export type WireRelationKind =
   | "hasOne"
   | "hasMany"
   | "belongsToMany"
-  | "localizations";
+  | "localizations"
+  | "mediaOne"
+  | "mediaMany";
 export interface WireRelation {
   key: string;
   /** The Eloquent relation method on this model. */
@@ -60,17 +63,25 @@ export interface WireShape {
 
 // `_fkNames` is accepted for signature stability with the controller emitter (Task 5+);
 // relations are excluded by construction, so the current shape builder never reads it.
+// With `fileModel`, the media library's model, media fields are links to its files; without it
+// (the Strapi storage layout, which reports them) they stay where they were, among the scalars.
 export const wireShape = (
   doc: IrDocument,
   ct: ContentType,
   _fkNames: string[],
   versioned: ReadonlySet<string> = new Set(),
   localized: ReadonlySet<string> = new Set(),
+  fileModel?: string,
 ): WireShape => {
   const names = filamentNames(ct);
   const expansion = expandComponents(doc, ct);
   const top: WireScalar[] = ct.fields
-    .filter((f) => f.type !== "relation" && f.type !== "component")
+    .filter(
+      (f) =>
+        f.type !== "relation" &&
+        f.type !== "component" &&
+        (f.type !== "media" || fileModel === undefined),
+    )
     .map((f) => ({ key: [camelKey(f.name)], column: snakeColumn(f.name), type: f.type }));
   const embedded: WireScalar[] = expansion.scalars.map((s) => ({
     key: s.path.map(camelKey),
@@ -101,6 +112,7 @@ export const wireShape = (
     components,
     relations: [
       ...wireRelations(doc, ct, versioned, localized),
+      ...(fileModel === undefined ? [] : mediaRelations(ct, fileModel)),
       // Strapi's `localizations`: the document's other locales, populated like a relation.
       ...(localized.has(ct.name)
         ? [
@@ -122,6 +134,26 @@ export const wireShape = (
     localized: localized.has(ct.name),
   };
 };
+
+/** A media field links files through Strapi's `files_related_mph`, in the order given. */
+const mediaRelations = (ct: ContentType, fileModel: string): WireRelation[] =>
+  ct.fields.flatMap((f) =>
+    f.type === "media"
+      ? [
+          {
+            key: camelKey(f.name),
+            relation: f.name,
+            kind: f.multiple === true ? ("mediaMany" as const) : ("mediaOne" as const),
+            model: fileModel,
+            foreignKey: null,
+            uid: FILE_UID,
+            holder: "self" as const,
+            draftPublish: false,
+            localized: false,
+          },
+        ]
+      : [],
+  );
 
 const strapiUid = (ct: ContentType): string => `api::${kebab(ct.name)}.${kebab(ct.name)}`;
 

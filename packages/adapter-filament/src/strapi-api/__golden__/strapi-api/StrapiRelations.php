@@ -58,14 +58,38 @@ final class StrapiRelations
             if ($relation['draftPublish']) {
                 $eloquent->whereNull($eloquent->getRelated()->qualifyColumn('published_at'));
             }
+            $media = in_array($relation['kind'], ['mediaOne', 'mediaMany'], true);
+            if ($media) {
+                $eloquent->orderByPivot('order');
+            }
             $current = array_map('intval', $eloquent->pluck($eloquent->getRelated()->getQualifiedKeyName())->all());
-            $wanted = $relation['kind'] === 'hasOne'
+            $wanted = in_array($relation['kind'], ['hasOne', 'mediaOne'], true)
                 ? array_values(array_filter([self::single($current[0] ?? null, $link)]))
                 : self::many($current, $link);
-            $relation['kind'] === 'belongsToMany'
-                ? $eloquent->sync($wanted)
-                : self::moveForeignKeys($row, $relation, $current, $wanted);
+            if ($media) {
+                $eloquent->sync(self::ordered($wanted));
+            } elseif ($relation['kind'] === 'belongsToMany') {
+                $eloquent->sync($wanted);
+            } else {
+                self::moveForeignKeys($row, $relation, $current, $wanted);
+            }
         }
+    }
+
+    /**
+     * A media field's files with their positions, which its link rows keep.
+     *
+     * @param list<int> $ids
+     * @return array<int, array{order: int}>
+     */
+    public static function ordered(array $ids): array
+    {
+        $ordered = [];
+        foreach (array_values($ids) as $i => $id) {
+            $ordered[$id] = ['order' => $i + 1];
+        }
+
+        return $ordered;
     }
 
     /**
