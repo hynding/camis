@@ -1,0 +1,163 @@
+{
+  "about": "Strapi 5's Upload API and media fields over REST, checked against strapi-php. Run on an empty database, in order, with strapi-populate-vectors.mjs; files come from __fixtures__/media. Book has a single cover (images) and multiple attachments; Post, which has draft and publish, has a single image. A file's hash and url end in random hex, and an image's byte sizes depend on its encoder, so neither is compared.",
+  "seed": [],
+  "reads": [],
+  "writes": [
+    {
+      "name": "upload stores an image with its formats",
+      "path": "/upload",
+      "as": "files:Wide",
+      "upload": [
+        { "file": "wide.png", "info": { "alternativeText": "red", "caption": "A red box" } }
+      ]
+    },
+    {
+      "name": "upload names a file from its info",
+      "path": "/upload",
+      "as": "files:Notes",
+      "upload": [{ "file": "notes.txt", "info": { "name": "my-notes.txt" } }]
+    },
+    {
+      "name": "upload without files is rejected",
+      "path": "/upload",
+      "upload": []
+    },
+    {
+      "name": "the files list",
+      "method": "GET",
+      "path": "/upload/files",
+      "query": "fields[0]=name&fields[1]=mime&sort=name:asc"
+    },
+    {
+      "name": "the files list filters",
+      "method": "GET",
+      "path": "/upload/files",
+      "query": "filters[mime][$startsWith]=image/&fields[0]=name"
+    },
+    {
+      "name": "one file",
+      "method": "GET",
+      "path": "/upload/files/#files:Notes"
+    },
+    {
+      "name": "a missing file",
+      "method": "GET",
+      "path": "/upload/files/999999"
+    },
+    {
+      "name": "upload with an id updates the file's info",
+      "path": "/upload",
+      "query": "id=#files:Notes",
+      "form": { "fileInfo": "{\"name\":\"renamed.txt\",\"caption\":\"cap\"}" },
+      "upload": []
+    },
+    {
+      "name": "updating a missing file",
+      "path": "/upload",
+      "query": "id=999999",
+      "form": { "fileInfo": "{\"name\":\"x\"}" },
+      "upload": []
+    },
+    {
+      "name": "media fields take file ids",
+      "method": "POST",
+      "path": "/books",
+      "as": "books:Covered",
+      "query": "fields[0]=title&populate[cover][fields][0]=name&populate[attachments][fields][0]=name",
+      "data": {
+        "title": "Covered",
+        "cover": "#files:Wide",
+        "attachments": ["#files:Notes", "#files:Wide"]
+      }
+    },
+    {
+      "name": "or documentIds",
+      "method": "POST",
+      "path": "/books",
+      "as": "books:ByDocument",
+      "query": "fields[0]=title&populate[cover][fields][0]=name",
+      "data": { "title": "ByDocument", "cover": "@files:Wide" }
+    },
+    {
+      "name": "a missing file is rejected",
+      "method": "POST",
+      "path": "/books",
+      "data": { "title": "Missing", "cover": 999999 }
+    },
+    {
+      "name": "media stays off the wire unless populated",
+      "method": "GET",
+      "path": "/books/@books:Covered"
+    },
+    {
+      "name": "populate=* includes the whole file",
+      "method": "GET",
+      "path": "/books/@books:Covered",
+      "query": "fields[0]=title&populate=*"
+    },
+    {
+      "name": "filters reach into media",
+      "method": "GET",
+      "path": "/books",
+      "query": "filters[attachments][name][$eq]=renamed.txt&fields[0]=title"
+    },
+    {
+      "name": "disconnect removes a file from a list",
+      "method": "PUT",
+      "path": "/books/@books:Covered",
+      "query": "fields[0]=title&populate[attachments][fields][0]=name",
+      "data": { "attachments": { "disconnect": ["#files:Wide"] } }
+    },
+    {
+      "name": "null clears a single file",
+      "method": "PUT",
+      "path": "/books/@books:ByDocument",
+      "query": "fields[0]=title&populate[cover][fields][0]=name",
+      "data": { "cover": null }
+    },
+    {
+      "name": "upload with ref links the new file to an entry",
+      "path": "/upload",
+      "as": "files:Linked",
+      "upload": [{ "file": "notes.txt" }],
+      "form": { "ref": "api::book.book", "refId": "#books:ByDocument", "field": "attachments" }
+    },
+    {
+      "name": "which then lists it",
+      "method": "GET",
+      "path": "/books/@books:ByDocument",
+      "query": "fields[0]=title&populate[attachments][fields][0]=name"
+    },
+    {
+      "name": "a draft holds its media",
+      "method": "POST",
+      "path": "/posts",
+      "as": "posts:Pictured",
+      "query": "status=draft&fields[0]=title&populate[image][fields][0]=name",
+      "data": { "title": "Pictured", "image": "#files:Wide" }
+    },
+    {
+      "name": "and publishing copies it",
+      "method": "PUT",
+      "path": "/posts/@posts:Pictured",
+      "query": "fields[0]=title&populate[image][fields][0]=name",
+      "data": {}
+    },
+    {
+      "name": "deleting a file returns it",
+      "method": "DELETE",
+      "path": "/upload/files/#files:Notes"
+    },
+    {
+      "name": "and unlinks it",
+      "method": "GET",
+      "path": "/books/@books:Covered",
+      "query": "fields[0]=title&populate[attachments][fields][0]=name"
+    },
+    {
+      "name": "deleting it again",
+      "method": "DELETE",
+      "path": "/upload/files/#files:Notes"
+    }
+  ]
+}

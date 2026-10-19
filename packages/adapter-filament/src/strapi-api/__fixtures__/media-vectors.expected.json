@@ -1,0 +1,401 @@
+{
+  "upload stores an image with its formats": {
+    "status": 201,
+    "data": [
+      {
+        "alternativeText": "red",
+        "caption": "A red box",
+        "ext": ".png",
+        "formats": {
+          "large": {
+            "ext": ".png",
+            "hash": "large_wide_<hash>",
+            "height": 667,
+            "mime": "image/png",
+            "name": "large_wide.png",
+            "url": "/uploads/large_wide_<hash>.png",
+            "width": 1000
+          },
+          "medium": {
+            "ext": ".png",
+            "hash": "medium_wide_<hash>",
+            "height": 500,
+            "mime": "image/png",
+            "name": "medium_wide.png",
+            "url": "/uploads/medium_wide_<hash>.png",
+            "width": 750
+          },
+          "small": {
+            "ext": ".png",
+            "hash": "small_wide_<hash>",
+            "height": 333,
+            "mime": "image/png",
+            "name": "small_wide.png",
+            "url": "/uploads/small_wide_<hash>.png",
+            "width": 500
+          },
+          "thumbnail": {
+            "ext": ".png",
+            "hash": "thumbnail_wide_<hash>",
+            "height": 156,
+            "mime": "image/png",
+            "name": "thumbnail_wide.png",
+            "url": "/uploads/thumbnail_wide_<hash>.png",
+            "width": 234
+          }
+        },
+        "hash": "wide_<hash>",
+        "height": 800,
+        "isUrlSigned": false,
+        "mime": "image/png",
+        "name": "wide.png",
+        "provider": "local",
+        "url": "/uploads/wide_<hash>.png",
+        "width": 1200
+      }
+    ]
+  },
+  "upload names a file from its info": {
+    "status": 201,
+    "data": [
+      {
+        "ext": ".txt",
+        "hash": "my_notes_<hash>",
+        "isUrlSigned": false,
+        "mime": "text/plain",
+        "name": "my-notes.txt",
+        "provider": "local",
+        "size": 0.01,
+        "url": "/uploads/my_notes_<hash>.txt"
+      }
+    ]
+  },
+  "upload without files is rejected": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Files are empty"
+    }
+  },
+  "the files list": {
+    "status": 200,
+    "data": [
+      {
+        "isUrlSigned": false,
+        "mime": "text/plain",
+        "name": "my-notes.txt"
+      },
+      {
+        "isUrlSigned": false,
+        "mime": "image/png",
+        "name": "wide.png"
+      }
+    ]
+  },
+  "the files list filters": {
+    "status": 200,
+    "data": [
+      {
+        "isUrlSigned": false,
+        "name": "wide.png"
+      }
+    ]
+  },
+  "one file": {
+    "status": 200,
+    "data": {
+      "ext": ".txt",
+      "hash": "my_notes_<hash>",
+      "isUrlSigned": false,
+      "mime": "text/plain",
+      "name": "my-notes.txt",
+      "provider": "local",
+      "size": 0.01,
+      "url": "/uploads/my_notes_<hash>.txt"
+    }
+  },
+  "a missing file": {
+    "status": 404,
+    "error": {
+      "name": "NotFoundError",
+      "message": "file.notFound"
+    }
+  },
+  "upload with an id updates the file's info": {
+    "status": 200,
+    "data": {
+      "caption": "cap",
+      "ext": ".txt",
+      "hash": "my_notes_<hash>",
+      "isUrlSigned": false,
+      "mime": "text/plain",
+      "name": "renamed.txt",
+      "provider": "local",
+      "size": 0.01,
+      "url": "/uploads/my_notes_<hash>.txt"
+    }
+  },
+  "updating a missing file": {
+    "status": 404,
+    "error": {
+      "name": "NotFoundError",
+      "message": "Entity not found"
+    }
+  },
+  "media fields take file ids": {
+    "status": 201,
+    "data": {
+      "attachments": [
+        {
+          "name": "renamed.txt"
+        },
+        {
+          "name": "wide.png"
+        }
+      ],
+      "cover": {
+        "name": "wide.png"
+      },
+      "title": "Covered"
+    }
+  },
+  "or documentIds": {
+    "status": 201,
+    "data": {
+      "cover": {
+        "name": "wide.png"
+      },
+      "title": "ByDocument"
+    }
+  },
+  "a missing file is rejected": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "1 relation(s) of type plugin::upload.file associated with this entity do not exist"
+    }
+  },
+  "media stays off the wire unless populated": {
+    "status": 200,
+    "data": {
+      "title": "Covered"
+    }
+  },
+  "populate=* includes the whole file": {
+    "status": 200,
+    "data": {
+      "attachments": [
+        {
+          "caption": "cap",
+          "ext": ".txt",
+          "hash": "my_notes_<hash>",
+          "mime": "text/plain",
+          "name": "renamed.txt",
+          "provider": "local",
+          "size": 0.01,
+          "url": "/uploads/my_notes_<hash>.txt"
+        },
+        {
+          "alternativeText": "red",
+          "caption": "A red box",
+          "ext": ".png",
+          "formats": {
+            "large": {
+              "ext": ".png",
+              "hash": "large_wide_<hash>",
+              "height": 667,
+              "mime": "image/png",
+              "name": "large_wide.png",
+              "url": "/uploads/large_wide_<hash>.png",
+              "width": 1000
+            },
+            "medium": {
+              "ext": ".png",
+              "hash": "medium_wide_<hash>",
+              "height": 500,
+              "mime": "image/png",
+              "name": "medium_wide.png",
+              "url": "/uploads/medium_wide_<hash>.png",
+              "width": 750
+            },
+            "small": {
+              "ext": ".png",
+              "hash": "small_wide_<hash>",
+              "height": 333,
+              "mime": "image/png",
+              "name": "small_wide.png",
+              "url": "/uploads/small_wide_<hash>.png",
+              "width": 500
+            },
+            "thumbnail": {
+              "ext": ".png",
+              "hash": "thumbnail_wide_<hash>",
+              "height": 156,
+              "mime": "image/png",
+              "name": "thumbnail_wide.png",
+              "url": "/uploads/thumbnail_wide_<hash>.png",
+              "width": 234
+            }
+          },
+          "hash": "wide_<hash>",
+          "height": 800,
+          "mime": "image/png",
+          "name": "wide.png",
+          "provider": "local",
+          "url": "/uploads/wide_<hash>.png",
+          "width": 1200
+        }
+      ],
+      "cover": {
+        "alternativeText": "red",
+        "caption": "A red box",
+        "ext": ".png",
+        "formats": {
+          "large": {
+            "ext": ".png",
+            "hash": "large_wide_<hash>",
+            "height": 667,
+            "mime": "image/png",
+            "name": "large_wide.png",
+            "url": "/uploads/large_wide_<hash>.png",
+            "width": 1000
+          },
+          "medium": {
+            "ext": ".png",
+            "hash": "medium_wide_<hash>",
+            "height": 500,
+            "mime": "image/png",
+            "name": "medium_wide.png",
+            "url": "/uploads/medium_wide_<hash>.png",
+            "width": 750
+          },
+          "small": {
+            "ext": ".png",
+            "hash": "small_wide_<hash>",
+            "height": 333,
+            "mime": "image/png",
+            "name": "small_wide.png",
+            "url": "/uploads/small_wide_<hash>.png",
+            "width": 500
+          },
+          "thumbnail": {
+            "ext": ".png",
+            "hash": "thumbnail_wide_<hash>",
+            "height": 156,
+            "mime": "image/png",
+            "name": "thumbnail_wide.png",
+            "url": "/uploads/thumbnail_wide_<hash>.png",
+            "width": 234
+          }
+        },
+        "hash": "wide_<hash>",
+        "height": 800,
+        "mime": "image/png",
+        "name": "wide.png",
+        "provider": "local",
+        "url": "/uploads/wide_<hash>.png",
+        "width": 1200
+      },
+      "editions": [],
+      "genres": [],
+      "title": "Covered"
+    }
+  },
+  "filters reach into media": {
+    "status": 200,
+    "data": [
+      {
+        "title": "Covered"
+      }
+    ]
+  },
+  "disconnect removes a file from a list": {
+    "status": 200,
+    "data": {
+      "attachments": [
+        {
+          "name": "renamed.txt"
+        }
+      ],
+      "title": "Covered"
+    }
+  },
+  "null clears a single file": {
+    "status": 200,
+    "data": {
+      "title": "ByDocument"
+    }
+  },
+  "upload with ref links the new file to an entry": {
+    "status": 201,
+    "data": [
+      {
+        "ext": ".txt",
+        "hash": "notes_<hash>",
+        "isUrlSigned": false,
+        "mime": "text/plain",
+        "name": "notes.txt",
+        "provider": "local",
+        "size": 0.01,
+        "url": "/uploads/notes_<hash>.txt"
+      }
+    ]
+  },
+  "which then lists it": {
+    "status": 200,
+    "data": {
+      "attachments": [
+        {
+          "name": "notes.txt"
+        }
+      ],
+      "title": "ByDocument"
+    }
+  },
+  "a draft holds its media": {
+    "status": 201,
+    "data": {
+      "image": {
+        "name": "wide.png"
+      },
+      "title": "Pictured"
+    }
+  },
+  "and publishing copies it": {
+    "status": 200,
+    "data": {
+      "image": {
+        "name": "wide.png"
+      },
+      "title": "Pictured"
+    }
+  },
+  "deleting a file returns it": {
+    "status": 200,
+    "data": {
+      "caption": "cap",
+      "ext": ".txt",
+      "hash": "my_notes_<hash>",
+      "isUrlSigned": false,
+      "mime": "text/plain",
+      "name": "renamed.txt",
+      "provider": "local",
+      "size": 0.01,
+      "url": "/uploads/my_notes_<hash>.txt"
+    }
+  },
+  "and unlinks it": {
+    "status": 200,
+    "data": {
+      "attachments": [],
+      "title": "Covered"
+    }
+  },
+  "deleting it again": {
+    "status": 404,
+    "error": {
+      "name": "NotFoundError",
+      "message": "file.notFound"
+    }
+  }
+}

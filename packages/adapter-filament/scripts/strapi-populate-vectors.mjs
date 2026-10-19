@@ -4,6 +4,9 @@
 // expected file is recorded from strapi-php (`--record`), which is how it is known to be Strapi's
 // behaviour rather than camis's.
 //
+// A step with `upload` posts multipart form data instead: each entry names a file under
+// __fixtures__/media and the fileInfo sent with it, and `form` adds fields (ref, refId, field).
+//
 // usage: strapi-populate-vectors.mjs <api-base> [--token T] [--vectors F] [--expected F] [--record]
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -44,12 +47,24 @@ const resolve = (value) => {
 };
 const resolveText = (text) => text.replace(/[@#][a-z]+:[A-Za-z]+/g, (t) => String(ref(t)));
 
-const call = async (method, path, query, data) => {
+const multipart = (upload, form) => {
+  const body = new FormData();
+  for (const { file, info } of upload) {
+    body.append("files", new Blob([readFileSync(join(fixtures, "media", file))]), file);
+    if (info !== undefined) body.append("fileInfo", JSON.stringify(info));
+  }
+  for (const [key, value] of Object.entries(form ?? {})) body.append(key, resolveText(value));
+  return body;
+};
+
+const call = async (method, path, query, data, upload, form) => {
   const url = `${base}${resolveText(path)}${query ? `?${resolveText(query)}` : ""}`;
   const headers = { Accept: "application/json" };
   if (values.token) headers.Authorization = `Bearer ${values.token}`;
   const init = { method, headers };
-  if (data !== undefined) {
+  if (upload !== undefined) {
+    init.body = multipart(upload, form);
+  } else if (data !== undefined) {
     headers["Content-Type"] = "application/json";
     init.body = JSON.stringify({ data: resolve(data) });
   }
@@ -66,14 +81,30 @@ const call = async (method, path, query, data) => {
 // null scalars off the wire (a known gap, PLAN.md Phase 19). publishedAt is dropped too unless the
 // vector file asks for its presence: Strapi stamps it even on types without draft and publish.
 const publishedAtPresence = vectors.publishedAt === "presence";
+// A stored file's hash (and so its url) ends in random hex, and an image's byte size depends on
+// the encoder that resized it (sharp, GD), so neither is compared.
 const VOLATILE = new Set(["id", "documentId", "createdAt", "updatedAt"]);
+const RANDOM_SUFFIX = /_[0-9a-f]{10}(?=\.|$)/g;
+const encoded = (file, key) =>
+  (key === "size" || key === "sizeInBytes") &&
+  typeof file.width === "number" &&
+  String(file.mime).startsWith("image/");
 const normalize = (value) => {
   if (Array.isArray(value)) return value.map(normalize);
+  if (typeof value === "string") return value;
   if (value !== null && typeof value === "object")
     return Object.fromEntries(
       Object.entries(value)
         .filter(
-          ([k, v]) => !VOLATILE.has(k) && (k === "publishedAt" ? publishedAtPresence : v !== null),
+          ([k, v]) =>
+            !VOLATILE.has(k) &&
+            !encoded(value, k) &&
+            (k === "publishedAt" ? publishedAtPresence : v !== null),
+        )
+        .map(([k, v]) =>
+          (k === "hash" || k === "url") && typeof v === "string"
+            ? [k, v.replace(RANDOM_SUFFIX, "_<hash>")]
+            : [k, v],
         )
         .map(([k, v]) => (k === "publishedAt" ? [k, v === null ? "absent" : "present"] : [k, v]))
         .sort(([a], [b]) => a.localeCompare(b))
@@ -89,9 +120,15 @@ const outcome = ({ status, body }) => {
     const keyed = details && typeof details === "object" && "key" in details;
     return { status, error: { name, message, ...(keyed ? { details } : {}) } };
   }
-  // A few plugin routes (the i18n locales list) answer with a bare array rather than { data }.
-  return { status, data: normalize(Array.isArray(body) ? body : (body?.data ?? null)) };
+  // Plugin routes (the i18n locales list, the upload API) answer with a bare array or object.
+  return { status, data: normalize(bare(body) ? body : (body?.data ?? null)) };
 };
+
+function bare(body) {
+  return Array.isArray(body) || (body !== null && typeof body === "object" && !("data" in body));
+}
+// What `as` names: the first file of an upload, or the document written.
+const written = (body) => (Array.isArray(body) ? body[0] : bare(body) ? body : body?.data);
 
 for (const row of vectors.seed) {
   const { status, body } = await call("POST", row.path, row.query ?? "", row.data);
@@ -105,9 +142,17 @@ for (const row of vectors.seed) {
 const results = {};
 for (const v of vectors.reads) results[v.name] = outcome(await call("GET", v.path, v.query));
 for (const v of vectors.writes) {
-  const response = await call(v.method, v.path, v.query ?? vectors.defaultQuery, v.data);
-  if (v.as !== undefined && response.body?.data)
-    refs.set(v.as, { id: response.body.data.id, documentId: response.body.data.documentId });
+  const response = await call(
+    v.method ?? "POST",
+    v.path,
+    v.query ?? vectors.defaultQuery,
+    v.data,
+    v.upload,
+    v.form,
+  );
+  const target = written(response.body);
+  if (v.as !== undefined && target?.id !== undefined)
+    refs.set(v.as, { id: target.id, documentId: target.documentId });
   results[v.name] = outcome(response);
 }
 
