@@ -55,9 +55,9 @@ const runHook = (words) => {
 const call = async (step) => {
   const headers = { Accept: "application/json" };
   if (step.as !== undefined) {
+    // A session an earlier step failed to open is sent as no session, so that step shows the cause.
     const jwt = sessions.get(step.as);
-    if (jwt === undefined) throw new Error(`no session saved as ${step.as}`);
-    headers.Authorization = `Bearer ${jwt}`;
+    if (jwt !== undefined) headers.Authorization = `Bearer ${jwt}`;
   }
   const init = { method: step.method ?? "POST", headers, redirect: "manual" };
   if (step.body !== undefined) {
@@ -125,7 +125,9 @@ expected.forEach((want, i) => {
   const got = outcomes[i];
   if (JSON.stringify(got) !== JSON.stringify(want)) {
     failed += 1;
-    console.error(`FAIL ${want.name}\n  want ${JSON.stringify(want)}\n  got  ${JSON.stringify(got)}`);
+    console.error(
+      `FAIL ${want.name}\n  want ${JSON.stringify(want)}\n  got  ${JSON.stringify(got)}`,
+    );
   }
 });
 if (failed > 0 || outcomes.length !== expected.length) {

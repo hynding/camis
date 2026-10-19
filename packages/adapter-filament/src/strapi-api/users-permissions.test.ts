@@ -47,7 +47,10 @@ const generated = [
 ];
 
 describe("users-permissions runtime", () => {
-  it.each(generated)("%s is generated and marked", (path) => {
+  it.each(generated)("%s is generated", (path) => {
+    expect(content(path).startsWith("<?php\n")).toBe(true);
+  });
+  it.each(generated.filter((path) => !path.startsWith("app/Filament/")))("%s is marked", (path) => {
     expect(content(path)).toContain(PHP_MARKER);
   });
   it("StrapiUsers golden", async () => {

@@ -172,5 +172,12 @@ export const emitStrapiStorage = (input: StrapiApiInput): StrapiApiEmission => {
       "Strapi's own admin panel owns content editing.",
   });
 
+  gaps.push({
+    feature: "usersPermissionsAccounts",
+    location: {},
+    severity: "downgrade",
+    message:
+      "the Strapi storage layout serves register, login and /users/me only; password reset and change, email confirmation, blocked users and /users are left to the Strapi instance",
+  });
   return { files, gaps, scopeMethods };
 };

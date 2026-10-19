@@ -35,6 +35,17 @@ import { emitScopeMethod } from "./scope";
 import { emitSerializer } from "./serializer";
 import { kebab } from "./names";
 import { wireShape } from "./wire-shape";
+import { emitUserResourceFiles, emitUsersPermissionsSettingsPage } from "./users-permissions-admin";
+import {
+  emitSettingsMigration,
+  emitStrapiActiveUser,
+  emitStrapiSettings,
+  emitStrapiUsers,
+  emitUserController,
+  emitUsersPermissionsMigration,
+  SETTINGS_MIGRATION_PATH,
+  USERS_PERMISSIONS_MIGRATION_PATH,
+} from "./users-permissions";
 
 export interface StrapiApiInput {
   doc: IrDocument;
@@ -113,6 +124,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
       "auth:sanctum",
       localized.size > 0,
       input.media !== undefined,
+      true,
     ),
   });
   files.push({
@@ -122,6 +134,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
       input.alwaysPopulateComponents === true,
       localized.size > 0,
       input.media !== undefined,
+      true,
     ),
   });
   files.push({
@@ -129,6 +142,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     content: emitAuthController(bundle.defaultRole),
   });
   files.push({ path: USERNAME_MIGRATION_PATH, content: emitUsernameMigration() });
+  files.push(...usersPermissionsFiles(secured));
   files.push({
     path: "app/Http/Middleware/StrapiErrors.php",
     content: emitStrapiErrorsMiddleware(),
@@ -155,6 +169,21 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
   }
   return { files, gaps, scopeMethods };
 };
+
+/** users-permissions beyond register and login: accounts, their settings and their admin. */
+const usersPermissionsFiles = (secured: boolean): GeneratedFile[] => [
+  { path: "app/Support/StrapiUsers.php", content: emitStrapiUsers() },
+  { path: "app/Support/StrapiSettings.php", content: emitStrapiSettings() },
+  { path: "app/Http/Controllers/Api/UserController.php", content: emitUserController(secured) },
+  { path: "app/Http/Middleware/StrapiActiveUser.php", content: emitStrapiActiveUser() },
+  { path: USERS_PERMISSIONS_MIGRATION_PATH, content: emitUsersPermissionsMigration() },
+  { path: SETTINGS_MIGRATION_PATH, content: emitSettingsMigration() },
+  ...emitUserResourceFiles(secured),
+  {
+    path: "app/Filament/Pages/UsersPermissionsSettings.php",
+    content: emitUsersPermissionsSettingsPage(secured),
+  },
+];
 
 /** The media library: Strapi's files and their upload API, and its admin. */
 const mediaLibraryFiles = (

@@ -9,6 +9,8 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AuthorApiController;
 use App\Http\Controllers\Api\TagApiController;
 use App\Http\Controllers\Api\UploadController;
+use App\Http\Controllers\Api\UserController;
+use App\Http\Middleware\StrapiActiveUser;
 use App\Http\Middleware\StrapiErrors;
 use Illuminate\Support\Facades\Route;
 
@@ -27,9 +29,14 @@ Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle):
     Route::get('/_health', fn () => response()->noContent());
     Route::post('/auth/local', [AuthController::class, 'login'])->middleware($authThrottle);
     Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware($authThrottle);
+    Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware($authThrottle);
+    Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])->middleware($authThrottle);
+    Route::get('/auth/email-confirmation', [AuthController::class, 'emailConfirmation']);
+    Route::post('/auth/send-email-confirmation', [AuthController::class, 'sendEmailConfirmation'])->middleware($authThrottle);
 
     Route::middleware([])->group(function (): void {
-        Route::get('/users/me', [AuthController::class, 'me']);
+        Route::get('/users/me', [UserController::class, 'me'])->middleware(['auth:sanctum', StrapiActiveUser::class]);
+        Route::post('/auth/change-password', [AuthController::class, 'changePassword'])->middleware(['auth:sanctum', StrapiActiveUser::class]);
 
         Route::get('/articles', [ArticleApiController::class, 'index']);
         Route::post('/articles', [ArticleApiController::class, 'store']);

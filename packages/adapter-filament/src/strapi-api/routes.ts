@@ -2,6 +2,7 @@ import type { StorageLayout } from "@camis/adapter-kernel";
 import type { ContentType } from "@camis/ir-schema";
 import { filamentNames } from "../names";
 import { routePath } from "./names";
+import { usersPermissionsConfigKeys } from "./users-permissions";
 
 /** Default requests per minute allowed on the unauthenticated credential endpoints. */
 const AUTH_THROTTLE_PER_MINUTE = 10;
@@ -24,6 +25,7 @@ export const emitApiConfig = (
   alwaysPopulateComponents = false,
   localized = false,
   upload = false,
+  usersPermissions = false,
 ): string => {
   // Where the media library keeps its files: unset, public/uploads, served at /uploads as Strapi's
   // local provider serves it; else a Laravel disk name (s3, …). The limit is Strapi's default.
@@ -76,7 +78,7 @@ declare(strict_types=1);
 return [
     // Requests per minute allowed on the unauthenticated credential endpoints
     // (POST /auth/local and /auth/local/register), keyed by client address.
-    'auth_throttle_per_minute' => max(1, (int) env('CAMIS_AUTH_THROTTLE_PER_MINUTE', ${AUTH_THROTTLE_PER_MINUTE})),${strapiKeys}${i18nKeys}${uploadKeys}
+    'auth_throttle_per_minute' => max(1, (int) env('CAMIS_AUTH_THROTTLE_PER_MINUTE', ${AUTH_THROTTLE_PER_MINUTE})),${strapiKeys}${i18nKeys}${uploadKeys}${usersPermissions ? usersPermissionsConfigKeys() : ""}
 ];
 `;
 };
@@ -94,6 +96,7 @@ export const emitStrapiRoutes = (
   guard: RouteGuard = "auth:sanctum",
   localized = false,
   upload = false,
+  usersPermissions = false,
 ): string => {
   const jwt = secured && guard === "strapi-jwt";
   const sorted = [...cts].sort((a, b) => routePath(a).localeCompare(routePath(b)));
@@ -101,6 +104,9 @@ export const emitStrapiRoutes = (
     "App\\Http\\Controllers\\Api\\AuthController",
     ...(localized ? ["App\\Http\\Controllers\\Api\\LocaleController"] : []),
     ...(upload ? ["App\\Http\\Controllers\\Api\\UploadController"] : []),
+    ...(usersPermissions
+      ? ["App\\Http\\Controllers\\Api\\UserController", "App\\Http\\Middleware\\StrapiActiveUser"]
+      : []),
     ...sorted.map((ct) => `App\\Http\\Controllers\\Api\\${filamentNames(ct).model}ApiController`),
     "App\\Http\\Middleware\\StrapiErrors",
     ...(jwt ? ["App\\Http\\Middleware\\StrapiJwtGuard"] : []),
@@ -128,11 +134,35 @@ export const emitStrapiRoutes = (
         Route::get('/upload/files/{id}', [UploadController::class, 'findOne']);
         Route::delete('/upload/files/{id}', [UploadController::class, 'destroy']);`
     : "";
+  const sanctum = usersPermissions
+    ? "Route::middleware(['auth:sanctum', StrapiActiveUser::class])"
+    : "Route::middleware('auth:sanctum')";
   const group = !secured
     ? "Route::middleware([])"
     : jwt
       ? "Route::middleware(StrapiJwtGuard::class)"
-      : "Route::middleware('auth:sanctum')";
+      : sanctum;
+  // A session's own routes need one even where nothing else is guarded.
+  const own = secured ? "" : "->middleware(['auth:sanctum', StrapiActiveUser::class])";
+  const accountRoutes = usersPermissions
+    ? `
+    Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware($authThrottle);
+    Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])->middleware($authThrottle);
+    Route::get('/auth/email-confirmation', [AuthController::class, 'emailConfirmation']);
+    Route::post('/auth/send-email-confirmation', [AuthController::class, 'sendEmailConfirmation'])->middleware($authThrottle);`
+    : "";
+  // Without roles nothing would guard who lists or makes accounts, so the routes are left out.
+  const userRoutes = `
+        Route::get('/users/count', [UserController::class, 'count']);
+        Route::get('/users', [UserController::class, 'find']);
+        Route::post('/users', [UserController::class, 'create']);
+        Route::get('/users/{id}', [UserController::class, 'findOne']);
+        Route::put('/users/{id}', [UserController::class, 'update']);
+        Route::delete('/users/{id}', [UserController::class, 'destroy']);`;
+  const sessionRoutes = usersPermissions
+    ? `Route::get('/users/me', [UserController::class, 'me'])${own};
+        Route::post('/auth/change-password', [AuthController::class, 'changePassword'])${own};${secured ? userRoutes : ""}`
+    : "Route::get('/users/me', [AuthController::class, 'me']);";
   return `<?php
 
 // @camis:generated — do not edit. Custom routes belong in routes/api-custom.php.
@@ -155,7 +185,7 @@ $authThrottle = 'throttle:'.(int) config('camis.auth_throttle_per_minute', ${AUT
 Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle): void {
     Route::get('/_health', fn () => response()->noContent());
     Route::post('/auth/local', [AuthController::class, 'login'])->middleware($authThrottle);
-    Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware($authThrottle);${
+    Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware($authThrottle);${accountRoutes}${
       localized
         ? `
 
@@ -165,7 +195,7 @@ Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle):
     }
 
     ${group}->group(function (): void {
-        Route::get('/users/me', [AuthController::class, 'me']);
+        ${sessionRoutes}
 
 ${resources}${uploads}
     });

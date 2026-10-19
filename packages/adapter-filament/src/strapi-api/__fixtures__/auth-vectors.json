@@ -1,81 +1,343 @@
 {
   "steps": [
-    { "name": "register", "path": "/auth/local/register", "body": { "username": "alice", "email": "Alice@Example.test", "password": "secret1" }, "save": "alice", "keep": { "aliceId": "user.id" } },
-    { "name": "register taken", "path": "/auth/local/register", "body": { "username": "alice", "email": "alice@example.test", "password": "secret1" } },
-    { "name": "register taken email", "path": "/auth/local/register", "body": { "username": "alice2", "email": "ALICE@example.test", "password": "secret1" } },
-    { "name": "register invalid email", "path": "/auth/local/register", "body": { "username": "alice3", "email": "not-an-email", "password": "secret1" } },
-    { "name": "register without username", "path": "/auth/local/register", "body": { "email": "nameless@example.test", "password": "secret1" } },
-    { "name": "register without password", "path": "/auth/local/register", "body": { "username": "nopass", "email": "nopass@example.test" } },
-    { "name": "register with a role", "path": "/auth/local/register", "body": { "username": "sneaky", "email": "sneaky@example.test", "password": "secret1", "role": 1 } },
+    {
+      "name": "register",
+      "path": "/auth/local/register",
+      "body": { "username": "alice", "email": "Alice@Example.test", "password": "secret1" },
+      "save": "alice",
+      "keep": { "aliceId": "user.id" }
+    },
+    {
+      "name": "register taken",
+      "path": "/auth/local/register",
+      "body": { "username": "alice", "email": "alice@example.test", "password": "secret1" }
+    },
+    {
+      "name": "register taken email",
+      "path": "/auth/local/register",
+      "body": { "username": "alice2", "email": "ALICE@example.test", "password": "secret1" }
+    },
+    {
+      "name": "register invalid email",
+      "path": "/auth/local/register",
+      "body": { "username": "alice3", "email": "not-an-email", "password": "secret1" }
+    },
+    {
+      "name": "register without username",
+      "path": "/auth/local/register",
+      "body": { "email": "nameless@example.test", "password": "secret1" }
+    },
+    {
+      "name": "register without password",
+      "path": "/auth/local/register",
+      "body": { "username": "nopass", "email": "nopass@example.test" }
+    },
+    {
+      "name": "register with a role",
+      "path": "/auth/local/register",
+      "body": {
+        "username": "sneaky",
+        "email": "sneaky@example.test",
+        "password": "secret1",
+        "role": 1
+      }
+    },
 
-    { "name": "login wrong password", "path": "/auth/local", "body": { "identifier": "alice", "password": "wrong" } },
-    { "name": "login unknown identifier", "path": "/auth/local", "body": { "identifier": "nobody", "password": "secret1" } },
+    {
+      "name": "login wrong password",
+      "path": "/auth/local",
+      "body": { "identifier": "alice", "password": "wrong" }
+    },
+    {
+      "name": "login unknown identifier",
+      "path": "/auth/local",
+      "body": { "identifier": "nobody", "password": "secret1" }
+    },
     { "name": "login without password", "path": "/auth/local", "body": { "identifier": "alice" } },
-    { "name": "login by email", "path": "/auth/local", "body": { "identifier": "ALICE@example.test", "password": "secret1" }, "save": "alice" },
+    {
+      "name": "login by email",
+      "path": "/auth/local",
+      "body": { "identifier": "ALICE@example.test", "password": "secret1" },
+      "save": "alice"
+    },
     { "name": "me", "method": "GET", "path": "/users/me", "as": "alice" },
     { "name": "me without a session", "method": "GET", "path": "/users/me" },
 
-    { "name": "change password wrong current", "path": "/auth/change-password", "as": "alice", "body": { "currentPassword": "wrong", "password": "secret2", "passwordConfirmation": "secret2" } },
-    { "name": "change password mismatch", "path": "/auth/change-password", "as": "alice", "body": { "currentPassword": "secret1", "password": "secret2", "passwordConfirmation": "secret3" } },
-    { "name": "change password unchanged", "path": "/auth/change-password", "as": "alice", "body": { "currentPassword": "secret1", "password": "secret1", "passwordConfirmation": "secret1" } },
-    { "name": "change password without a session", "path": "/auth/change-password", "body": { "currentPassword": "secret1", "password": "secret2", "passwordConfirmation": "secret2" } },
-    { "name": "change password", "path": "/auth/change-password", "as": "alice", "body": { "currentPassword": "secret1", "password": "secret2", "passwordConfirmation": "secret2" }, "save": "alice" },
-    { "name": "login old password", "path": "/auth/local", "body": { "identifier": "alice", "password": "secret1" } },
+    {
+      "name": "change password wrong current",
+      "path": "/auth/change-password",
+      "as": "alice",
+      "body": {
+        "currentPassword": "wrong",
+        "password": "secret2",
+        "passwordConfirmation": "secret2"
+      }
+    },
+    {
+      "name": "change password mismatch",
+      "path": "/auth/change-password",
+      "as": "alice",
+      "body": {
+        "currentPassword": "secret1",
+        "password": "secret2",
+        "passwordConfirmation": "secret3"
+      }
+    },
+    {
+      "name": "change password unchanged",
+      "path": "/auth/change-password",
+      "as": "alice",
+      "body": {
+        "currentPassword": "secret1",
+        "password": "secret1",
+        "passwordConfirmation": "secret1"
+      }
+    },
+    {
+      "name": "change password without a session",
+      "path": "/auth/change-password",
+      "body": {
+        "currentPassword": "secret1",
+        "password": "secret2",
+        "passwordConfirmation": "secret2"
+      }
+    },
+    {
+      "name": "change password",
+      "path": "/auth/change-password",
+      "as": "alice",
+      "body": {
+        "currentPassword": "secret1",
+        "password": "secret2",
+        "passwordConfirmation": "secret2"
+      },
+      "save": "alice"
+    },
+    {
+      "name": "login old password",
+      "path": "/auth/local",
+      "body": { "identifier": "alice", "password": "secret1" }
+    },
 
-    { "name": "forgot password", "path": "/auth/forgot-password", "body": { "email": "alice@example.test" } },
-    { "name": "forgot password unknown email", "path": "/auth/forgot-password", "body": { "email": "nobody@example.test" } },
-    { "name": "forgot password invalid email", "path": "/auth/forgot-password", "body": { "email": "nope" } },
+    {
+      "name": "forgot password",
+      "path": "/auth/forgot-password",
+      "body": { "email": "alice@example.test" }
+    },
+    {
+      "name": "forgot password unknown email",
+      "path": "/auth/forgot-password",
+      "body": { "email": "nobody@example.test" }
+    },
+    {
+      "name": "forgot password invalid email",
+      "path": "/auth/forgot-password",
+      "body": { "email": "nope" }
+    },
     { "hook": ["lookup", "reset", "alice"], "into": "code" },
-    { "name": "reset password wrong code", "path": "/auth/reset-password", "body": { "code": "wrong", "password": "secret3", "passwordConfirmation": "secret3" } },
-    { "name": "reset password mismatch", "path": "/auth/reset-password", "body": { "code": "$code", "password": "secret3", "passwordConfirmation": "secret4" } },
-    { "name": "reset password", "path": "/auth/reset-password", "body": { "code": "$code", "password": "secret3", "passwordConfirmation": "secret3" }, "save": "alice" },
-    { "name": "reset password code reused", "path": "/auth/reset-password", "body": { "code": "$code", "password": "secret4", "passwordConfirmation": "secret4" } },
-    { "name": "login new password", "path": "/auth/local", "body": { "identifier": "alice", "password": "secret3" } },
+    {
+      "name": "reset password wrong code",
+      "path": "/auth/reset-password",
+      "body": { "code": "wrong", "password": "secret3", "passwordConfirmation": "secret3" }
+    },
+    {
+      "name": "reset password mismatch",
+      "path": "/auth/reset-password",
+      "body": { "code": "$code", "password": "secret3", "passwordConfirmation": "secret4" }
+    },
+    {
+      "name": "reset password",
+      "path": "/auth/reset-password",
+      "body": { "code": "$code", "password": "secret3", "passwordConfirmation": "secret3" },
+      "save": "alice"
+    },
+    {
+      "name": "reset password code reused",
+      "path": "/auth/reset-password",
+      "body": { "code": "$code", "password": "secret4", "passwordConfirmation": "secret4" }
+    },
+    {
+      "name": "login new password",
+      "path": "/auth/local",
+      "body": { "identifier": "alice", "password": "secret3" }
+    },
 
-    { "name": "register bob", "path": "/auth/local/register", "body": { "username": "bob", "email": "bob@example.test", "password": "secret1" }, "save": "bob", "keep": { "bobId": "user.id" } },
+    {
+      "name": "register bob",
+      "path": "/auth/local/register",
+      "body": { "username": "bob", "email": "bob@example.test", "password": "secret1" },
+      "save": "bob",
+      "keep": { "bobId": "user.id" }
+    },
     { "name": "users", "method": "GET", "path": "/users?sort=username:asc", "as": "alice" },
-    { "name": "users filtered", "method": "GET", "path": "/users?filters[username][$eq]=bob&fields[0]=username", "as": "alice" },
+    {
+      "name": "users filtered",
+      "method": "GET",
+      "path": "/users?filters[username][$eq]=bob&fields[0]=username",
+      "as": "alice"
+    },
     { "name": "users count", "method": "GET", "path": "/users/count", "as": "alice" },
     { "name": "user", "method": "GET", "path": "/users/$bobId", "as": "alice" },
     { "name": "user missing", "method": "GET", "path": "/users/999999", "as": "alice" },
     { "name": "users without a session", "method": "GET", "path": "/users" },
-    { "name": "create user denied", "path": "/users", "as": "alice", "body": { "username": "made", "email": "made@example.test", "password": "secret1" } },
-    { "name": "update user denied", "method": "PUT", "path": "/users/$bobId", "as": "alice", "body": { "username": "robert" } },
+    {
+      "name": "create user denied",
+      "path": "/users",
+      "as": "alice",
+      "body": { "username": "made", "email": "made@example.test", "password": "secret1" }
+    },
+    {
+      "name": "update user denied",
+      "method": "PUT",
+      "path": "/users/$bobId",
+      "as": "alice",
+      "body": { "username": "robert" }
+    },
     { "name": "delete user denied", "method": "DELETE", "path": "/users/$bobId", "as": "alice" },
 
     { "hook": ["allow", "create"] },
     { "hook": ["lookup", "role", "authenticated"], "into": "roleId" },
-    { "name": "create user without a role", "path": "/users", "as": "alice", "body": { "username": "made", "email": "made@example.test", "password": "secret1" } },
-    { "name": "create user invalid email", "path": "/users", "as": "alice", "body": { "username": "made", "email": "nope", "password": "secret1", "role": "$roleId" } },
-    { "name": "create user email taken", "path": "/users", "as": "alice", "body": { "username": "made", "email": "BOB@example.test", "password": "secret1", "role": "$roleId" } },
-    { "name": "create user", "path": "/users", "as": "alice", "body": { "username": "made", "email": "Made@example.test", "password": "secret1", "role": "$roleId" }, "keep": { "madeId": "id" } },
-    { "name": "login created user", "path": "/auth/local", "body": { "identifier": "made", "password": "secret1" } },
+    {
+      "name": "create user without a role",
+      "path": "/users",
+      "as": "alice",
+      "body": { "username": "made", "email": "made@example.test", "password": "secret1" }
+    },
+    {
+      "name": "create user invalid email",
+      "path": "/users",
+      "as": "alice",
+      "body": { "username": "made", "email": "nope", "password": "secret1", "role": "$roleId" }
+    },
+    {
+      "name": "create user email taken",
+      "path": "/users",
+      "as": "alice",
+      "body": {
+        "username": "made",
+        "email": "BOB@example.test",
+        "password": "secret1",
+        "role": "$roleId"
+      }
+    },
+    {
+      "name": "create user",
+      "path": "/users",
+      "as": "alice",
+      "body": {
+        "username": "made",
+        "email": "Made@example.test",
+        "password": "secret1",
+        "role": "$roleId"
+      },
+      "keep": { "madeId": "id" }
+    },
+    {
+      "name": "login created user",
+      "path": "/auth/local",
+      "body": { "identifier": "made", "password": "secret1" }
+    },
     { "hook": ["allow", "update"] },
-    { "name": "update user", "method": "PUT", "path": "/users/$bobId", "as": "alice", "body": { "username": "robert", "email": "Robert@example.test" } },
-    { "name": "update user username taken", "method": "PUT", "path": "/users/$bobId", "as": "alice", "body": { "username": "alice" } },
-    { "name": "update user email taken", "method": "PUT", "path": "/users/$bobId", "as": "alice", "body": { "email": "alice@example.test" } },
-    { "name": "update user empty password", "method": "PUT", "path": "/users/$bobId", "as": "alice", "body": { "password": "" } },
-    { "name": "update user missing", "method": "PUT", "path": "/users/999999", "as": "alice", "body": { "username": "ghost" } },
+    {
+      "name": "update user",
+      "method": "PUT",
+      "path": "/users/$bobId",
+      "as": "alice",
+      "body": { "username": "robert", "email": "Robert@example.test" }
+    },
+    {
+      "name": "update user username taken",
+      "method": "PUT",
+      "path": "/users/$bobId",
+      "as": "alice",
+      "body": { "username": "alice" }
+    },
+    {
+      "name": "update user email taken",
+      "method": "PUT",
+      "path": "/users/$bobId",
+      "as": "alice",
+      "body": { "email": "alice@example.test" }
+    },
+    {
+      "name": "update user empty password",
+      "method": "PUT",
+      "path": "/users/$bobId",
+      "as": "alice",
+      "body": { "password": "" }
+    },
+    {
+      "name": "update user missing",
+      "method": "PUT",
+      "path": "/users/999999",
+      "as": "alice",
+      "body": { "username": "ghost" }
+    },
     { "hook": ["allow", "destroy"] },
     { "name": "delete user", "method": "DELETE", "path": "/users/$madeId", "as": "alice" },
     { "name": "users after delete", "method": "GET", "path": "/users/count", "as": "alice" },
 
     { "hook": ["block", "robert"] },
-    { "name": "login blocked", "path": "/auth/local", "body": { "identifier": "robert", "password": "secret1" } },
+    {
+      "name": "login blocked",
+      "path": "/auth/local",
+      "body": { "identifier": "robert", "password": "secret1" }
+    },
     { "name": "me blocked", "method": "GET", "path": "/users/me", "as": "bob" },
 
-    { "hook": ["settings", "{\"email_confirmation\":true,\"email_confirmation_redirection\":\"http://localhost:3000/confirmed\"}"] },
-    { "name": "register unconfirmed", "path": "/auth/local/register", "body": { "username": "carol", "email": "carol@example.test", "password": "secret1" } },
-    { "name": "login unconfirmed", "path": "/auth/local", "body": { "identifier": "carol", "password": "secret1" } },
-    { "name": "send confirmation", "path": "/auth/send-email-confirmation", "body": { "email": "carol@example.test" } },
-    { "name": "send confirmation unknown email", "path": "/auth/send-email-confirmation", "body": { "email": "nobody@example.test" } },
+    {
+      "hook": [
+        "settings",
+        "{\"email_confirmation\":true,\"email_confirmation_redirection\":\"http://localhost:3000/confirmed\"}"
+      ]
+    },
+    {
+      "name": "register unconfirmed",
+      "path": "/auth/local/register",
+      "body": { "username": "carol", "email": "carol@example.test", "password": "secret1" }
+    },
+    {
+      "name": "login unconfirmed",
+      "path": "/auth/local",
+      "body": { "identifier": "carol", "password": "secret1" }
+    },
+    {
+      "name": "send confirmation",
+      "path": "/auth/send-email-confirmation",
+      "body": { "email": "carol@example.test" }
+    },
+    {
+      "name": "send confirmation unknown email",
+      "path": "/auth/send-email-confirmation",
+      "body": { "email": "nobody@example.test" }
+    },
     { "hook": ["lookup", "confirmation", "carol"], "into": "confirmation" },
-    { "name": "confirm wrong token", "method": "GET", "path": "/auth/email-confirmation?confirmation=wrong" },
-    { "name": "confirm", "method": "GET", "path": "/auth/email-confirmation?confirmation=$confirmation" },
-    { "name": "login confirmed", "path": "/auth/local", "body": { "identifier": "carol", "password": "secret1" } },
-    { "name": "send confirmation already confirmed", "path": "/auth/send-email-confirmation", "body": { "email": "carol@example.test" } },
+    {
+      "name": "confirm wrong token",
+      "method": "GET",
+      "path": "/auth/email-confirmation?confirmation=wrong"
+    },
+    {
+      "name": "confirm",
+      "method": "GET",
+      "path": "/auth/email-confirmation?confirmation=$confirmation"
+    },
+    {
+      "name": "login confirmed",
+      "path": "/auth/local",
+      "body": { "identifier": "carol", "password": "secret1" }
+    },
+    {
+      "name": "send confirmation already confirmed",
+      "path": "/auth/send-email-confirmation",
+      "body": { "email": "carol@example.test" }
+    },
 
     { "hook": ["settings", "{\"allow_register\":false}"] },
-    { "name": "register closed", "path": "/auth/local/register", "body": { "username": "dave", "email": "dave@example.test", "password": "secret1" } }
+    {
+      "name": "register closed",
+      "path": "/auth/local/register",
+      "body": { "username": "dave", "email": "dave@example.test", "password": "secret1" }
+    }
   ]
 }

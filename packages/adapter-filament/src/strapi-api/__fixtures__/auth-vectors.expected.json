@@ -40,9 +40,7 @@
       "details": {
         "errors": [
           {
-            "path": [
-              "email"
-            ],
+            "path": ["email"],
             "message": "email must be a valid email",
             "name": "ValidationError",
             "value": "not-an-email"
@@ -60,9 +58,7 @@
       "details": {
         "errors": [
           {
-            "path": [
-              "username"
-            ],
+            "path": ["username"],
             "message": "username is a required field",
             "name": "ValidationError"
           }
@@ -79,9 +75,7 @@
       "details": {
         "errors": [
           {
-            "path": [
-              "password"
-            ],
+            "path": ["password"],
             "message": "password is a required field",
             "name": "ValidationError"
           }
@@ -125,9 +119,7 @@
       "details": {
         "errors": [
           {
-            "path": [
-              "password"
-            ],
+            "path": ["password"],
             "message": "password is a required field",
             "name": "ValidationError"
           }
@@ -187,9 +179,7 @@
       "details": {
         "errors": [
           {
-            "path": [
-              "passwordConfirmation"
-            ],
+            "path": ["passwordConfirmation"],
             "message": "Passwords do not match",
             "name": "ValidationError",
             "value": "secret3"
@@ -262,9 +252,7 @@
       "details": {
         "errors": [
           {
-            "path": [
-              "email"
-            ],
+            "path": ["email"],
             "message": "email must be a valid email",
             "name": "ValidationError",
             "value": "nope"
@@ -291,9 +279,7 @@
       "details": {
         "errors": [
           {
-            "path": [
-              "passwordConfirmation"
-            ],
+            "path": ["passwordConfirmation"],
             "message": "Passwords do not match",
             "name": "ValidationError",
             "value": "secret4"
@@ -448,9 +434,7 @@
       "details": {
         "errors": [
           {
-            "path": [
-              "role"
-            ],
+            "path": ["role"],
             "message": "role is a required field",
             "name": "ValidationError"
           }
@@ -467,9 +451,7 @@
       "details": {
         "errors": [
           {
-            "path": [
-              "email"
-            ],
+            "path": ["email"],
             "message": "email must be a valid email",
             "name": "ValidationError",
             "value": "nope"
