@@ -11,6 +11,50 @@ const docWith = (articleFields: unknown[]): IrDocument =>
 
 const codes = (doc: IrDocument) => validateInvariants(doc).map((e) => e.code);
 
+describe("the builtin file type", () => {
+  const withFile = (file: object, extra: object[] = []): IrDocument =>
+    ({
+      version: 1,
+      contentTypes: [
+        { name: "File", kind: "collection", builtin: "file", fields: [], ...file },
+        ...extra,
+      ],
+      components: [],
+    }) as IrDocument;
+
+  it("accepts one with no fields", () => {
+    expect(codes(withFile({}))).toEqual([]);
+  });
+
+  // Its fields are the media library's own (name, url, formats, …), fixed by every target.
+  it("declares no fields of its own", () => {
+    const errors = validateInvariants(withFile({ fields: [{ type: "string", name: "label" }] }));
+    expect(errors).toEqual([
+      expect.objectContaining({ code: "builtin_file_fields", location: { contentType: "File" } }),
+    ]);
+  });
+
+  it("is declared once", () => {
+    const second = { name: "Asset", kind: "collection", builtin: "file", fields: [] };
+    expect(codes(withFile({}, [second]))).toEqual(["duplicate_builtin_file"]);
+  });
+
+  // A file is linked through a media field, which says how many and of which kinds.
+  it("is not a relation target", () => {
+    const post = {
+      name: "Post",
+      kind: "collection",
+      fields: [{ type: "relation", name: "image", relationKind: "manyToOne", target: "File" }],
+    };
+    expect(validateInvariants(withFile({}, [post]))).toEqual([
+      expect.objectContaining({
+        code: "relation_to_builtin_file",
+        location: { contentType: "Post", field: "image" },
+      }),
+    ]);
+  });
+});
+
 describe("reference invariants", () => {
   it("flags an unknown relation target (C1)", () => {
     const doc: IrDocument = {

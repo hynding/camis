@@ -390,3 +390,22 @@ describe("localized content types", () => {
     ]);
   });
 });
+
+describe("the builtin file type", () => {
+  it("is reported: the Express target has no media library, so it is a plain table", () => {
+    const result = expressAdapter.generate(
+      {
+        roles: [],
+        document: {
+          version: 1,
+          components: [],
+          contentTypes: [{ name: "File", kind: "collection", builtin: "file", fields: [] }],
+        },
+      },
+      { projectName: "x" },
+    );
+    expect(result.gaps.gaps).toEqual([
+      expect.objectContaining({ feature: "builtinFile", location: { contentType: "File" } }),
+    ]);
+  });
+});

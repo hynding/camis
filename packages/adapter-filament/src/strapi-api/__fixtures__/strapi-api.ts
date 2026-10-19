@@ -43,6 +43,8 @@ export const strapiApiBundle: IrBundle = {
           { type: "email", name: "email", required: true },
         ],
       },
+      // The media library's files (media-vectors.json): Book and Post link them through media fields.
+      { name: "File", kind: "collection", builtin: "file", fields: [] },
       {
         name: "Note",
         kind: "collection",
@@ -117,6 +119,7 @@ export const strapiApiBundle: IrBundle = {
           { type: "integer", name: "views" },
           { type: "relation", name: "author", relationKind: "manyToOne", target: "Author" },
           { type: "relation", name: "topics", relationKind: "manyToMany", target: "Topic" },
+          { type: "media", name: "image", allowedTypes: ["image"] },
         ],
       },
       // Internationalization (i18n-vectors.json): Category and Article are localized, Article.code
@@ -188,6 +191,8 @@ export const strapiApiBundle: IrBundle = {
           { type: "relation", name: "topic", relationKind: "manyToOne", target: "Topic" },
           // A plain type linking a localized one: it links the default locale.
           { type: "relation", name: "category", relationKind: "manyToOne", target: "Category" },
+          { type: "media", name: "cover", allowedTypes: ["image"] },
+          { type: "media", name: "attachments", multiple: true },
         ],
       },
     ],
@@ -238,6 +243,7 @@ export const strapiApiBundle: IrBundle = {
           assign: { creator: "user.id" },
         },
         { contentType: "Tag", actions: ["read"] },
+        { contentType: "File", actions: ["create", "read", "update", "delete"] },
         { contentType: "Book", actions: ["create", "read", "update", "delete"] },
         { contentType: "Author", actions: ["create", "read", "update", "delete"] },
         { contentType: "Genre", actions: ["create", "read", "update", "delete"] },

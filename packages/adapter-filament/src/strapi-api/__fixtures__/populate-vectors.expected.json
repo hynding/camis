@@ -18,6 +18,7 @@
     "status": 200,
     "data": [
       {
+        "attachments": [],
         "author": {
           "name": "Ann"
         },
@@ -43,6 +44,7 @@
         "title": "Alpha"
       },
       {
+        "attachments": [],
         "author": {
           "name": "Bob"
         },
@@ -55,6 +57,7 @@
         "title": "Beta"
       },
       {
+        "attachments": [],
         "editions": [],
         "genres": [],
         "title": "Gamma"
@@ -396,6 +399,7 @@
   "populate on one document": {
     "status": 200,
     "data": {
+      "attachments": [],
       "author": {
         "name": "Ann"
       },

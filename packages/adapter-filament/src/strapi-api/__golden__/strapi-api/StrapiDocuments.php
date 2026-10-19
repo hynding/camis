@@ -112,6 +112,9 @@ final class StrapiDocuments
                 foreach ($from->{$field['component']}()->orderBy('id')->get() as $child) {
                     $to->{$field['component']}()->save($child->replicate());
                 }
+            } elseif (in_array($field['kind'] ?? null, ['mediaOne', 'mediaMany'], true)) {
+                $media = $from->{$field['relation']}()->orderByPivot('order');
+                $to->{$field['relation']}()->sync(StrapiRelations::ordered($media->pluck($media->getRelated()->getQualifiedKeyName())->all()));
             } elseif (($field['kind'] ?? null) === 'belongsToMany' && $field['holder'] === 'self') {
                 $relation = $from->{$field['relation']}();
                 $ids = $relation->orderBy($relation->getRelated()->getQualifiedKeyName())->pluck($relation->getRelated()->getQualifiedKeyName())->all();

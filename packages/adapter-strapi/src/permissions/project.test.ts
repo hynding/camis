@@ -84,6 +84,65 @@ describe("projectPermissions", () => {
   });
 });
 
+describe("grants on the builtin file type", () => {
+  const withFile: IrDocument = {
+    version: 1,
+    contentTypes: [{ name: "File", kind: "collection", builtin: "file", fields: [] }],
+    components: [],
+  };
+  const uploader: Role = {
+    name: "authenticated",
+    grants: [{ contentType: "File", actions: ["create", "read", "update", "delete"] }],
+  };
+
+  it("become the upload plugin's content API actions", () => {
+    expect(projectApiRoles(withFile, [uploader]).roles).toEqual([
+      {
+        type: "authenticated",
+        actions: [
+          "plugin::upload.content-api.destroy",
+          "plugin::upload.content-api.find",
+          "plugin::upload.content-api.findOne",
+          "plugin::upload.content-api.upload",
+        ],
+      },
+    ]);
+  });
+
+  it("become the media library's admin actions, which take no subject", () => {
+    const out = projectPermissions(withFile, [uploader]);
+    expect(out.roles[0]!.permissions).toEqual([
+      { action: "plugin::upload.assets.copy-link", subject: null },
+      { action: "plugin::upload.assets.create", subject: null },
+      { action: "plugin::upload.assets.download", subject: null },
+      { action: "plugin::upload.assets.update", subject: null },
+      { action: "plugin::upload.read", subject: null },
+    ]);
+  });
+
+  it("report a condition the media library cannot hold", () => {
+    const out = projectPermissions(withFile, [
+      {
+        name: "authenticated",
+        grants: [
+          {
+            contentType: "File",
+            actions: ["read"],
+            condition: { kind: "lit", value: true },
+          },
+        ],
+      },
+    ]);
+    expect(out.gaps).toEqual([
+      expect.objectContaining({
+        feature: "fileGrantCondition",
+        location: { contentType: "File", rule: "authenticated" },
+      }),
+    ]);
+    expect(out.conditions).toEqual([]);
+  });
+});
+
 describe("projectApiRoles", () => {
   it("maps grant actions to users-permissions API actions, deduped and sorted", () => {
     const out = projectApiRoles(doc, [editor]);

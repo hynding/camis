@@ -16,11 +16,24 @@ import {
 } from "./i18n-runtime";
 import { emitResourceFiles } from "../resource";
 import { emitStrapiErrorsMiddleware } from "./errors";
+import { mediaFields } from "./media";
+import {
+  emitFileModel,
+  emitFileResourceFiles,
+  emitFileSerializer,
+  emitFilesMigration,
+  emitHasMedia,
+  emitMediaPicker,
+  emitStrapiUpload,
+  emitUploadController,
+  FILES_MIGRATION_PATH,
+} from "./media-runtime";
 import { emitStrapiPopulate, emitStrapiRelations } from "./populate-runtime";
 import { emitHasDocumentId, emitStrapiError, emitStrapiQuery } from "./rest-runtime";
 import { emitApiConfig, emitStrapiRoutes } from "./routes";
 import { emitScopeMethod } from "./scope";
 import { emitSerializer } from "./serializer";
+import { kebab } from "./names";
 import { wireShape } from "./wire-shape";
 
 export interface StrapiApiInput {
@@ -32,6 +45,8 @@ export interface StrapiApiInput {
   versioned?: ReadonlySet<string>;
   /** Localized content types kept as one row per locale (`localizationPlan`). */
   localized?: ReadonlySet<string>;
+  /** The builtin file type when the project keeps a media library (`mediaPlan`). */
+  media?: ContentType | undefined;
   /** The default of `camis.rest.always_populate_components` (GenerateOptions). */
   alwaysPopulateComponents?: boolean;
   /**
@@ -59,10 +74,11 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
   const files: GeneratedFile[] = [];
   const gaps: CapabilityGap[] = [];
   const scopeMethods = new Map<string, string>();
+  const fileModel = input.media === undefined ? undefined : filamentNames(input.media).model;
 
   for (const ct of emitted) {
     const names = filamentNames(ct);
-    const shape = wireShape(doc, ct, fkNames.get(ct.name) ?? [], versioned, localized);
+    const shape = wireShape(doc, ct, fkNames.get(ct.name) ?? [], versioned, localized, fileModel);
     files.push({
       path: `app/Http/Serializers/${names.model}Serializer.php`,
       content: emitSerializer(shape),
@@ -91,11 +107,22 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
 
   files.push({
     path: "routes/api.php",
-    content: emitStrapiRoutes(emitted, secured, "auth:sanctum", localized.size > 0),
+    content: emitStrapiRoutes(
+      emitted,
+      secured,
+      "auth:sanctum",
+      localized.size > 0,
+      input.media !== undefined,
+    ),
   });
   files.push({
     path: "config/camis.php",
-    content: emitApiConfig("laravel", input.alwaysPopulateComponents === true, localized.size > 0),
+    content: emitApiConfig(
+      "laravel",
+      input.alwaysPopulateComponents === true,
+      localized.size > 0,
+      input.media !== undefined,
+    ),
   });
   files.push({
     path: "app/Http/Controllers/Api/AuthController.php",
@@ -112,6 +139,13 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
   files.push({ path: "app/Support/StrapiRelations.php", content: emitStrapiRelations() });
   files.push({ path: "app/Models/Concerns/HasDocumentId.php", content: emitHasDocumentId() });
   if (localized.size > 0) files.push(...localeFiles());
+  if (input.media !== undefined) {
+    const scope = secured
+      ? emitScopeMethod(input.media, perm.readConditions.get(input.media.name))
+      : undefined;
+    if (scope?.gap) gaps.push(scope.gap);
+    files.push(...mediaLibraryFiles(input.media, emitted, secured, scope?.php));
+  }
   if (versioned.size > 0) {
     files.push({ path: "app/Support/StrapiDocuments.php", content: emitStrapiDocuments() });
     files.push({
@@ -120,6 +154,41 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     });
   }
   return { files, gaps, scopeMethods };
+};
+
+/** The media library: Strapi's files and their upload API, and its admin. */
+const mediaLibraryFiles = (
+  file: ContentType,
+  emitted: ContentType[],
+  secured: boolean,
+  scope: string | undefined,
+): GeneratedFile[] => {
+  const names = filamentNames(file);
+  const targets = emitted
+    .filter((ct) => mediaFields(ct).length > 0)
+    .map((ct) => ({
+      uid: `api::${kebab(ct.name)}.${kebab(ct.name)}`,
+      model: filamentNames(ct).model,
+    }));
+  return [
+    { path: "app/Support/StrapiUpload.php", content: emitStrapiUpload(names.model) },
+    { path: "app/Models/Concerns/HasMedia.php", content: emitHasMedia() },
+    {
+      path: `app/Models/${names.model}.php`,
+      content: emitFileModel(names.model, scope === undefined ? [] : [scope]),
+    },
+    {
+      path: `app/Http/Serializers/${names.model}Serializer.php`,
+      content: emitFileSerializer(names.model),
+    },
+    {
+      path: "app/Http/Controllers/Api/UploadController.php",
+      content: emitUploadController(names.model, targets, secured),
+    },
+    { path: FILES_MIGRATION_PATH, content: emitFilesMigration() },
+    { path: "app/Filament/Support/MediaPicker.php", content: emitMediaPicker(names.model) },
+    ...emitFileResourceFiles(names.model, names.resourceDir, names.resourceDir),
+  ];
 };
 
 /** The locales a localized project keeps, with their admin resource (a plain Filament resource). */

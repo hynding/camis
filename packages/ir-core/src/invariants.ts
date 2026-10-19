@@ -43,7 +43,14 @@ export const validateInvariants = (doc: IrDocument): IrError[] => {
   const checkFields = (fields: ContentType["fields"], location: IrError["location"]) => {
     for (const f of fields) {
       if (f.type === "relation") {
-        if (!typeByName.has(f.target)) {
+        if (typeByName.get(f.target)?.builtin === "file") {
+          errors.push({
+            code: "relation_to_builtin_file",
+            message: `relation "${f.name}" targets the builtin file type "${f.target}"; link files through a media field`,
+            location: { ...location, field: f.name },
+            path: [],
+          });
+        } else if (!typeByName.has(f.target)) {
           errors.push({
             code: "unknown_relation_target",
             message: `relation target "${f.target}" does not exist`,
@@ -115,6 +122,14 @@ export const validateInvariants = (doc: IrDocument): IrError[] => {
 
   for (const ct of doc.contentTypes) {
     checkFields(ct.fields, { contentType: ct.name });
+    if (ct.builtin === "file" && ct.fields.length > 0) {
+      errors.push({
+        code: "builtin_file_fields",
+        message: `builtin file type "${ct.name}" declares fields; a file's fields are the media library's own`,
+        location: { contentType: ct.name },
+        path: [],
+      });
+    }
     const upsertBy = ct.options?.upsertBy;
     if (upsertBy !== undefined) {
       const field = ct.fields.find((f) => f.name === upsertBy);
@@ -138,6 +153,15 @@ export const validateInvariants = (doc: IrDocument): IrError[] => {
   for (const c of doc.components)
     checkFields(c.fields as ContentType["fields"], { component: c.name });
 
+  const files = doc.contentTypes.filter((t) => t.builtin === "file");
+  for (const extra of files.slice(1)) {
+    errors.push({
+      code: "duplicate_builtin_file",
+      message: `"${extra.name}" is a second builtin file type; "${files[0]!.name}" already is one`,
+      location: { contentType: extra.name },
+      path: [],
+    });
+  }
   for (const name of findDuplicates(doc.contentTypes.map((t) => t.name))) {
     errors.push({
       code: "duplicate_content_type_name",

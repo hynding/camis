@@ -15,7 +15,13 @@ export const emitResourceFiles = (
   relationFields: string[] = [],
   extraEmits: FieldEmit[] = [],
   repeaters: RepeaterEmit[] = [],
-  options: { versioned?: boolean; localized?: boolean; secured?: boolean } = {},
+  options: {
+    versioned?: boolean;
+    localized?: boolean;
+    secured?: boolean;
+    /** Media fields, picked from the media library. */
+    media?: { field: string; multiple: boolean }[];
+  } = {},
 ): GeneratedFile[] => {
   const versioned = options.versioned === true;
   const localized = options.localized === true;
@@ -94,6 +100,7 @@ class ${n.resourceClass} extends Resource
     ...emits.map((e) => e.formImport),
     ...(relationFields.length > 0 || localized ? [SELECT] : []),
     ...(localized ? ["App\\Models\\Locale", "App\\Support\\StrapiLocales"] : []),
+    ...((options.media ?? []).length > 0 ? ["App\\Filament\\Support\\MediaPicker"] : []),
     ...repeaters.flatMap((r) => r.imports),
     "Filament\\Schemas\\Schema",
   ]);
@@ -108,6 +115,9 @@ class ${n.resourceClass} extends Resource
         `            ${manyRows ? e.formComponent.replace("->unique()", "") : e.formComponent},`,
     ),
     ...relationFields.map((s) => `            ${s},`),
+    ...(options.media ?? []).map(
+      (m) => `            MediaPicker::make('${m.field}', multiple: ${m.multiple}),`,
+    ),
     ...repeaters.map((r) => `            ${r.component},`),
   ].join("\n");
   const form = `<?php

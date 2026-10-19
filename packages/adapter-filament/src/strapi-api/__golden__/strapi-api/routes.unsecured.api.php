@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\ArticleApiController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AuthorApiController;
 use App\Http\Controllers\Api\TagApiController;
+use App\Http\Controllers\Api\UploadController;
 use App\Http\Middleware\StrapiErrors;
 use Illuminate\Support\Facades\Route;
 
@@ -47,6 +48,11 @@ Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle):
         Route::get('/tags/{key}', [TagApiController::class, 'show']);
         Route::put('/tags/{key}', [TagApiController::class, 'update']);
         Route::delete('/tags/{key}', [TagApiController::class, 'destroy']);
+
+        Route::post('/upload', [UploadController::class, 'upload']);
+        Route::get('/upload/files', [UploadController::class, 'find']);
+        Route::get('/upload/files/{id}', [UploadController::class, 'findOne']);
+        Route::delete('/upload/files/{id}', [UploadController::class, 'destroy']);
     });
 
     // Inside the group so hand-written routes inherit the Strapi error envelope.

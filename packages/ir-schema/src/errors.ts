@@ -25,7 +25,10 @@ export type IrErrorCode =
   | "unknown_hook_content_type"
   | "duplicate_hook"
   | "unknown_ai_source"
-  | "ai_computed_conflict";
+  | "ai_computed_conflict"
+  | "builtin_file_fields"
+  | "duplicate_builtin_file"
+  | "relation_to_builtin_file";
 
 export interface IrErrorLocation {
   contentType?: string;

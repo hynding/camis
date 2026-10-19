@@ -36,6 +36,8 @@ import { resolveRelations } from "./relations";
 import { emitResourceFiles } from "./resource";
 import { draftPublishPlan } from "./strapi-api/draft-publish";
 import { localizationPlan, sharedAcrossLocalesMethod } from "./strapi-api/localization";
+import { mediaFields, mediaPlan } from "./strapi-api/media";
+import { mediaRelationMethod } from "./strapi-api/media-runtime";
 import { emitStrapiApi } from "./strapi-api/emit";
 import { emitStrapiStorage } from "./strapi-api/storage/emit";
 
@@ -55,10 +57,12 @@ export const filamentAdapter: GenerateAdapter = {
     const versioned = draftPublish.versioned;
     const localization = localizationPlan(doc, apiStyle, storage);
     const localized = localization.localized;
+    const media = mediaPlan({ ...ir, document: doc }, apiStyle, storage);
+    const fileModel = media.file === undefined ? undefined : filamentNames(media.file).model;
     const rel = resolveRelations(doc, versioned, localized);
     const hooks = emitHookFiles(doc);
     const files: GeneratedFile[] = [];
-    const gaps: CapabilityGap[] = [...draftPublish.gaps, ...localization.gaps];
+    const gaps: CapabilityGap[] = [...draftPublish.gaps, ...localization.gaps, ...media.gaps];
     if (storage !== requestedStorage) {
       gaps.push({
         feature: "storageLayoutRequiresStrapiApi",
@@ -113,6 +117,7 @@ export const filamentAdapter: GenerateAdapter = {
       fkNames: rel.fkNames,
       versioned,
       localized,
+      media: media.file,
       alwaysPopulateComponents: options.alwaysPopulateComponents === true,
       observedModels: new Set([...hooks.observedModels, ...aiObservedModels]),
     };
@@ -148,10 +153,14 @@ export const filamentAdapter: GenerateAdapter = {
       const ctChildren = expansion.tables.map((t) => childTableEmit(ct, t));
       ctChildren.forEach((child) => children.push({ ct, child }));
       const names = filamentNames(ct);
+      // With a media library a media field is a link to its files, not a column.
+      const mediaOf = fileModel === undefined ? [] : mediaFields(ct);
+      const columns =
+        mediaOf.length === 0 ? ct : { ...ct, fields: ct.fields.filter((f) => f.type !== "media") };
       files.push({
         path: `app/Models/${names.model}.php`,
         content: emitModel(
-          ct,
+          columns,
           [...(rel.methods.get(ct.name) ?? []), ...ctChildren.map(childRelationMethod)],
           hooks.observedModels.has(ct.name) || aiObservedModels.has(ct.name),
           embeddedEmits,
@@ -163,13 +172,17 @@ export const filamentAdapter: GenerateAdapter = {
             ...(apiStyle === "strapi" ? ["App\\Models\\Concerns\\HasDocumentId"] : []),
             ...(versioned.has(ct.name) ? ["App\\Models\\Concerns\\HasDraftAndPublish"] : []),
             ...(localized.has(ct.name) ? ["App\\Models\\Concerns\\HasLocale"] : []),
+            ...(mediaOf.length > 0 ? ["App\\Models\\Concerns\\HasMedia"] : []),
           ],
-          localized.has(ct.name) ? [sharedAcrossLocalesMethod(ct)] : [],
+          [
+            ...(localized.has(ct.name) ? [sharedAcrossLocalesMethod(ct)] : []),
+            ...mediaOf.map((f) => mediaRelationMethod(f.name, f.name, fileModel)),
+          ],
         ),
       });
       files.push({
         path: migrationFilename(ct, migrationOrdinal.get(ct.name)!),
-        content: emitMigration(ct, rel.fkColumns.get(ct.name) ?? [], embeddedEmits, {
+        content: emitMigration(columns, rel.fkColumns.get(ct.name) ?? [], embeddedEmits, {
           documentId: apiStyle === "strapi",
           draftPublish: versioned.has(ct.name),
           localized: localized.has(ct.name),
@@ -177,7 +190,7 @@ export const filamentAdapter: GenerateAdapter = {
       });
       files.push(
         ...emitResourceFiles(
-          ct,
+          columns,
           rel.formFields.get(ct.name) ?? [],
           embeddedEmits,
           ctChildren.map(repeaterComponent),
@@ -185,6 +198,7 @@ export const filamentAdapter: GenerateAdapter = {
             versioned: versioned.has(ct.name),
             localized: localized.has(ct.name),
             secured: ir.roles.length > 0,
+            media: mediaOf.map((f) => ({ field: f.name, multiple: f.multiple === true })),
           },
         ),
       );

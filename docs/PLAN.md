@@ -539,6 +539,46 @@ localized ones empty; the strapi storage layout is not run against these vectors
 
 ---
 
+## Phase 23 — Media library and Upload API (`ir-schema`, `adapter-strapi`, `adapter-filament`, `adapter-express`)
+
+**Goal:** media fields and Strapi's Upload API behave over REST as on Strapi 5 with its upload
+plugin, and the Filament admin keeps a media library, on the laravel storage layout with the Strapi
+API style, with nothing more than PHP-FPM and GD on the host.
+
+- IR: `builtin: "file"` declares the media library as a content type with no fields, once per
+  project; nothing may relate to it. Its grants authorize the library. The Strapi adapter maps them
+  to the upload plugin's admin and Content API actions (a grant's conditions are a gap there); the
+  Express adapter reports the builtin as a gap.
+- Files live in Strapi's `files` table and link to entries through `files_related_mph`
+  (`related_type`, `related_id`, `field`, `order`), so a media field is no column. A project with
+  media fields and no declared file type gets an implicit one.
+- REST: `POST /api/upload` (multipart `files` + `fileInfo`, or `ref`/`refId`/`field` to link an
+  entry), `POST /api/upload?id=` to edit file info, `GET /api/upload/files` with filters, sort and
+  fields, `GET` and `DELETE /api/upload/files/:id`, each with Strapi's bodies and errors. Images get
+  Strapi's thumbnail, large, medium and small formats through GD; hashes, urls and kB sizes follow
+  Strapi. Entries write media by id or documentId, populate them only when asked, and Draft &
+  Publish copies the links on publish.
+- Storage: `public/uploads` served at `/uploads` by default, as Strapi's local provider; another
+  Laravel disk (S3, …) through `CAMIS_UPLOAD_DISK`; `CAMIS_UPLOAD_SIZE_LIMIT` (Strapi's 200 MB).
+- Admin: a Media Library resource that uploads, previews and edits file info; forms pick media
+  through a select that can upload in place; both behind the file grants.
+
+**Exit criteria:** `media-vectors.json`, recorded from strapi-php, passes in the `strapi-api` boot
+job on SQLite, MySQL and Postgres, with the admin's `MediaAdminTest`; the earlier vectors, admin
+tests and the smoke still pass.
+
+**Status (2026-10-19):** the 24 media checks, the 26 i18n, 24 Draft & Publish, 50 populate and 72
+REST checks, the three admin tests and the smoke pass on SQLite and Postgres with all caches on.
+
+Known gaps: originals are stored as uploaded, not re-encoded as sharp does, and an animated GIF's
+formats keep only its first frame; repeated `files` form keys need the `files[]` spelling (PHP keeps
+only the last one otherwise); there are no folders; `allowedTypes` is not enforced; `findOne`
+ignores `fields` and the file list ignores pagination, as strapi-php does; the admin's picker does
+not keep the order of a multiple media field; the Laravel API style keeps media as path columns and
+the strapi storage layout is not run against these vectors.
+
+---
+
 ## Sequencing rationale (quick reference)
 
 1. **Strapi first** — mature schema validates the IR fastest, with the thinnest adapter.

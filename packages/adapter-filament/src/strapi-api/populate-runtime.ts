@@ -28,6 +28,7 @@ use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\Relation;
 
 /** $serializer is a generated serializer class: toWire(), FIELDS and COMPONENTS. */
@@ -231,7 +232,12 @@ final class StrapiPopulate
     {
         $name = $relation['relation'];
         // load() hands the closure the relation, loadCount() the target's own query.
-        $constrain = function (Relation|Builder $query) use ($status, $narrow): void {
+        $media = in_array($relation['kind'], ['mediaOne', 'mediaMany'], true);
+        $constrain = function (Relation|Builder $query) use ($status, $narrow, $media): void {
+            // A media field lists its files in the order they were given, before any sort.
+            if ($media && $query instanceof BelongsToMany) {
+                $query->orderByPivot('order');
+            }
             $builder = $query instanceof Relation ? $query->getQuery() : $query;
             if ($status !== null) {
                 StrapiDocuments::withStatus($builder, $status);
@@ -367,7 +373,7 @@ final class StrapiPopulate
             }
             $wires = array_map(fn (int|string $target) => $result['wires'][$target], $linked);
             $kind = $serializer::FIELDS[$key]['kind'];
-            $wire[$key] = in_array($kind, ['hasMany', 'belongsToMany', 'localizations'], true) ? $wires : ($wires[0] ?? null);
+            $wire[$key] = in_array($kind, ['hasMany', 'belongsToMany', 'localizations', 'mediaMany'], true) ? $wires : ($wires[0] ?? null);
         }
 
         return $wire;
@@ -480,14 +486,38 @@ final class StrapiRelations
             if ($relation['draftPublish']) {
                 $eloquent->whereNull($eloquent->getRelated()->qualifyColumn('published_at'));
             }
+            $media = in_array($relation['kind'], ['mediaOne', 'mediaMany'], true);
+            if ($media) {
+                $eloquent->orderByPivot('order');
+            }
             $current = array_map('intval', $eloquent->pluck($eloquent->getRelated()->getQualifiedKeyName())->all());
-            $wanted = $relation['kind'] === 'hasOne'
+            $wanted = in_array($relation['kind'], ['hasOne', 'mediaOne'], true)
                 ? array_values(array_filter([self::single($current[0] ?? null, $link)]))
                 : self::many($current, $link);
-            $relation['kind'] === 'belongsToMany'
-                ? $eloquent->sync($wanted)
-                : self::moveForeignKeys($row, $relation, $current, $wanted);
+            if ($media) {
+                $eloquent->sync(self::ordered($wanted));
+            } elseif ($relation['kind'] === 'belongsToMany') {
+                $eloquent->sync($wanted);
+            } else {
+                self::moveForeignKeys($row, $relation, $current, $wanted);
+            }
         }
+    }
+
+    /**
+     * A media field's files with their positions, which its link rows keep.
+     *
+     * @param list<int> $ids
+     * @return array<int, array{order: int}>
+     */
+    public static function ordered(array $ids): array
+    {
+        $ordered = [];
+        foreach (array_values($ids) as $i => $id) {
+            $ordered[$id] = ['order' => $i + 1];
+        }
+
+        return $ordered;
     }
 
     /**

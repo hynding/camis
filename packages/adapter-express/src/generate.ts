@@ -65,6 +65,14 @@ export const expressAdapterFor = (dialect: Dialect): GenerateAdapter => ({
 
     const expansions = new Map<string, ExpandedContentType>();
     doc.contentTypes.forEach((ct) => {
+      if (ct.builtin === "file") {
+        gaps.push({
+          feature: "builtinFile",
+          location: { contentType: ct.name },
+          severity: "downgrade",
+          message: `"${ct.name}" is the media library's files; the Express target has no media library, so it is a plain table and media fields stay text columns`,
+        });
+      }
       if (ct.options?.localized === true) {
         gaps.push({
           feature: "localized",

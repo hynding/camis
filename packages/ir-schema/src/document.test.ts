@@ -48,6 +48,17 @@ describe("builtin content types", () => {
     if (r.success) expect(r.data.builtin).toBe("user");
   });
 
+  it("accepts builtin: 'file', the media library's files", () => {
+    const r = contentType.safeParse({
+      name: "File",
+      kind: "collection",
+      builtin: "file",
+      fields: [],
+    });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.builtin).toBe("file");
+  });
+
   it("rejects unknown builtin kinds", () => {
     const r = contentType.safeParse({
       name: "Team",
