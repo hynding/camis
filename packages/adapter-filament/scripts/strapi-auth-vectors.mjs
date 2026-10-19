@@ -75,7 +75,12 @@ const call = async (step) => {
   } catch {
     // a redirect or an empty body
   }
-  return { status: response.status, location: response.headers.get("location"), cookies: cookiesOf(response), body };
+  return {
+    status: response.status,
+    location: response.headers.get("location"),
+    cookies: cookiesOf(response),
+    body,
+  };
 };
 
 // The response's cookies by name; an expired or emptied one is a cleared cookie.
@@ -92,7 +97,12 @@ const cookiesOf = (response) =>
 // Server-assigned keys differ between runs and runtimes; tokens, session times and generated
 // device ids are compared by presence.
 const VOLATILE = new Set(["id", "documentId", "createdAt", "updatedAt", "publishedAt"]);
-const PRESENCE = { jwt: "<jwt>", refreshToken: "<token>", loginAt: "<date>", lastActiveAt: "<date>" };
+const PRESENCE = {
+  jwt: "<jwt>",
+  refreshToken: "<token>",
+  loginAt: "<date>",
+  lastActiveAt: "<date>",
+};
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const masked = (key, value) => {
   if (typeof value !== "string") return normalize(value);
