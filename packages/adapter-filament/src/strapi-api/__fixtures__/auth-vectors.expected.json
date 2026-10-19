@@ -674,11 +674,6 @@
     "status": 201,
     "body": {
       "data": {
-        "inStock": null,
-        "pages": null,
-        "publishedOn": null,
-        "rating": null,
-        "releasedAt": null,
         "title": "Dune"
       },
       "meta": {}

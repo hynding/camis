@@ -177,7 +177,7 @@ export const emitStrapiStorage = (input: StrapiApiInput): StrapiApiEmission => {
     location: {},
     severity: "downgrade",
     message:
-      "the Strapi storage layout serves register, login and /users/me only; password reset and change, email confirmation, blocked users and /users are left to the Strapi instance",
+      "the Strapi storage layout serves register, login and /users/me only; password reset and change, email confirmation, blocked users, refresh-token sessions and /users are left to the Strapi instance",
   });
   return { files, gaps, scopeMethods };
 };
