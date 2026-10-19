@@ -49,7 +49,8 @@ export const contentType = z
   .object({
     name: typeName,
     kind: z.enum(["collection", "single"]),
-    builtin: z.literal("user").optional(),
+    /** A type the target supplies: the users it authenticates, or the media library's files. */
+    builtin: z.enum(["user", "file"]).optional(),
     names: z
       .object({
         plural: z.string().optional(),

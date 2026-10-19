@@ -10,6 +10,29 @@ export const STRAPI_ACTION_UID: Record<Action, string> = {
   publish: "plugin::content-manager.explorer.publish",
 };
 
+// A grant on the builtin file type is a grant on the media library, whose admin actions take no
+// subject: deleting an asset is part of updating the library.
+export const FILE_ADMIN_ACTIONS: Record<Action, string[]> = {
+  create: ["plugin::upload.assets.create"],
+  read: [
+    "plugin::upload.read",
+    "plugin::upload.assets.download",
+    "plugin::upload.assets.copy-link",
+  ],
+  update: ["plugin::upload.assets.update"],
+  delete: ["plugin::upload.assets.update"],
+  publish: [],
+};
+
+// The upload plugin's Content API: `upload` both adds files and edits their info.
+export const FILE_API_ACTIONS: Record<Action, string[]> = {
+  create: ["plugin::upload.content-api.upload"],
+  read: ["plugin::upload.content-api.find", "plugin::upload.content-api.findOne"],
+  update: ["plugin::upload.content-api.upload"],
+  delete: ["plugin::upload.content-api.destroy"],
+  publish: [],
+};
+
 // Field access maps to the content-manager actions it gates.
 export const FIELD_ACCESS_ACTIONS: Record<"read" | "write", Action[]> = {
   read: ["read"],

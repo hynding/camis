@@ -6,6 +6,8 @@ import { strapiNames } from "../names";
 import {
   API_ACTION_SUFFIXES,
   FIELD_ACCESS_ACTIONS,
+  FILE_ADMIN_ACTIONS,
+  FILE_API_ACTIONS,
   PUBLIC_API_ACTIONS,
   STRAPI_ACTION_UID,
   USER_RELATION_WRITE_ACTION,
@@ -16,7 +18,8 @@ export const USER_CONTEXT = ["user.id", "user.email", "user.role"] as const;
 
 export interface PermissionEntry {
   action: string;
-  subject: string;
+  /** The content type's uid; null for the media library's actions. */
+  subject: string | null;
   properties?: { fields: string[] };
   conditions?: string[];
 }
@@ -41,7 +44,9 @@ export interface ProjectionResult {
 }
 
 const sortEntries = (a: PermissionEntry, b: PermissionEntry): number =>
-  a.action === b.action ? a.subject.localeCompare(b.subject) : a.action.localeCompare(b.action);
+  a.action === b.action
+    ? (a.subject ?? "").localeCompare(b.subject ?? "")
+    : a.action.localeCompare(b.action);
 
 export const projectPermissions = (doc: IrDocument, roles: Role[]): ProjectionResult => {
   const byName = new Map(doc.contentTypes.map((ct) => [ct.name, ct]));
@@ -76,6 +81,19 @@ export const projectPermissions = (doc: IrDocument, roles: Role[]): ProjectionRe
     const permissions: PermissionEntry[] = [];
     for (const grant of role.grants) {
       const ct = byName.get(grant.contentType)!;
+      if (ct.builtin === "file") {
+        if (grant.condition !== undefined) {
+          gaps.push({
+            feature: "fileGrantCondition",
+            location: { contentType: grant.contentType, rule: role.name },
+            severity: "downgrade",
+            message: `"${role.name}" grant on the media library is conditioned; Strapi's upload actions take no custom condition, so it applies to every file`,
+          });
+        }
+        const actions = new Set(grant.actions.flatMap((act) => FILE_ADMIN_ACTIONS[act]));
+        for (const action of actions) permissions.push({ action, subject: null });
+        continue;
+      }
       const subject = strapiNames(ct).uid;
       const grantConditions = grant.condition
         ? [register(grant.condition, { contentType: grant.contentType, rule: role.name })]
@@ -158,6 +176,11 @@ export const projectApiRoles = (doc: IrDocument, roles: Role[]): ApiRoleProjecti
     const actions = new Set<string>();
     for (const grant of role.grants) {
       const ct = byName.get(grant.contentType)!;
+      if (ct.builtin === "file") {
+        for (const act of grant.actions)
+          for (const action of FILE_API_ACTIONS[act]) actions.add(action);
+        continue;
+      }
       const uid = strapiNames(ct).uid;
       for (const act of grant.actions) {
         for (const suffix of API_ACTION_SUFFIXES[act] ?? []) {
