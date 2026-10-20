@@ -5,9 +5,11 @@
 // code names the account whose profile the provider hands back.
 //
 // usage: fake-oauth-provider.mjs --cert F --key F [--port 9443]
+import { Buffer } from "node:buffer";
 import { generateKeyPairSync, sign } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createServer } from "node:https";
+import { URL, URLSearchParams } from "node:url";
 import { parseArgs } from "node:util";
 
 const { values } = parseArgs({

@@ -19,7 +19,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, URL } from "node:url";
 import { parseArgs } from "node:util";
 
 const here = dirname(fileURLToPath(import.meta.url));
