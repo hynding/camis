@@ -10,7 +10,10 @@
 // advanced settings, blocking a user); `into` keeps its output as `$name` for later steps, and
 // `keep` keeps response values the same way (`{ "bobId": "user.id" }`). `bearer` sends a literal
 // token (one that does not verify), `headers` adds request headers, and `cookie` names a response
-// cookie to record (set or cleared) and keep as `$<name>`.
+// cookie to record (set or cleared) and keep as `$<name>`. `jar` names a cookie jar the step sends
+// and fills, as a browser would across an OAuth round trip, and `keepQuery` keeps query values of
+// the redirect's location (`{ "state": "state" }`). A redirect's own origin and an OAuth state are
+// masked, as they differ between runtimes and runs.
 //
 // usage: strapi-auth-vectors.mjs <api-base> --hook CMD [--vectors F] [--expected F] [--record]
 import { execFileSync } from "node:child_process";
@@ -39,6 +42,7 @@ const { steps } = JSON.parse(readFileSync(values.vectors, "utf8"));
 
 const sessions = new Map();
 const vars = new Map();
+const jars = new Map();
 const VAR = /\$([a-zA-Z_]+)/g;
 const fill = (value) => {
   if (typeof value === "string")
@@ -62,12 +66,25 @@ const call = async (step) => {
     const jwt = sessions.get(step.as);
     if (jwt !== undefined) headers.Authorization = `Bearer ${jwt}`;
   }
+  const jar = step.jar === undefined ? undefined : (jars.get(step.jar) ?? new Map());
+  if (jar !== undefined && jar.size > 0)
+    headers.Cookie = [...jar].map(([name, value]) => `${name}=${value}`).join("; ");
   const init = { method: step.method ?? "POST", headers, redirect: "manual" };
   if (step.body !== undefined) {
     headers["Content-Type"] = "application/json";
     init.body = JSON.stringify(fill(step.body));
   }
   const response = await fetch(`${base}${fill(step.path)}`, init);
+  if (jar !== undefined) {
+    for (const line of response.headers.getSetCookie()) {
+      const [pair, ...attributes] = line.split(";");
+      const [name, ...value] = pair.split("=");
+      const expired = attributes.some((a) => /^\s*(max-age=0|expires=thu, 01 jan 1970)/i.test(a));
+      if (expired) jar.delete(name.trim());
+      else jar.set(name.trim(), value.join("="));
+    }
+    jars.set(step.jar, jar);
+  }
   const text = await response.text();
   let body = text;
   try {
@@ -120,8 +137,15 @@ const normalize = (value) => {
     );
   return value;
 };
+const origin = new URL(base).origin;
+const maskLocation = (location) =>
+  location
+    .replaceAll(origin, "<origin>")
+    .replaceAll(encodeURIComponent(origin), "<origin>")
+    .replace(/([?&]state=)[0-9a-f]{40}\b/, "$1<state>");
 const outcome = ({ status, location, body }, cookie) => {
-  if (status >= 300 && status < 400) return { status, location: fill(location ?? "") };
+  if (status >= 300 && status < 400)
+    return { status, location: maskLocation(fill(location ?? "")) };
   if (cookie !== undefined) return { ...outcome({ status, body }), cookie };
   if (body?.error) {
     const { name, message, details } = body.error;
@@ -144,6 +168,8 @@ for (const step of steps) {
     sessions.set(step.save, response.body.jwt);
   for (const [name, path] of Object.entries(step.keep ?? {}))
     vars.set(name, String(path.split(".").reduce((value, key) => value?.[key], response.body)));
+  for (const [name, param] of Object.entries(step.keepQuery ?? {}))
+    vars.set(name, new URL(response.location ?? "", base).searchParams.get(param) ?? "");
   let cookie;
   if (step.cookie !== undefined) {
     const value = response.cookies.get(step.cookie);

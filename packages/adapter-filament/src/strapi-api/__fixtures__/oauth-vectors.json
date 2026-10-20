@@ -1,0 +1,352 @@
+{
+  "steps": [
+    {
+      "name": "register a local account",
+      "path": "/auth/local/register",
+      "body": {
+        "username": "carol",
+        "email": "carol@example.test",
+        "password": "secret1"
+      }
+    },
+    {
+      "name": "connect to a disabled provider",
+      "method": "GET",
+      "path": "/connect/keycloak"
+    },
+    {
+      "name": "provider callback for a disabled provider",
+      "method": "GET",
+      "path": "/auth/keycloak/callback"
+    },
+    {
+      "name": "connect to an unknown provider",
+      "method": "GET",
+      "path": "/connect/myspace"
+    },
+    {
+      "hook": ["provider", "email", "{\"enabled\":false}"]
+    },
+    {
+      "name": "local login with email sign-in off",
+      "path": "/auth/local",
+      "body": {
+        "identifier": "carol",
+        "password": "secret1"
+      }
+    },
+    {
+      "name": "register with email sign-in off",
+      "path": "/auth/local/register",
+      "body": {
+        "username": "carl",
+        "email": "carl@example.test",
+        "password": "secret1"
+      }
+    },
+    {
+      "hook": ["provider", "email", "{\"enabled\":true}"]
+    },
+    {
+      "hook": [
+        "provider",
+        "keycloak",
+        "{\"enabled\":true,\"key\":\"camis\",\"secret\":\"s3cret\",\"callback\":\"http://frontend.test/connect/keycloak/redirect\",\"subdomain\":\"127.0.0.1:9443/realms/test\"}"
+      ]
+    },
+    {
+      "name": "provider callback without a provider session",
+      "method": "GET",
+      "path": "/auth/keycloak/callback",
+      "jar": "alice"
+    },
+    {
+      "name": "wrong state: connect to keycloak",
+      "method": "GET",
+      "path": "/connect/keycloak",
+      "jar": "alice",
+      "keepQuery": {
+        "state": "state"
+      }
+    },
+    {
+      "name": "wrong state: back from keycloak",
+      "method": "GET",
+      "path": "/connect/keycloak/callback?code=alice&state=0000",
+      "jar": "alice"
+    },
+    {
+      "name": "wrong state: no session is left to sign in with",
+      "method": "GET",
+      "path": "/auth/keycloak/callback",
+      "jar": "alice"
+    },
+    {
+      "name": "no code: connect to keycloak",
+      "method": "GET",
+      "path": "/connect/keycloak",
+      "jar": "alice",
+      "keepQuery": {
+        "state": "state"
+      }
+    },
+    {
+      "name": "no code: back from keycloak",
+      "method": "GET",
+      "path": "/connect/keycloak/callback?state=$state",
+      "jar": "alice"
+    },
+    {
+      "name": "declined: connect to keycloak",
+      "method": "GET",
+      "path": "/connect/keycloak",
+      "jar": "alice",
+      "keepQuery": {
+        "state": "state"
+      }
+    },
+    {
+      "name": "declined: back from keycloak",
+      "method": "GET",
+      "path": "/connect/keycloak/callback?error=access_denied&error_description=User%20cancelled&state=$state",
+      "jar": "alice"
+    },
+    {
+      "name": "bad code: connect to keycloak",
+      "method": "GET",
+      "path": "/connect/keycloak",
+      "jar": "alice",
+      "keepQuery": {
+        "state": "state"
+      }
+    },
+    {
+      "name": "bad code: back from keycloak",
+      "method": "GET",
+      "path": "/connect/keycloak/callback?code=nobody&state=$state",
+      "jar": "alice"
+    },
+    {
+      "name": "alice: connect to keycloak",
+      "method": "GET",
+      "path": "/connect/keycloak",
+      "jar": "alice",
+      "keepQuery": {
+        "state": "state"
+      }
+    },
+    {
+      "name": "alice: back from keycloak",
+      "method": "GET",
+      "path": "/connect/keycloak/callback?code=alice&state=$state",
+      "jar": "alice"
+    },
+    {
+      "name": "alice: sign in through keycloak",
+      "method": "GET",
+      "path": "/auth/keycloak/callback",
+      "jar": "alice",
+      "save": "alice"
+    },
+    {
+      "name": "alice again: sign in through keycloak",
+      "method": "GET",
+      "path": "/auth/keycloak/callback",
+      "jar": "alice"
+    },
+    {
+      "name": "connect with a session",
+      "method": "GET",
+      "path": "/connect/keycloak",
+      "as": "alice"
+    },
+    {
+      "name": "provider callback with a session",
+      "method": "GET",
+      "path": "/auth/keycloak/callback",
+      "as": "alice"
+    },
+    {
+      "name": "unverified email: connect to keycloak",
+      "method": "GET",
+      "path": "/connect/keycloak",
+      "jar": "bob",
+      "keepQuery": {
+        "state": "state"
+      }
+    },
+    {
+      "name": "unverified email: back from keycloak",
+      "method": "GET",
+      "path": "/connect/keycloak/callback?code=bob&state=$state",
+      "jar": "bob"
+    },
+    {
+      "name": "unverified email: sign in through keycloak",
+      "method": "GET",
+      "path": "/auth/keycloak/callback",
+      "jar": "bob"
+    },
+    {
+      "name": "no email: connect to keycloak",
+      "method": "GET",
+      "path": "/connect/keycloak",
+      "jar": "ghost",
+      "keepQuery": {
+        "state": "state"
+      }
+    },
+    {
+      "name": "no email: back from keycloak",
+      "method": "GET",
+      "path": "/connect/keycloak/callback?code=ghost&state=$state",
+      "jar": "ghost"
+    },
+    {
+      "name": "no email: sign in through keycloak",
+      "method": "GET",
+      "path": "/auth/keycloak/callback",
+      "jar": "ghost"
+    },
+    {
+      "name": "email of a local account: connect to keycloak",
+      "method": "GET",
+      "path": "/connect/keycloak",
+      "jar": "carol",
+      "keepQuery": {
+        "state": "state"
+      }
+    },
+    {
+      "name": "email of a local account: back from keycloak",
+      "method": "GET",
+      "path": "/connect/keycloak/callback?code=carol&state=$state",
+      "jar": "carol"
+    },
+    {
+      "name": "email of a local account: sign in through keycloak",
+      "method": "GET",
+      "path": "/auth/keycloak/callback",
+      "jar": "carol"
+    },
+    {
+      "hook": ["block", "alice"]
+    },
+    {
+      "name": "blocked: sign in through keycloak",
+      "method": "GET",
+      "path": "/auth/keycloak/callback",
+      "jar": "alice"
+    },
+    {
+      "hook": ["settings", "{\"allow_register\":false}"]
+    },
+    {
+      "name": "sign-ups closed: connect to keycloak",
+      "method": "GET",
+      "path": "/connect/keycloak",
+      "jar": "dave",
+      "keepQuery": {
+        "state": "state"
+      }
+    },
+    {
+      "name": "sign-ups closed: back from keycloak",
+      "method": "GET",
+      "path": "/connect/keycloak/callback?code=dave&state=$state",
+      "jar": "dave"
+    },
+    {
+      "name": "sign-ups closed: sign in through keycloak",
+      "method": "GET",
+      "path": "/auth/keycloak/callback",
+      "jar": "dave"
+    },
+    {
+      "hook": ["settings", "{\"allow_register\":true}"]
+    },
+    {
+      "name": "connect with a foreign callback",
+      "method": "GET",
+      "path": "/connect/keycloak?callback=https://evil.test/steal",
+      "jar": "dave"
+    },
+    {
+      "name": "custom callback: connect to keycloak",
+      "method": "GET",
+      "path": "/connect/keycloak?callback=http://frontend.test/connect/keycloak/redirect?from=app",
+      "jar": "dave",
+      "keepQuery": {
+        "state": "state"
+      }
+    },
+    {
+      "name": "custom callback: back from keycloak",
+      "method": "GET",
+      "path": "/connect/keycloak/callback?code=dave&state=$state",
+      "jar": "dave"
+    },
+    {
+      "name": "custom callback: sign in through keycloak",
+      "method": "GET",
+      "path": "/auth/keycloak/callback",
+      "jar": "dave"
+    },
+    {
+      "hook": [
+        "provider",
+        "cas",
+        "{\"enabled\":true,\"key\":\"camis\",\"secret\":\"s3cret\",\"callback\":\"http://frontend.test/connect/cas/redirect\",\"subdomain\":\"127.0.0.1:9443/cas\"}"
+      ]
+    },
+    {
+      "name": "cas: connect to cas",
+      "method": "GET",
+      "path": "/connect/cas",
+      "jar": "erin",
+      "keepQuery": {
+        "state": "state"
+      }
+    },
+    {
+      "name": "cas: back from cas",
+      "method": "GET",
+      "path": "/connect/cas/callback?code=erin&state=$state",
+      "jar": "erin"
+    },
+    {
+      "name": "cas: sign in through cas",
+      "method": "GET",
+      "path": "/auth/cas/callback",
+      "jar": "erin"
+    },
+    {
+      "hook": [
+        "provider",
+        "cognito",
+        "{\"enabled\":true,\"key\":\"camis\",\"secret\":\"s3cret\",\"callback\":\"http://frontend.test/connect/cognito/redirect\",\"subdomain\":\"127.0.0.1:9443/cognito\",\"jwksurl\":\"https://127.0.0.1:9443/cognito/jwks\"}"
+      ]
+    },
+    {
+      "name": "cognito: connect to cognito",
+      "method": "GET",
+      "path": "/connect/cognito",
+      "jar": "fran",
+      "keepQuery": {
+        "state": "state"
+      }
+    },
+    {
+      "name": "cognito: back from cognito",
+      "method": "GET",
+      "path": "/connect/cognito/callback?code=fran&state=$state",
+      "jar": "fran"
+    },
+    {
+      "name": "cognito: sign in through cognito",
+      "method": "GET",
+      "path": "/auth/cognito/callback",
+      "jar": "fran"
+    }
+  ]
+}
