@@ -169,6 +169,46 @@ const emailTemplate = (key: string, title: string): string => `
                 Textarea::make('message')->rows(8)->required(),
             ]),`;
 
+// Strapi's provider list in its admin's order, with the settings its edit form shows for each.
+const PROVIDERS: { name: string; label: string; subdomain?: true; jwks?: true }[] = [
+  { name: "auth0", label: "Auth0", subdomain: true },
+  { name: "cas", label: "CAS", subdomain: true },
+  { name: "cognito", label: "Cognito", subdomain: true, jwks: true },
+  { name: "discord", label: "Discord" },
+  { name: "facebook", label: "Facebook" },
+  { name: "github", label: "GitHub" },
+  { name: "google", label: "Google" },
+  { name: "instagram", label: "Instagram" },
+  { name: "keycloak", label: "Keycloak", subdomain: true },
+  { name: "linkedin", label: "LinkedIn" },
+  { name: "microsoft", label: "Microsoft" },
+  { name: "patreon", label: "Patreon" },
+  { name: "reddit", label: "Reddit" },
+  { name: "twitch", label: "Twitch" },
+  { name: "twitter", label: "Twitter" },
+  { name: "vk", label: "VK" },
+];
+
+const providerSection = (p: (typeof PROVIDERS)[number]): string => `
+                Section::make('${p.label}')->statePath('${p.name}')->collapsed()->schema([
+                    Toggle::make('enabled'),
+                    TextInput::make('key')->label('Client ID'),
+                    TextInput::make('secret')->label('Client Secret')->password()->revealable(),${
+                      p.subdomain
+                        ? `
+                    TextInput::make('subdomain')->label('Host URI (Subdomain)'),`
+                        : ""
+                    }${
+                      p.jwks
+                        ? `
+                    TextInput::make('jwksurl')->label('JWKS URL')->url(),`
+                        : ""
+                    }
+                    TextInput::make('callback')->label('The redirect URL to your front-end app')->url(),
+                    Placeholder::make('redirect')->label('The redirect URL to add in your ${p.label} application configurations')
+                        ->content(StrapiOAuth::redirectUri('${p.name}')),
+                ]),`;
+
 /**
  * Strapi keeps these settings in its store and edits them in its admin, so they change without a
  * redeploy. Only someone who may update users may change how accounts are made.
@@ -179,10 +219,13 @@ declare(strict_types=1);
 
 namespace App\\Filament\\Pages;
 
+use App\\Support\\StrapiOAuth;
+use App\\Support\\StrapiProviders;
 use App\\Support\\StrapiSettings;
 use App\\Support\\StrapiUsers;
 use BackedEnum;
 use Filament\\Actions\\Action;
+use Filament\\Forms\\Components\\Placeholder;
 use Filament\\Forms\\Components\\Textarea;
 use Filament\\Forms\\Components\\TextInput;
 use Filament\\Forms\\Components\\Toggle;
@@ -214,7 +257,7 @@ class UsersPermissionsSettings extends Page
 
     public function mount(): void
     {
-        $this->form->fill(['advanced' => StrapiUsers::advanced(), 'email' => StrapiUsers::emails()]);
+        $this->form->fill(['advanced' => StrapiUsers::advanced(), 'email' => StrapiUsers::emails(), 'grant' => StrapiProviders::settings()]);
     }
 
     public function form(Schema $schema): Schema
@@ -227,6 +270,12 @@ class UsersPermissionsSettings extends Page
                 TextInput::make('email_confirmation_redirection')->label('Redirection url')->url(),
                 TextInput::make('email_reset_password')->label('Reset password page')->url(),
             ]),${emailTemplate("email_confirmation", "Email address confirmation")}${emailTemplate("reset_password", "Reset password")}
+            // A provider's secret is kept in the database, as Strapi keeps it in its store.
+            Section::make('Providers')->statePath('grant')->collapsed()->schema([
+                Section::make('Email')->statePath('email')->collapsed()->schema([
+                    Toggle::make('enabled'),
+                ]),${PROVIDERS.map(providerSection).join("")}
+            ]),
         ])->statePath('data');
     }
 
@@ -245,6 +294,7 @@ class UsersPermissionsSettings extends Page
         $state = $this->form->getState();
         StrapiSettings::merge('users-permissions.advanced', $state['advanced']);
         StrapiSettings::merge('users-permissions.email', $state['email']);
+        StrapiSettings::merge('users-permissions.grant', $state['grant']);
         Notification::make()->success()->title('Saved')->send();
     }
 }

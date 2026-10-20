@@ -659,6 +659,41 @@ where Strapi sends them.
 
 ---
 
+## Phase 24 — Users & Permissions, part 3: sign-in providers (`adapter-filament`)
+
+**Goal:** Strapi 5's sign-in providers work as on Strapi, on the laravel storage layout with the
+Strapi API style, and the Filament admin turns them on and configures them.
+
+- Settings: Strapi's 17 providers (email and 16 OAuth ones) with its defaults, overridden by what
+  the admin saves in `strapi_settings` (`users-permissions.grant`), edited in a Providers section
+  of the Users & Permissions page. Turning email off refuses `/auth/local` as Strapi does.
+- REST: `/connect/:provider` sends the browser to the provider with a state kept in a Laravel
+  session (database driver, no cookie beyond the session's); its callback trades the code for
+  tokens, keeps them in the session and returns to the front end, which signs in with
+  `/auth/:provider/callback`. A `?callback=` must match the configured page's origin and path.
+  The account is the one made through that provider for that email, else a new confirmed one with
+  the default role and no password; Strapi's errors and their order are kept.
+- OAuth 2 for every provider but Twitter, which runs OAuth 1 (HMAC-SHA1); Cognito's id token is
+  verified against the provider's JWKS. Each provider's profile check is ported from strapi-php.
+- Provider requests go through Laravel's HTTP client, so a shared host needs nothing beyond
+  outbound HTTPS.
+
+**Exit criteria:** the 45 checks of `oauth-vectors.json`, recorded from strapi-php against a
+stand-in Keycloak, CAS and Cognito served over HTTPS (`fake-oauth-provider.mjs`), pass in the
+`strapi-api` boot job on SQLite, MySQL and Postgres, with `ProvidersTest` (the fixed-host
+providers through `Http::fake`, Twitter's OAuth 1 and the admin settings); every earlier suite
+still passes.
+
+**Status (2026-10-20):** every suite passes on SQLite and Postgres with all caches on, and the
+admin tests pass. Recording the vectors found that strapi-php's `fetch` read every status as 0 on
+PHP 8.3, which broke its provider sign-in; that is fixed in strapi-php.
+
+Known gaps: providers registered in code (Strapi's `providers-registry.add`) have no hook here,
+and the stand-in provider covers the three providers whose host is a setting; the rest are
+checked against recorded answers, not a live provider.
+
+---
+
 ## Sequencing rationale (quick reference)
 
 1. **Strapi first** — mature schema validates the IR fastest, with the thinnest adapter.
