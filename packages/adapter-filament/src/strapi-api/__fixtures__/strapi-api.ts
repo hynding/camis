@@ -256,5 +256,14 @@ export const strapiApiBundle: IrBundle = {
         { contentType: "Page", actions: ["create", "read", "update", "delete", "publish"] },
       ],
     },
+    {
+      // What a caller without a session may do (auth-vectors.json's public role, and the smoke).
+      name: "public",
+      grants: [
+        { contentType: "Book", actions: ["read"] },
+        { contentType: "Tag", actions: ["read"] },
+        { contentType: "Activity", actions: ["read"], condition: publicOrMine },
+      ],
+    },
   ],
 };

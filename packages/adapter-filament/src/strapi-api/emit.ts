@@ -33,12 +33,20 @@ import { emitHasDocumentId, emitStrapiError, emitStrapiQuery } from "./rest-runt
 import { emitApiConfig, emitStrapiRoutes } from "./routes";
 import { emitScopeMethod } from "./scope";
 import { emitSerializer } from "./serializer";
+import {
+  emitRoleController,
+  emitSessionController,
+  emitSessionsMigration,
+  emitStrapiSessions,
+  SESSIONS_MIGRATION_PATH,
+} from "./sessions";
 import { kebab } from "./names";
 import { wireShape } from "./wire-shape";
 import { emitUserResourceFiles, emitUsersPermissionsSettingsPage } from "./users-permissions-admin";
 import {
   emitSettingsMigration,
   emitStrapiActiveUser,
+  emitStrapiCredentials,
   emitStrapiSettings,
   emitStrapiUsers,
   emitUserController,
@@ -60,6 +68,8 @@ export interface StrapiApiInput {
   media?: ContentType | undefined;
   /** The default of `camis.rest.always_populate_components` (GenerateOptions). */
   alwaysPopulateComponents?: boolean;
+  /** Callers without a session act as the IR's public role (`guestsPlan`). */
+  guests?: boolean;
   /**
    * Content types whose model must declare `#[ObservedBy]` — hook observers plus AI-field
    * observers. Only the Strapi *storage* layout reads it: on the Laravel layout `emitModel`
@@ -79,6 +89,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
   const versioned = input.versioned ?? new Set<string>();
   const localized = input.localized ?? new Set<string>();
   const secured = bundle.roles.length > 0;
+  const guests = input.guests === true;
   const perm = secured
     ? projectFilamentPermissions(doc, bundle.roles)
     : { readConditions: new Map<string, never>(), assigns: new Map<string, string[]>() };
@@ -110,7 +121,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
       mode: "seed",
     });
     if (secured) {
-      const scope = emitScopeMethod(ct, perm.readConditions.get(ct.name));
+      const scope = emitScopeMethod(ct, perm.readConditions.get(ct.name), "laravel", guests);
       scopeMethods.set(ct.name, scope.php);
       if (scope.gap) gaps.push(scope.gap);
     }
@@ -125,6 +136,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
       localized.size > 0,
       input.media !== undefined,
       true,
+      guests,
     ),
   });
   files.push({
@@ -142,20 +154,20 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     content: emitAuthController(bundle.defaultRole),
   });
   files.push({ path: USERNAME_MIGRATION_PATH, content: emitUsernameMigration() });
-  files.push(...usersPermissionsFiles(secured));
+  files.push(...usersPermissionsFiles(secured, guests));
   files.push({
     path: "app/Http/Middleware/StrapiErrors.php",
     content: emitStrapiErrorsMiddleware(),
   });
   files.push({ path: "app/Support/StrapiError.php", content: emitStrapiError() });
-  files.push({ path: "app/Support/StrapiQuery.php", content: emitStrapiQuery() });
+  files.push({ path: "app/Support/StrapiQuery.php", content: emitStrapiQuery(secured) });
   files.push({ path: "app/Support/StrapiPopulate.php", content: emitStrapiPopulate() });
   files.push({ path: "app/Support/StrapiRelations.php", content: emitStrapiRelations() });
   files.push({ path: "app/Models/Concerns/HasDocumentId.php", content: emitHasDocumentId() });
   if (localized.size > 0) files.push(...localeFiles());
   if (input.media !== undefined) {
     const scope = secured
-      ? emitScopeMethod(input.media, perm.readConditions.get(input.media.name))
+      ? emitScopeMethod(input.media, perm.readConditions.get(input.media.name), "laravel", guests)
       : undefined;
     if (scope?.gap) gaps.push(scope.gap);
     files.push(...mediaLibraryFiles(input.media, emitted, secured, scope?.php));
@@ -171,13 +183,21 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
 };
 
 /** users-permissions beyond register and login: accounts, their settings and their admin. */
-const usersPermissionsFiles = (secured: boolean): GeneratedFile[] => [
+const usersPermissionsFiles = (secured: boolean, guests: boolean): GeneratedFile[] => [
   { path: "app/Support/StrapiUsers.php", content: emitStrapiUsers() },
   { path: "app/Support/StrapiSettings.php", content: emitStrapiSettings() },
-  { path: "app/Http/Controllers/Api/UserController.php", content: emitUserController(secured) },
+  {
+    path: "app/Http/Controllers/Api/UserController.php",
+    content: emitUserController(secured, guests),
+  },
   { path: "app/Http/Middleware/StrapiActiveUser.php", content: emitStrapiActiveUser() },
+  { path: "app/Http/Middleware/StrapiCredentials.php", content: emitStrapiCredentials() },
   { path: USERS_PERMISSIONS_MIGRATION_PATH, content: emitUsersPermissionsMigration() },
   { path: SETTINGS_MIGRATION_PATH, content: emitSettingsMigration() },
+  { path: "app/Support/StrapiSessions.php", content: emitStrapiSessions() },
+  { path: "app/Http/Controllers/Api/SessionController.php", content: emitSessionController() },
+  { path: "app/Http/Controllers/Api/RoleController.php", content: emitRoleController() },
+  { path: SESSIONS_MIGRATION_PATH, content: emitSessionsMigration() },
   ...emitUserResourceFiles(secured),
   {
     path: "app/Filament/Pages/UsersPermissionsSettings.php",

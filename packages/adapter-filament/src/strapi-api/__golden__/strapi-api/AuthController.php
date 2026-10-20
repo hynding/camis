@@ -8,6 +8,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\StrapiError;
+use App\Support\StrapiSessions;
 use App\Support\StrapiUsers;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -17,8 +18,6 @@ use Spatie\Permission\Models\Role;
 
 class AuthController extends Controller
 {
-    private const TOKEN_NAME = 'api';
-
     private const REGISTER_KEYS = ['username', 'password', 'email'];
 
     public function register(Request $request): JsonResponse
@@ -62,7 +61,7 @@ class AuthController extends Controller
             return response()->json(['user' => StrapiUsers::wire($user)]);
         }
 
-        return response()->json($this->session($user));
+        return response()->json(StrapiSessions::registered($request, $user));
     }
 
     public function login(Request $request): JsonResponse
@@ -83,7 +82,7 @@ class AuthController extends Controller
             throw StrapiUsers::application('Your account has been blocked by an administrator');
         }
 
-        return response()->json($this->session($user));
+        return StrapiSessions::login($request, $user);
     }
 
     public function changePassword(Request $request): JsonResponse
@@ -99,7 +98,7 @@ class AuthController extends Controller
         }
         $user->forceFill(['password' => Hash::make((string) $body['password'])])->save();
 
-        return response()->json($this->session($user));
+        return response()->json(StrapiSessions::reissue($user));
     }
 
     public function forgotPassword(Request $request): JsonResponse
@@ -126,7 +125,7 @@ class AuthController extends Controller
             ?? throw StrapiError::validation('Incorrect code provided');
         $user->forceFill(['reset_password_token' => null, 'password' => Hash::make((string) $body['password'])])->save();
 
-        return response()->json($this->session($user));
+        return response()->json(StrapiSessions::reissue($user));
     }
 
     public function emailConfirmation(Request $request): RedirectResponse
@@ -158,13 +157,5 @@ class AuthController extends Controller
         StrapiUsers::sendConfirmation($user);
 
         return response()->json(['email' => $user->email, 'sent' => true]);
-    }
-
-    private function session(User $user): array
-    {
-        return [
-            'jwt' => $user->createToken(self::TOKEN_NAME)->plainTextToken,
-            'user' => StrapiUsers::wire($user),
-        ];
     }
 }

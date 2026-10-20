@@ -15,6 +15,7 @@ use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 
 class TaskApiController extends Controller
 {
@@ -31,7 +32,7 @@ class TaskApiController extends Controller
     protected function find(Request $request, string $key): Task
     {
         $m = $this->scoped($request)->where(self::KEY, $key)->first();
-        if ($m === null || ! $request->user()->can('view', $m)) {
+        if ($m === null || ! Gate::allows('view', $m)) {
             abort(404);
         }
 
@@ -43,7 +44,7 @@ class TaskApiController extends Controller
         $this->authorize('viewAny', Task::class);
         $rows = $this->scoped($request)->get();
         StrapiComponents::load($rows, Task::COMPONENT_MAP);
-        $rows = $rows->filter(fn (Task $m) => $request->user()->can('view', $m));
+        $rows = $rows->filter(fn (Task $m) => Gate::allows('view', $m));
 
         return response()->json(['data' => $rows->map(fn (Task $m) => TaskSerializer::toWire($m))->values()->all()]);
     }
@@ -78,7 +79,7 @@ class TaskApiController extends Controller
     {
         $wire = TaskSerializer::fromWire((array) $request->input('data', []));
         $m = $this->scoped($request)->where(self::KEY, $key)->first();
-        if ($m !== null && $request->user()->can('view', $m)) {
+        if ($m !== null && Gate::allows('view', $m)) {
             $this->authorize('update', $m);
             DB::transaction(function () use ($m, $wire): void {
                 $m->fill(StrapiComponents::columnsOf($wire, Task::COMPONENT_MAP))->save();

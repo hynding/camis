@@ -235,6 +235,17 @@ jobs:
           php artisan db:seed --class="Database\\Seeders\\RolePermissionSeeder" --force
           node ../packages/adapter-filament/scripts/strapi-auth-vectors.mjs http://127.0.0.1:8765/api \
             --hook "bash ../packages/adapter-filament/scripts/strapi-auth-hook.sh"
+      - name: Strapi refresh-token session vectors (recorded from strapi-php in refresh mode)
+        run: |
+          cd app
+          echo "CAMIS_JWT_MANAGEMENT=refresh" >> .env
+          php artisan config:cache
+          php artisan migrate:fresh --force
+          php artisan db:seed --class="Database\\Seeders\\RolePermissionSeeder" --force
+          F=../packages/adapter-filament/src/strapi-api/__fixtures__
+          node ../packages/adapter-filament/scripts/strapi-auth-vectors.mjs http://127.0.0.1:8765/api \
+            --hook "bash ../packages/adapter-filament/scripts/strapi-auth-hook.sh" \
+            --vectors $F/session-vectors.json --expected $F/session-vectors.expected.json
       - name: Filament admin publishes drafts, translates, keeps the media library and manages users
         run: |
           cd app

@@ -35,6 +35,7 @@ import { filamentNames, snakeColumn } from "./names";
 import { resolveRelations } from "./relations";
 import { emitResourceFiles } from "./resource";
 import { draftPublishPlan } from "./strapi-api/draft-publish";
+import { guestsPlan } from "./strapi-api/guests";
 import { localizationPlan, sharedAcrossLocalesMethod } from "./strapi-api/localization";
 import { mediaFields, mediaPlan } from "./strapi-api/media";
 import { mediaRelationMethod } from "./strapi-api/media-runtime";
@@ -59,10 +60,16 @@ export const filamentAdapter: GenerateAdapter = {
     const localized = localization.localized;
     const media = mediaPlan({ ...ir, document: doc }, apiStyle, storage);
     const fileModel = media.file === undefined ? undefined : filamentNames(media.file).model;
+    const { guests, gaps: guestGaps } = guestsPlan(ir.roles, apiStyle, storage);
     const rel = resolveRelations(doc, versioned, localized);
     const hooks = emitHookFiles(doc);
     const files: GeneratedFile[] = [];
-    const gaps: CapabilityGap[] = [...draftPublish.gaps, ...localization.gaps, ...media.gaps];
+    const gaps: CapabilityGap[] = [
+      ...draftPublish.gaps,
+      ...localization.gaps,
+      ...media.gaps,
+      ...guestGaps,
+    ];
     if (storage !== requestedStorage) {
       gaps.push({
         feature: "storageLayoutRequiresStrapiApi",
@@ -119,6 +126,7 @@ export const filamentAdapter: GenerateAdapter = {
       localized,
       media: media.file,
       alwaysPopulateComponents: options.alwaysPopulateComponents === true,
+      guests,
       observedModels: new Set([...hooks.observedModels, ...aiObservedModels]),
     };
     const strapi =
@@ -256,7 +264,7 @@ export const filamentAdapter: GenerateAdapter = {
         });
     }
 
-    const perm = emitPermissions(doc, ir.roles, storage);
+    const perm = emitPermissions(doc, ir.roles, storage, guests);
     const allFiles = [...files, ...hooks.files, ...perm.files, ...aiGenFiles, deployFile(storage)];
     return {
       files: allFiles,

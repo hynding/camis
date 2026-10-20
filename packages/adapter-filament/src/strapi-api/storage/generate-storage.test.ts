@@ -151,7 +151,7 @@ describe("filamentAdapter storageLayout strapi — file set", () => {
         severity: "downgrade",
         message:
           "the Strapi storage layout serves register, login and /users/me only; password reset " +
-          "and change, email confirmation, blocked users and /users are left to the Strapi instance",
+          "and change, email confirmation, blocked users, refresh-token sessions and /users are left to the Strapi instance",
       },
     ]);
   });

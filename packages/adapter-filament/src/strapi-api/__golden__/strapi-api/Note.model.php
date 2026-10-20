@@ -37,9 +37,14 @@ class Note extends Model
         return $this->belongsTo(User::class, 'owner_id');
     }
 
-    /** Rows visible to $user (Strapi API style list scope). */
-    public function scopeForUser(Builder $q, User $user): Builder
+    /** Rows visible to $user (Strapi API style list scope); null is a caller without a session. */
+    public function scopeForUser(Builder $q, ?User $user): Builder
     {
+        if ($user === null) {
+            $q->whereRaw('1 = 0');
+
+            return $q;
+        }
         $q->where('owner_id', '=', $user->id);
 
         return $q;

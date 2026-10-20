@@ -97,6 +97,7 @@ export const emitStrapiRoutes = (
   localized = false,
   upload = false,
   usersPermissions = false,
+  guests = false,
 ): string => {
   const jwt = secured && guard === "strapi-jwt";
   const sorted = [...cts].sort((a, b) => routePath(a).localeCompare(routePath(b)));
@@ -105,7 +106,13 @@ export const emitStrapiRoutes = (
     ...(localized ? ["App\\Http\\Controllers\\Api\\LocaleController"] : []),
     ...(upload ? ["App\\Http\\Controllers\\Api\\UploadController"] : []),
     ...(usersPermissions
-      ? ["App\\Http\\Controllers\\Api\\UserController", "App\\Http\\Middleware\\StrapiActiveUser"]
+      ? [
+          "App\\Http\\Controllers\\Api\\RoleController",
+          "App\\Http\\Controllers\\Api\\SessionController",
+          "App\\Http\\Controllers\\Api\\UserController",
+          "App\\Http\\Middleware\\StrapiActiveUser",
+          "App\\Http\\Middleware\\StrapiCredentials",
+        ]
       : []),
     ...sorted.map((ct) => `App\\Http\\Controllers\\Api\\${filamentNames(ct).model}ApiController`),
     "App\\Http\\Middleware\\StrapiErrors",
@@ -144,12 +151,23 @@ export const emitStrapiRoutes = (
       : sanctum;
   // A session's own routes need one even where nothing else is guarded.
   const own = secured ? "" : "->middleware(['auth:sanctum', StrapiActiveUser::class])";
+  // Strapi grants these to its public role alone, so a session is refused on them.
+  const guestOnly = usersPermissions ? ", StrapiCredentials::class.':guest'" : "";
+  const throttled = usersPermissions ? `[$authThrottle${guestOnly}]` : "$authThrottle";
   const accountRoutes = usersPermissions
     ? `
-    Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware($authThrottle);
-    Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])->middleware($authThrottle);
-    Route::get('/auth/email-confirmation', [AuthController::class, 'emailConfirmation']);
-    Route::post('/auth/send-email-confirmation', [AuthController::class, 'sendEmailConfirmation'])->middleware($authThrottle);`
+    Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware(${throttled});
+    Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])->middleware(${throttled});
+    Route::get('/auth/email-confirmation', [AuthController::class, 'emailConfirmation'])->middleware(StrapiCredentials::class.':guest');
+    Route::post('/auth/send-email-confirmation', [AuthController::class, 'sendEmailConfirmation'])->middleware(${throttled});
+    Route::post('/auth/refresh', [SessionController::class, 'refresh'])->middleware(StrapiCredentials::class.':guest');
+
+    // Roles live in the IR, so no grant opens these: Strapi forbids them to the roles it ships.
+    Route::middleware([StrapiCredentials::class.':optional', StrapiActiveUser::class])->group(function (): void {
+        Route::match(['get', 'post'], '/users-permissions/roles', RoleController::class);
+        Route::match(['get', 'put', 'delete'], '/users-permissions/roles/{role}', RoleController::class);
+        Route::get('/users-permissions/permissions', RoleController::class);
+    });`
     : "";
   // Without roles nothing would guard who lists or makes accounts, so the routes are left out.
   const userRoutes = `
@@ -159,10 +177,29 @@ export const emitStrapiRoutes = (
         Route::get('/users/{id}', [UserController::class, 'findOne']);
         Route::put('/users/{id}', [UserController::class, 'update']);
         Route::delete('/users/{id}', [UserController::class, 'destroy']);`;
+  const ownRoutes = `Route::get('/users/me', [UserController::class, 'me'])${own};
+        Route::post('/auth/change-password', [AuthController::class, 'changePassword'])${own};
+        Route::post('/auth/logout', [SessionController::class, 'logout'])${own};
+        Route::get('/auth/sessions', [SessionController::class, 'sessions'])${own};
+        Route::delete('/auth/sessions/{sessionId}', [SessionController::class, 'revoke'])${own};`;
   const sessionRoutes = usersPermissions
-    ? `Route::get('/users/me', [UserController::class, 'me'])${own};
-        Route::post('/auth/change-password', [AuthController::class, 'changePassword'])${own};${secured ? userRoutes : ""}`
+    ? `${ownRoutes}${secured && !guests ? userRoutes : ""}`
     : "Route::get('/users/me', [AuthController::class, 'me']);";
+  // With a public role, content is served without a session; a session's own routes still need one.
+  const groups = guests
+    ? `${sanctum}->group(function (): void {
+        ${ownRoutes}
+    });
+
+    Route::middleware([StrapiCredentials::class.':optional', StrapiActiveUser::class])->group(function (): void {${userRoutes.slice(1)}
+
+${resources}${uploads}
+    });`
+    : `${group}->group(function (): void {
+        ${sessionRoutes}
+
+${resources}${uploads}
+    });`;
   return `<?php
 
 // @camis:generated — do not edit. Custom routes belong in routes/api-custom.php.
@@ -184,8 +221,8 @@ $authThrottle = 'throttle:'.(int) config('camis.auth_throttle_per_minute', ${AUT
 
 Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle): void {
     Route::get('/_health', fn () => response()->noContent());
-    Route::post('/auth/local', [AuthController::class, 'login'])->middleware($authThrottle);
-    Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware($authThrottle);${accountRoutes}${
+    Route::post('/auth/local', [AuthController::class, 'login'])->middleware(${throttled});
+    Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware(${throttled});${accountRoutes}${
       localized
         ? `
 
@@ -194,11 +231,7 @@ Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle):
         : ""
     }
 
-    ${group}->group(function (): void {
-        ${sessionRoutes}
-
-${resources}${uploads}
-    });
+    ${groups}
 
     // Inside the group so hand-written routes inherit the Strapi error envelope.
     require __DIR__.'/api-custom.php';

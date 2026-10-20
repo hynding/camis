@@ -16,6 +16,7 @@ use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 
 class ActivityApiController extends Controller
 {
@@ -32,7 +33,7 @@ class ActivityApiController extends Controller
     protected function find(Request $request, string $key): Activity
     {
         $m = $this->scoped($request)->where(self::KEY, $key)->first();
-        if ($m === null || ! $request->user()->can('view', $m)) {
+        if ($m === null || ! Gate::allows('view', $m)) {
             abort(404);
         }
 
@@ -49,7 +50,7 @@ class ActivityApiController extends Controller
     {
         $this->authorize('viewAny', Activity::class);
         $found = StrapiQuery::find($this->scoped($request), $request->query(), ActivitySerializer::FIELDS, $request->user());
-        $rows = $found['rows']->filter(fn (Activity $m) => $request->user()->can('view', $m));
+        $rows = $found['rows']->filter(fn (Activity $m) => Gate::allows('view', $m));
 
         return response()->json([
             'data' => StrapiPopulate::many($rows, $request->query(), ActivitySerializer::class, $request->user()),
@@ -59,6 +60,7 @@ class ActivityApiController extends Controller
 
     public function show(Request $request, string $key): JsonResponse
     {
+        $this->authorize('viewAny', Activity::class);
         $m = $this->find($request, $key);
 
         return response()->json(['data' => $this->wire($request, $m), 'meta' => new \stdClass()]);
@@ -70,7 +72,7 @@ class ActivityApiController extends Controller
         $wire = ActivitySerializer::fromWire((array) $request->input('data', []));
         $links = StrapiRelations::read((array) $request->input('data', []), ActivitySerializer::FIELDS, $request->user());
         $m = new Activity($wire['columns']);
-        $m->creator_id = $request->user()->id;
+        $m->creator_id = $request->user()?->id;
         DB::transaction(function () use ($m, $wire, $links): void {
             StrapiRelations::associate($m, $links);
             $m->save();
@@ -86,7 +88,7 @@ class ActivityApiController extends Controller
         $wire = ActivitySerializer::fromWire((array) $request->input('data', []));
         $links = StrapiRelations::read((array) $request->input('data', []), ActivitySerializer::FIELDS, $request->user());
         $m = $this->scoped($request)->where(self::KEY, $key)->first();
-        if ($m !== null && $request->user()->can('view', $m)) {
+        if ($m !== null && Gate::allows('view', $m)) {
             $this->authorize('update', $m);
             DB::transaction(function () use ($m, $wire, $links): void {
                 $m->fill($wire['columns']);
@@ -105,7 +107,7 @@ class ActivityApiController extends Controller
         $this->authorize('create', Activity::class);
         $m = new Activity($wire['columns']);
         $m->{self::KEY} = $key;
-        $m->creator_id = $request->user()->id;
+        $m->creator_id = $request->user()?->id;
         DB::transaction(function () use ($m, $wire, $links): void {
             StrapiRelations::associate($m, $links);
             $m->save();

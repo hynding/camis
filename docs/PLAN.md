@@ -620,6 +620,45 @@ no-reply address; the strapi storage layout keeps register, login and `/users/me
 
 ---
 
+## Phase 24 — Users & Permissions, part 2: the public role, sessions and roles (`permissions`, `adapter-filament`)
+
+**Goal:** callers without a session get the public role's grants, refresh-token sessions work as
+in Strapi 5, and the roles routes answer as Strapi's do, on the laravel storage layout with the
+Strapi API style.
+
+- The public role: an IR role named `public` (`PUBLIC_ROLE`) applies to callers without a token.
+  Policies and scopes take a nullable user; a guest's condition data has no `user.id`, so a
+  condition that needs one fails closed. Strapi's public-only routes (login, register, the
+  password and confirmation routes, refresh) refuse a session with 403, and its
+  authenticated-only routes refuse a guest. Without a `public` role, guests keep the 403 of part 1;
+  on other API styles or the strapi storage layout the role is reported as a `publicRole` gap.
+- Sessions: `CAMIS_JWT_MANAGEMENT=refresh` (Strapi's `jwtManagement: 'refresh'`) gives each login
+  a session in `strapi_sessions` with a rotating refresh token (only its hash is kept) and a
+  Sanctum access token that lasts `CAMIS_ACCESS_TOKEN_LIFESPAN` seconds. `/auth/refresh`,
+  `/auth/logout`, `/auth/sessions` and `DELETE /auth/sessions/:id` follow Strapi, including the
+  httpOnly cookie mode (`CAMIS_SESSIONS_HTTP_ONLY` or the `x-strapi-refresh-cookie` header) and a
+  new session after a password change or reset. `legacy-support` stays the default, where the
+  session routes answer 404 as Strapi's do. Expired sessions are swept on about one login in
+  fifty, so no scheduler is needed.
+- Strapi answers a single read without the read grant with 403 (camis answered 404), and sorting
+  by an unreadable relation with 400 `Invalid key`; both now match.
+- `/users-permissions/roles[/:id]` and `/users-permissions/permissions` answer 403 to every
+  caller: roles live in the IR, so no grant opens them, as none of Strapi's shipped roles does.
+
+**Exit criteria:** the 92 checks of `auth-vectors.json` (legacy mode) and the 37 of
+`session-vectors.json` (refresh mode), both recorded from strapi-php, pass in the `strapi-api`
+boot job on SQLite, MySQL and Postgres; the earlier vectors, admin tests and the smoke still pass.
+
+**Status (2026-10-19):** every suite passes on SQLite and Postgres with all caches on, and the
+admin tests pass.
+
+Known gaps: OAuth providers (`/connect/:provider`) come next. Ending a session revokes its access
+tokens at once, where Strapi's stateless JWTs live until they expire (stricter, so no vector
+checks it). The Filament admin has no role matrix (Phase 30). Null scalars are left off the wire
+where Strapi sends them.
+
+---
+
 ## Sequencing rationale (quick reference)
 
 1. **Strapi first** — mature schema validates the IR fastest, with the thinnest adapter.

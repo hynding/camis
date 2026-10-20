@@ -402,8 +402,12 @@ final class StrapiQuery
      */
     private static function sortByRelation(Builder $query, array $relation, string $key, string $rest, string $direction, ?Authenticatable $viewer): void
     {
+        if (! self::readable($relation, $viewer)) {
+            // Strapi rejects the relation itself, whatever its target's key, as filters do.
+            throw StrapiError::invalidKey($key, $key, 'sort');
+        }
         $column = $relation['serializer']::FIELDS[$rest]['column'] ?? null;
-        if (! self::readable($relation, $viewer) || $column === null) {
+        if ($column === null) {
             $parent = str_contains($rest, '.') ? $key.'.'.substr($rest, 0, (int) strrpos($rest, '.')) : $key;
             throw StrapiError::invalidKey(str_contains($rest, '.') ? substr($rest, (int) strrpos($rest, '.') + 1) : $rest, $parent, 'sort');
         }

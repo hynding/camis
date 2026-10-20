@@ -14,7 +14,25 @@ const header = (namespace: string): string =>
  * One plain class with static methods: nothing is registered at boot, so FPM pays for it only on
  * the requests that list.
  */
-export const emitStrapiQuery = (): string =>
+// A project without roles passes a null viewer and checks nothing; with roles, null is a caller
+// without a session, whom the gate and the scope answer for from the public role.
+const viewerDoc = (secured: boolean): string =>
+  secured
+    ? ` * $viewer is the caller, null without a session: a relation's rows are reached only through the
+ * target's read grant and its forUser scope, as on its own route.
+ */`
+    : ` * $viewer is the caller in a project with roles, and null in one without: a relation's rows are
+ * then reached only through the target's read grant and its forUser scope, as on its own route.
+ */`;
+const unsecured = (secured: boolean): string => (secured ? "" : "$viewer === null || ");
+const scopeBody = (secured: boolean): string =>
+  secured
+    ? "        $query->forUser($viewer);"
+    : `        if ($viewer !== null) {
+            $query->forUser($viewer);
+        }`;
+
+export const emitStrapiQuery = (secured = false): string =>
   header("App\\Support") +
   String.raw`
 use Carbon\CarbonImmutable;
@@ -30,9 +48,7 @@ use Illuminate\Support\Facades\Gate;
  * ['component' => <child relation>, 'fields' => <the child's own map>], or a relation to
  * ['relation' => <Eloquent relation>, 'kind' => ..., 'model' => ..., 'serializer' => ...].
  *
- * $viewer is the caller in a project with roles, and null in one without: a relation's rows are
- * then reached only through the target's read grant and its forUser scope, as on its own route.
- */
+${viewerDoc(secured)}
 final class StrapiQuery
 {
     private const ATTRIBUTE_OPERATORS = [
@@ -91,21 +107,19 @@ final class StrapiQuery
     /** Whether the caller may read the target of a FIELDS relation entry at all. */
     public static function readable(array $relation, ?Authenticatable $viewer): bool
     {
-        return $viewer === null || Gate::forUser($viewer)->allows('viewAny', $relation['model']);
+        return ${unsecured(secured)}Gate::forUser($viewer)->allows('viewAny', $relation['model']);
     }
 
     /** Whether the caller may see one row of a relation's target. */
     public static function visible(mixed $row, ?Authenticatable $viewer): bool
     {
-        return $viewer === null || Gate::forUser($viewer)->allows('view', $row);
+        return ${unsecured(secured)}Gate::forUser($viewer)->allows('view', $row);
     }
 
     /** Narrows a target's query to the rows the caller's grants let it list. */
     public static function scope(mixed $query, ?Authenticatable $viewer): void
     {
-        if ($viewer !== null) {
-            $query->forUser($viewer);
-        }
+${scopeBody(secured)}
     }
 
     /** Keeps the scalars the fields parameter names, plus id and documentId; components stay. */
@@ -414,8 +428,12 @@ final class StrapiQuery
      */
     private static function sortByRelation(Builder $query, array $relation, string $key, string $rest, string $direction, ?Authenticatable $viewer): void
     {
+        if (! self::readable($relation, $viewer)) {
+            // Strapi rejects the relation itself, whatever its target's key, as filters do.
+            throw StrapiError::invalidKey($key, $key, 'sort');
+        }
         $column = $relation['serializer']::FIELDS[$rest]['column'] ?? null;
-        if (! self::readable($relation, $viewer) || $column === null) {
+        if ($column === null) {
             $parent = str_contains($rest, '.') ? $key.'.'.substr($rest, 0, (int) strrpos($rest, '.')) : $key;
             throw StrapiError::invalidKey(str_contains($rest, '.') ? substr($rest, (int) strrpos($rest, '.') + 1) : $rest, $parent, 'sort');
         }

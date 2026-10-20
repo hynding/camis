@@ -7,10 +7,13 @@ declare(strict_types=1);
 use App\Http\Controllers\Api\ArticleApiController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AuthorApiController;
+use App\Http\Controllers\Api\RoleController;
+use App\Http\Controllers\Api\SessionController;
 use App\Http\Controllers\Api\TagApiController;
 use App\Http\Controllers\Api\UploadController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Middleware\StrapiActiveUser;
+use App\Http\Middleware\StrapiCredentials;
 use App\Http\Middleware\StrapiErrors;
 use Illuminate\Support\Facades\Route;
 
@@ -27,16 +30,27 @@ $authThrottle = 'throttle:'.(int) config('camis.auth_throttle_per_minute', 10).'
 
 Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle): void {
     Route::get('/_health', fn () => response()->noContent());
-    Route::post('/auth/local', [AuthController::class, 'login'])->middleware($authThrottle);
-    Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware($authThrottle);
-    Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware($authThrottle);
-    Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])->middleware($authThrottle);
-    Route::get('/auth/email-confirmation', [AuthController::class, 'emailConfirmation']);
-    Route::post('/auth/send-email-confirmation', [AuthController::class, 'sendEmailConfirmation'])->middleware($authThrottle);
+    Route::post('/auth/local', [AuthController::class, 'login'])->middleware([$authThrottle, StrapiCredentials::class.':guest']);
+    Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware([$authThrottle, StrapiCredentials::class.':guest']);
+    Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware([$authThrottle, StrapiCredentials::class.':guest']);
+    Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])->middleware([$authThrottle, StrapiCredentials::class.':guest']);
+    Route::get('/auth/email-confirmation', [AuthController::class, 'emailConfirmation'])->middleware(StrapiCredentials::class.':guest');
+    Route::post('/auth/send-email-confirmation', [AuthController::class, 'sendEmailConfirmation'])->middleware([$authThrottle, StrapiCredentials::class.':guest']);
+    Route::post('/auth/refresh', [SessionController::class, 'refresh'])->middleware(StrapiCredentials::class.':guest');
+
+    // Roles live in the IR, so no grant opens these: Strapi forbids them to the roles it ships.
+    Route::middleware([StrapiCredentials::class.':optional', StrapiActiveUser::class])->group(function (): void {
+        Route::match(['get', 'post'], '/users-permissions/roles', RoleController::class);
+        Route::match(['get', 'put', 'delete'], '/users-permissions/roles/{role}', RoleController::class);
+        Route::get('/users-permissions/permissions', RoleController::class);
+    });
 
     Route::middleware([])->group(function (): void {
         Route::get('/users/me', [UserController::class, 'me'])->middleware(['auth:sanctum', StrapiActiveUser::class]);
         Route::post('/auth/change-password', [AuthController::class, 'changePassword'])->middleware(['auth:sanctum', StrapiActiveUser::class]);
+        Route::post('/auth/logout', [SessionController::class, 'logout'])->middleware(['auth:sanctum', StrapiActiveUser::class]);
+        Route::get('/auth/sessions', [SessionController::class, 'sessions'])->middleware(['auth:sanctum', StrapiActiveUser::class]);
+        Route::delete('/auth/sessions/{sessionId}', [SessionController::class, 'revoke'])->middleware(['auth:sanctum', StrapiActiveUser::class]);
 
         Route::get('/articles', [ArticleApiController::class, 'index']);
         Route::post('/articles', [ArticleApiController::class, 'store']);
