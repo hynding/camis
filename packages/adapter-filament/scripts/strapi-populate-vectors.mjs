@@ -33,7 +33,7 @@ if (base === undefined) {
   process.exit(2);
 }
 const vectors = JSON.parse(readFileSync(values.vectors, "utf8"));
-const graphqlEndpoint = values.graphql ?? `${new URL(base).origin}/graphql`;
+const graphqlEndpoint = values.graphql ?? base.replace(/\/api\/?$/, "/graphql");
 
 const refs = new Map(); // "authors:Ann" → { id, documentId }
 const ref = (token) => {

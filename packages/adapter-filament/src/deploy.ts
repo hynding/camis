@@ -99,8 +99,23 @@ job runner, or locally against the production database.`
     : `Run the migrate/seed steps via your host's one-off job runner, or
 locally against the production database.`;
 
+/** Strapi's GraphQL endpoint: its library, its route outside /api, and its parsed-schema cache. */
+const graphqlSection = `
+
+## GraphQL
+
+\`/graphql\` serves Strapi 5's GraphQL content API through the same REST controllers, grants and
+populate. It needs \`composer require webonyx/graphql-php:^15.19\` (\`camis scaffold filament
+--graphql\` runs it), and \`bootstrap/app.php\` must load \`routes/graphql.php\` in \`withRouting\`'s
+\`then:\` callback, inside the \`api\` middleware group (\`--graphql\` adds that too), so
+\`route:cache\` keeps it. The first request parses \`graphql/schema.graphql\` into
+\`bootstrap/cache/camis-graphql.php\`, which opcache then serves; it is rebuilt whenever the schema
+changes, so that directory must stay writable, as Laravel's own caches need it to be.
+\`CAMIS_GRAPHQL_DEFAULT_LIMIT\` (default 10) and \`CAMIS_GRAPHQL_MAX_LIMIT\` (default -1, no cap)
+are Strapi's graphql \`defaultLimit\` and \`maxLimit\`.`;
+
 // Generator-owned deployment guide for the overlaid Laravel app. Regenerated on every run.
-export const deployFile = (layout: StorageLayout = "laravel"): GeneratedFile => ({
+export const deployFile = (layout: StorageLayout = "laravel", graphql = false): GeneratedFile => ({
   path: "DEPLOY.md",
   content: `<!-- @camis:generated — do not edit -->
 
@@ -138,7 +153,7 @@ DB_PASSWORD=secret
 
 ${firstDeploy(layout)}
 
-## Shared hosting (no shell)
+${graphql ? graphqlSection.slice(2) + "\n\n" : ""}## Shared hosting (no shell)
 
 Build locally (scaffold + \`camis build\` + \`composer install\`), upload the whole app
 directory, and point the document root at \`public/\`. Laravel's \`.htaccess\` ships in

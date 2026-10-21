@@ -1,0 +1,717 @@
+import { pluralize } from "@camis/ir-core";
+import {
+  fieldApiName,
+  type CapabilityGap,
+  type Component,
+  type ComponentFieldT,
+  type ContentType,
+  type Field,
+  type IrDocument,
+} from "@camis/ir-schema";
+import { filamentNames } from "../names";
+import { componentUid, kebab } from "./names";
+import type { WireShape } from "./wire-shape";
+
+/**
+ * Strapi 5's GraphQL schema for a project's content types, printed as webonyx's (and
+ * graphql-js's) schema printer prints it: strapi-php's schema for the same types
+ * (`graphql-schema.strapi-php.graphql`) is the oracle, definition for definition.
+ *
+ * Alongside the printed schema it returns what the runtime needs to resolve it: each root field's
+ * content type and action, and each type's relations, components and zones.
+ */
+
+interface Argument {
+  name: string;
+  type: string;
+  default?: string;
+  description?: string;
+}
+interface Member {
+  name: string;
+  type: string;
+  args?: Argument[];
+}
+type Definition =
+  | { kind: "type" | "input"; name: string; fields: Member[] }
+  | { kind: "enum"; name: string; values: string[] }
+  | { kind: "union"; name: string; members: string[] }
+  | { kind: "scalar"; name: string; description?: string };
+
+/** What the runtime reads: GraphQL type name → how its fields reach the REST API. */
+export interface GraphqlRelation {
+  type: string;
+  many: boolean;
+}
+export interface GraphqlContentType {
+  name: string;
+  model: string;
+  /** The REST route key's API name when it is not the documentId (`options.upsertBy`). */
+  routeKey: string | null;
+  draftPublish: boolean;
+  localized: boolean;
+  relations: Record<string, GraphqlRelation>;
+  components: Record<string, { type: string; repeatable: boolean }>;
+  zones: string[];
+}
+export interface GraphqlComponent {
+  name: string;
+  uid: string;
+  components: Record<string, { type: string; repeatable: boolean }>;
+}
+export interface GraphqlSchema {
+  sdl: string;
+  queries: [field: string, type: string, action: "findOne" | "find" | "connection"][];
+  mutations: [field: string, type: string, action: "create" | "update" | "delete"][];
+  types: GraphqlContentType[];
+  components: GraphqlComponent[];
+  /** Every component's GraphQL type name → its uid, for a zone's items. */
+  zoneMembers: Record<string, string[]>;
+  gaps: CapabilityGap[];
+}
+
+export interface GraphqlSchemaInput {
+  doc: IrDocument;
+  emitted: ContentType[];
+  shapes: ReadonlyMap<string, WireShape>;
+  media: boolean;
+}
+
+// ------------------------------------------------------------------------------------ naming
+
+const pascal = (kebabName: string): string =>
+  kebabName
+    .split(/[-_.\s]+/)
+    .filter((part) => part !== "")
+    .map((part) => part[0]!.toUpperCase() + part.slice(1))
+    .join("");
+const camel = (kebabName: string): string => {
+  const p = pascal(kebabName);
+  return p[0]!.toLowerCase() + p.slice(1);
+};
+/** Strapi's getTypeName: the singular name, PascalCase (`activity-session` → ActivitySession). */
+const typeName = (ct: ContentType): string => pascal(kebab(ct.name));
+/** Strapi's getComponentName: `shared.money` → ComponentSharedMoney. */
+const componentTypeName = (component: Component): string =>
+  `Component${pascal(componentUid(component))}`;
+const singularField = (ct: ContentType): string => camel(kebab(ct.name));
+const pluralField = (ct: ContentType): string =>
+  camel(kebab(ct.names?.plural ?? pluralize(ct.name)));
+const lodashSnake = (name: string): string =>
+  name
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/[-\s]+/g, "_")
+    .toUpperCase();
+
+const SCALAR_DESCRIPTIONS: Record<string, string> = {
+  JSON: "The `JSON` scalar type represents JSON values as specified by [ECMA-404](http://www.ecma-international.org/publications/files/ECMA-ST/ECMA-404.pdf).",
+  Long: "The `BigInt` scalar type represents non-fractional signed whole numeric values.",
+  DateTime:
+    "A date-time string at UTC, such as 2007-12-03T10:15:30Z, compliant with the `date-time` format outlined in section 5.6 of the RFC 3339 profile of the ISO 8601 standard for representation of dates and times using the Gregorian calendar.",
+  Date: "A date string, such as 2007-12-03, compliant with the `full-date` format outlined in section 5.6 of the RFC 3339 profile of the ISO 8601 standard for representation of dates and times using the Gregorian calendar.",
+  Time: "A time string with format HH:mm:ss.SSS",
+  I18NLocaleCode: "A string used to identify an i18n locale",
+};
+const BUILT_IN = new Set(["ID", "String", "Int", "Float", "Boolean"]);
+
+const scalarOf = (type: Field["type"]): string => {
+  switch (type) {
+    case "integer":
+      return "Int";
+    case "bigInteger":
+      return "Long";
+    case "float":
+    case "decimal":
+      return "Float";
+    case "boolean":
+      return "Boolean";
+    case "date":
+      return "Date";
+    case "time":
+      return "Time";
+    case "dateTime":
+    case "timestamp":
+      return "DateTime";
+    case "json":
+      return "JSON";
+    default:
+      return "String";
+  }
+};
+const GRAPHQL_NAME = /^[_A-Za-z][_0-9A-Za-z]*$/;
+
+// -------------------------------------------------------------------------------- printing
+
+const printArgument = (a: Argument): string =>
+  `${a.name}: ${a.type}${a.default === undefined ? "" : ` = ${a.default}`}`;
+
+/** graphql-js's printArgs: inline unless an argument has a description. */
+const printArguments = (args: Argument[]): string => {
+  if (args.length === 0) return "";
+  if (args.every((a) => a.description === undefined))
+    return `(${args.map(printArgument).join(", ")})`;
+  const lines = args.map(
+    (a, i) =>
+      `${a.description === undefined ? "" : `${i === 0 ? "" : "\n"}    "${a.description}"\n`}    ${printArgument(a)}`,
+  );
+  return `(\n${lines.join("\n")}\n  )`;
+};
+
+const printDefinition = (d: Definition): string => {
+  switch (d.kind) {
+    case "scalar":
+      return `${d.description === undefined ? "" : `"${d.description}"\n`}scalar ${d.name}`;
+    case "enum":
+      return `enum ${d.name} {\n${d.values.map((v) => `  ${v}`).join("\n")}\n}`;
+    case "union":
+      return `union ${d.name} = ${d.members.join(" | ")}`;
+    default:
+      return `${d.kind} ${d.name} {\n${d.fields
+        .map((f) => `  ${f.name}${printArguments(f.args ?? [])}: ${f.type}`)
+        .join("\n")}\n}`;
+  }
+};
+
+// --------------------------------------------------------------------------------- building
+
+const OPERATORS = [
+  "eq",
+  "eqi",
+  "ne",
+  "nei",
+  "startsWith",
+  "endsWith",
+  "contains",
+  "notContains",
+  "containsi",
+  "notContainsi",
+  "gt",
+  "gte",
+  "lt",
+  "lte",
+];
+const PUBLICATION_FILTERS = [
+  "NEVER_PUBLISHED",
+  "HAS_PUBLISHED_VERSION",
+  "MODIFIED",
+  "UNMODIFIED",
+  "NEVER_PUBLISHED_DOCUMENT",
+  "HAS_PUBLISHED_VERSION_DOCUMENT",
+  "PUBLISHED_WITHOUT_DRAFT",
+  "PUBLISHED_WITH_DRAFT",
+];
+const LOCALE_ARGUMENT: Argument = {
+  name: "locale",
+  type: "I18NLocaleCode",
+  description: "The locale to use for the query",
+};
+const STATUS_ARGUMENT: Argument = {
+  name: "status",
+  type: "PublicationStatus",
+  default: "PUBLISHED",
+};
+const PUBLICATION_ARGUMENTS: Argument[] = [
+  STATUS_ARGUMENT,
+  { name: "hasPublishedVersion", type: "Boolean" },
+  { name: "publicationFilter", type: "PublicationFilter" },
+];
+const listArguments = (filters: string): Argument[] => [
+  { name: "filters", type: filters },
+  { name: "pagination", type: "PaginationArg", default: "{  }" },
+  { name: "sort", type: "[String]", default: "[]" },
+];
+const TIMESTAMPS = ["createdAt", "updatedAt", "publishedAt"];
+
+/** The upload plugin's file type, as Strapi's content API sends it. */
+const UPLOAD_FILE_FIELDS: [string, string][] = [
+  ["name", "String!"],
+  ["alternativeText", "String"],
+  ["caption", "String"],
+  ["focalPoint", "JSON"],
+  ["width", "Int"],
+  ["height", "Int"],
+  ["formats", "JSON"],
+  ["hash", "String!"],
+  ["ext", "String"],
+  ["mime", "String!"],
+  ["size", "Float!"],
+  ["url", "String!"],
+  ["previewUrl", "String"],
+  ["provider", "String!"],
+  ["provider_metadata", "JSON"],
+];
+
+class SchemaBuilder {
+  private readonly definitions = new Map<string, Definition>();
+  private readonly componentsByName: Map<string, Component>;
+  readonly componentMaps = new Map<string, GraphqlComponent>();
+  readonly zoneMembers: Record<string, string[]> = {};
+
+  constructor(input: GraphqlSchemaInput) {
+    this.componentsByName = new Map(input.doc.components.map((c) => [c.name, c]));
+  }
+
+  define(definition: Definition): void {
+    if (!this.definitions.has(definition.name)) this.definitions.set(definition.name, definition);
+  }
+
+  /** A definition made on first use, so the schema names only what it needs. */
+  need(name: string, make: () => Definition): string {
+    if (!this.definitions.has(name)) {
+      this.definitions.set(name, { kind: "scalar", name });
+      this.definitions.set(name, make());
+    }
+    return name;
+  }
+
+  scalar(name: string): string {
+    if (BUILT_IN.has(name)) return name;
+    const description = SCALAR_DESCRIPTIONS[name];
+    return this.need(name, () => ({
+      kind: "scalar",
+      name,
+      ...(description === undefined ? {} : { description }),
+    }));
+  }
+
+  scalarFilter(scalar: string): string {
+    this.scalar(scalar);
+    return this.need(`${scalar}FilterInput`, () => ({
+      kind: "input",
+      name: `${scalar}FilterInput`,
+      fields: [
+        { name: "and", type: `[${scalar}]` },
+        { name: "or", type: `[${scalar}]` },
+        { name: "not", type: `${scalar}FilterInput` },
+        ...OPERATORS.map((o) => ({ name: o, type: scalar })),
+        { name: "null", type: "Boolean" },
+        { name: "notNull", type: "Boolean" },
+        { name: "in", type: `[${scalar}]` },
+        { name: "notIn", type: `[${scalar}]` },
+        { name: "between", type: `[${scalar}]` },
+      ],
+    }));
+  }
+
+  /** Strapi's enum for an enumeration field: ENUM_<TYPE>_<FIELD>, or a string when a value is no name. */
+  enumeration(owner: string, field: Field | ComponentFieldT): string {
+    if (field.type !== "enumeration" || !field.values.every((v) => GRAPHQL_NAME.test(v)))
+      return "String";
+    const name = `ENUM_${lodashSnake(`${owner}_${fieldApiName(field)}`)}`;
+    return this.need(name, () => ({ kind: "enum", name, values: [...field.values] }));
+  }
+
+  /** A scalar field's output and input type. */
+  scalarType(owner: string, field: Field | ComponentFieldT): string {
+    return field.type === "enumeration"
+      ? this.enumeration(owner, field)
+      : this.scalar(scalarOf(field.type));
+  }
+
+  pagination(): void {
+    this.need("PaginationArg", () => ({
+      kind: "input",
+      name: "PaginationArg",
+      fields: ["page", "pageSize", "start", "limit"].map((name) => ({ name, type: "Int" })),
+    }));
+  }
+
+  component(name: string): Component {
+    const component = this.componentsByName.get(name);
+    if (component === undefined) throw new Error(`unknown component "${name}"`);
+    return component;
+  }
+
+  /** A component's type, with its id and its own components; relations and media stay off it. */
+  componentType(component: Component): string {
+    const name = componentTypeName(component);
+    return this.need(name, () => {
+      const nested: GraphqlComponent["components"] = {};
+      const fields: Member[] = [{ name: "id", type: "ID!" }];
+      for (const f of component.fields) {
+        const key = fieldApiName(f);
+        if (f.type === "component") {
+          const target = this.component(f.component);
+          nested[key] = { type: componentTypeName(target), repeatable: f.repeatable };
+          fields.push(this.componentField(key, target, f.repeatable));
+        } else if (f.type !== "relation" && f.type !== "media") {
+          fields.push({
+            name: key,
+            type: `${this.scalarType(name, f)}${f.required === true ? "!" : ""}`,
+          });
+        }
+      }
+      this.componentMaps.set(name, { name, uid: componentUid(component), components: nested });
+      return { kind: "type", name, fields };
+    });
+  }
+
+  componentField(key: string, component: Component, repeatable: boolean): Member {
+    const type = this.componentType(component);
+    if (!repeatable) return { name: key, type };
+    this.pagination();
+    return { name: key, args: listArguments(this.componentFilters(component)), type: `[${type}]` };
+  }
+
+  componentFilters(component: Component): string {
+    const name = `${componentTypeName(component)}FiltersInput`;
+    return this.need(name, () => ({
+      kind: "input",
+      name,
+      fields: [
+        ...component.fields.flatMap((f): Member[] =>
+          f.type === "component"
+            ? [{ name: fieldApiName(f), type: this.componentFilters(this.component(f.component)) }]
+            : f.type === "relation" || f.type === "media"
+              ? []
+              : [{ name: fieldApiName(f), type: this.scalarFilter(scalarOf(f.type)) }],
+        ),
+        { name: "and", type: `[${name}]` },
+        { name: "or", type: `[${name}]` },
+        { name: "not", type: name },
+      ],
+    }));
+  }
+
+  componentInput(component: Component): string {
+    const name = `${componentTypeName(component)}Input`;
+    return this.need(name, () => ({
+      kind: "input",
+      name,
+      fields: [
+        { name: "id", type: "ID" },
+        ...component.fields.flatMap((f): Member[] => {
+          if (f.type === "component") {
+            const input = this.componentInput(this.component(f.component));
+            return [{ name: fieldApiName(f), type: f.repeatable ? `[${input}]` : input }];
+          }
+          return f.type === "relation" || f.type === "media"
+            ? []
+            : [{ name: fieldApiName(f), type: this.scalarType(componentTypeName(component), f) }];
+        }),
+      ],
+    }));
+  }
+
+  uploadFile(): void {
+    this.scalar("DateTime");
+    this.scalar("JSON");
+    this.need("UploadFile", () => ({
+      kind: "type",
+      name: "UploadFile",
+      fields: [
+        { name: "documentId", type: "ID!" },
+        ...UPLOAD_FILE_FIELDS.map(([name, type]) => ({ name, type })),
+        ...TIMESTAMPS.map((name) => ({ name, type: "DateTime" })),
+      ],
+    }));
+    this.need("UploadFileFiltersInput", () => ({
+      kind: "input",
+      name: "UploadFileFiltersInput",
+      fields: [
+        { name: "documentId", type: this.scalarFilter("ID") },
+        ...UPLOAD_FILE_FIELDS.map(([name, type]) => ({
+          name,
+          type: this.scalarFilter(type.replace("!", "")),
+        })),
+        ...TIMESTAMPS.map((name) => ({ name, type: this.scalarFilter("DateTime") })),
+        { name: "and", type: "[UploadFileFiltersInput]" },
+        { name: "or", type: "[UploadFileFiltersInput]" },
+        { name: "not", type: "UploadFileFiltersInput" },
+      ],
+    }));
+  }
+
+  relationCollection(target: string): string {
+    return this.need(`${target}RelationResponseCollection`, () => ({
+      kind: "type",
+      name: `${target}RelationResponseCollection`,
+      fields: [{ name: "nodes", type: `[${target}!]!` }],
+    }));
+  }
+
+  print(): string {
+    return `${[...this.definitions.values()].map(printDefinition).join("\n\n")}\n`;
+  }
+}
+
+/** A content type's fields as Strapi's content API lays them out: its own, then inverse sides. */
+interface ContentField {
+  field?: Field;
+  key: string;
+  relation?: WireShape["relations"][number];
+}
+const contentFields = (ct: ContentType, shape: WireShape): ContentField[] => {
+  const relations = new Map(shape.relations.map((r) => [r.key, r]));
+  const own = ct.fields.flatMap((f): ContentField[] => {
+    const key = fieldApiName(f);
+    if (f.type === "relation" || f.type === "media") {
+      const relation = relations.get(key);
+      // A link to the built-in user stays off the content API, as it does on REST.
+      return relation === undefined ? [] : [{ field: f, key, relation }];
+    }
+    return [{ field: f, key }];
+  });
+  const ownKeys = new Set(own.map((o) => o.key));
+  const inverse = shape.relations
+    .filter((r) => !ownKeys.has(r.key) && r.kind !== "localizations")
+    .map((relation): ContentField => ({ key: relation.key, relation }));
+  return [...own, ...inverse];
+};
+
+const MANY = new Set(["hasMany", "belongsToMany", "localizations", "mediaMany"]);
+
+export const buildGraphqlSchema = (input: GraphqlSchemaInput): GraphqlSchema => {
+  const { shapes } = input;
+  const b = new SchemaBuilder(input);
+  const byModel = new Map(input.emitted.map((ct) => [filamentNames(ct).model, ct]));
+  const contentTypes = [...input.emitted].sort((x, y) =>
+    kebab(x.name).localeCompare(kebab(y.name)),
+  );
+  const queryFields: Member[] = [];
+  const mutationFields: Member[] = [];
+  const queries: GraphqlSchema["queries"] = [];
+  const mutations: GraphqlSchema["mutations"] = [];
+  const types: GraphqlContentType[] = [];
+  const gaps: CapabilityGap[] = [];
+
+  b.define({ kind: "type", name: "Query", fields: queryFields });
+  b.define({ kind: "type", name: "Mutation", fields: mutationFields });
+  b.define({ kind: "enum", name: "PublicationStatus", values: ["DRAFT", "PUBLISHED"] });
+  b.define({ kind: "enum", name: "PublicationFilter", values: PUBLICATION_FILTERS });
+  b.pagination();
+  if (input.media) b.uploadFile();
+
+  /** The GraphQL type a relation reaches. */
+  const targetType = (relation: WireShape["relations"][number]): string => {
+    if (relation.kind === "mediaOne" || relation.kind === "mediaMany") return "UploadFile";
+    const target = byModel.get(relation.model);
+    if (target === undefined) throw new Error(`unknown relation target "${relation.model}"`);
+    return typeName(target);
+  };
+
+  for (const ct of contentTypes) {
+    const shape = shapes.get(ct.name);
+    if (shape === undefined) continue;
+    const name = typeName(ct);
+    const filters = `${name}FiltersInput`;
+    const upsertBy = ct.fields.find((f) => f.name === ct.options?.upsertBy);
+    const map: GraphqlContentType = {
+      name,
+      model: shape.model,
+      routeKey: upsertBy === undefined ? null : fieldApiName(upsertBy),
+      draftPublish: shape.draftPublish,
+      localized: shape.localized,
+      relations: {},
+      components: {},
+      zones: [],
+    };
+    const typeFields: Member[] = [{ name: "documentId", type: "ID!" }];
+    const filterFields: Member[] = [{ name: "documentId", type: b.scalarFilter("ID") }];
+    const inputFields: Member[] = [];
+
+    for (const { field, key, relation } of contentFields(ct, shape)) {
+      if (relation !== undefined) {
+        const target = targetType(relation);
+        const many = MANY.has(relation.kind);
+        map.relations[key] = { type: target, many };
+        const media = target === "UploadFile";
+        if (many) {
+          const args = listArguments(`${target}FiltersInput`);
+          typeFields.push(
+            { name: `${key}_connection`, args, type: b.relationCollection(target) },
+            { name: key, args, type: `[${target}]!` },
+          );
+        } else {
+          typeFields.push({ name: key, type: target });
+        }
+        if (!media) filterFields.push({ name: key, type: `${target}FiltersInput` });
+        inputFields.push({ name: key, type: many ? "[ID]" : "ID" });
+        continue;
+      }
+      if (field === undefined) continue;
+      if (field.type === "component") {
+        const component = b.component(field.component);
+        map.components[key] = {
+          type: componentTypeName(component),
+          repeatable: field.repeatable,
+        };
+        typeFields.push(b.componentField(key, component, field.repeatable));
+        filterFields.push({ name: key, type: b.componentFilters(component) });
+        const componentInput = b.componentInput(component);
+        inputFields.push({
+          name: key,
+          type: field.repeatable ? `[${componentInput}]` : componentInput,
+        });
+      } else if (field.type === "dynamicZone") {
+        const union = `${name}${pascal(key)}DynamicZone`;
+        const members = field.components.map((c) => b.componentType(b.component(c)));
+        b.need(union, () => ({ kind: "union", name: union, members: [...members, "Error"] }));
+        b.need("Error", () => ({
+          kind: "type",
+          name: "Error",
+          fields: [
+            { name: "code", type: "String!" },
+            { name: "message", type: "String" },
+          ],
+        }));
+        b.need(`${union}Input`, () => ({ kind: "scalar", name: `${union}Input` }));
+        b.zoneMembers[union] = members;
+        map.zones.push(key);
+        typeFields.push({ name: key, type: `[${union}]` });
+        inputFields.push({ name: key, type: `[${union}Input!]` });
+      } else {
+        const type = b.scalarType(name, field);
+        typeFields.push({ name: key, type: `${type}${field.required === true ? "!" : ""}` });
+        filterFields.push({ name: key, type: b.scalarFilter(scalarOf(field.type)) });
+        inputFields.push({ name: key, type });
+      }
+    }
+
+    const dateTimeFilter = b.scalarFilter("DateTime");
+    typeFields.push(...TIMESTAMPS.map((t) => ({ name: t, type: "DateTime" })));
+    filterFields.push(...TIMESTAMPS.map((t) => ({ name: t, type: dateTimeFilter })));
+    if (shape.localized) {
+      const args = listArguments(filters);
+      map.relations.localizations = { type: name, many: true };
+      typeFields.push(
+        { name: "locale", type: "String" },
+        { name: "localizations_connection", args, type: b.relationCollection(name) },
+        { name: "localizations", args, type: `[${name}]!` },
+      );
+      filterFields.push(
+        { name: "locale", type: b.scalarFilter("String") },
+        { name: "localizations", type: filters },
+      );
+    }
+    filterFields.push(
+      { name: "and", type: `[${filters}]` },
+      { name: "or", type: `[${filters}]` },
+      { name: "not", type: filters },
+    );
+    // Strapi's input carries a locale only on the types that keep none: it is the i18n plugin's
+    // own attribute, which a localized type sets through the locale argument instead.
+    inputFields.push(
+      { name: "publishedAt", type: "DateTime" },
+      ...(shape.localized ? [] : [{ name: "locale", type: "String" }]),
+    );
+
+    b.define({ kind: "type", name, fields: typeFields });
+    b.define({ kind: "input", name: filters, fields: filterFields });
+    b.define({ kind: "input", name: `${name}Input`, fields: inputFields });
+    b.need(`${name}EntityResponseCollection`, () => ({
+      kind: "type",
+      name: `${name}EntityResponseCollection`,
+      fields: [
+        { name: "nodes", type: `[${name}!]!` },
+        { name: "pageInfo", type: "Pagination!" },
+      ],
+    }));
+    b.need("Pagination", () => ({
+      kind: "type",
+      name: "Pagination",
+      fields: ["total", "page", "pageSize", "pageCount"].map((f) => ({ name: f, type: "Int!" })),
+    }));
+    b.need("DeleteMutationResponse", () => ({
+      kind: "type",
+      name: "DeleteMutationResponse",
+      fields: [{ name: "documentId", type: "ID!" }],
+    }));
+    if (shape.localized) b.scalar("I18NLocaleCode");
+
+    const locale = shape.localized ? [LOCALE_ARGUMENT] : [];
+    const documentId: Argument = { name: "documentId", type: "ID!" };
+    const single = singularField(ct);
+    const plural = pluralField(ct);
+    queryFields.push(
+      { name: single, args: [documentId, ...PUBLICATION_ARGUMENTS, ...locale], type: name },
+      {
+        name: `${plural}_connection`,
+        args: [...listArguments(filters), ...PUBLICATION_ARGUMENTS, ...locale],
+        type: `${name}EntityResponseCollection`,
+      },
+      {
+        name: plural,
+        args: [...listArguments(filters), ...PUBLICATION_ARGUMENTS, ...locale],
+        type: `[${name}]!`,
+      },
+    );
+    queries.push(
+      [single, name, "findOne"],
+      [`${plural}_connection`, name, "connection"],
+      [plural, name, "find"],
+    );
+    const data: Argument = { name: "data", type: `${name}Input!` };
+    mutationFields.push(
+      { name: `create${name}`, args: [STATUS_ARGUMENT, data, ...locale], type: name },
+      { name: `update${name}`, args: [documentId, STATUS_ARGUMENT, data, ...locale], type: name },
+      { name: `delete${name}`, args: [documentId, ...locale], type: "DeleteMutationResponse" },
+    );
+    mutations.push(
+      [`create${name}`, name, "create"],
+      [`update${name}`, name, "update"],
+      [`delete${name}`, name, "delete"],
+    );
+    types.push(map);
+    if (ct.kind === "single") {
+      gaps.push({
+        feature: "graphqlSingleTypes",
+        location: { contentType: ct.name },
+        severity: "downgrade",
+        message: `"${ct.name}" is a single type; GraphQL serves it as a collection, as the REST API does.`,
+      });
+    }
+  }
+  if (input.media) {
+    types.push({
+      name: "UploadFile",
+      model: "File",
+      routeKey: null,
+      draftPublish: false,
+      localized: false,
+      relations: {},
+      components: {},
+      zones: [],
+    });
+    gaps.push({
+      feature: "graphqlMorphRelations",
+      location: { contentType: "File" },
+      severity: "downgrade",
+      message:
+        "UploadFile.related (Strapi's GenericMorph union of everything a file is linked from) is not served.",
+    });
+  }
+  gaps.push(
+    {
+      feature: "graphqlPublicationFilter",
+      location: {},
+      severity: "downgrade",
+      message:
+        "The hasPublishedVersion and publicationFilter arguments are in the schema but refused: neither REST nor GraphQL serves them yet.",
+    },
+    {
+      feature: "graphqlPluginApis",
+      location: {},
+      severity: "downgrade",
+      message:
+        "GraphQL serves the content API only: the users-permissions (login, register, me, roles, users), i18n locale and upload queries and mutations are REST-only for now.",
+    },
+    {
+      feature: "graphqlApiTokens",
+      location: {},
+      severity: "downgrade",
+      message:
+        "A full-access API token reaches /graphql; read-only and custom tokens are refused there, since their grants are checked per REST route.",
+    },
+  );
+
+  return {
+    sdl: b.print(),
+    queries,
+    mutations,
+    types,
+    components: [...b.componentMaps.values()].sort((x, y) => x.name.localeCompare(y.name)),
+    zoneMembers: b.zoneMembers,
+    gaps,
+  };
+};

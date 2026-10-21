@@ -30,7 +30,18 @@ export const emitApiConfig = (
   usersPermissions = false,
   apiTokens = false,
   webhooks = false,
+  graphql = false,
 ): string => {
+  // Strapi's graphql plugin config: a list's page size when a query names none, and the largest
+  // one allowed (-1 = no cap), as a new Strapi project ships them.
+  const graphqlKeys = graphql
+    ? `
+
+    'graphql' => [
+        'default_limit' => (int) env('CAMIS_GRAPHQL_DEFAULT_LIMIT', 10),
+        'max_limit' => (int) env('CAMIS_GRAPHQL_MAX_LIMIT', -1),
+    ],`
+    : "";
   // Where the media library keeps its files: unset, public/uploads, served at /uploads as Strapi's
   // local provider serves it; else a Laravel disk name (s3, …). The limit is Strapi's default.
   const uploadKeys = upload
@@ -82,7 +93,7 @@ declare(strict_types=1);
 return [
     // Requests per minute allowed on the unauthenticated credential endpoints
     // (POST /auth/local and /auth/local/register), keyed by client address.
-    'auth_throttle_per_minute' => max(1, (int) env('CAMIS_AUTH_THROTTLE_PER_MINUTE', ${AUTH_THROTTLE_PER_MINUTE})),${strapiKeys}${i18nKeys}${uploadKeys}${usersPermissions ? usersPermissionsConfigKeys() : ""}${apiTokens ? apiTokensConfigKeys() : ""}${webhooks ? webhooksConfigKeys() : ""}
+    'auth_throttle_per_minute' => max(1, (int) env('CAMIS_AUTH_THROTTLE_PER_MINUTE', ${AUTH_THROTTLE_PER_MINUTE})),${strapiKeys}${i18nKeys}${uploadKeys}${usersPermissions ? usersPermissionsConfigKeys() : ""}${apiTokens ? apiTokensConfigKeys() : ""}${webhooks ? webhooksConfigKeys() : ""}${graphqlKeys}
 ];
 `;
 };

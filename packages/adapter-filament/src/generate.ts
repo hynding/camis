@@ -127,9 +127,19 @@ export const filamentAdapter: GenerateAdapter = {
       localized,
       media: media.file,
       alwaysPopulateComponents: options.alwaysPopulateComponents === true,
+      graphql: options.graphql === true,
       guests,
       observedModels: new Set([...hooks.observedModels, ...aiObservedModels]),
     };
+    if (options.graphql === true && (apiStyle !== "strapi" || storage === "strapi")) {
+      gaps.push({
+        feature: "graphql",
+        location: {},
+        severity: "downgrade",
+        message:
+          "GraphQL is served on the Strapi API style over Laravel storage only; this project generates none.",
+      });
+    }
     const strapi =
       apiStyle === "strapi"
         ? storage === "strapi"
@@ -290,7 +300,16 @@ export const filamentAdapter: GenerateAdapter = {
     }
 
     const perm = emitPermissions(doc, ir.roles, storage, guests);
-    const allFiles = [...files, ...hooks.files, ...perm.files, ...aiGenFiles, deployFile(storage)];
+    const allFiles = [
+      ...files,
+      ...hooks.files,
+      ...perm.files,
+      ...aiGenFiles,
+      deployFile(
+        storage,
+        options.graphql === true && apiStyle === "strapi" && storage !== "strapi",
+      ),
+    ];
     return {
       files: allFiles,
       manifest: buildManifest(allFiles),

@@ -31,6 +31,15 @@ const fields = (block: string): Map<string, string> => {
   return out;
 };
 
+/**
+ * A definition with its fields in name order: a type lists its fields in its attributes' order,
+ * and the oracle project's Post declares its relations in another order than the fixture's.
+ */
+const shape = (block: string): string[] => [
+  block.slice(0, block.indexOf("{") + 1 || undefined),
+  ...[...fields(block).values()].sort(),
+];
+
 const oracle = blocks(
   readFileSync(join(__dirname, "__fixtures__/graphql-schema.strapi-php.graphql"), "utf8"),
 );
@@ -46,6 +55,21 @@ describe("GraphQL", () => {
     expect(paths.filter((p) => /graphql/i.test(p))).toEqual([]);
   });
 
+  it("reports, rather than drops, GraphQL where only the Strapi API style on Laravel storage serves it", () => {
+    for (const options of [
+      { apiStyle: "laravel" },
+      { apiStyle: "strapi", storageLayout: "strapi" },
+    ] as const) {
+      const other = filamentAdapter.generate(strapiApiBundle, {
+        projectName: "oyl",
+        graphql: true,
+        ...options,
+      });
+      expect(other.files.map((f) => f.path).filter((p) => /graphql/i.test(p))).toEqual([]);
+      expect(other.gaps.gaps.map((g) => g.feature)).toContain("graphql");
+    }
+  });
+
   const result = generate(true);
   const content = (p: string) => result.files.find((f) => f.path === p)?.content ?? "";
   const sdl = content("graphql/schema.graphql");
@@ -58,7 +82,14 @@ describe("GraphQL", () => {
       "routes/graphql.php",
     ])
       expect(result.files.map((f) => f.path)).toContain(path);
-    expect(content("routes/graphql.php")).toContain("Route::match(['get', 'post'], '/graphql'");
+    expect(content("routes/graphql.php")).toContain("->match(['get', 'post'], '/graphql'");
+  });
+
+  // strapi-php answers a token that does not verify on /graphql with the REST error body, a 401.
+  it("answers a refused request on /graphql with Strapi's error body", () => {
+    expect(content("app/Http/Middleware/StrapiErrors.php")).toContain(
+      "if (! $request->is('api/*', 'graphql')) {",
+    );
   });
 
   it("names and shapes every type it shares with Strapi's as Strapi does", () => {
@@ -66,7 +97,8 @@ describe("GraphQL", () => {
       (name) => oracle.has(name) && !["Query", "Mutation", "UploadFile"].includes(name),
     );
     expect(shared.length).toBeGreaterThan(40);
-    for (const name of shared) expect(ours.get(name), name).toBe(oracle.get(name));
+    for (const name of shared)
+      expect(shape(ours.get(name)!), name).toEqual(shape(oracle.get(name)!));
   });
 
   it("leaves out only the types later phases bring", () => {
@@ -93,6 +125,16 @@ describe("GraphQL", () => {
     theirs.delete("related");
     expect(fields(ours.get("UploadFile") ?? "")).toEqual(theirs);
     expect(result.gaps.gaps.map((g) => g.feature)).toContain("graphqlMorphRelations");
+  });
+
+  it("tells the deploy how the endpoint is installed and cached", () => {
+    const deploy = content("DEPLOY.md");
+    expect(deploy).toContain("composer require webonyx/graphql-php");
+    expect(deploy).toContain("routes/graphql.php");
+    expect(deploy).toContain("bootstrap/cache/camis-graphql.php");
+    expect(generate(false).files.find((f) => f.path === "DEPLOY.md")!.content).not.toContain(
+      "graphql",
+    );
   });
 
   it("keeps the generated schema stable", async () => {
