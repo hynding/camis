@@ -16,6 +16,8 @@ export interface ChildTableEmit {
   fk: string;
   relationName: string;
   emits: FieldEmit[];
+  /** A dynamic zone member's rows: they keep the item's place in the zone. */
+  ordered?: boolean;
 }
 
 export const childTableEmit = (ct: ContentType, table: ExpandedTable): ChildTableEmit => {
@@ -50,7 +52,7 @@ return new class extends Migration
     {
         Schema::create('${child.table}', function (Blueprint $table): void {
             $table->id();
-            $table->foreignId('${child.fk}')->constrained('${parent.table}')->cascadeOnDelete();
+            $table->foreignId('${child.fk}')->constrained('${parent.table}')->cascadeOnDelete();${child.ordered === true ? "\n            $table->unsignedInteger('position');" : ""}
 ${columns}
             $table->timestamps();
         });
@@ -65,7 +67,12 @@ ${columns}
 };
 
 export const emitChildModel = (child: ChildTableEmit): string => {
-  const fillable = child.emits.map((e) => `        '${e.column}',`).join("\n");
+  const fillable = [
+    ...(child.ordered === true ? ["position"] : []),
+    ...child.emits.map((e) => e.column),
+  ]
+    .map((column) => `        '${column}',`)
+    .join("\n");
   const casts = child.emits
     .filter((e) => e.cast !== undefined)
     .map((e) => `            '${e.column}' => ${e.cast},`)

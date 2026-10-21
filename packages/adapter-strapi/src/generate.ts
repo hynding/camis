@@ -55,20 +55,6 @@ const softDeleteGaps = (doc: IrDocument): CapabilityGap[] =>
       }),
     );
 
-const dynamicZoneGaps = (doc: IrDocument): CapabilityGap[] =>
-  doc.contentTypes.flatMap((ct) =>
-    ct.fields
-      .filter((f) => f.type === "dynamicZone")
-      .map(
-        (f): CapabilityGap => ({
-          feature: "dynamicZone",
-          location: { contentType: ct.name, field: f.name },
-          severity: "downgrade",
-          message: `dynamicZone is not supported yet; "${ct.name}.${f.name}" is dropped.`,
-        }),
-      ),
-  );
-
 export const strapiAdapter: GenerateAdapter = {
   target: "strapi",
   generate: (ir, options): GenerationResult => {
@@ -122,7 +108,7 @@ export const strapiAdapter: GenerateAdapter = {
       manifest: buildManifest(allFiles),
       gaps: {
         target: "strapi",
-        gaps: [...softDeleteGaps(doc), ...dynamicZoneGaps(doc), ...perm.gaps, ...aiGaps],
+        gaps: [...softDeleteGaps(doc), ...perm.gaps, ...aiGaps],
       },
     };
   },

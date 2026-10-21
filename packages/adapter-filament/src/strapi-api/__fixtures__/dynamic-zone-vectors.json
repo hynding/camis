@@ -1,0 +1,156 @@
+{
+  "about": "Strapi 5 dynamic zones over REST, checked against strapi-php. Run on an empty database: seeds in order, then reads, then writes in order, with strapi-populate-vectors.mjs. Landing has draft and publish and a blocks zone of Hero (heading, subheading and a Money component) and Quantity items. publishedAt is compared as present or absent.",
+  "publishedAt": "presence",
+  "seed": [
+    {
+      "path": "/landings",
+      "as": "landings:Home",
+      "data": {
+        "title": "Home",
+        "blocks": [
+          {
+            "__component": "shared.hero",
+            "heading": "Hi",
+            "subheading": "Welcome",
+            "price": { "minor": 5, "currency": "EUR" }
+          },
+          { "__component": "shared.quantity", "amount": 2, "unit": "kg" },
+          { "__component": "shared.hero", "heading": "Bye" }
+        ]
+      }
+    },
+    { "path": "/landings", "as": "landings:Plain", "data": { "title": "Plain" } },
+    {
+      "path": "/landings",
+      "query": "status=draft",
+      "as": "landings:Draft",
+      "data": {
+        "title": "Draft",
+        "blocks": [{ "__component": "shared.hero", "heading": "Soon" }]
+      }
+    }
+  ],
+  "reads": [
+    {
+      "name": "a zone is left out unless populate names it",
+      "path": "/landings/@landings:Home",
+      "query": ""
+    },
+    {
+      "name": "populate=* sends a zone's items in order",
+      "path": "/landings",
+      "query": "populate=*&sort=title"
+    },
+    {
+      "name": "populate a zone by name",
+      "path": "/landings/@landings:Home",
+      "query": "populate=blocks"
+    },
+    {
+      "name": "populate a zone with true",
+      "path": "/landings/@landings:Home",
+      "query": "populate[blocks]=true"
+    },
+    {
+      "name": "populate inside a zone's items",
+      "path": "/landings/@landings:Home",
+      "query": "populate[blocks][populate]=*"
+    },
+    {
+      "name": "on keeps the components it names, populated as it says",
+      "path": "/landings/@landings:Home",
+      "query": "populate[blocks][on][shared.hero][populate]=price"
+    },
+    {
+      "name": "on with true",
+      "path": "/landings/@landings:Home",
+      "query": "populate[blocks][on][shared.quantity]=true"
+    },
+    {
+      "name": "fields inside on",
+      "path": "/landings/@landings:Home",
+      "query": "populate[blocks][on][shared.hero][fields][0]=heading"
+    },
+    {
+      "name": "a draft keeps its zone",
+      "path": "/landings/@landings:Draft",
+      "query": "status=draft&populate=blocks"
+    },
+    {
+      "name": "a zone cannot be filtered",
+      "path": "/landings",
+      "query": "filters[blocks][heading][$eq]=Hi"
+    },
+    { "name": "a zone cannot be sorted", "path": "/landings", "query": "sort=blocks" },
+    { "name": "a zone is not a field", "path": "/landings", "query": "fields[0]=blocks" }
+  ],
+  "defaultQuery": "populate[blocks][populate]=*",
+  "writes": [
+    {
+      "name": "an update without the zone keeps it",
+      "method": "PUT",
+      "path": "/landings/@landings:Home",
+      "data": { "title": "Home, again" }
+    },
+    {
+      "name": "an update with the zone replaces it, in its new order",
+      "method": "PUT",
+      "path": "/landings/@landings:Home",
+      "data": {
+        "blocks": [
+          { "__component": "shared.quantity", "amount": 9, "unit": "g" },
+          { "__component": "shared.hero", "heading": "New", "price": { "currency": "USD" } }
+        ]
+      }
+    },
+    {
+      "name": "the published version shows the new zone",
+      "method": "GET",
+      "path": "/landings/@landings:Home"
+    },
+    {
+      "name": "the draft shows it too",
+      "method": "GET",
+      "path": "/landings/@landings:Home",
+      "query": "status=draft&populate[blocks][populate]=*"
+    },
+    {
+      "name": "an item naming an unknown component is refused",
+      "path": "/landings",
+      "data": {
+        "title": "Bad",
+        "blocks": [{ "__component": "shared.nope", "heading": "Hi" }]
+      }
+    },
+    {
+      "name": "an item whose component the zone does not hold is dropped",
+      "path": "/landings",
+      "as": "landings:Other",
+      "data": {
+        "title": "Other",
+        "blocks": [
+          { "__component": "shared.money", "minor": 1 },
+          { "__component": "shared.hero", "heading": "Kept" }
+        ]
+      }
+    },
+    {
+      "name": "an item cannot name an id the entry does not hold",
+      "method": "PUT",
+      "path": "/landings/@landings:Home",
+      "data": { "blocks": [{ "__component": "shared.hero", "id": 999, "heading": "Id" }] }
+    },
+    {
+      "name": "an empty zone clears it",
+      "method": "PUT",
+      "path": "/landings/@landings:Home",
+      "data": { "blocks": [] }
+    },
+    {
+      "name": "a deleted entry takes its zone with it",
+      "method": "DELETE",
+      "path": "/landings/@landings:Other",
+      "query": ""
+    }
+  ]
+}

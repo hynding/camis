@@ -81,14 +81,14 @@ describe("importCommand", () => {
         info: { singularName: "page", pluralName: "pages", displayName: "Page" },
         attributes: {
           title: { type: "string" },
-          blocks: { type: "dynamiczone", components: ["shared.quote"] },
+          related: { type: "relation", relation: "morphToMany" },
         },
       }),
     );
     const lines: string[] = [];
     const code = await importCommand("strapi", dir, join(dir, "ir.json"), memIo({}, lines, {}));
     expect(code).toBe(0);
-    expect(lines.join("\n")).toMatch(/⚠ dynamiczone @ Page\.blocks/);
+    expect(lines.join("\n")).toMatch(/⚠ morphRelation @ Page\.related/);
   });
   it("passes --upsert-by through to the Strapi importer", async () => {
     const dir = await mkdtemp(join(tmpdir(), "camis-import-"));

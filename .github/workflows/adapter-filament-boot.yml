@@ -230,6 +230,17 @@ jobs:
           F=../packages/adapter-filament/src/strapi-api/__fixtures__
           node ../packages/adapter-filament/scripts/strapi-populate-vectors.mjs http://127.0.0.1:8765/api \
             --token "$T" --vectors $F/media-vectors.json --expected $F/media-vectors.expected.json
+      - name: Strapi dynamic zone vectors (recorded from strapi-php)
+        run: |
+          cd app
+          php artisan migrate:fresh --force
+          php artisan db:seed --class="Database\\Seeders\\RolePermissionSeeder" --force
+          T=$(curl -s -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' \
+            --data '{"username":"zones","email":"zones@example.test","password":"secret1"}' \
+            http://127.0.0.1:8765/api/auth/local/register | jq -r .jwt)
+          F=../packages/adapter-filament/src/strapi-api/__fixtures__
+          node ../packages/adapter-filament/scripts/strapi-populate-vectors.mjs http://127.0.0.1:8765/api \
+            --token "$T" --vectors $F/dynamic-zone-vectors.json --expected $F/dynamic-zone-vectors.expected.json
       - name: Strapi users-permissions vectors (recorded from strapi-php)
         run: |
           cd app
@@ -281,14 +292,14 @@ jobs:
           node ../packages/adapter-filament/scripts/strapi-auth-vectors.mjs http://127.0.0.1:8765/api \
             --hook "bash ../packages/adapter-filament/scripts/strapi-auth-hook.sh" \
             --vectors $F/session-vectors.json --expected $F/session-vectors.expected.json
-      - name: Filament admin publishes drafts, translates, keeps the media library, manages users and API tokens
+      - name: Filament admin publishes drafts, translates, keeps the media library, manages users and API tokens, builds dynamic zones
         run: |
           cd app
           # The cached config would point the tests at the served database instead of :memory:.
           php artisan config:clear
           S=../packages/adapter-filament/scripts/php
-          cp $S/DraftAdminTest.php $S/LocaleAdminTest.php $S/MediaAdminTest.php $S/UsersAdminTest.php $S/ProvidersTest.php $S/ApiTokensTest.php $S/WebhooksTest.php tests/Feature/
-          php artisan test tests/Feature/DraftAdminTest.php tests/Feature/LocaleAdminTest.php tests/Feature/MediaAdminTest.php tests/Feature/UsersAdminTest.php tests/Feature/ProvidersTest.php tests/Feature/ApiTokensTest.php tests/Feature/WebhooksTest.php
+          cp $S/DraftAdminTest.php $S/LocaleAdminTest.php $S/MediaAdminTest.php $S/UsersAdminTest.php $S/ProvidersTest.php $S/ApiTokensTest.php $S/WebhooksTest.php $S/DynamicZonesTest.php tests/Feature/
+          php artisan test tests/Feature/DraftAdminTest.php tests/Feature/LocaleAdminTest.php tests/Feature/MediaAdminTest.php tests/Feature/UsersAdminTest.php tests/Feature/ProvidersTest.php tests/Feature/ApiTokensTest.php tests/Feature/WebhooksTest.php tests/Feature/DynamicZonesTest.php
       - name: Server log on failure
         if: failure()
         run: cat app/serve.log app/storage/logs/laravel.log "$RUNNER_TEMP/oauth/serve.log" || true

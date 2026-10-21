@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { expression } from "@camis/expr";
-import { fieldName, typeName } from "./identifiers";
+import { apiName, fieldName, typeName } from "./identifiers";
 import { ai } from "./ai";
 
 export const FIELD_TYPES = [
@@ -32,6 +32,8 @@ export type RelationKind = (typeof RELATION_KINDS)[number];
 
 const common = {
   name: fieldName,
+  /** The key the field goes by on the API when it is not its name: an imported project's own. */
+  names: z.object({ api: apiName.optional() }).optional(),
   required: z.boolean().optional(),
   validate: expression.optional(),
   visibleWhen: expression.optional(),
@@ -187,3 +189,10 @@ export type Field = z.infer<typeof field>;
 export type ComponentFieldT = z.infer<typeof componentField>;
 
 export { typeName };
+
+/** The key a field goes by on the API: the one it names, else its own name. */
+export const fieldApiName = <
+  F extends { name: string; names?: { api?: string | undefined } | undefined },
+>(
+  f: F,
+): string => f.names?.api ?? f.name;

@@ -1,9 +1,10 @@
-import type {
-  CapabilityGap,
-  Component,
-  ComponentFieldT,
-  ContentType,
-  Field,
+import {
+  fieldApiName,
+  type CapabilityGap,
+  type Component,
+  type ComponentFieldT,
+  type ContentType,
+  type Field,
 } from "@camis/ir-schema";
 import { irField } from "./attributes";
 import { irName } from "./names";
@@ -58,7 +59,8 @@ export const irContentType = (
     contentType.options = { ...contentType.options, localized: true };
     const attributes = asRecord(schema.attributes);
     contentType.fields = fields.map((f) =>
-      asRecord(asRecord(asRecord(attributes[f.name]).pluginOptions).i18n).localized === false
+      asRecord(asRecord(asRecord(attributes[fieldApiName(f)]).pluginOptions).i18n).localized ===
+      false
         ? { ...f, localized: false }
         : f,
     );
@@ -71,8 +73,19 @@ export const irComponent = (
   schema: Record<string, unknown>,
   group?: string,
 ): { component: Component; gaps: CapabilityGap[] } => {
-  const { fields, gaps } = fieldsFromAttributes(asRecord(schema.attributes), {
+  const { fields: all, gaps } = fieldsFromAttributes(asRecord(schema.attributes), {
     component: componentName,
+  });
+  // Strapi allows a dynamic zone only on a content type; one in a component has no IR form.
+  const fields = all.filter((f) => {
+    if (f.type !== "dynamicZone") return true;
+    gaps.push({
+      feature: "dynamiczone",
+      location: { component: componentName, field: f.name },
+      severity: "downgrade",
+      message: `dynamic zone "${fieldApiName(f)}" inside component "${componentName}" is not representable; skipped.`,
+    });
+    return false;
   });
   const collection = str(schema.collectionName);
   const names: { collection?: string; group?: string } = {};
@@ -80,8 +93,8 @@ export const irComponent = (
   if (group !== undefined && group !== "") names.group = group;
   const component: Component = {
     name: componentName,
-    // dynamicZone fields are routed to gaps by irField (components disallow dynamicZone per
-    // D6), so the fields array is safely narrowed to ComponentFieldT at runtime.
+    // dynamicZone fields were routed to gaps above (components disallow dynamicZone per D6), so
+    // the fields array is safely narrowed to ComponentFieldT at runtime.
     fields: fields as ComponentFieldT[],
     ...(Object.keys(names).length > 0 ? { names } : {}),
   };

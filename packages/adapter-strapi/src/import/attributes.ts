@@ -1,6 +1,6 @@
 import { FIELD_TYPES, type CapabilityGap, type Field } from "@camis/ir-schema";
 import { fromStrapiMediaKinds } from "../media-kinds";
-import { irName } from "./names";
+import { fieldNameOf, irName } from "./names";
 
 export interface IrFieldResult {
   field?: Field;
@@ -29,16 +29,35 @@ const SCALAR_CONSTRAINTS = [
   "multiple",
 ] as const;
 
+const componentName = (uid: unknown): string => irName(String(uid).split(".").slice(1).join("-"));
+
+// A snake_case attribute keeps its name on the API: the IR field is camelCase and names it.
+const named = (attribute: string): { name: string; names?: { api: string } } => {
+  const name = fieldNameOf(attribute);
+  return name === attribute ? { name } : { name, names: { api: attribute } };
+};
+
 export const irField = (
-  name: string,
+  attribute: string,
   attr: Record<string, unknown>,
   location: CapabilityGap["location"],
 ): IrFieldResult => {
   const strapiType = String(attr.type);
   const irType = REVERSE_TYPE[strapiType] ?? strapiType;
+  const { name } = named(attribute);
 
   if (strapiType === "relation") {
     if (attr.mappedBy !== undefined) return { skip: true };
+    if (String(attr.relation).startsWith("morph")) {
+      return {
+        gap: {
+          feature: "morphRelation",
+          location: { ...location, field: name },
+          severity: "downgrade",
+          message: `polymorphic relation "${attribute}" (${String(attr.relation)}) has no IR representation; skipped.`,
+        },
+      };
+    }
     const rawTarget = String(attr.target);
     const builtinUser = rawTarget === PLUGIN_USER_UID;
     if (rawTarget.startsWith("plugin::") && !builtinUser) {
@@ -47,28 +66,54 @@ export const irField = (
           feature: "pluginRelation",
           location: { ...location, field: name },
           severity: "downgrade",
-          message: `relation "${name}" targets plugin type "${rawTarget}", which has no IR representation; skipped.`,
+          message: `relation "${attribute}" targets plugin type "${rawTarget}", which has no IR representation; skipped.`,
         },
       };
     }
     const target = builtinUser ? "User" : irName(rawTarget.split("::")[1]?.split(".")[0] ?? "");
     const field: Record<string, unknown> = {
       type: "relation",
-      name,
+      ...named(attribute),
       relationKind: attr.relation,
       target,
     };
-    if (attr.inversedBy !== undefined) field.inverse = attr.inversedBy;
-    return builtinUser ? { field: field as Field, builtinUser: true } : { field: field as Field };
+    let gap: CapabilityGap | undefined;
+    if (attr.inversedBy !== undefined) {
+      const inversedBy = String(attr.inversedBy);
+      field.inverse = fieldNameOf(inversedBy);
+      // The inverse side is not a field of its own in the IR, so it has nowhere to keep its key.
+      if (field.inverse !== inversedBy) {
+        gap = {
+          feature: "inverseApiName",
+          location: { ...location, field: name },
+          severity: "downgrade",
+          message: `the inverse of "${attribute}", "${inversedBy}", goes by "${String(field.inverse)}" on the API.`,
+        };
+      }
+    }
+    return {
+      field: field as Field,
+      ...(gap === undefined ? {} : { gap }),
+      ...(builtinUser ? { builtinUser: true as const } : {}),
+    };
   }
   if (strapiType === "component") {
-    const compName = irName(String(attr.component).split(".").slice(1).join("-"));
     return {
       field: {
         type: "component",
-        name,
-        component: compName,
+        ...named(attribute),
+        component: componentName(attr.component),
         repeatable: Boolean(attr.repeatable),
+      } as Field,
+    };
+  }
+  if (strapiType === "dynamiczone") {
+    const components = Array.isArray(attr.components) ? attr.components : [];
+    return {
+      field: {
+        type: "dynamicZone",
+        ...named(attribute),
+        components: components.map(componentName),
       } as Field,
     };
   }
@@ -84,13 +129,14 @@ export const irField = (
         feature: strapiType,
         location: { ...location, field: name },
         severity: "downgrade",
-        message: `Strapi attribute type "${strapiType}" on "${name}" is not representable; skipped.`,
+        message: `Strapi attribute type "${strapiType}" on "${attribute}" is not representable; skipped.`,
       },
     };
   }
 
-  const field: Record<string, unknown> = { type: irType, name };
+  const field: Record<string, unknown> = { type: irType, ...named(attribute) };
   for (const k of SCALAR_CONSTRAINTS) if (attr[k] !== undefined) field[k] = attr[k];
+  if (typeof attr.targetField === "string") field.targetField = fieldNameOf(attr.targetField);
   if (irType === "enumeration") field.values = attr.enum;
   if (irType === "media" && Array.isArray(attr.allowedTypes)) {
     field.allowedTypes = fromStrapiMediaKinds(attr.allowedTypes);

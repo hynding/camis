@@ -150,6 +150,18 @@ export const strapiApiBundle: IrBundle = {
         options: { localized: true, draftPublish: true },
         fields: [{ type: "string", name: "title" }],
       },
+      // Dynamic zones (dynamic-zone-vectors.json): Landing's blocks hold Hero and Quantity items,
+      // with draft and publish so publishing copies them.
+      {
+        name: "Landing",
+        kind: "collection",
+        names: { plural: "Landings" },
+        options: { draftPublish: true },
+        fields: [
+          { type: "string", name: "title", required: true },
+          { type: "dynamicZone", name: "blocks", components: ["Hero", "Quantity"] },
+        ],
+      },
       // Relation targets for Book: a to-one with an inverse side, and a to-many without one.
       {
         name: "Author",
@@ -197,6 +209,15 @@ export const strapiApiBundle: IrBundle = {
       },
     ],
     components: [
+      // A dynamic zone's member (dynamic-zone-vectors.json), holding a nested component.
+      {
+        name: "Hero",
+        fields: [
+          { type: "string", name: "heading", required: true },
+          { type: "text", name: "subheading" },
+          { type: "component", name: "price", component: "Money", repeatable: false },
+        ],
+      },
       {
         name: "Money",
         fields: [
@@ -254,6 +275,7 @@ export const strapiApiBundle: IrBundle = {
         { contentType: "Category", actions: ["create", "read", "update", "delete"] },
         { contentType: "Article", actions: ["create", "read", "update", "delete"] },
         { contentType: "Page", actions: ["create", "read", "update", "delete", "publish"] },
+        { contentType: "Landing", actions: ["create", "read", "update", "delete", "publish"] },
       ],
     },
     {

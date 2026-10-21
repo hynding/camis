@@ -22,6 +22,19 @@ describe("contentType node refinements", () => {
     expect(ct([{ type: "string", name: "id" }]).success).toBe(false);
   });
 
+  it("rejects two fields going by one key on the API", () => {
+    expect(
+      ct([
+        { type: "string", name: "heroTitle", names: { api: "title" } },
+        { type: "text", name: "title" },
+      ]).success,
+    ).toBe(false);
+  });
+
+  it("rejects the reserved key id on the API", () => {
+    expect(ct([{ type: "string", name: "legacyId", names: { api: "id" } }]).success).toBe(false);
+  });
+
   it("accepts uid.targetField pointing at a sibling (S10)", () => {
     expect(
       ct([

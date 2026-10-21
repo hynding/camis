@@ -31,10 +31,10 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\Relation;
 
-/** $serializer is a generated serializer class: toWire(), FIELDS and COMPONENTS. */
+/** $serializer is a generated serializer class: toWire(), FIELDS, COMPONENTS and ZONES. */
 final class StrapiPopulate
 {
-    private const PARAMS = ['fields', 'filters', 'sort', 'populate', 'count'];
+    private const PARAMS = ['fields', 'filters', 'sort', 'populate', 'count', 'on'];
 
     public static function one(Model $row, array $params, string $serializer, ?Authenticatable $viewer): array
     {
@@ -358,7 +358,9 @@ final class StrapiPopulate
         $wire = $serializer::toWire($row);
         $always = (bool) config('camis.rest.always_populate_components', false);
         foreach ($serializer::COMPONENTS as $key) {
-            if (array_key_exists($key, $tree)) {
+            if (isset($serializer::ZONES[$key]) && (array_key_exists($key, $tree) || $always)) {
+                $wire[$key] = self::zone($wire[$key] ?? [], $key, $tree[$key] ?? [], $serializer);
+            } elseif (array_key_exists($key, $tree)) {
                 $wire[$key] = self::component($wire[$key] ?? null, $key, $tree[$key], $serializer);
             } elseif (! $always) {
                 unset($wire[$key]);
@@ -401,6 +403,57 @@ final class StrapiPopulate
         return $repeatable
             ? array_map(fn (array $item) => array_intersect_key($item, $keep), $value)
             : array_intersect_key($value, $keep);
+    }
+
+    /**
+     * A populated dynamic zone: its items in order, each component inside an item left out unless
+     * the zone's populate names it. On keeps only the components it names, each with its own
+     * fields and populate.
+     */
+    private static function zone(array $items, string $key, array $sub, string $serializer): array
+    {
+        $members = $serializer::ZONES[$key];
+        $on = is_array($sub['on'] ?? null) ? $sub['on'] : null;
+        $zone = [];
+        foreach ($items as $item) {
+            $uid = $item['__component'];
+            $own = $members[$uid]['components'] ?? [];
+            if ($on === null) {
+                $zone[] = self::inside($item, $sub['populate'] ?? null, $own);
+            } elseif (array_key_exists($uid, $on) && ! in_array($on[$uid], [false, 'false'], true)) {
+                $fragment = is_array($on[$uid]) ? $on[$uid] : [];
+                $zone[] = self::inside(self::fields($item, $fragment['fields'] ?? null, $own), $fragment['populate'] ?? null, $own);
+            }
+        }
+
+        return $zone;
+    }
+
+    /** A zone item without the components of its own that $populate does not name. */
+    private static function inside(array $item, mixed $populate, array $own): array
+    {
+        if ($populate === '*' || $populate === true || $populate === 'true') {
+            return $item;
+        }
+        $named = match (true) {
+            is_string($populate) => array_map('trim', explode(',', $populate)),
+            is_array($populate) && array_is_list($populate) => $populate,
+            is_array($populate) => array_keys($populate),
+            default => [],
+        };
+
+        return array_diff_key($item, array_flip(array_diff($own, $named)));
+    }
+
+    /** A zone item narrowed to $fields, keeping its id, its component and its own components. */
+    private static function fields(array $item, mixed $fields, array $own): array
+    {
+        if ($fields === null || $fields === '*') {
+            return $item;
+        }
+        $wanted = is_string($fields) ? array_map('trim', explode(',', $fields)) : (array) $fields;
+
+        return array_intersect_key($item, array_flip(['id', '__component', ...$own, ...$wanted]));
     }
 
     /** @return list<string> the scalar keys of an embedded component, relative to it */

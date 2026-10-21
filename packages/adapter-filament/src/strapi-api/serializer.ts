@@ -1,6 +1,13 @@
 import type { StorageLayout } from "@camis/adapter-kernel";
 import { PHP_MARKER } from "../hooks/names";
-import type { WireChild, WireRelation, WireScalar, WireShape } from "./wire-shape";
+import type {
+  WireChild,
+  WireRelation,
+  WireScalar,
+  WireShape,
+  WireZone,
+  WireZoneMember,
+} from "./wire-shape";
 
 const NUMERIC_INT = new Set(["integer"]);
 // Strapi renders a `biginteger` as a string: a 64-bit value does not survive a JSON number.
@@ -83,6 +90,8 @@ const toWireBody = (shape: WireShape, indent: string, layout: StorageLayout): st
       `$m->${c.relation}->map(fn ($c) => self::nested([\n${render(inner, rowIndent)}\n${closeIndent}]))->filter(fn ($r) => $r !== null)->values()->all()`,
     );
   }
+  if (layout === "laravel")
+    for (const z of shape.zones) insert(root, [z.key], zoneWire(z, `${indent}${UNIT}`));
   insert(root, ["createdAt"], `$m->created_at${ZULU_MS}`);
   insert(root, ["updatedAt"], `$m->updated_at${ZULU_MS}`);
   // Strapi stamps publishedAt on every write of a type without draft and publish.
@@ -91,6 +100,20 @@ const toWireBody = (shape: WireShape, indent: string, layout: StorageLayout): st
   if (shape.localized && layout === "laravel") insert(root, ["locale"], "$m->locale");
   return render(root, indent);
 };
+
+// One member's items as [position, wire item] pairs, which `self::zone` puts back in the zone's order.
+const zoneMemberWire = (member: WireZoneMember, indent: string): string => {
+  const item = node();
+  insert(item, ["__component"], `'${member.uid}'`);
+  insert(item, ["id"], "$c->id");
+  for (const s of member.scalars) insert(item, s.key, read(s, "$c", "laravel"));
+  return `${indent}...$m->${member.relation}->map(fn ($c) => [$c->position, self::omitNulls([
+${render(item, `${indent}${UNIT}`)}
+${indent}])])->all(),`;
+};
+
+const zoneWire = (zone: WireZone, indent: string): string =>
+  `self::zone([\n${zone.members.map((m) => zoneMemberWire(m, indent)).join("\n")}\n${indent.slice(UNIT.length)}])`;
 
 const fromWireColumns = (scalars: WireScalar[], src: string, indent: string): string =>
   scalars
@@ -118,6 +141,52 @@ ${indent}}`;
   });
   return [`${indent}$children = [];`, ...blocks].join("\n");
 };
+
+// A zone's items, refused or dropped as Strapi does by `StrapiZones::items`, each member's columns
+// read from its item. Set only when the payload mentions the zone, like the children above.
+const fromWireZoneStatements = (zones: WireZone[], indent: string): string =>
+  zones
+    .map((z) => {
+      const l1 = `${indent}${UNIT}`;
+      const l2 = `${l1}${UNIT}`;
+      const l3 = `${l2}${UNIT}`;
+      const arms = z.members
+        .map((m) => `${l2}'${m.uid}' => [\n${fromWireColumns(m.scalars, "$item", l3)}\n${l2}],`)
+        .join("\n");
+      return `${indent}if (array_key_exists('${z.key}', $data)) {
+${l1}$children['${z.key}'] = StrapiZones::items($data['${z.key}'], '${z.key}', self::ZONES['${z.key}'], fn (string $uid, array $item) => match ($uid) {
+${arms}
+${l1}});
+${indent}}`;
+    })
+    .join("\n");
+
+const zoneSyncBody = (zones: WireZone[], indent: string): string =>
+  zones
+    .map(
+      (z) => `${indent}if (array_key_exists('${z.key}', $children)) {
+${indent}${UNIT}StrapiZones::sync($m, '${z.key}', self::ZONES['${z.key}'], $children['${z.key}']);
+${indent}}`,
+    )
+    .join("\n");
+
+const zoneEntry = (zone: WireZone, indent: string): string =>
+  `${indent}'${zone.key}' => [\n${zone.members
+    .map(
+      (m) =>
+        `${indent}${UNIT}'${m.uid}' => ['relation' => '${m.relation}', 'components' => [${m.components.map((c) => `'${c}'`).join(", ")}]],`,
+    )
+    .join("\n")}\n${indent}],`;
+
+const zoneHelper = `
+
+    /** @param list<array{0: int, 1: array}> $items [position, item] pairs from every member */
+    private static function zone(array $items): array
+    {
+        usort($items, fn (array $a, array $b) => $a[0] <=> $b[0]);
+
+        return array_column($items, 1);
+    }`;
 
 const syncBody = (children: WireChild[], indent: string): string =>
   children
@@ -156,7 +225,8 @@ const relationEntry = (r: WireRelation, indent: string): string =>
  * The wire path → column map `App\Support\StrapiQuery` filters, sorts and selects by: every
  * scalar Strapi exposes (`id`, `documentId`, the timestamps, embedded component scalars as dotted
  * paths), each repeatable component as its child relation with the child's own map, and each
- * relation as its Eloquent relation, target and storage.
+ * relation as its Eloquent relation, target and storage, and each dynamic zone as a key that
+ * is none of these.
  */
 const fieldsConstant = (shape: WireShape): string => {
   const l2 = `${UNIT}${UNIT}`;
@@ -180,18 +250,32 @@ const fieldsConstant = (shape: WireShape): string => {
   const rows = [
     ...[id, documentId, ...shape.scalars].map((s) => fieldEntry(s, l2)),
     ...children,
+    // A zone is a key Strapi knows but will not filter, sort or select by.
+    ...shape.zones.map((z) => `${l2}'${z.key}' => ['zone' => true],`),
     ...shape.relations.map((r) => relationEntry(r, l2)),
     ...timestamps.map((s) => fieldEntry(s, l2)),
   ];
   const components = shape.components.map((c) => `'${c}'`).join(", ");
-  return `\n    /** Wire path → column, for StrapiQuery's filters, sort and fields. */\n    public const FIELDS = [\n${rows.join("\n")}\n    ];\n\n    /** Component keys, which Strapi leaves off the wire unless populate names them. */\n    public const COMPONENTS = [${components}];\n\n    /** Whether each document has a draft and, once published, a published version. */\n    public const DRAFT_PUBLISH = ${shape.draftPublish};\n\n    /** Whether each document keeps one row per locale. */\n    public const LOCALIZED = ${shape.localized};\n`;
+  const zones =
+    shape.zones.length === 0
+      ? "[]"
+      : `[\n${shape.zones.map((z) => zoneEntry(z, l2)).join("\n")}\n    ]`;
+  return `\n    /** Wire path → column, for StrapiQuery's filters, sort and fields. */\n    public const FIELDS = [\n${rows.join("\n")}\n    ];\n\n    /** Component keys, which Strapi leaves off the wire unless populate names them. */\n    public const COMPONENTS = [${components}];\n\n    /** Each dynamic zone's member components by uid: the child relation its items live in, and its own component keys. */\n    public const ZONES = ${zones};\n\n    /** Whether each document has a draft and, once published, a published version. */\n    public const DRAFT_PUBLISH = ${shape.draftPublish};\n\n    /** Whether each document keeps one row per locale. */\n    public const LOCALIZED = ${shape.localized};\n`;
 };
 
 export const emitSerializer = (shape: WireShape, layout: StorageLayout = "laravel"): string => {
   const l2 = `${UNIT}${UNIT}`; // method-body statements
   const l3 = `${UNIT}${UNIT}${UNIT}`; // array literal entries
-  const syncChildrenBody = shape.children.length === 0 ? "" : `\n${syncBody(shape.children, l2)}`;
+  const zones = layout === "laravel" ? shape.zones : [];
+  const syncChildrenBody = [
+    ...(shape.children.length === 0 ? [] : [syncBody(shape.children, l2)]),
+    ...(zones.length === 0 ? [] : [zoneSyncBody(zones, l2)]),
+  ]
+    .map((body) => `\n${body}`)
+    .join("");
   const hasHelperBody = shape.children.length === 0 ? "" : hasHelper;
+  const zoneHelperBody = zones.length === 0 ? "" : zoneHelper;
+  const zoneImport = zones.length === 0 ? "" : "\nuse App\\Support\\StrapiZones;";
   return `<?php
 ${PHP_MARKER}
 
@@ -199,7 +283,7 @@ declare(strict_types=1);
 
 namespace App\\Http\\Serializers;
 
-use App\\Models\\${shape.model};
+use App\\Models\\${shape.model};${zoneImport}
 
 final class ${shape.model}Serializer
 {${layout === "laravel" ? fieldsConstant(shape) : ""}
@@ -217,7 +301,7 @@ ${toWireBody(shape, l3, layout)}
         $columns = array_filter([
 ${fromWireColumns(shape.scalars, "$data", l3)}
         ], fn ($v) => $v !== null);
-${fromWireChildStatements(shape.children, l2)}
+${fromWireChildStatements(shape.children, l2)}${zones.length === 0 ? "" : `\n${fromWireZoneStatements(zones, l2)}`}
 
         return ['columns' => $columns, 'children' => $children];
     }
@@ -250,7 +334,7 @@ ${fromWireChildStatements(shape.children, l2)}
         }
 
         return $cur;
-    }${hasHelperBody}
+    }${hasHelperBody}${zoneHelperBody}
 }
 `;
 };

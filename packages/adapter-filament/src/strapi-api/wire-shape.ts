@@ -1,9 +1,9 @@
 import { expandComponents } from "@camis/adapter-kernel";
-import type { ContentType, FieldType, IrDocument } from "@camis/ir-schema";
+import { fieldApiName, type ContentType, type FieldType, type IrDocument } from "@camis/ir-schema";
 import { childTableEmit } from "../components";
 import { filamentNames, snake, snakeColumn } from "../names";
 import { FILE_UID } from "./media-runtime";
-import { camelKey, kebab } from "./names";
+import { componentUid, kebab } from "./names";
 
 export interface WireScalar {
   key: string[];
@@ -15,6 +15,21 @@ export interface WireChild {
   relation: string;
   model: string;
   scalars: WireScalar[];
+}
+/** One component a dynamic zone holds: its uid on the wire and the child relation its items live in. */
+export interface WireZoneMember {
+  uid: string;
+  /** The component's display name, as the admin labels its items. */
+  label: string;
+  relation: string;
+  model: string;
+  scalars: WireScalar[];
+  /** Its own component keys, which populate inside the zone names. */
+  components: string[];
+}
+export interface WireZone {
+  key: string;
+  members: WireZoneMember[];
 }
 /** How a relation is stored, from this side: the Eloquent relation type `relations.ts` declares. */
 export type WireRelationKind =
@@ -51,8 +66,9 @@ export interface WireShape {
   upsert: boolean;
   scalars: WireScalar[];
   children: WireChild[];
-  /** The top-level component keys, embedded or repeatable, in IR order: what populate can name. */
+  /** The top-level component keys, embedded or repeatable, and the zones, in IR order: what populate can name. */
   components: string[];
+  zones: WireZone[];
   /** Relations to other content types, both the sides this type declares and their inverses. */
   relations: WireRelation[];
   /** Whether this type keeps a draft and a published version of each document. */
@@ -80,28 +96,51 @@ export const wireShape = (
       (f) =>
         f.type !== "relation" &&
         f.type !== "component" &&
+        f.type !== "dynamicZone" &&
         (f.type !== "media" || fileModel === undefined),
     )
-    .map((f) => ({ key: [camelKey(f.name)], column: snakeColumn(f.name), type: f.type }));
+    .map((f) => ({ key: [fieldApiName(f)], column: snakeColumn(f.name), type: f.type }));
   const embedded: WireScalar[] = expansion.scalars.map((s) => ({
-    key: s.path.map(camelKey),
+    key: s.apiPath,
     column: s.path.map(snakeColumn).join("_"),
     type: s.field.type,
   }));
   const children: WireChild[] = expansion.tables.map((t) => {
     const child = childTableEmit(ct, t);
     return {
-      key: t.path.map(camelKey),
+      key: t.apiPath,
       relation: child.relationName,
       model: child.model,
       scalars: t.scalars.map((s) => ({
-        key: s.path.map(camelKey),
+        key: s.apiPath,
         column: s.path.map(snakeColumn).join("_"),
         type: s.field.type,
       })),
     };
   });
-  const components = ct.fields.filter((f) => f.type === "component").map((f) => camelKey(f.name));
+  const components = ct.fields
+    .filter((f) => f.type === "component" || f.type === "dynamicZone")
+    .map((f) => fieldApiName(f));
+  const zones: WireZone[] = expansion.zones.map((z) => ({
+    key: z.apiName,
+    members: z.members.map((m) => {
+      const child = childTableEmit(ct, m.table);
+      return {
+        uid: componentUid(m.component),
+        label: m.component.name,
+        relation: child.relationName,
+        model: child.model,
+        scalars: m.table.scalars.map((s) => ({
+          key: s.apiPath,
+          column: s.path.map(snakeColumn).join("_"),
+          type: s.field.type,
+        })),
+        components: m.component.fields
+          .filter((f) => f.type === "component")
+          .map((f) => fieldApiName(f)),
+      };
+    }),
+  }));
   const upsertBy = ct.options?.upsertBy;
   return {
     model: names.model,
@@ -110,6 +149,7 @@ export const wireShape = (
     scalars: [...top, ...embedded],
     children,
     components,
+    zones,
     relations: [
       ...wireRelations(doc, ct, versioned, localized),
       ...(fileModel === undefined ? [] : mediaRelations(ct, fileModel)),
@@ -141,7 +181,7 @@ const mediaRelations = (ct: ContentType, fileModel: string): WireRelation[] =>
     f.type === "media"
       ? [
           {
-            key: camelKey(f.name),
+            key: fieldApiName(f),
             relation: f.name,
             kind: f.multiple === true ? ("mediaMany" as const) : ("mediaOne" as const),
             model: fileModel,
@@ -170,13 +210,14 @@ const wireRelations = (
 ): WireRelation[] => {
   const byName = new Map(doc.contentTypes.map((c) => [c.name, c]));
   const entry = (
+    key: string,
     name: string,
     kind: WireRelationKind,
     target: ContentType,
     foreignKey: string | null,
     holder: WireRelation["holder"],
   ): WireRelation => ({
-    key: camelKey(name),
+    key,
     relation: name,
     kind,
     model: filamentNames(target).model,
@@ -192,12 +233,14 @@ const wireRelations = (
     const target = byName.get(f.target);
     if (target === undefined || target.builtin !== undefined) continue;
     if (f.relationKind === "manyToOne" || f.relationKind === "oneToOne") {
-      own.push(entry(f.name, "belongsTo", target, `${snakeColumn(f.name)}_id`, "self"));
+      own.push(
+        entry(fieldApiName(f), f.name, "belongsTo", target, `${snakeColumn(f.name)}_id`, "self"),
+      );
     } else if (f.relationKind === "oneToMany") {
       const fk = `${snakeColumn(f.inverse ?? snake(ct.name))}_id`;
-      own.push(entry(f.name, "hasMany", target, fk, "target"));
+      own.push(entry(fieldApiName(f), f.name, "hasMany", target, fk, "target"));
     } else {
-      own.push(entry(f.name, "belongsToMany", target, null, "self"));
+      own.push(entry(fieldApiName(f), f.name, "belongsToMany", target, null, "self"));
     }
   }
   const inverse: WireRelation[] = [];
@@ -206,15 +249,19 @@ const wireRelations = (
       for (const g of other.fields) {
         if (g.type !== "relation" || g.target !== ct.name || g.inverse === undefined) continue;
         if (g.relationKind === "manyToOne") {
-          inverse.push(entry(g.inverse, "hasMany", other, `${snakeColumn(g.name)}_id`, "target"));
+          inverse.push(
+            entry(g.inverse, g.inverse, "hasMany", other, `${snakeColumn(g.name)}_id`, "target"),
+          );
         } else if (g.relationKind === "oneToOne") {
-          inverse.push(entry(g.inverse, "hasOne", other, `${snakeColumn(g.name)}_id`, "target"));
+          inverse.push(
+            entry(g.inverse, g.inverse, "hasOne", other, `${snakeColumn(g.name)}_id`, "target"),
+          );
         } else if (g.relationKind === "oneToMany") {
           inverse.push(
-            entry(g.inverse, "belongsTo", other, `${snakeColumn(g.inverse)}_id`, "self"),
+            entry(g.inverse, g.inverse, "belongsTo", other, `${snakeColumn(g.inverse)}_id`, "self"),
           );
         } else {
-          inverse.push(entry(g.inverse, "belongsToMany", other, null, "target"));
+          inverse.push(entry(g.inverse, g.inverse, "belongsToMany", other, null, "target"));
         }
       }
     }

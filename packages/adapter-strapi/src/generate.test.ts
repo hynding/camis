@@ -298,13 +298,16 @@ describe("strapiAdapter.generate — components + inverses", () => {
     });
   });
 
-  it("reports dynamicZone as a capability gap and omits it", () => {
+  it("writes a dynamic zone, which Strapi keeps natively", () => {
     const r = strapiAdapter.generate({ document: doc, roles: [] }, { projectName: "blog" });
-    expect(r.gaps.gaps.some((g) => g.feature === "dynamicZone")).toBe(true);
+    expect(r.gaps.gaps.some((g) => g.feature === "dynamicZone")).toBe(false);
     const article = JSON.parse(
       r.files.find((f) => f.path.endsWith("article/schema.json"))!.content,
     );
-    expect(article.attributes.blocks).toBeUndefined();
+    expect(article.attributes.blocks).toEqual({
+      type: "dynamiczone",
+      components: ["shared.seo-meta"],
+    });
   });
 });
 

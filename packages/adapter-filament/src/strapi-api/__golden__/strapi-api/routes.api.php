@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\AuthorApiController;
 use App\Http\Controllers\Api\BookApiController;
 use App\Http\Controllers\Api\CategoryApiController;
 use App\Http\Controllers\Api\GenreApiController;
+use App\Http\Controllers\Api\LandingApiController;
 use App\Http\Controllers\Api\NoteApiController;
 use App\Http\Controllers\Api\PageApiController;
 use App\Http\Controllers\Api\PostApiController;
@@ -81,6 +82,12 @@ Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle):
         Route::get('/genres/{key}', [GenreApiController::class, 'show']);
         Route::put('/genres/{key}', [GenreApiController::class, 'update']);
         Route::delete('/genres/{key}', [GenreApiController::class, 'destroy']);
+
+        Route::get('/landings', [LandingApiController::class, 'index']);
+        Route::post('/landings', [LandingApiController::class, 'store']);
+        Route::get('/landings/{key}', [LandingApiController::class, 'show']);
+        Route::put('/landings/{key}', [LandingApiController::class, 'update']);
+        Route::delete('/landings/{key}', [LandingApiController::class, 'destroy']);
 
         Route::get('/notes', [NoteApiController::class, 'index']);
         Route::post('/notes', [NoteApiController::class, 'store']);
