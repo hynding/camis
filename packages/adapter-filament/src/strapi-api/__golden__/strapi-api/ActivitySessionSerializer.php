@@ -20,6 +20,7 @@ final class ActivitySessionSerializer
         ]],
         'createdAt' => ['column' => 'created_at', 'type' => 'dateTime'],
         'updatedAt' => ['column' => 'updated_at', 'type' => 'dateTime'],
+        'publishedAt' => ['column' => 'updated_at', 'type' => 'dateTime'],
     ];
 
     /** Component keys, which Strapi leaves off the wire unless populate names them. */
@@ -44,6 +45,7 @@ final class ActivitySessionSerializer
             ]))->filter(fn ($r) => $r !== null)->values()->all(),
             'createdAt' => $m->created_at?->toIso8601ZuluString('millisecond'),
             'updatedAt' => $m->updated_at?->toIso8601ZuluString('millisecond'),
+            'publishedAt' => $m->updated_at?->toIso8601ZuluString('millisecond'),
         ]);
     }
 

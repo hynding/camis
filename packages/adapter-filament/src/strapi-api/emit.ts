@@ -57,6 +57,15 @@ import {
   SESSIONS_MIGRATION_PATH,
 } from "./sessions";
 import { kebab } from "./names";
+import {
+  emitEmitsStrapiEvents,
+  emitStrapiWebhooks,
+  emitWebhookModel,
+  emitWebhookResourceFiles,
+  emitWebhooksMigration,
+  WEBHOOKS_MIGRATION_PATH,
+  type WebhookContentType,
+} from "./webhooks";
 import { wireShape } from "./wire-shape";
 import { emitUserResourceFiles, emitUsersPermissionsSettingsPage } from "./users-permissions-admin";
 import {
@@ -164,6 +173,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
       input.media !== undefined,
       true,
       secured,
+      true,
     ),
   });
   files.push({
@@ -185,6 +195,17 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
       ),
     );
   }
+  files.push(
+    ...webhookFiles(
+      emitted.map((ct) => ({
+        model: filamentNames(ct).model,
+        uid: `api::${kebab(ct.name)}.${kebab(ct.name)}`,
+        modelName: kebab(ct.name),
+      })),
+      fileModel,
+      secured,
+    ),
+  );
   files.push({
     path: "app/Http/Middleware/StrapiErrors.php",
     content: emitStrapiErrorsMiddleware(),
@@ -263,6 +284,22 @@ const apiTokenFiles = (
   },
   { path: "app/Http/Middleware/StrapiApiToken.php", content: emitStrapiApiTokenMiddleware() },
   ...emitApiTokenResourceFiles(),
+];
+
+/** Strapi's webhooks, the events that fire them, and their admin. */
+const webhookFiles = (
+  contentTypes: WebhookContentType[],
+  fileModel: string | undefined,
+  secured: boolean,
+): GeneratedFile[] => [
+  { path: WEBHOOKS_MIGRATION_PATH, content: emitWebhooksMigration() },
+  { path: "app/Models/StrapiWebhook.php", content: emitWebhookModel() },
+  {
+    path: "app/Support/StrapiWebhooks.php",
+    content: emitStrapiWebhooks({ contentTypes, fileModel }),
+  },
+  { path: "app/Models/Concerns/EmitsStrapiEvents.php", content: emitEmitsStrapiEvents() },
+  ...emitWebhookResourceFiles(secured),
 ];
 
 /** The media library: Strapi's files and their upload API, and its admin. */

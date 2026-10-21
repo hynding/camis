@@ -186,5 +186,12 @@ export const emitStrapiStorage = (input: StrapiApiInput): StrapiApiEmission => {
     message:
       "the Strapi storage layout does not accept API tokens: the Strapi instance keeps and checks them",
   });
+  gaps.push({
+    feature: "webhooks",
+    location: {},
+    severity: "downgrade",
+    message:
+      "the Strapi storage layout sends no webhooks: a write through camis does not reach the webhooks the Strapi instance keeps",
+  });
   return { files, gaps, scopeMethods };
 };

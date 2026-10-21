@@ -1,0 +1,736 @@
+[
+  {
+    "name": "creating an author",
+    "status": 201,
+    "body": {
+      "data": {
+        "name": "Frank Herbert"
+      },
+      "meta": {}
+    }
+  },
+  {
+    "name": "an entry's creation reaches every webhook that hears it",
+    "deliveries": [
+      {
+        "path": "/hooks/all",
+        "headers": {
+          "content-type": "application/json",
+          "x-camis-site": "blog",
+          "x-strapi-event": "entry.create"
+        },
+        "body": {
+          "at": "<date>",
+          "entry": {
+            "books": [],
+            "name": "Frank Herbert",
+            "published": true
+          },
+          "event": "entry.create",
+          "model": "author",
+          "uid": "api::author.author"
+        }
+      },
+      {
+        "path": "/hooks/failing",
+        "headers": {
+          "content-type": "application/json",
+          "x-strapi-event": "entry.create"
+        },
+        "body": {
+          "at": "<date>",
+          "entry": {
+            "books": [],
+            "name": "Frank Herbert",
+            "published": true
+          },
+          "event": "entry.create",
+          "model": "author",
+          "uid": "api::author.author"
+        }
+      }
+    ]
+  },
+  {
+    "name": "creating a genre",
+    "status": 201,
+    "body": {
+      "data": {
+        "name": "Science fiction"
+      },
+      "meta": {}
+    }
+  },
+  {
+    "name": "the genre's creation",
+    "deliveries": [
+      {
+        "path": "/hooks/all",
+        "headers": {
+          "content-type": "application/json",
+          "x-camis-site": "blog",
+          "x-strapi-event": "entry.create"
+        },
+        "body": {
+          "at": "<date>",
+          "entry": {
+            "name": "Science fiction",
+            "published": true
+          },
+          "event": "entry.create",
+          "model": "genre",
+          "uid": "api::genre.genre"
+        }
+      },
+      {
+        "path": "/hooks/failing",
+        "headers": {
+          "content-type": "application/json",
+          "x-strapi-event": "entry.create"
+        },
+        "body": {
+          "at": "<date>",
+          "entry": {
+            "name": "Science fiction",
+            "published": true
+          },
+          "event": "entry.create",
+          "model": "genre",
+          "uid": "api::genre.genre"
+        }
+      }
+    ]
+  },
+  {
+    "name": "creating a book with relations and components",
+    "status": 201,
+    "body": {
+      "data": {
+        "pages": 412,
+        "title": "Dune"
+      },
+      "meta": {}
+    }
+  },
+  {
+    "name": "the created entry is sent populated",
+    "deliveries": [
+      {
+        "path": "/hooks/all",
+        "headers": {
+          "content-type": "application/json",
+          "x-camis-site": "blog",
+          "x-strapi-event": "entry.create"
+        },
+        "body": {
+          "at": "<date>",
+          "entry": {
+            "attachments": [],
+            "author": {
+              "name": "Frank Herbert",
+              "published": true
+            },
+            "editions": [
+              {
+                "amount": 2,
+                "unit": "box"
+              }
+            ],
+            "genres": [
+              {
+                "name": "Science fiction",
+                "published": true
+              }
+            ],
+            "pages": 412,
+            "price": {
+              "currency": "EUR",
+              "minor": "999"
+            },
+            "published": true,
+            "title": "Dune"
+          },
+          "event": "entry.create",
+          "model": "book",
+          "uid": "api::book.book"
+        }
+      },
+      {
+        "path": "/hooks/failing",
+        "headers": {
+          "content-type": "application/json",
+          "x-strapi-event": "entry.create"
+        },
+        "body": {
+          "at": "<date>",
+          "entry": {
+            "attachments": [],
+            "author": {
+              "name": "Frank Herbert",
+              "published": true
+            },
+            "editions": [
+              {
+                "amount": 2,
+                "unit": "box"
+              }
+            ],
+            "genres": [
+              {
+                "name": "Science fiction",
+                "published": true
+              }
+            ],
+            "pages": 412,
+            "price": {
+              "currency": "EUR",
+              "minor": "999"
+            },
+            "published": true,
+            "title": "Dune"
+          },
+          "event": "entry.create",
+          "model": "book",
+          "uid": "api::book.book"
+        }
+      }
+    ]
+  },
+  {
+    "name": "updating the book",
+    "status": 200,
+    "body": {
+      "data": {
+        "pages": 500,
+        "title": "Dune"
+      },
+      "meta": {}
+    }
+  },
+  {
+    "name": "an update is sent populated",
+    "deliveries": [
+      {
+        "path": "/hooks/all",
+        "headers": {
+          "content-type": "application/json",
+          "x-camis-site": "blog",
+          "x-strapi-event": "entry.update"
+        },
+        "body": {
+          "at": "<date>",
+          "entry": {
+            "attachments": [],
+            "author": {
+              "name": "Frank Herbert",
+              "published": true
+            },
+            "editions": [
+              {
+                "amount": 2,
+                "unit": "box"
+              }
+            ],
+            "genres": [
+              {
+                "name": "Science fiction",
+                "published": true
+              }
+            ],
+            "pages": 500,
+            "price": {
+              "currency": "EUR",
+              "minor": "999"
+            },
+            "published": true,
+            "title": "Dune"
+          },
+          "event": "entry.update",
+          "model": "book",
+          "uid": "api::book.book"
+        }
+      }
+    ]
+  },
+  {
+    "name": "a refused write",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "a refused write sends nothing",
+    "deliveries": []
+  },
+  {
+    "name": "creating a post, which is published",
+    "status": 201,
+    "body": {
+      "data": {
+        "title": "First"
+      },
+      "meta": {}
+    }
+  },
+  {
+    "name": "a published creation sends its draft's creation then its publication",
+    "deliveries": [
+      {
+        "path": "/hooks/all",
+        "headers": {
+          "content-type": "application/json",
+          "x-camis-site": "blog",
+          "x-strapi-event": "entry.create"
+        },
+        "body": {
+          "at": "<date>",
+          "entry": {
+            "author": {
+              "name": "Frank Herbert",
+              "published": true
+            },
+            "title": "First",
+            "topics": []
+          },
+          "event": "entry.create",
+          "model": "post",
+          "uid": "api::post.post"
+        }
+      },
+      {
+        "path": "/hooks/all",
+        "headers": {
+          "content-type": "application/json",
+          "x-camis-site": "blog",
+          "x-strapi-event": "entry.publish"
+        },
+        "body": {
+          "at": "<date>",
+          "entry": {
+            "author": {
+              "name": "Frank Herbert",
+              "published": true
+            },
+            "published": true,
+            "title": "First",
+            "topics": []
+          },
+          "event": "entry.publish",
+          "model": "post",
+          "uid": "api::post.post"
+        }
+      },
+      {
+        "path": "/hooks/failing",
+        "headers": {
+          "content-type": "application/json",
+          "x-strapi-event": "entry.create"
+        },
+        "body": {
+          "at": "<date>",
+          "entry": {
+            "author": {
+              "name": "Frank Herbert",
+              "published": true
+            },
+            "title": "First",
+            "topics": []
+          },
+          "event": "entry.create",
+          "model": "post",
+          "uid": "api::post.post"
+        }
+      }
+    ]
+  },
+  {
+    "name": "creating a draft post",
+    "status": 201,
+    "body": {
+      "data": {
+        "title": "Second"
+      },
+      "meta": {}
+    }
+  },
+  {
+    "name": "a draft's creation is not a publication",
+    "deliveries": [
+      {
+        "path": "/hooks/all",
+        "headers": {
+          "content-type": "application/json",
+          "x-camis-site": "blog",
+          "x-strapi-event": "entry.create"
+        },
+        "body": {
+          "at": "<date>",
+          "entry": {
+            "title": "Second",
+            "topics": []
+          },
+          "event": "entry.create",
+          "model": "post",
+          "uid": "api::post.post"
+        }
+      },
+      {
+        "path": "/hooks/failing",
+        "headers": {
+          "content-type": "application/json",
+          "x-strapi-event": "entry.create"
+        },
+        "body": {
+          "at": "<date>",
+          "entry": {
+            "title": "Second",
+            "topics": []
+          },
+          "event": "entry.create",
+          "model": "post",
+          "uid": "api::post.post"
+        }
+      }
+    ]
+  },
+  {
+    "name": "updating the published post",
+    "status": 200,
+    "body": {
+      "data": {
+        "title": "First, again"
+      },
+      "meta": {}
+    }
+  },
+  {
+    "name": "updating a published post",
+    "deliveries": [
+      {
+        "path": "/hooks/all",
+        "headers": {
+          "content-type": "application/json",
+          "x-camis-site": "blog",
+          "x-strapi-event": "entry.update"
+        },
+        "body": {
+          "at": "<date>",
+          "entry": {
+            "author": {
+              "name": "Frank Herbert",
+              "published": true
+            },
+            "title": "First, again",
+            "topics": []
+          },
+          "event": "entry.update",
+          "model": "post",
+          "uid": "api::post.post"
+        }
+      },
+      {
+        "path": "/hooks/all",
+        "headers": {
+          "content-type": "application/json",
+          "x-camis-site": "blog",
+          "x-strapi-event": "entry.publish"
+        },
+        "body": {
+          "at": "<date>",
+          "entry": {
+            "author": {
+              "name": "Frank Herbert",
+              "published": true
+            },
+            "published": true,
+            "title": "First, again",
+            "topics": []
+          },
+          "event": "entry.publish",
+          "model": "post",
+          "uid": "api::post.post"
+        }
+      }
+    ]
+  },
+  {
+    "name": "updating the draft post",
+    "status": 200,
+    "body": {
+      "data": {
+        "title": "Second",
+        "views": 3
+      },
+      "meta": {}
+    }
+  },
+  {
+    "name": "updating a draft",
+    "deliveries": [
+      {
+        "path": "/hooks/all",
+        "headers": {
+          "content-type": "application/json",
+          "x-camis-site": "blog",
+          "x-strapi-event": "entry.update"
+        },
+        "body": {
+          "at": "<date>",
+          "entry": {
+            "title": "Second",
+            "topics": [],
+            "views": 3
+          },
+          "event": "entry.update",
+          "model": "post",
+          "uid": "api::post.post"
+        }
+      }
+    ]
+  },
+  {
+    "name": "deleting the published post",
+    "status": 204,
+    "body": ""
+  },
+  {
+    "name": "a deletion is sent for each version, unpopulated",
+    "deliveries": [
+      {
+        "path": "/hooks/all",
+        "headers": {
+          "content-type": "application/json",
+          "x-camis-site": "blog",
+          "x-strapi-event": "entry.delete"
+        },
+        "body": {
+          "at": "<date>",
+          "entry": {
+            "title": "First, again"
+          },
+          "event": "entry.delete",
+          "model": "post",
+          "uid": "api::post.post"
+        }
+      },
+      {
+        "path": "/hooks/all",
+        "headers": {
+          "content-type": "application/json",
+          "x-camis-site": "blog",
+          "x-strapi-event": "entry.delete"
+        },
+        "body": {
+          "at": "<date>",
+          "entry": {
+            "published": true,
+            "title": "First, again"
+          },
+          "event": "entry.delete",
+          "model": "post",
+          "uid": "api::post.post"
+        }
+      }
+    ]
+  },
+  {
+    "name": "deleting the book",
+    "status": 204,
+    "body": ""
+  },
+  {
+    "name": "the book's deletion",
+    "deliveries": [
+      {
+        "path": "/hooks/all",
+        "headers": {
+          "content-type": "application/json",
+          "x-camis-site": "blog",
+          "x-strapi-event": "entry.delete"
+        },
+        "body": {
+          "at": "<date>",
+          "entry": {
+            "pages": 500,
+            "published": true,
+            "title": "Dune"
+          },
+          "event": "entry.delete",
+          "model": "book",
+          "uid": "api::book.book"
+        }
+      }
+    ]
+  },
+  {
+    "name": "uploading a file",
+    "status": 201,
+    "body": [
+      {
+        "caption": "Notes",
+        "ext": ".txt",
+        "hash": "notes_<hash>",
+        "isUrlSigned": false,
+        "mime": "text/plain",
+        "name": "notes.txt",
+        "provider": "local",
+        "size": 0.01,
+        "url": "/uploads/notes_<hash>.txt"
+      }
+    ]
+  },
+  {
+    "name": "an upload",
+    "deliveries": [
+      {
+        "path": "/hooks/all",
+        "headers": {
+          "content-type": "application/json",
+          "x-camis-site": "blog",
+          "x-strapi-event": "media.create"
+        },
+        "body": {
+          "at": "<date>",
+          "event": "media.create",
+          "media": {
+            "caption": "Notes",
+            "ext": ".txt",
+            "hash": "notes_<hash>",
+            "mime": "text/plain",
+            "name": "notes.txt",
+            "provider": "local",
+            "published": true,
+            "size": 0.01,
+            "url": "/uploads/notes_<hash>.txt"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "changing the file's information",
+    "status": 200,
+    "body": {
+      "alternativeText": "the notes",
+      "caption": "Notes",
+      "ext": ".txt",
+      "hash": "notes_<hash>",
+      "isUrlSigned": false,
+      "mime": "text/plain",
+      "name": "notes.txt",
+      "provider": "local",
+      "size": 0.01,
+      "url": "/uploads/notes_<hash>.txt"
+    }
+  },
+  {
+    "name": "a file's change",
+    "deliveries": [
+      {
+        "path": "/hooks/all",
+        "headers": {
+          "content-type": "application/json",
+          "x-camis-site": "blog",
+          "x-strapi-event": "media.update"
+        },
+        "body": {
+          "at": "<date>",
+          "event": "media.update",
+          "media": {
+            "alternativeText": "the notes",
+            "caption": "Notes",
+            "ext": ".txt",
+            "hash": "notes_<hash>",
+            "mime": "text/plain",
+            "name": "notes.txt",
+            "provider": "local",
+            "published": true,
+            "size": 0.01,
+            "url": "/uploads/notes_<hash>.txt"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "deleting the file",
+    "status": 200,
+    "body": {
+      "alternativeText": "the notes",
+      "caption": "Notes",
+      "ext": ".txt",
+      "hash": "notes_<hash>",
+      "isUrlSigned": false,
+      "mime": "text/plain",
+      "name": "notes.txt",
+      "provider": "local",
+      "size": 0.01,
+      "url": "/uploads/notes_<hash>.txt"
+    }
+  },
+  {
+    "name": "a file's deletion",
+    "deliveries": [
+      {
+        "path": "/hooks/all",
+        "headers": {
+          "content-type": "application/json",
+          "x-camis-site": "blog",
+          "x-strapi-event": "media.delete"
+        },
+        "body": {
+          "at": "<date>",
+          "event": "media.delete",
+          "media": {
+            "alternativeText": "the notes",
+            "caption": "Notes",
+            "ext": ".txt",
+            "hash": "notes_<hash>",
+            "mime": "text/plain",
+            "name": "notes.txt",
+            "provider": "local",
+            "published": true,
+            "size": 0.01,
+            "url": "/uploads/notes_<hash>.txt"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "creating an author with one webhook disabled",
+    "status": 201,
+    "body": {
+      "data": {
+        "name": "Ursula K. Le Guin"
+      },
+      "meta": {}
+    }
+  },
+  {
+    "name": "a disabled webhook hears nothing",
+    "deliveries": [
+      {
+        "path": "/hooks/failing",
+        "headers": {
+          "content-type": "application/json",
+          "x-strapi-event": "entry.create"
+        },
+        "body": {
+          "at": "<date>",
+          "entry": {
+            "books": [],
+            "name": "Ursula K. Le Guin",
+            "published": true
+          },
+          "event": "entry.create",
+          "model": "author",
+          "uid": "api::author.author"
+        }
+      }
+    ]
+  }
+]

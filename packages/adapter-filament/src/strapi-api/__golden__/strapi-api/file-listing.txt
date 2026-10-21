@@ -96,6 +96,10 @@ overwrite app/Filament/Resources/Users/Pages/CreateUser.php
 overwrite app/Filament/Resources/Users/Pages/EditUser.php
 overwrite app/Filament/Resources/Users/Pages/ListUsers.php
 overwrite app/Filament/Resources/Users/UserResource.php
+overwrite app/Filament/Resources/Webhooks/Pages/CreateWebhook.php
+overwrite app/Filament/Resources/Webhooks/Pages/EditWebhook.php
+overwrite app/Filament/Resources/Webhooks/Pages/ListWebhooks.php
+overwrite app/Filament/Resources/Webhooks/WebhookResource.php
 overwrite app/Filament/Support/MediaPicker.php
 overwrite app/Http/Controllers/Api/AuthController.php
 overwrite app/Http/Controllers/Api/ConnectController.php
@@ -143,6 +147,7 @@ overwrite app/Models/Author.php
 overwrite app/Models/Book.php
 overwrite app/Models/BookEditions.php
 overwrite app/Models/Category.php
+overwrite app/Models/Concerns/EmitsStrapiEvents.php
 overwrite app/Models/Concerns/HasDocumentId.php
 overwrite app/Models/Concerns/HasDraftAndPublish.php
 overwrite app/Models/Concerns/HasLocale.php
@@ -154,6 +159,7 @@ overwrite app/Models/Note.php
 overwrite app/Models/Page.php
 overwrite app/Models/Post.php
 overwrite app/Models/StrapiApiToken.php
+overwrite app/Models/StrapiWebhook.php
 overwrite app/Models/Tag.php
 overwrite app/Models/Topic.php
 overwrite app/Models/Transaction.php
@@ -187,6 +193,7 @@ overwrite app/Support/StrapiSessions.php
 overwrite app/Support/StrapiSettings.php
 overwrite app/Support/StrapiUpload.php
 overwrite app/Support/StrapiUsers.php
+overwrite app/Support/StrapiWebhooks.php
 overwrite config/camis.php
 overwrite database/migrations/0001_01_02_000000_add_username_to_users_table.php
 overwrite database/migrations/0001_01_02_000000_create_files_table.php
@@ -201,6 +208,7 @@ overwrite database/migrations/0001_01_02_000004_allow_users_without_password.php
 overwrite database/migrations/0001_01_02_000004_create_activities_table.php
 overwrite database/migrations/0001_01_02_000005_create_strapi_api_tokens_table.php
 overwrite database/migrations/0001_01_02_000005_create_tags_table.php
+overwrite database/migrations/0001_01_02_000006_create_strapi_webhooks_table.php
 overwrite database/migrations/0001_01_02_000006_create_topics_table.php
 overwrite database/migrations/0001_01_02_000007_create_categories_table.php
 overwrite database/migrations/0001_01_02_000008_create_articles_table.php

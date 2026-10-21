@@ -3,6 +3,7 @@ import type { ContentType } from "@camis/ir-schema";
 import { filamentNames } from "../names";
 import { routePath } from "./names";
 import { apiTokensConfigKeys } from "./api-tokens";
+import { webhooksConfigKeys } from "./webhooks";
 import { usersPermissionsConfigKeys } from "./users-permissions";
 
 /** Default requests per minute allowed on the unauthenticated credential endpoints. */
@@ -28,6 +29,7 @@ export const emitApiConfig = (
   upload = false,
   usersPermissions = false,
   apiTokens = false,
+  webhooks = false,
 ): string => {
   // Where the media library keeps its files: unset, public/uploads, served at /uploads as Strapi's
   // local provider serves it; else a Laravel disk name (s3, …). The limit is Strapi's default.
@@ -80,7 +82,7 @@ declare(strict_types=1);
 return [
     // Requests per minute allowed on the unauthenticated credential endpoints
     // (POST /auth/local and /auth/local/register), keyed by client address.
-    'auth_throttle_per_minute' => max(1, (int) env('CAMIS_AUTH_THROTTLE_PER_MINUTE', ${AUTH_THROTTLE_PER_MINUTE})),${strapiKeys}${i18nKeys}${uploadKeys}${usersPermissions ? usersPermissionsConfigKeys() : ""}${apiTokens ? apiTokensConfigKeys() : ""}
+    'auth_throttle_per_minute' => max(1, (int) env('CAMIS_AUTH_THROTTLE_PER_MINUTE', ${AUTH_THROTTLE_PER_MINUTE})),${strapiKeys}${i18nKeys}${uploadKeys}${usersPermissions ? usersPermissionsConfigKeys() : ""}${apiTokens ? apiTokensConfigKeys() : ""}${webhooks ? webhooksConfigKeys() : ""}
 ];
 `;
 };

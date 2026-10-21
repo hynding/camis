@@ -24,11 +24,14 @@ const viewerDoc = (secured: boolean): string =>
     : ` * $viewer is the caller in a project with roles, and null in one without: a relation's rows are
  * then reached only through the target's read grant and its forUser scope, as on its own route.
  */`;
-const unsecured = (secured: boolean): string => (secured ? "" : "$viewer === null || ");
+const unsecured = (secured: boolean): string =>
+  secured ? "self::$unrestricted || " : "self::$unrestricted || $viewer === null || ";
 const scopeBody = (secured: boolean): string =>
   secured
-    ? "        $query->forUser($viewer);"
-    : `        if ($viewer !== null) {
+    ? `        if (! self::$unrestricted) {
+            $query->forUser($viewer);
+        }`
+    : `        if (! self::$unrestricted && $viewer !== null) {
             $query->forUser($viewer);
         }`;
 
@@ -102,6 +105,24 @@ final class StrapiQuery
     public static function order(Builder $query, mixed $sort, array $fields, ?Authenticatable $viewer): void
     {
         self::sort($query, $sort, $fields, $viewer);
+    }
+
+    /** Set while unrestricted() runs. */
+    private static bool $unrestricted = false;
+
+    /**
+     * Reads as no caller: every row and every relation, as Strapi populates the entry it sends a
+     * webhook whoever made the change.
+     */
+    public static function unrestricted(\Closure $read): mixed
+    {
+        $was = self::$unrestricted;
+        self::$unrestricted = true;
+        try {
+            return $read();
+        } finally {
+            self::$unrestricted = $was;
+        }
     }
 
     /** Whether the caller may read the target of a FIELDS relation entry at all. */
