@@ -1,0 +1,346 @@
+{
+  "a zone is left out unless populate names it": {
+    "status": 200,
+    "data": {
+      "publishedAt": "present",
+      "title": "Home"
+    }
+  },
+  "populate=* sends a zone's items in order": {
+    "status": 200,
+    "data": [
+      {
+        "blocks": [
+          {
+            "__component": "shared.hero",
+            "heading": "Hi",
+            "subheading": "Welcome"
+          },
+          {
+            "__component": "shared.quantity",
+            "amount": 2,
+            "unit": "kg"
+          },
+          {
+            "__component": "shared.hero",
+            "heading": "Bye"
+          }
+        ],
+        "publishedAt": "present",
+        "title": "Home"
+      },
+      {
+        "blocks": [],
+        "publishedAt": "present",
+        "title": "Plain"
+      }
+    ]
+  },
+  "populate a zone by name": {
+    "status": 200,
+    "data": {
+      "blocks": [
+        {
+          "__component": "shared.hero",
+          "heading": "Hi",
+          "subheading": "Welcome"
+        },
+        {
+          "__component": "shared.quantity",
+          "amount": 2,
+          "unit": "kg"
+        },
+        {
+          "__component": "shared.hero",
+          "heading": "Bye"
+        }
+      ],
+      "publishedAt": "present",
+      "title": "Home"
+    }
+  },
+  "populate a zone with true": {
+    "status": 200,
+    "data": {
+      "blocks": [
+        {
+          "__component": "shared.hero",
+          "heading": "Hi",
+          "subheading": "Welcome"
+        },
+        {
+          "__component": "shared.quantity",
+          "amount": 2,
+          "unit": "kg"
+        },
+        {
+          "__component": "shared.hero",
+          "heading": "Bye"
+        }
+      ],
+      "publishedAt": "present",
+      "title": "Home"
+    }
+  },
+  "populate inside a zone's items": {
+    "status": 200,
+    "data": {
+      "blocks": [
+        {
+          "__component": "shared.hero",
+          "heading": "Hi",
+          "price": {
+            "currency": "EUR",
+            "minor": "5"
+          },
+          "subheading": "Welcome"
+        },
+        {
+          "__component": "shared.quantity",
+          "amount": 2,
+          "unit": "kg"
+        },
+        {
+          "__component": "shared.hero",
+          "heading": "Bye"
+        }
+      ],
+      "publishedAt": "present",
+      "title": "Home"
+    }
+  },
+  "on keeps the components it names, populated as it says": {
+    "status": 200,
+    "data": {
+      "blocks": [
+        {
+          "__component": "shared.hero",
+          "heading": "Hi",
+          "price": {
+            "currency": "EUR",
+            "minor": "5"
+          },
+          "subheading": "Welcome"
+        },
+        {
+          "__component": "shared.hero",
+          "heading": "Bye"
+        }
+      ],
+      "publishedAt": "present",
+      "title": "Home"
+    }
+  },
+  "on with true": {
+    "status": 200,
+    "data": {
+      "blocks": [
+        {
+          "__component": "shared.quantity",
+          "amount": 2,
+          "unit": "kg"
+        }
+      ],
+      "publishedAt": "present",
+      "title": "Home"
+    }
+  },
+  "fields inside on": {
+    "status": 200,
+    "data": {
+      "blocks": [
+        {
+          "__component": "shared.hero",
+          "heading": "Hi"
+        },
+        {
+          "__component": "shared.hero",
+          "heading": "Bye"
+        }
+      ],
+      "publishedAt": "present",
+      "title": "Home"
+    }
+  },
+  "a draft keeps its zone": {
+    "status": 200,
+    "data": {
+      "blocks": [
+        {
+          "__component": "shared.hero",
+          "heading": "Soon"
+        }
+      ],
+      "publishedAt": "absent",
+      "title": "Draft"
+    }
+  },
+  "a zone cannot be filtered": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid key blocks",
+      "details": {
+        "key": "blocks",
+        "path": "blocks",
+        "source": "query",
+        "param": "filters"
+      }
+    }
+  },
+  "a zone cannot be sorted": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid key blocks",
+      "details": {
+        "key": "blocks",
+        "path": "blocks",
+        "source": "query",
+        "param": "sort"
+      }
+    }
+  },
+  "a zone is not a field": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid key blocks",
+      "details": {
+        "key": "blocks",
+        "path": "blocks",
+        "source": "query",
+        "param": "fields"
+      }
+    }
+  },
+  "an update without the zone keeps it": {
+    "status": 200,
+    "data": {
+      "blocks": [
+        {
+          "__component": "shared.hero",
+          "heading": "Hi",
+          "price": {
+            "currency": "EUR",
+            "minor": "5"
+          },
+          "subheading": "Welcome"
+        },
+        {
+          "__component": "shared.quantity",
+          "amount": 2,
+          "unit": "kg"
+        },
+        {
+          "__component": "shared.hero",
+          "heading": "Bye"
+        }
+      ],
+      "publishedAt": "present",
+      "title": "Home, again"
+    }
+  },
+  "an update with the zone replaces it, in its new order": {
+    "status": 200,
+    "data": {
+      "blocks": [
+        {
+          "__component": "shared.quantity",
+          "amount": 9,
+          "unit": "g"
+        },
+        {
+          "__component": "shared.hero",
+          "heading": "New",
+          "price": {
+            "currency": "USD"
+          }
+        }
+      ],
+      "publishedAt": "present",
+      "title": "Home, again"
+    }
+  },
+  "the published version shows the new zone": {
+    "status": 200,
+    "data": {
+      "blocks": [
+        {
+          "__component": "shared.quantity",
+          "amount": 9,
+          "unit": "g"
+        },
+        {
+          "__component": "shared.hero",
+          "heading": "New",
+          "price": {
+            "currency": "USD"
+          }
+        }
+      ],
+      "publishedAt": "present",
+      "title": "Home, again"
+    }
+  },
+  "the draft shows it too": {
+    "status": 200,
+    "data": {
+      "blocks": [
+        {
+          "__component": "shared.quantity",
+          "amount": 9,
+          "unit": "g"
+        },
+        {
+          "__component": "shared.hero",
+          "heading": "New",
+          "price": {
+            "currency": "USD"
+          }
+        }
+      ],
+      "publishedAt": "absent",
+      "title": "Home, again"
+    }
+  },
+  "an item naming an unknown component is refused": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "blocks[0].__component must be one of the following values: shared.hero, shared.money, shared.quantity"
+    }
+  },
+  "an item whose component the zone does not hold is dropped": {
+    "status": 201,
+    "data": {
+      "blocks": [
+        {
+          "__component": "shared.hero",
+          "heading": "Kept"
+        }
+      ],
+      "publishedAt": "present",
+      "title": "Other"
+    }
+  },
+  "an item cannot name an id the entry does not hold": {
+    "status": 400,
+    "error": {
+      "name": "ApplicationError",
+      "message": "Some of the provided components in blocks are not related to the entity"
+    }
+  },
+  "an empty zone clears it": {
+    "status": 200,
+    "data": {
+      "blocks": [],
+      "publishedAt": "present",
+      "title": "Home, again"
+    }
+  },
+  "a deleted entry takes its zone with it": {
+    "status": 204,
+    "data": null
+  }
+}
