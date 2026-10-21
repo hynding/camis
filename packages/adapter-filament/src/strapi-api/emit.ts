@@ -56,7 +56,7 @@ import {
   emitStrapiSessions,
   SESSIONS_MIGRATION_PATH,
 } from "./sessions";
-import { kebab } from "./names";
+import { componentUid, kebab } from "./names";
 import {
   emitEmitsStrapiEvents,
   emitStrapiWebhooks,
@@ -67,6 +67,7 @@ import {
   type WebhookContentType,
 } from "./webhooks";
 import { wireShape } from "./wire-shape";
+import { emitStrapiZones } from "./zones-runtime";
 import { emitUserResourceFiles, emitUsersPermissionsSettingsPage } from "./users-permissions-admin";
 import {
   emitSettingsMigration,
@@ -214,6 +215,11 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
   files.push({ path: "app/Support/StrapiQuery.php", content: emitStrapiQuery(secured) });
   files.push({ path: "app/Support/StrapiPopulate.php", content: emitStrapiPopulate() });
   files.push({ path: "app/Support/StrapiRelations.php", content: emitStrapiRelations() });
+  if (emitted.some((ct) => ct.fields.some((f) => f.type === "dynamicZone")))
+    files.push({
+      path: "app/Support/StrapiZones.php",
+      content: emitStrapiZones(doc.components.map(componentUid).sort()),
+    });
   files.push({ path: "app/Models/Concerns/HasDocumentId.php", content: emitHasDocumentId() });
   if (localized.size > 0) files.push(...localeFiles());
   if (input.media !== undefined) {

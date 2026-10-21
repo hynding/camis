@@ -159,7 +159,7 @@ ${scopeBody(secured)}
         foreach ($wanted as $key) {
             if (! isset($fields[$key]['column']) || str_contains($key, '.')) {
                 // Strapi names the path only when the key is a component it refused to select.
-                $isComponent = isset($fields[$key]['component']) || self::isComponent($fields, $key);
+                $isComponent = isset($fields[$key]['component']) || isset($fields[$key]['zone']) || self::isComponent($fields, $key);
                 throw StrapiError::invalidKey($key, $isComponent ? $key : null, 'fields');
             }
         }
@@ -212,6 +212,8 @@ ${scopeBody(secured)}
                 if (is_array($value)) {
                     $query->whereHas($field['component'], fn (Builder $q) => self::where($q, $value, $field['fields'], null, $viewer, self::join($at, $wirePath)));
                 }
+            } elseif (isset($field['zone'])) {
+                throw StrapiError::invalidKey($key, self::join($at, $wirePath), 'filters');
             } elseif (isset($field['relation'])) {
                 if (! self::readable($field, $viewer)) {
                     throw StrapiError::invalidKey($key, self::join($at, $wirePath), 'filters');
@@ -428,6 +430,9 @@ ${scopeBody(secured)}
             if (! isset($field) && isset($head[1], $fields[$head[0]]['relation'])) {
                 self::sortByRelation($query, $fields[$head[0]], $head[0], $head[1], $direction, $viewer);
                 continue;
+            }
+            if (isset($field['zone'])) {
+                throw StrapiError::invalidKey($path, $path, 'sort');
             }
             if (isset($field['component']) || isset($field['relation']) || (! isset($field['column']) && self::isComponent($fields, $path))) {
                 // Strapi reads 'price:asc' on a component as { price: 'asc' } and rejects 'asc'.

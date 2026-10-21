@@ -292,14 +292,14 @@ jobs:
           node ../packages/adapter-filament/scripts/strapi-auth-vectors.mjs http://127.0.0.1:8765/api \
             --hook "bash ../packages/adapter-filament/scripts/strapi-auth-hook.sh" \
             --vectors $F/session-vectors.json --expected $F/session-vectors.expected.json
-      - name: Filament admin publishes drafts, translates, keeps the media library, manages users and API tokens
+      - name: Filament admin publishes drafts, translates, keeps the media library, manages users and API tokens, builds dynamic zones
         run: |
           cd app
           # The cached config would point the tests at the served database instead of :memory:.
           php artisan config:clear
           S=../packages/adapter-filament/scripts/php
-          cp $S/DraftAdminTest.php $S/LocaleAdminTest.php $S/MediaAdminTest.php $S/UsersAdminTest.php $S/ProvidersTest.php $S/ApiTokensTest.php $S/WebhooksTest.php tests/Feature/
-          php artisan test tests/Feature/DraftAdminTest.php tests/Feature/LocaleAdminTest.php tests/Feature/MediaAdminTest.php tests/Feature/UsersAdminTest.php tests/Feature/ProvidersTest.php tests/Feature/ApiTokensTest.php tests/Feature/WebhooksTest.php
+          cp $S/DraftAdminTest.php $S/LocaleAdminTest.php $S/MediaAdminTest.php $S/UsersAdminTest.php $S/ProvidersTest.php $S/ApiTokensTest.php $S/WebhooksTest.php $S/DynamicZonesTest.php tests/Feature/
+          php artisan test tests/Feature/DraftAdminTest.php tests/Feature/LocaleAdminTest.php tests/Feature/MediaAdminTest.php tests/Feature/UsersAdminTest.php tests/Feature/ProvidersTest.php tests/Feature/ApiTokensTest.php tests/Feature/WebhooksTest.php tests/Feature/DynamicZonesTest.php
       - name: Server log on failure
         if: failure()
         run: cat app/serve.log app/storage/logs/laravel.log "$RUNNER_TEMP/oauth/serve.log" || true

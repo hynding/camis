@@ -3,7 +3,7 @@ import type { ContentType, FieldType, IrDocument } from "@camis/ir-schema";
 import { childTableEmit } from "../components";
 import { filamentNames, snake, snakeColumn } from "../names";
 import { FILE_UID } from "./media-runtime";
-import { camelKey, kebab } from "./names";
+import { camelKey, componentUid, kebab } from "./names";
 
 export interface WireScalar {
   key: string[];
@@ -15,6 +15,21 @@ export interface WireChild {
   relation: string;
   model: string;
   scalars: WireScalar[];
+}
+/** One component a dynamic zone holds: its uid on the wire and the child relation its items live in. */
+export interface WireZoneMember {
+  uid: string;
+  /** The component's display name, as the admin labels its items. */
+  label: string;
+  relation: string;
+  model: string;
+  scalars: WireScalar[];
+  /** Its own component keys, which populate inside the zone names. */
+  components: string[];
+}
+export interface WireZone {
+  key: string;
+  members: WireZoneMember[];
 }
 /** How a relation is stored, from this side: the Eloquent relation type `relations.ts` declares. */
 export type WireRelationKind =
@@ -51,8 +66,9 @@ export interface WireShape {
   upsert: boolean;
   scalars: WireScalar[];
   children: WireChild[];
-  /** The top-level component keys, embedded or repeatable, in IR order: what populate can name. */
+  /** The top-level component keys, embedded or repeatable, and the zones, in IR order: what populate can name. */
   components: string[];
+  zones: WireZone[];
   /** Relations to other content types, both the sides this type declares and their inverses. */
   relations: WireRelation[];
   /** Whether this type keeps a draft and a published version of each document. */
@@ -80,6 +96,7 @@ export const wireShape = (
       (f) =>
         f.type !== "relation" &&
         f.type !== "component" &&
+        f.type !== "dynamicZone" &&
         (f.type !== "media" || fileModel === undefined),
     )
     .map((f) => ({ key: [camelKey(f.name)], column: snakeColumn(f.name), type: f.type }));
@@ -101,7 +118,29 @@ export const wireShape = (
       })),
     };
   });
-  const components = ct.fields.filter((f) => f.type === "component").map((f) => camelKey(f.name));
+  const components = ct.fields
+    .filter((f) => f.type === "component" || f.type === "dynamicZone")
+    .map((f) => camelKey(f.name));
+  const zones: WireZone[] = expansion.zones.map((z) => ({
+    key: camelKey(z.name),
+    members: z.members.map((m) => {
+      const child = childTableEmit(ct, m.table);
+      return {
+        uid: componentUid(m.component),
+        label: m.component.name,
+        relation: child.relationName,
+        model: child.model,
+        scalars: m.table.scalars.map((s) => ({
+          key: s.path.map(camelKey),
+          column: s.path.map(snakeColumn).join("_"),
+          type: s.field.type,
+        })),
+        components: m.component.fields
+          .filter((f) => f.type === "component")
+          .map((f) => camelKey(f.name)),
+      };
+    }),
+  }));
   const upsertBy = ct.options?.upsertBy;
   return {
     model: names.model,
@@ -110,6 +149,7 @@ export const wireShape = (
     scalars: [...top, ...embedded],
     children,
     components,
+    zones,
     relations: [
       ...wireRelations(doc, ct, versioned, localized),
       ...(fileModel === undefined ? [] : mediaRelations(ct, fileModel)),

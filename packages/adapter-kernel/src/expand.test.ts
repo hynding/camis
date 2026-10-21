@@ -253,6 +253,30 @@ describe("expandComponents", () => {
     expect(r.tables[0]?.scalars.map((s) => s.field.name)).toEqual(["amount", "unit"]);
   });
 
+  it("turns each component a dynamic zone holds into a child table keyed by the zone", () => {
+    const zoned: IrDocument = {
+      ...doc,
+      contentTypes: [
+        {
+          name: "Landing",
+          kind: "collection",
+          fields: [{ type: "dynamicZone", name: "blocks", components: ["Money", "Quantity"] }],
+        },
+      ],
+    };
+    const out = expandComponents(zoned, zoned.contentTypes[0]!);
+    expect(out.tables).toEqual([]);
+    expect(out.zones.map((z) => z.name)).toEqual(["blocks"]);
+    expect(out.zones[0]!.members.map((m) => [m.component.name, m.table.path])).toEqual([
+      ["Money", ["blocks", "Money"]],
+      ["Quantity", ["blocks", "Quantity"]],
+    ]);
+    expect(out.zones[0]!.members[0]!.table.scalars.map((s) => s.path)).toEqual([
+      ["minor"],
+      ["currency"],
+    ]);
+  });
+
   it("reports a relation inside a component as a downgrade gap", () => {
     const withRel: IrDocument = {
       version: 1,

@@ -41,6 +41,7 @@ import { mediaFields, mediaPlan } from "./strapi-api/media";
 import { mediaRelationMethod } from "./strapi-api/media-runtime";
 import { emitStrapiApi } from "./strapi-api/emit";
 import { emitStrapiStorage } from "./strapi-api/storage/emit";
+import { zoneBuilder } from "./strapi-api/zones-admin";
 
 export const filamentAdapter: GenerateAdapter = {
   target: "filament",
@@ -139,6 +140,8 @@ export const filamentAdapter: GenerateAdapter = {
     emitted.forEach((ct) => {
       for (const f of ct.fields) {
         if (f.type === "relation" || f.type === "component") continue;
+        // The Strapi API style keeps a dynamic zone as one child table per member component.
+        if (f.type === "dynamicZone" && apiStyle === "strapi") continue;
         if (!isSupportedField(f.type)) {
           gaps.push({
             feature: f.type,
@@ -160,16 +163,33 @@ export const filamentAdapter: GenerateAdapter = {
       );
       const ctChildren = expansion.tables.map((t) => childTableEmit(ct, t));
       ctChildren.forEach((child) => children.push({ ct, child }));
+      const zoneChildren =
+        apiStyle === "strapi"
+          ? expansion.zones.flatMap((z) =>
+              z.members.map((m) => ({ ...childTableEmit(ct, m.table), ordered: true })),
+            )
+          : [];
+      zoneChildren.forEach((child) => children.push({ ct, child }));
       const names = filamentNames(ct);
-      // With a media library a media field is a link to its files, not a column.
+      // With a media library a media field is a link to its files, not a column; a dynamic zone
+      // lives in its members' tables.
       const mediaOf = fileModel === undefined ? [] : mediaFields(ct);
-      const columns =
-        mediaOf.length === 0 ? ct : { ...ct, fields: ct.fields.filter((f) => f.type !== "media") };
+      const columns = {
+        ...ct,
+        fields: ct.fields.filter(
+          (f) =>
+            !(f.type === "media" && mediaOf.length > 0) &&
+            !(f.type === "dynamicZone" && apiStyle === "strapi"),
+        ),
+      };
       files.push({
         path: `app/Models/${names.model}.php`,
         content: emitModel(
           columns,
-          [...(rel.methods.get(ct.name) ?? []), ...ctChildren.map(childRelationMethod)],
+          [
+            ...(rel.methods.get(ct.name) ?? []),
+            ...[...ctChildren, ...zoneChildren].map(childRelationMethod),
+          ],
           hooks.observedModels.has(ct.name) || aiObservedModels.has(ct.name),
           embeddedEmits,
           rel.fkNames.get(ct.name) ?? [],
@@ -203,7 +223,10 @@ export const filamentAdapter: GenerateAdapter = {
           columns,
           rel.formFields.get(ct.name) ?? [],
           embeddedEmits,
-          ctChildren.map(repeaterComponent),
+          [
+            ...ctChildren.map(repeaterComponent),
+            ...(apiStyle === "strapi" ? expansion.zones.map((z) => zoneBuilder(ct, z)) : []),
+          ],
           {
             versioned: versioned.has(ct.name),
             localized: localized.has(ct.name),
@@ -212,7 +235,7 @@ export const filamentAdapter: GenerateAdapter = {
           },
         ),
       );
-      ctChildren.forEach((child) => {
+      [...ctChildren, ...zoneChildren].forEach((child) => {
         files.push({ path: `app/Models/${child.model}.php`, content: emitChildModel(child) });
       });
       if (apiStyle === "laravel") {

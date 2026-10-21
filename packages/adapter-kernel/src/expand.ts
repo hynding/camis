@@ -22,9 +22,22 @@ export interface ExpandedTable {
   scalars: ExpandedScalar[];
 }
 
+/** One component a dynamic zone may hold, realized as its own child table of the content type. */
+export interface ExpandedZoneMember {
+  component: Component;
+  table: ExpandedTable;
+}
+
+/** A dynamic zone: an ordered list of items, each one of its member components. */
+export interface ExpandedZone {
+  name: string;
+  members: ExpandedZoneMember[];
+}
+
 export interface ExpandedContentType {
   scalars: ExpandedScalar[];
   tables: ExpandedTable[];
+  zones: ExpandedZone[];
   gaps: CapabilityGap[];
 }
 
@@ -60,14 +73,15 @@ export const columnField = (scalar: ExpandedScalar): Field => {
 /**
  * Expand a content type's component fields against the document's component definitions.
  * Non-repeatable components flatten (recursively) into prefixed embedded scalars; repeatable
- * components become child tables. Relations and AI attachments inside components, and
+ * components become child tables, and each component a dynamic zone holds becomes one more, keyed
+ * by the zone. Relations and AI attachments inside components, and
  * repeatables nested inside repeatables, are bounded out as downgrade gaps. A flattened scalar
  * keeps its `required` verbatim and reports, via `alwaysPresent`, whether every component
  * reference above it is required.
  */
 export const expandComponents = (doc: IrDocument, ct: ContentType): ExpandedContentType => {
   const byName = new Map<string, Component>(doc.components.map((c) => [c.name, c]));
-  const out: ExpandedContentType = { scalars: [], tables: [], gaps: [] };
+  const out: ExpandedContentType = { scalars: [], tables: [], zones: [], gaps: [] };
 
   const walk = (
     component: Component,
@@ -132,6 +146,19 @@ export const expandComponents = (doc: IrDocument, ct: ContentType): ExpandedCont
   };
 
   for (const field of ct.fields) {
+    if (field.type === "dynamicZone") {
+      const zone: ExpandedZone = { name: field.name, members: [] };
+      for (const name of field.components) {
+        const component = byName.get(name);
+        if (!component) continue; // unreachable on validated IR
+        // A member's table is keyed by the zone and the component: its rows exist only as items.
+        const table: ExpandedTable = { path: [field.name, component.name], scalars: [] };
+        walk(component, [], table.scalars, true, true);
+        zone.members.push({ component, table });
+      }
+      out.zones.push(zone);
+      continue;
+    }
     if (field.type !== "component") continue;
     const component = byName.get(field.component);
     if (!component) continue; // unreachable on validated IR

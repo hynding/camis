@@ -26,6 +26,9 @@ final class TransactionSerializer
     /** Component keys, which Strapi leaves off the wire unless populate names them. */
     public const COMPONENTS = ['amount'];
 
+    /** Each dynamic zone's member components by uid: the child relation its items live in, and its own component keys. */
+    public const ZONES = [];
+
     /** Whether each document has a draft and, once published, a published version. */
     public const DRAFT_PUBLISH = false;
 

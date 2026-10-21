@@ -17,10 +17,14 @@ describe("dynamic zones", () => {
     expect(migration).toContain("$table->string('heading')");
     expect(migration).toContain("$table->bigInteger('price_minor')->nullable();");
     expect(content("app/Models/Landing.php")).toContain("public function blocksHero(): HasMany");
+    expect(content("_create_landings_table.php")).not.toContain("'blocks'");
+    expect(content("app/Filament/Resources/Landings/Schemas/LandingForm.php")).not.toContain(
+      "TextInput::make('blocks')",
+    );
   });
 
   it("is no capability gap", () => {
-    expect(result.gaps.filter((g) => g.feature === "dynamicZone")).toEqual([]);
+    expect(result.gaps.gaps.filter((g) => g.feature === "dynamicZone")).toEqual([]);
   });
 
   it("sends each item with its component's uid, only when populate names the zone", async () => {
@@ -34,9 +38,11 @@ describe("dynamic zones", () => {
   });
 
   it("refuses an item naming a component the project does not have, as Strapi words it", () => {
-    expect(content("app/Http/Serializers/LandingSerializer.php")).toContain(
-      "must be one of the following values: shared.hero, shared.money, shared.quantity",
+    const zones = content("app/Support/StrapiZones.php");
+    expect(zones).toContain(
+      "private const COMPONENTS = ['shared.hero', 'shared.money', 'shared.quantity'];",
     );
+    expect(zones).toContain("__component must be one of the following values: ");
   });
 
   it("narrows a zone by populate's on fragments", () => {

@@ -19,7 +19,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 
-/** $serializer is a generated serializer class: its FIELDS say which links the row holds. */
+/** $serializer is a generated serializer class: its FIELDS and ZONES say which children and links the row holds. */
 final class StrapiDocuments
 {
     /** Strapi's status parameter: anything but 'published' (the default) asks for drafts. */
@@ -140,6 +140,14 @@ final class StrapiDocuments
                 $relation = $from->{$field['relation']}();
                 $ids = $relation->orderBy($relation->getRelated()->getQualifiedKeyName())->pluck($relation->getRelated()->getQualifiedKeyName())->all();
                 $to->{$field['relation']}()->sync(self::counterparts($field, $ids, $published));
+            }
+        }
+        foreach ($serializer::ZONES as $members) {
+            foreach ($members as $member) {
+                $to->{$member['relation']}()->delete();
+                foreach ($from->{$member['relation']}()->orderBy('position')->get() as $item) {
+                    $to->{$member['relation']}()->save($item->replicate());
+                }
             }
         }
 
