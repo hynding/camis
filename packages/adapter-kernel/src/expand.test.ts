@@ -359,4 +359,50 @@ describe("expandComponents", () => {
     expect((r.scalars[0]?.field as { ai?: unknown }).ai).toBeUndefined();
     expect(r.gaps.map((g) => g.feature)).toEqual(["componentAiField"]);
   });
+
+  it("keys each scalar, table and zone by the names its fields go by on the API", () => {
+    const named: IrDocument = {
+      version: 1,
+      contentTypes: [
+        {
+          name: "Page",
+          kind: "collection",
+          fields: [
+            {
+              type: "component",
+              name: "heroBanner",
+              names: { api: "hero_banner" },
+              component: "Banner",
+              repeatable: false,
+            },
+            {
+              type: "component",
+              name: "faqItems",
+              names: { api: "faq_items" },
+              component: "Banner",
+              repeatable: true,
+            },
+            {
+              type: "dynamicZone",
+              name: "pageBlocks",
+              names: { api: "page_blocks" },
+              components: ["Banner"],
+            },
+          ],
+        },
+      ],
+      components: [
+        {
+          name: "Banner",
+          fields: [{ type: "string", name: "mainTitle", names: { api: "main_title" } }],
+        },
+      ],
+    };
+    const r = expandComponents(named, named.contentTypes[0]!);
+    expect(r.scalars.map((s) => s.apiPath)).toEqual([["hero_banner", "main_title"]]);
+    expect(r.tables.map((t) => t.apiPath)).toEqual([["faq_items"]]);
+    expect(r.tables[0]?.scalars.map((s) => s.apiPath)).toEqual([["main_title"]]);
+    expect(r.zones.map((z) => z.apiName)).toEqual(["page_blocks"]);
+    expect(r.zones[0]?.members[0]?.table.scalars.map((s) => s.apiPath)).toEqual([["main_title"]]);
+  });
 });

@@ -79,13 +79,13 @@ describe("importDocument", () => {
           pluginOptions: {},
           attributes: {
             title: { type: "string" },
-            blocks: { type: "dynamiczone", components: ["shared.seo-meta"] },
+            body: { type: "blocks" },
           },
         }),
       },
     ];
     const { document, gaps } = importDocument(files);
-    expect(gaps.gaps.some((g) => g.feature === "dynamiczone")).toBe(true);
+    expect(gaps.gaps.some((g) => g.feature === "blocks")).toBe(true);
     expect(document.ok).toBe(true);
     if (!document.ok) return;
     expect(document.value.contentTypes[0]!.fields.map((f) => f.name)).toEqual(["title"]);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { field, componentField } from "./fields";
+import { field, componentField, fieldApiName } from "./fields";
 
 const parse = (v: unknown) => field.safeParse(v);
 
@@ -132,6 +132,27 @@ describe("ai annotation on fields", () => {
     expect(r.success).toBe(true);
     expect((r.success ? r.data : ({} as never)) as Record<string, unknown>).not.toHaveProperty(
       "ai",
+    );
+  });
+});
+
+describe("a field's name on the API", () => {
+  it("accepts the name an imported API already uses for the field", () => {
+    expect(parse({ type: "string", name: "heroTitle", names: { api: "hero_title" } }).success).toBe(
+      true,
+    );
+  });
+
+  it("rejects an API name no target can use as a key", () => {
+    expect(parse({ type: "string", name: "heroTitle", names: { api: "hero title" } }).success).toBe(
+      false,
+    );
+  });
+
+  it("is the field's own name unless the field names another", () => {
+    expect(fieldApiName({ type: "string", name: "heroTitle" })).toBe("heroTitle");
+    expect(fieldApiName({ type: "string", name: "heroTitle", names: { api: "hero_title" } })).toBe(
+      "hero_title",
     );
   });
 });

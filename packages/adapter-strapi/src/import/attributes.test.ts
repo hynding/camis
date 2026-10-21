@@ -141,3 +141,55 @@ describe("irField — plugin relation targets", () => {
     expect(r.gap?.feature).toBe("pluginRelation");
   });
 });
+
+describe("irField — what strapi-php projects carry", () => {
+  it("camelCases a snake_case attribute, keeping its name on the API", () => {
+    expect(irField("hero_title", { type: "string", required: true }, loc).field).toEqual({
+      type: "string",
+      name: "heroTitle",
+      names: { api: "hero_title" },
+      required: true,
+    });
+  });
+  it("camelCases the field a uid is made from", () => {
+    expect(irField("slug", { type: "uid", targetField: "hero_title" }, loc).field).toEqual({
+      type: "uid",
+      name: "slug",
+      targetField: "heroTitle",
+    });
+  });
+  it("camelCases a relation's inverse, reporting the inverse's API name it loses", () => {
+    const r = irField(
+      "author",
+      {
+        type: "relation",
+        relation: "manyToOne",
+        target: "api::author.author",
+        inversedBy: "blog_posts",
+      },
+      loc,
+    );
+    expect(r.field).toEqual({
+      type: "relation",
+      name: "author",
+      relationKind: "manyToOne",
+      target: "Author",
+      inverse: "blogPosts",
+    });
+    expect(r.gap?.feature).toBe("inverseApiName");
+  });
+  it("maps a dynamic zone to its IR components", () => {
+    expect(
+      irField(
+        "blocks",
+        { type: "dynamiczone", components: ["shared.hero", "content.seo-meta"] },
+        loc,
+      ).field,
+    ).toEqual({ type: "dynamicZone", name: "blocks", components: ["Hero", "SeoMeta"] });
+  });
+  it("reports a polymorphic relation as a downgrade gap", () => {
+    const r = irField("related", { type: "relation", relation: "morphToMany" }, loc);
+    expect(r.field).toBeUndefined();
+    expect(r.gap).toMatchObject({ feature: "morphRelation", severity: "downgrade" });
+  });
+});

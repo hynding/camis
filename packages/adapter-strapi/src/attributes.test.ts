@@ -83,12 +83,28 @@ describe("toAttribute — media", () => {
 });
 
 describe("toAttributes — dynamicZone", () => {
-  it("skips dynamicZone fields (deferred; generate reports a gap)", () => {
+  it("writes a dynamic zone with its components' uids", () => {
+    const attrs = toAttributes(
+      [
+        { type: "string", name: "title" },
+        { type: "dynamicZone", name: "blocks", components: ["Hero", "Quote"] },
+      ],
+      new Set(),
+      new Map([["Quote", "content.quote"]]),
+    );
+    expect(attrs.blocks).toEqual({
+      type: "dynamiczone",
+      components: ["shared.hero", "content.quote"],
+    });
+  });
+});
+
+describe("toAttributes — API names", () => {
+  it("keys an attribute by the name the field goes by on the API", () => {
     const attrs = toAttributes([
-      { type: "string", name: "title" },
-      { type: "dynamicZone", name: "blocks", components: ["Hero"] },
+      { type: "string", name: "heroTitle", names: { api: "hero_title" } },
     ]);
-    expect(Object.keys(attrs)).toEqual(["title"]);
+    expect(Object.keys(attrs)).toEqual(["hero_title"]);
   });
 });
 
