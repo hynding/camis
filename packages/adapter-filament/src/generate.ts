@@ -177,7 +177,9 @@ export const filamentAdapter: GenerateAdapter = {
             ? [strapi.scopeMethods.get(ct.name)!]
             : [],
           [
-            ...(apiStyle === "strapi" ? ["App\\Models\\Concerns\\HasDocumentId"] : []),
+            ...(apiStyle === "strapi"
+              ? ["App\\Models\\Concerns\\EmitsStrapiEvents", "App\\Models\\Concerns\\HasDocumentId"]
+              : []),
             ...(versioned.has(ct.name) ? ["App\\Models\\Concerns\\HasDraftAndPublish"] : []),
             ...(localized.has(ct.name) ? ["App\\Models\\Concerns\\HasLocale"] : []),
             ...(mediaOf.length > 0 ? ["App\\Models\\Concerns\\HasMedia"] : []),

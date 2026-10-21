@@ -20,6 +20,7 @@ final class TransactionSerializer
         'amount.currency' => ['column' => 'amount_currency', 'type' => 'string'],
         'createdAt' => ['column' => 'created_at', 'type' => 'dateTime'],
         'updatedAt' => ['column' => 'updated_at', 'type' => 'dateTime'],
+        'publishedAt' => ['column' => 'updated_at', 'type' => 'dateTime'],
     ];
 
     /** Component keys, which Strapi leaves off the wire unless populate names them. */
@@ -42,6 +43,7 @@ final class TransactionSerializer
             'occurredOn' => $m->occurred_on?->toDateString(),
             'createdAt' => $m->created_at?->toIso8601ZuluString('millisecond'),
             'updatedAt' => $m->updated_at?->toIso8601ZuluString('millisecond'),
+            'publishedAt' => $m->updated_at?->toIso8601ZuluString('millisecond'),
             'amount' => self::nested([
                 'minor' => $m->amount_minor === null ? null : (string) $m->amount_minor,
                 'currency' => $m->amount_currency,

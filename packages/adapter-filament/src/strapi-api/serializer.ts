@@ -85,6 +85,9 @@ const toWireBody = (shape: WireShape, indent: string, layout: StorageLayout): st
   }
   insert(root, ["createdAt"], `$m->created_at${ZULU_MS}`);
   insert(root, ["updatedAt"], `$m->updated_at${ZULU_MS}`);
+  // Strapi stamps publishedAt on every write of a type without draft and publish.
+  if (!shape.draftPublish && layout === "laravel")
+    insert(root, ["publishedAt"], `$m->updated_at${ZULU_MS}`);
   if (shape.localized && layout === "laravel") insert(root, ["locale"], "$m->locale");
   return render(root, indent);
 };
@@ -163,9 +166,11 @@ const fieldsConstant = (shape: WireShape): string => {
   const timestamps: WireScalar[] = [
     { key: ["createdAt"], column: "created_at", type: "dateTime" },
     { key: ["updatedAt"], column: "updated_at", type: "dateTime" },
-    ...(shape.draftPublish
-      ? [{ key: ["publishedAt"], column: "published_at", type: "dateTime" as const }]
-      : []),
+    {
+      key: ["publishedAt"],
+      column: shape.draftPublish ? "published_at" : "updated_at",
+      type: "dateTime",
+    },
     ...(shape.localized ? [{ key: ["locale"], column: "locale", type: "string" as const }] : []),
   ];
   const children = shape.children.map(

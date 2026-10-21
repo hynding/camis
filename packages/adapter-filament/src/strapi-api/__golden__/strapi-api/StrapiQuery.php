@@ -76,22 +76,40 @@ final class StrapiQuery
         self::sort($query, $sort, $fields, $viewer);
     }
 
+    /** Set while unrestricted() runs. */
+    private static bool $unrestricted = false;
+
+    /**
+     * Reads as no caller: every row and every relation, as Strapi populates the entry it sends a
+     * webhook whoever made the change.
+     */
+    public static function unrestricted(\Closure $read): mixed
+    {
+        $was = self::$unrestricted;
+        self::$unrestricted = true;
+        try {
+            return $read();
+        } finally {
+            self::$unrestricted = $was;
+        }
+    }
+
     /** Whether the caller may read the target of a FIELDS relation entry at all. */
     public static function readable(array $relation, ?Authenticatable $viewer): bool
     {
-        return $viewer === null || Gate::forUser($viewer)->allows('viewAny', $relation['model']);
+        return self::$unrestricted || $viewer === null || Gate::forUser($viewer)->allows('viewAny', $relation['model']);
     }
 
     /** Whether the caller may see one row of a relation's target. */
     public static function visible(mixed $row, ?Authenticatable $viewer): bool
     {
-        return $viewer === null || Gate::forUser($viewer)->allows('view', $row);
+        return self::$unrestricted || $viewer === null || Gate::forUser($viewer)->allows('view', $row);
     }
 
     /** Narrows a target's query to the rows the caller's grants let it list. */
     public static function scope(mixed $query, ?Authenticatable $viewer): void
     {
-        if ($viewer !== null) {
+        if (! self::$unrestricted && $viewer !== null) {
             $query->forUser($viewer);
         }
     }

@@ -13,11 +13,12 @@
 // headers, and `cookie` names a response cookie to record (set or cleared) and keep as `$<name>`.
 // `jar` names a cookie jar the step sends and fills, as a browser would across an OAuth round
 // trip, and `keepQuery` keeps query values of the redirect's location (`{ "state": "state" }`). A
-// redirect's own origin and an OAuth state are masked, as they differ between runtimes and runs.
+// redirect's own origin, an OAuth state and a stored file's random name are masked, as they differ
+// between runtimes and runs.
 // `upload` sends files from __fixtures__/media as the Upload API's multipart form (`files`, and
 // `fileInfo` when given). A step with `deliveries` records the webhooks webhook-receiver.mjs
 // (`--receiver`) got since the last such step, waiting for them as a runtime may send after it
-// answers; a delivery's time and a file's random hash and url are masked.
+// answers; a delivery's time is masked, and a published version shows as `published`.
 //
 // usage: strapi-auth-vectors.mjs <api-base> --hook CMD [--vectors F] [--expected F] [--record]
 //        [--receiver URL]
@@ -137,9 +138,12 @@ const PRESENCE = {
   lastActiveAt: "<date>",
 };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+// A stored file's hash, and so its url, ends in random hex.
+const RANDOM_SUFFIX = /_[0-9a-f]{10}(?=\.|$)/g;
 const masked = (key, value) => {
   if (typeof value !== "string") return normalize(value);
   if (key in PRESENCE) return PRESENCE[key];
+  if (key === "hash" || key === "url") return value.replace(RANDOM_SUFFIX, "_<hash>");
   return key === "deviceId" && UUID.test(value) ? "<uuid>" : value;
 };
 const normalize = (value) => {
@@ -194,7 +198,6 @@ const deliveries = async () => {
     .sort((a, b) => a.delivery.path.localeCompare(b.delivery.path) || a.i - b.i)
     .map(({ delivery }) => ({ ...delivery, body: maskDelivery(delivery.body) }));
 };
-const RANDOM_FILE = new Set(["hash", "url"]);
 // A published version shows as `published`, which normalize would otherwise drop with the date.
 const publication = (value) => {
   if (Array.isArray(value)) return value.map(publication);
@@ -207,19 +210,8 @@ const publication = (value) => {
 };
 const maskDelivery = (delivered) => {
   if (delivered === null || typeof delivered !== "object") return delivered;
-  const { createdAt, media, ...rest } = publication(delivered);
-  const file =
-    media === undefined
-      ? {}
-      : {
-          media: Object.fromEntries(
-            Object.entries(normalize(media)).map(([k, v]) => [
-              k,
-              RANDOM_FILE.has(k) && typeof v === "string" ? "<random>" : v,
-            ]),
-          ),
-        };
-  return normalize({ ...rest, ...file, ...(createdAt === undefined ? {} : { at: "<date>" }) });
+  const { createdAt, ...rest } = publication(delivered);
+  return normalize({ ...rest, ...(createdAt === undefined ? {} : { at: "<date>" }) });
 };
 
 const outcomes = [];

@@ -39,15 +39,24 @@ final class StrapiDocuments
             ->first();
     }
 
+    /** Each version's own write is not an event: the documents send what Strapi sends for it. */
     public static function publish(Model $draft, string $serializer): Model
     {
-        return DB::transaction(fn () => self::copy($draft, self::sibling($draft, true), $serializer, true));
+        $published = StrapiWebhooks::quietly(fn () => DB::transaction(fn () => self::copy($draft, self::sibling($draft, true), $serializer, true)));
+        StrapiWebhooks::entry('entry.publish', $published);
+
+        return $published;
     }
 
     /** Drops the published version; the draft stays. */
     public static function unpublish(Model $draft): void
     {
-        self::sibling($draft, true)?->delete();
+        $published = self::sibling($draft, true);
+        if ($published === null) {
+            return;
+        }
+        StrapiWebhooks::quietly(fn () => $published->delete());
+        StrapiWebhooks::entry('entry.unpublish', $published);
     }
 
     /** Resets the draft to the published version. */
@@ -57,8 +66,10 @@ final class StrapiDocuments
         if ($published === null) {
             return $draft;
         }
+        $draft = StrapiWebhooks::quietly(fn () => DB::transaction(fn () => self::copy($published, $draft, $serializer, false)));
+        StrapiWebhooks::entry('entry.draft-discard', $draft);
 
-        return DB::transaction(fn () => self::copy($published, $draft, $serializer, false));
+        return $draft;
     }
 
     /** Deletes every version of the document. */

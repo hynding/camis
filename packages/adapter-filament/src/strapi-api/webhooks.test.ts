@@ -35,7 +35,7 @@ describe("webhooks", () => {
     const webhooks = content("app/Support/StrapiWebhooks.php");
     expect(webhooks).toContain("app()->terminating(fn () => self::flush());");
     expect(webhooks).toContain("DB::afterCommit(");
-    expect(webhooks).toContain("->timeout(10)");
+    expect(webhooks).toContain("Http::timeout(10)");
   });
 
   it("hears every content type's writes and the media library's", () => {

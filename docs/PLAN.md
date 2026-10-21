@@ -726,6 +726,45 @@ admin`) open its admin API, which Filament replaces. A token is refused the user
 role routes, as every session is: the roles are the IR's. The Strapi storage layout accepts no
 API token (the Strapi instance keeps them), and tokens are not carried over from a Strapi
 database.
+
+## Phase 26 — Webhooks (`adapter-filament`)
+
+**Goal:** Strapi 5's webhooks fire as on Strapi, on the laravel storage layout with the Strapi API
+style, without a queue worker, and the Filament admin manages them.
+
+- Webhooks live in Strapi's own `strapi_webhooks` table. Every enabled webhook that hears an event
+  is POSTed `{ event, createdAt, ...info }` with its own headers over `camis.webhooks.default_headers`
+  (Strapi's `server.webhooks.defaultHeaders`), `X-Strapi-Event` and JSON, with a 10 s timeout; an
+  error status or a failure is its answer, never the write's.
+- Events: `entry.create`, `entry.update` and `entry.delete` from every content type's writes
+  (through the API, the admin or any Eloquent save), `entry.publish`, `entry.unpublish` and
+  `entry.draft-discard` from the documents (a version's own copy is not an event), and
+  `media.create`, `media.update` and `media.delete` from the media library. An entry is sent
+  populated as Strapi's deep populate reads it, whoever wrote it; a deletion or an unpublication
+  as the row was. A row written twice in a request is one event, and nothing is sent for a
+  transaction that rolls back.
+- Shared hosting: events are sent once the response has gone (`app()->terminating`, after
+  PHP-FPM's `fastcgi_finish_request`), so no queue worker or cron is needed and a slow receiver
+  never slows a write.
+- Types without draft and publish carry `publishedAt`, the time of their last write, as Strapi
+  stamps it.
+- The admin's Settings › Webhooks resource makes, edits, enables, triggers (`trigger-test`) and
+  deletes webhooks, refusing a url the public internet cannot reach in production, for whoever may
+  change accounts (`user.update`) where the project has roles.
+
+**Exit criteria:** the 30 checks of `webhook-vectors.json`, recorded from strapi-php against a local
+receiver (`webhook-receiver.mjs`), pass in the `strapi-api` boot job on SQLite, MySQL and Postgres,
+with `WebhooksTest` (the admin page and its trigger, the production url check, the admin's own
+writes and publication changes, a rolled-back write, default headers); every earlier suite still
+passes.
+
+**Status (2026-10-21):** every suite passes on SQLite and Postgres with all caches on, and the
+admin tests pass.
+
+Known gaps: user accounts' writes are not events (Strapi sends `entry.create` and `entry.update`
+for them). Strapi's `populateRelations: false` setting is not offered. A webhook is sent once,
+with no retry, as on Strapi. The Strapi storage layout sends no webhooks (the Strapi instance
+keeps them).
 ---
 
 ## Sequencing rationale (quick reference)

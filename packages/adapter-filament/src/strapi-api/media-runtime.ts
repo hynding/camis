@@ -336,12 +336,14 @@ declare(strict_types=1);
 
 namespace App\\Models;
 
+use App\\Models\\Concerns\\EmitsStrapiEvents;
 use App\\Models\\Concerns\\HasDocumentId;
 use App\\Support\\StrapiUpload;${members.length > 0 ? "\nuse Illuminate\\Database\\Eloquent\\Builder;" : ""}
 use Illuminate\\Database\\Eloquent\\Model;
 
 class ${model} extends Model
 {
+    use EmitsStrapiEvents;
     use HasDocumentId;
 
     protected $table = 'files';

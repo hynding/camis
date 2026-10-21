@@ -21,6 +21,7 @@ final class ConsumableSerializer
         ]],
         'createdAt' => ['column' => 'created_at', 'type' => 'dateTime'],
         'updatedAt' => ['column' => 'updated_at', 'type' => 'dateTime'],
+        'publishedAt' => ['column' => 'updated_at', 'type' => 'dateTime'],
     ];
 
     /** Component keys, which Strapi leaves off the wire unless populate names them. */
@@ -41,6 +42,7 @@ final class ConsumableSerializer
             'recordId' => $m->record_id,
             'createdAt' => $m->created_at?->toIso8601ZuluString('millisecond'),
             'updatedAt' => $m->updated_at?->toIso8601ZuluString('millisecond'),
+            'publishedAt' => $m->updated_at?->toIso8601ZuluString('millisecond'),
             'facts' => self::nested([
                 'calories' => $m->facts_calories === null ? null : (float) $m->facts_calories,
                 'additional' => $m->factsAdditional->map(fn ($c) => self::nested([

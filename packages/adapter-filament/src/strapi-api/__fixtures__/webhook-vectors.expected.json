@@ -253,24 +253,16 @@
     ]
   },
   {
-    "name": "a rejected write",
-    "status": 400,
+    "name": "a refused write",
+    "status": 403,
     "error": {
-      "name": "ValidationError",
-      "message": "title must be defined.",
-      "details": {
-        "errors": [
-          {
-            "path": ["title"],
-            "message": "title must be defined.",
-            "name": "ValidationError"
-          }
-        ]
-      }
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
     }
   },
   {
-    "name": "a rejected write sends nothing",
+    "name": "a refused write sends nothing",
     "deliveries": []
   },
   {
@@ -580,13 +572,13 @@
       {
         "caption": "Notes",
         "ext": ".txt",
-        "hash": "notes_3afbc7c944",
+        "hash": "notes_<hash>",
         "isUrlSigned": false,
         "mime": "text/plain",
         "name": "notes.txt",
         "provider": "local",
         "size": 0.01,
-        "url": "/uploads/notes_3afbc7c944.txt"
+        "url": "/uploads/notes_<hash>.txt"
       }
     ]
   },
@@ -606,13 +598,13 @@
           "media": {
             "caption": "Notes",
             "ext": ".txt",
-            "hash": "<random>",
+            "hash": "notes_<hash>",
             "mime": "text/plain",
             "name": "notes.txt",
             "provider": "local",
             "published": true,
             "size": 0.01,
-            "url": "<random>"
+            "url": "/uploads/notes_<hash>.txt"
           }
         }
       }
@@ -625,13 +617,13 @@
       "alternativeText": "the notes",
       "caption": "Notes",
       "ext": ".txt",
-      "hash": "notes_3afbc7c944",
+      "hash": "notes_<hash>",
       "isUrlSigned": false,
       "mime": "text/plain",
       "name": "notes.txt",
       "provider": "local",
       "size": 0.01,
-      "url": "/uploads/notes_3afbc7c944.txt"
+      "url": "/uploads/notes_<hash>.txt"
     }
   },
   {
@@ -651,13 +643,13 @@
             "alternativeText": "the notes",
             "caption": "Notes",
             "ext": ".txt",
-            "hash": "<random>",
+            "hash": "notes_<hash>",
             "mime": "text/plain",
             "name": "notes.txt",
             "provider": "local",
             "published": true,
             "size": 0.01,
-            "url": "<random>"
+            "url": "/uploads/notes_<hash>.txt"
           }
         }
       }
@@ -670,13 +662,13 @@
       "alternativeText": "the notes",
       "caption": "Notes",
       "ext": ".txt",
-      "hash": "notes_3afbc7c944",
+      "hash": "notes_<hash>",
       "isUrlSigned": false,
       "mime": "text/plain",
       "name": "notes.txt",
       "provider": "local",
       "size": 0.01,
-      "url": "/uploads/notes_3afbc7c944.txt"
+      "url": "/uploads/notes_<hash>.txt"
     }
   },
   {
@@ -696,13 +688,13 @@
             "alternativeText": "the notes",
             "caption": "Notes",
             "ext": ".txt",
-            "hash": "<random>",
+            "hash": "notes_<hash>",
             "mime": "text/plain",
             "name": "notes.txt",
             "provider": "local",
             "published": true,
             "size": 0.01,
-            "url": "<random>"
+            "url": "/uploads/notes_<hash>.txt"
           }
         }
       }
