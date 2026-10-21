@@ -2,7 +2,7 @@
 # The camis side of strapi-auth-vectors.mjs --hook, run from the generated app's directory: reads
 # what only the database knows and changes what only an administrator can, through artisan tinker.
 # usage: strapi-auth-hook.sh lookup reset|confirmation <username> | lookup role <name>
-#        | settings <json> | block <username> | allow create|update|destroy | role <name> <action>...
+#        | settings <json> | provider <name> <json> | block <username> | allow create|update|destroy | role <name> <action>...
 set -euo pipefail
 php_string() { printf "'%s'" "$(printf '%s' "$1" | sed "s/\\\\/\\\\\\\\/g; s/'/\\\\'/g")"; }
 case "$1" in
@@ -13,6 +13,7 @@ case "$1" in
       role) code="echo Spatie\\Permission\\Models\\Role::findByName($(php_string "$3"))->getKey();" ;;
     esac ;;
   settings) code="App\\Support\\StrapiSettings::merge('users-permissions.advanced', json_decode($(php_string "$2"), true));" ;;
+  provider) code="App\\Support\\StrapiProviders::configure($(php_string "$2"), json_decode($(php_string "$3"), true));" ;;
   block) code="App\\Models\\User::where('username', $(php_string "$2"))->update(['blocked' => true]);" ;;
   allow)
     action="$2"; [[ "$action" == destroy ]] && action=delete

@@ -94,6 +94,7 @@ overwrite app/Filament/Resources/Users/Pages/ListUsers.php
 overwrite app/Filament/Resources/Users/UserResource.php
 overwrite app/Filament/Support/MediaPicker.php
 overwrite app/Http/Controllers/Api/AuthController.php
+overwrite app/Http/Controllers/Api/ConnectController.php
 overwrite app/Http/Controllers/Api/Generated/ActivityApiController.php
 overwrite app/Http/Controllers/Api/Generated/ActivitySessionApiController.php
 overwrite app/Http/Controllers/Api/Generated/ArticleApiController.php
@@ -170,7 +171,9 @@ overwrite app/Support/Ring1.php
 overwrite app/Support/StrapiDocuments.php
 overwrite app/Support/StrapiError.php
 overwrite app/Support/StrapiLocales.php
+overwrite app/Support/StrapiOAuth.php
 overwrite app/Support/StrapiPopulate.php
+overwrite app/Support/StrapiProviders.php
 overwrite app/Support/StrapiQuery.php
 overwrite app/Support/StrapiRelations.php
 overwrite app/Support/StrapiSessions.php
@@ -187,6 +190,7 @@ overwrite database/migrations/0001_01_02_000002_create_strapi_settings_table.php
 overwrite database/migrations/0001_01_02_000002_create_transactions_table.php
 overwrite database/migrations/0001_01_02_000003_create_activity_sessions_table.php
 overwrite database/migrations/0001_01_02_000003_create_strapi_sessions_table.php
+overwrite database/migrations/0001_01_02_000004_allow_users_without_password.php
 overwrite database/migrations/0001_01_02_000004_create_activities_table.php
 overwrite database/migrations/0001_01_02_000005_create_tags_table.php
 overwrite database/migrations/0001_01_02_000006_create_topics_table.php

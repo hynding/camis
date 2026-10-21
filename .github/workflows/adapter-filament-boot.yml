@@ -161,6 +161,8 @@ jobs:
           esac
           # The auth vectors make more credential requests in a minute than the default allows.
           echo "CAMIS_AUTH_THROTTLE_PER_MINUTE=600" >> .env
+          # The OAuth redirect URI is built from it, and the vectors mask the origin they call.
+          sed -i 's#^APP_URL=.*#APP_URL=http://127.0.0.1:8765#' .env
           php artisan migrate --force
           php artisan db:seed --class="Database\\Seeders\\RolePermissionSeeder" --force
           php artisan config:cache
@@ -235,6 +237,20 @@ jobs:
           php artisan db:seed --class="Database\\Seeders\\RolePermissionSeeder" --force
           node ../packages/adapter-filament/scripts/strapi-auth-vectors.mjs http://127.0.0.1:8765/api \
             --hook "bash ../packages/adapter-filament/scripts/strapi-auth-hook.sh"
+      - name: Strapi sign-in provider vectors (recorded from strapi-php against a stand-in provider)
+        run: |
+          bash packages/adapter-filament/scripts/fake-oauth-cert.sh "$RUNNER_TEMP/oauth"
+          sudo cp "$RUNNER_TEMP/oauth/fake-oauth.crt" /usr/local/share/ca-certificates/camis-fake-oauth.crt
+          sudo update-ca-certificates
+          (node packages/adapter-filament/scripts/fake-oauth-provider.mjs --cert "$RUNNER_TEMP/oauth/fake-oauth.crt" --key "$RUNNER_TEMP/oauth/fake-oauth.key" > "$RUNNER_TEMP/oauth/serve.log" 2>&1 &)
+          for _ in $(seq 1 30); do curl -s -o /dev/null https://127.0.0.1:9443/cognito/jwks && break; sleep 1; done
+          cd app
+          php artisan migrate:fresh --force
+          php artisan db:seed --class="Database\\Seeders\\RolePermissionSeeder" --force
+          F=../packages/adapter-filament/src/strapi-api/__fixtures__
+          node ../packages/adapter-filament/scripts/strapi-auth-vectors.mjs http://127.0.0.1:8765/api \
+            --hook "bash ../packages/adapter-filament/scripts/strapi-auth-hook.sh" \
+            --vectors $F/oauth-vectors.json --expected $F/oauth-vectors.expected.json
       - name: Strapi refresh-token session vectors (recorded from strapi-php in refresh mode)
         run: |
           cd app
@@ -252,8 +268,8 @@ jobs:
           # The cached config would point the tests at the served database instead of :memory:.
           php artisan config:clear
           S=../packages/adapter-filament/scripts/php
-          cp $S/DraftAdminTest.php $S/LocaleAdminTest.php $S/MediaAdminTest.php $S/UsersAdminTest.php tests/Feature/
-          php artisan test tests/Feature/DraftAdminTest.php tests/Feature/LocaleAdminTest.php tests/Feature/MediaAdminTest.php tests/Feature/UsersAdminTest.php
+          cp $S/DraftAdminTest.php $S/LocaleAdminTest.php $S/MediaAdminTest.php $S/UsersAdminTest.php $S/ProvidersTest.php tests/Feature/
+          php artisan test tests/Feature/DraftAdminTest.php tests/Feature/LocaleAdminTest.php tests/Feature/MediaAdminTest.php tests/Feature/UsersAdminTest.php tests/Feature/ProvidersTest.php
       - name: Server log on failure
         if: failure()
-        run: cat app/serve.log app/storage/logs/laravel.log || true
+        run: cat app/serve.log app/storage/logs/laravel.log "$RUNNER_TEMP/oauth/serve.log" || true

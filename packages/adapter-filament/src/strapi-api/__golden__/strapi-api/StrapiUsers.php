@@ -46,7 +46,7 @@ final class StrapiUsers
         ];
     }
 
-    /** A new local account, as users-permissions' user service adds one. */
+    /** A new account (local unless a provider made it), as users-permissions' user service adds one. */
     public static function add(array $values): User
     {
         $user = new User();
@@ -55,7 +55,7 @@ final class StrapiUsers
             'username' => $values['username'],
             'email' => mb_strtolower((string) $values['email']),
             'password' => $values['password'],
-            'provider' => 'local',
+            'provider' => $values['provider'] ?? 'local',
             'confirmed' => (bool) ($values['confirmed'] ?? false),
             'blocked' => (bool) ($values['blocked'] ?? false),
             'document_id' => self::newDocumentId(),

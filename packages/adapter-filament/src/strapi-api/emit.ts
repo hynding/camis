@@ -32,6 +32,13 @@ import { emitStrapiPopulate, emitStrapiRelations } from "./populate-runtime";
 import { emitHasDocumentId, emitStrapiError, emitStrapiQuery } from "./rest-runtime";
 import { emitApiConfig, emitStrapiRoutes } from "./routes";
 import { emitScopeMethod } from "./scope";
+import {
+  emitConnectController,
+  emitPasswordlessMigration,
+  emitStrapiOAuth,
+  emitStrapiProviders,
+  PASSWORDLESS_MIGRATION_PATH,
+} from "./oauth";
 import { emitSerializer } from "./serializer";
 import {
   emitRoleController,
@@ -154,7 +161,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     content: emitAuthController(bundle.defaultRole),
   });
   files.push({ path: USERNAME_MIGRATION_PATH, content: emitUsernameMigration() });
-  files.push(...usersPermissionsFiles(secured, guests));
+  files.push(...usersPermissionsFiles(secured, guests, bundle.defaultRole));
   files.push({
     path: "app/Http/Middleware/StrapiErrors.php",
     content: emitStrapiErrorsMiddleware(),
@@ -183,7 +190,11 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
 };
 
 /** users-permissions beyond register and login: accounts, their settings and their admin. */
-const usersPermissionsFiles = (secured: boolean, guests: boolean): GeneratedFile[] => [
+const usersPermissionsFiles = (
+  secured: boolean,
+  guests: boolean,
+  defaultRole: string | undefined,
+): GeneratedFile[] => [
   { path: "app/Support/StrapiUsers.php", content: emitStrapiUsers() },
   { path: "app/Support/StrapiSettings.php", content: emitStrapiSettings() },
   {
@@ -198,6 +209,10 @@ const usersPermissionsFiles = (secured: boolean, guests: boolean): GeneratedFile
   { path: "app/Http/Controllers/Api/SessionController.php", content: emitSessionController() },
   { path: "app/Http/Controllers/Api/RoleController.php", content: emitRoleController() },
   { path: SESSIONS_MIGRATION_PATH, content: emitSessionsMigration() },
+  { path: "app/Support/StrapiProviders.php", content: emitStrapiProviders(defaultRole) },
+  { path: "app/Support/StrapiOAuth.php", content: emitStrapiOAuth() },
+  { path: "app/Http/Controllers/Api/ConnectController.php", content: emitConnectController() },
+  { path: PASSWORDLESS_MIGRATION_PATH, content: emitPasswordlessMigration() },
   ...emitUserResourceFiles(secured),
   {
     path: "app/Filament/Pages/UsersPermissionsSettings.php",

@@ -107,6 +107,7 @@ export const emitStrapiRoutes = (
     ...(upload ? ["App\\Http\\Controllers\\Api\\UploadController"] : []),
     ...(usersPermissions
       ? [
+          "App\\Http\\Controllers\\Api\\ConnectController",
           "App\\Http\\Controllers\\Api\\RoleController",
           "App\\Http\\Controllers\\Api\\SessionController",
           "App\\Http\\Controllers\\Api\\UserController",
@@ -116,6 +117,13 @@ export const emitStrapiRoutes = (
       : []),
     ...sorted.map((ct) => `App\\Http\\Controllers\\Api\\${filamentNames(ct).model}ApiController`),
     "App\\Http\\Middleware\\StrapiErrors",
+    ...(usersPermissions
+      ? [
+          "Illuminate\\Cookie\\Middleware\\AddQueuedCookiesToResponse",
+          "Illuminate\\Cookie\\Middleware\\EncryptCookies",
+          "Illuminate\\Session\\Middleware\\StartSession",
+        ]
+      : []),
     ...(jwt ? ["App\\Http\\Middleware\\StrapiJwtGuard"] : []),
     "Illuminate\\Support\\Facades\\Route",
   ]
@@ -161,6 +169,13 @@ export const emitStrapiRoutes = (
     Route::get('/auth/email-confirmation', [AuthController::class, 'emailConfirmation'])->middleware(StrapiCredentials::class.':guest');
     Route::post('/auth/send-email-confirmation', [AuthController::class, 'sendEmailConfirmation'])->middleware(${throttled});
     Route::post('/auth/refresh', [SessionController::class, 'refresh'])->middleware(StrapiCredentials::class.':guest');
+
+    // A provider's round trip is the browser's: its state and tokens are kept in a session.
+    Route::middleware([EncryptCookies::class, AddQueuedCookiesToResponse::class, StartSession::class, StrapiCredentials::class.':guest'])->group(function () use ($authThrottle): void {
+        Route::get('/connect/{provider}', [ConnectController::class, 'connect'])->middleware($authThrottle);
+        Route::get('/connect/{provider}/callback', [ConnectController::class, 'callback'])->middleware($authThrottle);
+        Route::get('/auth/{provider}/callback', [ConnectController::class, 'signIn']);
+    });
 
     // Roles live in the IR, so no grant opens these: Strapi forbids them to the roles it ships.
     Route::middleware([StrapiCredentials::class.':optional', StrapiActiveUser::class])->group(function (): void {

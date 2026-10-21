@@ -50,6 +50,7 @@ namespace App\\Http\\Controllers\\Api;
 use App\\Http\\Controllers\\Controller;
 use App\\Models\\User;
 use App\\Support\\StrapiError;
+use App\\Support\\StrapiProviders;
 use App\\Support\\StrapiSessions;
 use App\\Support\\StrapiUsers;
 use Illuminate\\Http\\JsonResponse;
@@ -110,6 +111,9 @@ ${
 
     public function login(Request $request): JsonResponse
     {
+        if (! StrapiProviders::enabled('email')) {
+            throw StrapiUsers::application('This provider is disabled');
+        }
         $body = $request->json()->all();
         StrapiUsers::validate($body, ['identifier' => ['required'], 'password' => ['required']]);
         $identifier = (string) $body['identifier'];

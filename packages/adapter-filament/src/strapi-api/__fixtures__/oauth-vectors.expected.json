@@ -1,0 +1,348 @@
+[
+  {
+    "name": "register a local account",
+    "status": 200,
+    "body": {
+      "jwt": "<jwt>",
+      "user": {
+        "blocked": false,
+        "confirmed": true,
+        "email": "carol@example.test",
+        "provider": "local",
+        "username": "carol"
+      }
+    }
+  },
+  {
+    "name": "connect to a disabled provider",
+    "status": 400,
+    "error": {
+      "name": "ApplicationError",
+      "message": "This provider is disabled",
+      "details": {}
+    }
+  },
+  {
+    "name": "provider callback for a disabled provider",
+    "status": 400,
+    "error": {
+      "name": "ApplicationError",
+      "message": "This provider is disabled",
+      "details": {}
+    }
+  },
+  {
+    "name": "connect to an unknown provider",
+    "status": 400,
+    "error": {
+      "name": "ApplicationError",
+      "message": "This provider is disabled",
+      "details": {}
+    }
+  },
+  {
+    "name": "local login with email sign-in off",
+    "status": 400,
+    "error": {
+      "name": "ApplicationError",
+      "message": "This provider is disabled",
+      "details": {}
+    }
+  },
+  {
+    "name": "register with email sign-in off",
+    "status": 200,
+    "body": {
+      "jwt": "<jwt>",
+      "user": {
+        "blocked": false,
+        "confirmed": true,
+        "email": "carl@example.test",
+        "provider": "local",
+        "username": "carl"
+      }
+    }
+  },
+  {
+    "name": "provider callback without a provider session",
+    "status": 400,
+    "error": {
+      "name": "ApplicationError",
+      "message": "OAuth authentication requires a completed provider session",
+      "details": {}
+    }
+  },
+  {
+    "name": "wrong state: connect to keycloak",
+    "status": 302,
+    "location": "https://127.0.0.1:9443/realms/test/protocol/openid-connect/auth?client_id=camis&response_type=code&redirect_uri=<origin>%2Fapi%2Fconnect%2Fkeycloak%2Fcallback&scope=openid+email+profile&state=<state>"
+  },
+  {
+    "name": "wrong state: back from keycloak",
+    "status": 302,
+    "location": "http://frontend.test/connect/keycloak/redirect?error=oauth_error&error_description=OAuth2+state+mismatch"
+  },
+  {
+    "name": "wrong state: no session is left to sign in with",
+    "status": 400,
+    "error": {
+      "name": "ApplicationError",
+      "message": "OAuth authentication requires a completed provider session",
+      "details": {}
+    }
+  },
+  {
+    "name": "no code: connect to keycloak",
+    "status": 302,
+    "location": "https://127.0.0.1:9443/realms/test/protocol/openid-connect/auth?client_id=camis&response_type=code&redirect_uri=<origin>%2Fapi%2Fconnect%2Fkeycloak%2Fcallback&scope=openid+email+profile&state=<state>"
+  },
+  {
+    "name": "no code: back from keycloak",
+    "status": 302,
+    "location": "http://frontend.test/connect/keycloak/redirect?error=oauth_error&error_description=OAuth2+missing+code+parameter"
+  },
+  {
+    "name": "declined: connect to keycloak",
+    "status": 302,
+    "location": "https://127.0.0.1:9443/realms/test/protocol/openid-connect/auth?client_id=camis&response_type=code&redirect_uri=<origin>%2Fapi%2Fconnect%2Fkeycloak%2Fcallback&scope=openid+email+profile&state=<state>"
+  },
+  {
+    "name": "declined: back from keycloak",
+    "status": 302,
+    "location": "http://frontend.test/connect/keycloak/redirect?error=access_denied&error_description=User+cancelled"
+  },
+  {
+    "name": "bad code: connect to keycloak",
+    "status": 302,
+    "location": "https://127.0.0.1:9443/realms/test/protocol/openid-connect/auth?client_id=camis&response_type=code&redirect_uri=<origin>%2Fapi%2Fconnect%2Fkeycloak%2Fcallback&scope=openid+email+profile&state=<state>"
+  },
+  {
+    "name": "bad code: back from keycloak",
+    "status": 302,
+    "location": "http://frontend.test/connect/keycloak/redirect?error=oauth_error&error_description=Code+is+invalid"
+  },
+  {
+    "name": "alice: connect to keycloak",
+    "status": 302,
+    "location": "https://127.0.0.1:9443/realms/test/protocol/openid-connect/auth?client_id=camis&response_type=code&redirect_uri=<origin>%2Fapi%2Fconnect%2Fkeycloak%2Fcallback&scope=openid+email+profile&state=<state>"
+  },
+  {
+    "name": "alice: back from keycloak",
+    "status": 302,
+    "location": "http://frontend.test/connect/keycloak/redirect"
+  },
+  {
+    "name": "alice: sign in through keycloak",
+    "status": 200,
+    "body": {
+      "jwt": "<jwt>",
+      "user": {
+        "blocked": false,
+        "confirmed": true,
+        "email": "alice@example.test",
+        "provider": "keycloak",
+        "username": "alice"
+      }
+    }
+  },
+  {
+    "name": "alice again: sign in through keycloak",
+    "status": 200,
+    "body": {
+      "jwt": "<jwt>",
+      "user": {
+        "blocked": false,
+        "confirmed": true,
+        "email": "alice@example.test",
+        "provider": "keycloak",
+        "username": "alice"
+      }
+    }
+  },
+  {
+    "name": "connect with a session",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "provider callback with a session",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "unverified email: connect to keycloak",
+    "status": 302,
+    "location": "https://127.0.0.1:9443/realms/test/protocol/openid-connect/auth?client_id=camis&response_type=code&redirect_uri=<origin>%2Fapi%2Fconnect%2Fkeycloak%2Fcallback&scope=openid+email+profile&state=<state>"
+  },
+  {
+    "name": "unverified email: back from keycloak",
+    "status": 302,
+    "location": "http://frontend.test/connect/keycloak/redirect"
+  },
+  {
+    "name": "unverified email: sign in through keycloak",
+    "status": 400,
+    "error": {
+      "name": "ApplicationError",
+      "message": "Email not verified by Keycloak",
+      "details": {}
+    }
+  },
+  {
+    "name": "no email: connect to keycloak",
+    "status": 302,
+    "location": "https://127.0.0.1:9443/realms/test/protocol/openid-connect/auth?client_id=camis&response_type=code&redirect_uri=<origin>%2Fapi%2Fconnect%2Fkeycloak%2Fcallback&scope=openid+email+profile&state=<state>"
+  },
+  {
+    "name": "no email: back from keycloak",
+    "status": 302,
+    "location": "http://frontend.test/connect/keycloak/redirect"
+  },
+  {
+    "name": "no email: sign in through keycloak",
+    "status": 400,
+    "error": {
+      "name": "ApplicationError",
+      "message": "Email was not available.",
+      "details": {}
+    }
+  },
+  {
+    "name": "email of a local account: connect to keycloak",
+    "status": 302,
+    "location": "https://127.0.0.1:9443/realms/test/protocol/openid-connect/auth?client_id=camis&response_type=code&redirect_uri=<origin>%2Fapi%2Fconnect%2Fkeycloak%2Fcallback&scope=openid+email+profile&state=<state>"
+  },
+  {
+    "name": "email of a local account: back from keycloak",
+    "status": 302,
+    "location": "http://frontend.test/connect/keycloak/redirect"
+  },
+  {
+    "name": "email of a local account: sign in through keycloak",
+    "status": 400,
+    "error": {
+      "name": "ApplicationError",
+      "message": "Email is already taken.",
+      "details": {}
+    }
+  },
+  {
+    "name": "blocked: sign in through keycloak",
+    "status": 400,
+    "error": {
+      "name": "ApplicationError",
+      "message": "Your account has been blocked by an administrator",
+      "details": {}
+    }
+  },
+  {
+    "name": "sign-ups closed: connect to keycloak",
+    "status": 302,
+    "location": "https://127.0.0.1:9443/realms/test/protocol/openid-connect/auth?client_id=camis&response_type=code&redirect_uri=<origin>%2Fapi%2Fconnect%2Fkeycloak%2Fcallback&scope=openid+email+profile&state=<state>"
+  },
+  {
+    "name": "sign-ups closed: back from keycloak",
+    "status": 302,
+    "location": "http://frontend.test/connect/keycloak/redirect"
+  },
+  {
+    "name": "sign-ups closed: sign in through keycloak",
+    "status": 400,
+    "error": {
+      "name": "ApplicationError",
+      "message": "Register action is actually not available.",
+      "details": {}
+    }
+  },
+  {
+    "name": "connect with a foreign callback",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid callback URL provided",
+      "details": {
+        "callback": "https://evil.test/steal"
+      }
+    }
+  },
+  {
+    "name": "custom callback: connect to keycloak",
+    "status": 302,
+    "location": "https://127.0.0.1:9443/realms/test/protocol/openid-connect/auth?client_id=camis&response_type=code&redirect_uri=<origin>%2Fapi%2Fconnect%2Fkeycloak%2Fcallback&scope=openid+email+profile&state=<state>"
+  },
+  {
+    "name": "custom callback: back from keycloak",
+    "status": 302,
+    "location": "http://frontend.test/connect/keycloak/redirect"
+  },
+  {
+    "name": "custom callback: sign in through keycloak",
+    "status": 200,
+    "body": {
+      "jwt": "<jwt>",
+      "user": {
+        "blocked": false,
+        "confirmed": true,
+        "email": "dave@example.test",
+        "provider": "keycloak",
+        "username": "dave"
+      }
+    }
+  },
+  {
+    "name": "cas: connect to cas",
+    "status": 302,
+    "location": "https://127.0.0.1:9443/cas/oidc/authorize?client_id=camis&response_type=code&redirect_uri=<origin>%2Fapi%2Fconnect%2Fcas%2Fcallback&scope=openid+email&state=<state>"
+  },
+  {
+    "name": "cas: back from cas",
+    "status": 302,
+    "location": "http://frontend.test/connect/cas/redirect"
+  },
+  {
+    "name": "cas: sign in through cas",
+    "status": 200,
+    "body": {
+      "jwt": "<jwt>",
+      "user": {
+        "blocked": false,
+        "confirmed": true,
+        "email": "erin@example.test",
+        "provider": "cas",
+        "username": "erin"
+      }
+    }
+  },
+  {
+    "name": "cognito: connect to cognito",
+    "status": 302,
+    "location": "https://127.0.0.1:9443/cognito/oauth2/authorize?client_id=camis&response_type=code&redirect_uri=<origin>%2Fapi%2Fconnect%2Fcognito%2Fcallback&scope=email+openid+profile&state=<state>"
+  },
+  {
+    "name": "cognito: back from cognito",
+    "status": 302,
+    "location": "http://frontend.test/connect/cognito/redirect"
+  },
+  {
+    "name": "cognito: sign in through cognito",
+    "status": 200,
+    "body": {
+      "jwt": "<jwt>",
+      "user": {
+        "blocked": false,
+        "confirmed": true,
+        "email": "fran@example.test",
+        "provider": "cognito",
+        "username": "fran"
+      }
+    }
+  }
+]
