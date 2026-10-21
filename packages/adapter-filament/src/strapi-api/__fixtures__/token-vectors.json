@@ -1,0 +1,404 @@
+{
+  "dropNulls": true,
+  "steps": [
+    {
+      "hook": ["role", "public", "api::book.book.find", "api::book.book.findOne"]
+    },
+    {
+      "hook": [
+        "role",
+        "authenticated",
+        "api::author.author.create",
+        "api::author.author.delete",
+        "api::author.author.find",
+        "api::author.author.findOne",
+        "api::author.author.update",
+        "api::book.book.create",
+        "api::book.book.delete",
+        "api::book.book.find",
+        "api::book.book.findOne",
+        "api::book.book.update",
+        "api::genre.genre.create",
+        "api::genre.genre.delete",
+        "api::genre.genre.find",
+        "api::genre.genre.findOne",
+        "api::genre.genre.update"
+      ]
+    },
+    {
+      "hook": ["token", "reader", "read-only"],
+      "into": "reader"
+    },
+    {
+      "hook": ["token", "writer", "full-access"],
+      "into": "writer"
+    },
+    {
+      "hook": ["token", "lister", "custom", "api::book.book.find", "api::author.author.find"],
+      "into": "lister"
+    },
+    {
+      "hook": ["token", "picker", "custom", "api::book.book.findOne"],
+      "into": "picker"
+    },
+    {
+      "name": "without a token the public role cannot list authors",
+      "method": "GET",
+      "path": "/authors"
+    },
+    {
+      "name": "a full-access token creates an author",
+      "path": "/authors",
+      "bearer": "$writer",
+      "body": {
+        "data": {
+          "name": "Frank Herbert"
+        }
+      },
+      "keep": {
+        "authorId": "data.documentId"
+      }
+    },
+    {
+      "name": "a full-access token creates a genre",
+      "path": "/genres",
+      "bearer": "$writer",
+      "body": {
+        "data": {
+          "name": "Science fiction"
+        }
+      },
+      "keep": {
+        "genreId": "data.documentId"
+      }
+    },
+    {
+      "name": "a full-access token creates a book",
+      "path": "/books",
+      "bearer": "$writer",
+      "body": {
+        "data": {
+          "title": "Dune",
+          "pages": 412,
+          "author": "$authorId",
+          "genres": ["$genreId"]
+        }
+      },
+      "keep": {
+        "bookId": "data.documentId"
+      }
+    },
+    {
+      "name": "a read-only token lists",
+      "method": "GET",
+      "path": "/books",
+      "bearer": "$reader"
+    },
+    {
+      "name": "a read-only token reads one",
+      "method": "GET",
+      "path": "/books/$bookId",
+      "bearer": "$reader"
+    },
+    {
+      "name": "a read-only token reads what the public role cannot",
+      "method": "GET",
+      "path": "/authors",
+      "bearer": "$reader"
+    },
+    {
+      "name": "a read-only token populates",
+      "method": "GET",
+      "path": "/books/$bookId?populate=*",
+      "bearer": "$reader"
+    },
+    {
+      "name": "a read-only token may not create",
+      "path": "/books",
+      "bearer": "$reader",
+      "body": {
+        "data": {
+          "title": "Children of Dune"
+        }
+      }
+    },
+    {
+      "name": "a read-only token may not update",
+      "method": "PUT",
+      "path": "/books/$bookId",
+      "bearer": "$reader",
+      "body": {
+        "data": {
+          "pages": 1
+        }
+      }
+    },
+    {
+      "name": "a read-only token may not delete",
+      "method": "DELETE",
+      "path": "/books/$bookId",
+      "bearer": "$reader"
+    },
+    {
+      "name": "a read-only token reads drafts",
+      "method": "GET",
+      "path": "/posts?status=draft",
+      "bearer": "$reader"
+    },
+    {
+      "name": "a custom token runs its action",
+      "method": "GET",
+      "path": "/books",
+      "bearer": "$lister"
+    },
+    {
+      "name": "a custom token is refused another action",
+      "method": "GET",
+      "path": "/books/$bookId",
+      "bearer": "$lister"
+    },
+    {
+      "name": "a custom token is refused a write",
+      "path": "/books",
+      "bearer": "$lister",
+      "body": {
+        "data": {
+          "title": "Children of Dune"
+        }
+      }
+    },
+    {
+      "name": "a custom token populates a relation it may find",
+      "method": "GET",
+      "path": "/books?populate=author",
+      "bearer": "$lister"
+    },
+    {
+      "name": "a custom token loses a relation it may not find",
+      "method": "GET",
+      "path": "/books?populate[0]=author&populate[1]=genres",
+      "bearer": "$lister"
+    },
+    {
+      "name": "a custom token filters on a relation it may not find",
+      "method": "GET",
+      "path": "/books?filters[genres][name][$eq]=Science%20fiction",
+      "bearer": "$lister"
+    },
+    {
+      "name": "a findOne-only token reads one",
+      "method": "GET",
+      "path": "/books/$bookId?populate=author",
+      "bearer": "$picker"
+    },
+    {
+      "name": "a findOne-only token may not list",
+      "method": "GET",
+      "path": "/books",
+      "bearer": "$picker"
+    },
+    {
+      "name": "a custom token is refused the locales",
+      "method": "GET",
+      "path": "/i18n/locales",
+      "bearer": "$picker"
+    },
+    {
+      "name": "a read-only token lists the locales",
+      "method": "GET",
+      "path": "/i18n/locales",
+      "bearer": "$reader"
+    },
+    {
+      "name": "a read-only token lists the media",
+      "method": "GET",
+      "path": "/upload/files",
+      "bearer": "$reader"
+    },
+    {
+      "name": "a read-only token may not upload",
+      "path": "/upload",
+      "bearer": "$reader",
+      "body": {}
+    },
+    {
+      "name": "register",
+      "path": "/auth/local/register",
+      "body": {
+        "username": "tess",
+        "email": "tess@example.test",
+        "password": "secret1"
+      },
+      "save": "tess"
+    },
+    {
+      "name": "a read-only token lists the users",
+      "method": "GET",
+      "path": "/users",
+      "bearer": "$reader"
+    },
+    {
+      "name": "a read-only token counts the users",
+      "method": "GET",
+      "path": "/users/count",
+      "bearer": "$reader"
+    },
+    {
+      "name": "a full-access token has no user of its own",
+      "method": "GET",
+      "path": "/users/me",
+      "bearer": "$writer"
+    },
+    {
+      "name": "a read-only token may not log in",
+      "path": "/auth/local",
+      "bearer": "$reader",
+      "body": {
+        "identifier": "tess",
+        "password": "secret1"
+      }
+    },
+    {
+      "name": "a full-access token logs in",
+      "path": "/auth/local",
+      "bearer": "$writer",
+      "body": {
+        "identifier": "tess",
+        "password": "secret1"
+      }
+    },
+    {
+      "name": "a full-access token may not change a password",
+      "path": "/auth/change-password",
+      "bearer": "$writer",
+      "body": {
+        "currentPassword": "secret1",
+        "password": "secret2",
+        "passwordConfirmation": "secret2"
+      }
+    },
+    {
+      "name": "a full-access token logs out no one",
+      "method": "POST",
+      "path": "/auth/logout",
+      "bearer": "$writer"
+    },
+    {
+      "name": "a full-access token lists no sessions",
+      "method": "GET",
+      "path": "/auth/sessions",
+      "bearer": "$writer"
+    },
+    {
+      "name": "a full-access token revokes no session",
+      "method": "DELETE",
+      "path": "/auth/sessions/nope",
+      "bearer": "$writer"
+    },
+    {
+      "name": "a full-access token refreshes nothing",
+      "path": "/auth/refresh",
+      "bearer": "$writer",
+      "body": {}
+    },
+    {
+      "name": "a full-access token asks for a reset",
+      "path": "/auth/forgot-password",
+      "bearer": "$writer",
+      "body": {
+        "email": "nobody@example.test"
+      }
+    },
+    {
+      "name": "a read-only token may not confirm an email",
+      "method": "GET",
+      "path": "/auth/email-confirmation?confirmation=nope",
+      "bearer": "$reader"
+    },
+    {
+      "name": "a read-only token may not sign in through a provider",
+      "method": "GET",
+      "path": "/connect/github",
+      "bearer": "$reader"
+    },
+    {
+      "name": "a read-only token may not register",
+      "path": "/auth/local/register",
+      "bearer": "$reader",
+      "body": {
+        "username": "uma",
+        "email": "uma@example.test",
+        "password": "secret1"
+      }
+    },
+    {
+      "name": "a session still reads as its role",
+      "method": "GET",
+      "path": "/books",
+      "as": "tess"
+    },
+    {
+      "name": "a full-access token updates",
+      "method": "PUT",
+      "path": "/books/$bookId",
+      "bearer": "$writer",
+      "body": {
+        "data": {
+          "pages": 500
+        }
+      }
+    },
+    {
+      "name": "a token that is not one",
+      "method": "GET",
+      "path": "/books",
+      "bearer": "not-a-token"
+    },
+    {
+      "hook": ["regenerate", "lister"],
+      "into": "listerAgain"
+    },
+    {
+      "name": "a regenerated token's old key",
+      "method": "GET",
+      "path": "/books",
+      "bearer": "$lister"
+    },
+    {
+      "name": "a regenerated token's new key",
+      "method": "GET",
+      "path": "/books?fields[0]=title",
+      "bearer": "$listerAgain"
+    },
+    {
+      "hook": ["expire", "reader"]
+    },
+    {
+      "name": "an expired token",
+      "method": "GET",
+      "path": "/books",
+      "bearer": "$reader"
+    },
+    {
+      "name": "an expired token on a public route",
+      "method": "GET",
+      "path": "/i18n/locales",
+      "bearer": "$reader"
+    },
+    {
+      "name": "a full-access token deletes",
+      "method": "DELETE",
+      "path": "/books/$bookId",
+      "bearer": "$writer"
+    },
+    {
+      "hook": ["revoke", "writer"]
+    },
+    {
+      "name": "a revoked token",
+      "method": "GET",
+      "path": "/books",
+      "bearer": "$writer"
+    }
+  ]
+}

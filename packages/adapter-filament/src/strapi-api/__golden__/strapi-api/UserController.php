@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Support\StrapiApiTokens;
 use App\Support\StrapiError;
 use App\Support\StrapiQuery;
 use App\Support\StrapiUsers;
@@ -47,9 +48,12 @@ final class UserController extends Controller
         return response()->json($this->filtered($request)->count());
     }
 
+    /** An API token's request reaches here with no account of its own. */
     public function me(Request $request): JsonResponse
     {
-        return response()->json(StrapiUsers::wire($request->user()));
+        $user = $request->user() ?? throw new StrapiError(401, 'UnauthorizedError', 'Unauthorized');
+
+        return response()->json(StrapiUsers::wire($user));
     }
 
     public function create(Request $request): JsonResponse
@@ -123,6 +127,10 @@ final class UserController extends Controller
 
     private function allow(Request $request, string $permission): void
     {
+        // An API token's request was already checked against its token, which stands in for a role.
+        if (StrapiApiTokens::active()) {
+            return;
+        }
         if (! $request->user()->can($permission)) {
             throw new StrapiError(403, 'ForbiddenError', 'Forbidden');
         }

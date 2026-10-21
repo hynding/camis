@@ -366,11 +366,11 @@ behavioural oracle for the wire format.
 | 22 | Internationalization: IR `localized` content types and fields, `locale` param, locales settings, Filament locale switcher (`strapi/i18n`) | IR change |
 | 23 | Media library and Upload API: Strapi's `files` shape, `/api/upload`, formats via GD, local disk default, S3 and Cloudinary through Laravel filesystems (`strapi/upload`) | |
 | 24 | Users & Permissions completion: forgot/reset/change password, email confirmation, refresh sessions, OAuth providers, blocked users, roles × actions matrix editor (`plugin-users-permissions`) | |
-| 25 | API tokens (read-only, full-access, custom; salted hashes; expiry; `lastUsedAt`) and transfer tokens (`strapi/admin`) | |
+| 25 | API tokens (read-only, full-access, custom; salted hashes; expiry; `lastUsedAt`) (`strapi/admin`) | transfer tokens move to 29 |
 | 26 | Webhooks and lifecycle events (`entry.*`, `media.*`), sent after the response (`strapi/admin`, `core`) | no worker |
 | 27 | Dynamic zones on relational targets, plus the importer gaps that block strapi-php projects (snake_case attribute names, morph relations) | see `docs/` import limits |
 | 28 | GraphQL (opt-in, `webonyx/graphql-php` like strapi-php; same schema naming as Strapi's plugin) (`plugin-graphql`) | |
-| 29 | OpenAPI document + Swagger UI, data export/import archives compatible with Strapi's (`strapi/openapi`, `plugin-documentation`, `strapi/data-transfer`) | |
+| 29 | OpenAPI document + Swagger UI, data export/import archives compatible with Strapi's, and the transfer tokens that guard them (`strapi/openapi`, `plugin-documentation`, `strapi/data-transfer`) | |
 | 30 | Strapi-like admin in Filament: Content Manager navigation, Settings area, Strapi wording | Filament stays the admin (owner's call, 2026-10-16); no Strapi React bundle |
 
 Not planned: content-releases, review-workflows, content history, audit logs, preview (Enterprise,
@@ -692,6 +692,40 @@ Known gaps: providers registered in code (Strapi's `providers-registry.add`) hav
 and the stand-in provider covers the three providers whose host is a setting; the rest are
 checked against recorded answers, not a live provider.
 
+
+## Phase 25 — API tokens (`adapter-filament`)
+
+**Goal:** Strapi 5's content API tokens work as on Strapi, on the laravel storage layout with the
+Strapi API style, and the Filament admin makes and manages them.
+
+- A token is read-only, full-access or custom (a list of Strapi actions, `api::book.book.find`),
+  with an optional lifespan of 7, 30 or 90 days. Its 256-hex-character key is kept as an
+  HMAC-SHA512 hash salted with `API_TOKEN_SALT` (Strapi's own variable; unset, the app key), and
+  encrypted with the app key so the admin can show it again. A use is recorded at most hourly.
+- Strapi tries a token before a session on every API route: `StrapiApiToken` checks it against
+  the route's action, named as Strapi names it from the controller and method that serve it, and
+  refuses an expired one with Strapi's "Token expired". A route Strapi does not have (a
+  hand-written one in `api-custom.php`) is open to full-access tokens only.
+- A token stands in for a role: it decides every grant the request asks for through one
+  `Gate::before`, reads every row (no role condition narrows a list), and acts for no user, so
+  `/users/me`, change-password and the session routes answer as Strapi does without an account.
+  A type reached through a relation, in populate or a filter, needs that type's find.
+- The admin's Settings › API Tokens resource makes, edits, shows, regenerates and deletes tokens,
+  for whoever may change accounts (`user.update`).
+
+**Exit criteria:** the 48 checks of `token-vectors.json`, recorded from strapi-php, pass in the
+`strapi-api` boot job on SQLite, MySQL and Postgres, with `ApiTokensTest` (the admin page,
+lifespans, the hourly last use, rows a role condition hides, refresh-mode sessions); every earlier
+suite still passes.
+
+**Status (2026-10-21):** every suite passes on SQLite and Postgres with all caches on, and the
+admin tests pass.
+
+Known gaps: transfer tokens belong to data transfer (Phase 29). Strapi's admin tokens (`kind:
+admin`) open its admin API, which Filament replaces. A token is refused the users-permissions
+role routes, as every session is: the roles are the IR's. The Strapi storage layout accepts no
+API token (the Strapi instance keeps them), and tokens are not carried over from a Strapi
+database.
 ---
 
 ## Sequencing rationale (quick reference)

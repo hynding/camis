@@ -342,17 +342,19 @@ final class StrapiUsers
  * How a route takes credentials beyond Laravel's own guard. `optional`: a request may come without
  * a session (it then acts as the public role), but a token that does not verify is refused, as
  * Strapi refuses it on every route. `guest`: a route Strapi grants to its public role alone
- * (logging in, registering, recovering a password), which a session is forbidden.
+ * (logging in, registering, recovering a password), which a session is forbidden. `required`
+ * (with API tokens, in place of `auth:sanctum`): a session or an API token, which StrapiApiToken
+ * has already checked against the route and which acts for no account.
  */
-export const emitStrapiCredentials = (): string => `<?php
+export const emitStrapiCredentials = (tokens = false): string => `<?php
 ${PHP_MARKER}
 
 declare(strict_types=1);
 
 namespace App\\Http\\Middleware;
-
+${tokens ? "\nuse App\\Support\\StrapiApiTokens;" : ""}
 use App\\Support\\StrapiError;
-use Closure;
+use Closure;${tokens ? "\nuse Illuminate\\Auth\\AuthenticationException;" : ""}
 use Illuminate\\Http\\Request;
 use Illuminate\\Support\\Facades\\Auth;
 use Symfony\\Component\\HttpFoundation\\Response;
@@ -361,9 +363,18 @@ final class StrapiCredentials
 {
     public function handle(Request $request, Closure $next, string $mode): Response
     {
-        if ($request->bearerToken() === null) {
+${
+  tokens
+    ? `        if (StrapiApiTokens::active() || ($request->bearerToken() === null && $mode !== 'required')) {
             return $next($request);
         }
+        if ($request->bearerToken() === null) {
+            throw new AuthenticationException();
+        }`
+    : `        if ($request->bearerToken() === null) {
+            return $next($request);
+        }`
+}
         if (Auth::guard('sanctum')->user() === null) {
             throw new StrapiError(401, 'UnauthorizedError', 'Missing or invalid credentials');
         }
@@ -430,7 +441,7 @@ declare(strict_types=1);
 namespace App\\Http\\Controllers\\Api;
 
 use App\\Http\\Controllers\\Controller;
-use App\\Models\\User;${guests ? "\nuse App\\Support\\PublicRole;" : ""}
+use App\\Models\\User;${guests ? "\nuse App\\Support\\PublicRole;" : ""}${secured ? "\nuse App\\Support\\StrapiApiTokens;" : ""}
 use App\\Support\\StrapiError;
 use App\\Support\\StrapiQuery;
 use App\\Support\\StrapiUsers;
@@ -467,9 +478,12 @@ final class UserController extends Controller
         return response()->json($this->filtered($request)->count());
     }
 
+    /** An API token's request reaches here with no account of its own. */
     public function me(Request $request): JsonResponse
     {
-        return response()->json(StrapiUsers::wire($request->user()));
+        $user = $request->user() ?? throw new StrapiError(401, 'UnauthorizedError', 'Unauthorized');
+
+        return response()->json(StrapiUsers::wire($user));
     }
 
     public function create(Request $request): JsonResponse
@@ -536,6 +550,10 @@ ${assignRole}        $user = StrapiUsers::add([...$body, 'password' => Hash::mak
 
     private function allow(Request $request, string $permission): void
     {
+        // An API token's request was already checked against its token, which stands in for a role.
+        if (StrapiApiTokens::active()) {
+            return;
+        }
         if (! ${guests ? "PublicRole::allows($request->user(), $permission)" : "$request->user()->can($permission)"}) {
             throw new StrapiError(403, 'ForbiddenError', 'Forbidden');
         }

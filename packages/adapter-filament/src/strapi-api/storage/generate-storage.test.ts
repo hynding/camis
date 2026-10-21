@@ -153,6 +153,13 @@ describe("filamentAdapter storageLayout strapi — file set", () => {
           "the Strapi storage layout serves register, login and /users/me only; password reset " +
           "and change, email confirmation, blocked users, refresh-token sessions, sign-in providers and /users are left to the Strapi instance",
       },
+      {
+        feature: "apiTokens",
+        location: {},
+        severity: "downgrade",
+        message:
+          "the Strapi storage layout does not accept API tokens: the Strapi instance keeps and checks them",
+      },
     ]);
   });
 

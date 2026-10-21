@@ -8,12 +8,12 @@
 // `hook` runs the runtime's hook command instead (`--hook`, given the step's words), which reads
 // what only the database knows (a reset code) or changes what only an administrator can (the
 // advanced settings, blocking a user); `into` keeps its output as `$name` for later steps, and
-// `keep` keeps response values the same way (`{ "bobId": "user.id" }`). `bearer` sends a literal
-// token (one that does not verify), `headers` adds request headers, and `cookie` names a response
-// cookie to record (set or cleared) and keep as `$<name>`. `jar` names a cookie jar the step sends
-// and fills, as a browser would across an OAuth round trip, and `keepQuery` keeps query values of
-// the redirect's location (`{ "state": "state" }`). A redirect's own origin and an OAuth state are
-// masked, as they differ between runtimes and runs.
+// `keep` keeps response values the same way (`{ "bobId": "user.id" }`). `bearer` sends a given
+// token (a literal one that does not verify, or an API token a hook made), `headers` adds request
+// headers, and `cookie` names a response cookie to record (set or cleared) and keep as `$<name>`.
+// `jar` names a cookie jar the step sends and fills, as a browser would across an OAuth round
+// trip, and `keepQuery` keeps query values of the redirect's location (`{ "state": "state" }`). A
+// redirect's own origin and an OAuth state are masked, as they differ between runtimes and runs.
 //
 // usage: strapi-auth-vectors.mjs <api-base> --hook CMD [--vectors F] [--expected F] [--record]
 import { execFileSync } from "node:child_process";
@@ -38,7 +38,7 @@ if (base === undefined || values.hook === undefined) {
   console.error("usage: strapi-auth-vectors.mjs <api-base> --hook CMD [--record]");
   process.exit(2);
 }
-const { steps } = JSON.parse(readFileSync(values.vectors, "utf8"));
+const { steps, dropNulls = false } = JSON.parse(readFileSync(values.vectors, "utf8"));
 
 const sessions = new Map();
 const vars = new Map();
@@ -60,7 +60,7 @@ const runHook = (words) => {
 
 const call = async (step) => {
   const headers = { Accept: "application/json", ...fill(step.headers ?? {}) };
-  if (step.bearer !== undefined) headers.Authorization = `Bearer ${step.bearer}`;
+  if (step.bearer !== undefined) headers.Authorization = `Bearer ${fill(step.bearer)}`;
   if (step.as !== undefined) {
     // A session an earlier step failed to open is sent as no session, so that step shows the cause.
     const jwt = sessions.get(step.as);
@@ -112,7 +112,8 @@ const cookiesOf = (response) =>
   );
 
 // Server-assigned keys differ between runs and runtimes; tokens, session times and generated
-// device ids are compared by presence.
+// device ids are compared by presence. A vector file over content sets `dropNulls`, as camis
+// leaves null scalars off the wire (a known gap, PLAN.md Phase 19).
 const VOLATILE = new Set(["id", "documentId", "createdAt", "updatedAt", "publishedAt"]);
 const PRESENCE = {
   jwt: "<jwt>",
@@ -131,7 +132,7 @@ const normalize = (value) => {
   if (value !== null && typeof value === "object")
     return Object.fromEntries(
       Object.entries(value)
-        .filter(([k]) => !VOLATILE.has(k))
+        .filter(([k, v]) => !VOLATILE.has(k) && !(dropNulls && v === null))
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([k, v]) => [k, masked(k, v)]),
     );
