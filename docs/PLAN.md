@@ -765,6 +765,47 @@ Known gaps: user accounts' writes are not events (Strapi sends `entry.create` an
 for them). Strapi's `populateRelations: false` setting is not offered. A webhook is sent once,
 with no retry, as on Strapi. The Strapi storage layout sends no webhooks (the Strapi instance
 keeps them).
+
+---
+
+## Phase 27 — Dynamic zones and the strapi-php importer gaps (`ir-schema`, `adapter-kernel`, `adapter-strapi`, `adapter-filament`)
+
+**Goal:** Strapi 5's dynamic zones work on the laravel storage layout with the Strapi API style, and
+a strapi-php project imports without hand edits.
+
+- Each component a zone holds keeps its items in its own child table of the content type
+  (`<table>_<zone>_<component>`), with a `position` column holding the item's place in the zone.
+  The serializer's `ZONES` names each member by uid; items go on the wire with `__component` and
+  `id`, only when populate names the zone.
+- Populate as Strapi reads it: `*`, `true` or the zone's name send the items without their own
+  components; `[populate]` inside the zone adds them; `[on][uid]` keeps only the components it
+  names, each with its own `fields` and `populate`. A zone cannot be filtered, sorted or selected
+  (`Invalid key`, with its path).
+- Writes: an update without the zone keeps it, one with it replaces it in its new order, `[]`
+  clears it. An item naming a component the project lacks is refused with Strapi's message (which
+  lists every component); one the zone does not hold is dropped; an item may name the id of one
+  the entry holds, which keeps that row, and any other id is refused. Publishing and discarding
+  copy the items with the version.
+- The admin edits a zone with a Builder, one block per member, over the same rows.
+- IR: a field may name the key it goes by on the API (`names.api`), unique among its siblings.
+  The Strapi importer camelCases snake_case attributes and keeps their names there, so the
+  Filament Strapi API sends and reads `hero_title` over the same `hero_title` column; it imports
+  dynamic zones (the Strapi target writes them back), and reports morph relations, a dynamic zone
+  inside a component, and a snake_case inverse (which has no field to keep its key) as gaps.
+
+**Exit criteria:** the 21 checks of `dynamic-zone-vectors.json`, recorded from strapi-php, pass in
+the `strapi-api` boot job on SQLite, MySQL and Postgres, with `DynamicZonesTest` (the Builder's
+writes and reads, its order, publishing, and a caller without the grant refused); every earlier
+suite still passes; strapi-php's `examples/getstarted` imports and generates.
+
+**Status (2026-10-21):** every suite passes on SQLite and Postgres with all caches on, and the
+admin tests pass. `examples/getstarted` imports with its gaps reported and its generated PHP lints.
+
+Known gaps: a zone's member items are not validated against the component's required fields or
+constraints before the write (the database's own constraints apply). A zone member's relations
+and repeatable components stay gaps, as in any component on this layout. The Strapi storage layout
+still reports dynamic zones. An inverse relation's snake_case name reaches the wire camelCased.
+
 ---
 
 ## Sequencing rationale (quick reference)
