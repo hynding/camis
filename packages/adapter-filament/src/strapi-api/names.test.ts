@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { camelKey, routePath } from "./names";
+import { routePath } from "./names";
 
 describe("strapi-api names", () => {
   it("routePath is the kebab plural from names.plural", () => {
@@ -15,8 +15,5 @@ describe("strapi-api names", () => {
   it("routePath falls back to pluralizing the type name", () => {
     expect(routePath({ name: "Note", kind: "collection", fields: [] })).toBe("notes");
     expect(routePath({ name: "Category", kind: "collection", fields: [] })).toBe("categories");
-  });
-  it("camelKey preserves IR field names", () => {
-    expect(camelKey("recordId")).toBe("recordId");
   });
 });

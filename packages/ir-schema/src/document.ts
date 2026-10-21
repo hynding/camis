@@ -1,15 +1,20 @@
 import { z } from "zod";
-import { componentField, field } from "./fields";
+import { componentField, field, fieldApiName } from "./fields";
 import { hook } from "./hooks";
 import { collectionName, fieldName, typeName } from "./identifiers";
 
 const RESERVED_FIELD_NAMES = new Set(["id"]);
 
-const nodeRefine = (
-  fields: { name: string; type: string; targetField?: string }[],
-  ctx: z.RefinementCtx,
-) => {
+type RefinedField = {
+  name: string;
+  type: string;
+  targetField?: string;
+  names?: { api?: string | undefined } | undefined;
+};
+
+const nodeRefine = (fields: RefinedField[], ctx: z.RefinementCtx) => {
   const seen = new Set<string>();
+  const keys = new Set<string>();
   fields.forEach((f, i) => {
     if (seen.has(f.name)) {
       ctx.addIssue({
@@ -20,6 +25,25 @@ const nodeRefine = (
       });
     }
     seen.add(f.name);
+    // A field's API key must be as unique as its name, or one would shadow the other on the wire.
+    const key = fieldApiName(f);
+    if (key !== f.name && (keys.has(key) || fields.some((g) => g !== f && g.name === key))) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `field "${f.name}" goes by "${key}" on the API, which another field also does`,
+        params: { irCode: "duplicate_field" },
+        path: ["fields", i, "names", "api"],
+      });
+    }
+    keys.add(key);
+    if (RESERVED_FIELD_NAMES.has(key) && key !== f.name) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `"${key}" is a reserved field name`,
+        params: { irCode: "reserved_field_name" },
+        path: ["fields", i, "names", "api"],
+      });
+    }
     if (RESERVED_FIELD_NAMES.has(f.name)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -71,7 +95,7 @@ export const contentType = z
       .optional(),
   })
   .superRefine((ct, ctx) => {
-    nodeRefine(ct.fields as { name: string; type: string; targetField?: string }[], ctx);
+    nodeRefine(ct.fields as RefinedField[], ctx);
     if (ct.options?.localized === true) return;
     ct.fields.forEach((f, i) => {
       if ("localized" in f && f.localized !== undefined) {
@@ -96,9 +120,7 @@ export const component = z
       .optional(),
     fields: z.array(componentField),
   })
-  .superRefine((c, ctx) =>
-    nodeRefine(c.fields as { name: string; type: string; targetField?: string }[], ctx),
-  );
+  .superRefine((c, ctx) => nodeRefine(c.fields as RefinedField[], ctx));
 
 export const irDocument = z
   .object({

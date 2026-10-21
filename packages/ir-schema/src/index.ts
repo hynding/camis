@@ -1,12 +1,12 @@
 export { fail, ok } from "./errors";
 export type { IrError, IrErrorCode, IrErrorLocation, Result } from "./errors";
-export { FIELD_TYPES, RELATION_KINDS, componentField, field } from "./fields";
+export { FIELD_TYPES, RELATION_KINDS, componentField, field, fieldApiName } from "./fields";
 export type { ComponentFieldT, Field, FieldType, RelationKind } from "./fields";
 export { component, contentType, irDocument } from "./document";
 export type { Component, ContentType, IrDocument } from "./document";
 export { parseDocument } from "./parse";
 export type { CapabilityDescriptor, CapabilityGap, CapabilityGapReport } from "./capability";
-export { collectionName, fieldName, typeName } from "./identifiers";
+export { apiName, collectionName, fieldName, typeName } from "./identifiers";
 export { HOOK_SCALARS, hook, shapeField } from "./hooks";
 export type { Hook, HookScalar, ShapeField } from "./hooks";
 export { ai, aiPlaceholders, AI_TRIGGERS } from "./ai";

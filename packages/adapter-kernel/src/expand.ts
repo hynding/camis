@@ -1,8 +1,17 @@
-import type { CapabilityGap, Component, ContentType, Field, IrDocument } from "@camis/ir-schema";
+import {
+  fieldApiName,
+  type CapabilityGap,
+  type Component,
+  type ContentType,
+  type Field,
+  type IrDocument,
+} from "@camis/ir-schema";
 
 /** A scalar produced by flattening components; `path` is field-name segments from the owning table. */
 export interface ExpandedScalar {
   path: string[];
+  /** The same path in the keys its fields go by on the API. */
+  apiPath: string[];
   field: Field;
   /**
    * True when every non-repeatable component reference on the path to this scalar is required,
@@ -19,6 +28,8 @@ export interface ExpandedScalar {
 /** A repeatable component reference, realized as a child table of the content type. */
 export interface ExpandedTable {
   path: string[];
+  /** The same path in the keys its fields go by on the API. */
+  apiPath: string[];
   scalars: ExpandedScalar[];
 }
 
@@ -31,6 +42,8 @@ export interface ExpandedZoneMember {
 /** A dynamic zone: an ordered list of items, each one of its member components. */
 export interface ExpandedZone {
   name: string;
+  /** The key the zone goes by on the API. */
+  apiName: string;
   members: ExpandedZoneMember[];
 }
 
@@ -86,6 +99,7 @@ export const expandComponents = (doc: IrDocument, ct: ContentType): ExpandedCont
   const walk = (
     component: Component,
     path: string[],
+    apiPath: string[],
     sink: ExpandedScalar[],
     insideRepeatable: boolean,
     alwaysPresent: boolean,
@@ -116,14 +130,19 @@ export const expandComponents = (doc: IrDocument, ct: ContentType): ExpandedCont
             );
             continue;
           }
-          const table: ExpandedTable = { path: [...path, field.name], scalars: [] };
+          const table: ExpandedTable = {
+            path: [...path, field.name],
+            apiPath: [...apiPath, fieldApiName(field)],
+            scalars: [],
+          };
           out.tables.push(table);
           // A child-table row exists only when the item does, so required-ness inside it holds.
-          walk(child, [], table.scalars, true, true);
+          walk(child, [], [], table.scalars, true, true);
         } else {
           walk(
             child,
             [...path, field.name],
+            [...apiPath, fieldApiName(field)],
             sink,
             insideRepeatable,
             alwaysPresent && field.required === true,
@@ -141,19 +160,28 @@ export const expandComponents = (doc: IrDocument, ct: ContentType): ExpandedCont
           ),
         );
       }
-      sink.push({ path: [...path, field.name], field: stripAi(field), alwaysPresent });
+      sink.push({
+        path: [...path, field.name],
+        apiPath: [...apiPath, fieldApiName(field)],
+        field: stripAi(field),
+        alwaysPresent,
+      });
     }
   };
 
   for (const field of ct.fields) {
     if (field.type === "dynamicZone") {
-      const zone: ExpandedZone = { name: field.name, members: [] };
+      const zone: ExpandedZone = { name: field.name, apiName: fieldApiName(field), members: [] };
       for (const name of field.components) {
         const component = byName.get(name);
         if (!component) continue; // unreachable on validated IR
         // A member's table is keyed by the zone and the component: its rows exist only as items.
-        const table: ExpandedTable = { path: [field.name, component.name], scalars: [] };
-        walk(component, [], table.scalars, true, true);
+        const table: ExpandedTable = {
+          path: [field.name, component.name],
+          apiPath: [fieldApiName(field), component.name],
+          scalars: [],
+        };
+        walk(component, [], [], table.scalars, true, true);
         zone.members.push({ component, table });
       }
       out.zones.push(zone);
@@ -163,11 +191,22 @@ export const expandComponents = (doc: IrDocument, ct: ContentType): ExpandedCont
     const component = byName.get(field.component);
     if (!component) continue; // unreachable on validated IR
     if (field.repeatable) {
-      const table: ExpandedTable = { path: [field.name], scalars: [] };
+      const table: ExpandedTable = {
+        path: [field.name],
+        apiPath: [fieldApiName(field)],
+        scalars: [],
+      };
       out.tables.push(table);
-      walk(component, [], table.scalars, true, true);
+      walk(component, [], [], table.scalars, true, true);
     } else {
-      walk(component, [field.name], out.scalars, false, field.required === true);
+      walk(
+        component,
+        [field.name],
+        [fieldApiName(field)],
+        out.scalars,
+        false,
+        field.required === true,
+      );
     }
   }
   return out;

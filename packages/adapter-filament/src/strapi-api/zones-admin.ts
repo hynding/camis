@@ -2,14 +2,14 @@ import type { ExpandedZone } from "@camis/adapter-kernel";
 import type { ContentType } from "@camis/ir-schema";
 import { childTableEmit, type RepeaterEmit } from "../components";
 import { filamentNames } from "../names";
-import { camelKey, componentUid } from "./names";
+import { componentUid } from "./names";
 
 /**
  * A dynamic zone in the admin: a Builder with one block per member component, read from and
  * written to the zone's rows through `StrapiZones`, as the REST API reads and writes them.
  */
 export const zoneBuilder = (ct: ContentType, zone: ExpandedZone): RepeaterEmit => {
-  const key = camelKey(zone.name);
+  const key = zone.apiName;
   const members = `${filamentNames(ct).model}Serializer::ZONES['${key}']`;
   const children = zone.members.map((m) => ({ member: m, child: childTableEmit(ct, m.table) }));
   const blocks = children
@@ -21,7 +21,7 @@ export const zoneBuilder = (ct: ContentType, zone: ExpandedZone): RepeaterEmit =
     })
     .join("\n");
   return {
-    component: `Builder::make('${key}')
+    component: `Builder::make('${zone.name}')
                 ->blocks([
 ${blocks}
                 ])

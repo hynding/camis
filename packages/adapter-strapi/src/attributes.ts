@@ -1,4 +1,4 @@
-import type { Field } from "@camis/ir-schema";
+import { fieldApiName, type Field } from "@camis/ir-schema";
 import { toStrapiMediaKinds } from "./media-kinds";
 import { kebab } from "./names";
 
@@ -43,6 +43,11 @@ export const toAttribute = (
     return attr;
   }
 
+  if (field.type === "dynamicZone") {
+    attr.components = field.components.map((c) => componentUids.get(c) ?? `shared.${kebab(c)}`);
+    return attr;
+  }
+
   if (field.type === "component") {
     attr.component = componentUids.get(field.component) ?? `shared.${kebab(field.component)}`;
     attr.repeatable = field.repeatable;
@@ -70,9 +75,7 @@ export const toAttributes = (
   componentUids: ReadonlyMap<string, string> = new Map(),
 ): Record<string, Attribute> => {
   const out: Record<string, Attribute> = {};
-  for (const field of fields) {
-    if (field.type === "dynamicZone") continue; // deferred; generate emits a capability-gap
-    out[field.name] = toAttribute(field, builtinUsers, componentUids);
-  }
+  for (const field of fields)
+    out[fieldApiName(field)] = toAttribute(field, builtinUsers, componentUids);
   return out;
 };

@@ -135,7 +135,7 @@ describe("newCommand — from an existing Strapi project", () => {
         info: { singularName: "page", pluralName: "pages", displayName: "Page" },
         attributes: {
           title: { type: "string", required: true },
-          blocks: { type: "dynamiczone", components: ["shared.quote"] },
+          related: { type: "relation", relation: "morphToMany" },
         },
       }),
     );
@@ -148,7 +148,7 @@ describe("newCommand — from an existing Strapi project", () => {
     expect(await newCommand("migrated", io, { fromStrapi: source })).toBe(0);
     const ir = json(files, "/work/migrated/camis.json") as { contentTypes: { name: string }[] };
     expect(ir.contentTypes.map((ct) => ct.name)).toEqual(["Page"]);
-    expect(lines.join("\n")).toMatch(/⚠ dynamiczone @ Page\.blocks/);
+    expect(lines.join("\n")).toMatch(/⚠ morphRelation @ Page\.related/);
   });
 
   it("does not combine with --template", async () => {

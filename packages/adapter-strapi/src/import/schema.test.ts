@@ -42,6 +42,17 @@ describe("irContentType", () => {
 });
 
 describe("irComponent", () => {
+  it("reports a dynamic zone inside a component, which the IR does not allow, as a gap", () => {
+    const { component, gaps } = irComponent("Section", {
+      collectionName: "components_shared_sections",
+      attributes: {
+        heading: { type: "string" },
+        blocks: { type: "dynamiczone", components: ["shared.hero"] },
+      },
+    });
+    expect(component.fields.map((f) => f.name)).toEqual(["heading"]);
+    expect(gaps.map((g) => g.feature)).toEqual(["dynamiczone"]);
+  });
   it("reverses a component json using the path-derived name", () => {
     const schema = {
       collectionName: "components_shared_seo_metas",
