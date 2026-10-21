@@ -8,12 +8,12 @@
 // `hook` runs the runtime's hook command instead (`--hook`, given the step's words), which reads
 // what only the database knows (a reset code) or changes what only an administrator can (the
 // advanced settings, blocking a user); `into` keeps its output as `$name` for later steps, and
-// `keep` keeps response values the same way (`{ "bobId": "user.id" }`). `bearer` sends a literal
-// token (one that does not verify), `headers` adds request headers, and `cookie` names a response
-// cookie to record (set or cleared) and keep as `$<name>`. `jar` names a cookie jar the step sends
-// and fills, as a browser would across an OAuth round trip, and `keepQuery` keeps query values of
-// the redirect's location (`{ "state": "state" }`). A redirect's own origin and an OAuth state are
-// masked, as they differ between runtimes and runs.
+// `keep` keeps response values the same way (`{ "bobId": "user.id" }`). `bearer` sends a given
+// token (a literal one that does not verify, or an API token a hook made), `headers` adds request
+// headers, and `cookie` names a response cookie to record (set or cleared) and keep as `$<name>`.
+// `jar` names a cookie jar the step sends and fills, as a browser would across an OAuth round
+// trip, and `keepQuery` keeps query values of the redirect's location (`{ "state": "state" }`). A
+// redirect's own origin and an OAuth state are masked, as they differ between runtimes and runs.
 //
 // usage: strapi-auth-vectors.mjs <api-base> --hook CMD [--vectors F] [--expected F] [--record]
 import { execFileSync } from "node:child_process";
@@ -60,7 +60,7 @@ const runHook = (words) => {
 
 const call = async (step) => {
   const headers = { Accept: "application/json", ...fill(step.headers ?? {}) };
-  if (step.bearer !== undefined) headers.Authorization = `Bearer ${step.bearer}`;
+  if (step.bearer !== undefined) headers.Authorization = `Bearer ${fill(step.bearer)}`;
   if (step.as !== undefined) {
     // A session an earlier step failed to open is sent as no session, so that step shows the cause.
     const jwt = sessions.get(step.as);

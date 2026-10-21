@@ -1,0 +1,596 @@
+[
+  {
+    "name": "without a token the public role cannot list authors",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "a full-access token creates an author",
+    "status": 201,
+    "body": {
+      "data": {
+        "name": "Frank Herbert"
+      },
+      "meta": {}
+    }
+  },
+  {
+    "name": "a full-access token creates a genre",
+    "status": 201,
+    "body": {
+      "data": {
+        "name": "Science fiction"
+      },
+      "meta": {}
+    }
+  },
+  {
+    "name": "a full-access token creates a book",
+    "status": 201,
+    "body": {
+      "data": {
+        "inStock": null,
+        "pages": 412,
+        "publishedOn": null,
+        "rating": null,
+        "releasedAt": null,
+        "title": "Dune"
+      },
+      "meta": {}
+    }
+  },
+  {
+    "name": "a read-only token lists",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "inStock": null,
+          "pages": 412,
+          "publishedOn": null,
+          "rating": null,
+          "releasedAt": null,
+          "title": "Dune"
+        }
+      ],
+      "meta": {
+        "pagination": {
+          "page": 1,
+          "pageCount": 1,
+          "pageSize": 25,
+          "total": 1
+        }
+      }
+    }
+  },
+  {
+    "name": "a read-only token reads one",
+    "status": 200,
+    "body": {
+      "data": {
+        "inStock": null,
+        "pages": 412,
+        "publishedOn": null,
+        "rating": null,
+        "releasedAt": null,
+        "title": "Dune"
+      },
+      "meta": {}
+    }
+  },
+  {
+    "name": "a read-only token reads what the public role cannot",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "name": "Frank Herbert"
+        }
+      ],
+      "meta": {
+        "pagination": {
+          "page": 1,
+          "pageCount": 1,
+          "pageSize": 25,
+          "total": 1
+        }
+      }
+    }
+  },
+  {
+    "name": "a read-only token populates",
+    "status": 200,
+    "body": {
+      "data": {
+        "attachments": [],
+        "author": {
+          "name": "Frank Herbert"
+        },
+        "category": null,
+        "cover": null,
+        "editions": [],
+        "genres": [
+          {
+            "name": "Science fiction"
+          }
+        ],
+        "inStock": null,
+        "pages": 412,
+        "price": null,
+        "publishedOn": null,
+        "rating": null,
+        "releasedAt": null,
+        "title": "Dune",
+        "topic": null
+      },
+      "meta": {}
+    }
+  },
+  {
+    "name": "a read-only token may not create",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "a read-only token may not update",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "a read-only token may not delete",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "a read-only token reads drafts",
+    "status": 200,
+    "body": {
+      "data": [],
+      "meta": {
+        "pagination": {
+          "page": 1,
+          "pageCount": 0,
+          "pageSize": 25,
+          "total": 0
+        }
+      }
+    }
+  },
+  {
+    "name": "a custom token runs its action",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "inStock": null,
+          "pages": 412,
+          "publishedOn": null,
+          "rating": null,
+          "releasedAt": null,
+          "title": "Dune"
+        }
+      ],
+      "meta": {
+        "pagination": {
+          "page": 1,
+          "pageCount": 1,
+          "pageSize": 25,
+          "total": 1
+        }
+      }
+    }
+  },
+  {
+    "name": "a custom token is refused another action",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "a custom token is refused a write",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "a custom token populates a relation it may find",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "author": {
+            "name": "Frank Herbert"
+          },
+          "inStock": null,
+          "pages": 412,
+          "publishedOn": null,
+          "rating": null,
+          "releasedAt": null,
+          "title": "Dune"
+        }
+      ],
+      "meta": {
+        "pagination": {
+          "page": 1,
+          "pageCount": 1,
+          "pageSize": 25,
+          "total": 1
+        }
+      }
+    }
+  },
+  {
+    "name": "a custom token loses a relation it may not find",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "author": {
+            "name": "Frank Herbert"
+          },
+          "inStock": null,
+          "pages": 412,
+          "publishedOn": null,
+          "rating": null,
+          "releasedAt": null,
+          "title": "Dune"
+        }
+      ],
+      "meta": {
+        "pagination": {
+          "page": 1,
+          "pageCount": 1,
+          "pageSize": 25,
+          "total": 1
+        }
+      }
+    }
+  },
+  {
+    "name": "a custom token filters on a relation it may not find",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid key genres",
+      "details": {
+        "key": "genres",
+        "path": "genres",
+        "source": "query",
+        "param": "filters"
+      }
+    }
+  },
+  {
+    "name": "a findOne-only token reads one",
+    "status": 200,
+    "body": {
+      "data": {
+        "inStock": null,
+        "pages": 412,
+        "publishedOn": null,
+        "rating": null,
+        "releasedAt": null,
+        "title": "Dune"
+      },
+      "meta": {}
+    }
+  },
+  {
+    "name": "a findOne-only token may not list",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "a custom token is refused the locales",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "a read-only token lists the locales",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "a read-only token lists the media",
+    "status": 200,
+    "body": []
+  },
+  {
+    "name": "a read-only token may not upload",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "register",
+    "status": 200,
+    "body": {
+      "jwt": "<jwt>",
+      "user": {
+        "blocked": false,
+        "confirmed": true,
+        "email": "tess@example.test",
+        "provider": "local",
+        "username": "tess"
+      }
+    }
+  },
+  {
+    "name": "a read-only token lists the users",
+    "status": 200,
+    "body": [
+      {
+        "blocked": false,
+        "confirmed": true,
+        "email": "tess@example.test",
+        "provider": "local",
+        "username": "tess"
+      }
+    ]
+  },
+  {
+    "name": "a read-only token counts the users",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "a full-access token has no user of its own",
+    "status": 401,
+    "error": {
+      "name": "UnauthorizedError",
+      "message": "Unauthorized",
+      "details": {}
+    }
+  },
+  {
+    "name": "a read-only token may not log in",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "a full-access token logs in",
+    "status": 200,
+    "body": {
+      "jwt": "<jwt>",
+      "user": {
+        "blocked": false,
+        "confirmed": true,
+        "email": "tess@example.test",
+        "provider": "local",
+        "username": "tess"
+      }
+    }
+  },
+  {
+    "name": "a full-access token may not change a password",
+    "status": 400,
+    "error": {
+      "name": "ApplicationError",
+      "message": "You must be authenticated to reset your password",
+      "details": {}
+    }
+  },
+  {
+    "name": "a full-access token logs out no one",
+    "status": 404,
+    "error": {
+      "name": "NotFoundError",
+      "message": "Not Found",
+      "details": {}
+    }
+  },
+  {
+    "name": "a full-access token lists no sessions",
+    "status": 404,
+    "error": {
+      "name": "NotFoundError",
+      "message": "Not Found",
+      "details": {}
+    }
+  },
+  {
+    "name": "a full-access token revokes no session",
+    "status": 404,
+    "error": {
+      "name": "NotFoundError",
+      "message": "Not Found",
+      "details": {}
+    }
+  },
+  {
+    "name": "a full-access token refreshes nothing",
+    "status": 404,
+    "error": {
+      "name": "NotFoundError",
+      "message": "Not Found",
+      "details": {}
+    }
+  },
+  {
+    "name": "a full-access token asks for a reset",
+    "status": 200,
+    "body": {
+      "ok": true
+    }
+  },
+  {
+    "name": "a read-only token may not confirm an email",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "a read-only token may not sign in through a provider",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "a read-only token may not register",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "a session still reads as its role",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "inStock": null,
+          "pages": 412,
+          "publishedOn": null,
+          "rating": null,
+          "releasedAt": null,
+          "title": "Dune"
+        }
+      ],
+      "meta": {
+        "pagination": {
+          "page": 1,
+          "pageCount": 1,
+          "pageSize": 25,
+          "total": 1
+        }
+      }
+    }
+  },
+  {
+    "name": "a full-access token updates",
+    "status": 200,
+    "body": {
+      "data": {
+        "inStock": null,
+        "pages": 500,
+        "publishedOn": null,
+        "rating": null,
+        "releasedAt": null,
+        "title": "Dune"
+      },
+      "meta": {}
+    }
+  },
+  {
+    "name": "a token that is not one",
+    "status": 401,
+    "error": {
+      "name": "UnauthorizedError",
+      "message": "Missing or invalid credentials",
+      "details": {}
+    }
+  },
+  {
+    "name": "a regenerated token's old key",
+    "status": 401,
+    "error": {
+      "name": "UnauthorizedError",
+      "message": "Missing or invalid credentials",
+      "details": {}
+    }
+  },
+  {
+    "name": "a regenerated token's new key",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "title": "Dune"
+        }
+      ],
+      "meta": {
+        "pagination": {
+          "page": 1,
+          "pageCount": 1,
+          "pageSize": 25,
+          "total": 1
+        }
+      }
+    }
+  },
+  {
+    "name": "an expired token",
+    "status": 401,
+    "error": {
+      "name": "UnauthorizedError",
+      "message": "Token expired",
+      "details": {}
+    }
+  },
+  {
+    "name": "an expired token on a public route",
+    "status": 401,
+    "error": {
+      "name": "UnauthorizedError",
+      "message": "Token expired",
+      "details": {}
+    }
+  },
+  {
+    "name": "a full-access token deletes",
+    "status": 204,
+    "body": ""
+  },
+  {
+    "name": "a revoked token",
+    "status": 401,
+    "error": {
+      "name": "UnauthorizedError",
+      "message": "Missing or invalid credentials",
+      "details": {}
+    }
+  }
+]

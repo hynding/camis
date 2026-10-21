@@ -3,6 +3,7 @@
 # what only the database knows and changes what only an administrator can, through artisan tinker.
 # usage: strapi-auth-hook.sh lookup reset|confirmation <username> | lookup role <name>
 #        | settings <json> | provider <name> <json> | block <username> | allow create|update|destroy | role <name> <action>...
+#        | token <name> <type> <action>... | expire|revoke|regenerate <name>
 set -euo pipefail
 php_string() { printf "'%s'" "$(printf '%s' "$1" | sed "s/\\\\/\\\\\\\\/g; s/'/\\\\'/g")"; }
 case "$1" in
@@ -14,6 +15,12 @@ case "$1" in
     esac ;;
   settings) code="App\\Support\\StrapiSettings::merge('users-permissions.advanced', json_decode($(php_string "$2"), true));" ;;
   provider) code="App\\Support\\StrapiProviders::configure($(php_string "$2"), json_decode($(php_string "$3"), true));" ;;
+  token)
+    actions=""; for a in "${@:4}"; do actions+="$(php_string "$a"), "; done
+    code="echo App\\Support\\StrapiApiTokens::create(['name' => $(php_string "$2"), 'type' => $(php_string "$3"), 'permissions' => [$actions]])['accessKey'];" ;;
+  expire) code="App\\Models\\StrapiApiToken::where('name', $(php_string "$2"))->update(['expires_at' => now()->subMinute()]);" ;;
+  revoke) code="App\\Models\\StrapiApiToken::where('name', $(php_string "$2"))->delete();" ;;
+  regenerate) code="echo App\\Support\\StrapiApiTokens::regenerate(App\\Models\\StrapiApiToken::where('name', $(php_string "$2"))->sole());" ;;
   block) code="App\\Models\\User::where('username', $(php_string "$2"))->update(['blocked' => true]);" ;;
   allow)
     action="$2"; [[ "$action" == destroy ]] && action=delete
