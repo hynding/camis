@@ -251,6 +251,15 @@ jobs:
           node ../packages/adapter-filament/scripts/strapi-auth-vectors.mjs http://127.0.0.1:8765/api \
             --hook "bash ../packages/adapter-filament/scripts/strapi-auth-hook.sh" \
             --vectors $F/oauth-vectors.json --expected $F/oauth-vectors.expected.json
+      - name: Strapi API token vectors (recorded from strapi-php)
+        run: |
+          cd app
+          php artisan migrate:fresh --force
+          php artisan db:seed --class="Database\\Seeders\\RolePermissionSeeder" --force
+          F=../packages/adapter-filament/src/strapi-api/__fixtures__
+          node ../packages/adapter-filament/scripts/strapi-auth-vectors.mjs http://127.0.0.1:8765/api \
+            --hook "bash ../packages/adapter-filament/scripts/strapi-auth-hook.sh" \
+            --vectors $F/token-vectors.json --expected $F/token-vectors.expected.json
       - name: Strapi refresh-token session vectors (recorded from strapi-php in refresh mode)
         run: |
           cd app
@@ -262,14 +271,14 @@ jobs:
           node ../packages/adapter-filament/scripts/strapi-auth-vectors.mjs http://127.0.0.1:8765/api \
             --hook "bash ../packages/adapter-filament/scripts/strapi-auth-hook.sh" \
             --vectors $F/session-vectors.json --expected $F/session-vectors.expected.json
-      - name: Filament admin publishes drafts, translates, keeps the media library and manages users
+      - name: Filament admin publishes drafts, translates, keeps the media library, manages users and API tokens
         run: |
           cd app
           # The cached config would point the tests at the served database instead of :memory:.
           php artisan config:clear
           S=../packages/adapter-filament/scripts/php
-          cp $S/DraftAdminTest.php $S/LocaleAdminTest.php $S/MediaAdminTest.php $S/UsersAdminTest.php $S/ProvidersTest.php tests/Feature/
-          php artisan test tests/Feature/DraftAdminTest.php tests/Feature/LocaleAdminTest.php tests/Feature/MediaAdminTest.php tests/Feature/UsersAdminTest.php tests/Feature/ProvidersTest.php
+          cp $S/DraftAdminTest.php $S/LocaleAdminTest.php $S/MediaAdminTest.php $S/UsersAdminTest.php $S/ProvidersTest.php $S/ApiTokensTest.php tests/Feature/
+          php artisan test tests/Feature/DraftAdminTest.php tests/Feature/LocaleAdminTest.php tests/Feature/MediaAdminTest.php tests/Feature/UsersAdminTest.php tests/Feature/ProvidersTest.php tests/Feature/ApiTokensTest.php
       - name: Server log on failure
         if: failure()
         run: cat app/serve.log app/storage/logs/laravel.log "$RUNNER_TEMP/oauth/serve.log" || true

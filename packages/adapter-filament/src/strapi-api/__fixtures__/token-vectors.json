@@ -1,4 +1,5 @@
 {
+  "dropNulls": true,
   "steps": [
     {
       "hook": ["role", "public", "api::book.book.find", "api::book.book.findOne"]

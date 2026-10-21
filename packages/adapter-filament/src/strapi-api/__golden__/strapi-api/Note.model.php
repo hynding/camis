@@ -40,6 +40,9 @@ class Note extends Model
     /** Rows visible to $user (Strapi API style list scope); null is a caller without a session. */
     public function scopeForUser(Builder $q, ?User $user): Builder
     {
+        if (\App\Support\StrapiApiTokens::active()) {
+            return $q;
+        }
         if ($user === null) {
             $q->whereRaw('1 = 0');
 

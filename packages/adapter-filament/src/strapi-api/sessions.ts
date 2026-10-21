@@ -441,6 +441,7 @@ declare(strict_types=1);
 namespace App\\Http\\Controllers\\Api;
 
 use App\\Http\\Controllers\\Controller;
+use App\\Models\\User;
 use App\\Support\\StrapiError;
 use App\\Support\\StrapiSessions;
 use Illuminate\\Http\\JsonResponse;
@@ -464,7 +465,7 @@ final class SessionController extends Controller
     public function logout(Request $request): JsonResponse
     {
         self::refreshOnly();
-        $user = $request->user();
+        $user = self::user($request);
         $deviceId = $request->json('deviceId');
         if ($request->json('scope') === 'all') {
             StrapiSessions::invalidate($user);
@@ -483,13 +484,13 @@ final class SessionController extends Controller
     {
         self::refreshOnly();
 
-        return response()->json(['data' => StrapiSessions::list($request->user(), StrapiSessions::current($request))]);
+        return response()->json(['data' => StrapiSessions::list(self::user($request), StrapiSessions::current($request))]);
     }
 
     public function revoke(Request $request, string $sessionId): JsonResponse
     {
         self::refreshOnly();
-        if (! StrapiSessions::revoke($request->user(), $sessionId)) {
+        if (! StrapiSessions::revoke(self::user($request), $sessionId)) {
             throw new StrapiError(404, 'NotFoundError', 'Session not found');
         }
 
@@ -501,6 +502,12 @@ final class SessionController extends Controller
         if (! StrapiSessions::refreshMode()) {
             throw new StrapiError(404, 'NotFoundError', 'Not Found');
         }
+    }
+
+    /** An API token's request has no account, so no sessions of its own. */
+    private static function user(Request $request): User
+    {
+        return $request->user() ?? throw new StrapiError(401, 'UnauthorizedError', 'Missing authentication');
     }
 }
 `;

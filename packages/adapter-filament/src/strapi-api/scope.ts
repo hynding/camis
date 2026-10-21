@@ -14,9 +14,15 @@ export interface ScopeEmit {
   gap?: CapabilityGap;
 }
 
-const method = (body: string, guests: boolean): string =>
-  guests
-    ? `    /** Rows visible to $user (Strapi API style list scope); null is a caller without a session. */\n    public function scopeForUser(Builder $q, ?User $user): Builder\n    {\n${body}\n    }`
+// An API token reads as Strapi's own tokens do, through no role and so no row condition.
+const TOKEN_BYPASS = `        if (\\App\\Support\\StrapiApiTokens::active()) {
+            return $q;
+        }
+`;
+
+const method = (body: string, guests: boolean, tokens: boolean): string =>
+  guests || tokens
+    ? `    /** Rows visible to $user (Strapi API style list scope); null is a caller without a session. */\n    public function scopeForUser(Builder $q, ?User $user): Builder\n    {\n${tokens && body.trim() !== "return $q;" ? TOKEN_BYPASS : ""}${body}\n    }`
     : `    /** Rows visible to $user (Strapi API style list scope). */\n    public function scopeForUser(Builder $q, User $user): Builder\n    {\n${body}\n    }`;
 
 const filtered = (node: WhereNode | boolean, indent: string): string => {
@@ -32,18 +38,22 @@ const body = (node: WhereNode, guests: boolean): string => {
   return `        if ($user === null) {\n${filtered(guest, "            ")}\n        }\n${filtered(node, "        ")}`;
 };
 
-/** `guests`: the project serves callers without a session, so the scope accepts a null user. */
+/**
+ * `guests`: the project serves callers without a session, so the scope accepts a null user.
+ * `tokens`: API tokens reach the API, which read every row and act for no user.
+ */
 export const emitScopeMethod = (
   ct: ContentType,
   condition: Expression | undefined,
   layout: StorageLayout = "laravel",
   guests = false,
+  tokens = false,
 ): ScopeEmit => {
-  if (condition === undefined) return { php: method("        return $q;", guests) };
+  if (condition === undefined) return { php: method("        return $q;", guests, tokens) };
   const node = toWhereNode(condition, whereContext(ct, layout));
   if (node === null) {
     return {
-      php: method("        return $q;", guests),
+      php: method("        return $q;", guests, tokens),
       gap: {
         feature: "listScopeFallback",
         location: { contentType: ct.name },
@@ -52,5 +62,5 @@ export const emitScopeMethod = (
       },
     };
   }
-  return { php: method(body(node, guests), guests) };
+  return { php: method(body(node, guests), guests, tokens) };
 };

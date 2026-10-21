@@ -3,6 +3,15 @@ import type { CapabilityGap, ContentType, IrDocument } from "@camis/ir-schema";
 import type { IrBundle } from "@camis/permissions";
 import { filamentNames } from "../names";
 import { projectFilamentPermissions } from "../permissions/project";
+import {
+  API_TOKENS_MIGRATION_PATH,
+  emitApiTokenModel,
+  emitApiTokenResourceFiles,
+  emitApiTokensMigration,
+  emitStrapiApiTokenMiddleware,
+  emitStrapiApiTokens,
+  type TokenContentType,
+} from "./api-tokens";
 import { emitAuthController, emitUsernameMigration, USERNAME_MIGRATION_PATH } from "./auth";
 import { emitGeneratedController, emitProtectedController } from "./controller";
 import { emitHasDraftAndPublish, emitStrapiDocuments } from "./draft-publish-runtime";
@@ -128,7 +137,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
       mode: "seed",
     });
     if (secured) {
-      const scope = emitScopeMethod(ct, perm.readConditions.get(ct.name), "laravel", guests);
+      const scope = emitScopeMethod(ct, perm.readConditions.get(ct.name), "laravel", guests, true);
       scopeMethods.set(ct.name, scope.php);
       if (scope.gap) gaps.push(scope.gap);
     }
@@ -154,6 +163,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
       localized.size > 0,
       input.media !== undefined,
       true,
+      secured,
     ),
   });
   files.push({
@@ -162,6 +172,19 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
   });
   files.push({ path: USERNAME_MIGRATION_PATH, content: emitUsernameMigration() });
   files.push(...usersPermissionsFiles(secured, guests, bundle.defaultRole));
+  if (secured) {
+    files.push(
+      ...apiTokenFiles(
+        emitted.map((ct) => ({
+          controller: `${filamentNames(ct).model}ApiController`,
+          model: filamentNames(ct).model,
+          uid: `api::${kebab(ct.name)}.${kebab(ct.name)}`,
+        })),
+        fileModel,
+        localized.size > 0,
+      ),
+    );
+  }
   files.push({
     path: "app/Http/Middleware/StrapiErrors.php",
     content: emitStrapiErrorsMiddleware(),
@@ -174,7 +197,13 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
   if (localized.size > 0) files.push(...localeFiles());
   if (input.media !== undefined) {
     const scope = secured
-      ? emitScopeMethod(input.media, perm.readConditions.get(input.media.name), "laravel", guests)
+      ? emitScopeMethod(
+          input.media,
+          perm.readConditions.get(input.media.name),
+          "laravel",
+          guests,
+          true,
+        )
       : undefined;
     if (scope?.gap) gaps.push(scope.gap);
     files.push(...mediaLibraryFiles(input.media, emitted, secured, scope?.php));
@@ -202,7 +231,7 @@ const usersPermissionsFiles = (
     content: emitUserController(secured, guests),
   },
   { path: "app/Http/Middleware/StrapiActiveUser.php", content: emitStrapiActiveUser() },
-  { path: "app/Http/Middleware/StrapiCredentials.php", content: emitStrapiCredentials() },
+  { path: "app/Http/Middleware/StrapiCredentials.php", content: emitStrapiCredentials(secured) },
   { path: USERS_PERMISSIONS_MIGRATION_PATH, content: emitUsersPermissionsMigration() },
   { path: SETTINGS_MIGRATION_PATH, content: emitSettingsMigration() },
   { path: "app/Support/StrapiSessions.php", content: emitStrapiSessions() },
@@ -218,6 +247,22 @@ const usersPermissionsFiles = (
     path: "app/Filament/Pages/UsersPermissionsSettings.php",
     content: emitUsersPermissionsSettingsPage(secured),
   },
+];
+
+/** Strapi's content API tokens, which stand in for a role, and their admin. */
+const apiTokenFiles = (
+  contentTypes: TokenContentType[],
+  fileModel: string | undefined,
+  localized: boolean,
+): GeneratedFile[] => [
+  { path: API_TOKENS_MIGRATION_PATH, content: emitApiTokensMigration() },
+  { path: "app/Models/StrapiApiToken.php", content: emitApiTokenModel() },
+  {
+    path: "app/Support/StrapiApiTokens.php",
+    content: emitStrapiApiTokens({ contentTypes, fileModel, localized }),
+  },
+  { path: "app/Http/Middleware/StrapiApiToken.php", content: emitStrapiApiTokenMiddleware() },
+  ...emitApiTokenResourceFiles(),
 ];
 
 /** The media library: Strapi's files and their upload API, and its admin. */

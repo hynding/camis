@@ -12,6 +12,10 @@ overwrite app/Filament/Resources/ActivitySessions/Pages/EditActivitySession.php
 overwrite app/Filament/Resources/ActivitySessions/Pages/ListActivitySessions.php
 overwrite app/Filament/Resources/ActivitySessions/Schemas/ActivitySessionForm.php
 overwrite app/Filament/Resources/ActivitySessions/Schemas/ActivitySessionsTable.php
+overwrite app/Filament/Resources/ApiTokens/ApiTokenResource.php
+overwrite app/Filament/Resources/ApiTokens/Pages/CreateApiToken.php
+overwrite app/Filament/Resources/ApiTokens/Pages/EditApiToken.php
+overwrite app/Filament/Resources/ApiTokens/Pages/ListApiTokens.php
 overwrite app/Filament/Resources/Articles/ArticleResource.php
 overwrite app/Filament/Resources/Articles/Pages/CreateArticle.php
 overwrite app/Filament/Resources/Articles/Pages/EditArticle.php
@@ -114,6 +118,7 @@ overwrite app/Http/Controllers/Api/SessionController.php
 overwrite app/Http/Controllers/Api/UploadController.php
 overwrite app/Http/Controllers/Api/UserController.php
 overwrite app/Http/Middleware/StrapiActiveUser.php
+overwrite app/Http/Middleware/StrapiApiToken.php
 overwrite app/Http/Middleware/StrapiCredentials.php
 overwrite app/Http/Middleware/StrapiErrors.php
 overwrite app/Http/Serializers/ActivitySerializer.php
@@ -148,6 +153,7 @@ overwrite app/Models/Locale.php
 overwrite app/Models/Note.php
 overwrite app/Models/Page.php
 overwrite app/Models/Post.php
+overwrite app/Models/StrapiApiToken.php
 overwrite app/Models/Tag.php
 overwrite app/Models/Topic.php
 overwrite app/Models/Transaction.php
@@ -168,6 +174,7 @@ overwrite app/Policies/TransactionPolicy.php
 overwrite app/Policies/UserPolicy.php
 overwrite app/Support/PublicRole.php
 overwrite app/Support/Ring1.php
+overwrite app/Support/StrapiApiTokens.php
 overwrite app/Support/StrapiDocuments.php
 overwrite app/Support/StrapiError.php
 overwrite app/Support/StrapiLocales.php
@@ -192,6 +199,7 @@ overwrite database/migrations/0001_01_02_000003_create_activity_sessions_table.p
 overwrite database/migrations/0001_01_02_000003_create_strapi_sessions_table.php
 overwrite database/migrations/0001_01_02_000004_allow_users_without_password.php
 overwrite database/migrations/0001_01_02_000004_create_activities_table.php
+overwrite database/migrations/0001_01_02_000005_create_strapi_api_tokens_table.php
 overwrite database/migrations/0001_01_02_000005_create_tags_table.php
 overwrite database/migrations/0001_01_02_000006_create_topics_table.php
 overwrite database/migrations/0001_01_02_000007_create_categories_table.php

@@ -91,9 +91,9 @@ class AuthController extends Controller
 
     public function changePassword(Request $request): JsonResponse
     {
+        $user = $request->user() ?? throw StrapiUsers::application('You must be authenticated to reset your password');
         $body = $request->json()->all();
         StrapiUsers::validate($body, ['password' => ['required', 'maxPassword'], 'passwordConfirmation' => ['required', 'same:password'], 'currentPassword' => ['required']]);
-        $user = $request->user();
         if (! Hash::check((string) $body['currentPassword'], $user->password)) {
             throw StrapiError::validation('The provided current password is invalid');
         }

@@ -2,6 +2,7 @@ import type { StorageLayout } from "@camis/adapter-kernel";
 import type { ContentType } from "@camis/ir-schema";
 import { filamentNames } from "../names";
 import { routePath } from "./names";
+import { apiTokensConfigKeys } from "./api-tokens";
 import { usersPermissionsConfigKeys } from "./users-permissions";
 
 /** Default requests per minute allowed on the unauthenticated credential endpoints. */
@@ -26,6 +27,7 @@ export const emitApiConfig = (
   localized = false,
   upload = false,
   usersPermissions = false,
+  apiTokens = false,
 ): string => {
   // Where the media library keeps its files: unset, public/uploads, served at /uploads as Strapi's
   // local provider serves it; else a Laravel disk name (s3, …). The limit is Strapi's default.
@@ -78,7 +80,7 @@ declare(strict_types=1);
 return [
     // Requests per minute allowed on the unauthenticated credential endpoints
     // (POST /auth/local and /auth/local/register), keyed by client address.
-    'auth_throttle_per_minute' => max(1, (int) env('CAMIS_AUTH_THROTTLE_PER_MINUTE', ${AUTH_THROTTLE_PER_MINUTE})),${strapiKeys}${i18nKeys}${uploadKeys}${usersPermissions ? usersPermissionsConfigKeys() : ""}
+    'auth_throttle_per_minute' => max(1, (int) env('CAMIS_AUTH_THROTTLE_PER_MINUTE', ${AUTH_THROTTLE_PER_MINUTE})),${strapiKeys}${i18nKeys}${uploadKeys}${usersPermissions ? usersPermissionsConfigKeys() : ""}${apiTokens ? apiTokensConfigKeys() : ""}
 ];
 `;
 };
@@ -100,6 +102,7 @@ export const emitStrapiRoutes = (
   guests = false,
 ): string => {
   const jwt = secured && guard === "strapi-jwt";
+  const tokens = usersPermissions && secured;
   const sorted = [...cts].sort((a, b) => routePath(a).localeCompare(routePath(b)));
   const uses = [
     "App\\Http\\Controllers\\Api\\AuthController",
@@ -115,6 +118,7 @@ export const emitStrapiRoutes = (
           "App\\Http\\Middleware\\StrapiCredentials",
         ]
       : []),
+    ...(tokens ? ["App\\Http\\Middleware\\StrapiApiToken"] : []),
     ...sorted.map((ct) => `App\\Http\\Controllers\\Api\\${filamentNames(ct).model}ApiController`),
     "App\\Http\\Middleware\\StrapiErrors",
     ...(usersPermissions
@@ -149,9 +153,11 @@ export const emitStrapiRoutes = (
         Route::get('/upload/files/{id}', [UploadController::class, 'findOne']);
         Route::delete('/upload/files/{id}', [UploadController::class, 'destroy']);`
     : "";
-  const sanctum = usersPermissions
-    ? "Route::middleware(['auth:sanctum', StrapiActiveUser::class])"
-    : "Route::middleware('auth:sanctum')";
+  const sanctum = tokens
+    ? "Route::middleware([StrapiCredentials::class.':required', StrapiActiveUser::class])"
+    : usersPermissions
+      ? "Route::middleware(['auth:sanctum', StrapiActiveUser::class])"
+      : "Route::middleware('auth:sanctum')";
   const group = !secured
     ? "Route::middleware([])"
     : jwt
@@ -234,7 +240,13 @@ Route::prependMiddlewareToGroup('api', StrapiErrors::class);
 // The rate is deployment-specific — see config/camis.php.
 $authThrottle = 'throttle:'.(int) config('camis.auth_throttle_per_minute', ${AUTH_THROTTLE_PER_MINUTE}).',1';
 
-Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle): void {
+${
+  tokens
+    ? `// Strapi tries an API token before a session, on every content API route: StrapiApiToken checks
+// the token against the route's action, ahead of each route's own credentials.
+`
+    : ""
+}Route::middleware([StrapiErrors::class${tokens ? ", StrapiApiToken::class" : ""}])->group(function () use ($authThrottle): void {
     Route::get('/_health', fn () => response()->noContent());
     Route::post('/auth/local', [AuthController::class, 'login'])->middleware(${throttled});
     Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware(${throttled});${accountRoutes}${

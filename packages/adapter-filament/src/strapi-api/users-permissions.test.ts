@@ -111,7 +111,9 @@ describe("users-permissions routes", () => {
     expect(routes.indexOf("'/users/me'")).toBeLessThan(routes.indexOf("'/users/{id}'"));
   });
   it("checks a blocked or unconfirmed session on every authenticated route", () => {
-    expect(routes).toMatch(/Route::middleware\(\['auth:sanctum', StrapiActiveUser::class\]\)/);
+    expect(routes).toMatch(
+      /Route::middleware\(\[StrapiCredentials::class\.':required', StrapiActiveUser::class\]\)/,
+    );
   });
   it("throttles the unauthenticated email endpoints with the credential ones", () => {
     expect(routes).toContain(
