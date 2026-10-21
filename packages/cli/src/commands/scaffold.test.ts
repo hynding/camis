@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Io } from "../io";
 import {
   patchBootstrapApp,
+  patchBootstrapGraphql,
   patchBootstrapMiddleware,
   patchUserModel,
   scaffoldCommand,
@@ -151,7 +152,45 @@ describe("patchBootstrapMiddleware", () => {
   });
 });
 
+// Strapi serves GraphQL at /graphql, beside /api, so its route file is loaded on its own, inside
+// withRouting so that route:cache keeps it; a project generated without GraphQL has no such file.
+describe("patchBootstrapGraphql", () => {
+  it("loads routes/graphql.php in the api middleware group when the file exists", () => {
+    const patched = patchBootstrapGraphql(STOCK_BOOTSTRAP);
+    expect(patched).toContain("then: function (): void {");
+    expect(patched).toContain("if (is_file(__DIR__.'/../routes/graphql.php')) {");
+    expect(patched).toContain(
+      "\\Illuminate\\Support\\Facades\\Route::middleware('api')->group(__DIR__.'/../routes/graphql.php');",
+    );
+    expect(patched).toContain("health: '/up',");
+  });
+  it("is idempotent", () => {
+    const once = patchBootstrapGraphql(STOCK_BOOTSTRAP);
+    expect(patchBootstrapGraphql(once)).toBe(once);
+  });
+  it("leaves a bootstrap without the stock health route unchanged so the caller can fail loudly", () => {
+    const hand = STOCK_BOOTSTRAP.replace("        health: '/up',\n", "");
+    expect(patchBootstrapGraphql(hand)).toBe(hand);
+  });
+});
+
 describe("scaffoldCommand", () => {
+  it("installs webonyx/graphql-php and routes /graphql with --graphql", async () => {
+    const { io, calls, written } = fakeIo({
+      files: {
+        "/proj/app/app/Models/User.php": STOCK_USER,
+        "/proj/app/bootstrap/app.php": STOCK_BOOTSTRAP,
+      },
+    });
+    expect(await scaffoldCommand("filament", "app", io, { graphql: true })).toBe(0);
+    expect(calls.at(-1)!.args).toEqual([
+      "require",
+      "webonyx/graphql-php:^15.19",
+      "--no-interaction",
+    ]);
+    expect(written["/proj/app/bootstrap/app.php"]).toContain("routes/graphql.php");
+  });
+
   it("runs the composer/artisan sequence in order and patches User.php", async () => {
     const { io, calls, written } = fakeIo({
       files: {
