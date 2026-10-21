@@ -87,6 +87,16 @@ describe("emitSerializer", () => {
 
   // Strapi returns a biginteger as a string — a 64-bit value does not survive a JSON number — so
   // an int cast here would answer 1250 where Strapi answers "1250".
+  it("stamps publishedAt on a type without draft and publish at its last write, as Strapi does", () => {
+    const transaction = emitSerializer(shape("Transaction"));
+    expect(transaction).toContain(
+      "'publishedAt' => $m->updated_at?->toIso8601ZuluString('millisecond'),",
+    );
+    expect(transaction).toContain(
+      "'publishedAt' => ['column' => 'updated_at', 'type' => 'dateTime'],",
+    );
+  });
+
   it("serializes a bigInteger as a string and a plain integer as a number", () => {
     const php = emitSerializer(shape("Transaction"));
     expect(php).toContain(

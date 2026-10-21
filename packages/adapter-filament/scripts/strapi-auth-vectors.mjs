@@ -14,12 +14,18 @@
 // `jar` names a cookie jar the step sends and fills, as a browser would across an OAuth round
 // trip, and `keepQuery` keeps query values of the redirect's location (`{ "state": "state" }`). A
 // redirect's own origin and an OAuth state are masked, as they differ between runtimes and runs.
+// `upload` sends files from __fixtures__/media as the Upload API's multipart form (`files`, and
+// `fileInfo` when given). A step with `deliveries` records the webhooks webhook-receiver.mjs
+// (`--receiver`) got since the last such step, waiting for them as a runtime may send after it
+// answers; a delivery's time and a file's random hash and url are masked.
 //
 // usage: strapi-auth-vectors.mjs <api-base> --hook CMD [--vectors F] [--expected F] [--record]
+//        [--receiver URL]
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, URL } from "node:url";
+import { setTimeout as sleep } from "node:timers/promises";
 import { parseArgs } from "node:util";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -31,6 +37,7 @@ const { values, positionals } = parseArgs({
     vectors: { type: "string", default: join(fixtures, "auth-vectors.json") },
     expected: { type: "string", default: join(fixtures, "auth-vectors.expected.json") },
     record: { type: "boolean", default: false },
+    receiver: { type: "string", default: "http://127.0.0.1:9555" },
   },
 });
 const base = positionals[0];
@@ -73,6 +80,14 @@ const call = async (step) => {
   if (step.body !== undefined) {
     headers["Content-Type"] = "application/json";
     init.body = JSON.stringify(fill(step.body));
+  }
+  if (step.upload !== undefined) {
+    const form = new FormData();
+    for (const name of step.upload.files)
+      form.append("files", new Blob([readFileSync(join(fixtures, "media", name))]), name);
+    if (step.upload.fileInfo !== undefined)
+      form.append("fileInfo", JSON.stringify(fill(step.upload.fileInfo)));
+    init.body = form;
   }
   const response = await fetch(`${base}${fill(step.path)}`, init);
   if (jar !== undefined) {
@@ -157,8 +172,62 @@ const outcome = ({ status, location, body }, cookie) => {
   return { status, body: normalize(body) };
 };
 
+// What the receiver got since it was last asked, waiting until a poll brings nothing new.
+const POLL_MS = 200;
+const QUIET_MS = 2000;
+const SETTLED_MS = 600;
+const deliveries = async () => {
+  const got = [];
+  let quiet = 0;
+  while (quiet < (got.length > 0 ? SETTLED_MS : QUIET_MS)) {
+    await sleep(POLL_MS);
+    const batch = await (await fetch(`${values.receiver}/deliveries`)).json();
+    if (batch.length === 0) quiet += POLL_MS;
+    else {
+      got.push(...batch);
+      quiet = 0;
+    }
+  }
+  // Each webhook's deliveries in the order sent; webhooks by path, as runtimes may interleave them.
+  return got
+    .map((delivery, i) => ({ delivery, i }))
+    .sort((a, b) => a.delivery.path.localeCompare(b.delivery.path) || a.i - b.i)
+    .map(({ delivery }) => ({ ...delivery, body: maskDelivery(delivery.body) }));
+};
+const RANDOM_FILE = new Set(["hash", "url"]);
+// A published version shows as `published`, which normalize would otherwise drop with the date.
+const publication = (value) => {
+  if (Array.isArray(value)) return value.map(publication);
+  if (value === null || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([k, v]) =>
+      k === "publishedAt" && typeof v === "string" ? ["published", true] : [k, publication(v)],
+    ),
+  );
+};
+const maskDelivery = (delivered) => {
+  if (delivered === null || typeof delivered !== "object") return delivered;
+  const { createdAt, media, ...rest } = publication(delivered);
+  const file =
+    media === undefined
+      ? {}
+      : {
+          media: Object.fromEntries(
+            Object.entries(normalize(media)).map(([k, v]) => [
+              k,
+              RANDOM_FILE.has(k) && typeof v === "string" ? "<random>" : v,
+            ]),
+          ),
+        };
+  return normalize({ ...rest, ...file, ...(createdAt === undefined ? {} : { at: "<date>" }) });
+};
+
 const outcomes = [];
 for (const step of steps) {
+  if (step.deliveries !== undefined) {
+    outcomes.push({ name: step.name, deliveries: await deliveries() });
+    continue;
+  }
   if (step.hook !== undefined) {
     const out = runHook(step.hook);
     if (step.into !== undefined) vars.set(step.into, out);

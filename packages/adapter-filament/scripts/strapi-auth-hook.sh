@@ -4,6 +4,7 @@
 # usage: strapi-auth-hook.sh lookup reset|confirmation <username> | lookup role <name>
 #        | settings <json> | provider <name> <json> | block <username> | allow create|update|destroy | role <name> <action>...
 #        | token <name> <type> <action>... | expire|revoke|regenerate <name>
+#        | webhook <name> <url> <headers-json> <event>... | webhook-disable <name>
 set -euo pipefail
 php_string() { printf "'%s'" "$(printf '%s' "$1" | sed "s/\\\\/\\\\\\\\/g; s/'/\\\\'/g")"; }
 case "$1" in
@@ -21,6 +22,10 @@ case "$1" in
   expire) code="App\\Models\\StrapiApiToken::where('name', $(php_string "$2"))->update(['expires_at' => now()->subMinute()]);" ;;
   revoke) code="App\\Models\\StrapiApiToken::where('name', $(php_string "$2"))->delete();" ;;
   regenerate) code="echo App\\Support\\StrapiApiTokens::regenerate(App\\Models\\StrapiApiToken::where('name', $(php_string "$2"))->sole());" ;;
+  webhook)
+    events=""; for e in "${@:5}"; do events+="$(php_string "$e"), "; done
+    code="App\\Models\\StrapiWebhook::create(['name' => $(php_string "$2"), 'url' => $(php_string "$3"), 'headers' => json_decode($(php_string "$4"), true), 'events' => [$events], 'enabled' => true]);" ;;
+  webhook-disable) code="App\\Models\\StrapiWebhook::where('name', $(php_string "$2"))->update(['enabled' => false]);" ;;
   block) code="App\\Models\\User::where('username', $(php_string "$2"))->update(['blocked' => true]);" ;;
   allow)
     action="$2"; [[ "$action" == destroy ]] && action=delete

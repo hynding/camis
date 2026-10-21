@@ -1,0 +1,154 @@
+{
+  "about": "Strapi 5's webhooks, checked against strapi-php. Run on an empty database, in order, with strapi-auth-vectors.mjs and webhook-receiver.mjs listening on 127.0.0.1:9555. A webhook named all hears every event, failing hears entry.create and answers 500; a delivery step records what each got since the last one.",
+  "dropNulls": true,
+  "steps": [
+    { "hook": ["token", "writer", "full-access"], "into": "writer" },
+    {
+      "hook": [
+        "webhook",
+        "all",
+        "http://127.0.0.1:9555/hooks/all",
+        "{\"X-Camis-Site\":\"blog\"}",
+        "entry.create",
+        "entry.update",
+        "entry.delete",
+        "entry.publish",
+        "entry.unpublish",
+        "entry.draft-discard",
+        "media.create",
+        "media.update",
+        "media.delete"
+      ]
+    },
+    {
+      "hook": ["webhook", "failing", "http://127.0.0.1:9555/hooks/failing", "{}", "entry.create"]
+    },
+    {
+      "name": "creating an author",
+      "path": "/authors",
+      "bearer": "$writer",
+      "body": { "data": { "name": "Frank Herbert" } },
+      "keep": { "authorId": "data.documentId" }
+    },
+    { "name": "an entry's creation reaches every webhook that hears it", "deliveries": true },
+    {
+      "name": "creating a genre",
+      "path": "/genres",
+      "bearer": "$writer",
+      "body": { "data": { "name": "Science fiction" } },
+      "keep": { "genreId": "data.documentId" }
+    },
+    { "name": "the genre's creation", "deliveries": true },
+    {
+      "name": "creating a book with relations and components",
+      "path": "/books",
+      "bearer": "$writer",
+      "body": {
+        "data": {
+          "title": "Dune",
+          "pages": 412,
+          "author": "$authorId",
+          "genres": ["$genreId"],
+          "price": { "minor": 999, "currency": "EUR" },
+          "editions": [{ "amount": 2, "unit": "box" }]
+        }
+      },
+      "keep": { "bookId": "data.documentId" }
+    },
+    { "name": "the created entry is sent populated", "deliveries": true },
+    {
+      "name": "updating the book",
+      "method": "PUT",
+      "path": "/books/$bookId",
+      "bearer": "$writer",
+      "body": { "data": { "pages": 500 } }
+    },
+    { "name": "an update is sent populated", "deliveries": true },
+    {
+      "name": "a rejected write",
+      "path": "/books",
+      "bearer": "$writer",
+      "body": { "data": { "pages": 1 } }
+    },
+    { "name": "a rejected write sends nothing", "deliveries": true },
+    {
+      "name": "creating a post, which is published",
+      "path": "/posts",
+      "bearer": "$writer",
+      "body": { "data": { "title": "First", "author": "$authorId" } },
+      "keep": { "postId": "data.documentId" }
+    },
+    {
+      "name": "a published creation sends its draft's creation then its publication",
+      "deliveries": true
+    },
+    {
+      "name": "creating a draft post",
+      "path": "/posts?status=draft",
+      "bearer": "$writer",
+      "body": { "data": { "title": "Second" } },
+      "keep": { "draftId": "data.documentId" }
+    },
+    { "name": "a draft's creation is not a publication", "deliveries": true },
+    {
+      "name": "updating the published post",
+      "method": "PUT",
+      "path": "/posts/$postId",
+      "bearer": "$writer",
+      "body": { "data": { "title": "First, again" } }
+    },
+    { "name": "updating a published post", "deliveries": true },
+    {
+      "name": "updating the draft post",
+      "method": "PUT",
+      "path": "/posts/$draftId?status=draft",
+      "bearer": "$writer",
+      "body": { "data": { "views": 3 } }
+    },
+    { "name": "updating a draft", "deliveries": true },
+    {
+      "name": "deleting the published post",
+      "method": "DELETE",
+      "path": "/posts/$postId",
+      "bearer": "$writer"
+    },
+    { "name": "a deletion is sent for each version, unpopulated", "deliveries": true },
+    {
+      "name": "deleting the book",
+      "method": "DELETE",
+      "path": "/books/$bookId",
+      "bearer": "$writer"
+    },
+    { "name": "the book's deletion", "deliveries": true },
+    {
+      "name": "uploading a file",
+      "path": "/upload",
+      "bearer": "$writer",
+      "upload": { "files": ["notes.txt"], "fileInfo": { "caption": "Notes" } },
+      "keep": { "fileId": "0.id" }
+    },
+    { "name": "an upload", "deliveries": true },
+    {
+      "name": "changing the file's information",
+      "path": "/upload?id=$fileId",
+      "bearer": "$writer",
+      "upload": { "files": [], "fileInfo": { "alternativeText": "the notes" } }
+    },
+    { "name": "a file's change", "deliveries": true },
+    {
+      "name": "deleting the file",
+      "method": "DELETE",
+      "path": "/upload/files/$fileId",
+      "bearer": "$writer"
+    },
+    { "name": "a file's deletion", "deliveries": true },
+    { "hook": ["webhook-disable", "all"] },
+    {
+      "name": "creating an author with one webhook disabled",
+      "path": "/authors",
+      "bearer": "$writer",
+      "body": { "data": { "name": "Ursula K. Le Guin" } }
+    },
+    { "name": "a disabled webhook hears nothing", "deliveries": true }
+  ]
+}
