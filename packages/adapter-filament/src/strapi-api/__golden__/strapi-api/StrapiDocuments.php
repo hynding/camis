@@ -5,23 +5,98 @@ declare(strict_types=1);
 
 namespace App\Support;
 
+use App\Models\Concerns\HasLocale;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Facades\DB;
 
 /** $serializer is a generated serializer class: its FIELDS and ZONES say which children and links the row holds. */
 final class StrapiDocuments
 {
+    public const PUBLICATION_FILTERS = [
+        'never-published',
+        'has-published-version',
+        'modified',
+        'unmodified',
+        'never-published-document',
+        'has-published-version-document',
+        'published-without-draft',
+        'published-with-draft',
+    ];
+
     /** Strapi's status parameter: anything but 'published' (the default) asks for drafts. */
     public static function draftOnly(array $params): bool
     {
         return array_key_exists('status', $params) && $params['status'] !== 'published';
     }
 
-    /** Narrows a query to the version the status parameter names. */
+    /** Narrows a query to the version the status parameter names, and to its publicationFilter. */
     public static function version(Builder $query, array $params): Builder
     {
-        return self::withStatus($query, ! self::draftOnly($params));
+        $published = ! self::draftOnly($params);
+        self::withStatus($query, $published);
+        $cohort = self::publicationFilter($params);
+
+        return $cohort === null ? $query : self::cohort($query, $cohort, $published);
+    }
+
+    /**
+     * Strapi's publicationFilter parameter, or the cohort its deprecated hasPublishedVersion names
+     * (which is document-scoped); a value Strapi does not know is refused, on any type.
+     */
+    public static function publicationFilter(array $params): ?string
+    {
+        $mode = $params['publicationFilter'] ?? null;
+        if ($mode !== null && ! in_array($mode, self::PUBLICATION_FILTERS, true)) {
+            throw StrapiError::validation("Invalid value for 'publicationFilter'. Expected one of: ".implode(', ', self::PUBLICATION_FILTERS).'.');
+        }
+        $legacy = $params['hasPublishedVersion'] ?? null;
+        if ($legacy !== null && ! in_array($legacy, ['true', 'false'], true)) {
+            throw StrapiError::validation("Invalid value for 'hasPublishedVersion'. Expected boolean or 'true'/'false' string.");
+        }
+        if ($mode !== null || $legacy === null) {
+            return $mode;
+        }
+
+        return $legacy === 'true' ? 'has-published-version-document' : 'never-published-document';
+    }
+
+    /**
+     * Narrows rows of one status to a publicationFilter cohort by whether the other version of
+     * the same document exists: in the same locale, unless the mode is document-scoped
+     * ('-document'); modified and unmodified compare the two versions' updated_at. A mode
+     * the status cannot satisfy, such as published versions that were never published, is empty.
+     */
+    public static function cohort(Builder $query, string $mode, bool $published): Builder
+    {
+        $wanted = match ($mode) {
+            'never-published', 'never-published-document' => $published ? null : false,
+            'published-without-draft' => $published ? false : null,
+            'published-with-draft' => $published ? true : null,
+            default => true,
+        };
+        if ($wanted === null) {
+            return $query->whereRaw('1 = 0');
+        }
+        $model = $query->getModel();
+        $paired = ! str_ends_with($mode, '-document') && in_array(HasLocale::class, class_uses_recursive($model), true);
+        $newer = ['modified' => '>', 'unmodified' => '<='][$mode] ?? null;
+        $other = function (QueryBuilder $sub) use ($query, $model, $published, $paired, $newer): void {
+            $sub->selectRaw('1')
+                ->from($model->getTable().' as camis_other')
+                ->whereColumn('camis_other.document_id', $query->qualifyColumn('document_id'));
+            $published ? $sub->whereNull('camis_other.published_at') : $sub->whereNotNull('camis_other.published_at');
+            if ($paired) {
+                $sub->whereColumn('camis_other.locale', $query->qualifyColumn('locale'));
+            }
+            if ($newer !== null) {
+                [$draft, $live] = $published ? ['camis_other.updated_at', $query->qualifyColumn('updated_at')] : [$query->qualifyColumn('updated_at'), 'camis_other.updated_at'];
+                $sub->whereColumn($draft, $newer, $live);
+            }
+        };
+
+        return $wanted ? $query->whereExists($other) : $query->whereNotExists($other);
     }
 
     public static function withStatus(Builder $query, bool $published): Builder

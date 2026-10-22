@@ -25,6 +25,7 @@ import {
   type Member,
 } from "./graphql-sdl";
 import { definePluginApis, type PluginAction } from "./graphql-plugin-schema";
+import { FILE_UID } from "./media-runtime";
 import type { WireShape } from "./wire-shape";
 
 /**
@@ -43,6 +44,8 @@ export interface GraphqlRelation {
 }
 export interface GraphqlContentType {
   name: string;
+  /** Strapi's uid (`api::book.book`), which a file's related entries carry as \`__type\`. */
+  uid: string;
   model: string;
   /** The REST route key's API name when it is not the documentId (`options.upsertBy`). */
   routeKey: string | null;
@@ -180,6 +183,10 @@ class SchemaBuilder implements DefinitionSink {
 
   define(definition: Definition): void {
     if (!this.definitions.has(definition.name)) this.definitions.set(definition.name, definition);
+  }
+
+  has(name: string): boolean {
+    return this.definitions.has(name);
   }
 
   /** A definition made on first use, so the schema names only what it needs. */
@@ -329,6 +336,7 @@ class SchemaBuilder implements DefinitionSink {
       fields: [
         { name: "documentId", type: "ID!" },
         ...UPLOAD_FILE_FIELDS.map(([name, type]) => ({ name, type })),
+        { name: "related", type: "[GenericMorph]" },
         ...TIMESTAMPS.map((name) => ({ name, type: "DateTime" })),
       ],
     }));
@@ -425,6 +433,7 @@ export const buildGraphqlSchema = (input: GraphqlSchemaInput): GraphqlSchema => 
     const upsertBy = ct.fields.find((f) => f.name === ct.options?.upsertBy);
     const map: GraphqlContentType = {
       name,
+      uid: `api::${kebab(ct.name)}.${kebab(ct.name)}`,
       model: shape.model,
       routeKey: upsertBy === undefined ? null : fieldApiName(upsertBy),
       draftPublish: shape.draftPublish,
@@ -592,6 +601,7 @@ export const buildGraphqlSchema = (input: GraphqlSchemaInput): GraphqlSchema => 
   if (input.media) {
     types.push({
       name: "UploadFile",
+      uid: FILE_UID,
       model: "File",
       routeKey: null,
       draftPublish: false,
@@ -600,13 +610,6 @@ export const buildGraphqlSchema = (input: GraphqlSchemaInput): GraphqlSchema => 
       components: {},
       zones: [],
     });
-    gaps.push({
-      feature: "graphqlMorphRelations",
-      location: { contentType: "File" },
-      severity: "downgrade",
-      message:
-        "UploadFile.related (Strapi's GenericMorph union of everything a file is linked from) is not served.",
-    });
   }
   const plugins = definePluginApis(b, {
     media: input.media,
@@ -614,14 +617,8 @@ export const buildGraphqlSchema = (input: GraphqlSchemaInput): GraphqlSchema => 
   });
   queryFields.unshift(...plugins.queries);
   mutationFields.push(...plugins.mutations);
+  if (input.media) b.define(genericMorph(b, types));
   gaps.push(
-    {
-      feature: "graphqlPublicationFilter",
-      location: {},
-      severity: "downgrade",
-      message:
-        "The hasPublishedVersion and publicationFilter arguments are in the schema but refused: neither REST nor GraphQL serves them yet.",
-    },
     {
       feature: "graphqlRoleMutations",
       location: {},
@@ -650,6 +647,27 @@ export const buildGraphqlSchema = (input: GraphqlSchemaInput): GraphqlSchema => 
     gaps,
   };
 };
+
+/**
+ * Strapi's union of everything a file can be linked from, in its registration order: components,
+ * then the plugins' types, then the content types by uid.
+ */
+const genericMorph = (b: SchemaBuilder, types: GraphqlContentType[]): Definition => ({
+  kind: "union",
+  name: "GenericMorph",
+  members: [
+    ...[...b.componentMaps.keys()].sort(),
+    ...PLUGIN_MORPH_MEMBERS.filter((name) => b.has(name)),
+    ...types.map((t) => t.name).filter((name) => !PLUGIN_MORPH_MEMBERS.includes(name)),
+  ],
+});
+const PLUGIN_MORPH_MEMBERS = [
+  "UploadFile",
+  "I18NLocale",
+  "UsersPermissionsPermission",
+  "UsersPermissionsRole",
+  "UsersPermissionsUser",
+];
 
 /** Strapi's own two roles keep the descriptions users-permissions gives them. */
 const ROLE_DESCRIPTIONS: Record<string, string> = {

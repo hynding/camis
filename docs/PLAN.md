@@ -869,8 +869,26 @@ Postgres, with `GraphqlTest` adding role mutations refused even to a full-access
 permissions refused, GraphQL sign-in throttled, and a custom token held to its actions. The REST
 user controller now refuses a taken username as Strapi does (it raised a database error).
 
-Known gaps (reported): `UploadFile.related` (Strapi's `GenericMorph`), `hasPublishedVersion` and
-`publicationFilter` (in the schema, refused), role mutations (roles are the IR's, as on REST) and
+**Part 3 — publication filters and a file's related entries.** `publicationFilter` (Strapi's eight
+cohorts: `never-published`, `has-published-version`, `modified`, `unmodified`, their
+document-scoped `-document` forms, `published-without-draft`, `published-with-draft`) and the
+deprecated `hasPublishedVersion` (document-scoped) narrow a draft-and-publish type's list and
+findOne, over REST and GraphQL, by whether the other version of the document exists (in the same
+locale unless document-scoped), comparing `updated_at` for `modified`. Every populated
+draft-and-publish level inherits the cohort with the request's status, on REST and GraphQL alike,
+as strapi-php does; an unknown value is a `ValidationError` on any type. The Upload API's
+`populate=related` (or `*`) lists the entries each file is linked from, every version and link,
+with their uid as `__type`, leaving out the types the caller may not read, at one query per linked
+type. GraphQL's `UploadFile.related` is the same list as Strapi's `GenericMorph` union.
+
+Part 3's exit: the 35 checks of `publication-filter-vectors.json` and the three new checks of
+`media-vectors.json`, recorded from strapi-php, pass on SQLite, MySQL and Postgres. strapi-php
+answers GraphQL's `UploadFile.related` with an internal error ("Missing schema in
+validateQuery"), so `GraphqlTest` checks it instead, with a caller who may not read every linked
+type. camis keeps timestamps to the second, so a draft edited within the second of its publish
+reads as `unmodified` (the vectors wait a second between the two).
+
+Known gaps (reported): role mutations (roles are the IR's, as on REST) and
 `UsersPermissionsRole.permissions` (the IR's grants are not permission rows). Filters and sort on
 a repeatable component are refused. The Strapi storage layout and the laravel API style generate
 no GraphQL. A single type is served as a collection, as on REST.

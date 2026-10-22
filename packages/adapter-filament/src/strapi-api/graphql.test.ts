@@ -44,8 +44,6 @@ const oracle = blocks(
   readFileSync(join(__dirname, "__fixtures__/graphql-schema.strapi-php.graphql"), "utf8"),
 );
 
-// What strapi-php's schema has that a later part brings: the morph links of a file.
-
 describe("GraphQL", () => {
   it("is generated only when the project asks for it", () => {
     const paths = generate(false).files.map((f) => f.path);
@@ -91,7 +89,7 @@ describe("GraphQL", () => {
 
   it("names and shapes every type it shares with Strapi's as Strapi does", () => {
     const shared = [...ours.keys()].filter(
-      (name) => oracle.has(name) && !["Query", "Mutation", "UploadFile"].includes(name),
+      (name) => oracle.has(name) && !["Query", "Mutation", "GenericMorph"].includes(name),
     );
     expect(shared.length).toBeGreaterThan(40);
     for (const name of shared)
@@ -121,7 +119,11 @@ describe("GraphQL", () => {
   // media-vectors.json over REST and by GraphqlTest.php here.
   it("serves the media library's files with the entries they are linked from", () => {
     expect(fields(ours.get("UploadFile") ?? "")).toEqual(fields(oracle.get("UploadFile")!));
-    expect(ours.get("GenericMorph")).toBe(oracle.get("GenericMorph"));
+    // The fixture has more content types than the oracle project; the shared ones keep its order.
+    const members = (name: string, sdl: Map<string, string>) =>
+      (sdl.get(name) ?? "").replace(/^union \w+ = /, "").split(" | ");
+    const theirs = members("GenericMorph", oracle);
+    expect(members("GenericMorph", ours).filter((m) => theirs.includes(m))).toEqual(theirs);
     expect(result.gaps.gaps.map((g) => g.feature)).not.toContain("graphqlMorphRelations");
   });
 

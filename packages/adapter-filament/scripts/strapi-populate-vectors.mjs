@@ -13,6 +13,7 @@
 // usage: strapi-populate-vectors.mjs <api-base> [--token T] [--vectors F] [--expected F] [--graphql URL] [--record]
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { setTimeout as pause } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
@@ -190,7 +191,7 @@ for (const v of vectors.reads)
       : outcome(await call("GET", v.path, v.query));
 for (const v of vectors.writes) {
   if (v.wait !== undefined) {
-    await new Promise((done) => setTimeout(done, v.wait));
+    await pause(v.wait);
     continue;
   }
   if (v.graphql !== undefined) {

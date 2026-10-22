@@ -243,17 +243,27 @@ final class StrapiGraphqlPlugins
     private static function files(string $verb, array $args, Request $request, ResolveInfo $info): mixed
     {
         $upload = UploadController::class;
+        $selection = $info->getFieldSelection(2);
+        $related = isset($selection['related']) || isset($selection['nodes']['related']) ? ['populate' => 'related'] : [];
         switch ($verb) {
             case 'find':
             case 'connection':
-                return self::listed($verb, StrapiGraphql::dispatch($upload, 'find', self::query($args, $info), $request) ?? [], $args);
+                return self::listed($verb, StrapiGraphql::dispatch($upload, 'find', self::query($args, $info) + $related, $request) ?? [], $args);
             case 'findOne':
-                return (StrapiGraphql::dispatch($upload, 'find', self::byDocumentId($args), $request, null, [], 'plugin::upload.content-api.findOne') ?? [])[0] ?? null;
+                return (StrapiGraphql::dispatch($upload, 'find', self::byDocumentId($args) + $related, $request, null, [], 'plugin::upload.content-api.findOne') ?? [])[0] ?? null;
             case 'update':
                 return StrapiGraphql::dispatch($upload, 'upload', ['id' => (string) $args['id']], $request, ['fileInfo' => $args['info'] ?? []]);
             default:
                 return StrapiGraphql::found(fn () => StrapiGraphql::dispatch($upload, 'destroy', [], $request, null, [(string) $args['id']]));
         }
+    }
+
+    /** The entries a file reached through a media field is linked from, which its populate left out. */
+    public static function related(array $file, Request $request): ?array
+    {
+        $found = StrapiGraphql::dispatch(UploadController::class, 'find', self::byDocumentId(['documentId' => $file['documentId'] ?? '']) + ['populate' => 'related'], $request, null, [], 'plugin::upload.content-api.findOne');
+
+        return $found[0]['related'] ?? null;
     }
 
     // ------------------------------------------------------------------------------------ lists
