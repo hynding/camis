@@ -1,0 +1,1216 @@
+type Query {
+  uploadFile(documentId: ID!, status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): UploadFile
+  uploadFiles_connection(filters: UploadFileFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): UploadFileEntityResponseCollection
+  uploadFiles(filters: UploadFileFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [UploadFile]!
+  i18NLocale(documentId: ID!, status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): I18NLocale
+  i18NLocales_connection(filters: I18NLocaleFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): I18NLocaleEntityResponseCollection
+  i18NLocales(filters: I18NLocaleFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [I18NLocale]!
+  usersPermissionsRole(documentId: ID!, status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): UsersPermissionsRole
+  usersPermissionsRoles_connection(filters: UsersPermissionsRoleFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): UsersPermissionsRoleEntityResponseCollection
+  usersPermissionsRoles(filters: UsersPermissionsRoleFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [UsersPermissionsRole]!
+  usersPermissionsUser(documentId: ID!, status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): UsersPermissionsUser
+  usersPermissionsUsers_connection(filters: UsersPermissionsUserFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): UsersPermissionsUserEntityResponseCollection
+  usersPermissionsUsers(filters: UsersPermissionsUserFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [UsersPermissionsUser]!
+  article(
+    documentId: ID!
+    status: PublicationStatus = PUBLISHED
+    hasPublishedVersion: Boolean
+    publicationFilter: PublicationFilter
+
+    "The locale to use for the query"
+    locale: I18NLocaleCode
+  ): Article
+  articles_connection(
+    filters: ArticleFiltersInput
+    pagination: PaginationArg = {  }
+    sort: [String] = []
+    status: PublicationStatus = PUBLISHED
+    hasPublishedVersion: Boolean
+    publicationFilter: PublicationFilter
+
+    "The locale to use for the query"
+    locale: I18NLocaleCode
+  ): ArticleEntityResponseCollection
+  articles(
+    filters: ArticleFiltersInput
+    pagination: PaginationArg = {  }
+    sort: [String] = []
+    status: PublicationStatus = PUBLISHED
+    hasPublishedVersion: Boolean
+    publicationFilter: PublicationFilter
+
+    "The locale to use for the query"
+    locale: I18NLocaleCode
+  ): [Article]!
+  author(documentId: ID!, status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): Author
+  authors_connection(filters: AuthorFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): AuthorEntityResponseCollection
+  authors(filters: AuthorFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [Author]!
+  book(documentId: ID!, status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): Book
+  books_connection(filters: BookFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): BookEntityResponseCollection
+  books(filters: BookFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [Book]!
+  category(
+    documentId: ID!
+    status: PublicationStatus = PUBLISHED
+    hasPublishedVersion: Boolean
+    publicationFilter: PublicationFilter
+
+    "The locale to use for the query"
+    locale: I18NLocaleCode
+  ): Category
+  categories_connection(
+    filters: CategoryFiltersInput
+    pagination: PaginationArg = {  }
+    sort: [String] = []
+    status: PublicationStatus = PUBLISHED
+    hasPublishedVersion: Boolean
+    publicationFilter: PublicationFilter
+
+    "The locale to use for the query"
+    locale: I18NLocaleCode
+  ): CategoryEntityResponseCollection
+  categories(
+    filters: CategoryFiltersInput
+    pagination: PaginationArg = {  }
+    sort: [String] = []
+    status: PublicationStatus = PUBLISHED
+    hasPublishedVersion: Boolean
+    publicationFilter: PublicationFilter
+
+    "The locale to use for the query"
+    locale: I18NLocaleCode
+  ): [Category]!
+  genre(documentId: ID!, status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): Genre
+  genres_connection(filters: GenreFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): GenreEntityResponseCollection
+  genres(filters: GenreFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [Genre]!
+  landing(documentId: ID!, status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): Landing
+  landings_connection(filters: LandingFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): LandingEntityResponseCollection
+  landings(filters: LandingFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [Landing]!
+  page(
+    documentId: ID!
+    status: PublicationStatus = PUBLISHED
+    hasPublishedVersion: Boolean
+    publicationFilter: PublicationFilter
+
+    "The locale to use for the query"
+    locale: I18NLocaleCode
+  ): Page
+  pages_connection(
+    filters: PageFiltersInput
+    pagination: PaginationArg = {  }
+    sort: [String] = []
+    status: PublicationStatus = PUBLISHED
+    hasPublishedVersion: Boolean
+    publicationFilter: PublicationFilter
+
+    "The locale to use for the query"
+    locale: I18NLocaleCode
+  ): PageEntityResponseCollection
+  pages(
+    filters: PageFiltersInput
+    pagination: PaginationArg = {  }
+    sort: [String] = []
+    status: PublicationStatus = PUBLISHED
+    hasPublishedVersion: Boolean
+    publicationFilter: PublicationFilter
+
+    "The locale to use for the query"
+    locale: I18NLocaleCode
+  ): [Page]!
+  post(documentId: ID!, status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): Post
+  posts_connection(filters: PostFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): PostEntityResponseCollection
+  posts(filters: PostFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [Post]!
+  topic(documentId: ID!, status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): Topic
+  topics_connection(filters: TopicFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): TopicEntityResponseCollection
+  topics(filters: TopicFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [Topic]!
+  me: UsersPermissionsMe
+}
+
+enum PublicationStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum PublicationFilter {
+  NEVER_PUBLISHED
+  HAS_PUBLISHED_VERSION
+  MODIFIED
+  UNMODIFIED
+  NEVER_PUBLISHED_DOCUMENT
+  HAS_PUBLISHED_VERSION_DOCUMENT
+  PUBLISHED_WITHOUT_DRAFT
+  PUBLISHED_WITH_DRAFT
+}
+
+type UploadFile {
+  documentId: ID!
+  name: String!
+  alternativeText: String
+  caption: String
+  focalPoint: JSON
+  width: Int
+  height: Int
+  formats: JSON
+  hash: String!
+  ext: String
+  mime: String!
+  size: Float!
+  url: String!
+  previewUrl: String
+  provider: String!
+  provider_metadata: JSON
+  related: [GenericMorph]
+  createdAt: DateTime
+  updatedAt: DateTime
+  publishedAt: DateTime
+}
+
+"The `JSON` scalar type represents JSON values as specified by [ECMA-404](http://www.ecma-international.org/publications/files/ECMA-ST/ECMA-404.pdf)."
+scalar JSON
+
+union GenericMorph = ComponentSharedHero | ComponentSharedMoney | ComponentSharedQuantity | UploadFile | I18NLocale | UsersPermissionsPermission | UsersPermissionsRole | UsersPermissionsUser | Article | Author | Book | Category | Genre | Landing | Page | Post | Topic
+
+type ComponentSharedHero {
+  id: ID!
+  heading: String!
+  subheading: String
+  price: ComponentSharedMoney
+}
+
+type ComponentSharedMoney {
+  id: ID!
+  minor: Long
+  currency: String
+}
+
+"The `BigInt` scalar type represents non-fractional signed whole numeric values."
+scalar Long
+
+type ComponentSharedQuantity {
+  id: ID!
+  amount: Float
+  unit: String
+}
+
+type I18NLocale {
+  documentId: ID!
+  name: String
+  code: String
+  createdAt: DateTime
+  updatedAt: DateTime
+  publishedAt: DateTime
+}
+
+"A date-time string at UTC, such as 2007-12-03T10:15:30Z, compliant with the `date-time` format outlined in section 5.6 of the RFC 3339 profile of the ISO 8601 standard for representation of dates and times using the Gregorian calendar."
+scalar DateTime
+
+type UsersPermissionsPermission {
+  documentId: ID!
+  action: String!
+  role: UsersPermissionsRole
+  createdAt: DateTime
+  updatedAt: DateTime
+  publishedAt: DateTime
+}
+
+type UsersPermissionsRole {
+  documentId: ID!
+  name: String!
+  description: String
+  type: String
+  permissions_connection(filters: UsersPermissionsPermissionFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): UsersPermissionsPermissionRelationResponseCollection
+  permissions(filters: UsersPermissionsPermissionFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): [UsersPermissionsPermission]!
+  users_connection(filters: UsersPermissionsUserFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): UsersPermissionsUserRelationResponseCollection
+  users(filters: UsersPermissionsUserFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): [UsersPermissionsUser]!
+  createdAt: DateTime
+  updatedAt: DateTime
+  publishedAt: DateTime
+}
+
+input UsersPermissionsPermissionFiltersInput {
+  documentId: IDFilterInput
+  action: StringFilterInput
+  role: UsersPermissionsRoleFiltersInput
+  createdAt: DateTimeFilterInput
+  updatedAt: DateTimeFilterInput
+  publishedAt: DateTimeFilterInput
+  and: [UsersPermissionsPermissionFiltersInput]
+  or: [UsersPermissionsPermissionFiltersInput]
+  not: UsersPermissionsPermissionFiltersInput
+}
+
+input IDFilterInput {
+  and: [ID]
+  or: [ID]
+  not: IDFilterInput
+  eq: ID
+  eqi: ID
+  ne: ID
+  nei: ID
+  startsWith: ID
+  endsWith: ID
+  contains: ID
+  notContains: ID
+  containsi: ID
+  notContainsi: ID
+  gt: ID
+  gte: ID
+  lt: ID
+  lte: ID
+  null: Boolean
+  notNull: Boolean
+  in: [ID]
+  notIn: [ID]
+  between: [ID]
+}
+
+input StringFilterInput {
+  and: [String]
+  or: [String]
+  not: StringFilterInput
+  eq: String
+  eqi: String
+  ne: String
+  nei: String
+  startsWith: String
+  endsWith: String
+  contains: String
+  notContains: String
+  containsi: String
+  notContainsi: String
+  gt: String
+  gte: String
+  lt: String
+  lte: String
+  null: Boolean
+  notNull: Boolean
+  in: [String]
+  notIn: [String]
+  between: [String]
+}
+
+input UsersPermissionsRoleFiltersInput {
+  documentId: IDFilterInput
+  name: StringFilterInput
+  description: StringFilterInput
+  type: StringFilterInput
+  permissions: UsersPermissionsPermissionFiltersInput
+  users: UsersPermissionsUserFiltersInput
+  createdAt: DateTimeFilterInput
+  updatedAt: DateTimeFilterInput
+  publishedAt: DateTimeFilterInput
+  and: [UsersPermissionsRoleFiltersInput]
+  or: [UsersPermissionsRoleFiltersInput]
+  not: UsersPermissionsRoleFiltersInput
+}
+
+input UsersPermissionsUserFiltersInput {
+  documentId: IDFilterInput
+  username: StringFilterInput
+  email: StringFilterInput
+  provider: StringFilterInput
+  confirmed: BooleanFilterInput
+  blocked: BooleanFilterInput
+  role: UsersPermissionsRoleFiltersInput
+  createdAt: DateTimeFilterInput
+  updatedAt: DateTimeFilterInput
+  publishedAt: DateTimeFilterInput
+  and: [UsersPermissionsUserFiltersInput]
+  or: [UsersPermissionsUserFiltersInput]
+  not: UsersPermissionsUserFiltersInput
+}
+
+input BooleanFilterInput {
+  and: [Boolean]
+  or: [Boolean]
+  not: BooleanFilterInput
+  eq: Boolean
+  eqi: Boolean
+  ne: Boolean
+  nei: Boolean
+  startsWith: Boolean
+  endsWith: Boolean
+  contains: Boolean
+  notContains: Boolean
+  containsi: Boolean
+  notContainsi: Boolean
+  gt: Boolean
+  gte: Boolean
+  lt: Boolean
+  lte: Boolean
+  null: Boolean
+  notNull: Boolean
+  in: [Boolean]
+  notIn: [Boolean]
+  between: [Boolean]
+}
+
+input DateTimeFilterInput {
+  and: [DateTime]
+  or: [DateTime]
+  not: DateTimeFilterInput
+  eq: DateTime
+  eqi: DateTime
+  ne: DateTime
+  nei: DateTime
+  startsWith: DateTime
+  endsWith: DateTime
+  contains: DateTime
+  notContains: DateTime
+  containsi: DateTime
+  notContainsi: DateTime
+  gt: DateTime
+  gte: DateTime
+  lt: DateTime
+  lte: DateTime
+  null: Boolean
+  notNull: Boolean
+  in: [DateTime]
+  notIn: [DateTime]
+  between: [DateTime]
+}
+
+input PaginationArg {
+  page: Int
+  pageSize: Int
+  start: Int
+  limit: Int
+}
+
+type UsersPermissionsPermissionRelationResponseCollection {
+  nodes: [UsersPermissionsPermission!]!
+}
+
+type UsersPermissionsUserRelationResponseCollection {
+  nodes: [UsersPermissionsUser!]!
+}
+
+type UsersPermissionsUser {
+  documentId: ID!
+  username: String!
+  email: String!
+  provider: String
+  confirmed: Boolean
+  blocked: Boolean
+  role: UsersPermissionsRole
+  createdAt: DateTime
+  updatedAt: DateTime
+  publishedAt: DateTime
+}
+
+type Article {
+  documentId: ID!
+  title: String
+  code: String
+  category: Category
+  genres_connection(filters: GenreFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): GenreRelationResponseCollection
+  genres(filters: GenreFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): [Genre]!
+  createdAt: DateTime
+  updatedAt: DateTime
+  publishedAt: DateTime
+  locale: String
+  localizations_connection(filters: ArticleFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): ArticleRelationResponseCollection
+  localizations(filters: ArticleFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): [Article]!
+}
+
+type Category {
+  documentId: ID!
+  name: String
+  createdAt: DateTime
+  updatedAt: DateTime
+  publishedAt: DateTime
+  locale: String
+  localizations_connection(filters: CategoryFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): CategoryRelationResponseCollection
+  localizations(filters: CategoryFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): [Category]!
+}
+
+input CategoryFiltersInput {
+  documentId: IDFilterInput
+  name: StringFilterInput
+  createdAt: DateTimeFilterInput
+  updatedAt: DateTimeFilterInput
+  publishedAt: DateTimeFilterInput
+  locale: StringFilterInput
+  localizations: CategoryFiltersInput
+  and: [CategoryFiltersInput]
+  or: [CategoryFiltersInput]
+  not: CategoryFiltersInput
+}
+
+type CategoryRelationResponseCollection {
+  nodes: [Category!]!
+}
+
+input GenreFiltersInput {
+  documentId: IDFilterInput
+  name: StringFilterInput
+  createdAt: DateTimeFilterInput
+  updatedAt: DateTimeFilterInput
+  publishedAt: DateTimeFilterInput
+  and: [GenreFiltersInput]
+  or: [GenreFiltersInput]
+  not: GenreFiltersInput
+}
+
+type GenreRelationResponseCollection {
+  nodes: [Genre!]!
+}
+
+type Genre {
+  documentId: ID!
+  name: String!
+  createdAt: DateTime
+  updatedAt: DateTime
+  publishedAt: DateTime
+}
+
+input ArticleFiltersInput {
+  documentId: IDFilterInput
+  title: StringFilterInput
+  code: StringFilterInput
+  category: CategoryFiltersInput
+  genres: GenreFiltersInput
+  createdAt: DateTimeFilterInput
+  updatedAt: DateTimeFilterInput
+  publishedAt: DateTimeFilterInput
+  locale: StringFilterInput
+  localizations: ArticleFiltersInput
+  and: [ArticleFiltersInput]
+  or: [ArticleFiltersInput]
+  not: ArticleFiltersInput
+}
+
+type ArticleRelationResponseCollection {
+  nodes: [Article!]!
+}
+
+type Author {
+  documentId: ID!
+  name: String!
+  books_connection(filters: BookFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): BookRelationResponseCollection
+  books(filters: BookFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): [Book]!
+  createdAt: DateTime
+  updatedAt: DateTime
+  publishedAt: DateTime
+}
+
+input BookFiltersInput {
+  documentId: IDFilterInput
+  title: StringFilterInput
+  pages: IntFilterInput
+  rating: FloatFilterInput
+  inStock: BooleanFilterInput
+  publishedOn: DateFilterInput
+  releasedAt: DateTimeFilterInput
+  price: ComponentSharedMoneyFiltersInput
+  editions: ComponentSharedQuantityFiltersInput
+  author: AuthorFiltersInput
+  genres: GenreFiltersInput
+  topic: TopicFiltersInput
+  category: CategoryFiltersInput
+  createdAt: DateTimeFilterInput
+  updatedAt: DateTimeFilterInput
+  publishedAt: DateTimeFilterInput
+  and: [BookFiltersInput]
+  or: [BookFiltersInput]
+  not: BookFiltersInput
+}
+
+input IntFilterInput {
+  and: [Int]
+  or: [Int]
+  not: IntFilterInput
+  eq: Int
+  eqi: Int
+  ne: Int
+  nei: Int
+  startsWith: Int
+  endsWith: Int
+  contains: Int
+  notContains: Int
+  containsi: Int
+  notContainsi: Int
+  gt: Int
+  gte: Int
+  lt: Int
+  lte: Int
+  null: Boolean
+  notNull: Boolean
+  in: [Int]
+  notIn: [Int]
+  between: [Int]
+}
+
+input FloatFilterInput {
+  and: [Float]
+  or: [Float]
+  not: FloatFilterInput
+  eq: Float
+  eqi: Float
+  ne: Float
+  nei: Float
+  startsWith: Float
+  endsWith: Float
+  contains: Float
+  notContains: Float
+  containsi: Float
+  notContainsi: Float
+  gt: Float
+  gte: Float
+  lt: Float
+  lte: Float
+  null: Boolean
+  notNull: Boolean
+  in: [Float]
+  notIn: [Float]
+  between: [Float]
+}
+
+input DateFilterInput {
+  and: [Date]
+  or: [Date]
+  not: DateFilterInput
+  eq: Date
+  eqi: Date
+  ne: Date
+  nei: Date
+  startsWith: Date
+  endsWith: Date
+  contains: Date
+  notContains: Date
+  containsi: Date
+  notContainsi: Date
+  gt: Date
+  gte: Date
+  lt: Date
+  lte: Date
+  null: Boolean
+  notNull: Boolean
+  in: [Date]
+  notIn: [Date]
+  between: [Date]
+}
+
+"A date string, such as 2007-12-03, compliant with the `full-date` format outlined in section 5.6 of the RFC 3339 profile of the ISO 8601 standard for representation of dates and times using the Gregorian calendar."
+scalar Date
+
+input ComponentSharedMoneyFiltersInput {
+  minor: LongFilterInput
+  currency: StringFilterInput
+  and: [ComponentSharedMoneyFiltersInput]
+  or: [ComponentSharedMoneyFiltersInput]
+  not: ComponentSharedMoneyFiltersInput
+}
+
+input LongFilterInput {
+  and: [Long]
+  or: [Long]
+  not: LongFilterInput
+  eq: Long
+  eqi: Long
+  ne: Long
+  nei: Long
+  startsWith: Long
+  endsWith: Long
+  contains: Long
+  notContains: Long
+  containsi: Long
+  notContainsi: Long
+  gt: Long
+  gte: Long
+  lt: Long
+  lte: Long
+  null: Boolean
+  notNull: Boolean
+  in: [Long]
+  notIn: [Long]
+  between: [Long]
+}
+
+input ComponentSharedQuantityFiltersInput {
+  amount: FloatFilterInput
+  unit: StringFilterInput
+  and: [ComponentSharedQuantityFiltersInput]
+  or: [ComponentSharedQuantityFiltersInput]
+  not: ComponentSharedQuantityFiltersInput
+}
+
+input AuthorFiltersInput {
+  documentId: IDFilterInput
+  name: StringFilterInput
+  books: BookFiltersInput
+  createdAt: DateTimeFilterInput
+  updatedAt: DateTimeFilterInput
+  publishedAt: DateTimeFilterInput
+  and: [AuthorFiltersInput]
+  or: [AuthorFiltersInput]
+  not: AuthorFiltersInput
+}
+
+input TopicFiltersInput {
+  documentId: IDFilterInput
+  name: StringFilterInput
+  createdAt: DateTimeFilterInput
+  updatedAt: DateTimeFilterInput
+  publishedAt: DateTimeFilterInput
+  and: [TopicFiltersInput]
+  or: [TopicFiltersInput]
+  not: TopicFiltersInput
+}
+
+type BookRelationResponseCollection {
+  nodes: [Book!]!
+}
+
+type Book {
+  documentId: ID!
+  title: String!
+  pages: Int
+  rating: Float
+  inStock: Boolean
+  publishedOn: Date
+  releasedAt: DateTime
+  price: ComponentSharedMoney
+  editions(filters: ComponentSharedQuantityFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): [ComponentSharedQuantity]
+  author: Author
+  genres_connection(filters: GenreFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): GenreRelationResponseCollection
+  genres(filters: GenreFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): [Genre]!
+  topic: Topic
+  category: Category
+  cover: UploadFile
+  attachments_connection(filters: UploadFileFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): UploadFileRelationResponseCollection
+  attachments(filters: UploadFileFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): [UploadFile]!
+  createdAt: DateTime
+  updatedAt: DateTime
+  publishedAt: DateTime
+}
+
+type Topic {
+  documentId: ID!
+  name: String!
+  createdAt: DateTime
+  updatedAt: DateTime
+  publishedAt: DateTime
+}
+
+input UploadFileFiltersInput {
+  documentId: IDFilterInput
+  name: StringFilterInput
+  alternativeText: StringFilterInput
+  caption: StringFilterInput
+  focalPoint: JSONFilterInput
+  width: IntFilterInput
+  height: IntFilterInput
+  formats: JSONFilterInput
+  hash: StringFilterInput
+  ext: StringFilterInput
+  mime: StringFilterInput
+  size: FloatFilterInput
+  url: StringFilterInput
+  previewUrl: StringFilterInput
+  provider: StringFilterInput
+  provider_metadata: JSONFilterInput
+  createdAt: DateTimeFilterInput
+  updatedAt: DateTimeFilterInput
+  publishedAt: DateTimeFilterInput
+  and: [UploadFileFiltersInput]
+  or: [UploadFileFiltersInput]
+  not: UploadFileFiltersInput
+}
+
+input JSONFilterInput {
+  and: [JSON]
+  or: [JSON]
+  not: JSONFilterInput
+  eq: JSON
+  eqi: JSON
+  ne: JSON
+  nei: JSON
+  startsWith: JSON
+  endsWith: JSON
+  contains: JSON
+  notContains: JSON
+  containsi: JSON
+  notContainsi: JSON
+  gt: JSON
+  gte: JSON
+  lt: JSON
+  lte: JSON
+  null: Boolean
+  notNull: Boolean
+  in: [JSON]
+  notIn: [JSON]
+  between: [JSON]
+}
+
+type UploadFileRelationResponseCollection {
+  nodes: [UploadFile!]!
+}
+
+type Landing {
+  documentId: ID!
+  title: String!
+  blocks: [LandingBlocksDynamicZone]
+  createdAt: DateTime
+  updatedAt: DateTime
+  publishedAt: DateTime
+}
+
+union LandingBlocksDynamicZone = ComponentSharedHero | ComponentSharedQuantity | Error
+
+type Error {
+  code: String!
+  message: String
+}
+
+type Page {
+  documentId: ID!
+  title: String
+  createdAt: DateTime
+  updatedAt: DateTime
+  publishedAt: DateTime
+  locale: String
+  localizations_connection(filters: PageFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): PageRelationResponseCollection
+  localizations(filters: PageFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): [Page]!
+}
+
+input PageFiltersInput {
+  documentId: IDFilterInput
+  title: StringFilterInput
+  createdAt: DateTimeFilterInput
+  updatedAt: DateTimeFilterInput
+  publishedAt: DateTimeFilterInput
+  locale: StringFilterInput
+  localizations: PageFiltersInput
+  and: [PageFiltersInput]
+  or: [PageFiltersInput]
+  not: PageFiltersInput
+}
+
+type PageRelationResponseCollection {
+  nodes: [Page!]!
+}
+
+type Post {
+  documentId: ID!
+  title: String!
+  views: Int
+  topics_connection(filters: TopicFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): TopicRelationResponseCollection
+  topics(filters: TopicFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): [Topic]!
+  author: Author
+  image: UploadFile
+  createdAt: DateTime
+  updatedAt: DateTime
+  publishedAt: DateTime
+}
+
+type TopicRelationResponseCollection {
+  nodes: [Topic!]!
+}
+
+type UploadFileEntityResponseCollection {
+  nodes: [UploadFile!]!
+  pageInfo: Pagination!
+}
+
+type Pagination {
+  total: Int!
+  page: Int!
+  pageSize: Int!
+  pageCount: Int!
+}
+
+input I18NLocaleFiltersInput {
+  documentId: IDFilterInput
+  name: StringFilterInput
+  code: StringFilterInput
+  createdAt: DateTimeFilterInput
+  updatedAt: DateTimeFilterInput
+  publishedAt: DateTimeFilterInput
+  and: [I18NLocaleFiltersInput]
+  or: [I18NLocaleFiltersInput]
+  not: I18NLocaleFiltersInput
+}
+
+type I18NLocaleEntityResponseCollection {
+  nodes: [I18NLocale!]!
+  pageInfo: Pagination!
+}
+
+type UsersPermissionsRoleEntityResponseCollection {
+  nodes: [UsersPermissionsRole!]!
+  pageInfo: Pagination!
+}
+
+type UsersPermissionsUserEntityResponseCollection {
+  nodes: [UsersPermissionsUser!]!
+  pageInfo: Pagination!
+}
+
+"A string used to identify an i18n locale"
+scalar I18NLocaleCode
+
+type ArticleEntityResponseCollection {
+  nodes: [Article!]!
+  pageInfo: Pagination!
+}
+
+type AuthorEntityResponseCollection {
+  nodes: [Author!]!
+  pageInfo: Pagination!
+}
+
+type BookEntityResponseCollection {
+  nodes: [Book!]!
+  pageInfo: Pagination!
+}
+
+type CategoryEntityResponseCollection {
+  nodes: [Category!]!
+  pageInfo: Pagination!
+}
+
+type GenreEntityResponseCollection {
+  nodes: [Genre!]!
+  pageInfo: Pagination!
+}
+
+input LandingFiltersInput {
+  documentId: IDFilterInput
+  title: StringFilterInput
+  createdAt: DateTimeFilterInput
+  updatedAt: DateTimeFilterInput
+  publishedAt: DateTimeFilterInput
+  and: [LandingFiltersInput]
+  or: [LandingFiltersInput]
+  not: LandingFiltersInput
+}
+
+type LandingEntityResponseCollection {
+  nodes: [Landing!]!
+  pageInfo: Pagination!
+}
+
+type PageEntityResponseCollection {
+  nodes: [Page!]!
+  pageInfo: Pagination!
+}
+
+input PostFiltersInput {
+  documentId: IDFilterInput
+  title: StringFilterInput
+  views: IntFilterInput
+  topics: TopicFiltersInput
+  author: AuthorFiltersInput
+  createdAt: DateTimeFilterInput
+  updatedAt: DateTimeFilterInput
+  publishedAt: DateTimeFilterInput
+  and: [PostFiltersInput]
+  or: [PostFiltersInput]
+  not: PostFiltersInput
+}
+
+type PostEntityResponseCollection {
+  nodes: [Post!]!
+  pageInfo: Pagination!
+}
+
+type TopicEntityResponseCollection {
+  nodes: [Topic!]!
+  pageInfo: Pagination!
+}
+
+type UsersPermissionsMe {
+  id: ID!
+  documentId: ID!
+  username: String!
+  email: String
+  confirmed: Boolean
+  blocked: Boolean
+  role: UsersPermissionsMeRole
+}
+
+type UsersPermissionsMeRole {
+  id: ID!
+  name: String!
+  description: String
+  type: String
+}
+
+type Mutation {
+  createArticle(
+    status: PublicationStatus = PUBLISHED
+    data: ArticleInput!
+
+    "The locale to use for the query"
+    locale: I18NLocaleCode
+  ): Article
+  updateArticle(
+    documentId: ID!
+    status: PublicationStatus = PUBLISHED
+    data: ArticleInput!
+
+    "The locale to use for the query"
+    locale: I18NLocaleCode
+  ): Article
+  deleteArticle(
+    documentId: ID!
+
+    "The locale to use for the query"
+    locale: I18NLocaleCode
+  ): DeleteMutationResponse
+  createAuthor(status: PublicationStatus = PUBLISHED, data: AuthorInput!): Author
+  updateAuthor(documentId: ID!, status: PublicationStatus = PUBLISHED, data: AuthorInput!): Author
+  deleteAuthor(documentId: ID!): DeleteMutationResponse
+  createBook(status: PublicationStatus = PUBLISHED, data: BookInput!): Book
+  updateBook(documentId: ID!, status: PublicationStatus = PUBLISHED, data: BookInput!): Book
+  deleteBook(documentId: ID!): DeleteMutationResponse
+  createCategory(
+    status: PublicationStatus = PUBLISHED
+    data: CategoryInput!
+
+    "The locale to use for the query"
+    locale: I18NLocaleCode
+  ): Category
+  updateCategory(
+    documentId: ID!
+    status: PublicationStatus = PUBLISHED
+    data: CategoryInput!
+
+    "The locale to use for the query"
+    locale: I18NLocaleCode
+  ): Category
+  deleteCategory(
+    documentId: ID!
+
+    "The locale to use for the query"
+    locale: I18NLocaleCode
+  ): DeleteMutationResponse
+  createGenre(status: PublicationStatus = PUBLISHED, data: GenreInput!): Genre
+  updateGenre(documentId: ID!, status: PublicationStatus = PUBLISHED, data: GenreInput!): Genre
+  deleteGenre(documentId: ID!): DeleteMutationResponse
+  createLanding(status: PublicationStatus = PUBLISHED, data: LandingInput!): Landing
+  updateLanding(documentId: ID!, status: PublicationStatus = PUBLISHED, data: LandingInput!): Landing
+  deleteLanding(documentId: ID!): DeleteMutationResponse
+  createPage(
+    status: PublicationStatus = PUBLISHED
+    data: PageInput!
+
+    "The locale to use for the query"
+    locale: I18NLocaleCode
+  ): Page
+  updatePage(
+    documentId: ID!
+    status: PublicationStatus = PUBLISHED
+    data: PageInput!
+
+    "The locale to use for the query"
+    locale: I18NLocaleCode
+  ): Page
+  deletePage(
+    documentId: ID!
+
+    "The locale to use for the query"
+    locale: I18NLocaleCode
+  ): DeleteMutationResponse
+  createPost(status: PublicationStatus = PUBLISHED, data: PostInput!): Post
+  updatePost(documentId: ID!, status: PublicationStatus = PUBLISHED, data: PostInput!): Post
+  deletePost(documentId: ID!): DeleteMutationResponse
+  createTopic(status: PublicationStatus = PUBLISHED, data: TopicInput!): Topic
+  updateTopic(documentId: ID!, status: PublicationStatus = PUBLISHED, data: TopicInput!): Topic
+  deleteTopic(documentId: ID!): DeleteMutationResponse
+  updateUploadFile(id: ID!, info: FileInfoInput): UploadFile!
+  deleteUploadFile(id: ID!): UploadFile
+
+  "Create a new role"
+  createUsersPermissionsRole(data: UsersPermissionsRoleInput!): UsersPermissionsCreateRolePayload
+
+  "Update an existing role"
+  updateUsersPermissionsRole(id: ID!, data: UsersPermissionsRoleInput!): UsersPermissionsUpdateRolePayload
+
+  "Delete an existing role"
+  deleteUsersPermissionsRole(id: ID!): UsersPermissionsDeleteRolePayload
+
+  "Create a new user"
+  createUsersPermissionsUser(data: UsersPermissionsUserInput!): UsersPermissionsUserEntityResponse!
+
+  "Update an existing user"
+  updateUsersPermissionsUser(id: ID!, data: UsersPermissionsUserInput!): UsersPermissionsUserEntityResponse!
+
+  "Delete an existing user"
+  deleteUsersPermissionsUser(id: ID!): UsersPermissionsUserEntityResponse!
+
+  login(input: UsersPermissionsLoginInput!): UsersPermissionsLoginPayload!
+
+  "Register a user"
+  register(input: UsersPermissionsRegisterInput!): UsersPermissionsLoginPayload!
+
+  "Request a reset password token"
+  forgotPassword(email: String!): UsersPermissionsPasswordPayload
+
+  "Reset user password. Confirm with a code (resetToken from forgotPassword)"
+  resetPassword(password: String!, passwordConfirmation: String!, code: String!): UsersPermissionsLoginPayload
+
+  "Change user password. Confirm with the current password."
+  changePassword(currentPassword: String!, password: String!, passwordConfirmation: String!): UsersPermissionsLoginPayload
+
+  "Confirm an email users email address"
+  emailConfirmation(confirmation: String!): UsersPermissionsLoginPayload
+}
+
+input ArticleInput {
+  title: String
+  code: String
+  category: ID
+  genres: [ID]
+  publishedAt: DateTime
+}
+
+type DeleteMutationResponse {
+  documentId: ID!
+}
+
+input AuthorInput {
+  name: String
+  books: [ID]
+  publishedAt: DateTime
+  locale: String
+}
+
+input BookInput {
+  title: String
+  pages: Int
+  rating: Float
+  inStock: Boolean
+  publishedOn: Date
+  releasedAt: DateTime
+  price: ComponentSharedMoneyInput
+  editions: [ComponentSharedQuantityInput]
+  author: ID
+  genres: [ID]
+  topic: ID
+  category: ID
+  cover: ID
+  attachments: [ID]
+  publishedAt: DateTime
+  locale: String
+}
+
+input ComponentSharedMoneyInput {
+  id: ID
+  minor: Long
+  currency: String
+}
+
+input ComponentSharedQuantityInput {
+  id: ID
+  amount: Float
+  unit: String
+}
+
+input CategoryInput {
+  name: String
+  publishedAt: DateTime
+}
+
+input GenreInput {
+  name: String
+  publishedAt: DateTime
+  locale: String
+}
+
+input LandingInput {
+  title: String
+  blocks: [LandingBlocksDynamicZoneInput!]
+  publishedAt: DateTime
+  locale: String
+}
+
+scalar LandingBlocksDynamicZoneInput
+
+input PageInput {
+  title: String
+  publishedAt: DateTime
+}
+
+input PostInput {
+  title: String
+  views: Int
+  topics: [ID]
+  author: ID
+  image: ID
+  publishedAt: DateTime
+  locale: String
+}
+
+input TopicInput {
+  name: String
+  publishedAt: DateTime
+  locale: String
+}
+
+input FileInfoInput {
+  name: String
+  alternativeText: String
+  caption: String
+}
+
+input UsersPermissionsRoleInput {
+  name: String
+  description: String
+  type: String
+  permissions: [ID]
+  users: [ID]
+  publishedAt: DateTime
+  locale: String
+}
+
+type UsersPermissionsCreateRolePayload {
+  ok: Boolean!
+}
+
+type UsersPermissionsUpdateRolePayload {
+  ok: Boolean!
+}
+
+type UsersPermissionsDeleteRolePayload {
+  ok: Boolean!
+}
+
+input UsersPermissionsUserInput {
+  username: String
+  email: String
+  provider: String
+  password: String
+  resetPasswordToken: String
+  confirmationToken: String
+  confirmed: Boolean
+  blocked: Boolean
+  role: ID
+  publishedAt: DateTime
+  locale: String
+}
+
+type UsersPermissionsUserEntityResponse {
+  data: UsersPermissionsUser
+}
+
+input UsersPermissionsLoginInput {
+  identifier: String!
+  password: String!
+  provider: String! = "local"
+}
+
+type UsersPermissionsLoginPayload {
+  jwt: String
+  user: UsersPermissionsMe!
+}
+
+input UsersPermissionsRegisterInput {
+  username: String!
+  email: String!
+  password: String!
+}
+
+type UsersPermissionsPasswordPayload {
+  ok: Boolean!
+}

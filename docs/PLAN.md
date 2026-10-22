@@ -808,6 +808,53 @@ still reports dynamic zones. An inverse relation's snake_case name reaches the w
 
 ---
 
+## Phase 28 — GraphQL content API (`adapter-kernel`, `cli`, `adapter-filament`)
+
+**Goal:** Strapi 5's GraphQL plugin, opt-in (`graphql: true`), on the laravel storage layout with
+the Strapi API style, with the schema Strapi prints for the same content types and the REST API's
+grants, conditions, drafts, locales and errors.
+
+- `graphql/schema.graphql` is printed at generation, definition for definition as strapi-php's
+  (webonyx's) printer prints it for the same project: `Book`, `BookFiltersInput`, `BookInput`,
+  `BookEntityResponseCollection` and `BookRelationResponseCollection`, `Component<Category><Name>`
+  types with their filters and inputs, `<Type><Zone>DynamicZone` unions (plus `Error`) and their
+  input scalars, `ENUM_<TYPE>_<FIELD>` enumerations, Strapi's scalars, `PaginationArg`,
+  `Pagination`, `PublicationStatus`, `DeleteMutationResponse`, and the media library's
+  `UploadFile` with its filters. Each type has `book`, `books` and `books_connection`, and
+  `createBook`, `updateBook` and `deleteBook`, with `status` and, on a localized type, `locale`.
+- `/graphql` (GET and POST, beside `/api`, behind the content API's own credentials) runs each
+  root field as the REST action it names, through the generated controller, as the caller: the
+  selection set becomes the request's populate, so a list costs what the REST list costs, and a
+  relation asked for twice with different arguments is fetched per row for the second ask.
+  Filters take Strapi's `$` operators, `status` and `locale` pass through, and a relation's
+  pagination and the default page size (10, `camis.graphql`) are Strapi's GraphQL ones.
+- A document the caller cannot see is null; errors carry Strapi's codes (`FORBIDDEN`,
+  `BAD_USER_INPUT`, `STRAPI_PAGINATION_ERROR`, `GRAPHQL_VALIDATION_FAILED`) with the application
+  error under `extensions.error`; a token that does not verify gets the REST 401 body.
+- Shared hosting: the parsed schema is kept in `bootstrap/cache/camis-graphql.php` (rebuilt when
+  the schema changes) for opcache to serve; `camis scaffold filament --graphql` installs
+  `webonyx/graphql-php` and loads `routes/graphql.php` in `withRouting`'s `then:`, so
+  `route:cache` keeps it.
+
+**Exit criteria:** the generated schema's types, queries and mutations equal strapi-php's for the
+same content types (`graphql-schema.strapi-php.graphql`); the 36 checks of `graphql-vectors.json`,
+recorded from strapi-php, pass in the `strapi-api` boot job on SQLite, MySQL and Postgres, with
+`GraphqlTest` (a caller without the grant refused and nothing written, a row condition hiding
+another caller's rows from queries and mutations, a bad token's 401); every earlier suite still
+passes.
+
+**Status (2026-10-21):** every suite passes on SQLite and Postgres with all caches on, and the
+PHP tests pass.
+
+Known gaps (reported): the users-permissions (`login`, `register`, `me`, roles, users), i18n
+locale and upload queries and mutations, `UploadFile.related` (Strapi's `GenericMorph`),
+`hasPublishedVersion` and `publicationFilter` (in the schema, refused), and read-only and custom
+API tokens (a full-access one works) come in a second part. Filters and sort on a repeatable
+component are refused. The Strapi storage layout and the laravel API style generate no GraphQL.
+A single type is served as a collection, as on REST.
+
+---
+
 ## Sequencing rationale (quick reference)
 
 1. **Strapi first** — mature schema validates the IR fastest, with the thinnest adapter.

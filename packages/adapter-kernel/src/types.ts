@@ -37,6 +37,8 @@ export interface GenerateOptions {
    * CAMIS_REST_ALWAYS_POPULATE_COMPONENTS.
    */
   alwaysPopulateComponents?: boolean;
+  /** Filament, Strapi API style only: serve Strapi 5's GraphQL content API at /graphql. Default false. */
+  graphql?: boolean;
 }
 
 export interface GenerationResult {

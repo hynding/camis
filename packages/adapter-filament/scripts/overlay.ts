@@ -13,7 +13,11 @@ if (!dest) {
 }
 const result =
   style === "strapi"
-    ? filamentAdapter.generate(strapiApiBundle, { projectName: "oyl", apiStyle: "strapi" })
+    ? filamentAdapter.generate(strapiApiBundle, {
+        projectName: "oyl",
+        apiStyle: "strapi",
+        graphql: true,
+      })
     : filamentAdapter.generate(bootBundle, { projectName: "blog" });
 await materialize(result, dest);
 console.log(`overlay materialized into ${dest}${style ? ` (apiStyle ${style})` : ""}`);

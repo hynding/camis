@@ -6,8 +6,10 @@
 //
 // A step with `upload` posts multipart form data instead: each entry names a file under
 // __fixtures__/media and the fileInfo sent with it, and `form` adds fields (ref, refId, field).
+// A step with `graphql` posts that query and its `variables` to the GraphQL endpoint (`--graphql`,
+// else /graphql beside the API base); a mutation's `as` names the document its first field returns.
 //
-// usage: strapi-populate-vectors.mjs <api-base> [--token T] [--vectors F] [--expected F] [--record]
+// usage: strapi-populate-vectors.mjs <api-base> [--token T] [--vectors F] [--expected F] [--graphql URL] [--record]
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,6 +24,7 @@ const { values, positionals } = parseArgs({
     vectors: { type: "string", default: join(fixtures, "populate-vectors.json") },
     expected: { type: "string", default: join(fixtures, "populate-vectors.expected.json") },
     record: { type: "boolean", default: false },
+    graphql: { type: "string" },
   },
 });
 const base = positionals[0];
@@ -30,6 +33,7 @@ if (base === undefined) {
   process.exit(2);
 }
 const vectors = JSON.parse(readFileSync(values.vectors, "utf8"));
+const graphqlEndpoint = values.graphql ?? base.replace(/\/api\/?$/, "/graphql");
 
 const refs = new Map(); // "authors:Ann" → { id, documentId }
 const ref = (token) => {
@@ -77,6 +81,20 @@ const call = async (method, path, query, data, upload, form) => {
   }
 };
 
+const graphql = async (query, variables) => {
+  const headers = { Accept: "application/json", "Content-Type": "application/json" };
+  if (values.token) headers.Authorization = `Bearer ${values.token}`;
+  const response = await fetch(graphqlEndpoint, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      query: resolveText(query),
+      ...(variables ? { variables: resolve(variables) } : {}),
+    }),
+  });
+  return { status: response.status, body: await response.json() };
+};
+
 // Server-assigned keys differ between runs and runtimes; nulls are dropped because camis leaves
 // null scalars off the wire (a known gap, PLAN.md Phase 19). publishedAt is dropped too unless the
 // vector file asks for its presence: Strapi stamps it even on types without draft and publish.
@@ -89,8 +107,8 @@ const encoded = (file, key) =>
   (key === "size" || key === "sizeInBytes") &&
   typeof file.width === "number" &&
   String(file.mime).startsWith("image/");
-const normalize = (value) => {
-  if (Array.isArray(value)) return value.map(normalize);
+const normalize = (value, keepNulls = false) => {
+  if (Array.isArray(value)) return value.map((v) => normalize(v, keepNulls));
   if (typeof value === "string") return value;
   if (value !== null && typeof value === "object")
     return Object.fromEntries(
@@ -99,7 +117,7 @@ const normalize = (value) => {
           ([k, v]) =>
             !VOLATILE.has(k) &&
             !encoded(value, k) &&
-            (k === "publishedAt" ? publishedAtPresence : v !== null),
+            (k === "publishedAt" ? publishedAtPresence : keepNulls || v !== null),
         )
         .map(([k, v]) =>
           (k === "hash" || k === "url") && typeof v === "string"
@@ -108,7 +126,7 @@ const normalize = (value) => {
         )
         .map(([k, v]) => (k === "publishedAt" ? [k, v === null ? "absent" : "present"] : [k, v]))
         .sort(([a], [b]) => a.localeCompare(b))
-        .map(([k, v]) => [k, normalize(v)]),
+        .map(([k, v]) => [k, normalize(v, keepNulls)]),
     );
   return value;
 };
@@ -124,6 +142,30 @@ const outcome = ({ status, body }) => {
   return { status, data: normalize(bare(body) ? body : (body?.data ?? null)) };
 };
 
+// A GraphQL answer keeps its nulls (the schema sends every field asked for); an error compares by
+// message, code, path and Strapi's error, never by the stack trace a development server adds.
+const graphqlOutcome = ({ body }) => ({
+  data: normalize(body.data ?? null, true),
+  errors: (body.errors ?? []).map((e) => {
+    const error = e.extensions?.error;
+    const keyed = error?.details && typeof error.details === "object" && "key" in error.details;
+    return {
+      message: e.message,
+      code: e.extensions?.code ?? null,
+      path: e.path ?? null,
+      ...(error
+        ? {
+            error: {
+              name: error.name,
+              message: error.message,
+              ...(keyed ? { details: error.details } : {}),
+            },
+          }
+        : {}),
+    };
+  }),
+});
+
 function bare(body) {
   return Array.isArray(body) || (body !== null && typeof body === "object" && !("data" in body));
 }
@@ -131,7 +173,7 @@ function bare(body) {
 const written = (body) => (Array.isArray(body) ? body[0] : bare(body) ? body : body?.data);
 
 for (const row of vectors.seed) {
-  const { status, body } = await call("POST", row.path, row.query ?? "", row.data);
+  const { status, body } = await call(row.method ?? "POST", row.path, row.query ?? "", row.data);
   if (status !== 200 && status !== 201) {
     console.error(`SEED FAIL ${row.as} (${status}): ${JSON.stringify(body)}`);
     process.exit(1);
@@ -140,8 +182,20 @@ for (const row of vectors.seed) {
 }
 
 const results = {};
-for (const v of vectors.reads) results[v.name] = outcome(await call("GET", v.path, v.query));
+for (const v of vectors.reads)
+  results[v.name] =
+    v.graphql !== undefined
+      ? graphqlOutcome(await graphql(v.graphql, v.variables))
+      : outcome(await call("GET", v.path, v.query));
 for (const v of vectors.writes) {
+  if (v.graphql !== undefined) {
+    const response = await graphql(v.graphql, v.variables);
+    const target = Object.values(response.body.data ?? {})[0];
+    if (v.as !== undefined && target?.documentId !== undefined)
+      refs.set(v.as, { id: null, documentId: target.documentId });
+    results[v.name] = graphqlOutcome(response);
+    continue;
+  }
   const response = await call(
     v.method ?? "POST",
     v.path,

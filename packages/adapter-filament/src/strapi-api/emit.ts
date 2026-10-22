@@ -66,7 +66,14 @@ import {
   WEBHOOKS_MIGRATION_PATH,
   type WebhookContentType,
 } from "./webhooks";
-import { wireShape } from "./wire-shape";
+import { buildGraphqlSchema } from "./graphql-schema";
+import {
+  emitGraphqlRoutes,
+  emitStrapiGraphql,
+  emitStrapiGraphqlTypes,
+  GRAPHQL_SCHEMA_PATH,
+} from "./graphql-runtime";
+import { wireShape, type WireShape } from "./wire-shape";
 import { emitStrapiZones } from "./zones-runtime";
 import { emitUserResourceFiles, emitUsersPermissionsSettingsPage } from "./users-permissions-admin";
 import {
@@ -96,6 +103,8 @@ export interface StrapiApiInput {
   alwaysPopulateComponents?: boolean;
   /** Callers without a session act as the IR's public role (`guestsPlan`). */
   guests?: boolean;
+  /** Serve Strapi's GraphQL content API at /graphql (GenerateOptions). */
+  graphql?: boolean;
   /**
    * Content types whose model must declare `#[ObservedBy]` — hook observers plus AI-field
    * observers. Only the Strapi *storage* layout reads it: on the Laravel layout `emitModel`
@@ -124,9 +133,11 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
   const scopeMethods = new Map<string, string>();
   const fileModel = input.media === undefined ? undefined : filamentNames(input.media).model;
 
+  const shapes = new Map<string, WireShape>();
   for (const ct of emitted) {
     const names = filamentNames(ct);
     const shape = wireShape(doc, ct, fkNames.get(ct.name) ?? [], versioned, localized, fileModel);
+    shapes.set(ct.name, shape);
     files.push({
       path: `app/Http/Serializers/${names.model}Serializer.php`,
       content: emitSerializer(shape),
@@ -175,6 +186,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
       true,
       secured,
       true,
+      input.graphql === true,
     ),
   });
   files.push({
@@ -241,6 +253,16 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
       path: "app/Models/Concerns/HasDraftAndPublish.php",
       content: emitHasDraftAndPublish(),
     });
+  }
+  if (input.graphql === true) {
+    const schema = buildGraphqlSchema({ doc, emitted, shapes, media: input.media !== undefined });
+    gaps.push(...schema.gaps);
+    files.push(
+      { path: GRAPHQL_SCHEMA_PATH, content: schema.sdl },
+      { path: "app/GraphQL/StrapiGraphql.php", content: emitStrapiGraphql() },
+      { path: "app/GraphQL/StrapiGraphqlTypes.php", content: emitStrapiGraphqlTypes(schema) },
+      { path: "routes/graphql.php", content: emitGraphqlRoutes(secured) },
+    );
   }
   return { files, gaps, scopeMethods };
 };

@@ -77,7 +77,7 @@ class StrapiErrors
         }
 
         $this->handler->renderable(function (Throwable $e, Request $request): ?JsonResponse {
-            if (! $request->is('api/*')) {
+            if (! $request->is('api/*', 'graphql')) {
                 return null;
             }
 

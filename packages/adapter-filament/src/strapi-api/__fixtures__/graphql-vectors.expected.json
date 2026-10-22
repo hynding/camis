@@ -1,0 +1,602 @@
+{
+  "a list sends every scalar it is asked for": {
+    "data": {
+      "books": [
+        {
+          "inStock": true,
+          "pages": 100,
+          "publishedAt": "present",
+          "publishedOn": "2024-05-01",
+          "rating": 4.5,
+          "releasedAt": "2024-05-01T10:00:00.000Z",
+          "title": "Alpha"
+        },
+        {
+          "inStock": null,
+          "pages": 250,
+          "publishedAt": "present",
+          "publishedOn": null,
+          "rating": null,
+          "releasedAt": null,
+          "title": "Beta"
+        },
+        {
+          "inStock": null,
+          "pages": 50,
+          "publishedAt": "present",
+          "publishedOn": null,
+          "rating": null,
+          "releasedAt": null,
+          "title": "Gamma"
+        }
+      ]
+    },
+    "errors": []
+  },
+  "one document by documentId, with its components": {
+    "data": {
+      "book": {
+        "editions": [
+          {
+            "amount": 1,
+            "unit": "ea"
+          },
+          {
+            "amount": 2.5,
+            "unit": "kg"
+          }
+        ],
+        "price": {
+          "currency": "EUR",
+          "minor": 1999
+        },
+        "title": "Alpha"
+      }
+    },
+    "errors": []
+  },
+  "a document that does not exist is null": {
+    "data": {
+      "book": null
+    },
+    "errors": []
+  },
+  "relations, to one and to many": {
+    "data": {
+      "books": [
+        {
+          "author": {
+            "name": "Ann"
+          },
+          "genres": [
+            {
+              "name": "Fantasy"
+            },
+            {
+              "name": "Horror"
+            }
+          ],
+          "title": "Alpha",
+          "topic": {
+            "name": "Space"
+          }
+        },
+        {
+          "author": {
+            "name": "Bob"
+          },
+          "genres": [
+            {
+              "name": "Horror"
+            }
+          ],
+          "title": "Beta",
+          "topic": null
+        },
+        {
+          "author": null,
+          "genres": [],
+          "title": "Gamma",
+          "topic": null
+        }
+      ]
+    },
+    "errors": []
+  },
+  "a relation's own filters, sort and pagination": {
+    "data": {
+      "book": {
+        "desc": {
+          "nodes": [
+            {
+              "name": "Horror"
+            },
+            {
+              "name": "Fantasy"
+            }
+          ]
+        },
+        "genres": [
+          {
+            "name": "Fantasy"
+          }
+        ]
+      }
+    },
+    "errors": []
+  },
+  "a relation's pagination": {
+    "data": {
+      "author": {
+        "books": [
+          {
+            "title": "Alpha"
+          }
+        ],
+        "name": "Ann"
+      }
+    },
+    "errors": []
+  },
+  "the inverse side of a relation": {
+    "data": {
+      "authors": [
+        {
+          "books": [
+            {
+              "title": "Alpha"
+            }
+          ],
+          "books_connection": {
+            "nodes": [
+              {
+                "title": "Alpha"
+              }
+            ]
+          },
+          "name": "Ann"
+        },
+        {
+          "books": [
+            {
+              "title": "Beta"
+            }
+          ],
+          "books_connection": {
+            "nodes": [
+              {
+                "title": "Beta"
+              }
+            ]
+          },
+          "name": "Bob"
+        }
+      ]
+    },
+    "errors": []
+  },
+  "a connection sends its page": {
+    "data": {
+      "books_connection": {
+        "nodes": [
+          {
+            "title": "Gamma"
+          }
+        ],
+        "pageInfo": {
+          "page": 2,
+          "pageCount": 2,
+          "pageSize": 2,
+          "total": 3
+        }
+      }
+    },
+    "errors": []
+  },
+  "offset pagination": {
+    "data": {
+      "books_connection": {
+        "nodes": [
+          {
+            "title": "Beta"
+          }
+        ],
+        "pageInfo": {
+          "page": 2,
+          "pageCount": 3,
+          "pageSize": 1,
+          "total": 3
+        }
+      }
+    },
+    "errors": []
+  },
+  "both kinds of pagination at once are refused": {
+    "data": null,
+    "errors": [
+      {
+        "message": "Cannot use both page & offset pagination in the same query",
+        "code": "STRAPI_PAGINATION_ERROR",
+        "path": ["books"],
+        "error": {
+          "name": "PaginationError",
+          "message": "Cannot use both page & offset pagination in the same query"
+        }
+      }
+    ]
+  },
+  "filters on scalars": {
+    "data": {
+      "books": [
+        {
+          "title": "Alpha"
+        },
+        {
+          "title": "Beta"
+        }
+      ]
+    },
+    "errors": []
+  },
+  "logical filters": {
+    "data": {
+      "books": [
+        {
+          "title": "Beta"
+        },
+        {
+          "title": "Gamma"
+        }
+      ]
+    },
+    "errors": []
+  },
+  "not": {
+    "data": {
+      "books": [
+        {
+          "title": "Beta"
+        },
+        {
+          "title": "Gamma"
+        }
+      ]
+    },
+    "errors": []
+  },
+  "filters through a relation": {
+    "data": {
+      "books": [
+        {
+          "title": "Beta"
+        }
+      ]
+    },
+    "errors": []
+  },
+  "filters through a component": {
+    "data": {
+      "books": [
+        {
+          "title": "Alpha"
+        }
+      ]
+    },
+    "errors": []
+  },
+  "filters with in, null and between": {
+    "data": {
+      "a": [
+        {
+          "title": "Alpha"
+        },
+        {
+          "title": "Gamma"
+        }
+      ],
+      "b": [
+        {
+          "title": "Beta"
+        },
+        {
+          "title": "Gamma"
+        }
+      ],
+      "c": [
+        {
+          "title": "Alpha"
+        },
+        {
+          "title": "Beta"
+        }
+      ]
+    },
+    "errors": []
+  },
+  "sort by several keys and descending": {
+    "data": {
+      "books": [
+        {
+          "title": "Beta"
+        },
+        {
+          "title": "Alpha"
+        },
+        {
+          "title": "Gamma"
+        }
+      ]
+    },
+    "errors": []
+  },
+  "an unknown sort key is refused": {
+    "data": null,
+    "errors": [
+      {
+        "message": "Invalid key nope",
+        "code": "BAD_USER_INPUT",
+        "path": ["books"],
+        "error": {
+          "name": "ValidationError",
+          "message": "Invalid key nope",
+          "details": {
+            "key": "nope",
+            "path": null,
+            "source": "query",
+            "param": "sort"
+          }
+        }
+      }
+    ]
+  },
+  "a field the type does not have fails validation": {
+    "data": null,
+    "errors": [
+      {
+        "message": "Cannot query field \"nope\" on type \"Book\".",
+        "code": "GRAPHQL_VALIDATION_FAILED",
+        "path": null
+      }
+    ]
+  },
+  "variables": {
+    "data": {
+      "books": [
+        {
+          "pages": 250,
+          "title": "Beta"
+        }
+      ]
+    },
+    "errors": []
+  },
+  "drafts are left out unless the status asks for them": {
+    "data": {
+      "drafts": [
+        {
+          "author": {
+            "name": "Ann"
+          },
+          "publishedAt": "absent",
+          "title": "Draft"
+        },
+        {
+          "author": null,
+          "publishedAt": "absent",
+          "title": "Live"
+        }
+      ],
+      "published": [
+        {
+          "publishedAt": "present",
+          "title": "Live"
+        }
+      ]
+    },
+    "errors": []
+  },
+  "a locale": {
+    "data": {
+      "en": [
+        {
+          "code": "A1",
+          "locale": "en",
+          "title": "Hello"
+        }
+      ],
+      "fr": [
+        {
+          "code": "A1",
+          "locale": "fr",
+          "title": "Bonjour"
+        }
+      ]
+    },
+    "errors": []
+  },
+  "a document's other locales": {
+    "data": {
+      "articles": [
+        {
+          "localizations": [
+            {
+              "locale": "fr",
+              "title": "Bonjour"
+            }
+          ],
+          "title": "Hello"
+        }
+      ]
+    },
+    "errors": []
+  },
+  "a dynamic zone, item by item": {
+    "data": {
+      "landings": [
+        {
+          "blocks": [
+            {
+              "__typename": "ComponentSharedHero",
+              "heading": "Hi",
+              "price": {
+                "currency": "EUR",
+                "minor": 5
+              }
+            },
+            {
+              "__typename": "ComponentSharedQuantity",
+              "amount": 2,
+              "unit": "kg"
+            }
+          ],
+          "title": "Home"
+        }
+      ]
+    },
+    "errors": []
+  },
+  "aliases and typename": {
+    "data": {
+      "first": {
+        "__typename": "Book",
+        "name": "Alpha"
+      }
+    },
+    "errors": []
+  },
+  "create a document with components and relations": {
+    "data": {
+      "createBook": {
+        "author": {
+          "name": "Bob"
+        },
+        "editions": [
+          {
+            "amount": 3,
+            "unit": "g"
+          }
+        ],
+        "genres": [
+          {
+            "name": "Poetry"
+          }
+        ],
+        "pages": 10,
+        "price": {
+          "currency": "USD",
+          "minor": 5
+        },
+        "title": "Delta"
+      }
+    },
+    "errors": []
+  },
+  "create with variables": {
+    "data": {
+      "createBook": {
+        "inStock": false,
+        "title": "Epsilon"
+      }
+    },
+    "errors": []
+  },
+  "update a document": {
+    "data": {
+      "updateBook": {
+        "author": {
+          "name": "Bob"
+        },
+        "genres": [],
+        "pages": 11,
+        "title": "Delta"
+      }
+    },
+    "errors": []
+  },
+  "update a document that does not exist": {
+    "data": {
+      "updateBook": null
+    },
+    "errors": []
+  },
+  "create a draft": {
+    "data": {
+      "createPost": {
+        "publishedAt": "absent",
+        "title": "Soon"
+      }
+    },
+    "errors": []
+  },
+  "publish it by updating with the published status": {
+    "data": {
+      "updatePost": {
+        "publishedAt": "present",
+        "title": "Soon",
+        "views": 3
+      }
+    },
+    "errors": []
+  },
+  "create in a locale": {
+    "data": {
+      "updateArticle": {
+        "code": "A1",
+        "locale": "fr",
+        "title": "Hallo"
+      }
+    },
+    "errors": []
+  },
+  "write a dynamic zone": {
+    "data": {
+      "updateLanding": {
+        "blocks": [
+          {
+            "__typename": "ComponentSharedQuantity",
+            "amount": 9,
+            "unit": "g"
+          },
+          {
+            "__typename": "ComponentSharedHero",
+            "heading": "New"
+          }
+        ]
+      }
+    },
+    "errors": []
+  },
+  "a zone item naming no component of the zone is refused": {
+    "data": {
+      "updateLanding": {
+        "title": "Home"
+      }
+    },
+    "errors": []
+  },
+  "delete a document": {
+    "data": {
+      "deleteBook": {}
+    },
+    "errors": []
+  },
+  "it is gone": {
+    "data": {
+      "books": [
+        {
+          "title": "Alpha"
+        },
+        {
+          "title": "Beta"
+        },
+        {
+          "title": "Delta"
+        },
+        {
+          "title": "Gamma"
+        }
+      ]
+    },
+    "errors": []
+  }
+}

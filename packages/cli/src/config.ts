@@ -10,6 +10,7 @@ export const targetConfig = z.object({
   apiStyle: z.enum(["laravel", "strapi"]).optional(),
   storageLayout: z.enum(["laravel", "strapi"]).optional(),
   alwaysPopulateComponents: z.boolean().optional(),
+  graphql: z.boolean().optional(),
 });
 export type TargetConfig = z.infer<typeof targetConfig>;
 

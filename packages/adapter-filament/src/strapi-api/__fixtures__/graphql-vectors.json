@@ -1,0 +1,312 @@
+{
+  "about": "Strapi 5's GraphQL content API, checked against strapi-php's GraphQL plugin. Run on an empty database: seeds over REST in order, then each query and mutation in order, with strapi-populate-vectors.mjs. A step's graphql is posted to /graphql with its variables. publishedAt is compared as present or absent; documentId, id and the timestamps are left out.",
+  "publishedAt": "presence",
+  "seed": [
+    {
+      "path": "/authors",
+      "as": "authors:Ann",
+      "data": {
+        "name": "Ann"
+      }
+    },
+    {
+      "path": "/authors",
+      "as": "authors:Bob",
+      "data": {
+        "name": "Bob"
+      }
+    },
+    {
+      "path": "/genres",
+      "as": "genres:Fantasy",
+      "data": {
+        "name": "Fantasy"
+      }
+    },
+    {
+      "path": "/genres",
+      "as": "genres:Horror",
+      "data": {
+        "name": "Horror"
+      }
+    },
+    {
+      "path": "/genres",
+      "as": "genres:Poetry",
+      "data": {
+        "name": "Poetry"
+      }
+    },
+    {
+      "path": "/topics",
+      "as": "topics:Space",
+      "data": {
+        "name": "Space"
+      }
+    },
+    {
+      "path": "/books",
+      "as": "books:Alpha",
+      "data": {
+        "title": "Alpha",
+        "pages": 100,
+        "rating": 4.5,
+        "inStock": true,
+        "publishedOn": "2024-05-01",
+        "releasedAt": "2024-05-01T10:00:00.000Z",
+        "price": {
+          "minor": 1999,
+          "currency": "EUR"
+        },
+        "editions": [
+          {
+            "amount": 1,
+            "unit": "ea"
+          },
+          {
+            "amount": 2.5,
+            "unit": "kg"
+          }
+        ],
+        "author": "@authors:Ann",
+        "genres": ["@genres:Fantasy", "@genres:Horror"],
+        "topic": "@topics:Space"
+      }
+    },
+    {
+      "path": "/books",
+      "as": "books:Beta",
+      "data": {
+        "title": "Beta",
+        "pages": 250,
+        "author": "@authors:Bob",
+        "genres": ["@genres:Horror"]
+      }
+    },
+    {
+      "path": "/books",
+      "as": "books:Gamma",
+      "data": {
+        "title": "Gamma",
+        "pages": 50
+      }
+    },
+    {
+      "path": "/posts",
+      "query": "status=draft",
+      "as": "posts:Draft",
+      "data": {
+        "title": "Draft",
+        "views": 1,
+        "author": "@authors:Ann"
+      }
+    },
+    {
+      "path": "/posts",
+      "as": "posts:Live",
+      "data": {
+        "title": "Live",
+        "views": 7
+      }
+    },
+    {
+      "path": "/articles",
+      "as": "articles:Hello",
+      "data": {
+        "title": "Hello",
+        "code": "A1"
+      }
+    },
+    {
+      "path": "/articles/@articles:Hello",
+      "method": "PUT",
+      "query": "locale=fr",
+      "as": "articles:Bonjour",
+      "data": {
+        "title": "Bonjour"
+      }
+    },
+    {
+      "path": "/landings",
+      "as": "landings:Home",
+      "data": {
+        "title": "Home",
+        "blocks": [
+          {
+            "__component": "shared.hero",
+            "heading": "Hi",
+            "price": {
+              "minor": 5,
+              "currency": "EUR"
+            }
+          },
+          {
+            "__component": "shared.quantity",
+            "amount": 2,
+            "unit": "kg"
+          }
+        ]
+      }
+    }
+  ],
+  "reads": [
+    {
+      "name": "a list sends every scalar it is asked for",
+      "graphql": "{ books(sort: \"title\") { title pages rating inStock publishedOn releasedAt publishedAt } }"
+    },
+    {
+      "name": "one document by documentId, with its components",
+      "graphql": "{ book(documentId: \"@books:Alpha\") { title price { minor currency } editions { amount unit } } }"
+    },
+    {
+      "name": "a document that does not exist is null",
+      "graphql": "{ book(documentId: \"nope\") { title } }"
+    },
+    {
+      "name": "relations, to one and to many",
+      "graphql": "{ books(sort: \"title\") { title author { name } genres(sort: \"name\") { name } topic { name } } }"
+    },
+    {
+      "name": "a relation's own filters, sort and pagination",
+      "graphql": "{ book(documentId: \"@books:Alpha\") { genres(filters: { name: { startsWith: \"F\" } }) { name } desc: genres_connection(sort: \"name:desc\") { nodes { name } } } }"
+    },
+    {
+      "name": "a relation's pagination",
+      "graphql": "{ author(documentId: \"@authors:Ann\") { name books(pagination: { limit: 1 }) { title } } }"
+    },
+    {
+      "name": "the inverse side of a relation",
+      "graphql": "{ authors(sort: \"name\") { name books { title } books_connection { nodes { title } } } }"
+    },
+    {
+      "name": "a connection sends its page",
+      "graphql": "{ books_connection(sort: \"title\", pagination: { page: 2, pageSize: 2 }) { nodes { title } pageInfo { page pageSize pageCount total } } }"
+    },
+    {
+      "name": "offset pagination",
+      "graphql": "{ books_connection(sort: \"title\", pagination: { start: 1, limit: 1 }) { nodes { title } pageInfo { page pageSize pageCount total } } }"
+    },
+    {
+      "name": "both kinds of pagination at once are refused",
+      "graphql": "{ books(pagination: { page: 1, limit: 2 }) { title } }"
+    },
+    {
+      "name": "filters on scalars",
+      "graphql": "{ books(filters: { pages: { gte: 100 }, title: { containsi: \"a\" } }, sort: \"title\") { title } }"
+    },
+    {
+      "name": "logical filters",
+      "graphql": "{ books(filters: { or: [{ title: { eq: \"Gamma\" } }, { pages: { gt: 200 } }] }, sort: \"title\") { title } }"
+    },
+    {
+      "name": "not",
+      "graphql": "{ books(filters: { not: { title: { eq: \"Alpha\" } } }, sort: \"title\") { title } }"
+    },
+    {
+      "name": "filters through a relation",
+      "graphql": "{ books(filters: { author: { name: { eq: \"Bob\" } } }) { title } }"
+    },
+    {
+      "name": "filters through a component",
+      "graphql": "{ books(filters: { price: { currency: { eq: \"EUR\" } } }) { title } }"
+    },
+    {
+      "name": "filters with in, null and between",
+      "graphql": "{ a: books(filters: { title: { in: [\"Alpha\", \"Gamma\"] } }, sort: \"title\") { title } b: books(filters: { rating: { null: true } }, sort: \"title\") { title } c: books(filters: { pages: { between: [60, 260] } }, sort: \"title\") { title } }"
+    },
+    {
+      "name": "sort by several keys and descending",
+      "graphql": "{ books(sort: [\"pages:desc\", \"title\"]) { title } }"
+    },
+    {
+      "name": "an unknown sort key is refused",
+      "graphql": "{ books(sort: \"nope:asc\") { title } }"
+    },
+    {
+      "name": "a field the type does not have fails validation",
+      "graphql": "{ books { nope } }"
+    },
+    {
+      "name": "variables",
+      "graphql": "query Find($title: String!) { books(filters: { title: { eq: $title } }) { title pages } }",
+      "variables": {
+        "title": "Beta"
+      }
+    },
+    {
+      "name": "drafts are left out unless the status asks for them",
+      "graphql": "{ published: posts(sort: \"title\") { title publishedAt } drafts: posts(status: DRAFT, sort: \"title\") { title publishedAt author { name } } }"
+    },
+    {
+      "name": "a locale",
+      "graphql": "{ en: articles { title code locale } fr: articles(locale: \"fr\") { title code locale } }"
+    },
+    {
+      "name": "a document's other locales",
+      "graphql": "{ articles { title localizations { title locale } } }"
+    },
+    {
+      "name": "a dynamic zone, item by item",
+      "graphql": "{ landings { title blocks { __typename ... on ComponentSharedHero { heading price { minor currency } } ... on ComponentSharedQuantity { amount unit } } } }"
+    },
+    {
+      "name": "aliases and typename",
+      "graphql": "{ first: book(documentId: \"@books:Alpha\") { __typename name: title } }"
+    }
+  ],
+  "writes": [
+    {
+      "name": "create a document with components and relations",
+      "as": "books:Delta",
+      "graphql": "mutation { createBook(data: { title: \"Delta\", pages: 10, price: { minor: 5, currency: \"USD\" }, editions: [{ amount: 3, unit: \"g\" }], author: \"@authors:Bob\", genres: [\"@genres:Poetry\"] }) { documentId title pages price { minor currency } editions { amount unit } author { name } genres { name } } }"
+    },
+    {
+      "name": "create with variables",
+      "as": "books:Epsilon",
+      "graphql": "mutation Make($data: BookInput!) { createBook(data: $data) { documentId title inStock } }",
+      "variables": {
+        "data": {
+          "title": "Epsilon",
+          "inStock": false
+        }
+      }
+    },
+    {
+      "name": "update a document",
+      "graphql": "mutation { updateBook(documentId: \"@books:Delta\", data: { pages: 11, genres: [] }) { title pages genres { name } author { name } } }"
+    },
+    {
+      "name": "update a document that does not exist",
+      "graphql": "mutation { updateBook(documentId: \"nope\", data: { pages: 1 }) { title } }"
+    },
+    {
+      "name": "create a draft",
+      "as": "posts:Soon",
+      "graphql": "mutation { createPost(data: { title: \"Soon\" }, status: DRAFT) { documentId title publishedAt } }"
+    },
+    {
+      "name": "publish it by updating with the published status",
+      "graphql": "mutation { updatePost(documentId: \"@posts:Soon\", data: { views: 3 }, status: PUBLISHED) { title views publishedAt } }"
+    },
+    {
+      "name": "create in a locale",
+      "graphql": "mutation { updateArticle(documentId: \"@articles:Hello\", data: { title: \"Hallo\" }, locale: \"fr\") { title code locale } }"
+    },
+    {
+      "name": "write a dynamic zone",
+      "graphql": "mutation { updateLanding(documentId: \"@landings:Home\", data: { blocks: [{ __typename: \"ComponentSharedQuantity\", amount: 9, unit: \"g\" }, { __typename: \"ComponentSharedHero\", heading: \"New\" }] }) { blocks { __typename ... on ComponentSharedHero { heading } ... on ComponentSharedQuantity { amount unit } } } }"
+    },
+    {
+      "name": "a zone item naming no component of the zone is refused",
+      "graphql": "mutation { updateLanding(documentId: \"@landings:Home\", data: { blocks: [{ __typename: \"ComponentSharedMoney\", minor: 1 }] }) { title } }"
+    },
+    {
+      "name": "delete a document",
+      "graphql": "mutation { deleteBook(documentId: \"@books:Epsilon\") { documentId } }"
+    },
+    {
+      "name": "it is gone",
+      "graphql": "{ books(sort: \"title\") { title } }"
+    }
+  ]
+}

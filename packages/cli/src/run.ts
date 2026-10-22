@@ -14,7 +14,7 @@ Usage:
                                                  (create a project, then scaffold and build it)
   camis validate <ir.json>
   camis import <strapi|express> <projectDir> [--out ir.json] [--upsert-by <field>]
-  camis scaffold filament <dir> [--storage laravel|strapi]
+  camis scaffold filament <dir> [--storage laravel|strapi] [--graphql]
                                                  (create the Laravel host app for the overlay)
   camis generate [--config camis.config.json]   (dry-run: lists files + gaps)
   camis build    [--config camis.config.json]   (writes the project to each out)`;
@@ -78,7 +78,10 @@ export const run = async (argv: string[], io: Io): Promise<number> => {
         io.out("✗ scaffold --storage must be laravel or strapi");
         return 1;
       }
-      return scaffoldCommand(rest[0], rest[1], io, { storage });
+      return scaffoldCommand(rest[0], rest[1], io, {
+        storage,
+        graphql: rest.includes("--graphql"),
+      });
     }
     case "generate":
       return generateCommand(flag(rest, "--config", "camis.config.json"), io, { write: false });

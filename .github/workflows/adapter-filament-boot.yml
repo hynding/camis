@@ -140,6 +140,7 @@ jobs:
           php artisan install:api --no-interaction
           composer require spatie/laravel-permission --no-interaction
           php artisan vendor:publish --provider="Spatie\Permission\PermissionServiceProvider" --no-interaction
+          composer require webonyx/graphql-php:"^15.19" --no-interaction
           php -r '$f="app/Models/User.php";$c=file_get_contents($f);$c=str_replace("use HasFactory, Notifiable;","use HasFactory, Notifiable, \\Spatie\\Permission\\Traits\\HasRoles, \\Laravel\\Sanctum\\HasApiTokens;",$c);file_put_contents($f,$c);'
           grep -q HasApiTokens app/Models/User.php || { echo "User model patch did not apply"; exit 1; }
       - name: Overlay (apiStyle strapi)
@@ -147,13 +148,14 @@ jobs:
       - name: Patch bootstrap/app.php as camis scaffold does
         run: >-
           pnpm --filter @camis/cli exec tsx -e "import { readFileSync, writeFileSync } from 'node:fs';
-          import { patchBootstrapMiddleware } from './src/commands/scaffold';
+          import { patchBootstrapGraphql, patchBootstrapMiddleware } from './src/commands/scaffold';
           const f = process.env.GITHUB_WORKSPACE + '/app/bootstrap/app.php';
-          writeFileSync(f, patchBootstrapMiddleware(readFileSync(f, 'utf8')));"
+          writeFileSync(f, patchBootstrapGraphql(patchBootstrapMiddleware(readFileSync(f, 'utf8'))));"
       - name: Migrate + seed + cache (as a shared-host deploy does) + serve (${{ matrix.db }})
         run: |
           cd app
           grep -q "prependToGroup('api'" bootstrap/app.php || { echo "bootstrap/app.php patch did not apply"; exit 1; }
+          grep -q "routes/graphql.php" bootstrap/app.php || { echo "bootstrap/app.php graphql patch did not apply"; exit 1; }
           case "${{ matrix.db }}" in
             sqlite) echo "DB_CONNECTION=sqlite" >> .env; touch database/database.sqlite ;;
             mysql)  printf 'DB_CONNECTION=mysql\nDB_HOST=127.0.0.1\nDB_PORT=3306\nDB_DATABASE=camis\nDB_USERNAME=root\nDB_PASSWORD=camis\n' >> .env ;;
@@ -241,6 +243,18 @@ jobs:
           F=../packages/adapter-filament/src/strapi-api/__fixtures__
           node ../packages/adapter-filament/scripts/strapi-populate-vectors.mjs http://127.0.0.1:8765/api \
             --token "$T" --vectors $F/dynamic-zone-vectors.json --expected $F/dynamic-zone-vectors.expected.json
+      - name: Strapi GraphQL vectors (recorded from strapi-php, locales en and fr)
+        run: |
+          cd app
+          php artisan migrate:fresh --force
+          php artisan db:seed --class="Database\\Seeders\\RolePermissionSeeder" --force
+          php artisan tinker --execute='\App\Models\Locale::create(["code" => "fr", "name" => "French (fr)"]);'
+          T=$(curl -s -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' \
+            --data '{"username":"graphql","email":"graphql@example.test","password":"secret1"}' \
+            http://127.0.0.1:8765/api/auth/local/register | jq -r .jwt)
+          F=../packages/adapter-filament/src/strapi-api/__fixtures__
+          node ../packages/adapter-filament/scripts/strapi-populate-vectors.mjs http://127.0.0.1:8765/api \
+            --token "$T" --vectors $F/graphql-vectors.json --expected $F/graphql-vectors.expected.json
       - name: Strapi users-permissions vectors (recorded from strapi-php)
         run: |
           cd app
@@ -292,14 +306,14 @@ jobs:
           node ../packages/adapter-filament/scripts/strapi-auth-vectors.mjs http://127.0.0.1:8765/api \
             --hook "bash ../packages/adapter-filament/scripts/strapi-auth-hook.sh" \
             --vectors $F/session-vectors.json --expected $F/session-vectors.expected.json
-      - name: Filament admin publishes drafts, translates, keeps the media library, manages users and API tokens, builds dynamic zones
+      - name: Filament admin publishes drafts, translates, keeps the media library, manages users and API tokens, builds dynamic zones; GraphQL refuses what REST refuses
         run: |
           cd app
           # The cached config would point the tests at the served database instead of :memory:.
           php artisan config:clear
           S=../packages/adapter-filament/scripts/php
-          cp $S/DraftAdminTest.php $S/LocaleAdminTest.php $S/MediaAdminTest.php $S/UsersAdminTest.php $S/ProvidersTest.php $S/ApiTokensTest.php $S/WebhooksTest.php $S/DynamicZonesTest.php tests/Feature/
-          php artisan test tests/Feature/DraftAdminTest.php tests/Feature/LocaleAdminTest.php tests/Feature/MediaAdminTest.php tests/Feature/UsersAdminTest.php tests/Feature/ProvidersTest.php tests/Feature/ApiTokensTest.php tests/Feature/WebhooksTest.php tests/Feature/DynamicZonesTest.php
+          cp $S/DraftAdminTest.php $S/LocaleAdminTest.php $S/MediaAdminTest.php $S/UsersAdminTest.php $S/ProvidersTest.php $S/ApiTokensTest.php $S/WebhooksTest.php $S/DynamicZonesTest.php $S/GraphqlTest.php tests/Feature/
+          php artisan test tests/Feature/DraftAdminTest.php tests/Feature/LocaleAdminTest.php tests/Feature/MediaAdminTest.php tests/Feature/UsersAdminTest.php tests/Feature/ProvidersTest.php tests/Feature/ApiTokensTest.php tests/Feature/WebhooksTest.php tests/Feature/DynamicZonesTest.php tests/Feature/GraphqlTest.php
       - name: Server log on failure
         if: failure()
         run: cat app/serve.log app/storage/logs/laravel.log "$RUNNER_TEMP/oauth/serve.log" || true

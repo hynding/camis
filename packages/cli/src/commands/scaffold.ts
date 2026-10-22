@@ -65,11 +65,38 @@ export const patchBootstrapMiddleware = (source: string): string => {
   return source.replace(STOCK_WITH_MIDDLEWARE, STRAPI_ERRORS_FIRST);
 };
 
+const STOCK_HEALTH = "        health: '/up',\n";
+const GRAPHQL_ROUTES = `${STOCK_HEALTH}        // camis: Strapi's GraphQL endpoint, beside /api rather than under it.
+        then: function (): void {
+            if (is_file(__DIR__.'/../routes/graphql.php')) {
+                \\Illuminate\\Support\\Facades\\Route::middleware('api')->group(__DIR__.'/../routes/graphql.php');
+            }
+        },
+`;
+
+/**
+ * Load the generated routes/graphql.php from bootstrap/app.php's routing. Idempotent.
+ *
+ * Strapi serves GraphQL at /graphql, outside the /api prefix every routes/api.php route takes.
+ * Registering it in withRouting's `then` keeps it in `php artisan route:cache`; the is_file guard
+ * keeps a project generated without GraphQL booting. A source without the stock `health` entry is
+ * returned unchanged; the caller fails loudly.
+ */
+export const patchBootstrapGraphql = (source: string): string => {
+  if (source.includes("routes/graphql.php")) return source;
+  return source.replace(STOCK_HEALTH, GRAPHQL_ROUTES);
+};
+
 /**
  * One read and one write of bootstrap/app.php: the api routes entry on the Strapi storage layout
  * (which skips `install:api`), and StrapiErrors first on the api group on both layouts.
  */
-const patchBootstrap = async (appDir: string, io: Io, storage: StorageLayout): Promise<boolean> => {
+const patchBootstrap = async (
+  appDir: string,
+  io: Io,
+  storage: StorageLayout,
+  graphql: boolean,
+): Promise<boolean> => {
   const bootstrapPath = join(appDir, "bootstrap/app.php");
   try {
     const source = await io.readFile(bootstrapPath);
@@ -90,8 +117,16 @@ const patchBootstrap = async (appDir: string, io: Io, storage: StorageLayout): P
       );
       return false;
     }
+    if (graphql) {
+      patched = patchBootstrapGraphql(patched);
+      if (!patched.includes("routes/graphql.php")) {
+        io.out("✗ could not patch bootstrap/app.php: no stock `health: '/up',` routing line");
+        return false;
+      }
+    }
     await io.writeFile(bootstrapPath, patched);
     if (storage === "strapi") io.out("✓ patched bootstrap/app.php to route routes/api.php");
+    if (graphql) io.out("✓ patched bootstrap/app.php to route routes/graphql.php");
     io.out("✓ patched bootstrap/app.php to run StrapiErrors first on API routes");
     return true;
   } catch (e) {
@@ -163,7 +198,7 @@ export const scaffoldCommand = async (
   target: string,
   dir: string,
   io: Io,
-  options?: { storage?: StorageLayout },
+  options?: { storage?: StorageLayout; graphql?: boolean },
 ): Promise<number> => {
   if (target !== "filament") {
     io.out(`✗ "${target}" has no scaffold; only the filament target needs a host app`);
@@ -179,10 +214,21 @@ export const scaffoldCommand = async (
     // no composer.json → safe to scaffold
   }
 
-  const stepList =
-    storage === "strapi"
+  const graphql = options?.graphql === true;
+  const stepList = [
+    ...(storage === "strapi"
       ? strapiSteps(appDir, dirname(appDir), appDir)
-      : steps(appDir, dirname(appDir), appDir);
+      : steps(appDir, dirname(appDir), appDir)),
+    ...(graphql
+      ? [
+          {
+            cmd: "composer",
+            args: ["require", "webonyx/graphql-php:^15.19", "--no-interaction"],
+            cwd: appDir,
+          },
+        ]
+      : []),
+  ];
 
   for (const step of stepList) {
     io.out(`→ ${step.cmd} ${step.args.join(" ")}`);
@@ -193,7 +239,7 @@ export const scaffoldCommand = async (
     }
   }
 
-  if (!(await patchBootstrap(appDir, io, storage))) return 1;
+  if (!(await patchBootstrap(appDir, io, storage, graphql))) return 1;
 
   if (storage === "strapi") {
     io.out(`✓ scaffolded Laravel 12 (Strapi storage) at ${dir}`);
