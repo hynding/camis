@@ -328,6 +328,8 @@ jobs:
           node ../packages/adapter-filament/scripts/strapi-auth-vectors.mjs http://127.0.0.1:8765/api \
             --hook "bash ../packages/adapter-filament/scripts/strapi-auth-hook.sh" \
             --vectors $F/session-vectors.json --expected $F/session-vectors.expected.json
+      - name: Strapi's OpenAPI document at /documentation lists only routes the app serves
+        run: node packages/adapter-filament/scripts/strapi-openapi-routes.mjs app http://127.0.0.1:8765
       - name: Filament admin publishes drafts, translates, keeps the media library, manages users and API tokens, builds dynamic zones; GraphQL refuses what REST refuses
         run: |
           cd app

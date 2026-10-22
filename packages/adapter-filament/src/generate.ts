@@ -128,6 +128,8 @@ export const filamentAdapter: GenerateAdapter = {
       media: media.file,
       alwaysPopulateComponents: options.alwaysPopulateComponents === true,
       graphql: options.graphql === true,
+      documentation: options.documentation === true,
+      projectName: options.projectName,
       guests,
       observedModels: new Set([...hooks.observedModels, ...aiObservedModels]),
     };
@@ -138,6 +140,15 @@ export const filamentAdapter: GenerateAdapter = {
         severity: "downgrade",
         message:
           "GraphQL is served on the Strapi API style over Laravel storage only; this project generates none.",
+      });
+    }
+    if (options.documentation === true && (apiStyle !== "strapi" || storage === "strapi")) {
+      gaps.push({
+        feature: "documentation",
+        location: {},
+        severity: "downgrade",
+        message:
+          "The OpenAPI document and /documentation are served on the Strapi API style over Laravel storage only; this project generates neither.",
       });
     }
     const strapi =
@@ -308,6 +319,7 @@ export const filamentAdapter: GenerateAdapter = {
       deployFile(
         storage,
         options.graphql === true && apiStyle === "strapi" && storage !== "strapi",
+        options.documentation === true && apiStyle === "strapi" && storage !== "strapi",
       ),
     ];
     return {

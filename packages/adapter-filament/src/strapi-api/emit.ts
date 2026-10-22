@@ -67,6 +67,12 @@ import {
   type WebhookContentType,
 } from "./webhooks";
 import { emitStrapiGraphqlPlugins } from "./graphql-plugins-runtime";
+import {
+  DOCUMENTATION_PAGE_PATH,
+  emitDocumentationPage,
+  emitOpenApiDocument,
+  OPENAPI_PATH,
+} from "./openapi";
 import { buildGraphqlSchema } from "./graphql-schema";
 import {
   emitGraphqlRoutes,
@@ -106,6 +112,10 @@ export interface StrapiApiInput {
   guests?: boolean;
   /** Serve Strapi's GraphQL content API at /graphql (GenerateOptions). */
   graphql?: boolean;
+  /** Write Strapi's OpenAPI document and serve Swagger UI at /documentation (GenerateOptions). */
+  documentation?: boolean;
+  /** The project's name, which the OpenAPI document's info carries. */
+  projectName?: string;
   /**
    * Content types whose model must declare `#[ObservedBy]` — hook observers plus AI-field
    * observers. Only the Strapi *storage* layout reads it: on the Laravel layout `emitModel`
@@ -273,6 +283,23 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
         content: emitStrapiGraphqlTypes(schema, secured),
       },
       { path: "routes/graphql.php", content: emitGraphqlRoutes(secured) },
+    );
+  }
+  if (input.documentation === true) {
+    const projectName = input.projectName ?? "camis";
+    files.push(
+      {
+        path: OPENAPI_PATH,
+        content: emitOpenApiDocument({
+          doc,
+          emitted,
+          versioned,
+          localized,
+          media: input.media !== undefined,
+          projectName,
+        }),
+      },
+      { path: DOCUMENTATION_PAGE_PATH, content: emitDocumentationPage(projectName) },
     );
   }
   return { files, gaps, scopeMethods };

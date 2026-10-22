@@ -24,7 +24,7 @@ interface OpenApiDocument {
   info: { title: string; description: string; version: string };
   servers: { url: string; description: string }[];
   paths: Record<string, Record<string, unknown>>;
-  components: { schemas: Record<string, unknown> };
+  components: { schemas: Record<string, unknown>; securitySchemes: unknown };
   [key: string]: unknown;
 }
 
@@ -74,7 +74,8 @@ describe("OpenAPI document", () => {
     for (const path of served) expect(ours.paths[path], path).toEqual(oracle.paths[path]);
   });
 
-  it("registers the same schemas as Strapi", () => {
+  it("registers the same schemas as Strapi, and its bearer token", () => {
+    expect(ours.components?.securitySchemes).toEqual(oracle.components.securitySchemes);
     expect(Object.keys(ours.components?.schemas ?? {}).sort()).toEqual(
       Object.keys(oracle.components.schemas).sort(),
     );
@@ -107,6 +108,15 @@ describe("OpenAPI document", () => {
     );
     expect(page).toMatch(
       /<link rel="stylesheet" href="https:\/\/cdn\.jsdelivr\.net\/npm\/swagger-ui-dist@\d+\.\d+\.\d+\/swagger-ui\.css" integrity="sha384-[\w+/=]+" crossorigin="anonymous">/,
+    );
+  });
+
+  it("tells the deploy where the document is and how it stays current", () => {
+    const deploy = content("DEPLOY.md");
+    expect(deploy).toContain("/documentation");
+    expect(deploy).toContain(DOCUMENT_PATH);
+    expect(generate(false).files.find((f) => f.path === "DEPLOY.md")!.content).not.toContain(
+      "/documentation",
     );
   });
 

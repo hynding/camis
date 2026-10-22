@@ -17,6 +17,7 @@ const result =
         projectName: "oyl",
         apiStyle: "strapi",
         graphql: true,
+        documentation: true,
       })
     : filamentAdapter.generate(bootBundle, { projectName: "blog" });
 await materialize(result, dest);
