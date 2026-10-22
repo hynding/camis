@@ -14,7 +14,9 @@ const header = `<?php\n${PHP_MARKER}\n\ndeclare(strict_types=1);\n\nnamespace Ap
  * versioned types, and from a versioned type to a plain one, are held per version, so they load
  * as they are. A link a plain type holds to a versioned one points at the target's draft and is
  * shown as its published version; a link a plain type holds to a versioned one's draft is reached
- * from the published version through that draft (`draft-publish-vectors.json`).
+ * from the published version through that draft (`draft-publish-vectors.json`). The request's
+ * publicationFilter narrows every draft-and-publish level, as Strapi's does
+ * (`publication-filter-vectors.json`).
  *
  * Locales: a link from a type that keeps locales holds its target in its own locale, and one from
  * a type that does not holds the target's default locale, so both load as they are.
@@ -46,17 +48,17 @@ final class StrapiPopulate
     {
         $tree = self::tree($params['populate'] ?? null, $serializer, $viewer, null);
 
-        return self::rendered($rows, $params, $tree, $serializer, $viewer, ! StrapiDocuments::draftOnly($params));
+        return self::rendered($rows, $params, $tree, $serializer, $viewer, ! StrapiDocuments::draftOnly($params), StrapiDocuments::publicationFilter($params));
     }
 
     /** @return list<array> */
-    private static function rendered(Collection $rows, array $params, array $tree, string $serializer, ?Authenticatable $viewer, bool $published): array
+    private static function rendered(Collection $rows, array $params, array $tree, string $serializer, ?Authenticatable $viewer, bool $published, ?string $cohort): array
     {
         $loaded = [];
         foreach ($tree as $key => $sub) {
             $relation = $serializer::FIELDS[$key] ?? [];
             if (isset($relation['relation'])) {
-                $loaded[$key] = self::load($rows, $serializer, $relation, $sub, $viewer, $key, $published);
+                $loaded[$key] = self::load($rows, $serializer, $relation, $sub, $viewer, $key, $published, $cohort);
             }
         }
 
@@ -174,10 +176,13 @@ final class StrapiPopulate
      *
      * @return array{count: bool, links: array<int|string, list<int|string>|int>, wires: array<int|string, array>}
      */
-    private static function load(Collection $rows, string $serializer, array $relation, array $sub, ?Authenticatable $viewer, string $at, bool $published): array
+    private static function load(Collection $rows, string $serializer, array $relation, array $sub, ?Authenticatable $viewer, string $at, bool $published, ?string $cohort): array
     {
-        $narrow = function (Builder $query) use ($relation, $sub, $viewer, $at): void {
+        $narrow = function (Builder $query) use ($relation, $sub, $viewer, $at, $published, $cohort): void {
             StrapiQuery::scope($query, $viewer);
+            if ($cohort !== null && ($relation['draftPublish'] ?? false)) {
+                StrapiDocuments::cohort($query, $cohort, $published);
+            }
             StrapiQuery::filter($query, $sub, $relation['serializer']::FIELDS, $viewer, $at);
             StrapiQuery::order($query, $sub['sort'] ?? null, $relation['serializer']::FIELDS, $viewer);
         };
@@ -201,7 +206,7 @@ final class StrapiPopulate
             $links[$key] = array_map(fn (Model $target) => $target->getKey(), $visible);
         }
         $params = array_intersect_key($sub, array_flip(['fields']));
-        $wires = self::rendered($targets->values(), $params, $sub['tree'] ?? [], $relation['serializer'], $viewer, $published);
+        $wires = self::rendered($targets->values(), $params, $sub['tree'] ?? [], $relation['serializer'], $viewer, $published, $cohort);
 
         return ['count' => false, 'links' => $links, 'wires' => array_combine($targets->keys()->all(), $wires) ?: []];
     }

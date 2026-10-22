@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Serializers\FileSerializer;
 use App\Models\File;
 use App\Support\StrapiError;
+use App\Support\StrapiPopulate;
 use App\Support\StrapiQuery;
 use App\Support\StrapiUpload;
 use Illuminate\Database\Eloquent\Builder;
@@ -65,16 +66,20 @@ class UploadController extends Controller
         StrapiQuery::filter($query, $params, FileSerializer::FIELDS, $request->user(), null);
         StrapiQuery::order($query, $params['sort'] ?? null, FileSerializer::FIELDS, $request->user());
 
-        return response()->json($query->get()->filter(fn (File $file) => Gate::allows('view', $file))
-            ->map(fn (File $file) => StrapiQuery::select(StrapiUpload::wire($file), $params, FileSerializer::FIELDS))
-            ->values()
+        $files = $query->get()->filter(fn (File $file) => Gate::allows('view', $file))->values();
+        $related = $this->related($request, $files);
+
+        return response()->json($files
+            ->map(fn (File $file) => StrapiQuery::select(StrapiUpload::wire($file), $params, FileSerializer::FIELDS) + $related($file))
             ->all());
     }
 
     /** Strapi's findOne reads only populate, so fields and filters do not narrow it. */
     public function findOne(Request $request, string $id): JsonResponse
     {
-        return response()->json(StrapiUpload::wire($this->file($request, $id, 'file.notFound')));
+        $file = $this->file($request, $id, 'file.notFound');
+
+        return response()->json(StrapiUpload::wire($file) + $this->related($request, collect([$file]))($file));
     }
 
     public function destroy(Request $request, string $id): JsonResponse
@@ -95,6 +100,48 @@ class UploadController extends Controller
         $file = DB::transaction(fn () => StrapiUpload::update($file, $this->infos($request)[0] ?? [], $upload));
 
         return response()->json(StrapiUpload::wire($file));
+    }
+
+    /**
+     * What populate=related (or *) adds to each file: every entry linked to it, once per link and
+     * in link order, each with its Strapi uid as __type; Strapi leaves out the entries of types the
+     * caller may not read. One query per linked type, whatever the number of files.
+     *
+     * @param \Illuminate\Support\Collection<int, File> $files
+     * @return \Closure(File): array
+     */
+    private function related(Request $request, \Illuminate\Support\Collection $files): \Closure
+    {
+        $populate = $request->query('populate');
+        $asked = $populate === '*' || $populate === 'related'
+            || (is_string($populate) && in_array('related', array_map('trim', explode(',', $populate)), true))
+            || (is_array($populate) && (in_array('related', $populate, true) || ! in_array($populate['related'] ?? false, [false, 'false'], true)));
+        if (! $asked) {
+            return fn (File $file): array => [];
+        }
+        $links = DB::table('files_related_mph')->whereIn('file_id', $files->map->getKey()->all())->orderBy('id')->get();
+        $entries = [];
+        foreach (self::TARGETS as $uid => [$modelClass, $serializer]) {
+            $ids = $links->where('related_type', (new $modelClass())->getMorphClass())->pluck('related_id')->unique()->values()->all();
+            if ($ids === [] || ! StrapiQuery::readable(['model' => $modelClass], $request->user())) {
+                continue;
+            }
+            $query = $modelClass::query()->whereKey($ids);
+            StrapiQuery::scope($query, $request->user());
+            $rows = $query->get()->filter(fn ($row) => StrapiQuery::visible($row, $request->user()))->values();
+            foreach (StrapiPopulate::many($rows, [], $serializer, $request->user()) as $i => $wire) {
+                $entries[$rows[$i]->getMorphClass()][$rows[$i]->getKey()] = $wire + ['__type' => $uid];
+            }
+        }
+        $byFile = [];
+        foreach ($links as $link) {
+            $entry = $entries[$link->related_type][$link->related_id] ?? null;
+            if ($entry !== null) {
+                $byFile[$link->file_id][] = $entry;
+            }
+        }
+
+        return fn (File $file): array => ['related' => $byFile[$file->getKey()] ?? []];
     }
 
     private function files(Request $request): Builder

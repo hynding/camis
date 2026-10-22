@@ -1,0 +1,279 @@
+{
+  "about": "Strapi 5's publicationFilter and hasPublishedVersion over REST and GraphQL, checked against strapi-php. Run on an empty database whose locales are en (the default) and fr, in order, with strapi-populate-vectors.mjs. Post and Topic have draft and publish, Page is localized with draft and publish, Author has neither. A `wait` step lets a draft's edit land in a later second than its publish, as camis keeps timestamps to the second.",
+  "seed": [
+    {
+      "path": "/authors",
+      "as": "authors:Ann",
+      "data": {
+        "name": "Ann"
+      }
+    },
+    {
+      "path": "/topics",
+      "as": "topics:Live",
+      "data": {
+        "name": "Live"
+      }
+    },
+    {
+      "path": "/topics",
+      "query": "status=draft",
+      "as": "topics:DraftOnly",
+      "data": {
+        "name": "DraftOnly"
+      }
+    },
+    {
+      "path": "/posts",
+      "as": "posts:Live",
+      "data": {
+        "title": "Live",
+        "views": 1,
+        "author": "@authors:Ann",
+        "topics": ["@topics:Live"]
+      }
+    },
+    {
+      "path": "/posts",
+      "as": "posts:Edited",
+      "data": {
+        "title": "Edited",
+        "views": 1
+      }
+    },
+    {
+      "path": "/posts",
+      "query": "status=draft",
+      "as": "posts:Draft",
+      "data": {
+        "title": "Draft",
+        "author": "@authors:Ann"
+      }
+    },
+    {
+      "path": "/posts",
+      "query": "status=draft",
+      "as": "posts:Linked",
+      "data": {
+        "title": "Linked",
+        "topics": ["@topics:Live", "@topics:DraftOnly"]
+      }
+    },
+    {
+      "path": "/pages",
+      "as": "pages:Home",
+      "data": {
+        "title": "Home"
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/pages/@pages:Home",
+      "query": "locale=fr&status=draft",
+      "as": "pages:Accueil",
+      "data": {
+        "title": "Accueil"
+      }
+    }
+  ],
+  "reads": [],
+  "defaultQuery": "fields[0]=title",
+  "writes": [
+    {
+      "wait": 1100
+    },
+    {
+      "name": "edit a published post's draft",
+      "method": "PUT",
+      "path": "/posts/@posts:Edited",
+      "query": "status=draft&fields[0]=title",
+      "data": {
+        "views": 5
+      }
+    },
+    {
+      "name": "never-published lists drafts never published",
+      "method": "GET",
+      "path": "/posts",
+      "query": "status=draft&publicationFilter=never-published&sort=title&fields[0]=title"
+    },
+    {
+      "name": "has-published-version lists drafts that were published",
+      "method": "GET",
+      "path": "/posts",
+      "query": "status=draft&publicationFilter=has-published-version&sort=title&fields[0]=title"
+    },
+    {
+      "name": "has-published-version on published versions",
+      "method": "GET",
+      "path": "/posts",
+      "query": "publicationFilter=has-published-version&sort=title&fields[0]=title"
+    },
+    {
+      "name": "never-published finds no published version",
+      "method": "GET",
+      "path": "/posts",
+      "query": "publicationFilter=never-published&sort=title&fields[0]=title"
+    },
+    {
+      "name": "modified lists drafts edited since publishing",
+      "method": "GET",
+      "path": "/posts",
+      "query": "status=draft&publicationFilter=modified&sort=title&fields[0]=title&fields[1]=views"
+    },
+    {
+      "name": "unmodified lists drafts unchanged since publishing",
+      "method": "GET",
+      "path": "/posts",
+      "query": "status=draft&publicationFilter=unmodified&sort=title&fields[0]=title"
+    },
+    {
+      "name": "modified on published versions",
+      "method": "GET",
+      "path": "/posts",
+      "query": "publicationFilter=modified&sort=title&fields[0]=title&fields[1]=views"
+    },
+    {
+      "name": "published-with-draft lists published versions",
+      "method": "GET",
+      "path": "/posts",
+      "query": "publicationFilter=published-with-draft&sort=title&fields[0]=title"
+    },
+    {
+      "name": "published-without-draft finds none",
+      "method": "GET",
+      "path": "/posts",
+      "query": "publicationFilter=published-without-draft&sort=title&fields[0]=title"
+    },
+    {
+      "name": "published-with-draft finds no draft",
+      "method": "GET",
+      "path": "/posts",
+      "query": "status=draft&publicationFilter=published-with-draft&sort=title&fields[0]=title"
+    },
+    {
+      "name": "hasPublishedVersion=false lists drafts never published",
+      "method": "GET",
+      "path": "/posts",
+      "query": "status=draft&hasPublishedVersion=false&sort=title&fields[0]=title"
+    },
+    {
+      "name": "hasPublishedVersion=true lists drafts that were published",
+      "method": "GET",
+      "path": "/posts",
+      "query": "status=draft&hasPublishedVersion=true&sort=title&fields[0]=title"
+    },
+    {
+      "name": "publicationFilter wins over hasPublishedVersion",
+      "method": "GET",
+      "path": "/posts",
+      "query": "status=draft&publicationFilter=never-published&hasPublishedVersion=true&sort=title&fields[0]=title"
+    },
+    {
+      "name": "publicationFilter combines with filters",
+      "method": "GET",
+      "path": "/posts",
+      "query": "status=draft&publicationFilter=has-published-version&filters[title][$eq]=Live&fields[0]=title"
+    },
+    {
+      "name": "populated draft-and-publish relations inherit it",
+      "method": "GET",
+      "path": "/posts",
+      "query": "status=draft&publicationFilter=never-published&sort=title&fields[0]=title&populate[topics][fields][0]=name&populate[author][fields][0]=name"
+    },
+    {
+      "name": "an unknown publicationFilter is refused",
+      "method": "GET",
+      "path": "/posts",
+      "query": "publicationFilter=sometimes"
+    },
+    {
+      "name": "an unknown hasPublishedVersion is refused",
+      "method": "GET",
+      "path": "/posts",
+      "query": "status=draft&hasPublishedVersion=maybe"
+    },
+    {
+      "name": "a type without draft and publish ignores it",
+      "method": "GET",
+      "path": "/authors",
+      "query": "publicationFilter=never-published&fields[0]=name"
+    },
+    {
+      "name": "findOne applies it",
+      "method": "GET",
+      "path": "/posts/@posts:Live",
+      "query": "status=draft&publicationFilter=never-published&fields[0]=title"
+    },
+    {
+      "name": "findOne finds a match",
+      "method": "GET",
+      "path": "/posts/@posts:Draft",
+      "query": "status=draft&publicationFilter=never-published&fields[0]=title"
+    },
+    {
+      "name": "a locale never published is never-published",
+      "method": "GET",
+      "path": "/pages",
+      "query": "locale=fr&status=draft&publicationFilter=never-published&fields[0]=title&fields[1]=locale"
+    },
+    {
+      "name": "its document was published, so not never-published-document",
+      "method": "GET",
+      "path": "/pages",
+      "query": "locale=fr&status=draft&publicationFilter=never-published-document&fields[0]=title"
+    },
+    {
+      "name": "and has-published-version-document",
+      "method": "GET",
+      "path": "/pages",
+      "query": "locale=fr&status=draft&publicationFilter=has-published-version-document&fields[0]=title&fields[1]=locale"
+    },
+    {
+      "name": "hasPublishedVersion is document-scoped",
+      "method": "GET",
+      "path": "/pages",
+      "query": "locale=fr&status=draft&hasPublishedVersion=true&fields[0]=title&fields[1]=locale"
+    },
+    {
+      "name": "GraphQL never-published, inherited by draft-and-publish relations",
+      "graphql": "query { posts(status: DRAFT, publicationFilter: NEVER_PUBLISHED, sort: \"title\") { title author { name } topics(sort: \"name\") { name } } }"
+    },
+    {
+      "name": "GraphQL has-published-version on published versions",
+      "graphql": "query { posts(publicationFilter: HAS_PUBLISHED_VERSION, sort: \"title\") { title topics(sort: \"name\") { name } } }"
+    },
+    {
+      "name": "GraphQL modified",
+      "graphql": "query { posts(status: DRAFT, publicationFilter: MODIFIED, sort: \"title\") { title views } }"
+    },
+    {
+      "name": "GraphQL hasPublishedVersion false, inherited as never-published-document",
+      "graphql": "query { posts(status: DRAFT, hasPublishedVersion: false, sort: \"title\") { title topics(sort: \"name\") { name } } }"
+    },
+    {
+      "name": "GraphQL hasPublishedVersion true",
+      "graphql": "query { posts(status: DRAFT, hasPublishedVersion: true, sort: \"title\") { title topics(sort: \"name\") { name } } }"
+    },
+    {
+      "name": "GraphQL connection counts the filtered set",
+      "graphql": "query { posts_connection(status: DRAFT, publicationFilter: HAS_PUBLISHED_VERSION) { nodes { title } pageInfo { total } } }"
+    },
+    {
+      "name": "GraphQL single document",
+      "graphql": "query { live: post(documentId: \"@posts:Live\", status: DRAFT, publicationFilter: NEVER_PUBLISHED) { title } draft: post(documentId: \"@posts:Draft\", status: DRAFT, publicationFilter: NEVER_PUBLISHED) { title } }"
+    },
+    {
+      "name": "GraphQL localized, pair and document scoped",
+      "graphql": "query { pair: pages(locale: \"fr\", status: DRAFT, publicationFilter: NEVER_PUBLISHED) { title locale } document: pages(locale: \"fr\", status: DRAFT, publicationFilter: NEVER_PUBLISHED_DOCUMENT) { title } }"
+    },
+    {
+      "name": "GraphQL published-without-draft finds none",
+      "graphql": "query { posts(publicationFilter: PUBLISHED_WITHOUT_DRAFT) { title } }"
+    },
+    {
+      "name": "GraphQL an unknown publicationFilter is refused",
+      "graphql": "query { posts(publicationFilter: SOMETIMES) { title } }"
+    }
+  ]
+}

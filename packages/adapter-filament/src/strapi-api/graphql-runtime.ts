@@ -52,6 +52,10 @@ export const emitStrapiGraphqlTypes = (schema: GraphqlSchema, tokens: boolean): 
         `        ${phpString(r.type)} => ['name' => ${phpString(r.name)}, 'description' => ${r.description === null ? "null" : phpString(r.description)}],`,
     )
     .join("\n");
+  const morphs = schema.types
+    .filter((t) => t.name !== "UploadFile")
+    .map((t) => `        ${phpString(t.uid)} => '${t.name}',`)
+    .join("\n");
   const zones = Object.entries(schema.zoneMembers)
     .map(([union, members]) => `        '${union}' => [${members.map(phpString).join(", ")}],`)
     .join("\n");
@@ -82,6 +86,11 @@ ${components}
     /** A dynamic zone's union → the component types it holds. */
     public const ZONES = [
 ${zones}
+    ];
+
+    /** A content type's uid → its type, for the GenericMorph entries a file is linked from. */
+    public const MORPHS = [
+${morphs}
     ];
 
     /** A plugin's root field → what StrapiGraphqlPlugins answers it with. */
@@ -229,6 +238,11 @@ final class StrapiGraphql
 
             return $config;
         }
+        if ($name === 'GenericMorph') {
+            $config['resolveType'] = fn (mixed $entry) => StrapiGraphqlTypes::MORPHS[is_array($entry) ? ($entry['__type'] ?? '') : ''] ?? null;
+
+            return $config;
+        }
         $scalar = match (true) {
             $name === 'Long' => self::long(),
             in_array($name, ['DateTime', 'Date', 'Time', 'I18NLocaleCode'], true) => self::text($name),
@@ -307,6 +321,9 @@ final class StrapiGraphql
             return StrapiGraphqlPlugins::field($source, $args, $request, $info);
         }
         $name = $info->fieldName;
+        if ($parent === 'UploadFile' && $name === 'related' && ! array_key_exists('related', $source)) {
+            return StrapiGraphqlPlugins::related($source, $request);
+        }
         $type = StrapiGraphqlTypes::TYPES[$parent] ?? StrapiGraphqlTypes::COMPONENTS[$parent] ?? [];
         $key = str_ends_with($name, '_connection') ? substr($name, 0, -strlen('_connection')) : $name;
         if (isset($type['relations'][$key])) {
@@ -325,9 +342,6 @@ final class StrapiGraphql
 
     private static function root(string $root, array $args, Request $request, ResolveInfo $info): mixed
     {
-        if (($args['hasPublishedVersion'] ?? null) !== null || ($args['publicationFilter'] ?? null) !== null) {
-            throw StrapiError::validation('hasPublishedVersion and publicationFilter are not supported');
-        }
         $plugin = StrapiGraphqlTypes::PLUGINS[$info->fieldName] ?? null;
         if ($plugin !== null) {
             return StrapiGraphqlPlugins::root($plugin, $args, $request, $info);
@@ -343,7 +357,11 @@ final class StrapiGraphql
         if (isset($args['locale'])) {
             $params['locale'] = $args['locale'];
         }
-        $context = ['status' => $params['status'] ?? null, 'locale' => $params['locale'] ?? null];
+        $cohort = self::cohort($args);
+        if ($cohort !== null && $action !== 'delete') {
+            $params['publicationFilter'] = $cohort;
+        }
+        $context = ['status' => $params['status'] ?? null, 'locale' => $params['locale'] ?? null, 'cohort' => $params['publicationFilter'] ?? null];
         $key = isset($args['documentId']) ? self::routeKey($type, (string) $args['documentId'], $params, $request) : null;
         $one = fn (?array $body) => $body === null ? null : self::annotate($body['data'], $typeName, $claims, $context);
 
@@ -409,10 +427,13 @@ final class StrapiGraphql
         if ($type['localized'] && $locale !== null) {
             $params['locale'] = $locale;
         }
+        if (($meta['cohort'] ?? null) !== null) {
+            $params['publicationFilter'] = $meta['cohort'];
+        }
         $id = self::routeKey($type, (string) $source['documentId'], $params, $request);
         $body = $id === null ? null : self::found(fn () => self::call($type, 'show', $params, $request, null, $id));
         $value = $body['data'][$key] ?? null;
-        $context = ['status' => $meta['status'] ?? null, 'locale' => $meta['locale'] ?? null];
+        $context = ['status' => $meta['status'] ?? null, 'locale' => $meta['locale'] ?? null, 'cohort' => $meta['cohort'] ?? null];
         if (! is_array($value)) {
             return $value;
         }
@@ -519,6 +540,22 @@ final class StrapiGraphql
         return ! (($skip['if'] ?? false) === true) && ! (($include['if'] ?? true) === false);
     }
 
+    /**
+     * The root's publicationFilter as REST names it, or the deprecated hasPublishedVersion's
+     * document-scoped cohort; Strapi hands either down to every draft-and-publish relation.
+     */
+    private static function cohort(array $args): ?string
+    {
+        if (($args['publicationFilter'] ?? null) !== null) {
+            return str_replace('_', '-', strtolower((string) $args['publicationFilter']));
+        }
+        if (($args['hasPublishedVersion'] ?? null) === null) {
+            return null;
+        }
+
+        return $args['hasPublishedVersion'] ? 'has-published-version-document' : 'never-published-document';
+    }
+
     /** What a relation is fetched with: its filters, in REST's form, and its sort. */
     private static function fetching(array $args, ?Type $filters): array
     {
@@ -531,7 +568,7 @@ final class StrapiGraphql
     /** Annotates a row and the rows populated under it with what their relations were fetched with. */
     private static function annotate(array $wire, string $typeName, array $claims, array $context): array
     {
-        $wire[self::META] = ['claims' => $claims, 'status' => $context['status'], 'locale' => $wire['locale'] ?? $context['locale']];
+        $wire[self::META] = ['claims' => $claims, 'status' => $context['status'], 'locale' => $wire['locale'] ?? $context['locale'], 'cohort' => $context['cohort']];
         $relations = StrapiGraphqlTypes::TYPES[$typeName]['relations'] ?? [];
         foreach ($claims['children'] as $key => $child) {
             $target = $relations[$key] ?? null;

@@ -144,6 +144,23 @@
       "data": {}
     },
     {
+      "name": "populate=related lists the entries a file is linked from, every version and link",
+      "method": "GET",
+      "path": "/upload/files",
+      "query": "populate=related&fields[0]=name"
+    },
+    {
+      "name": "one file's related entries",
+      "method": "GET",
+      "path": "/upload/files/#files:Wide",
+      "query": "populate=related"
+    },
+    {
+      "name": "related stays off the wire unless populated",
+      "method": "GET",
+      "path": "/upload/files/#files:Wide"
+    },
+    {
       "name": "deleting a file returns it",
       "method": "DELETE",
       "path": "/upload/files/#files:Notes"

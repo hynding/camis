@@ -8,10 +8,12 @@
 // __fixtures__/media and the fileInfo sent with it, and `form` adds fields (ref, refId, field).
 // A step with `graphql` posts that query and its `variables` to the GraphQL endpoint (`--graphql`,
 // else /graphql beside the API base); a mutation's `as` names the document its first field returns.
+// A step with only `wait` pauses that many milliseconds, so a later write lands in a later second.
 //
 // usage: strapi-populate-vectors.mjs <api-base> [--token T] [--vectors F] [--expected F] [--graphql URL] [--record]
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { setTimeout as pause } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
@@ -188,6 +190,10 @@ for (const v of vectors.reads)
       ? graphqlOutcome(await graphql(v.graphql, v.variables))
       : outcome(await call("GET", v.path, v.query));
 for (const v of vectors.writes) {
+  if (v.wait !== undefined) {
+    await pause(v.wait);
+    continue;
+  }
   if (v.graphql !== undefined) {
     const response = await graphql(v.graphql, v.variables);
     const target = Object.values(response.body.data ?? {})[0];

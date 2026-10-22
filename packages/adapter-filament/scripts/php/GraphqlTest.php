@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Models\Book;
+use App\Models\File;
 use App\Models\Note;
+use App\Models\Post;
 use App\Models\User;
 use App\Support\StrapiApiTokens;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -131,5 +133,30 @@ class GraphqlTest extends TestCase
             ->assertJsonPath('errors.0.extensions.code', 'FORBIDDEN');
         $this->graphql('{ me { username } }', $books)->assertJsonPath('errors.0.extensions.code', 'FORBIDDEN');
         $this->assertSame(1, Book::count());
+    }
+
+    /** strapi-php answers UploadFile.related with an internal error; this is the REST populate's answer. */
+    public function test_a_files_related_entries_are_those_the_caller_may_read(): void
+    {
+        $file = File::query()->forceCreate(['name' => 'wide.png', 'hash' => 'wide', 'mime' => 'image/png', 'size' => 1.5, 'url' => '/uploads/wide.png', 'provider' => 'local']);
+        $book = Book::query()->forceCreate(['title' => 'Covered', 'document_id' => 'covered00000000000000000']);
+        $book->cover()->attach($file->getKey(), ['order' => 1]);
+        $post = Post::query()->forceCreate(['title' => 'Pictured', 'document_id' => 'pictured0000000000000000']);
+        $post->image()->attach($file->getKey(), ['order' => 1]);
+        $query = '{ uploadFiles { name related { __typename ... on Book { title } ... on Post { title } } } }';
+
+        $full = StrapiApiTokens::create(['name' => 'full', 'type' => 'full-access'])['accessKey'];
+        $this->graphql($query, $full)->assertJsonPath('data.uploadFiles.0.related', [
+            ['__typename' => 'Book', 'title' => 'Covered'],
+            ['__typename' => 'Post', 'title' => 'Pictured'],
+        ]);
+
+        $books = StrapiApiTokens::create(['name' => 'books', 'type' => 'custom', 'permissions' => ['plugin::upload.content-api.find', 'api::book.book.find']])['accessKey'];
+        $this->graphql($query, $books)->assertJsonPath('data.uploadFiles.0.related', [['__typename' => 'Book', 'title' => 'Covered']]);
+        $this->app['auth']->forgetGuards();
+        $this->getJson('/api/upload/files?populate=related', ['Authorization' => 'Bearer '.$books])
+            ->assertOk()
+            ->assertJsonPath('0.related.0.__type', 'api::book.book')
+            ->assertJsonCount(1, '0.related');
     }
 }
