@@ -45,7 +45,6 @@ const oracle = blocks(
 );
 
 // What strapi-php's schema has that a later part brings: the morph links of a file.
-const LATER = /^GenericMorph$/;
 
 describe("GraphQL", () => {
   it("is generated only when the project asks for it", () => {
@@ -99,9 +98,8 @@ describe("GraphQL", () => {
       expect(shape(ours.get(name)!), name).toEqual(shape(oracle.get(name)!));
   });
 
-  it("leaves out only the types later phases bring", () => {
-    const missing = [...oracle.keys()].filter((name) => !ours.has(name));
-    expect(missing.filter((name) => !LATER.test(name))).toEqual([]);
+  it("leaves out none of Strapi's types", () => {
+    expect([...oracle.keys()].filter((name) => !ours.has(name))).toEqual([]);
   });
 
   it("offers each content type's queries and mutations as Strapi does", () => {
@@ -119,11 +117,17 @@ describe("GraphQL", () => {
     expect(features).not.toContain("graphqlApiTokens");
   });
 
-  it("serves the media library's files without their morph links", () => {
-    const theirs = fields(oracle.get("UploadFile")!);
-    theirs.delete("related");
-    expect(fields(ours.get("UploadFile") ?? "")).toEqual(theirs);
-    expect(result.gaps.gaps.map((g) => g.feature)).toContain("graphqlMorphRelations");
+  // strapi-php answers UploadFile.related with an internal error, so the links are checked by
+  // media-vectors.json over REST and by GraphqlTest.php here.
+  it("serves the media library's files with the entries they are linked from", () => {
+    expect(fields(ours.get("UploadFile") ?? "")).toEqual(fields(oracle.get("UploadFile")!));
+    expect(ours.get("GenericMorph")).toBe(oracle.get("GenericMorph"));
+    expect(result.gaps.gaps.map((g) => g.feature)).not.toContain("graphqlMorphRelations");
+  });
+
+  // publication-filter-vectors.json, recorded from strapi-php, is the behaviour.
+  it("serves publicationFilter and hasPublishedVersion", () => {
+    expect(result.gaps.gaps.map((g) => g.feature)).not.toContain("graphqlPublicationFilter");
   });
 
   it("tells the deploy how the endpoint is installed and cached", () => {

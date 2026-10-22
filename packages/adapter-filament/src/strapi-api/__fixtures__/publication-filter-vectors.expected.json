@@ -1,0 +1,363 @@
+{
+  "edit a published post's draft": {
+    "status": 200,
+    "data": {
+      "title": "Edited"
+    }
+  },
+  "never-published lists drafts never published": {
+    "status": 200,
+    "data": [
+      {
+        "title": "Draft"
+      },
+      {
+        "title": "Linked"
+      }
+    ]
+  },
+  "has-published-version lists drafts that were published": {
+    "status": 200,
+    "data": [
+      {
+        "title": "Edited"
+      },
+      {
+        "title": "Live"
+      }
+    ]
+  },
+  "has-published-version on published versions": {
+    "status": 200,
+    "data": [
+      {
+        "title": "Edited"
+      },
+      {
+        "title": "Live"
+      }
+    ]
+  },
+  "never-published finds no published version": {
+    "status": 200,
+    "data": []
+  },
+  "modified lists drafts edited since publishing": {
+    "status": 200,
+    "data": [
+      {
+        "title": "Edited",
+        "views": 5
+      }
+    ]
+  },
+  "unmodified lists drafts unchanged since publishing": {
+    "status": 200,
+    "data": [
+      {
+        "title": "Live"
+      }
+    ]
+  },
+  "modified on published versions": {
+    "status": 200,
+    "data": [
+      {
+        "title": "Edited",
+        "views": 1
+      }
+    ]
+  },
+  "published-with-draft lists published versions": {
+    "status": 200,
+    "data": [
+      {
+        "title": "Edited"
+      },
+      {
+        "title": "Live"
+      }
+    ]
+  },
+  "published-without-draft finds none": {
+    "status": 200,
+    "data": []
+  },
+  "published-with-draft finds no draft": {
+    "status": 200,
+    "data": []
+  },
+  "hasPublishedVersion=false lists drafts never published": {
+    "status": 200,
+    "data": [
+      {
+        "title": "Draft"
+      },
+      {
+        "title": "Linked"
+      }
+    ]
+  },
+  "hasPublishedVersion=true lists drafts that were published": {
+    "status": 200,
+    "data": [
+      {
+        "title": "Edited"
+      },
+      {
+        "title": "Live"
+      }
+    ]
+  },
+  "publicationFilter wins over hasPublishedVersion": {
+    "status": 200,
+    "data": [
+      {
+        "title": "Draft"
+      },
+      {
+        "title": "Linked"
+      }
+    ]
+  },
+  "publicationFilter combines with filters": {
+    "status": 200,
+    "data": [
+      {
+        "title": "Live"
+      }
+    ]
+  },
+  "populated draft-and-publish relations inherit it": {
+    "status": 200,
+    "data": [
+      {
+        "author": {
+          "name": "Ann"
+        },
+        "title": "Draft",
+        "topics": []
+      },
+      {
+        "title": "Linked",
+        "topics": [
+          {
+            "name": "DraftOnly"
+          }
+        ]
+      }
+    ]
+  },
+  "an unknown publicationFilter is refused": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid value for 'publicationFilter'. Expected one of: never-published, has-published-version, modified, unmodified, never-published-document, has-published-version-document, published-without-draft, published-with-draft."
+    }
+  },
+  "an unknown hasPublishedVersion is refused": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid value for 'hasPublishedVersion'. Expected boolean or 'true'/'false' string."
+    }
+  },
+  "a type without draft and publish ignores it": {
+    "status": 200,
+    "data": [
+      {
+        "name": "Ann"
+      }
+    ]
+  },
+  "findOne applies it": {
+    "status": 404,
+    "error": {
+      "name": "NotFoundError",
+      "message": "Not Found"
+    }
+  },
+  "findOne finds a match": {
+    "status": 200,
+    "data": {
+      "title": "Draft"
+    }
+  },
+  "a locale never published is never-published": {
+    "status": 200,
+    "data": [
+      {
+        "locale": "fr",
+        "title": "Accueil"
+      }
+    ]
+  },
+  "its document was published, so not never-published-document": {
+    "status": 200,
+    "data": []
+  },
+  "and has-published-version-document": {
+    "status": 200,
+    "data": [
+      {
+        "locale": "fr",
+        "title": "Accueil"
+      }
+    ]
+  },
+  "hasPublishedVersion is document-scoped": {
+    "status": 200,
+    "data": [
+      {
+        "locale": "fr",
+        "title": "Accueil"
+      }
+    ]
+  },
+  "GraphQL never-published, inherited by draft-and-publish relations": {
+    "data": {
+      "posts": [
+        {
+          "author": {
+            "name": "Ann"
+          },
+          "title": "Draft",
+          "topics": []
+        },
+        {
+          "author": null,
+          "title": "Linked",
+          "topics": [
+            {
+              "name": "DraftOnly"
+            }
+          ]
+        }
+      ]
+    },
+    "errors": []
+  },
+  "GraphQL has-published-version on published versions": {
+    "data": {
+      "posts": [
+        {
+          "title": "Edited",
+          "topics": []
+        },
+        {
+          "title": "Live",
+          "topics": [
+            {
+              "name": "Live"
+            }
+          ]
+        }
+      ]
+    },
+    "errors": []
+  },
+  "GraphQL modified": {
+    "data": {
+      "posts": [
+        {
+          "title": "Edited",
+          "views": 5
+        }
+      ]
+    },
+    "errors": []
+  },
+  "GraphQL hasPublishedVersion false, inherited as never-published-document": {
+    "data": {
+      "posts": [
+        {
+          "title": "Draft",
+          "topics": []
+        },
+        {
+          "title": "Linked",
+          "topics": [
+            {
+              "name": "DraftOnly"
+            }
+          ]
+        }
+      ]
+    },
+    "errors": []
+  },
+  "GraphQL hasPublishedVersion true": {
+    "data": {
+      "posts": [
+        {
+          "title": "Edited",
+          "topics": []
+        },
+        {
+          "title": "Live",
+          "topics": [
+            {
+              "name": "Live"
+            }
+          ]
+        }
+      ]
+    },
+    "errors": []
+  },
+  "GraphQL connection counts the filtered set": {
+    "data": {
+      "posts_connection": {
+        "nodes": [
+          {
+            "title": "Live"
+          },
+          {
+            "title": "Edited"
+          }
+        ],
+        "pageInfo": {
+          "total": 2
+        }
+      }
+    },
+    "errors": []
+  },
+  "GraphQL single document": {
+    "data": {
+      "draft": {
+        "title": "Draft"
+      },
+      "live": null
+    },
+    "errors": []
+  },
+  "GraphQL localized, pair and document scoped": {
+    "data": {
+      "document": [],
+      "pair": [
+        {
+          "locale": "fr",
+          "title": "Accueil"
+        }
+      ]
+    },
+    "errors": []
+  },
+  "GraphQL published-without-draft finds none": {
+    "data": {
+      "posts": []
+    },
+    "errors": []
+  },
+  "GraphQL an unknown publicationFilter is refused": {
+    "data": null,
+    "errors": [
+      {
+        "message": "Value \"SOMETIMES\" does not exist in \"PublicationFilter\" enum.",
+        "code": "GRAPHQL_VALIDATION_FAILED",
+        "path": null
+      }
+    ]
+  }
+}

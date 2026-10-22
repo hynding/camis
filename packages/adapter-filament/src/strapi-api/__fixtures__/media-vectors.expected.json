@@ -370,6 +370,171 @@
       "title": "Pictured"
     }
   },
+  "populate=related lists the entries a file is linked from, every version and link": {
+    "status": 200,
+    "data": [
+      {
+        "isUrlSigned": false,
+        "name": "wide.png",
+        "related": [
+          {
+            "__type": "api::book.book",
+            "title": "Covered"
+          },
+          {
+            "__type": "api::post.post",
+            "title": "Pictured"
+          },
+          {
+            "__type": "api::post.post",
+            "title": "Pictured"
+          }
+        ]
+      },
+      {
+        "isUrlSigned": false,
+        "name": "renamed.txt",
+        "related": [
+          {
+            "__type": "api::book.book",
+            "title": "Covered"
+          }
+        ]
+      },
+      {
+        "isUrlSigned": false,
+        "name": "notes.txt",
+        "related": [
+          {
+            "__type": "api::book.book",
+            "title": "ByDocument"
+          }
+        ]
+      }
+    ]
+  },
+  "one file's related entries": {
+    "status": 200,
+    "data": {
+      "alternativeText": "red",
+      "caption": "A red box",
+      "ext": ".png",
+      "formats": {
+        "large": {
+          "ext": ".png",
+          "hash": "large_wide_<hash>",
+          "height": 667,
+          "mime": "image/png",
+          "name": "large_wide.png",
+          "url": "/uploads/large_wide_<hash>.png",
+          "width": 1000
+        },
+        "medium": {
+          "ext": ".png",
+          "hash": "medium_wide_<hash>",
+          "height": 500,
+          "mime": "image/png",
+          "name": "medium_wide.png",
+          "url": "/uploads/medium_wide_<hash>.png",
+          "width": 750
+        },
+        "small": {
+          "ext": ".png",
+          "hash": "small_wide_<hash>",
+          "height": 333,
+          "mime": "image/png",
+          "name": "small_wide.png",
+          "url": "/uploads/small_wide_<hash>.png",
+          "width": 500
+        },
+        "thumbnail": {
+          "ext": ".png",
+          "hash": "thumbnail_wide_<hash>",
+          "height": 156,
+          "mime": "image/png",
+          "name": "thumbnail_wide.png",
+          "url": "/uploads/thumbnail_wide_<hash>.png",
+          "width": 234
+        }
+      },
+      "hash": "wide_<hash>",
+      "height": 800,
+      "isUrlSigned": false,
+      "mime": "image/png",
+      "name": "wide.png",
+      "provider": "local",
+      "related": [
+        {
+          "__type": "api::book.book",
+          "title": "Covered"
+        },
+        {
+          "__type": "api::post.post",
+          "title": "Pictured"
+        },
+        {
+          "__type": "api::post.post",
+          "title": "Pictured"
+        }
+      ],
+      "url": "/uploads/wide_<hash>.png",
+      "width": 1200
+    }
+  },
+  "related stays off the wire unless populated": {
+    "status": 200,
+    "data": {
+      "alternativeText": "red",
+      "caption": "A red box",
+      "ext": ".png",
+      "formats": {
+        "large": {
+          "ext": ".png",
+          "hash": "large_wide_<hash>",
+          "height": 667,
+          "mime": "image/png",
+          "name": "large_wide.png",
+          "url": "/uploads/large_wide_<hash>.png",
+          "width": 1000
+        },
+        "medium": {
+          "ext": ".png",
+          "hash": "medium_wide_<hash>",
+          "height": 500,
+          "mime": "image/png",
+          "name": "medium_wide.png",
+          "url": "/uploads/medium_wide_<hash>.png",
+          "width": 750
+        },
+        "small": {
+          "ext": ".png",
+          "hash": "small_wide_<hash>",
+          "height": 333,
+          "mime": "image/png",
+          "name": "small_wide.png",
+          "url": "/uploads/small_wide_<hash>.png",
+          "width": 500
+        },
+        "thumbnail": {
+          "ext": ".png",
+          "hash": "thumbnail_wide_<hash>",
+          "height": 156,
+          "mime": "image/png",
+          "name": "thumbnail_wide.png",
+          "url": "/uploads/thumbnail_wide_<hash>.png",
+          "width": 234
+        }
+      },
+      "hash": "wide_<hash>",
+      "height": 800,
+      "isUrlSigned": false,
+      "mime": "image/png",
+      "name": "wide.png",
+      "provider": "local",
+      "url": "/uploads/wide_<hash>.png",
+      "width": 1200
+    }
+  },
   "deleting a file returns it": {
     "status": 200,
     "data": {
