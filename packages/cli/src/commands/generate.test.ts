@@ -238,6 +238,21 @@ describe("generateCommand strapi style", () => {
     const camis = spy.mock.calls[0]![0].files.find((f) => f.path === "config/camis.php")!;
     expect(camis.content).toContain("env('CAMIS_REST_ALWAYS_POPULATE_COMPONENTS', true)");
   });
+  it("passes documentation through to the Filament target", async () => {
+    const spy = vi.fn(() => Promise.resolve()) as MockedFunction<
+      (r: GenerationResult, d: string) => Promise<void>
+    >;
+    const config = JSON.parse(filamentConfig) as { targets: Record<string, unknown>[] };
+    config.targets[0]!.documentation = true;
+    files["/p/camis.config.json"] = JSON.stringify(config);
+    try {
+      await generateCommand("camis.config.json", mk([], spy), { write: true });
+    } finally {
+      files["/p/camis.config.json"] = filamentConfig;
+    }
+    const paths = spy.mock.calls[0]![0].files.map((f) => f.path);
+    expect(paths).toContain("public/documentation/openapi.json");
+  });
   it("does not copy on dry-run", async () => {
     const copy = vi.fn(() => Promise.resolve());
     await generateCommand("camis.config.json", mk([], undefined, copy), { write: false });

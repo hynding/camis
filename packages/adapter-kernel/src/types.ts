@@ -39,6 +39,11 @@ export interface GenerateOptions {
   alwaysPopulateComponents?: boolean;
   /** Filament, Strapi API style only: serve Strapi 5's GraphQL content API at /graphql. Default false. */
   graphql?: boolean;
+  /**
+   * Filament, Strapi API style only: write Strapi 5's OpenAPI 3.1 document and serve Swagger UI
+   * at /documentation. Default false.
+   */
+  documentation?: boolean;
 }
 
 export interface GenerationResult {

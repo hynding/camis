@@ -114,8 +114,26 @@ changes, so that directory must stay writable, as Laravel's own caches need it t
 \`CAMIS_GRAPHQL_DEFAULT_LIMIT\` (default 10) and \`CAMIS_GRAPHQL_MAX_LIMIT\` (default -1, no cap)
 are Strapi's graphql \`defaultLimit\` and \`maxLimit\`.`;
 
+/** Strapi's OpenAPI document and the Swagger UI page beside it, both static files. */
+const documentationSection = `
+
+## API documentation
+
+\`/documentation\` is Swagger UI reading \`public/documentation/openapi.json\`, Strapi 5's OpenAPI 3.1
+document for this API, written by \`camis build\` from the IR. Both are static files under
+\`public/\`, so the web server sends them without starting PHP, and they change only when the
+project is rebuilt. The page loads Swagger UI from jsDelivr, pinned to one release and checked
+against its integrity hash. Anyone who can reach the site can read the document, as with
+Strapi's documentation plugin by default; to keep it private, protect \`public/documentation/\`
+in the web server (an \`.htaccess\` with basic auth on Apache) or build without
+\`documentation\`.`;
+
 // Generator-owned deployment guide for the overlaid Laravel app. Regenerated on every run.
-export const deployFile = (layout: StorageLayout = "laravel", graphql = false): GeneratedFile => ({
+export const deployFile = (
+  layout: StorageLayout = "laravel",
+  graphql = false,
+  documentation = false,
+): GeneratedFile => ({
   path: "DEPLOY.md",
   content: `<!-- @camis:generated — do not edit -->
 
@@ -153,7 +171,7 @@ DB_PASSWORD=secret
 
 ${firstDeploy(layout)}
 
-${graphql ? graphqlSection.slice(2) + "\n\n" : ""}## Shared hosting (no shell)
+${graphql ? graphqlSection.slice(2) + "\n\n" : ""}${documentation ? documentationSection.slice(2) + "\n\n" : ""}## Shared hosting (no shell)
 
 Build locally (scaffold + \`camis build\` + \`composer install\`), upload the whole app
 directory, and point the document root at \`public/\`. Laravel's \`.htaccess\` ships in

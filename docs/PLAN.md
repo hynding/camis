@@ -895,6 +895,33 @@ no GraphQL. A single type is served as a collection, as on REST.
 
 ---
 
+## Phase 29 — OpenAPI, data transfer (`adapter-kernel`, `cli`, `adapter-filament`)
+
+**Part 1 — the OpenAPI document and Swagger UI.** With the project option `documentation: true`
+(`camis.config.json`), the Strapi API style on laravel storage writes Strapi 5's OpenAPI 3.1
+document (`strapi openapi:generate`, `strapi/openapi`) to `public/documentation/openapi.json` and
+Swagger UI beside it, so `/documentation` serves both as static files: no PHP, no Node, no
+cache to warm. The document is built at generation time from the IR, reproducing the JSON Schema
+Strapi's Zod route validators produce: each content type's five core routes with their query
+parameters (`fields`, `filters`, `_q`, `pagination`, `sort`, `populate`, plus `locale` and the
+draft-and-publish ones where they apply), request bodies and response documents, and the
+registered schemas the documents refer to (relation and media targets, components). The
+users-permissions, upload and i18n routes carry fixed, hand-written schemas in Strapi; they come
+from `openapi-plugins.json`, recorded from strapi-php, and appear only when the project has the
+plugin. Swagger UI comes from jsDelivr, pinned and integrity-checked.
+
+Part 1's exit: `openapi.strapi-php.json`, written by strapi-php's `openapi:generate` with the
+fixture's types added to its example project, equals ours route for route and schema for schema,
+except the routes camis does not serve (the content-type builder, `POST /email`,
+`GET /upload/files/page`); the boot job checks that `/documentation` answers and that each of
+the 101 documented operations is a registered route. Strapi gives every `publishedAt` a default
+that is the moment it ran; the generated document leaves it out (no timestamps in codegen) and
+keeps the `required` it implies. `servers` is `/api`, where the routes are, rather than Strapi's
+empty URL. The documentation plugin's OpenAPI 3.0 variant (with its admin-only fields) is not
+generated.
+
+---
+
 ## Sequencing rationale (quick reference)
 
 1. **Strapi first** — mature schema validates the IR fastest, with the thinnest adapter.

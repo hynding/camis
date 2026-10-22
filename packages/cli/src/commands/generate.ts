@@ -82,6 +82,7 @@ export const generateCommand = async (
           ? { alwaysPopulateComponents: t.alwaysPopulateComponents }
           : {}),
         ...(t.graphql !== undefined ? { graphql: t.graphql } : {}),
+        ...(t.documentation !== undefined ? { documentation: t.documentation } : {}),
       },
     );
     const errorGap = printGaps(io, result.gaps.gaps);
