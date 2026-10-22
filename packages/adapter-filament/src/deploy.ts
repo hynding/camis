@@ -133,9 +133,9 @@ const transferSection = `
 
 ## Moving data in from Strapi
 
-\`php artisan strapi:import --file=export.tar.gz\` reads an archive Strapi's \`strapi export\` wrote
-(\`--no-encrypt\`; \`.tar\` or \`.tar.gz\`) and, as \`strapi import\` does, replaces this app's
-content with it: every entry keeps its documentId, timestamps, components, links, draft and
+\`php artisan strapi:import --file=export.tar.gz.enc --key=…\` reads an archive Strapi's
+\`strapi export\` wrote (encrypted with \`--key\`, or \`.tar\` / \`.tar.gz\` from \`--no-encrypt\`) and,
+as \`strapi import\` does, replaces this app's content with it: every entry keeps its documentId, timestamps, components, links, draft and
 published versions and locales, and the files' bytes go to the upload disk. \`--only\` and
 \`--exclude\` take Strapi's \`content\`, \`files\` and \`config\`; \`--force\` skips the prompt. Users
 are matched by email and keep their password hashes, so they sign in as before; accounts the

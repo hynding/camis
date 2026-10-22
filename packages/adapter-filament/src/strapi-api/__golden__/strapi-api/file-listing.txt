@@ -205,6 +205,7 @@ overwrite app/Support/StrapiQuery.php
 overwrite app/Support/StrapiRelations.php
 overwrite app/Support/StrapiSessions.php
 overwrite app/Support/StrapiSettings.php
+overwrite app/Support/StrapiTransferCipher.php
 overwrite app/Support/StrapiTransferMap.php
 overwrite app/Support/StrapiUpload.php
 overwrite app/Support/StrapiUsers.php

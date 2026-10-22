@@ -1,7 +1,8 @@
 import { PHP_MARKER } from "../hooks/names";
 
 /**
- * Strapi's data import, restore strategy: an archive `strapi export` wrote (`.tar`, `.tar.gz`)
+ * Strapi's data import, restore strategy: an archive `strapi export` wrote (`.tar`, `.tar.gz`,
+ * `.tar.gz.enc`)
  * replaces this app's content, files and configuration. Everything `StrapiTransferMap` names is
  * deleted, then every archived entry is inserted with its documentId and timestamps, then its
  * links, then the files' bytes. Ids are this database's own: links are resolved through the map
@@ -83,8 +84,11 @@ final class StrapiImport
         if ($bytes === false) {
             throw new \RuntimeException("Cannot read {$path}");
         }
-        if (str_ends_with($path, '.enc')) {
-            throw new \RuntimeException('Decrypting an archive is not supported yet; export it with --no-encrypt');
+        if (str_ends_with($path, '.enc') || ($key !== null && ! str_starts_with($bytes, "\x1f\x8b"))) {
+            if ($key === null) {
+                throw new \RuntimeException('The archive is encrypted: pass its key with --key');
+            }
+            $bytes = StrapiTransferCipher::decrypt($bytes, $key);
         }
         if (str_starts_with($bytes, "\x1f\x8b")) {
             $bytes = gzdecode($bytes);

@@ -87,6 +87,7 @@ import {
   IMPORT_ENGINE_PATH,
   TRANSFER_MAP_PATH,
 } from "./transfer";
+import { emitStrapiTransferCipher, TRANSFER_CIPHER_PATH } from "./transfer-cipher";
 import { emitStrapiImport } from "./transfer-runtime";
 import { wireShape, type WireShape } from "./wire-shape";
 import { emitStrapiZones } from "./zones-runtime";
@@ -322,6 +323,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
   files.push(
     { path: TRANSFER_MAP_PATH, content: transfer.content },
     { path: IMPORT_ENGINE_PATH, content: emitStrapiImport() },
+    { path: TRANSFER_CIPHER_PATH, content: emitStrapiTransferCipher() },
     { path: IMPORT_COMMAND_PATH, content: emitStrapiImportCommand() },
   );
   return { files, gaps, scopeMethods };
