@@ -10,6 +10,8 @@ import { strapiApiBundle } from "./__fixtures__/strapi-api";
 // imported app answers is read-vectors.json, recorded from strapi-php after it imported the same
 // archive; the boot job replays it. Here: the command exists, and every entity type and link the
 // archive holds has somewhere to go.
+const IMPORT_ENGINE = "app/Support/StrapiImport.php";
+
 const generate = (options: { apiStyle?: "strapi" | "laravel"; storageLayout?: "strapi" } = {}) =>
   filamentAdapter.generate(strapiApiBundle, { projectName: "oyl", apiStyle: "strapi", ...options });
 
@@ -80,5 +82,12 @@ describe("Strapi data import", () => {
 
   it("tells the deploy how to move a Strapi project's data in", () => {
     expect(content("DEPLOY.md")).toContain("php artisan strapi:import");
+  });
+
+  // Strapi encrypts an export unless told not to; the boot job imports
+  // strapi-php-export.tar.gz.enc (the same data, `strapi export -k camis-fixture-key`).
+  it("reads an encrypted archive with the key it was exported with", () => {
+    expect(content(IMPORT_ENGINE)).not.toContain("not supported");
+    expect(content("DEPLOY.md")).toContain("--key");
   });
 });

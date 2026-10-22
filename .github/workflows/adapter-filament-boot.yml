@@ -282,6 +282,18 @@ jobs:
             http://127.0.0.1:8765/api/auth/local/register | jq -r .jwt)
           node ../packages/adapter-filament/scripts/strapi-populate-vectors.mjs http://127.0.0.1:8765/api \
             --token "$T" --vectors $F/read-vectors.json --expected $F/read-vectors.expected.json
+      - name: Strapi data import, encrypted (the same archive, as `strapi export -k` writes it)
+        run: |
+          cd app
+          F=../packages/adapter-filament/src/strapi-api/__fixtures__/transfer
+          php artisan strapi:import --file=$F/strapi-php-export.tar.gz.enc --key=camis-fixture-key --force
+          curl -sf -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' \
+            --data '{"identifier":"alice","password":"secret123"}' http://127.0.0.1:8765/api/auth/local | jq -e .jwt > /dev/null
+          T=$(curl -s -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' \
+            --data '{"identifier":"reader@example.test","password":"secret1"}' \
+            http://127.0.0.1:8765/api/auth/local | jq -r .jwt)
+          node ../packages/adapter-filament/scripts/strapi-populate-vectors.mjs http://127.0.0.1:8765/api \
+            --token "$T" --vectors $F/read-vectors.json --expected $F/read-vectors.expected.json
       - name: Strapi GraphQL plugin vectors (sign-in, users, roles, locales, files, API tokens; recorded from strapi-php)
         run: |
           cd app
