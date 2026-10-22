@@ -80,6 +80,14 @@ import {
   emitStrapiGraphqlTypes,
   GRAPHQL_SCHEMA_PATH,
 } from "./graphql-runtime";
+import {
+  emitStrapiImportCommand,
+  emitStrapiTransferMap,
+  IMPORT_COMMAND_PATH,
+  IMPORT_ENGINE_PATH,
+  TRANSFER_MAP_PATH,
+} from "./transfer";
+import { emitStrapiImport } from "./transfer-runtime";
 import { wireShape, type WireShape } from "./wire-shape";
 import { emitStrapiZones } from "./zones-runtime";
 import { emitUserResourceFiles, emitUsersPermissionsSettingsPage } from "./users-permissions-admin";
@@ -302,6 +310,20 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
       { path: DOCUMENTATION_PAGE_PATH, content: emitDocumentationPage(projectName) },
     );
   }
+  const transfer = emitStrapiTransferMap({
+    emitted,
+    shapes,
+    userType: doc.contentTypes.find((ct) => ct.builtin === "user")?.name,
+    media: input.media !== undefined,
+    localized: localized.size > 0,
+    defaultRole: bundle.defaultRole,
+  });
+  gaps.push(...transfer.gaps);
+  files.push(
+    { path: TRANSFER_MAP_PATH, content: transfer.content },
+    { path: IMPORT_ENGINE_PATH, content: emitStrapiImport() },
+    { path: IMPORT_COMMAND_PATH, content: emitStrapiImportCommand() },
+  );
   return { files, gaps, scopeMethods };
 };
 

@@ -128,11 +128,35 @@ Strapi's documentation plugin by default; to keep it private, protect \`public/d
 in the web server (an \`.htaccess\` with basic auth on Apache) or build without
 \`documentation\`.`;
 
+/** Strapi's data import: moving a Strapi project's content, files and settings in. */
+const transferSection = `
+
+## Moving data in from Strapi
+
+\`php artisan strapi:import --file=export.tar.gz\` reads an archive Strapi's \`strapi export\` wrote
+(\`--no-encrypt\`; \`.tar\` or \`.tar.gz\`) and, as \`strapi import\` does, replaces this app's
+content with it: every entry keeps its documentId, timestamps, components, links, draft and
+published versions and locales, and the files' bytes go to the upload disk. \`--only\` and
+\`--exclude\` take Strapi's \`content\`, \`files\` and \`config\`; \`--force\` skips the prompt. Users
+are matched by email and keep their password hashes, so they sign in as before; accounts the
+archive lacks, such as the admin's, are kept. A user's Strapi role becomes the camis role of the
+same name, else the default one. Roles' permissions are not imported: the IR's grants are the
+permissions. The import refuses an archive holding a content type or attribute this project
+lacks, and names each one. On shared hosting without a shell, import locally against the
+production database and upload the files under \`public/uploads\`.`;
+
+/** What DEPLOY.md adds for the opt-in features this build includes. */
+export interface DeployExtras {
+  graphql?: boolean;
+  documentation?: boolean;
+  /** \`strapi:import\`: the Strapi API style over Laravel storage. */
+  transfer?: boolean;
+}
+
 // Generator-owned deployment guide for the overlaid Laravel app. Regenerated on every run.
 export const deployFile = (
   layout: StorageLayout = "laravel",
-  graphql = false,
-  documentation = false,
+  { graphql = false, documentation = false, transfer = false }: DeployExtras = {},
 ): GeneratedFile => ({
   path: "DEPLOY.md",
   content: `<!-- @camis:generated — do not edit -->
@@ -171,7 +195,7 @@ DB_PASSWORD=secret
 
 ${firstDeploy(layout)}
 
-${graphql ? graphqlSection.slice(2) + "\n\n" : ""}${documentation ? documentationSection.slice(2) + "\n\n" : ""}## Shared hosting (no shell)
+${graphql ? graphqlSection.slice(2) + "\n\n" : ""}${documentation ? documentationSection.slice(2) + "\n\n" : ""}${transfer ? transferSection.slice(2) + "\n\n" : ""}## Shared hosting (no shell)
 
 Build locally (scaffold + \`camis build\` + \`composer install\`), upload the whole app
 directory, and point the document root at \`public/\`. Laravel's \`.htaccess\` ships in
