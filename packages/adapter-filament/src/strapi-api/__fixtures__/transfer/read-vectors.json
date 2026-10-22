@@ -1,0 +1,44 @@
+{
+  "about": "What strapi-php answers after `php bin/strapi import -f strapi-php-export.tar.gz --force` into an empty project (the same answers as on the project it was exported from), and what camis must answer after `php artisan strapi:import strapi-php-export.tar.gz --force` into an empty app. documentIds are compared too: an import keeps every document's.",
+  "compare": ["documentId"],
+  "seed": [],
+  "reads": [
+    {
+      "name": "authors and their books",
+      "path": "/authors",
+      "query": "sort=name&populate[books][sort]=title"
+    },
+    { "name": "genres", "path": "/genres", "query": "sort=name" },
+    { "name": "books with everything", "path": "/books", "query": "sort=title&populate=*" },
+    {
+      "name": "a book's components and media in full",
+      "path": "/books",
+      "query": "filters[title][$eq]=Alpha&populate[price]=true&populate[editions]=true&populate[cover]=true&populate[attachments][sort]=name"
+    },
+    { "name": "published topics", "path": "/topics", "query": "sort=name" },
+    { "name": "draft topics", "path": "/topics", "query": "sort=name&status=draft" },
+    {
+      "name": "published posts with their links",
+      "path": "/posts",
+      "query": "sort=title&populate[author]=true&populate[topics][sort]=name&populate[image]=true"
+    },
+    {
+      "name": "draft posts",
+      "path": "/posts",
+      "query": "sort=title&status=draft&populate[author]=true&populate[topics][sort]=name"
+    },
+    { "name": "categories in every locale", "path": "/categories", "query": "sort=name&locale=*" },
+    { "name": "articles in English", "path": "/articles", "query": "populate=*" },
+    { "name": "articles in French", "path": "/articles", "query": "locale=fr&populate=*" },
+    { "name": "pages, published", "path": "/pages", "query": "locale=*" },
+    { "name": "pages, drafts", "path": "/pages", "query": "locale=*&status=draft&sort=title" },
+    {
+      "name": "landings and their zone",
+      "path": "/landings",
+      "query": "populate[blocks][populate]=*"
+    },
+    { "name": "the files", "path": "/upload/files", "query": "sort=name" },
+    { "name": "the locales", "path": "/i18n/locales" }
+  ],
+  "writes": []
+}

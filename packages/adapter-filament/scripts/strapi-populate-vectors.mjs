@@ -9,6 +9,7 @@
 // A step with `graphql` posts that query and its `variables` to the GraphQL endpoint (`--graphql`,
 // else /graphql beside the API base); a mutation's `as` names the document its first field returns.
 // A step with only `wait` pauses that many milliseconds, so a later write lands in a later second.
+// A file's `compare` lists server-assigned keys to compare after all (`documentId`).
 //
 // usage: strapi-populate-vectors.mjs <api-base> [--token T] [--vectors F] [--expected F] [--graphql URL] [--record]
 import { readFileSync, writeFileSync } from "node:fs";
@@ -103,7 +104,12 @@ const graphql = async (query, variables) => {
 const publishedAtPresence = vectors.publishedAt === "presence";
 // A stored file's hash (and so its url) ends in random hex, and an image's byte size depends on
 // the encoder that resized it (sharp, GD), so neither is compared.
-const VOLATILE = new Set(["id", "documentId", "createdAt", "updatedAt"]);
+// A vector file's `compare` keeps some of them: an import keeps every documentId.
+const VOLATILE = new Set(
+  ["id", "documentId", "createdAt", "updatedAt"].filter(
+    (k) => !(vectors.compare ?? []).includes(k),
+  ),
+);
 const RANDOM_SUFFIX = /_[0-9a-f]{10}(?=\.|$)/g;
 const encoded = (file, key) =>
   (key === "size" || key === "sizeInBytes") &&

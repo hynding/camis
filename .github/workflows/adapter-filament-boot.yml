@@ -267,6 +267,21 @@ jobs:
           F=../packages/adapter-filament/src/strapi-api/__fixtures__
           node ../packages/adapter-filament/scripts/strapi-populate-vectors.mjs http://127.0.0.1:8765/api \
             --token "$T" --vectors $F/publication-filter-vectors.json --expected $F/publication-filter-vectors.expected.json
+      - name: Strapi data import (a strapi-php export archive, read back as strapi-php reads it)
+        run: |
+          cd app
+          php artisan migrate:fresh --force
+          php artisan db:seed --class="Database\\Seeders\\RolePermissionSeeder" --force
+          F=../packages/adapter-filament/src/strapi-api/__fixtures__/transfer
+          php artisan strapi:import --file=$F/strapi-php-export.tar.gz --force
+          # The archive's user signs in with the password strapi-php hashed.
+          curl -sf -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' \
+            --data '{"identifier":"alice","password":"secret123"}' http://127.0.0.1:8765/api/auth/local | jq -e .jwt > /dev/null
+          T=$(curl -s -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' \
+            --data '{"username":"reader","email":"reader@example.test","password":"secret1"}' \
+            http://127.0.0.1:8765/api/auth/local/register | jq -r .jwt)
+          node ../packages/adapter-filament/scripts/strapi-populate-vectors.mjs http://127.0.0.1:8765/api \
+            --token "$T" --vectors $F/read-vectors.json --expected $F/read-vectors.expected.json
       - name: Strapi GraphQL plugin vectors (sign-in, users, roles, locales, files, API tokens; recorded from strapi-php)
         run: |
           cd app
