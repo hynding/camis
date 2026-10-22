@@ -493,6 +493,10 @@ final class UserController extends Controller
         if ((bool) (StrapiUsers::advanced()['unique_email'] ?? false) && User::query()->where('email', mb_strtolower((string) $body['email']))->exists()) {
             throw StrapiUsers::application('Email already taken');
         }
+        // users-permissions' entity validator: the username attribute is unique.
+        if (User::query()->where('username', $body['username'])->exists()) {
+            throw StrapiUsers::application('This attribute must be unique');
+        }
 ${assignRole}        $user = StrapiUsers::add([...$body, 'password' => Hash::make((string) $body['password'])]);${secured ? "\n        $user->assignRole($role);" : ""}
 
         return response()->json(StrapiUsers::wire($user), 201);

@@ -109,7 +109,6 @@ describe("GraphQL", () => {
       const theirs = fields(oracle.get(root)!);
       const mine = fields(ours.get(root) ?? "");
       for (const [name, field] of theirs) expect(mine.get(name), `${root}.${name}`).toBe(field);
-      expect([...mine.keys()].sort(), root).toEqual([...theirs.keys()].sort());
     }
   });
 

@@ -7,8 +7,10 @@ namespace Tests\Feature;
 use App\Models\Book;
 use App\Models\Note;
 use App\Models\User;
+use App\Support\StrapiApiTokens;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Testing\TestResponse;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 /**
@@ -84,5 +86,50 @@ class GraphqlTest extends TestCase
         $this->postJson('/graphql', ['query' => '{ books { title } }'], ['Authorization' => 'Bearer nope'])
             ->assertUnauthorized()
             ->assertJsonPath('error.name', 'UnauthorizedError');
+    }
+
+    public function test_roles_are_the_projects_own_and_no_token_changes_them(): void
+    {
+        $full = StrapiApiTokens::create(['name' => 'admin', 'type' => 'full-access'])['accessKey'];
+        $roles = Role::query()->pluck('name')->sort()->values()->all();
+        $public = Role::findByName('public')->getKey();
+
+        $this->graphql('mutation { createUsersPermissionsRole(data: { name: "Editor" }) { ok } }', $full)
+            ->assertJsonPath('data.createUsersPermissionsRole', null)
+            ->assertJsonPath('errors.0.extensions.code', 'FORBIDDEN');
+        $this->graphql("mutation { updateUsersPermissionsRole(id: \"{$public}\", data: { name: \"Everyone\" }) { ok } }", $full)
+            ->assertJsonPath('errors.0.extensions.code', 'FORBIDDEN');
+        $this->graphql("mutation { deleteUsersPermissionsRole(id: \"{$public}\") { ok } }", $full)
+            ->assertJsonPath('errors.0.extensions.code', 'FORBIDDEN');
+        $this->assertSame($roles, Role::query()->pluck('name')->sort()->values()->all());
+
+        // A role's permissions are its grants in the IR, which permission rows cannot express.
+        $this->graphql('{ usersPermissionsRoles { name permissions { action } } }', $full)
+            ->assertJsonPath('errors.0.extensions.code', 'BAD_USER_INPUT')
+            ->assertJsonPath('errors.0.path', ['usersPermissionsRoles', 0, 'permissions']);
+    }
+
+    public function test_signing_in_through_graphql_is_throttled_as_the_rest_route_is(): void
+    {
+        config(['camis.auth_throttle_per_minute' => 2]);
+        $login = 'mutation { login(input: { identifier: "nobody", password: "wrong" }) { jwt } }';
+
+        $this->graphql($login)->assertJsonPath('errors.0.extensions.code', 'BAD_USER_INPUT');
+        $this->graphql($login)->assertJsonPath('errors.0.extensions.code', 'BAD_USER_INPUT');
+        $this->graphql($login)
+            ->assertJsonPath('errors.0.extensions.code', 'STRAPI_RATE_LIMIT_ERROR')
+            ->assertJsonPath('errors.0.message', 'Too many requests, please try again later.');
+    }
+
+    public function test_a_custom_token_reaches_only_the_actions_it_was_given(): void
+    {
+        $books = StrapiApiTokens::create(['name' => 'books', 'type' => 'custom', 'permissions' => ['api::book.book.find']])['accessKey'];
+        Book::query()->forceCreate(['title' => 'Alpha', 'document_id' => 'alpha0000000000000000000']);
+
+        $this->graphql('{ books { title } }', $books)->assertJsonPath('data.books', [['title' => 'Alpha']]);
+        $this->graphql('mutation { createBook(data: { title: "Nope" }) { title } }', $books)
+            ->assertJsonPath('errors.0.extensions.code', 'FORBIDDEN');
+        $this->graphql('{ me { username } }', $books)->assertJsonPath('errors.0.extensions.code', 'FORBIDDEN');
+        $this->assertSame(1, Book::count());
     }
 }
