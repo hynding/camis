@@ -318,6 +318,13 @@ ${models}
     public static function action(Request $request): ?string
     {
         [$controller, $method] = array_pad(explode('@', (string) $request->route()?->getActionName(), 2), 2, '__invoke');
+
+        return self::actionOf($controller, $method);
+    }
+
+    /** A controller method's action as Strapi names it, for a request that runs it in-process (GraphQL). */
+    public static function actionOf(string $controller, string $method): ?string
+    {
         if (isset(self::CONTENT_TYPES[$controller])) {
             $action = self::CONTENT_ACTIONS[$method] ?? null;
 
@@ -367,6 +374,12 @@ ${models}
     public static function active(): bool
     {
         return request()->attributes->has(self::ATTRIBUTE);
+    }
+
+    /** The token the current request acts for, if any. */
+    public static function current(): ?StrapiApiToken
+    {
+        return (request()->attributes->get(self::ATTRIBUTE) ?? [null])[0];
     }
 
     /** @return array<string, string> Every action a custom token can be given, as the API Tokens page lists them. */
@@ -423,13 +436,18 @@ use Closure;
 use Illuminate\\Http\\Request;
 use Symfony\\Component\\HttpFoundation\\Response;
 
-/** Strapi's first content API strategy: an API token, checked against the route's action. */
+/**
+ * Strapi's first content API strategy: an API token, checked against the route's action. A
+ * GraphQL request runs many actions, so StrapiGraphql checks the token against each one it runs.
+ */
 final class StrapiApiToken
 {
     public function handle(Request $request, Closure $next): Response
     {
         $token = StrapiApiTokens::authenticate($request);
-        if ($token !== null) {
+        if ($token !== null && explode('@', (string) $request->route()?->getActionName())[0] === 'App\\GraphQL\\StrapiGraphql') {
+            StrapiApiTokens::actFor($request, $token, null);
+        } elseif ($token !== null) {
             $action = StrapiApiTokens::action($request);
             if (! StrapiApiTokens::allows($token, $action)) {
                 throw new StrapiError(403, 'ForbiddenError', 'Forbidden');

@@ -10,6 +10,21 @@ import {
 } from "@camis/ir-schema";
 import { filamentNames } from "../names";
 import { componentUid, kebab } from "./names";
+import {
+  listArguments,
+  LOCALE_ARGUMENT,
+  OPERATORS,
+  PUBLICATION_ARGUMENTS,
+  PUBLICATION_FILTERS,
+  printDefinition,
+  STATUS_ARGUMENT,
+  TIMESTAMPS,
+  type Argument,
+  type Definition,
+  type DefinitionSink,
+  type Member,
+} from "./graphql-sdl";
+import { definePluginApis, type PluginAction } from "./graphql-plugin-schema";
 import type { WireShape } from "./wire-shape";
 
 /**
@@ -20,23 +35,6 @@ import type { WireShape } from "./wire-shape";
  * Alongside the printed schema it returns what the runtime needs to resolve it: each root field's
  * content type and action, and each type's relations, components and zones.
  */
-
-interface Argument {
-  name: string;
-  type: string;
-  default?: string;
-  description?: string;
-}
-interface Member {
-  name: string;
-  type: string;
-  args?: Argument[];
-}
-type Definition =
-  | { kind: "type" | "input"; name: string; fields: Member[] }
-  | { kind: "enum"; name: string; values: string[] }
-  | { kind: "union"; name: string; members: string[] }
-  | { kind: "scalar"; name: string; description?: string };
 
 /** What the runtime reads: GraphQL type name → how its fields reach the REST API. */
 export interface GraphqlRelation {
@@ -67,7 +65,17 @@ export interface GraphqlSchema {
   components: GraphqlComponent[];
   /** Every component's GraphQL type name → its uid, for a zone's items. */
   zoneMembers: Record<string, string[]>;
+  /** Plugin root fields → what the runtime answers them with. */
+  plugins: [field: string, action: PluginAction][];
+  /** The IR's roles as users-permissions shows them: the role's name is its type. */
+  roles: GraphqlRole[];
   gaps: CapabilityGap[];
+}
+
+export interface GraphqlRole {
+  type: string;
+  name: string;
+  description: string | null;
 }
 
 export interface GraphqlSchemaInput {
@@ -75,6 +83,7 @@ export interface GraphqlSchemaInput {
   emitted: ContentType[];
   shapes: ReadonlyMap<string, WireShape>;
   media: boolean;
+  roles: readonly { name: string; description?: string | undefined }[];
 }
 
 // ------------------------------------------------------------------------------------ naming
@@ -140,88 +149,6 @@ const scalarOf = (type: Field["type"]): string => {
 };
 const GRAPHQL_NAME = /^[_A-Za-z][_0-9A-Za-z]*$/;
 
-// -------------------------------------------------------------------------------- printing
-
-const printArgument = (a: Argument): string =>
-  `${a.name}: ${a.type}${a.default === undefined ? "" : ` = ${a.default}`}`;
-
-/** graphql-js's printArgs: inline unless an argument has a description. */
-const printArguments = (args: Argument[]): string => {
-  if (args.length === 0) return "";
-  if (args.every((a) => a.description === undefined))
-    return `(${args.map(printArgument).join(", ")})`;
-  const lines = args.map(
-    (a, i) =>
-      `${a.description === undefined ? "" : `${i === 0 ? "" : "\n"}    "${a.description}"\n`}    ${printArgument(a)}`,
-  );
-  return `(\n${lines.join("\n")}\n  )`;
-};
-
-const printDefinition = (d: Definition): string => {
-  switch (d.kind) {
-    case "scalar":
-      return `${d.description === undefined ? "" : `"${d.description}"\n`}scalar ${d.name}`;
-    case "enum":
-      return `enum ${d.name} {\n${d.values.map((v) => `  ${v}`).join("\n")}\n}`;
-    case "union":
-      return `union ${d.name} = ${d.members.join(" | ")}`;
-    default:
-      return `${d.kind} ${d.name} {\n${d.fields
-        .map((f) => `  ${f.name}${printArguments(f.args ?? [])}: ${f.type}`)
-        .join("\n")}\n}`;
-  }
-};
-
-// --------------------------------------------------------------------------------- building
-
-const OPERATORS = [
-  "eq",
-  "eqi",
-  "ne",
-  "nei",
-  "startsWith",
-  "endsWith",
-  "contains",
-  "notContains",
-  "containsi",
-  "notContainsi",
-  "gt",
-  "gte",
-  "lt",
-  "lte",
-];
-const PUBLICATION_FILTERS = [
-  "NEVER_PUBLISHED",
-  "HAS_PUBLISHED_VERSION",
-  "MODIFIED",
-  "UNMODIFIED",
-  "NEVER_PUBLISHED_DOCUMENT",
-  "HAS_PUBLISHED_VERSION_DOCUMENT",
-  "PUBLISHED_WITHOUT_DRAFT",
-  "PUBLISHED_WITH_DRAFT",
-];
-const LOCALE_ARGUMENT: Argument = {
-  name: "locale",
-  type: "I18NLocaleCode",
-  description: "The locale to use for the query",
-};
-const STATUS_ARGUMENT: Argument = {
-  name: "status",
-  type: "PublicationStatus",
-  default: "PUBLISHED",
-};
-const PUBLICATION_ARGUMENTS: Argument[] = [
-  STATUS_ARGUMENT,
-  { name: "hasPublishedVersion", type: "Boolean" },
-  { name: "publicationFilter", type: "PublicationFilter" },
-];
-const listArguments = (filters: string): Argument[] => [
-  { name: "filters", type: filters },
-  { name: "pagination", type: "PaginationArg", default: "{  }" },
-  { name: "sort", type: "[String]", default: "[]" },
-];
-const TIMESTAMPS = ["createdAt", "updatedAt", "publishedAt"];
-
 /** The upload plugin's file type, as Strapi's content API sends it. */
 const UPLOAD_FILE_FIELDS: [string, string][] = [
   ["name", "String!"],
@@ -241,7 +168,7 @@ const UPLOAD_FILE_FIELDS: [string, string][] = [
   ["provider_metadata", "JSON"],
 ];
 
-class SchemaBuilder {
+class SchemaBuilder implements DefinitionSink {
   private readonly definitions = new Map<string, Definition>();
   private readonly componentsByName: Map<string, Component>;
   readonly componentMaps = new Map<string, GraphqlComponent>();
@@ -681,6 +608,12 @@ export const buildGraphqlSchema = (input: GraphqlSchemaInput): GraphqlSchema => 
         "UploadFile.related (Strapi's GenericMorph union of everything a file is linked from) is not served.",
     });
   }
+  const plugins = definePluginApis(b, {
+    media: input.media,
+    localized: types.some((t) => t.localized),
+  });
+  queryFields.unshift(...plugins.queries);
+  mutationFields.push(...plugins.mutations);
   gaps.push(
     {
       feature: "graphqlPublicationFilter",
@@ -690,18 +623,18 @@ export const buildGraphqlSchema = (input: GraphqlSchemaInput): GraphqlSchema => 
         "The hasPublishedVersion and publicationFilter arguments are in the schema but refused: neither REST nor GraphQL serves them yet.",
     },
     {
-      feature: "graphqlPluginApis",
+      feature: "graphqlRoleMutations",
       location: {},
       severity: "downgrade",
       message:
-        "GraphQL serves the content API only: the users-permissions (login, register, me, roles, users), i18n locale and upload queries and mutations are REST-only for now.",
+        "Roles are the IR's: createUsersPermissionsRole, updateUsersPermissionsRole and deleteUsersPermissionsRole are refused, as the REST role routes are.",
     },
     {
-      feature: "graphqlApiTokens",
+      feature: "graphqlRolePermissions",
       location: {},
       severity: "downgrade",
       message:
-        "A full-access API token reaches /graphql; read-only and custom tokens are refused there, since their grants are checked per REST route.",
+        "A role's permissions are its IR grants, which users-permissions' permission rows cannot express: UsersPermissionsRole.permissions is refused.",
     },
   );
 
@@ -712,6 +645,19 @@ export const buildGraphqlSchema = (input: GraphqlSchemaInput): GraphqlSchema => 
     types,
     components: [...b.componentMaps.values()].sort((x, y) => x.name.localeCompare(y.name)),
     zoneMembers: b.zoneMembers,
+    plugins: plugins.fields,
+    roles: input.roles.map(graphqlRole),
     gaps,
   };
 };
+
+/** Strapi's own two roles keep the descriptions users-permissions gives them. */
+const ROLE_DESCRIPTIONS: Record<string, string> = {
+  authenticated: "Default role given to authenticated user.",
+  public: "Default role given to unauthenticated user.",
+};
+const graphqlRole = (role: { name: string; description?: string | undefined }): GraphqlRole => ({
+  type: role.name,
+  name: role.name[0]!.toUpperCase() + role.name.slice(1),
+  description: role.description ?? ROLE_DESCRIPTIONS[role.name] ?? null,
+});

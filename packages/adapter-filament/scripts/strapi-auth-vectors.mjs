@@ -19,6 +19,9 @@
 // `fileInfo` when given). A step with `deliveries` records the webhooks webhook-receiver.mjs
 // (`--receiver`) got since the last such step, waiting for them as a runtime may send after it
 // answers; a delivery's time is masked, and a published version shows as `published`.
+// A step with `graphql` posts that query and its `variables` to /graphql beside the API base, with
+// the step's session or bearer; its answer compares as the GraphQL vectors' does (message, code,
+// path and Strapi's error), and `save` keeps the jwt its first field returns.
 //
 // usage: strapi-auth-vectors.mjs <api-base> --hook CMD [--vectors F] [--expected F] [--record]
 //        [--receiver URL]
@@ -47,6 +50,7 @@ if (base === undefined || values.hook === undefined) {
   process.exit(2);
 }
 const { steps, dropNulls = false } = JSON.parse(readFileSync(values.vectors, "utf8"));
+const graphqlEndpoint = base.replace(/\/api\/?$/, "/graphql");
 
 const sessions = new Map();
 const vars = new Map();
@@ -78,6 +82,13 @@ const call = async (step) => {
   if (jar !== undefined && jar.size > 0)
     headers.Cookie = [...jar].map(([name, value]) => `${name}=${value}`).join("; ");
   const init = { method: step.method ?? "POST", headers, redirect: "manual" };
+  if (step.graphql !== undefined) {
+    headers["Content-Type"] = "application/json";
+    init.body = JSON.stringify({
+      query: fill(step.graphql),
+      ...(step.variables === undefined ? {} : { variables: fill(step.variables) }),
+    });
+  }
   if (step.body !== undefined) {
     headers["Content-Type"] = "application/json";
     init.body = JSON.stringify(fill(step.body));
@@ -90,7 +101,8 @@ const call = async (step) => {
       form.append("fileInfo", JSON.stringify(fill(step.upload.fileInfo)));
     init.body = form;
   }
-  const response = await fetch(`${base}${fill(step.path)}`, init);
+  const url = step.graphql === undefined ? `${base}${fill(step.path)}` : graphqlEndpoint;
+  const response = await fetch(url, init);
   if (jar !== undefined) {
     for (const line of response.headers.getSetCookie()) {
       const [pair, ...attributes] = line.split(";");
@@ -163,6 +175,32 @@ const maskLocation = (location) =>
     .replaceAll(origin, "<origin>")
     .replaceAll(encodeURIComponent(origin), "<origin>")
     .replace(/([?&]state=)[0-9a-f]{40}\b/, "$1<state>");
+// A GraphQL error compares by message, code, path and Strapi's error, never by the stack trace a
+// development server adds. Any success is a 200: strapi-php lets a users-permissions controller's
+// 201 through to the GraphQL response, where Strapi's Apollo answers 200.
+const graphqlOutcome = ({ status, body }) => ({
+  status: status >= 200 && status < 300 ? 200 : status,
+  data: normalize(body?.data ?? null),
+  errors: (body?.errors ?? []).map((e) => {
+    const error = e.extensions?.error;
+    const empty =
+      error?.details === undefined || (Array.isArray(error.details) && error.details.length === 0);
+    return {
+      message: e.message,
+      code: e.extensions?.code ?? null,
+      path: e.path ?? null,
+      ...(error
+        ? {
+            error: {
+              name: error.name,
+              message: error.message,
+              details: empty ? {} : error.details,
+            },
+          }
+        : {}),
+    };
+  }),
+});
 const outcome = ({ status, location, body }, cookie) => {
   if (status >= 300 && status < 400)
     return { status, location: maskLocation(fill(location ?? "")) };
@@ -226,8 +264,11 @@ for (const step of steps) {
     continue;
   }
   const response = await call(step);
-  if (step.save !== undefined && typeof response.body?.jwt === "string")
-    sessions.set(step.save, response.body.jwt);
+  const jwt =
+    step.graphql === undefined
+      ? response.body?.jwt
+      : Object.values(response.body?.data ?? {})[0]?.jwt;
+  if (step.save !== undefined && typeof jwt === "string") sessions.set(step.save, jwt);
   for (const [name, path] of Object.entries(step.keep ?? {}))
     vars.set(name, String(path.split(".").reduce((value, key) => value?.[key], response.body)));
   for (const [name, param] of Object.entries(step.keepQuery ?? {}))
@@ -238,7 +279,10 @@ for (const step of steps) {
     cookie = value === undefined ? "<none>" : value === "" ? "<cleared>" : "<set>";
     if (value) vars.set(step.cookie, value);
   }
-  outcomes.push({ name: step.name, ...outcome(response, cookie) });
+  outcomes.push({
+    name: step.name,
+    ...(step.graphql === undefined ? outcome(response, cookie) : graphqlOutcome(response)),
+  });
 }
 
 if (values.record) {

@@ -1,0 +1,368 @@
+{
+  "steps": [
+    {
+      "name": "the public role reads books and locales, as the project's does",
+      "hook": [
+        "role",
+        "public",
+        "api::book.book.find",
+        "api::book.book.findOne",
+        "plugin::i18n.locales.listLocales"
+      ]
+    },
+    {
+      "name": "register",
+      "graphql": "mutation { register(input: { username: \"ann\", email: \"Ann@Example.test\", password: \"secret1\" }) { jwt user { username email confirmed blocked role { name type } } } }",
+      "save": "ann"
+    },
+    {
+      "name": "register taken",
+      "graphql": "mutation { register(input: { username: \"ann\", email: \"ann@example.test\", password: \"secret1\" }) { jwt } }"
+    },
+    {
+      "name": "register invalid email",
+      "graphql": "mutation { register(input: { username: \"ann2\", email: \"nope\", password: \"secret1\" }) { jwt } }"
+    },
+    {
+      "name": "register without a password",
+      "graphql": "mutation { register(input: { username: \"ann3\", email: \"ann3@example.test\" }) { jwt } }"
+    },
+    {
+      "name": "login wrong password",
+      "graphql": "mutation { login(input: { identifier: \"ann\", password: \"wrong\" }) { jwt } }"
+    },
+    {
+      "name": "login by email",
+      "graphql": "mutation Login($input: UsersPermissionsLoginInput!) { login(input: $input) { jwt user { username email } } }",
+      "variables": {
+        "input": {
+          "identifier": "ANN@example.test",
+          "password": "secret1"
+        }
+      },
+      "save": "ann"
+    },
+    {
+      "name": "me",
+      "graphql": "{ me { username email confirmed blocked role { name description type } } }",
+      "as": "ann"
+    },
+    {
+      "name": "me without a session",
+      "graphql": "{ me { username } }"
+    },
+    {
+      "name": "me with a token that does not verify",
+      "graphql": "{ me { username } }",
+      "bearer": "nope"
+    },
+    {
+      "name": "change password without a session",
+      "graphql": "mutation { changePassword(currentPassword: \"secret1\", password: \"secret2\", passwordConfirmation: \"secret2\") { jwt } }"
+    },
+    {
+      "name": "change password wrong current",
+      "graphql": "mutation { changePassword(currentPassword: \"wrong\", password: \"secret2\", passwordConfirmation: \"secret2\") { jwt } }",
+      "as": "ann"
+    },
+    {
+      "name": "change password mismatch",
+      "graphql": "mutation { changePassword(currentPassword: \"secret1\", password: \"secret2\", passwordConfirmation: \"secret3\") { jwt } }",
+      "as": "ann"
+    },
+    {
+      "name": "change password",
+      "graphql": "mutation { changePassword(currentPassword: \"secret1\", password: \"secret2\", passwordConfirmation: \"secret2\") { jwt user { username } } }",
+      "as": "ann",
+      "save": "ann"
+    },
+    {
+      "name": "forgot password",
+      "graphql": "mutation { forgotPassword(email: \"ann@example.test\") { ok } }"
+    },
+    {
+      "name": "forgot password for nobody",
+      "graphql": "mutation { forgotPassword(email: \"nobody@example.test\") { ok } }"
+    },
+    {
+      "name": "read the reset code",
+      "hook": ["lookup", "reset", "ann"],
+      "into": "code"
+    },
+    {
+      "name": "reset password mismatch",
+      "graphql": "mutation { resetPassword(code: \"$code\", password: \"secret3\", passwordConfirmation: \"secret4\") { jwt } }"
+    },
+    {
+      "name": "reset password with a wrong code",
+      "graphql": "mutation { resetPassword(code: \"nope\", password: \"secret3\", passwordConfirmation: \"secret3\") { jwt } }"
+    },
+    {
+      "name": "reset password",
+      "graphql": "mutation { resetPassword(code: \"$code\", password: \"secret3\", passwordConfirmation: \"secret3\") { jwt user { username } } }"
+    },
+    {
+      "name": "login with the new password",
+      "graphql": "mutation { login(input: { identifier: \"ann\", password: \"secret3\" }) { user { username } } }",
+      "save": "ann"
+    },
+    {
+      "name": "confirm an email with a wrong code",
+      "graphql": "mutation { emailConfirmation(confirmation: \"nope\") { jwt } }"
+    },
+    {
+      "name": "list users without the grant",
+      "graphql": "{ usersPermissionsUsers { username } }"
+    },
+    {
+      "name": "users with their role, as a user",
+      "graphql": "{ usersPermissionsUsers { username role { name type } } }",
+      "as": "ann"
+    },
+    {
+      "name": "roles, as a user",
+      "graphql": "{ usersPermissionsRoles { name } }",
+      "as": "ann"
+    },
+    {
+      "name": "list roles without the grant",
+      "graphql": "{ usersPermissionsRoles { name } }"
+    },
+    {
+      "name": "create a user without the grant",
+      "graphql": "mutation { createUsersPermissionsUser(data: { username: \"eve\", email: \"eve@example.test\", password: \"secret1\" }) { data { username } } }",
+      "as": "ann"
+    },
+    {
+      "name": "make a full-access token",
+      "hook": ["token", "admin", "full-access"],
+      "into": "full"
+    },
+    {
+      "name": "list users",
+      "graphql": "{ usersPermissionsUsers(sort: \"username\") { username email confirmed blocked role { name } } }",
+      "bearer": "$full"
+    },
+    {
+      "name": "users by filter, with a page",
+      "graphql": "{ usersPermissionsUsers_connection(filters: { username: { startsWith: \"a\" } }) { nodes { username } pageInfo { total page pageSize pageCount } } }",
+      "bearer": "$full"
+    },
+    {
+      "name": "list roles",
+      "graphql": "{ usersPermissionsRoles(sort: \"name\") { documentId name description type } }",
+      "bearer": "$full",
+      "keep": {
+        "publicRole": "data.usersPermissionsRoles.1.documentId"
+      }
+    },
+    {
+      "name": "a role by documentId",
+      "graphql": "{ usersPermissionsRole(documentId: \"$publicRole\") { name type users { username } } }",
+      "bearer": "$full"
+    },
+    {
+      "name": "a role's users",
+      "graphql": "{ usersPermissionsRoles(filters: { type: { eq: \"authenticated\" } }) { name users { username } users_connection { nodes { username } } } }",
+      "bearer": "$full"
+    },
+    {
+      "name": "read the authenticated role's id",
+      "hook": ["lookup", "role", "authenticated"],
+      "into": "authenticated"
+    },
+    {
+      "name": "create a user",
+      "graphql": "mutation { createUsersPermissionsUser(data: { username: \"bob\", email: \"bob@example.test\", password: \"secret1\", role: \"$authenticated\" }) { data { username email confirmed blocked role { name } } } }",
+      "bearer": "$full"
+    },
+    {
+      "name": "create a user that is taken",
+      "graphql": "mutation { createUsersPermissionsUser(data: { username: \"bob\", email: \"bob2@example.test\", password: \"secret1\", role: \"$authenticated\" }) { data { username } } }",
+      "bearer": "$full"
+    },
+    {
+      "name": "read bob's id",
+      "hook": ["lookup", "user", "bob"],
+      "into": "bob"
+    },
+    {
+      "name": "update a user",
+      "graphql": "mutation { updateUsersPermissionsUser(id: \"$bob\", data: { username: \"robert\", blocked: true }) { data { username blocked } } }",
+      "bearer": "$full"
+    },
+    {
+      "name": "update a user that is not there",
+      "graphql": "mutation { updateUsersPermissionsUser(id: \"9999\", data: { username: \"ghost\" }) { data { username } } }",
+      "bearer": "$full"
+    },
+    {
+      "name": "the updated user",
+      "graphql": "{ usersPermissionsUsers(filters: { username: { eq: \"robert\" } }) { documentId username blocked } }",
+      "bearer": "$full",
+      "keep": {
+        "robert": "data.usersPermissionsUsers.0.documentId"
+      }
+    },
+    {
+      "name": "a user by documentId",
+      "graphql": "{ usersPermissionsUser(documentId: \"$robert\") { username role { type } } }",
+      "bearer": "$full"
+    },
+    {
+      "name": "a user that is not there",
+      "graphql": "{ usersPermissionsUser(documentId: \"nope\") { username } }",
+      "bearer": "$full"
+    },
+    {
+      "name": "delete a user",
+      "graphql": "mutation { deleteUsersPermissionsUser(id: \"$bob\") { data { username } } }",
+      "bearer": "$full"
+    },
+    {
+      "name": "the deleted user is gone",
+      "graphql": "{ usersPermissionsUsers(filters: { username: { eq: \"robert\" } }) { username } }",
+      "bearer": "$full"
+    },
+    {
+      "name": "locales",
+      "graphql": "{ i18NLocales(sort: \"code\") { documentId name code } }",
+      "keep": {
+        "fr": "data.i18NLocales.1.documentId"
+      }
+    },
+    {
+      "name": "a locale by documentId",
+      "graphql": "{ i18NLocale(documentId: \"$fr\") { name code } }"
+    },
+    {
+      "name": "locales as a connection",
+      "graphql": "{ i18NLocales_connection(filters: { code: { eq: \"fr\" } }) { nodes { name code } pageInfo { total } } }"
+    },
+    {
+      "name": "locales as a connection, with the grant",
+      "graphql": "{ i18NLocales_connection(filters: { code: { eq: \"fr\" } }) { nodes { name code } pageInfo { total } } }",
+      "bearer": "$full"
+    },
+    {
+      "name": "upload a file",
+      "path": "/upload",
+      "upload": {
+        "files": ["notes.txt"],
+        "fileInfo": {
+          "name": "notes.txt",
+          "caption": "Hi"
+        }
+      },
+      "bearer": "$full",
+      "keep": {
+        "fileId": "0.id",
+        "fileDocumentId": "0.documentId"
+      }
+    },
+    {
+      "name": "files",
+      "graphql": "{ uploadFiles { name caption ext mime url provider } }",
+      "bearer": "$full"
+    },
+    {
+      "name": "a file by documentId",
+      "graphql": "{ uploadFile(documentId: \"$fileDocumentId\") { name caption } }",
+      "bearer": "$full"
+    },
+    {
+      "name": "files as a connection",
+      "graphql": "{ uploadFiles_connection(filters: { ext: { eq: \".txt\" } }) { nodes { name } pageInfo { total } } }",
+      "bearer": "$full"
+    },
+    {
+      "name": "files without the grant",
+      "graphql": "{ uploadFiles { name } }"
+    },
+    {
+      "name": "update a file's info",
+      "graphql": "mutation { updateUploadFile(id: \"$fileId\", info: { alternativeText: \"A greeting\", caption: \"Hello\" }) { name alternativeText caption } }",
+      "bearer": "$full"
+    },
+    {
+      "name": "update a file that is not there",
+      "graphql": "mutation { updateUploadFile(id: \"9999\", info: { caption: \"Nope\" }) { name } }",
+      "bearer": "$full"
+    },
+    {
+      "name": "delete a file",
+      "graphql": "mutation { deleteUploadFile(id: \"$fileId\") { name caption } }",
+      "bearer": "$full"
+    },
+    {
+      "name": "delete a file that is not there",
+      "graphql": "mutation { deleteUploadFile(id: \"$fileId\") { name } }",
+      "bearer": "$full"
+    },
+    {
+      "name": "no files left",
+      "graphql": "{ uploadFiles { name } }",
+      "bearer": "$full"
+    },
+    {
+      "name": "make a read-only token",
+      "hook": ["token", "reader", "read-only"],
+      "into": "reader"
+    },
+    {
+      "name": "a read-only token reads",
+      "graphql": "{ books { title } posts { title } }",
+      "bearer": "$reader"
+    },
+    {
+      "name": "a read-only token does not write",
+      "graphql": "mutation { createBook(data: { title: \"Nope\" }) { title } }",
+      "bearer": "$reader"
+    },
+    {
+      "name": "a read-only token reads locales and files",
+      "graphql": "{ i18NLocales { code } uploadFiles { name } }",
+      "bearer": "$reader"
+    },
+    {
+      "name": "a read-only token has no user",
+      "graphql": "{ me { username } }",
+      "bearer": "$reader"
+    },
+    {
+      "name": "make a custom token",
+      "hook": ["token", "books", "custom", "api::book.book.find"],
+      "into": "books"
+    },
+    {
+      "name": "a custom token reads what it grants",
+      "graphql": "{ books { title } }",
+      "bearer": "$books"
+    },
+    {
+      "name": "a custom token reads nothing else",
+      "graphql": "{ posts { title } }",
+      "bearer": "$books"
+    },
+    {
+      "name": "a custom token finds no single book",
+      "graphql": "{ book(documentId: \"nope\") { title } }",
+      "bearer": "$books"
+    },
+    {
+      "name": "a custom token does not write",
+      "graphql": "mutation { createBook(data: { title: \"Nope\" }) { title } }",
+      "bearer": "$books"
+    },
+    {
+      "name": "a custom token lists no users",
+      "graphql": "{ usersPermissionsUsers { username } }",
+      "bearer": "$books"
+    },
+    {
+      "name": "nothing was written",
+      "graphql": "{ books { title } }",
+      "bearer": "$full"
+    }
+  ]
+}

@@ -193,6 +193,13 @@ final class StrapiApiTokens
     public static function action(Request $request): ?string
     {
         [$controller, $method] = array_pad(explode('@', (string) $request->route()?->getActionName(), 2), 2, '__invoke');
+
+        return self::actionOf($controller, $method);
+    }
+
+    /** A controller method's action as Strapi names it, for a request that runs it in-process (GraphQL). */
+    public static function actionOf(string $controller, string $method): ?string
+    {
         if (isset(self::CONTENT_TYPES[$controller])) {
             $action = self::CONTENT_ACTIONS[$method] ?? null;
 
@@ -242,6 +249,12 @@ final class StrapiApiTokens
     public static function active(): bool
     {
         return request()->attributes->has(self::ATTRIBUTE);
+    }
+
+    /** The token the current request acts for, if any. */
+    public static function current(): ?StrapiApiToken
+    {
+        return (request()->attributes->get(self::ATTRIBUTE) ?? [null])[0];
     }
 
     /** @return array<string, string> Every action a custom token can be given, as the API Tokens page lists them. */

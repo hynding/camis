@@ -11,7 +11,7 @@ const phpString = (value: string): string =>
 const phpBool = (value: boolean): string => (value ? "true" : "false");
 
 /** The per-project half: which content type and action each root field is, and how types link. */
-export const emitStrapiGraphqlTypes = (schema: GraphqlSchema): string => {
+export const emitStrapiGraphqlTypes = (schema: GraphqlSchema, tokens: boolean): string => {
   const roots = (rows: [string, string, string][]) =>
     rows
       .map(([field, type, action]) => `        '${field}' => ['${type}', '${action}'],`)
@@ -41,6 +41,15 @@ export const emitStrapiGraphqlTypes = (schema: GraphqlSchema): string => {
     .map(
       (c) =>
         `        '${c.name}' => ['uid' => ${phpString(c.uid)}, 'components' => [${nested(c.components)}]],`,
+    )
+    .join("\n");
+  const plugins = schema.plugins
+    .map(([field, action]) => `        '${field}' => '${action}',`)
+    .join("\n");
+  const roles = schema.roles
+    .map(
+      (r) =>
+        `        ${phpString(r.type)} => ['name' => ${phpString(r.name)}, 'description' => ${r.description === null ? "null" : phpString(r.description)}],`,
     )
     .join("\n");
   const zones = Object.entries(schema.zoneMembers)
@@ -74,6 +83,19 @@ ${components}
     public const ZONES = [
 ${zones}
     ];
+
+    /** A plugin's root field → what StrapiGraphqlPlugins answers it with. */
+    public const PLUGINS = [
+${plugins}
+    ];
+
+    /** The IR's roles as users-permissions shows them, by type (the role's own name). */
+    public const ROLES = [
+${roles}
+    ];
+
+    /** Whether the project keeps API tokens, which StrapiGraphql checks each action against. */
+    public const TOKENS = ${phpBool(tokens)};
 }
 `;
 };
@@ -92,6 +114,7 @@ ${zones}
 export const emitStrapiGraphql = (): string =>
   header +
   String.raw`
+use App\Support\StrapiApiTokens;
 use App\Support\StrapiError;
 use GraphQL\Error\Error;
 use GraphQL\Error\SyntaxError;
@@ -280,6 +303,9 @@ final class StrapiGraphql
         if (! is_array($source)) {
             return null;
         }
+        if (isset(StrapiGraphqlPlugins::RELATIONS[$parent])) {
+            return StrapiGraphqlPlugins::field($source, $args, $request, $info);
+        }
         $name = $info->fieldName;
         $type = StrapiGraphqlTypes::TYPES[$parent] ?? StrapiGraphqlTypes::COMPONENTS[$parent] ?? [];
         $key = str_ends_with($name, '_connection') ? substr($name, 0, -strlen('_connection')) : $name;
@@ -299,11 +325,15 @@ final class StrapiGraphql
 
     private static function root(string $root, array $args, Request $request, ResolveInfo $info): mixed
     {
-        [$typeName, $action] = ($root === 'Query' ? StrapiGraphqlTypes::QUERIES : StrapiGraphqlTypes::MUTATIONS)[$info->fieldName];
-        $type = StrapiGraphqlTypes::TYPES[$typeName];
         if (($args['hasPublishedVersion'] ?? null) !== null || ($args['publicationFilter'] ?? null) !== null) {
             throw StrapiError::validation('hasPublishedVersion and publicationFilter are not supported');
         }
+        $plugin = StrapiGraphqlTypes::PLUGINS[$info->fieldName] ?? null;
+        if ($plugin !== null) {
+            return StrapiGraphqlPlugins::root($plugin, $args, $request, $info);
+        }
+        [$typeName, $action] = ($root === 'Query' ? StrapiGraphqlTypes::QUERIES : StrapiGraphqlTypes::MUTATIONS)[$info->fieldName];
+        $type = StrapiGraphqlTypes::TYPES[$typeName];
         $nodes = $action === 'connection' ? self::nodes($info->fieldNodes, Type::getNamedType($info->returnType)->name, $info) : $info->fieldNodes;
         [$populate, $claims] = $action === 'delete' ? [[], ['claims' => [], 'children' => []]] : self::populate($typeName, $nodes, $info);
         $params = ['populate' => $populate];
@@ -441,7 +471,7 @@ final class StrapiGraphql
      * @param iterable<FieldNode> $nodes
      * @return list<FieldNode>
      */
-    private static function collect(iterable $nodes, string $typeName, ResolveInfo $info): array
+    public static function collect(iterable $nodes, string $typeName, ResolveInfo $info): array
     {
         $fields = [];
         $walk = function (?SelectionSetNode $set) use (&$walk, &$fields, $typeName, $info): void {
@@ -476,7 +506,7 @@ final class StrapiGraphql
      * @param iterable<FieldNode> $nodes
      * @return list<FieldNode>
      */
-    private static function nodes(iterable $nodes, string $connection, ResolveInfo $info): array
+    public static function nodes(iterable $nodes, string $connection, ResolveInfo $info): array
     {
         return array_values(array_filter(self::collect($nodes, $connection, $info), fn (FieldNode $field) => $field->name->value === 'nodes'));
     }
@@ -518,7 +548,7 @@ final class StrapiGraphql
 
     // ------------------------------------------------------------------------ arguments → REST
 
-    private static function listing(array $args, ?Type $filters): array
+    public static function listing(array $args, ?Type $filters): array
     {
         $params = ['pagination' => (array) ($args['pagination'] ?? [])];
         if (($args['filters'] ?? null) !== null && $filters !== null) {
@@ -532,7 +562,7 @@ final class StrapiGraphql
     }
 
     /** GraphQL's filters as REST's: operators and and/or/not take Strapi's $ prefix. */
-    private static function filters(mixed $value, Type $type): mixed
+    public static function filters(mixed $value, Type $type): mixed
     {
         $type = Type::getNullableType($type);
         if ($type instanceof ListOfType) {
@@ -574,7 +604,7 @@ final class StrapiGraphql
     }
 
     /** Strapi GraphQL's pageInfo, whichever pagination the list was asked for with. */
-    private static function pageInfo(array $pagination): array
+    public static function pageInfo(array $pagination): array
     {
         if (isset($pagination['page'])) {
             return ['page' => $pagination['page'], 'pageSize' => $pagination['pageSize'], 'pageCount' => $pagination['pageCount'] ?? 0, 'total' => $pagination['total'] ?? 0];
@@ -591,7 +621,7 @@ final class StrapiGraphql
     }
 
     /** A related list's page, as Strapi's GraphQL pages a relation: ten at a time unless asked. */
-    private static function page(array $items, array $pagination): array
+    public static function page(array $items, array $pagination): array
     {
         $page = $pagination['page'] ?? null;
         $pageSize = $pagination['pageSize'] ?? null;
@@ -618,38 +648,68 @@ final class StrapiGraphql
 
     // ------------------------------------------------------------------------------- dispatch
 
-    /**
-     * Runs a REST action as the caller, with GraphQL's own page sizes.
-     *
-     * @return ?array the response body
-     */
+    /** @return ?array a content type's REST response body */
     private static function call(array $type, string $method, array $params, Request $request, ?array $data = null, ?string $documentId = null): ?array
     {
+        return self::dispatch($type['controller'], $method, $params, $request, $data === null ? null : ['data' => $data], $documentId === null ? [] : [$documentId]);
+    }
+
+    /**
+     * Runs a controller's action in-process as the caller, with GraphQL's own page sizes. An API
+     * token is checked against the action first ($action names it when it is not the method's
+     * own, and false skips the check for an action Strapi opens to every caller).
+     *
+     * @param list<string> $arguments the route's parameters
+     * @return mixed the JSON response's body; null for any other response
+     */
+    public static function dispatch(string $controller, string $method, array $params, Request $request, ?array $body = null, array $arguments = [], string|false|null $action = null): mixed
+    {
+        if ($action !== false) {
+            self::authorize($request, $action ?? (StrapiGraphqlTypes::TOKENS ? StrapiApiTokens::actionOf($controller, $method) : null));
+        }
         $inner = Request::create(
             '/api/graphql',
-            self::VERBS[$method],
+            self::VERBS[$method] ?? ($body === null ? 'GET' : 'POST'),
             [],
             [],
             [],
-            ['CONTENT_TYPE' => 'application/json', 'HTTP_ACCEPT' => 'application/json'],
-            $data === null ? null : (string) json_encode(['data' => $data]),
+            ['CONTENT_TYPE' => 'application/json', 'HTTP_ACCEPT' => 'application/json', 'REMOTE_ADDR' => (string) $request->ip()],
+            $body === null ? null : (string) json_encode($body),
         );
         $inner->query->replace(self::query($params));
         $inner->setUserResolver($request->getUserResolver());
         $inner->attributes->add($request->attributes->all());
-        $controller = app($type['controller']);
         $saved = [config('camis.rest.default_limit'), config('camis.rest.max_limit')];
         config([
             'camis.rest.default_limit' => (int) config('camis.graphql.default_limit', 10),
             'camis.rest.max_limit' => max(0, (int) config('camis.graphql.max_limit', -1)),
         ]);
         try {
-            $response = $documentId === null ? $controller->{$method}($inner) : $controller->{$method}($inner, $documentId);
+            $response = app($controller)->{$method}($inner, ...$arguments);
         } finally {
             config(['camis.rest.default_limit' => $saved[0], 'camis.rest.max_limit' => $saved[1]]);
         }
 
         return $response instanceof JsonResponse ? $response->getData(true) : null;
+    }
+
+    /** The caller's API token, checked against $action as StrapiApiToken checks a REST route's. */
+    public static function authorize(Request $request, ?string $action): void
+    {
+        $token = StrapiGraphqlTypes::TOKENS ? StrapiApiTokens::current() : null;
+        if ($token === null) {
+            return;
+        }
+        if (! StrapiApiTokens::allows($token, $action)) {
+            throw new AuthorizationException();
+        }
+        StrapiApiTokens::actFor($request, $token, $action);
+    }
+
+    /** Whether the caller is an API token rather than a role. */
+    public static function token(): bool
+    {
+        return StrapiGraphqlTypes::TOKENS && StrapiApiTokens::current() !== null;
     }
 
     /** Values as a query string would carry them, which is how the REST API reads its parameters. */
@@ -685,12 +745,17 @@ final class StrapiGraphql
     }
 
     /** A document the caller cannot see is null, as Strapi's GraphQL sends it. */
-    private static function found(\Closure $call): ?array
+    public static function found(\Closure $call): ?array
     {
         try {
             return $call();
         } catch (HttpExceptionInterface $e) {
             if ($e->getStatusCode() === 404) {
+                return null;
+            }
+            throw $e;
+        } catch (StrapiError $e) {
+            if ($e->status === 404) {
                 return null;
             }
             throw $e;
@@ -736,17 +801,15 @@ final class StrapiGraphql
         $extensions = [];
         if ($code !== null) {
             $extensions['code'] = $code;
-        } elseif ($previous instanceof StrapiError) {
+        } elseif ($previous instanceof StrapiError && $previous->status !== 403) {
             $extensions['code'] = match ($previous->name) {
                 'ValidationError' => 'BAD_USER_INPUT',
-                'ForbiddenError' => 'FORBIDDEN',
-                'UnauthorizedError' => 'UNAUTHENTICATED',
-                'NotFoundError' => 'NOT_FOUND',
+                'ForbiddenError', 'UnauthorizedError' => 'FORBIDDEN',
                 default => 'STRAPI_'.strtoupper((string) preg_replace('/(?<!^)[A-Z]/', '_$0', $previous->name)),
             };
             $message = $previous->getMessage();
             $extensions['error'] = ['name' => $previous->name, 'message' => $message, 'details' => $previous->details === [] ? new \stdClass() : $previous->details];
-        } elseif ($previous instanceof AuthorizationException || ($previous instanceof HttpExceptionInterface && $previous->getStatusCode() === 403)) {
+        } elseif ($previous instanceof AuthorizationException || $previous instanceof StrapiError || ($previous instanceof HttpExceptionInterface && $previous->getStatusCode() === 403)) {
             $message = 'Forbidden access';
             $extensions = ['code' => 'FORBIDDEN', 'error' => ['name' => 'ForbiddenError', 'message' => $message, 'details' => new \stdClass()]];
         } elseif ($previous instanceof Throwable) {

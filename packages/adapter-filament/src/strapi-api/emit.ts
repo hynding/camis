@@ -66,6 +66,7 @@ import {
   WEBHOOKS_MIGRATION_PATH,
   type WebhookContentType,
 } from "./webhooks";
+import { emitStrapiGraphqlPlugins } from "./graphql-plugins-runtime";
 import { buildGraphqlSchema } from "./graphql-schema";
 import {
   emitGraphqlRoutes,
@@ -255,12 +256,22 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     });
   }
   if (input.graphql === true) {
-    const schema = buildGraphqlSchema({ doc, emitted, shapes, media: input.media !== undefined });
+    const schema = buildGraphqlSchema({
+      doc,
+      emitted,
+      shapes,
+      media: input.media !== undefined,
+      roles: bundle.roles,
+    });
     gaps.push(...schema.gaps);
     files.push(
       { path: GRAPHQL_SCHEMA_PATH, content: schema.sdl },
       { path: "app/GraphQL/StrapiGraphql.php", content: emitStrapiGraphql() },
-      { path: "app/GraphQL/StrapiGraphqlTypes.php", content: emitStrapiGraphqlTypes(schema) },
+      { path: "app/GraphQL/StrapiGraphqlPlugins.php", content: emitStrapiGraphqlPlugins() },
+      {
+        path: "app/GraphQL/StrapiGraphqlTypes.php",
+        content: emitStrapiGraphqlTypes(schema, secured),
+      },
       { path: "routes/graphql.php", content: emitGraphqlRoutes(secured) },
     );
   }

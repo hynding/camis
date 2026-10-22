@@ -11,13 +11,18 @@ use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
-/** Strapi's first content API strategy: an API token, checked against the route's action. */
+/**
+ * Strapi's first content API strategy: an API token, checked against the route's action. A
+ * GraphQL request runs many actions, so StrapiGraphql checks the token against each one it runs.
+ */
 final class StrapiApiToken
 {
     public function handle(Request $request, Closure $next): Response
     {
         $token = StrapiApiTokens::authenticate($request);
-        if ($token !== null) {
+        if ($token !== null && explode('@', (string) $request->route()?->getActionName())[0] === 'App\GraphQL\StrapiGraphql') {
+            StrapiApiTokens::actFor($request, $token, null);
+        } elseif ($token !== null) {
             $action = StrapiApiTokens::action($request);
             if (! StrapiApiTokens::allows($token, $action)) {
                 throw new StrapiError(403, 'ForbiddenError', 'Forbidden');

@@ -1,0 +1,1001 @@
+[
+  {
+    "name": "register",
+    "status": 200,
+    "data": {
+      "register": {
+        "jwt": "<jwt>",
+        "user": {
+          "blocked": false,
+          "confirmed": true,
+          "email": "ann@example.test",
+          "role": null,
+          "username": "ann"
+        }
+      }
+    },
+    "errors": []
+  },
+  {
+    "name": "register taken",
+    "status": 200,
+    "data": null,
+    "errors": [
+      {
+        "message": "Email or Username are already taken",
+        "code": "STRAPI_APPLICATION_ERROR",
+        "path": ["register"],
+        "error": {
+          "name": "ApplicationError",
+          "message": "Email or Username are already taken",
+          "details": {}
+        }
+      }
+    ]
+  },
+  {
+    "name": "register invalid email",
+    "status": 200,
+    "data": null,
+    "errors": [
+      {
+        "message": "email must be a valid email",
+        "code": "BAD_USER_INPUT",
+        "path": ["register"],
+        "error": {
+          "name": "ValidationError",
+          "message": "email must be a valid email",
+          "details": {
+            "errors": [
+              {
+                "path": ["email"],
+                "message": "email must be a valid email",
+                "name": "ValidationError",
+                "value": "nope"
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "register without a password",
+    "status": 400,
+    "data": null,
+    "errors": [
+      {
+        "message": "Field UsersPermissionsRegisterInput.password of required type String! was not provided.",
+        "code": "GRAPHQL_VALIDATION_FAILED",
+        "path": null
+      }
+    ]
+  },
+  {
+    "name": "login wrong password",
+    "status": 200,
+    "data": null,
+    "errors": [
+      {
+        "message": "Invalid identifier or password",
+        "code": "BAD_USER_INPUT",
+        "path": ["login"],
+        "error": {
+          "name": "ValidationError",
+          "message": "Invalid identifier or password",
+          "details": {}
+        }
+      }
+    ]
+  },
+  {
+    "name": "login by email",
+    "status": 200,
+    "data": {
+      "login": {
+        "jwt": "<jwt>",
+        "user": {
+          "email": "ann@example.test",
+          "username": "ann"
+        }
+      }
+    },
+    "errors": []
+  },
+  {
+    "name": "me",
+    "status": 200,
+    "data": {
+      "me": {
+        "blocked": false,
+        "confirmed": true,
+        "email": "ann@example.test",
+        "role": {
+          "description": "Default role given to authenticated user.",
+          "name": "Authenticated",
+          "type": "authenticated"
+        },
+        "username": "ann"
+      }
+    },
+    "errors": []
+  },
+  {
+    "name": "me without a session",
+    "status": 200,
+    "data": {
+      "me": null
+    },
+    "errors": [
+      {
+        "message": "Forbidden access",
+        "code": "FORBIDDEN",
+        "path": ["me"],
+        "error": {
+          "name": "ForbiddenError",
+          "message": "Forbidden access",
+          "details": {}
+        }
+      }
+    ]
+  },
+  {
+    "name": "me with a token that does not verify",
+    "status": 401,
+    "data": null,
+    "errors": []
+  },
+  {
+    "name": "change password without a session",
+    "status": 200,
+    "data": {
+      "changePassword": null
+    },
+    "errors": [
+      {
+        "message": "Forbidden access",
+        "code": "FORBIDDEN",
+        "path": ["changePassword"],
+        "error": {
+          "name": "ForbiddenError",
+          "message": "Forbidden access",
+          "details": {}
+        }
+      }
+    ]
+  },
+  {
+    "name": "change password wrong current",
+    "status": 200,
+    "data": {
+      "changePassword": null
+    },
+    "errors": [
+      {
+        "message": "The provided current password is invalid",
+        "code": "BAD_USER_INPUT",
+        "path": ["changePassword"],
+        "error": {
+          "name": "ValidationError",
+          "message": "The provided current password is invalid",
+          "details": {}
+        }
+      }
+    ]
+  },
+  {
+    "name": "change password mismatch",
+    "status": 200,
+    "data": {
+      "changePassword": null
+    },
+    "errors": [
+      {
+        "message": "Passwords do not match",
+        "code": "BAD_USER_INPUT",
+        "path": ["changePassword"],
+        "error": {
+          "name": "ValidationError",
+          "message": "Passwords do not match",
+          "details": {
+            "errors": [
+              {
+                "path": ["passwordConfirmation"],
+                "message": "Passwords do not match",
+                "name": "ValidationError",
+                "value": "secret3"
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "change password",
+    "status": 200,
+    "data": {
+      "changePassword": {
+        "jwt": "<jwt>",
+        "user": {
+          "username": "ann"
+        }
+      }
+    },
+    "errors": []
+  },
+  {
+    "name": "forgot password",
+    "status": 200,
+    "data": {
+      "forgotPassword": {
+        "ok": true
+      }
+    },
+    "errors": []
+  },
+  {
+    "name": "forgot password for nobody",
+    "status": 200,
+    "data": {
+      "forgotPassword": {
+        "ok": true
+      }
+    },
+    "errors": []
+  },
+  {
+    "name": "reset password mismatch",
+    "status": 200,
+    "data": {
+      "resetPassword": null
+    },
+    "errors": [
+      {
+        "message": "Passwords do not match",
+        "code": "BAD_USER_INPUT",
+        "path": ["resetPassword"],
+        "error": {
+          "name": "ValidationError",
+          "message": "Passwords do not match",
+          "details": {
+            "errors": [
+              {
+                "path": ["passwordConfirmation"],
+                "message": "Passwords do not match",
+                "name": "ValidationError",
+                "value": "secret4"
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "reset password with a wrong code",
+    "status": 200,
+    "data": {
+      "resetPassword": null
+    },
+    "errors": [
+      {
+        "message": "Incorrect code provided",
+        "code": "BAD_USER_INPUT",
+        "path": ["resetPassword"],
+        "error": {
+          "name": "ValidationError",
+          "message": "Incorrect code provided",
+          "details": {}
+        }
+      }
+    ]
+  },
+  {
+    "name": "reset password",
+    "status": 200,
+    "data": {
+      "resetPassword": {
+        "jwt": "<jwt>",
+        "user": {
+          "username": "ann"
+        }
+      }
+    },
+    "errors": []
+  },
+  {
+    "name": "login with the new password",
+    "status": 200,
+    "data": {
+      "login": {
+        "user": {
+          "username": "ann"
+        }
+      }
+    },
+    "errors": []
+  },
+  {
+    "name": "confirm an email with a wrong code",
+    "status": 200,
+    "data": {
+      "emailConfirmation": null
+    },
+    "errors": [
+      {
+        "message": "Invalid token",
+        "code": "BAD_USER_INPUT",
+        "path": ["emailConfirmation"],
+        "error": {
+          "name": "ValidationError",
+          "message": "Invalid token",
+          "details": {}
+        }
+      }
+    ]
+  },
+  {
+    "name": "list users without the grant",
+    "status": 200,
+    "data": null,
+    "errors": [
+      {
+        "message": "Forbidden access",
+        "code": "FORBIDDEN",
+        "path": ["usersPermissionsUsers"],
+        "error": {
+          "name": "ForbiddenError",
+          "message": "Forbidden access",
+          "details": {}
+        }
+      }
+    ]
+  },
+  {
+    "name": "users with their role, as a user",
+    "status": 200,
+    "data": {
+      "usersPermissionsUsers": [
+        {
+          "role": null,
+          "username": "ann"
+        }
+      ]
+    },
+    "errors": [
+      {
+        "message": "Forbidden access",
+        "code": "FORBIDDEN",
+        "path": ["usersPermissionsUsers", 0, "role"],
+        "error": {
+          "name": "ForbiddenError",
+          "message": "Forbidden access",
+          "details": {}
+        }
+      }
+    ]
+  },
+  {
+    "name": "roles, as a user",
+    "status": 200,
+    "data": null,
+    "errors": [
+      {
+        "message": "Forbidden access",
+        "code": "FORBIDDEN",
+        "path": ["usersPermissionsRoles"],
+        "error": {
+          "name": "ForbiddenError",
+          "message": "Forbidden access",
+          "details": {}
+        }
+      }
+    ]
+  },
+  {
+    "name": "list roles without the grant",
+    "status": 200,
+    "data": null,
+    "errors": [
+      {
+        "message": "Forbidden access",
+        "code": "FORBIDDEN",
+        "path": ["usersPermissionsRoles"],
+        "error": {
+          "name": "ForbiddenError",
+          "message": "Forbidden access",
+          "details": {}
+        }
+      }
+    ]
+  },
+  {
+    "name": "create a user without the grant",
+    "status": 200,
+    "data": null,
+    "errors": [
+      {
+        "message": "Forbidden access",
+        "code": "FORBIDDEN",
+        "path": ["createUsersPermissionsUser"],
+        "error": {
+          "name": "ForbiddenError",
+          "message": "Forbidden access",
+          "details": {}
+        }
+      }
+    ]
+  },
+  {
+    "name": "list users",
+    "status": 200,
+    "data": {
+      "usersPermissionsUsers": [
+        {
+          "blocked": false,
+          "confirmed": true,
+          "email": "ann@example.test",
+          "role": {
+            "name": "Authenticated"
+          },
+          "username": "ann"
+        }
+      ]
+    },
+    "errors": []
+  },
+  {
+    "name": "users by filter, with a page",
+    "status": 200,
+    "data": {
+      "usersPermissionsUsers_connection": {
+        "nodes": [
+          {
+            "username": "ann"
+          }
+        ],
+        "pageInfo": {
+          "page": 1,
+          "pageCount": 1,
+          "pageSize": 10,
+          "total": 1
+        }
+      }
+    },
+    "errors": []
+  },
+  {
+    "name": "list roles",
+    "status": 200,
+    "data": {
+      "usersPermissionsRoles": [
+        {
+          "description": "Default role given to authenticated user.",
+          "name": "Authenticated",
+          "type": "authenticated"
+        },
+        {
+          "description": "Default role given to unauthenticated user.",
+          "name": "Public",
+          "type": "public"
+        }
+      ]
+    },
+    "errors": []
+  },
+  {
+    "name": "a role by documentId",
+    "status": 200,
+    "data": {
+      "usersPermissionsRole": {
+        "name": "Public",
+        "type": "public",
+        "users": []
+      }
+    },
+    "errors": []
+  },
+  {
+    "name": "a role's users",
+    "status": 200,
+    "data": {
+      "usersPermissionsRoles": [
+        {
+          "name": "Authenticated",
+          "users": [
+            {
+              "username": "ann"
+            }
+          ],
+          "users_connection": {
+            "nodes": [
+              {
+                "username": "ann"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "errors": []
+  },
+  {
+    "name": "create a user",
+    "status": 200,
+    "data": {
+      "createUsersPermissionsUser": {
+        "data": {
+          "blocked": false,
+          "confirmed": false,
+          "email": "bob@example.test",
+          "role": {
+            "name": "Authenticated"
+          },
+          "username": "bob"
+        }
+      }
+    },
+    "errors": []
+  },
+  {
+    "name": "create a user that is taken",
+    "status": 200,
+    "data": null,
+    "errors": [
+      {
+        "message": "This attribute must be unique",
+        "code": "STRAPI_APPLICATION_ERROR",
+        "path": ["createUsersPermissionsUser"],
+        "error": {
+          "name": "ApplicationError",
+          "message": "This attribute must be unique",
+          "details": {}
+        }
+      }
+    ]
+  },
+  {
+    "name": "update a user",
+    "status": 200,
+    "data": {
+      "updateUsersPermissionsUser": {
+        "data": {
+          "blocked": true,
+          "username": "robert"
+        }
+      }
+    },
+    "errors": []
+  },
+  {
+    "name": "update a user that is not there",
+    "status": 200,
+    "data": null,
+    "errors": [
+      {
+        "message": "User not found",
+        "code": "STRAPI_NOT_FOUND_ERROR",
+        "path": ["updateUsersPermissionsUser"],
+        "error": {
+          "name": "NotFoundError",
+          "message": "User not found",
+          "details": {}
+        }
+      }
+    ]
+  },
+  {
+    "name": "the updated user",
+    "status": 200,
+    "data": {
+      "usersPermissionsUsers": [
+        {
+          "blocked": true,
+          "username": "robert"
+        }
+      ]
+    },
+    "errors": []
+  },
+  {
+    "name": "a user by documentId",
+    "status": 200,
+    "data": {
+      "usersPermissionsUser": {
+        "role": {
+          "type": "authenticated"
+        },
+        "username": "robert"
+      }
+    },
+    "errors": []
+  },
+  {
+    "name": "a user that is not there",
+    "status": 200,
+    "data": {
+      "usersPermissionsUser": null
+    },
+    "errors": []
+  },
+  {
+    "name": "delete a user",
+    "status": 200,
+    "data": {
+      "deleteUsersPermissionsUser": {
+        "data": {
+          "username": "robert"
+        }
+      }
+    },
+    "errors": []
+  },
+  {
+    "name": "the deleted user is gone",
+    "status": 200,
+    "data": {
+      "usersPermissionsUsers": []
+    },
+    "errors": []
+  },
+  {
+    "name": "locales",
+    "status": 200,
+    "data": {
+      "i18NLocales": [
+        {
+          "code": "en",
+          "name": "English (en)"
+        },
+        {
+          "code": "fr",
+          "name": "French (fr)"
+        }
+      ]
+    },
+    "errors": []
+  },
+  {
+    "name": "a locale by documentId",
+    "status": 200,
+    "data": {
+      "i18NLocale": {
+        "code": "fr",
+        "name": "French (fr)"
+      }
+    },
+    "errors": []
+  },
+  {
+    "name": "locales as a connection",
+    "status": 200,
+    "data": {
+      "i18NLocales_connection": null
+    },
+    "errors": [
+      {
+        "message": "Forbidden access",
+        "code": "FORBIDDEN",
+        "path": ["i18NLocales_connection"],
+        "error": {
+          "name": "ForbiddenError",
+          "message": "Forbidden access",
+          "details": {}
+        }
+      }
+    ]
+  },
+  {
+    "name": "locales as a connection, with the grant",
+    "status": 200,
+    "data": {
+      "i18NLocales_connection": {
+        "nodes": [
+          {
+            "code": "fr",
+            "name": "French (fr)"
+          }
+        ],
+        "pageInfo": {
+          "total": 1
+        }
+      }
+    },
+    "errors": []
+  },
+  {
+    "name": "upload a file",
+    "status": 201,
+    "body": [
+      {
+        "alternativeText": null,
+        "caption": "Hi",
+        "ext": ".txt",
+        "focalPoint": null,
+        "formats": null,
+        "hash": "notes_<hash>",
+        "height": null,
+        "isUrlSigned": false,
+        "mime": "text/plain",
+        "name": "notes.txt",
+        "previewUrl": null,
+        "provider": "local",
+        "provider_metadata": null,
+        "size": 0.01,
+        "url": "/uploads/notes_<hash>.txt",
+        "width": null
+      }
+    ]
+  },
+  {
+    "name": "files",
+    "status": 200,
+    "data": {
+      "uploadFiles": [
+        {
+          "caption": "Hi",
+          "ext": ".txt",
+          "mime": "text/plain",
+          "name": "notes.txt",
+          "provider": "local",
+          "url": "/uploads/notes_<hash>.txt"
+        }
+      ]
+    },
+    "errors": []
+  },
+  {
+    "name": "a file by documentId",
+    "status": 200,
+    "data": {
+      "uploadFile": {
+        "caption": "Hi",
+        "name": "notes.txt"
+      }
+    },
+    "errors": []
+  },
+  {
+    "name": "files as a connection",
+    "status": 200,
+    "data": {
+      "uploadFiles_connection": {
+        "nodes": [
+          {
+            "name": "notes.txt"
+          }
+        ],
+        "pageInfo": {
+          "total": 1
+        }
+      }
+    },
+    "errors": []
+  },
+  {
+    "name": "files without the grant",
+    "status": 200,
+    "data": null,
+    "errors": [
+      {
+        "message": "Forbidden access",
+        "code": "FORBIDDEN",
+        "path": ["uploadFiles"],
+        "error": {
+          "name": "ForbiddenError",
+          "message": "Forbidden access",
+          "details": {}
+        }
+      }
+    ]
+  },
+  {
+    "name": "update a file's info",
+    "status": 200,
+    "data": {
+      "updateUploadFile": {
+        "alternativeText": "A greeting",
+        "caption": "Hello",
+        "name": "notes.txt"
+      }
+    },
+    "errors": []
+  },
+  {
+    "name": "update a file that is not there",
+    "status": 200,
+    "data": null,
+    "errors": [
+      {
+        "message": "Entity not found",
+        "code": "STRAPI_NOT_FOUND_ERROR",
+        "path": ["updateUploadFile"],
+        "error": {
+          "name": "NotFoundError",
+          "message": "Entity not found",
+          "details": {}
+        }
+      }
+    ]
+  },
+  {
+    "name": "delete a file",
+    "status": 200,
+    "data": {
+      "deleteUploadFile": {
+        "caption": "Hello",
+        "name": "notes.txt"
+      }
+    },
+    "errors": []
+  },
+  {
+    "name": "delete a file that is not there",
+    "status": 200,
+    "data": {
+      "deleteUploadFile": null
+    },
+    "errors": []
+  },
+  {
+    "name": "no files left",
+    "status": 200,
+    "data": {
+      "uploadFiles": []
+    },
+    "errors": []
+  },
+  {
+    "name": "a read-only token reads",
+    "status": 200,
+    "data": {
+      "books": [],
+      "posts": []
+    },
+    "errors": []
+  },
+  {
+    "name": "a read-only token does not write",
+    "status": 200,
+    "data": {
+      "createBook": null
+    },
+    "errors": [
+      {
+        "message": "Forbidden access",
+        "code": "FORBIDDEN",
+        "path": ["createBook"],
+        "error": {
+          "name": "ForbiddenError",
+          "message": "Forbidden access",
+          "details": {}
+        }
+      }
+    ]
+  },
+  {
+    "name": "a read-only token reads locales and files",
+    "status": 200,
+    "data": null,
+    "errors": [
+      {
+        "message": "Forbidden access",
+        "code": "FORBIDDEN",
+        "path": ["i18NLocales"],
+        "error": {
+          "name": "ForbiddenError",
+          "message": "Forbidden access",
+          "details": {}
+        }
+      }
+    ]
+  },
+  {
+    "name": "a read-only token has no user",
+    "status": 200,
+    "data": {
+      "me": null
+    },
+    "errors": [
+      {
+        "message": "Forbidden access",
+        "code": "FORBIDDEN",
+        "path": ["me"],
+        "error": {
+          "name": "ForbiddenError",
+          "message": "Forbidden access",
+          "details": {}
+        }
+      }
+    ]
+  },
+  {
+    "name": "a custom token reads what it grants",
+    "status": 200,
+    "data": {
+      "books": []
+    },
+    "errors": []
+  },
+  {
+    "name": "a custom token reads nothing else",
+    "status": 200,
+    "data": null,
+    "errors": [
+      {
+        "message": "Forbidden access",
+        "code": "FORBIDDEN",
+        "path": ["posts"],
+        "error": {
+          "name": "ForbiddenError",
+          "message": "Forbidden access",
+          "details": {}
+        }
+      }
+    ]
+  },
+  {
+    "name": "a custom token finds no single book",
+    "status": 200,
+    "data": {
+      "book": null
+    },
+    "errors": [
+      {
+        "message": "Forbidden access",
+        "code": "FORBIDDEN",
+        "path": ["book"],
+        "error": {
+          "name": "ForbiddenError",
+          "message": "Forbidden access",
+          "details": {}
+        }
+      }
+    ]
+  },
+  {
+    "name": "a custom token does not write",
+    "status": 200,
+    "data": {
+      "createBook": null
+    },
+    "errors": [
+      {
+        "message": "Forbidden access",
+        "code": "FORBIDDEN",
+        "path": ["createBook"],
+        "error": {
+          "name": "ForbiddenError",
+          "message": "Forbidden access",
+          "details": {}
+        }
+      }
+    ]
+  },
+  {
+    "name": "a custom token lists no users",
+    "status": 200,
+    "data": null,
+    "errors": [
+      {
+        "message": "Forbidden access",
+        "code": "FORBIDDEN",
+        "path": ["usersPermissionsUsers"],
+        "error": {
+          "name": "ForbiddenError",
+          "message": "Forbidden access",
+          "details": {}
+        }
+      }
+    ]
+  },
+  {
+    "name": "nothing was written",
+    "status": 200,
+    "data": {
+      "books": []
+    },
+    "errors": []
+  }
+]

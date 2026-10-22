@@ -44,10 +44,8 @@ const oracle = blocks(
   readFileSync(join(__dirname, "__fixtures__/graphql-schema.strapi-php.graphql"), "utf8"),
 );
 
-// What strapi-php's schema has that this phase leaves to later ones: its users-permissions and
-// i18n plugins' own types, the media library's own queries and mutations, and its morph links.
-const LATER =
-  /^(UsersPermissions|I18NLocale(?!Code)|GenericMorph$|UploadFileEntityResponseCollection$|FileInfoInput$)/;
+// What strapi-php's schema has that a later part brings: the morph links of a file.
+const LATER = /^GenericMorph$/;
 
 describe("GraphQL", () => {
   it("is generated only when the project asks for it", () => {
@@ -110,14 +108,15 @@ describe("GraphQL", () => {
     for (const root of ["Query", "Mutation"]) {
       const theirs = fields(oracle.get(root)!);
       const mine = fields(ours.get(root) ?? "");
-      for (const [name, field] of theirs)
-        if (
-          !/^(usersPermissions|i18NLocale|uploadFile|updateUploadFile|deleteUploadFile|register|login|forgotPassword|resetPassword|changePassword|emailConfirmation|me|createUsersPermissions|updateUsersPermissions|deleteUsersPermissions)/.test(
-            name,
-          )
-        )
-          expect(mine.get(name), `${root}.${name}`).toBe(field);
+      for (const [name, field] of theirs) expect(mine.get(name), `${root}.${name}`).toBe(field);
     }
+  });
+
+  // graphql-plugin-vectors.json, recorded from strapi-php, is the behaviour.
+  it("serves the users-permissions, i18n and upload plugins' own queries and mutations", () => {
+    const features = result.gaps.gaps.map((g) => g.feature);
+    expect(features).not.toContain("graphqlPluginApis");
+    expect(features).not.toContain("graphqlApiTokens");
   });
 
   it("serves the media library's files without their morph links", () => {

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The camis side of strapi-auth-vectors.mjs --hook, run from the generated app's directory: reads
 # what only the database knows and changes what only an administrator can, through artisan tinker.
-# usage: strapi-auth-hook.sh lookup reset|confirmation <username> | lookup role <name>
+# usage: strapi-auth-hook.sh lookup reset|confirmation|user <username> | lookup role <name>
 #        | settings <json> | provider <name> <json> | block <username> | allow create|update|destroy | role <name> <action>...
 #        | token <name> <type> <action>... | expire|revoke|regenerate <name>
 #        | webhook <name> <url> <headers-json> <event>... | webhook-disable <name>
@@ -12,6 +12,7 @@ case "$1" in
     case "$2" in
       reset) code="echo App\\Models\\User::where('username', $(php_string "$3"))->value('reset_password_token');" ;;
       confirmation) code="echo App\\Models\\User::where('username', $(php_string "$3"))->value('confirmation_token');" ;;
+      user) code="echo App\\Models\\User::where('username', $(php_string "$3"))->value('id');" ;;
       role) code="echo Spatie\\Permission\\Models\\Role::findByName($(php_string "$3"))->getKey();" ;;
     esac ;;
   settings) code="App\\Support\\StrapiSettings::merge('users-permissions.advanced', json_decode($(php_string "$2"), true));" ;;

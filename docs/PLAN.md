@@ -846,12 +846,34 @@ passes.
 **Status (2026-10-21):** every suite passes on SQLite and Postgres with all caches on, and the
 PHP tests pass.
 
-Known gaps (reported): the users-permissions (`login`, `register`, `me`, roles, users), i18n
-locale and upload queries and mutations, `UploadFile.related` (Strapi's `GenericMorph`),
-`hasPublishedVersion` and `publicationFilter` (in the schema, refused), and read-only and custom
-API tokens (a full-access one works) come in a second part. Filters and sort on a repeatable
-component are refused. The Strapi storage layout and the laravel API style generate no GraphQL.
-A single type is served as a collection, as on REST.
+**Part 2 — the plugins' own fields and API tokens.** The schema now holds every type, query and
+mutation strapi-php's has but `GenericMorph`:
+
+- users-permissions: `login`, `register`, `me`, `forgotPassword`, `resetPassword`,
+  `changePassword` and `emailConfirmation` run the REST auth controller (and its throttle, shared
+  config); `usersPermissionsUser(s)` and the user mutations run the REST user controller; roles
+  are read from the project's roles, with Strapi's names and descriptions for `authenticated` and
+  `public`. As in Strapi, no role is granted a read of roles (so `UsersPermissionsUser.role` is
+  refused without a token that has one); `UsersPermissionsMe.role` is always the caller's own.
+- i18n: `i18NLocale(s)` (Strapi's `listLocales` scope) and `i18NLocales_connection` (its default
+  `locale.find` scope, which no role holds).
+- upload: `uploadFile(s)`, `updateUploadFile` and `deleteUploadFile` through the upload API.
+- API tokens: `StrapiApiToken` lets a token through to `/graphql`, and each action the request
+  runs is checked against it, so read-only and custom tokens reach exactly what they would on REST.
+- Errors carry Strapi's GraphQL codes: `UnauthorizedError` is `FORBIDDEN` and `NotFoundError` is
+  `STRAPI_NOT_FOUND_ERROR`.
+
+Part 2's exit: the 63 checks of `graphql-plugin-vectors.json` (run by `strapi-auth-vectors.mjs`,
+whose steps may now be GraphQL ones), recorded from strapi-php, pass on SQLite, MySQL and
+Postgres, with `GraphqlTest` adding role mutations refused even to a full-access token, a role's
+permissions refused, GraphQL sign-in throttled, and a custom token held to its actions. The REST
+user controller now refuses a taken username as Strapi does (it raised a database error).
+
+Known gaps (reported): `UploadFile.related` (Strapi's `GenericMorph`), `hasPublishedVersion` and
+`publicationFilter` (in the schema, refused), role mutations (roles are the IR's, as on REST) and
+`UsersPermissionsRole.permissions` (the IR's grants are not permission rows). Filters and sort on
+a repeatable component are refused. The Strapi storage layout and the laravel API style generate
+no GraphQL. A single type is served as a collection, as on REST.
 
 ---
 
