@@ -1,6 +1,6 @@
 import { stableJson, withMarker, type GeneratedFile } from "@camis/adapter-kernel";
 import { aiPlaceholders, type ContentType, type Field, type IrDocument } from "@camis/ir-schema";
-import { strapiNames } from "./names";
+import { strapiNames } from "@camis/strapi-schema";
 
 type AiField = Field & { ai?: { model?: string; prompt: string; trigger: string } };
 const aiOf = (f: Field): AiField["ai"] | undefined => (f as AiField).ai;

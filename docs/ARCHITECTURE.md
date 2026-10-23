@@ -89,6 +89,7 @@ camis/
 │   ├── expr-php-emit/         # Ring 1: PHP code emitter (TS lib that emits PHP source)
 │   ├── permissions/           # Neutral permission model + down-projection logic
 │   ├── adapter-kernel/        # Shared adapter contracts, marker/manifest system, codegen utils
+│   ├── strapi-schema/         # IR → Strapi v5 schema.json (content types, components), shared by the adapters that speak Strapi
 │   ├── adapter-strapi/        # Strapi v5 generate + import
 │   ├── adapter-filament/      # Laravel 12 + Filament generate (Spatie + Policies)
 │   ├── adapter-express/       # Express + Drizzle + React admin generate
@@ -140,7 +141,9 @@ Filament/Spatie ship as Composer packages.
 
 Strapi v5 is the maturity benchmark and the first import/export adapter, which conveniently
 proves the IR can faithfully represent a real-world model. But the IR's own serialization is
-clean and neutral; Strapi-isms are confined to `adapter-strapi`.
+clean and neutral; Strapi-isms are confined to `adapter-strapi` and to `strapi-schema`, the
+IR → Strapi schema mapping that `adapter-strapi` writes as `schema.json` files and the Filament
+adapter's Strapi API style needs for Strapi's data-transfer archives.
 
 ### 3.3 Capability model & gap reporting
 

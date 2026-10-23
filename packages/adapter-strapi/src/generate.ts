@@ -9,14 +9,19 @@ import { normalize } from "@camis/ir-core";
 import type { CapabilityGap, Component, ContentType, IrDocument } from "@camis/ir-schema";
 import { aiFieldContentTypes, aiLifecycleFile, aiProviderFile, hasAiField } from "./ai";
 import { apiFactoryFiles } from "./api-files";
-import { componentSchema } from "./component-schema";
 import { usersPermissionsExtensionFile } from "./extensions";
 import { emitHookFiles } from "./hooks/emit";
-import { componentCategory, componentUids, kebab, strapiNames } from "./names";
 import { emitPermissions } from "./permissions/emit";
-import { contentTypeSchema } from "./schema";
-import { synthesizedInverses } from "./relations";
 import { skeletonFiles } from "./skeleton";
+import {
+  componentCategory,
+  componentSchema,
+  componentUids,
+  contentTypeSchema,
+  kebab,
+  strapiNames,
+  synthesizedInverses,
+} from "@camis/strapi-schema";
 
 const typeFiles = (
   ct: ContentType,
