@@ -920,6 +920,34 @@ keeps the `required` it implies. `servers` is `/api`, where the routes are, rath
 empty URL. The documentation plugin's OpenAPI 3.0 variant (with its admin-only fields) is not
 generated.
 
+**Part 2 — importing a Strapi export.** On the same style and layout, `php artisan strapi:import`
+takes Strapi's `strapi import` options (`--file`, `--key`, `--force`, `--only`, `--exclude` over
+`content`, `files`, `config`) and restores an archive `strapi export` wrote (`.tar`, `.tar.gz`,
+`.tar.gz.enc`), so a Strapi project can move onto shared hosting. A generated
+`StrapiTransferMap` says, per uid, which column, component columns or child rows each archived
+key goes to and which Eloquent relation stores each link, with content types in an order that
+sets required foreign keys on insert. The engine deletes the mapped content, inserts every entry
+with its documentId and timestamps, resolves links through the archived-id → row-id map (a row
+of a type without draft and publish links a draft-and-publish document's draft only, as camis
+stores it), attaches media in order, and restores locales, the files' bytes on the upload disk,
+users-permissions settings and webhooks. Users are matched by email, keeping their password
+hashes, rather than deleted, because the same table holds the admin's accounts; a Strapi role
+becomes the camis role of that name, else the default one. Decryption is Strapi's AES-128-ECB
+under scrypt(key), with scrypt written out in PHP. The import refuses an archive with a content
+type or attribute the project lacks, naming each; types and attributes only the project has stay
+empty. All of it runs in one PHP process, with no queue or cron.
+
+Part 2's exit: `transfer/strapi-php-export.tar.gz` and its encrypted twin, written by strapi-php
+from `transfer/seed-vectors.json`, import in the boot job; the archive's user signs in with the
+password strapi-php hashed, and the 16 reads of `read-vectors.json` (documentIds compared) answer
+as strapi-php answers them after importing the same archive. Passes on SQLite and Postgres,
+including a second import over the first.
+
+Known gaps: roles' permissions, upload folders and admin data are not imported (the IR's grants
+are the permissions; camis keeps a file's folder path only; Strapi does not export admin data).
+Repeatable components inside a component are reported and left empty. Exporting, transfer tokens
+and `strapi transfer` between live instances are the next parts.
+
 ---
 
 ## Sequencing rationale (quick reference)

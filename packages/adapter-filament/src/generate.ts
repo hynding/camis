@@ -316,11 +316,12 @@ export const filamentAdapter: GenerateAdapter = {
       ...hooks.files,
       ...perm.files,
       ...aiGenFiles,
-      deployFile(
-        storage,
-        options.graphql === true && apiStyle === "strapi" && storage !== "strapi",
-        options.documentation === true && apiStyle === "strapi" && storage !== "strapi",
-      ),
+      deployFile(storage, {
+        graphql: options.graphql === true && apiStyle === "strapi" && storage !== "strapi",
+        documentation:
+          options.documentation === true && apiStyle === "strapi" && storage !== "strapi",
+        transfer: apiStyle === "strapi" && storage !== "strapi",
+      }),
     ];
     return {
       files: allFiles,

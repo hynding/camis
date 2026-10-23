@@ -1,0 +1,689 @@
+{
+  "authors and their books": {
+    "status": 200,
+    "data": [
+      {
+        "books": [
+          {
+            "documentId": "uhkar50yrksrkvzgsbtd4do5",
+            "inStock": true,
+            "pages": 100,
+            "publishedOn": "2024-05-01",
+            "rating": 4.5,
+            "releasedAt": "2024-05-01T10:30:00.000Z",
+            "title": "Alpha"
+          }
+        ],
+        "documentId": "g6dorvivbhw31wks06o3dasi",
+        "name": "Ann"
+      },
+      {
+        "books": [
+          {
+            "documentId": "uvmvnl7k4k8r9adlqbr5edan",
+            "title": "Beta"
+          }
+        ],
+        "documentId": "ysvprg7b0owg2b85zfisajik",
+        "name": "Bob"
+      }
+    ]
+  },
+  "genres": {
+    "status": 200,
+    "data": [
+      {
+        "documentId": "n3hey902yln68uz4664bb234",
+        "name": "Fantasy"
+      },
+      {
+        "documentId": "lrtc4oqygvh31ktvsju40kk4",
+        "name": "Horror"
+      }
+    ]
+  },
+  "books with everything": {
+    "status": 200,
+    "data": [
+      {
+        "attachments": [
+          {
+            "documentId": "lz9aa6hfn25d4mwa77rtiqcu",
+            "ext": ".txt",
+            "hash": "my_notes_<hash>",
+            "mime": "text/plain",
+            "name": "my-notes.txt",
+            "provider": "local",
+            "size": 0.01,
+            "url": "/uploads/my_notes_<hash>.txt"
+          },
+          {
+            "alternativeText": "red",
+            "caption": "A red box",
+            "documentId": "iloixpyxad2v7qykf6twffu8",
+            "ext": ".png",
+            "formats": {
+              "large": {
+                "ext": ".png",
+                "hash": "large_wide_<hash>",
+                "height": 667,
+                "mime": "image/png",
+                "name": "large_wide.png",
+                "url": "/uploads/large_wide_<hash>.png",
+                "width": 1000
+              },
+              "medium": {
+                "ext": ".png",
+                "hash": "medium_wide_<hash>",
+                "height": 500,
+                "mime": "image/png",
+                "name": "medium_wide.png",
+                "url": "/uploads/medium_wide_<hash>.png",
+                "width": 750
+              },
+              "small": {
+                "ext": ".png",
+                "hash": "small_wide_<hash>",
+                "height": 333,
+                "mime": "image/png",
+                "name": "small_wide.png",
+                "url": "/uploads/small_wide_<hash>.png",
+                "width": 500
+              },
+              "thumbnail": {
+                "ext": ".png",
+                "hash": "thumbnail_wide_<hash>",
+                "height": 156,
+                "mime": "image/png",
+                "name": "thumbnail_wide.png",
+                "url": "/uploads/thumbnail_wide_<hash>.png",
+                "width": 234
+              }
+            },
+            "hash": "wide_<hash>",
+            "height": 800,
+            "mime": "image/png",
+            "name": "wide.png",
+            "provider": "local",
+            "url": "/uploads/wide_<hash>.png",
+            "width": 1200
+          }
+        ],
+        "author": {
+          "documentId": "g6dorvivbhw31wks06o3dasi",
+          "name": "Ann"
+        },
+        "category": {
+          "documentId": "m23sss2ezqfxwjj1lenngbgo",
+          "locale": "en",
+          "name": "News"
+        },
+        "cover": {
+          "alternativeText": "red",
+          "caption": "A red box",
+          "documentId": "iloixpyxad2v7qykf6twffu8",
+          "ext": ".png",
+          "formats": {
+            "large": {
+              "ext": ".png",
+              "hash": "large_wide_<hash>",
+              "height": 667,
+              "mime": "image/png",
+              "name": "large_wide.png",
+              "url": "/uploads/large_wide_<hash>.png",
+              "width": 1000
+            },
+            "medium": {
+              "ext": ".png",
+              "hash": "medium_wide_<hash>",
+              "height": 500,
+              "mime": "image/png",
+              "name": "medium_wide.png",
+              "url": "/uploads/medium_wide_<hash>.png",
+              "width": 750
+            },
+            "small": {
+              "ext": ".png",
+              "hash": "small_wide_<hash>",
+              "height": 333,
+              "mime": "image/png",
+              "name": "small_wide.png",
+              "url": "/uploads/small_wide_<hash>.png",
+              "width": 500
+            },
+            "thumbnail": {
+              "ext": ".png",
+              "hash": "thumbnail_wide_<hash>",
+              "height": 156,
+              "mime": "image/png",
+              "name": "thumbnail_wide.png",
+              "url": "/uploads/thumbnail_wide_<hash>.png",
+              "width": 234
+            }
+          },
+          "hash": "wide_<hash>",
+          "height": 800,
+          "mime": "image/png",
+          "name": "wide.png",
+          "provider": "local",
+          "url": "/uploads/wide_<hash>.png",
+          "width": 1200
+        },
+        "documentId": "uhkar50yrksrkvzgsbtd4do5",
+        "editions": [
+          {
+            "amount": 1,
+            "unit": "ea"
+          },
+          {
+            "amount": 2.5,
+            "unit": "kg"
+          }
+        ],
+        "genres": [
+          {
+            "documentId": "n3hey902yln68uz4664bb234",
+            "name": "Fantasy"
+          },
+          {
+            "documentId": "lrtc4oqygvh31ktvsju40kk4",
+            "name": "Horror"
+          }
+        ],
+        "inStock": true,
+        "pages": 100,
+        "price": {
+          "currency": "USD",
+          "minor": "1999"
+        },
+        "publishedOn": "2024-05-01",
+        "rating": 4.5,
+        "releasedAt": "2024-05-01T10:30:00.000Z",
+        "title": "Alpha",
+        "topic": {
+          "documentId": "ig38ornkq0hil8k38t1e0z2w",
+          "name": "Live"
+        }
+      },
+      {
+        "attachments": [],
+        "author": {
+          "documentId": "ysvprg7b0owg2b85zfisajik",
+          "name": "Bob"
+        },
+        "documentId": "uvmvnl7k4k8r9adlqbr5edan",
+        "editions": [],
+        "genres": [],
+        "title": "Beta"
+      }
+    ]
+  },
+  "a book's components and media in full": {
+    "status": 200,
+    "data": [
+      {
+        "attachments": [
+          {
+            "documentId": "lz9aa6hfn25d4mwa77rtiqcu",
+            "ext": ".txt",
+            "hash": "my_notes_<hash>",
+            "mime": "text/plain",
+            "name": "my-notes.txt",
+            "provider": "local",
+            "size": 0.01,
+            "url": "/uploads/my_notes_<hash>.txt"
+          },
+          {
+            "alternativeText": "red",
+            "caption": "A red box",
+            "documentId": "iloixpyxad2v7qykf6twffu8",
+            "ext": ".png",
+            "formats": {
+              "large": {
+                "ext": ".png",
+                "hash": "large_wide_<hash>",
+                "height": 667,
+                "mime": "image/png",
+                "name": "large_wide.png",
+                "url": "/uploads/large_wide_<hash>.png",
+                "width": 1000
+              },
+              "medium": {
+                "ext": ".png",
+                "hash": "medium_wide_<hash>",
+                "height": 500,
+                "mime": "image/png",
+                "name": "medium_wide.png",
+                "url": "/uploads/medium_wide_<hash>.png",
+                "width": 750
+              },
+              "small": {
+                "ext": ".png",
+                "hash": "small_wide_<hash>",
+                "height": 333,
+                "mime": "image/png",
+                "name": "small_wide.png",
+                "url": "/uploads/small_wide_<hash>.png",
+                "width": 500
+              },
+              "thumbnail": {
+                "ext": ".png",
+                "hash": "thumbnail_wide_<hash>",
+                "height": 156,
+                "mime": "image/png",
+                "name": "thumbnail_wide.png",
+                "url": "/uploads/thumbnail_wide_<hash>.png",
+                "width": 234
+              }
+            },
+            "hash": "wide_<hash>",
+            "height": 800,
+            "mime": "image/png",
+            "name": "wide.png",
+            "provider": "local",
+            "url": "/uploads/wide_<hash>.png",
+            "width": 1200
+          }
+        ],
+        "cover": {
+          "alternativeText": "red",
+          "caption": "A red box",
+          "documentId": "iloixpyxad2v7qykf6twffu8",
+          "ext": ".png",
+          "formats": {
+            "large": {
+              "ext": ".png",
+              "hash": "large_wide_<hash>",
+              "height": 667,
+              "mime": "image/png",
+              "name": "large_wide.png",
+              "url": "/uploads/large_wide_<hash>.png",
+              "width": 1000
+            },
+            "medium": {
+              "ext": ".png",
+              "hash": "medium_wide_<hash>",
+              "height": 500,
+              "mime": "image/png",
+              "name": "medium_wide.png",
+              "url": "/uploads/medium_wide_<hash>.png",
+              "width": 750
+            },
+            "small": {
+              "ext": ".png",
+              "hash": "small_wide_<hash>",
+              "height": 333,
+              "mime": "image/png",
+              "name": "small_wide.png",
+              "url": "/uploads/small_wide_<hash>.png",
+              "width": 500
+            },
+            "thumbnail": {
+              "ext": ".png",
+              "hash": "thumbnail_wide_<hash>",
+              "height": 156,
+              "mime": "image/png",
+              "name": "thumbnail_wide.png",
+              "url": "/uploads/thumbnail_wide_<hash>.png",
+              "width": 234
+            }
+          },
+          "hash": "wide_<hash>",
+          "height": 800,
+          "mime": "image/png",
+          "name": "wide.png",
+          "provider": "local",
+          "url": "/uploads/wide_<hash>.png",
+          "width": 1200
+        },
+        "documentId": "uhkar50yrksrkvzgsbtd4do5",
+        "editions": [
+          {
+            "amount": 1,
+            "unit": "ea"
+          },
+          {
+            "amount": 2.5,
+            "unit": "kg"
+          }
+        ],
+        "inStock": true,
+        "pages": 100,
+        "price": {
+          "currency": "USD",
+          "minor": "1999"
+        },
+        "publishedOn": "2024-05-01",
+        "rating": 4.5,
+        "releasedAt": "2024-05-01T10:30:00.000Z",
+        "title": "Alpha"
+      }
+    ]
+  },
+  "published topics": {
+    "status": 200,
+    "data": [
+      {
+        "documentId": "ig38ornkq0hil8k38t1e0z2w",
+        "name": "Live"
+      }
+    ]
+  },
+  "draft topics": {
+    "status": 200,
+    "data": [
+      {
+        "documentId": "e9iu220p0u39i4fpvnnrxsc8",
+        "name": "DraftOnly"
+      },
+      {
+        "documentId": "ig38ornkq0hil8k38t1e0z2w",
+        "name": "Live"
+      }
+    ]
+  },
+  "published posts with their links": {
+    "status": 200,
+    "data": [
+      {
+        "author": {
+          "documentId": "g6dorvivbhw31wks06o3dasi",
+          "name": "Ann"
+        },
+        "documentId": "r0y3ymqnacvmfai7o67ll4k3",
+        "image": {
+          "alternativeText": "red",
+          "caption": "A red box",
+          "documentId": "iloixpyxad2v7qykf6twffu8",
+          "ext": ".png",
+          "formats": {
+            "large": {
+              "ext": ".png",
+              "hash": "large_wide_<hash>",
+              "height": 667,
+              "mime": "image/png",
+              "name": "large_wide.png",
+              "url": "/uploads/large_wide_<hash>.png",
+              "width": 1000
+            },
+            "medium": {
+              "ext": ".png",
+              "hash": "medium_wide_<hash>",
+              "height": 500,
+              "mime": "image/png",
+              "name": "medium_wide.png",
+              "url": "/uploads/medium_wide_<hash>.png",
+              "width": 750
+            },
+            "small": {
+              "ext": ".png",
+              "hash": "small_wide_<hash>",
+              "height": 333,
+              "mime": "image/png",
+              "name": "small_wide.png",
+              "url": "/uploads/small_wide_<hash>.png",
+              "width": 500
+            },
+            "thumbnail": {
+              "ext": ".png",
+              "hash": "thumbnail_wide_<hash>",
+              "height": 156,
+              "mime": "image/png",
+              "name": "thumbnail_wide.png",
+              "url": "/uploads/thumbnail_wide_<hash>.png",
+              "width": 234
+            }
+          },
+          "hash": "wide_<hash>",
+          "height": 800,
+          "mime": "image/png",
+          "name": "wide.png",
+          "provider": "local",
+          "url": "/uploads/wide_<hash>.png",
+          "width": 1200
+        },
+        "title": "Live",
+        "topics": [
+          {
+            "documentId": "ig38ornkq0hil8k38t1e0z2w",
+            "name": "Live"
+          }
+        ],
+        "views": 3
+      }
+    ]
+  },
+  "draft posts": {
+    "status": 200,
+    "data": [
+      {
+        "author": {
+          "documentId": "ysvprg7b0owg2b85zfisajik",
+          "name": "Bob"
+        },
+        "documentId": "pnyq645ifhtiu1mgmxe8qon4",
+        "title": "Draft",
+        "topics": []
+      },
+      {
+        "author": {
+          "documentId": "g6dorvivbhw31wks06o3dasi",
+          "name": "Ann"
+        },
+        "documentId": "r0y3ymqnacvmfai7o67ll4k3",
+        "title": "Live (edited)",
+        "topics": [
+          {
+            "documentId": "e9iu220p0u39i4fpvnnrxsc8",
+            "name": "DraftOnly"
+          },
+          {
+            "documentId": "ig38ornkq0hil8k38t1e0z2w",
+            "name": "Live"
+          }
+        ],
+        "views": 3
+      }
+    ]
+  },
+  "categories in every locale": {
+    "status": 200,
+    "data": [
+      {
+        "documentId": "m23sss2ezqfxwjj1lenngbgo",
+        "locale": "fr",
+        "name": "Actualités"
+      },
+      {
+        "documentId": "m23sss2ezqfxwjj1lenngbgo",
+        "locale": "en",
+        "name": "News"
+      }
+    ]
+  },
+  "articles in English": {
+    "status": 200,
+    "data": [
+      {
+        "category": {
+          "documentId": "m23sss2ezqfxwjj1lenngbgo",
+          "locale": "en",
+          "name": "News"
+        },
+        "code": "A1",
+        "documentId": "zbvlt1f5vd09morx5z5y9pjk",
+        "genres": [
+          {
+            "documentId": "n3hey902yln68uz4664bb234",
+            "name": "Fantasy"
+          }
+        ],
+        "locale": "en",
+        "localizations": [
+          {
+            "code": "A1",
+            "documentId": "zbvlt1f5vd09morx5z5y9pjk",
+            "locale": "fr",
+            "title": "Bonjour"
+          }
+        ],
+        "title": "Hello"
+      }
+    ]
+  },
+  "articles in French": {
+    "status": 200,
+    "data": [
+      {
+        "code": "A1",
+        "documentId": "zbvlt1f5vd09morx5z5y9pjk",
+        "genres": [],
+        "locale": "fr",
+        "localizations": [
+          {
+            "code": "A1",
+            "documentId": "zbvlt1f5vd09morx5z5y9pjk",
+            "locale": "en",
+            "title": "Hello"
+          }
+        ],
+        "title": "Bonjour"
+      }
+    ]
+  },
+  "pages, published": {
+    "status": 200,
+    "data": [
+      {
+        "documentId": "ow6n9iry9ttojhukecthto9a",
+        "locale": "en",
+        "title": "Home"
+      }
+    ]
+  },
+  "pages, drafts": {
+    "status": 200,
+    "data": [
+      {
+        "documentId": "ow6n9iry9ttojhukecthto9a",
+        "locale": "fr",
+        "title": "Accueil"
+      },
+      {
+        "documentId": "ow6n9iry9ttojhukecthto9a",
+        "locale": "en",
+        "title": "Home"
+      }
+    ]
+  },
+  "landings and their zone": {
+    "status": 200,
+    "data": [
+      {
+        "blocks": [
+          {
+            "__component": "shared.hero",
+            "heading": "Hi",
+            "price": {
+              "currency": "EUR",
+              "minor": "5"
+            },
+            "subheading": "Welcome"
+          },
+          {
+            "__component": "shared.quantity",
+            "amount": 2,
+            "unit": "kg"
+          }
+        ],
+        "documentId": "e6ycctcu2973nwguzgv137yk",
+        "title": "Home"
+      }
+    ]
+  },
+  "the files": {
+    "status": 200,
+    "data": [
+      {
+        "documentId": "lz9aa6hfn25d4mwa77rtiqcu",
+        "ext": ".txt",
+        "hash": "my_notes_<hash>",
+        "isUrlSigned": false,
+        "mime": "text/plain",
+        "name": "my-notes.txt",
+        "provider": "local",
+        "size": 0.01,
+        "url": "/uploads/my_notes_<hash>.txt"
+      },
+      {
+        "alternativeText": "red",
+        "caption": "A red box",
+        "documentId": "iloixpyxad2v7qykf6twffu8",
+        "ext": ".png",
+        "formats": {
+          "large": {
+            "ext": ".png",
+            "hash": "large_wide_<hash>",
+            "height": 667,
+            "mime": "image/png",
+            "name": "large_wide.png",
+            "url": "/uploads/large_wide_<hash>.png",
+            "width": 1000
+          },
+          "medium": {
+            "ext": ".png",
+            "hash": "medium_wide_<hash>",
+            "height": 500,
+            "mime": "image/png",
+            "name": "medium_wide.png",
+            "url": "/uploads/medium_wide_<hash>.png",
+            "width": 750
+          },
+          "small": {
+            "ext": ".png",
+            "hash": "small_wide_<hash>",
+            "height": 333,
+            "mime": "image/png",
+            "name": "small_wide.png",
+            "url": "/uploads/small_wide_<hash>.png",
+            "width": 500
+          },
+          "thumbnail": {
+            "ext": ".png",
+            "hash": "thumbnail_wide_<hash>",
+            "height": 156,
+            "mime": "image/png",
+            "name": "thumbnail_wide.png",
+            "url": "/uploads/thumbnail_wide_<hash>.png",
+            "width": 234
+          }
+        },
+        "hash": "wide_<hash>",
+        "height": 800,
+        "isUrlSigned": false,
+        "mime": "image/png",
+        "name": "wide.png",
+        "provider": "local",
+        "url": "/uploads/wide_<hash>.png",
+        "width": 1200
+      }
+    ]
+  },
+  "the locales": {
+    "status": 200,
+    "data": [
+      {
+        "code": "en",
+        "documentId": "m34r79fqqb22nvsl7td0ampq",
+        "isDefault": true,
+        "name": "English (en)"
+      },
+      {
+        "code": "fr",
+        "documentId": "zkuqq6yto10h5wua9qyc028k",
+        "isDefault": false,
+        "name": "French (fr)"
+      }
+    ]
+  }
+}

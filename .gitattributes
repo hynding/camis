@@ -1,2 +1,4 @@
 # Byte-exact golden files must be stable across OSes; force LF everywhere.
 * text=auto eol=lf
+*.enc binary
+*.gz binary
