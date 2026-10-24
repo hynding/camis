@@ -67,6 +67,36 @@ final class StrapiTransferCipher
         return $plain;
     }
 
+    /**
+     * Encrypts $source into $target a megabyte at a time: ECB encrypts each block on its own, so
+     * only the last chunk carries the PKCS#7 padding.
+     */
+    public static function encryptFile(string $source, string $target, string $key): void
+    {
+        $derived = self::scrypt($key, '', 16);
+        $in = fopen($source, 'rb');
+        $out = fopen($target, 'wb');
+        if ($in === false || $out === false) {
+            throw new \RuntimeException('Cannot encrypt the archive');
+        }
+        $chunk = (string) fread($in, 1 << 20);
+        while (true) {
+            $next = feof($in) ? '' : (string) fread($in, 1 << 20);
+            $last = $next === '' && feof($in);
+            if ($last) {
+                $pad = 16 - strlen($chunk) % 16;
+                $chunk .= str_repeat(chr($pad), $pad);
+            }
+            fwrite($out, (string) openssl_encrypt($chunk, 'aes-128-ecb', $derived, OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING));
+            if ($last) {
+                break;
+            }
+            $chunk = $next;
+        }
+        fclose($in);
+        fclose($out);
+    }
+
     /** RFC 7914 scrypt. */
     public static function scrypt(string $password, string $salt, int $length, int $n = 16384, int $r = 8, int $p = 1): string
     {

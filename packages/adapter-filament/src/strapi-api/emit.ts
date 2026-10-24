@@ -81,8 +81,11 @@ import {
   GRAPHQL_SCHEMA_PATH,
 } from "./graphql-runtime";
 import {
+  emitStrapiExportCommand,
   emitStrapiImportCommand,
   emitStrapiTransferMap,
+  EXPORT_COMMAND_PATH,
+  EXPORT_ENGINE_PATH,
   IMPORT_COMMAND_PATH,
   IMPORT_ENGINE_PATH,
   TRANSFER_MAP_PATH,
@@ -90,6 +93,7 @@ import {
 } from "./transfer";
 import { runtimeSchemas } from "@camis/strapi-schema";
 import { emitStrapiTransferCipher, TRANSFER_CIPHER_PATH } from "./transfer-cipher";
+import { emitStrapiExport } from "./transfer-export-runtime";
 import { emitStrapiImport } from "./transfer-runtime";
 import { wireShape, type WireShape } from "./wire-shape";
 import { emitStrapiZones } from "./zones-runtime";
@@ -320,6 +324,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     media: input.media !== undefined,
     localized: localized.size > 0,
     defaultRole: bundle.defaultRole,
+    fileType: input.media?.name,
   });
   gaps.push(...transfer.gaps);
   files.push(
@@ -333,6 +338,8 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
         .join(""),
     },
     { path: IMPORT_COMMAND_PATH, content: emitStrapiImportCommand() },
+    { path: EXPORT_ENGINE_PATH, content: emitStrapiExport() },
+    { path: EXPORT_COMMAND_PATH, content: emitStrapiExportCommand() },
   );
   return { files, gaps, scopeMethods };
 };

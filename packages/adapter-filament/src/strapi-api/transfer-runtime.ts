@@ -625,7 +625,7 @@ final class StrapiImport
                     'url' => $value['url'] ?? null,
                     'headers' => json_encode((object) ($value['headers'] ?? []), JSON_THROW_ON_ERROR),
                     'events' => json_encode(array_values((array) ($value['events'] ?? [])), JSON_THROW_ON_ERROR),
-                    'enabled' => (bool) ($value['isEnabled'] ?? true),
+                    'enabled' => (bool) ($value['enabled'] ?? $value['isEnabled'] ?? true),
                 ]);
                 $this->counts['webhooks'] = ($this->counts['webhooks'] ?? 0) + 1;
 
@@ -633,6 +633,10 @@ final class StrapiImport
             }
             $key = (string) ($value['key'] ?? '');
             $stored = is_string($value['value'] ?? null) && json_validate($value['value']) ? json_decode($value['value'], true) : ($value['value'] ?? null);
+            if ($key === 'plugin_users-permissions_email' && is_array($stored)) {
+                // Strapi keeps each template under its admin label; this app's mailer reads the options.
+                $stored = array_map(fn (mixed $template): mixed => is_array($template) && is_array($template['options'] ?? null) ? $template['options'] : $template, $stored);
+            }
             $locale = StrapiTransferMap::TYPES['plugin::i18n.locale']['model'] ?? null;
             if ($key === 'plugin_i18n_default_locale' && $locale !== null) {
                 $table = (new $locale())->getTable();

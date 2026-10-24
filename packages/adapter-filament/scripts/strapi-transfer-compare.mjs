@@ -100,12 +100,12 @@ const read = (path) => {
   return { entities, links: links.sort(), assets, configuration };
 };
 
-/** An entry's data as an import restores it: no ids, timestamps to the second. */
+/** An entry's data as an import restores it: no ids, timestamps to the second, keys in order. */
 function normalize(value, versioned, top = true) {
   if (Array.isArray(value)) return value.map((v) => normalize(v, versioned, false));
   if (value !== null && typeof value === "object") {
     const out = {};
-    for (const [key, v] of Object.entries(value)) {
+    for (const [key, v] of Object.entries(value).sort(([a], [b]) => a.localeCompare(b))) {
       if (!top && key === "id") continue;
       if (top && key === "publishedAt" && !versioned) continue;
       out[key] = normalize(v, versioned, false);
