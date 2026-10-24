@@ -2,7 +2,7 @@ import type { Expression } from "@camis/expr";
 import { freeVars } from "@camis/expr";
 import type { CapabilityGap, IrDocument } from "@camis/ir-schema";
 import type { Action, Role } from "@camis/permissions";
-import { strapiNames } from "../names";
+import { strapiNames } from "@camis/strapi-schema";
 import {
   API_ACTION_SUFFIXES,
   FIELD_ACCESS_ACTIONS,

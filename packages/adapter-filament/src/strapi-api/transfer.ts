@@ -1,5 +1,6 @@
-import { fieldApiName, type CapabilityGap, type ContentType } from "@camis/ir-schema";
+import { fieldApiName, type CapabilityGap, type ContentType, type Field } from "@camis/ir-schema";
 import { PHP_MARKER } from "../hooks/names";
+import { permissionKey } from "../permissions/keys";
 import { filamentNames } from "../names";
 import { phpSingleQuoted } from "../php-literal";
 import { FILE_UID } from "./media-runtime";
@@ -12,8 +13,14 @@ const header = (namespace: string): string =>
 export const TRANSFER_MAP_PATH = "app/Support/StrapiTransferMap.php";
 export const IMPORT_ENGINE_PATH = "app/Support/StrapiImport.php";
 export const IMPORT_COMMAND_PATH = "app/Console/Commands/StrapiImport.php";
+export const EXPORT_ENGINE_PATH = "app/Support/StrapiExport.php";
+export const EXPORT_COMMAND_PATH = "app/Console/Commands/StrapiExport.php";
+/** Strapi's runtime schemas for this IR, which an export archive carries as they are. */
+export const TRANSFER_SCHEMAS_PATH = "resources/strapi/schemas.jsonl";
 
 const USER_UID = "plugin::users-permissions.user";
+
+type RelationField = Extract<Field, { type: "relation" }>;
 
 export interface TransferMapInput {
   emitted: ContentType[];
@@ -24,6 +31,8 @@ export interface TransferMapInput {
   localized: boolean;
   /** The role a Strapi `authenticated` user gets here (`bundle.defaultRole`). */
   defaultRole: string | undefined;
+  /** The builtin file type's name, whose grants are the upload plugin's actions. */
+  fileType: string | undefined;
 }
 export interface TransferMapEmission {
   content: string;
@@ -107,9 +116,20 @@ const attributes = (shape: WireShape, gaps: CapabilityGap[], ct: ContentType) =>
   return out;
 };
 
-/** Where each link of an archived entry goes: the Eloquent relation that stores it. */
+/**
+ * Where each link of an archived entry goes: the Eloquent relation that stores it. A link this
+ * type declares also names its Strapi relation and the target's inverse key, which an export
+ * writes it under (Strapi lists a link from the declaring side).
+ */
 const links = (shape: WireShape, ct: ContentType, userType: string | undefined) => {
   const out: Record<string, unknown> = {};
+  const declared = (key: string, relation: string) =>
+    ct.fields.find(
+      (f): f is RelationField =>
+        f.type === "relation" && f.name === relation && fieldApiName(f) === key,
+    );
+  const declaration = (f: RelationField | undefined) =>
+    f === undefined ? {} : { declares: f.relationKind, inverse: f.inverse ?? null };
   for (const r of shape.relations) {
     if (r.kind === "localizations") continue;
     if (r.kind === "mediaOne" || r.kind === "mediaMany") {
@@ -121,6 +141,7 @@ const links = (shape: WireShape, ct: ContentType, userType: string | undefined) 
       relation: r.relation,
       target: r.uid,
       required: r.kind === "belongsTo" && required(ct, r.relation),
+      ...declaration(declared(r.key, r.relation)),
     };
   }
   for (const f of ct.fields) {
@@ -131,7 +152,36 @@ const links = (shape: WireShape, ct: ContentType, userType: string | undefined) 
       relation: f.name,
       target: USER_UID,
       required: f.required === true,
+      ...declaration(f),
     };
+  }
+  return out;
+};
+
+/**
+ * The users-permissions actions each camis permission is in Strapi: a role's grants, as an
+ * export writes them for Strapi's roles.
+ */
+const actions = (input: TransferMapInput): Record<string, string[]> => {
+  const out: Record<string, string[]> = {};
+  for (const ct of input.emitted) {
+    const api = `${uidOf(ct)}.`;
+    const single = ct.kind === "single";
+    out[permissionKey(ct.name, "read")] = single ? [`${api}find`] : [`${api}find`, `${api}findOne`];
+    out[permissionKey(ct.name, "create")] = [`${api}${single ? "update" : "create"}`];
+    out[permissionKey(ct.name, "update")] = [`${api}update`];
+    out[permissionKey(ct.name, "delete")] = [`${api}delete`];
+  }
+  if (input.fileType !== undefined) {
+    const upload = "plugin::upload.content-api.";
+    out[permissionKey(input.fileType, "read")] = [`${upload}find`, `${upload}findOne`];
+    out[permissionKey(input.fileType, "create")] = [`${upload}upload`];
+    out[permissionKey(input.fileType, "update")] = [`${upload}upload`];
+    out[permissionKey(input.fileType, "delete")] = [`${upload}destroy`];
+  }
+  if (input.userType !== undefined) {
+    const user = "plugin::users-permissions.user.";
+    out[permissionKey(input.userType, "read")] = [`${user}find`, `${user}findOne`, `${user}count`];
   }
   return out;
 };
@@ -204,10 +254,11 @@ export const emitStrapiTransferMap = (input: TransferMapInput): TransferMapEmiss
     header("App\\Support") +
     `
 /**
- * Where each type of a Strapi export archive goes in this app, for \`strapi:import\`. Generated from
- * the IR: an entry's \`attributes\` name the column (or a component's columns, or the child rows)
- * each key of an archived entry is written to, \`null\` when this app keeps no such value; its
- * \`links\` name the Eloquent relation that stores each link.
+ * Where each type of a Strapi export archive goes in this app, for \`strapi:import\` and
+ * \`strapi:export\`. Generated from the IR: an entry's \`attributes\` name the column (or a
+ * component's columns, or the child rows) each key of an archived entry is written to, \`null\`
+ * when this app keeps no such value; its \`links\` name the Eloquent relation that stores each
+ * link, and for a link the type declares, its Strapi relation and the target's inverse key.
  */
 final class StrapiTransferMap
 {
@@ -215,6 +266,9 @@ final class StrapiTransferMap
     public const DEFAULT_ROLE = ${input.defaultRole === undefined ? "null" : phpSingleQuoted(input.defaultRole)};
 
     public const TYPES = ${php(types, 1)};
+
+    /** The users-permissions actions each of this app's permissions is in Strapi, for \`strapi:export\`. */
+    public const ACTIONS = ${php(actions(input), 1)};
 }
 `;
   return { content, gaps };
@@ -283,6 +337,66 @@ final class StrapiImport extends Command
             $this->line("Not imported: {$type} ({$reason})");
         }
         $this->info('Import process has been completed successfully!');
+
+        return self::SUCCESS;
+    }
+
+    /** @return list<string>|null */
+    private static function list(mixed $option): ?array
+    {
+        return is_string($option) && $option !== '' ? array_map('trim', explode(',', $option)) : null;
+    }
+}
+`;
+
+/** The command: Strapi's `strapi export` options, its key prompt, and its summary. */
+export const emitStrapiExportCommand = (): string =>
+  header("App\\Console\\Commands") +
+  String.raw`
+use App\Support\StrapiExport as Export;
+use Carbon\CarbonImmutable;
+use Illuminate\Console\Command;
+
+/** Strapi's ` +
+  "`strapi export`" +
+  String.raw`: writes this app's data as the archive ` +
+  "`strapi import`" +
+  String.raw` reads. */
+final class StrapiExport extends Command
+{
+    protected $signature = 'strapi:export
+        {--f|file= : Name to use for exported file (without extensions)}
+        {--k|key= : Provide encryption key in command instead of using the prompt}
+        {--no-encrypt : Disables "aes-128-ecb" encryption of the output file}
+        {--no-compress : Disables gzip compression of output file}
+        {--only= : Include only these types of data (plus schemas). Available types: content,files,config}
+        {--exclude= : Exclude data using comma-separated types. Available types: content,files,config}';
+
+    protected $description = 'Export data from this app to a Strapi export archive';
+
+    public function handle(): int
+    {
+        $file = (string) ($this->option('file') ?: 'export_' . CarbonImmutable::now()->format('YmdHis'));
+        try {
+            $stages = Export::stages(self::list($this->option('only')), self::list($this->option('exclude')));
+            $key = null;
+            if (! $this->option('no-encrypt')) {
+                $key = (string) ($this->option('key') ?: $this->secret('Please enter an encryption key'));
+                if ($key === '') {
+                    $this->error('Provide a key with --key, or export without encryption with --no-encrypt');
+
+                    return self::FAILURE;
+                }
+            }
+            $written = Export::write($file, $stages, ! $this->option('no-compress'), $key);
+        } catch (\Throwable $error) {
+            $this->error("Export process failed: {$error->getMessage()}");
+
+            return self::FAILURE;
+        }
+        $this->table(['Type', 'Count'], array_map(fn ($type, $count) => [$type, $count], array_keys($written['counts']), $written['counts']));
+        $this->line("Export archive is in {$written['path']}");
+        $this->info('Export process has been completed successfully!');
 
         return self::SUCCESS;
     }

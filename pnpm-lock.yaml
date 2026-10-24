@@ -84,6 +84,9 @@ importers:
       '@camis/permissions':
         specifier: workspace:*
         version: link:../permissions
+      '@camis/strapi-schema':
+        specifier: workspace:*
+        version: link:../strapi-schema
     devDependencies:
       tsx:
         specifier: ^4.22.4
@@ -118,6 +121,9 @@ importers:
       '@camis/permissions':
         specifier: workspace:*
         version: link:../permissions
+      '@camis/strapi-schema':
+        specifier: workspace:*
+        version: link:../strapi-schema
     devDependencies:
       tsx:
         specifier: ^4.22.4
@@ -218,6 +224,15 @@ importers:
       zod:
         specifier: ^3.25.76
         version: 3.25.76
+
+  packages/strapi-schema:
+    dependencies:
+      '@camis/ir-core':
+        specifier: workspace:*
+        version: link:../ir-core
+      '@camis/ir-schema':
+        specifier: workspace:*
+        version: link:../ir-schema
 
 packages:
 

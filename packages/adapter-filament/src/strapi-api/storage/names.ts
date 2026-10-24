@@ -11,7 +11,7 @@ export type RelationField = Extract<Field, { type: "relation" }>;
 
 /**
  * Strapi's physical table for a content type. Must match the Strapi target's own default
- * (`packages/adapter-strapi/src/component-schema.ts` uses the identical helpers for components)
+ * (`packages/strapi-schema/src/component-schema.ts` uses the identical helpers for components)
  * so a Laravel app reading Strapi's database lands on the same table Strapi itself created.
  */
 export const strapiTable = (ct: ContentType): string =>
@@ -72,7 +72,7 @@ export const cmpsTable = (table: string): string => `${table}_cmps`;
 
 /**
  * A component's physical table. Must match the Strapi target's own default
- * (`packages/adapter-strapi/src/component-schema.ts`) byte-for-byte.
+ * (`packages/strapi-schema/src/component-schema.ts`) byte-for-byte.
  */
 export const componentTable = (c: Component): string =>
   c.names?.collection ?? `components_shared_${snakeCase(pluralize(c.name))}`;

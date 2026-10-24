@@ -1,4 +1,5 @@
 overwrite DEPLOY.md
+overwrite app/Console/Commands/StrapiExport.php
 overwrite app/Console/Commands/StrapiImport.php
 overwrite app/Filament/Pages/UsersPermissionsSettings.php
 overwrite app/Filament/Resources/Activities/ActivityResource.php
@@ -196,6 +197,7 @@ overwrite app/Support/Ring1.php
 overwrite app/Support/StrapiApiTokens.php
 overwrite app/Support/StrapiDocuments.php
 overwrite app/Support/StrapiError.php
+overwrite app/Support/StrapiExport.php
 overwrite app/Support/StrapiImport.php
 overwrite app/Support/StrapiLocales.php
 overwrite app/Support/StrapiOAuth.php
@@ -243,6 +245,7 @@ overwrite database/migrations/0001_01_02_000019_create_books_editions_table.php
 overwrite database/migrations/0001_01_02_000020_create_landings_blocks_hero_table.php
 overwrite database/migrations/0001_01_02_000021_create_landings_blocks_quantity_table.php
 overwrite database/seeders/RolePermissionSeeder.php
+overwrite resources/strapi/schemas.jsonl
 overwrite routes/api.php
 seed app/Http/Controllers/Api/ActivityApiController.php
 seed app/Http/Controllers/Api/ActivitySessionApiController.php

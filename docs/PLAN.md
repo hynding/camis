@@ -945,8 +945,32 @@ including a second import over the first.
 
 Known gaps: roles' permissions, upload folders and admin data are not imported (the IR's grants
 are the permissions; camis keeps a file's folder path only; Strapi does not export admin data).
-Repeatable components inside a component are reported and left empty. Exporting, transfer tokens
-and `strapi transfer` between live instances are the next parts.
+Repeatable components inside a component are reported and left empty.
+
+**Part 3 — exporting to Strapi.** `php artisan strapi:export` takes `strapi export`'s options
+(`--file`, `--key`, `--no-encrypt`, `--no-compress`, `--only`, `--exclude`) and writes its archive,
+so a camis project can move to Strapi (or strapi-php) generated from the same IR. Strapi's import
+compares the archive's schemas with its own strictly, so the build writes Strapi's runtime
+schemas for the IR (`resources/strapi/schemas.jsonl`): `@camis/strapi-schema`, lifted out of
+`adapter-strapi` so both adapters share the IR → schema mapping, adds what Strapi's loader adds
+(system attributes, model keys) and carries the plugins' and admin's schemas recorded from
+strapi-php. The engine reads the rows back through `StrapiTransferMap`: entries in Strapi's REST
+shape with components inline, links from the declaring side with list positions (a type without
+draft and publish links both versions of a draft-and-publish document, as Strapi does), media as
+morph links, files with their bytes and metadata under Strapi's local `/uploads`, users with
+their hashes, roles with Strapi's default users-permissions actions plus the IR's grants
+(`StrapiTransferMap::ACTIONS`), and the users-permissions, locale and webhook settings. The
+archive is written as a ustar stream, gzipped and encrypted a megabyte at a time.
+
+Part 3's exit: in the boot job, strapi-php's archive imported and exported again holds the same
+entries, links, files and settings (`scripts/strapi-transfer-compare.mjs`), and imports again
+with the same 16 reads, plain and encrypted, on SQLite, MySQL and Postgres. strapi-php itself
+imports camis's export (checked locally against the oracle) and answers the 16 reads as before.
+The export also fixes the import's email templates, which Strapi keeps under `options`.
+
+Known gaps: upload folders and admin data are not exported, nor the content manager's view
+settings. Transfer tokens and `strapi transfer` between live instances (a websocket, which PHP-FPM
+cannot hold) are the next parts.
 
 ---
 

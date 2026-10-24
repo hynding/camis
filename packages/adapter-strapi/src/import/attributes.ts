@@ -1,5 +1,5 @@
 import { FIELD_TYPES, type CapabilityGap, type Field } from "@camis/ir-schema";
-import { fromStrapiMediaKinds } from "../media-kinds";
+import { fromStrapiMediaKinds } from "@camis/strapi-schema";
 import { fieldNameOf, irName } from "./names";
 
 export interface IrFieldResult {

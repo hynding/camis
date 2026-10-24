@@ -1,6 +1,6 @@
 import type { GeneratedFile } from "@camis/adapter-kernel";
 import type { IrDocument } from "@camis/ir-schema";
-import { strapiNames } from "../names";
+import { strapiNames } from "@camis/strapi-schema";
 import { emitHookContract } from "./contract";
 import { emitHookLifecycle } from "./lifecycles";
 import { hookSlug } from "./names";

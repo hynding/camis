@@ -143,13 +143,24 @@ archive lacks, such as the admin's, are kept. A user's Strapi role becomes the c
 same name, else the default one. Roles' permissions are not imported: the IR's grants are the
 permissions. The import refuses an archive holding a content type or attribute this project
 lacks, and names each one. On shared hosting without a shell, import locally against the
-production database and upload the files under \`public/uploads\`.`;
+production database and upload the files under \`public/uploads\`.
+
+## Moving data out to Strapi
+
+\`php artisan strapi:export --file=export --key=…\` writes the archive Strapi's \`strapi export\`
+writes (\`export.tar.gz.enc\`; \`--no-encrypt\` and \`--no-compress\` drop a step), which
+\`strapi import\` reads into a Strapi project generated from the same IR (\`camis build\` with the
+Strapi target). It holds every entry with its documentId, timestamps, components, links, draft
+and published versions and locales; the media library and its files' bytes; every account with
+its password hash, including any Filament admin kept in the same table; the roles, each with
+Strapi's default users-permissions actions and the IR's grants; and the users-permissions,
+locale and webhook settings. \`--only\` and \`--exclude\` take \`content\`, \`files\` and \`config\`.`;
 
 /** What DEPLOY.md adds for the opt-in features this build includes. */
 export interface DeployExtras {
   graphql?: boolean;
   documentation?: boolean;
-  /** \`strapi:import\`: the Strapi API style over Laravel storage. */
+  /** \`strapi:import\` and \`strapi:export\`: the Strapi API style over Laravel storage. */
   transfer?: boolean;
 }
 
