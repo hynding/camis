@@ -84,6 +84,9 @@ importers:
       '@camis/permissions':
         specifier: workspace:*
         version: link:../permissions
+      '@camis/strapi-schema':
+        specifier: workspace:*
+        version: link:../strapi-schema
     devDependencies:
       tsx:
         specifier: ^4.22.4

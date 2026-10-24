@@ -20,7 +20,7 @@ const doc: IrDocument = {
       names: { plural: "BlogPosts", collection: "blog_posts" },
       fields: [
         { type: "string", name: "title" },
-        { type: "component", name: "price", component: "Money" },
+        { type: "component", name: "price", component: "Money", repeatable: false },
         {
           type: "relation",
           name: "owner",
@@ -167,7 +167,7 @@ describe("runtimeSchemas", () => {
 
   it("names a component's model after its category", () => {
     expect(byUid.get("shared.money")).toEqual({
-      collectionName: "components_shared_money",
+      collectionName: "components_shared_moneys",
       info: { displayName: "Money" },
       options: {},
       pluginOptions: {},

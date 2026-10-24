@@ -12,6 +12,8 @@ const header = (namespace: string): string =>
 export const TRANSFER_MAP_PATH = "app/Support/StrapiTransferMap.php";
 export const IMPORT_ENGINE_PATH = "app/Support/StrapiImport.php";
 export const IMPORT_COMMAND_PATH = "app/Console/Commands/StrapiImport.php";
+/** Strapi's runtime schemas for this IR, which an export archive carries as they are. */
+export const TRANSFER_SCHEMAS_PATH = "resources/strapi/schemas.jsonl";
 
 const USER_UID = "plugin::users-permissions.user";
 

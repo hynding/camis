@@ -86,7 +86,9 @@ import {
   IMPORT_COMMAND_PATH,
   IMPORT_ENGINE_PATH,
   TRANSFER_MAP_PATH,
+  TRANSFER_SCHEMAS_PATH,
 } from "./transfer";
+import { runtimeSchemas } from "@camis/strapi-schema";
 import { emitStrapiTransferCipher, TRANSFER_CIPHER_PATH } from "./transfer-cipher";
 import { emitStrapiImport } from "./transfer-runtime";
 import { wireShape, type WireShape } from "./wire-shape";
@@ -324,6 +326,12 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     { path: TRANSFER_MAP_PATH, content: transfer.content },
     { path: IMPORT_ENGINE_PATH, content: emitStrapiImport() },
     { path: TRANSFER_CIPHER_PATH, content: emitStrapiTransferCipher() },
+    {
+      path: TRANSFER_SCHEMAS_PATH,
+      content: runtimeSchemas(doc)
+        .map((schema) => `${JSON.stringify(schema)}\n`)
+        .join(""),
+    },
     { path: IMPORT_COMMAND_PATH, content: emitStrapiImportCommand() },
   );
   return { files, gaps, scopeMethods };

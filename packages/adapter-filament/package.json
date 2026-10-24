@@ -19,7 +19,8 @@
     "@camis/expr-ts": "workspace:*",
     "@camis/ir-core": "workspace:*",
     "@camis/ir-schema": "workspace:*",
-    "@camis/permissions": "workspace:*"
+    "@camis/permissions": "workspace:*",
+    "@camis/strapi-schema": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.22.4"
