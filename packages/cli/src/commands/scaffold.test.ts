@@ -4,6 +4,7 @@ import {
   patchBootstrapApp,
   patchBootstrapGraphql,
   patchBootstrapMiddleware,
+  patchBootstrapTransfer,
   patchUserModel,
   scaffoldCommand,
 } from "./scaffold";
@@ -174,6 +175,38 @@ describe("patchBootstrapGraphql", () => {
   });
 });
 
+// Strapi's transfer runner is /admin/transfer/runner/*, outside /api; its route file is loaded the
+// same way, in the one `then` callback GraphQL's may already have opened.
+describe("patchBootstrapTransfer", () => {
+  const loads = (source: string, file: string) =>
+    source.includes(
+      `\\Illuminate\\Support\\Facades\\Route::middleware('api')->group(__DIR__.'/../routes/${file}');`,
+    );
+  it("loads routes/transfer.php in the api middleware group when the file exists", () => {
+    const patched = patchBootstrapTransfer(STOCK_BOOTSTRAP);
+    expect(patched).toContain("if (is_file(__DIR__.'/../routes/transfer.php')) {");
+    expect(loads(patched, "transfer.php")).toBe(true);
+  });
+  it("shares one then callback with GraphQL, whichever is patched first", () => {
+    for (const patched of [
+      patchBootstrapTransfer(patchBootstrapGraphql(STOCK_BOOTSTRAP)),
+      patchBootstrapGraphql(patchBootstrapTransfer(STOCK_BOOTSTRAP)),
+    ]) {
+      expect(patched.split("then: function").length).toBe(2);
+      expect(loads(patched, "transfer.php")).toBe(true);
+      expect(loads(patched, "graphql.php")).toBe(true);
+    }
+  });
+  it("is idempotent", () => {
+    const once = patchBootstrapTransfer(STOCK_BOOTSTRAP);
+    expect(patchBootstrapTransfer(once)).toBe(once);
+  });
+  it("leaves a bootstrap without the stock health route unchanged so the caller can fail loudly", () => {
+    const hand = STOCK_BOOTSTRAP.replace("        health: '/up',\n", "");
+    expect(patchBootstrapTransfer(hand)).toBe(hand);
+  });
+});
+
 describe("scaffoldCommand", () => {
   it("installs webonyx/graphql-php and routes /graphql with --graphql", async () => {
     const { io, calls, written } = fakeIo({
@@ -189,6 +222,17 @@ describe("scaffoldCommand", () => {
       "--no-interaction",
     ]);
     expect(written["/proj/app/bootstrap/app.php"]).toContain("routes/graphql.php");
+  });
+
+  it("routes Strapi's transfer runner on every scaffold", async () => {
+    const { io, written } = fakeIo({
+      files: {
+        "/proj/app/app/Models/User.php": STOCK_USER,
+        "/proj/app/bootstrap/app.php": STOCK_BOOTSTRAP,
+      },
+    });
+    expect(await scaffoldCommand("filament", "app", io)).toBe(0);
+    expect(written["/proj/app/bootstrap/app.php"]).toContain("routes/transfer.php");
   });
 
   it("runs the composer/artisan sequence in order and patches User.php", async () => {

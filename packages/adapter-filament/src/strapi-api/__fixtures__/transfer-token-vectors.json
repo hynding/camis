@@ -1,0 +1,105 @@
+{
+  "steps": [
+    {
+      "hook": ["transfer-token", "pusher", "push"],
+      "into": "pusher"
+    },
+    {
+      "hook": ["transfer-token", "puller", "pull"],
+      "into": "puller"
+    },
+    {
+      "hook": ["transfer-token", "both", "push", "pull"],
+      "into": "both"
+    },
+    {
+      "hook": ["token", "reader", "read-only"],
+      "into": "reader"
+    },
+    {
+      "name": "the push runner refuses a request without a token",
+      "method": "GET",
+      "path": "/admin/transfer/runner/push"
+    },
+    {
+      "name": "the pull runner refuses a key that is no token",
+      "method": "GET",
+      "path": "/admin/transfer/runner/pull",
+      "bearer": "not-a-transfer-token"
+    },
+    {
+      "name": "a content API token is no transfer token",
+      "method": "GET",
+      "path": "/admin/transfer/runner/pull",
+      "bearer": "$reader"
+    },
+    {
+      "name": "a push token may push, but this server keeps no WebSocket open",
+      "method": "GET",
+      "path": "/admin/transfer/runner/push",
+      "bearer": "$pusher",
+      "ownMessage": true
+    },
+    {
+      "name": "a push token may not pull",
+      "method": "GET",
+      "path": "/admin/transfer/runner/pull",
+      "bearer": "$pusher"
+    },
+    {
+      "name": "a pull token may pull",
+      "method": "GET",
+      "path": "/admin/transfer/runner/pull",
+      "bearer": "$puller",
+      "ownMessage": true
+    },
+    {
+      "name": "a pull token may not push",
+      "method": "GET",
+      "path": "/admin/transfer/runner/push",
+      "bearer": "$puller"
+    },
+    {
+      "name": "a token with both permissions may push",
+      "method": "GET",
+      "path": "/admin/transfer/runner/push",
+      "bearer": "$both",
+      "ownMessage": true
+    },
+    {
+      "hook": ["transfer-expire", "pusher"]
+    },
+    {
+      "name": "an expired token is refused",
+      "method": "GET",
+      "path": "/admin/transfer/runner/push",
+      "bearer": "$pusher"
+    },
+    {
+      "hook": ["transfer-regenerate", "puller"],
+      "into": "renewed"
+    },
+    {
+      "name": "a regenerated token's old key is refused",
+      "method": "GET",
+      "path": "/admin/transfer/runner/pull",
+      "bearer": "$puller"
+    },
+    {
+      "name": "a regenerated token's new key pulls",
+      "method": "GET",
+      "path": "/admin/transfer/runner/pull",
+      "bearer": "$renewed",
+      "ownMessage": true
+    },
+    {
+      "hook": ["transfer-revoke", "both"]
+    },
+    {
+      "name": "a revoked token is refused",
+      "method": "GET",
+      "path": "/admin/transfer/runner/push",
+      "bearer": "$both"
+    }
+  ]
+}

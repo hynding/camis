@@ -10,7 +10,7 @@
 // advanced settings, blocking a user); `into` keeps its output as `$name` for later steps, and
 // `keep` keeps response values the same way (`{ "bobId": "user.id" }`). `bearer` sends a given
 // token (a literal one that does not verify, or an API token a hook made), `headers` adds request
-// headers, and `cookie` names a response cookie to record (set or cleared) and keep as `$<name>`.
+// headers, `ownMessage` compares an error's message by presence only, and `cookie` names a response cookie to record (set or cleared) and keep as `$<name>`.
 // `jar` names a cookie jar the step sends and fills, as a browser would across an OAuth round
 // trip, and `keepQuery` keeps query values of the redirect's location (`{ "state": "state" }`). A
 // redirect's own origin, an OAuth state and a stored file's random name are masked, as they differ
@@ -201,6 +201,9 @@ const graphqlOutcome = ({ status, body }) => ({
     };
   }),
 });
+// A step with `ownMessage` lets each runtime word its error: what to do about it names its own tools.
+const worded = (result, own) =>
+  own && result.error !== undefined ? { ...result, error: { ...result.error, message: "<own>" } } : result;
 const outcome = ({ status, location, body }, cookie) => {
   if (status >= 300 && status < 400)
     return { status, location: maskLocation(fill(location ?? "")) };
@@ -281,7 +284,9 @@ for (const step of steps) {
   }
   outcomes.push({
     name: step.name,
-    ...(step.graphql === undefined ? outcome(response, cookie) : graphqlOutcome(response)),
+    ...(step.graphql === undefined
+      ? worded(outcome(response, cookie), step.ownMessage === true)
+      : graphqlOutcome(response)),
   });
 }
 

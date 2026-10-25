@@ -1,0 +1,110 @@
+[
+  {
+    "name": "the push runner refuses a request without a token",
+    "status": 401,
+    "error": {
+      "name": "UnauthorizedError",
+      "message": "Missing or invalid credentials",
+      "details": {}
+    }
+  },
+  {
+    "name": "the pull runner refuses a key that is no token",
+    "status": 401,
+    "error": {
+      "name": "UnauthorizedError",
+      "message": "Missing or invalid credentials",
+      "details": {}
+    }
+  },
+  {
+    "name": "a content API token is no transfer token",
+    "status": 401,
+    "error": {
+      "name": "UnauthorizedError",
+      "message": "Missing or invalid credentials",
+      "details": {}
+    }
+  },
+  {
+    "name": "a push token may push, but this server keeps no WebSocket open",
+    "status": 501,
+    "error": {
+      "name": "NotImplementedError",
+      "message": "<own>",
+      "details": {}
+    }
+  },
+  {
+    "name": "a push token may not pull",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "a pull token may pull",
+    "status": 501,
+    "error": {
+      "name": "NotImplementedError",
+      "message": "<own>",
+      "details": {}
+    }
+  },
+  {
+    "name": "a pull token may not push",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "a token with both permissions may push",
+    "status": 501,
+    "error": {
+      "name": "NotImplementedError",
+      "message": "<own>",
+      "details": {}
+    }
+  },
+  {
+    "name": "an expired token is refused",
+    "status": 401,
+    "error": {
+      "name": "UnauthorizedError",
+      "message": "Token expired",
+      "details": {}
+    }
+  },
+  {
+    "name": "a regenerated token's old key is refused",
+    "status": 401,
+    "error": {
+      "name": "UnauthorizedError",
+      "message": "Missing or invalid credentials",
+      "details": {}
+    }
+  },
+  {
+    "name": "a regenerated token's new key pulls",
+    "status": 501,
+    "error": {
+      "name": "NotImplementedError",
+      "message": "<own>",
+      "details": {}
+    }
+  },
+  {
+    "name": "a revoked token is refused",
+    "status": 401,
+    "error": {
+      "name": "UnauthorizedError",
+      "message": "Missing or invalid credentials",
+      "details": {}
+    }
+  }
+]
