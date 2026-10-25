@@ -89,7 +89,7 @@ describe("the public role on the Strapi API style", () => {
   });
 
   it("reports no gap: the laravel storage layout honours the public role", () => {
-    expect(result.gaps.gaps).toEqual([]);
+    expect(result.gaps.gaps.map((g) => g.feature)).not.toContain("publicRole");
   });
 });
 

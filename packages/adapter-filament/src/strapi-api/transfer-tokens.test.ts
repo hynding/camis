@@ -14,7 +14,7 @@ describe("transfer tokens", () => {
 
   it("keeps each token's salted hash only, as Strapi shows a transfer token once", () => {
     const migration = content(
-      "database/migrations/0001_01_02_000006_create_strapi_transfer_tokens_table.php",
+      "database/migrations/0001_01_02_000007_create_strapi_transfer_tokens_table.php",
     );
     expect(migration).toContain("Schema::create('strapi_transfer_tokens'");
     expect(migration).toContain("$table->string('access_key', 128)->unique();");
@@ -44,6 +44,9 @@ describe("transfer tokens", () => {
       "Route::get('/admin/transfer/runner/pull', [StrapiTransferRunner::class, 'pull']);",
     );
     expect(routes).toContain("Route::middleware([StrapiErrors::class])->group(");
+    expect(content("app/Http/Middleware/StrapiErrors.php")).toContain(
+      "if (! $request->is('api/*', 'graphql', 'admin/transfer/*')) {",
+    );
     await expect(routes).toMatchFileSnapshot("./__golden__/strapi-api/transfer-routes.php");
   });
 

@@ -972,6 +972,25 @@ Known gaps: upload folders and admin data are not exported, nor the content mana
 settings. Transfer tokens and `strapi transfer` between live instances (a websocket, which PHP-FPM
 cannot hold) are the next parts.
 
+**Part 4 — transfer tokens.** The admin's Settings › Transfer Tokens page makes, lists,
+regenerates and deletes Strapi's transfer tokens: push, pull or both, for 7, 30 or 90 days or
+unlimited, kept as an HMAC-SHA512 of the key salted with `TRANSFER_TOKEN_SALT` (Strapi's own, so a
+project moving off Strapi keeps its tokens' hashes), and shown once, as Strapi shows them.
+`strapi transfer`'s runner, `GET /admin/transfer/runner/{push,pull}`, is answered as strapi-php
+answers it under FPM: no or an unknown token is 401, an expired one 401 `Token expired`, one
+without the scope 403, and a valid one 501, since the runner is a WebSocket. The 501 names the
+archive commands that move the same data. The routes live in `routes/transfer.php`, which `camis
+scaffold` loads from `bootstrap/app.php`'s routing beside `routes/graphql.php`, so `route:cache`
+keeps them.
+
+Part 4's exit: `transfer-token-vectors.json` (12 requests: each scope, a content API token, an
+expired, regenerated and revoked token) answers in the boot job as strapi-php answers it, on
+SQLite, MySQL and Postgres; `TransferTokensTest.php` covers the admin page, lifespans and the
+hourly last use.
+
+Known gap (reported as `remoteDataTransfer`): `strapi transfer --to/--from` itself. A host with a
+shell moves data with `strapi:export` and `strapi:import`.
+
 ---
 
 ## Sequencing rationale (quick reference)

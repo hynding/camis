@@ -100,6 +100,10 @@ overwrite app/Filament/Resources/Transactions/Pages/ListTransactions.php
 overwrite app/Filament/Resources/Transactions/Schemas/TransactionForm.php
 overwrite app/Filament/Resources/Transactions/Schemas/TransactionsTable.php
 overwrite app/Filament/Resources/Transactions/TransactionResource.php
+overwrite app/Filament/Resources/TransferTokens/Pages/CreateTransferToken.php
+overwrite app/Filament/Resources/TransferTokens/Pages/EditTransferToken.php
+overwrite app/Filament/Resources/TransferTokens/Pages/ListTransferTokens.php
+overwrite app/Filament/Resources/TransferTokens/TransferTokenResource.php
 overwrite app/Filament/Resources/Users/Pages/CreateUser.php
 overwrite app/Filament/Resources/Users/Pages/EditUser.php
 overwrite app/Filament/Resources/Users/Pages/ListUsers.php
@@ -109,6 +113,7 @@ overwrite app/Filament/Resources/Webhooks/Pages/EditWebhook.php
 overwrite app/Filament/Resources/Webhooks/Pages/ListWebhooks.php
 overwrite app/Filament/Resources/Webhooks/WebhookResource.php
 overwrite app/Filament/Support/MediaPicker.php
+overwrite app/Http/Controllers/Admin/StrapiTransferRunner.php
 overwrite app/Http/Controllers/Api/AuthController.php
 overwrite app/Http/Controllers/Api/ConnectController.php
 overwrite app/Http/Controllers/Api/Generated/ActivityApiController.php
@@ -172,6 +177,7 @@ overwrite app/Models/Note.php
 overwrite app/Models/Page.php
 overwrite app/Models/Post.php
 overwrite app/Models/StrapiApiToken.php
+overwrite app/Models/StrapiTransferToken.php
 overwrite app/Models/StrapiWebhook.php
 overwrite app/Models/Tag.php
 overwrite app/Models/Topic.php
@@ -209,6 +215,7 @@ overwrite app/Support/StrapiSessions.php
 overwrite app/Support/StrapiSettings.php
 overwrite app/Support/StrapiTransferCipher.php
 overwrite app/Support/StrapiTransferMap.php
+overwrite app/Support/StrapiTransferTokens.php
 overwrite app/Support/StrapiUpload.php
 overwrite app/Support/StrapiUsers.php
 overwrite app/Support/StrapiWebhooks.php
@@ -230,6 +237,7 @@ overwrite database/migrations/0001_01_02_000005_create_tags_table.php
 overwrite database/migrations/0001_01_02_000006_create_strapi_webhooks_table.php
 overwrite database/migrations/0001_01_02_000006_create_topics_table.php
 overwrite database/migrations/0001_01_02_000007_create_categories_table.php
+overwrite database/migrations/0001_01_02_000007_create_strapi_transfer_tokens_table.php
 overwrite database/migrations/0001_01_02_000008_create_articles_table.php
 overwrite database/migrations/0001_01_02_000009_create_pages_table.php
 overwrite database/migrations/0001_01_02_000010_create_landings_table.php
@@ -247,6 +255,7 @@ overwrite database/migrations/0001_01_02_000021_create_landings_blocks_quantity_
 overwrite database/seeders/RolePermissionSeeder.php
 overwrite resources/strapi/schemas.jsonl
 overwrite routes/api.php
+overwrite routes/transfer.php
 seed app/Http/Controllers/Api/ActivityApiController.php
 seed app/Http/Controllers/Api/ActivitySessionApiController.php
 seed app/Http/Controllers/Api/ArticleApiController.php

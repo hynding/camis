@@ -148,14 +148,15 @@ jobs:
       - name: Patch bootstrap/app.php as camis scaffold does
         run: >-
           pnpm --filter @camis/cli exec tsx -e "import { readFileSync, writeFileSync } from 'node:fs';
-          import { patchBootstrapGraphql, patchBootstrapMiddleware } from './src/commands/scaffold';
+          import { patchBootstrapGraphql, patchBootstrapMiddleware, patchBootstrapTransfer } from './src/commands/scaffold';
           const f = process.env.GITHUB_WORKSPACE + '/app/bootstrap/app.php';
-          writeFileSync(f, patchBootstrapGraphql(patchBootstrapMiddleware(readFileSync(f, 'utf8'))));"
+          writeFileSync(f, patchBootstrapGraphql(patchBootstrapTransfer(patchBootstrapMiddleware(readFileSync(f, 'utf8')))));"
       - name: Migrate + seed + cache (as a shared-host deploy does) + serve (${{ matrix.db }})
         run: |
           cd app
           grep -q "prependToGroup('api'" bootstrap/app.php || { echo "bootstrap/app.php patch did not apply"; exit 1; }
           grep -q "routes/graphql.php" bootstrap/app.php || { echo "bootstrap/app.php graphql patch did not apply"; exit 1; }
+          grep -q "routes/transfer.php" bootstrap/app.php || { echo "bootstrap/app.php transfer patch did not apply"; exit 1; }
           case "${{ matrix.db }}" in
             sqlite) echo "DB_CONNECTION=sqlite" >> .env; touch database/database.sqlite ;;
             mysql)  printf 'DB_CONNECTION=mysql\nDB_HOST=127.0.0.1\nDB_PORT=3306\nDB_DATABASE=camis\nDB_USERNAME=root\nDB_PASSWORD=camis\n' >> .env ;;
@@ -341,6 +342,15 @@ jobs:
           node ../packages/adapter-filament/scripts/strapi-auth-vectors.mjs http://127.0.0.1:8765/api \
             --hook "bash ../packages/adapter-filament/scripts/strapi-auth-hook.sh" \
             --vectors $F/token-vectors.json --expected $F/token-vectors.expected.json
+      - name: Strapi transfer token vectors (recorded from strapi-php under FPM)
+        run: |
+          cd app
+          php artisan migrate:fresh --force
+          php artisan db:seed --class="Database\\Seeders\\RolePermissionSeeder" --force
+          F=../packages/adapter-filament/src/strapi-api/__fixtures__
+          node ../packages/adapter-filament/scripts/strapi-auth-vectors.mjs http://127.0.0.1:8765 \
+            --hook "bash ../packages/adapter-filament/scripts/strapi-auth-hook.sh" \
+            --vectors $F/transfer-token-vectors.json --expected $F/transfer-token-vectors.expected.json
       - name: Strapi webhook vectors (recorded from strapi-php)
         run: |
           (node packages/adapter-filament/scripts/webhook-receiver.mjs > "$RUNNER_TEMP/webhook-receiver.log" 2>&1 &)
@@ -364,14 +374,14 @@ jobs:
             --vectors $F/session-vectors.json --expected $F/session-vectors.expected.json
       - name: Strapi's OpenAPI document at /documentation lists only routes the app serves
         run: node packages/adapter-filament/scripts/strapi-openapi-routes.mjs app http://127.0.0.1:8765
-      - name: Filament admin publishes drafts, translates, keeps the media library, manages users and API tokens, builds dynamic zones; GraphQL refuses what REST refuses
+      - name: Filament admin publishes drafts, translates, keeps the media library, manages users, API and transfer tokens, builds dynamic zones; GraphQL refuses what REST refuses
         run: |
           cd app
           # The cached config would point the tests at the served database instead of :memory:.
           php artisan config:clear
           S=../packages/adapter-filament/scripts/php
-          cp $S/DraftAdminTest.php $S/LocaleAdminTest.php $S/MediaAdminTest.php $S/UsersAdminTest.php $S/ProvidersTest.php $S/ApiTokensTest.php $S/WebhooksTest.php $S/DynamicZonesTest.php $S/GraphqlTest.php tests/Feature/
-          php artisan test tests/Feature/DraftAdminTest.php tests/Feature/LocaleAdminTest.php tests/Feature/MediaAdminTest.php tests/Feature/UsersAdminTest.php tests/Feature/ProvidersTest.php tests/Feature/ApiTokensTest.php tests/Feature/WebhooksTest.php tests/Feature/DynamicZonesTest.php tests/Feature/GraphqlTest.php
+          cp $S/DraftAdminTest.php $S/LocaleAdminTest.php $S/MediaAdminTest.php $S/UsersAdminTest.php $S/ProvidersTest.php $S/ApiTokensTest.php $S/TransferTokensTest.php $S/WebhooksTest.php $S/DynamicZonesTest.php $S/GraphqlTest.php tests/Feature/
+          php artisan test tests/Feature/DraftAdminTest.php tests/Feature/LocaleAdminTest.php tests/Feature/MediaAdminTest.php tests/Feature/UsersAdminTest.php tests/Feature/ProvidersTest.php tests/Feature/ApiTokensTest.php tests/Feature/TransferTokensTest.php tests/Feature/WebhooksTest.php tests/Feature/DynamicZonesTest.php tests/Feature/GraphqlTest.php
       - name: Server log on failure
         if: failure()
         run: cat app/serve.log app/storage/logs/laravel.log "$RUNNER_TEMP/oauth/serve.log" || true

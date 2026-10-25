@@ -154,7 +154,15 @@ Strapi target). It holds every entry with its documentId, timestamps, components
 and published versions and locales; the media library and its files' bytes; every account with
 its password hash, including any Filament admin kept in the same table; the roles, each with
 Strapi's default users-permissions actions and the IR's grants; and the users-permissions,
-locale and webhook settings. \`--only\` and \`--exclude\` take \`content\`, \`files\` and \`config\`.`;
+locale and webhook settings. \`--only\` and \`--exclude\` take \`content\`, \`files\` and \`config\`.
+
+## Transfer tokens
+
+Settings › Transfer Tokens makes Strapi's transfer tokens; set \`TRANSFER_TOKEN_SALT\` to the
+Strapi project's own to keep its tokens' hashes (unset, the app key salts them). A token is shown
+once. \`strapi transfer --to/--from\` reaches \`/admin/transfer/runner/*\` and is checked as Strapi
+checks it, but the transfer itself needs a WebSocket server, which PHP under FPM cannot keep, so a
+valid token is answered 501: move the data with \`strapi:export\` and \`strapi:import\` instead.`;
 
 /** What DEPLOY.md adds for the opt-in features this build includes. */
 export interface DeployExtras {

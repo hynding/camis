@@ -46,7 +46,7 @@ class StrapiErrors
         }
 
         $this->handler->renderable(function (Throwable $e, Request $request): ?JsonResponse {
-            if (! $request->is('api/*', 'graphql')) {
+            if (! $request->is('api/*', 'graphql', 'admin/transfer/*')) {
                 return null;
             }
 

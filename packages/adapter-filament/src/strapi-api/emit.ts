@@ -91,6 +91,17 @@ import {
   TRANSFER_MAP_PATH,
   TRANSFER_SCHEMAS_PATH,
 } from "./transfer";
+import {
+  emitStrapiTransferRunner,
+  emitStrapiTransferTokens,
+  emitTransferRoutes,
+  emitTransferTokenModel,
+  emitTransferTokenResourceFiles,
+  emitTransferTokensMigration,
+  remoteTransferGap,
+  TRANSFER_ROUTES_PATH,
+  TRANSFER_TOKENS_MIGRATION_PATH,
+} from "./transfer-tokens";
 import { runtimeSchemas } from "@camis/strapi-schema";
 import { emitStrapiTransferCipher, TRANSFER_CIPHER_PATH } from "./transfer-cipher";
 import { emitStrapiExport } from "./transfer-export-runtime";
@@ -232,6 +243,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
         fileModel,
         localized.size > 0,
       ),
+      ...transferTokenFiles(),
     );
   }
   files.push(
@@ -341,6 +353,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     { path: EXPORT_ENGINE_PATH, content: emitStrapiExport() },
     { path: EXPORT_COMMAND_PATH, content: emitStrapiExportCommand() },
   );
+  gaps.push(remoteTransferGap);
   return { files, gaps, scopeMethods };
 };
 
@@ -389,6 +402,19 @@ const apiTokenFiles = (
   },
   { path: "app/Http/Middleware/StrapiApiToken.php", content: emitStrapiApiTokenMiddleware() },
   ...emitApiTokenResourceFiles(),
+];
+
+/** Strapi's transfer tokens, the runner routes they open, and their admin. */
+const transferTokenFiles = (): GeneratedFile[] => [
+  { path: TRANSFER_TOKENS_MIGRATION_PATH, content: emitTransferTokensMigration() },
+  { path: "app/Models/StrapiTransferToken.php", content: emitTransferTokenModel() },
+  { path: "app/Support/StrapiTransferTokens.php", content: emitStrapiTransferTokens() },
+  {
+    path: "app/Http/Controllers/Admin/StrapiTransferRunner.php",
+    content: emitStrapiTransferRunner(),
+  },
+  { path: TRANSFER_ROUTES_PATH, content: emitTransferRoutes() },
+  ...emitTransferTokenResourceFiles(),
 ];
 
 /** Strapi's webhooks, the events that fire them, and their admin. */
