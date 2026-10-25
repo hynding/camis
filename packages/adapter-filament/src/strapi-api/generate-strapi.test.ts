@@ -34,7 +34,8 @@ describe("filamentAdapter apiStyle strapi", () => {
         (f) => f.path === "app/Http/Controllers/Api/Generated/NoteApiController.php",
       ),
     ).toBe(true);
-    expect(result.gaps.gaps).toEqual([]);
+    // The one project-wide gap: remote transfer needs a WebSocket server (transfer-tokens.test.ts).
+    expect(result.gaps.gaps.map((g) => g.feature)).toEqual(["remoteDataTransfer"]);
   });
   it("is idempotent", () => {
     expect(

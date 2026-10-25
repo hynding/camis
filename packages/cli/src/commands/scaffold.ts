@@ -66,26 +66,35 @@ export const patchBootstrapMiddleware = (source: string): string => {
 };
 
 const STOCK_HEALTH = "        health: '/up',\n";
-const GRAPHQL_ROUTES = `${STOCK_HEALTH}        // camis: Strapi's GraphQL endpoint, beside /api rather than under it.
-        then: function (): void {
-            if (is_file(__DIR__.'/../routes/graphql.php')) {
-                \\Illuminate\\Support\\Facades\\Route::middleware('api')->group(__DIR__.'/../routes/graphql.php');
+const THEN_OPEN = "        then: function (): void {\n";
+const loadRoutes = (file: string): string =>
+  `            if (is_file(__DIR__.'/../routes/${file}')) {
+                \\Illuminate\\Support\\Facades\\Route::middleware('api')->group(__DIR__.'/../routes/${file}');
             }
-        },
 `;
 
 /**
- * Load the generated routes/graphql.php from bootstrap/app.php's routing. Idempotent.
- *
- * Strapi serves GraphQL at /graphql, outside the /api prefix every routes/api.php route takes.
- * Registering it in withRouting's `then` keeps it in `php artisan route:cache`; the is_file guard
- * keeps a project generated without GraphQL booting. A source without the stock `health` entry is
- * returned unchanged; the caller fails loudly.
+ * Load a generated route file from withRouting's `then`, in the api middleware group, opening the
+ * callback beside the stock `health` entry if no earlier patch has. Registering it there keeps it
+ * in `php artisan route:cache`; the is_file guard keeps a project generated without it booting. A
+ * source with neither is returned unchanged; the caller fails loudly.
  */
-export const patchBootstrapGraphql = (source: string): string => {
-  if (source.includes("routes/graphql.php")) return source;
-  return source.replace(STOCK_HEALTH, GRAPHQL_ROUTES);
+const patchBootstrapRoutes = (source: string, file: string): string => {
+  if (source.includes(`routes/${file}`)) return source;
+  if (source.includes(THEN_OPEN)) return source.replace(THEN_OPEN, THEN_OPEN + loadRoutes(file));
+  return source.replace(
+    STOCK_HEALTH,
+    `${STOCK_HEALTH}        // camis: Strapi's routes beside /api rather than under it.\n${THEN_OPEN}${loadRoutes(file)}        },\n`,
+  );
 };
+
+/** Strapi serves GraphQL at /graphql, outside the /api prefix every routes/api.php route takes. */
+export const patchBootstrapGraphql = (source: string): string =>
+  patchBootstrapRoutes(source, "graphql.php");
+
+/** Strapi's transfer runner is /admin/transfer/runner/*, outside /api too. */
+export const patchBootstrapTransfer = (source: string): string =>
+  patchBootstrapRoutes(source, "transfer.php");
 
 /**
  * One read and one write of bootstrap/app.php: the api routes entry on the Strapi storage layout
@@ -117,6 +126,11 @@ const patchBootstrap = async (
       );
       return false;
     }
+    patched = patchBootstrapTransfer(patched);
+    if (!patched.includes("routes/transfer.php")) {
+      io.out("✗ could not patch bootstrap/app.php: no stock `health: '/up',` routing line");
+      return false;
+    }
     if (graphql) {
       patched = patchBootstrapGraphql(patched);
       if (!patched.includes("routes/graphql.php")) {
@@ -127,6 +141,7 @@ const patchBootstrap = async (
     await io.writeFile(bootstrapPath, patched);
     if (storage === "strapi") io.out("✓ patched bootstrap/app.php to route routes/api.php");
     if (graphql) io.out("✓ patched bootstrap/app.php to route routes/graphql.php");
+    io.out("✓ patched bootstrap/app.php to route routes/transfer.php");
     io.out("✓ patched bootstrap/app.php to run StrapiErrors first on API routes");
     return true;
   } catch (e) {

@@ -83,7 +83,7 @@ describe("GraphQL", () => {
   // strapi-php answers a token that does not verify on /graphql with the REST error body, a 401.
   it("answers a refused request on /graphql with Strapi's error body", () => {
     expect(content("app/Http/Middleware/StrapiErrors.php")).toContain(
-      "if (! $request->is('api/*', 'graphql')) {",
+      "if (! $request->is('api/*', 'graphql', 'admin/transfer/*')) {",
     );
   });
 

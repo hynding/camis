@@ -142,8 +142,8 @@ are matched by email and keep their password hashes, so they sign in as before; 
 archive lacks, such as the admin's, are kept. A user's Strapi role becomes the camis role of the
 same name, else the default one. Roles' permissions are not imported: the IR's grants are the
 permissions. The import refuses an archive holding a content type or attribute this project
-lacks, and names each one. On shared hosting without a shell, import locally against the
-production database and upload the files under \`public/uploads\`.
+lacks, and names each one. On shared hosting without a shell, use Settings › Data transfer
+(below).
 
 ## Moving data out to Strapi
 
@@ -154,7 +154,26 @@ Strapi target). It holds every entry with its documentId, timestamps, components
 and published versions and locales; the media library and its files' bytes; every account with
 its password hash, including any Filament admin kept in the same table; the roles, each with
 Strapi's default users-permissions actions and the IR's grants; and the users-permissions,
-locale and webhook settings. \`--only\` and \`--exclude\` take \`content\`, \`files\` and \`config\`.`;
+locale and webhook settings. \`--only\` and \`--exclude\` take \`content\`, \`files\` and \`config\`.
+
+## Data transfer without a shell
+
+Settings › Data transfer runs the same export and import from the admin, for whoever may change
+accounts. An export downloads through a link that works for ten minutes and is removed once
+sent. An import takes an uploaded archive, or one put in \`storage/app/private/strapi-transfer\`
+by FTP when it is larger than the host accepts in an upload (PHP's \`upload_max_filesize\` and
+\`post_max_size\`, and Livewire's 12 MB \`temporary_file_upload\` rule), and asks before replacing
+the content. Both run inside one web request, so a large project needs a host that lets PHP run
+past its \`max_execution_time\`; where it does not, run the commands locally against the
+production database.
+
+## Transfer tokens
+
+Settings › Transfer Tokens makes Strapi's transfer tokens; set \`TRANSFER_TOKEN_SALT\` to the
+Strapi project's own to keep its tokens' hashes (unset, the app key salts them). A token is shown
+once. \`strapi transfer --to/--from\` reaches \`/admin/transfer/runner/*\` and is checked as Strapi
+checks it, but the transfer itself needs a WebSocket server, which PHP under FPM cannot keep, so a
+valid token is answered 501: move the data with \`strapi:export\` and \`strapi:import\` instead.`;
 
 /** What DEPLOY.md adds for the opt-in features this build includes. */
 export interface DeployExtras {

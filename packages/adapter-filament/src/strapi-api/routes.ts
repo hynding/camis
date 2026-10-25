@@ -3,6 +3,7 @@ import type { ContentType } from "@camis/ir-schema";
 import { filamentNames } from "../names";
 import { routePath } from "./names";
 import { apiTokensConfigKeys } from "./api-tokens";
+import { transferTokensConfigKeys } from "./transfer-tokens";
 import { webhooksConfigKeys } from "./webhooks";
 import { usersPermissionsConfigKeys } from "./users-permissions";
 
@@ -93,7 +94,7 @@ declare(strict_types=1);
 return [
     // Requests per minute allowed on the unauthenticated credential endpoints
     // (POST /auth/local and /auth/local/register), keyed by client address.
-    'auth_throttle_per_minute' => max(1, (int) env('CAMIS_AUTH_THROTTLE_PER_MINUTE', ${AUTH_THROTTLE_PER_MINUTE})),${strapiKeys}${i18nKeys}${uploadKeys}${usersPermissions ? usersPermissionsConfigKeys() : ""}${apiTokens ? apiTokensConfigKeys() : ""}${webhooks ? webhooksConfigKeys() : ""}${graphqlKeys}
+    'auth_throttle_per_minute' => max(1, (int) env('CAMIS_AUTH_THROTTLE_PER_MINUTE', ${AUTH_THROTTLE_PER_MINUTE})),${strapiKeys}${i18nKeys}${uploadKeys}${usersPermissions ? usersPermissionsConfigKeys() : ""}${apiTokens ? apiTokensConfigKeys() + transferTokensConfigKeys() : ""}${webhooks ? webhooksConfigKeys() : ""}${graphqlKeys}
 ];
 `;
 };
