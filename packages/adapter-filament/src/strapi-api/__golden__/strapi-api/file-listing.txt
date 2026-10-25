@@ -1,6 +1,7 @@
 overwrite DEPLOY.md
 overwrite app/Console/Commands/StrapiExport.php
 overwrite app/Console/Commands/StrapiImport.php
+overwrite app/Filament/Pages/DataTransfer.php
 overwrite app/Filament/Pages/UsersPermissionsSettings.php
 overwrite app/Filament/Resources/Activities/ActivityResource.php
 overwrite app/Filament/Resources/Activities/Pages/CreateActivity.php
@@ -113,6 +114,7 @@ overwrite app/Filament/Resources/Webhooks/Pages/EditWebhook.php
 overwrite app/Filament/Resources/Webhooks/Pages/ListWebhooks.php
 overwrite app/Filament/Resources/Webhooks/WebhookResource.php
 overwrite app/Filament/Support/MediaPicker.php
+overwrite app/Http/Controllers/Admin/StrapiTransferDownload.php
 overwrite app/Http/Controllers/Admin/StrapiTransferRunner.php
 overwrite app/Http/Controllers/Api/AuthController.php
 overwrite app/Http/Controllers/Api/ConnectController.php
@@ -213,6 +215,7 @@ overwrite app/Support/StrapiQuery.php
 overwrite app/Support/StrapiRelations.php
 overwrite app/Support/StrapiSessions.php
 overwrite app/Support/StrapiSettings.php
+overwrite app/Support/StrapiTransferArchives.php
 overwrite app/Support/StrapiTransferCipher.php
 overwrite app/Support/StrapiTransferMap.php
 overwrite app/Support/StrapiTransferTokens.php

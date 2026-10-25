@@ -988,8 +988,20 @@ expired, regenerated and revoked token) answers in the boot job as strapi-php an
 SQLite, MySQL and Postgres; `TransferTokensTest.php` covers the admin page, lifespans and the
 hourly last use.
 
-Known gap (reported as `remoteDataTransfer`): `strapi transfer --to/--from` itself. A host with a
-shell moves data with `strapi:export` and `strapi:import`.
+Known gap (reported as `remoteDataTransfer`): `strapi transfer --to/--from` itself. Data moves
+as an archive instead, with the commands or, without a shell, with Part 5's page.
+
+**Part 5 — data transfer without a shell.** Settings › Data transfer runs the commands' engines
+from the admin. An export is written to `storage/app/private/strapi-transfer` and handed over
+through a ten-minute signed link (`/admin/data-transfer/{file}`, in `routes/transfer.php`), so the
+web server streams it instead of Livewire holding it in memory, and it is removed once sent. An
+import takes an uploaded archive, or one put in that directory by FTP when it is larger than the
+host takes in an upload, reports a schema mismatch as the command does, and asks before it
+replaces the content.
+
+Part 5's exit: `DataTransferTest.php` in the boot job imports strapi-php's archive uploaded
+(encrypted) and picked from the directory, refuses a wrong key without changing anything,
+downloads an export through its signed link only, and imports that export again.
 
 ---
 
