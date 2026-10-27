@@ -594,7 +594,7 @@ export const buildGraphqlSchema = (input: GraphqlSchemaInput): GraphqlSchema => 
         feature: "graphqlSingleTypes",
         location: { contentType: ct.name },
         severity: "downgrade",
-        message: `"${ct.name}" is a single type; GraphQL serves it as a collection, as the REST API does.`,
+        message: `"${ct.name}" is a single type; GraphQL serves it as a collection.`,
       });
     }
   }

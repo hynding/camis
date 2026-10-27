@@ -89,6 +89,40 @@ type Query {
   genre(documentId: ID!, status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): Genre
   genres_connection(filters: GenreFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): GenreEntityResponseCollection
   genres(filters: GenreFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [Genre]!
+  global(
+    documentId: ID!
+    status: PublicationStatus = PUBLISHED
+    hasPublishedVersion: Boolean
+    publicationFilter: PublicationFilter
+
+    "The locale to use for the query"
+    locale: I18NLocaleCode
+  ): Global
+  globals_connection(
+    filters: GlobalFiltersInput
+    pagination: PaginationArg = {  }
+    sort: [String] = []
+    status: PublicationStatus = PUBLISHED
+    hasPublishedVersion: Boolean
+    publicationFilter: PublicationFilter
+
+    "The locale to use for the query"
+    locale: I18NLocaleCode
+  ): GlobalEntityResponseCollection
+  globals(
+    filters: GlobalFiltersInput
+    pagination: PaginationArg = {  }
+    sort: [String] = []
+    status: PublicationStatus = PUBLISHED
+    hasPublishedVersion: Boolean
+    publicationFilter: PublicationFilter
+
+    "The locale to use for the query"
+    locale: I18NLocaleCode
+  ): [Global]!
+  homepage(documentId: ID!, status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): Homepage
+  homepages_connection(filters: HomepageFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): HomepageEntityResponseCollection
+  homepages(filters: HomepageFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [Homepage]!
   landing(documentId: ID!, status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): Landing
   landings_connection(filters: LandingFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): LandingEntityResponseCollection
   landings(filters: LandingFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [Landing]!
@@ -198,6 +232,30 @@ type Mutation {
   createGenre(status: PublicationStatus = PUBLISHED, data: GenreInput!): Genre
   updateGenre(documentId: ID!, status: PublicationStatus = PUBLISHED, data: GenreInput!): Genre
   deleteGenre(documentId: ID!): DeleteMutationResponse
+  createGlobal(
+    status: PublicationStatus = PUBLISHED
+    data: GlobalInput!
+
+    "The locale to use for the query"
+    locale: I18NLocaleCode
+  ): Global
+  updateGlobal(
+    documentId: ID!
+    status: PublicationStatus = PUBLISHED
+    data: GlobalInput!
+
+    "The locale to use for the query"
+    locale: I18NLocaleCode
+  ): Global
+  deleteGlobal(
+    documentId: ID!
+
+    "The locale to use for the query"
+    locale: I18NLocaleCode
+  ): DeleteMutationResponse
+  createHomepage(status: PublicationStatus = PUBLISHED, data: HomepageInput!): Homepage
+  updateHomepage(documentId: ID!, status: PublicationStatus = PUBLISHED, data: HomepageInput!): Homepage
+  deleteHomepage(documentId: ID!): DeleteMutationResponse
   createLanding(status: PublicationStatus = PUBLISHED, data: LandingInput!): Landing
   updateLanding(documentId: ID!, status: PublicationStatus = PUBLISHED, data: LandingInput!): Landing
   deleteLanding(documentId: ID!): DeleteMutationResponse
@@ -942,6 +1000,86 @@ type GenreEntityResponseCollection {
   pageInfo: Pagination!
 }
 
+type GlobalRelationResponseCollection {
+  nodes: [Global!]!
+}
+
+type Global {
+  documentId: ID!
+  siteName: String
+  contact: String
+  createdAt: DateTime
+  updatedAt: DateTime
+  publishedAt: DateTime
+  locale: String
+  localizations_connection(filters: GlobalFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): GlobalRelationResponseCollection
+  localizations(filters: GlobalFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): [Global]!
+}
+
+input GlobalFiltersInput {
+  documentId: IDFilterInput
+  siteName: StringFilterInput
+  contact: StringFilterInput
+  createdAt: DateTimeFilterInput
+  updatedAt: DateTimeFilterInput
+  publishedAt: DateTimeFilterInput
+  locale: StringFilterInput
+  localizations: GlobalFiltersInput
+  and: [GlobalFiltersInput]
+  or: [GlobalFiltersInput]
+  not: GlobalFiltersInput
+}
+
+input GlobalInput {
+  siteName: String
+  contact: String
+  publishedAt: DateTime
+}
+
+type GlobalEntityResponseCollection {
+  nodes: [Global!]!
+  pageInfo: Pagination!
+}
+
+type Homepage {
+  documentId: ID!
+  title: String!
+  body: String
+  featured: Book
+  price: ComponentSharedMoney
+  createdAt: DateTime
+  updatedAt: DateTime
+  publishedAt: DateTime
+}
+
+input HomepageFiltersInput {
+  documentId: IDFilterInput
+  title: StringFilterInput
+  body: StringFilterInput
+  featured: BookFiltersInput
+  price: ComponentSharedMoneyFiltersInput
+  createdAt: DateTimeFilterInput
+  updatedAt: DateTimeFilterInput
+  publishedAt: DateTimeFilterInput
+  and: [HomepageFiltersInput]
+  or: [HomepageFiltersInput]
+  not: HomepageFiltersInput
+}
+
+input HomepageInput {
+  title: String
+  body: String
+  featured: ID
+  price: ComponentSharedMoneyInput
+  publishedAt: DateTime
+  locale: String
+}
+
+type HomepageEntityResponseCollection {
+  nodes: [Homepage!]!
+  pageInfo: Pagination!
+}
+
 type ComponentSharedHero {
   id: ID!
   heading: String!
@@ -1424,4 +1562,4 @@ type UsersPermissionsPasswordPayload {
   ok: Boolean!
 }
 
-union GenericMorph = ComponentSharedHero | ComponentSharedMoney | ComponentSharedQuantity | UploadFile | I18NLocale | UsersPermissionsPermission | UsersPermissionsRole | UsersPermissionsUser | Activity | ActivitySession | Article | Author | Book | Category | Genre | Landing | Note | Page | Post | Tag | Topic | Transaction
+union GenericMorph = ComponentSharedHero | ComponentSharedMoney | ComponentSharedQuantity | UploadFile | I18NLocale | UsersPermissionsPermission | UsersPermissionsRole | UsersPermissionsUser | Activity | ActivitySession | Article | Author | Book | Category | Genre | Global | Homepage | Landing | Note | Page | Post | Tag | Topic | Transaction

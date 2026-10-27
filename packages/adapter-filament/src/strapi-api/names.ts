@@ -7,8 +7,12 @@ export const kebab = (name: string): string =>
     .replace(/[_\s]+/g, "-")
     .toLowerCase();
 
-/** Strapi REST path segment: kebab-case plural (`ActivitySessions` → `activity-sessions`). */
-export const routePath = (ct: ContentType): string => kebab(ct.names?.plural ?? pluralize(ct.name));
+/**
+ * Strapi REST path segment: kebab-case plural (`ActivitySessions` → `activity-sessions`), or a
+ * single type's kebab-case singular, as its one entry is served there.
+ */
+export const routePath = (ct: ContentType): string =>
+  kebab(ct.kind === "single" ? ct.name : (ct.names?.plural ?? pluralize(ct.name)));
 
 /** A component's Strapi uid, `<category>.<kebab-name>`: the category is `names.group`, else "shared". */
 export const componentUid = (component: Component): string =>

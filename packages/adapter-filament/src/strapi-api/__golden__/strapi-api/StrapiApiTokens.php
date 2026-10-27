@@ -37,6 +37,8 @@ final class StrapiApiTokens
         'App\Http\Controllers\Api\BookApiController' => 'api::book.book',
         'App\Http\Controllers\Api\CategoryApiController' => 'api::category.category',
         'App\Http\Controllers\Api\GenreApiController' => 'api::genre.genre',
+        'App\Http\Controllers\Api\GlobalApiController' => 'api::global.global',
+        'App\Http\Controllers\Api\HomepageApiController' => 'api::homepage.homepage',
         'App\Http\Controllers\Api\LandingApiController' => 'api::landing.landing',
         'App\Http\Controllers\Api\NoteApiController' => 'api::note.note',
         'App\Http\Controllers\Api\PageApiController' => 'api::page.page',
@@ -46,7 +48,10 @@ final class StrapiApiTokens
         'App\Http\Controllers\Api\TransactionApiController' => 'api::transaction.transaction',
     ];
 
-    private const CONTENT_ACTIONS = ['index' => 'find', 'show' => 'findOne', 'store' => 'create', 'update' => 'update', 'destroy' => 'delete'];
+    private const CONTENT_ACTIONS = ['index' => 'find', 'show' => 'findOne', 'store' => 'create', 'update' => 'update', 'destroy' => 'delete', 'single' => 'find', 'putSingle' => 'update', 'destroySingle' => 'delete'];
+
+    /** The single types, which have no findOne or create. */
+    private const SINGLE_TYPES = ['api::global.global', 'api::homepage.homepage'];
 
     /** A plugin's controller → each method's action. */
     private const ROUTES = [
@@ -100,6 +105,8 @@ final class StrapiApiTokens
         \App\Models\Category::class => 'api::category.category',
         \App\Models\File::class => 'plugin::upload.content-api',
         \App\Models\Genre::class => 'api::genre.genre',
+        \App\Models\Global::class => 'api::global.global',
+        \App\Models\Homepage::class => 'api::homepage.homepage',
         \App\Models\Landing::class => 'api::landing.landing',
         \App\Models\Note::class => 'api::note.note',
         \App\Models\Page::class => 'api::page.page',
@@ -262,8 +269,10 @@ final class StrapiApiTokens
     {
         $actions = [];
         foreach (self::CONTENT_TYPES as $uid) {
-            foreach (self::CONTENT_ACTIONS as $action) {
-                $actions[] = $uid.'.'.$action;
+            foreach (array_unique(self::CONTENT_ACTIONS) as $action) {
+                if (! in_array($uid, self::SINGLE_TYPES, true) || ! in_array($action, ['findOne', 'create'], true)) {
+                    $actions[] = $uid.'.'.$action;
+                }
             }
         }
         foreach (self::ROUTES as $methods) {

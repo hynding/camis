@@ -279,6 +279,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
           controller: `${filamentNames(ct).model}ApiController`,
           model: filamentNames(ct).model,
           uid: `api::${kebab(ct.name)}.${kebab(ct.name)}`,
+          single: ct.kind === "single",
         })),
         fileModel,
         localized.size > 0,

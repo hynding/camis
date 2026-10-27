@@ -16,6 +16,8 @@ export interface TokenContentType {
   controller: string;
   model: string;
   uid: string;
+  /** A single type, whose actions are find, update and delete. */
+  single: boolean;
 }
 
 export interface ApiTokensInput {
@@ -173,6 +175,11 @@ export const emitStrapiApiTokens = (input: ApiTokensInput): string => {
   const content = contentTypes
     .map((ct) => `        ${controllerClass(ct.controller)} => '${ct.uid}',`)
     .join("\n");
+  const singles = contentTypes
+    .filter((ct) => ct.single)
+    .map((ct) => `'${ct.uid}'`)
+    .sort()
+    .join(", ");
   const routes = pluginRoutes(input)
     .map(
       ([controller, methods]) =>
@@ -224,7 +231,10 @@ final class StrapiApiTokens
 ${content}
     ];
 
-    private const CONTENT_ACTIONS = ['index' => 'find', 'show' => 'findOne', 'store' => 'create', 'update' => 'update', 'destroy' => 'delete'];
+    private const CONTENT_ACTIONS = ['index' => 'find', 'show' => 'findOne', 'store' => 'create', 'update' => 'update', 'destroy' => 'delete', 'single' => 'find', 'putSingle' => 'update', 'destroySingle' => 'delete'];
+
+    /** The single types, which have no findOne or create. */
+    private const SINGLE_TYPES = [${singles}];
 
     /** A plugin's controller → each method's action. */
     private const ROUTES = [
@@ -388,8 +398,10 @@ ${models}
     {
         $actions = [];
         foreach (self::CONTENT_TYPES as $uid) {
-            foreach (self::CONTENT_ACTIONS as $action) {
-                $actions[] = $uid.'.'.$action;
+            foreach (array_unique(self::CONTENT_ACTIONS) as $action) {
+                if (! in_array($uid, self::SINGLE_TYPES, true) || ! in_array($action, ['findOne', 'create'], true)) {
+                    $actions[] = $uid.'.'.$action;
+                }
             }
         }
         foreach (self::ROUTES as $methods) {

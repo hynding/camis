@@ -2,7 +2,7 @@ import type { StorageLayout } from "@camis/adapter-kernel";
 import type { ContentType } from "@camis/ir-schema";
 import { PHP_MARKER } from "../hooks/names";
 import { snakeColumn } from "../names";
-import { authLine, NESTED_STMT, STMT } from "./controller-shared";
+import { authLine, createCheck, madeCheck, NESTED_STMT, STMT } from "./controller-shared";
 import { strapiControllerParts } from "./storage/controller-storage";
 import type { ControllerLink } from "./storage/names";
 import type { WireShape } from "./wire-shape";
@@ -37,6 +37,50 @@ export interface ControllerParts {
   /** Extra protected helpers this layout's bodies call, rendered after `find()`. */
   helpers?: string;
 }
+
+/**
+ * A single type's routes: its one entry is found by any of its rows, whatever their version or
+ * locale, as Strapi's single-type service finds its document id, and served by the collection
+ * methods with that key.
+ */
+const singleMethods = (spec: ControllerSpec): string => {
+  const M = spec.shape.model;
+  const emptyDelete = spec.secured ? `            $this->authorize('delete', new ${M}());\n\n` : "";
+  return `
+    protected function singleKey(): ?string
+    {
+        $key = ${M}::query()->orderBy('id')->value(self::KEY);
+
+        return $key === null ? null : (string) $key;
+    }
+
+    public function single(Request $request): JsonResponse
+    {
+        return $this->show($request, $this->singleKey() ?? '');
+    }
+
+    /** Strapi's createOrUpdate: the first put makes the entry, a later one updates it. */
+    public function putSingle(Request $request): JsonResponse
+    {
+        if (! is_array($request->input('data'))) {
+            throw new StrapiError(400, 'ValidationError', 'Missing "data" payload in the request body');
+        }
+        $key = $this->singleKey();
+
+        return $key === null ? $this->store($request)->setStatusCode(200) : $this->update($request, $key);
+    }
+
+    public function destroySingle(Request $request): JsonResponse
+    {
+        $key = $this->singleKey();
+        if ($key === null) {
+${emptyDelete}            return response()->json(null, 204);
+        }
+
+        return $this->destroy($request, $key);
+    }
+`;
+};
 
 const laravelParts = (spec: ControllerSpec): ControllerParts => {
   const { shape, secured, scoped } = spec;
@@ -93,10 +137,10 @@ ${assignBlock}${persist("")}
     showBody: `${auth(`$this->authorize('viewAny', ${M}::class);`)}        $m = $this->find($request, $key);
 
         return response()->json(['data' => $this->wire($request, $m), 'meta' => new \\stdClass()]);`,
-    storeBody: `${auth(`$this->authorize('create', ${M}::class);`)}        $wire = ${S}::fromWire((array) $request->input('data', []));
+    storeBody: `${createCheck(spec)}        $wire = ${S}::fromWire((array) $request->input('data', []));
 ${readLinks}
         $m = new ${M}($wire['columns']);
-${assignBlock}${persist("")}
+${madeCheck(spec)}${assignBlock}${persist("")}
 
         return response()->json(['data' => $this->wire($request, $m->fresh()), 'meta' => new \\stdClass()], 201);`,
     updateBody: `        $wire = ${S}::fromWire((array) $request->input('data', []));
@@ -209,10 +253,10 @@ ${notFound}${auth(`$this->authorize('delete', $m);`)}        StrapiDocuments::de
     query: versioned
       ? "StrapiDocuments::version($this->documents($request), $request->query())"
       : "$this->documents($request)",
-    storeBody: `${auth(`$this->authorize('create', ${M}::class);`)}        $wire = ${S}::fromWire((array) $request->input('data', []));
+    storeBody: `${createCheck(spec)}        $wire = ${S}::fromWire((array) $request->input('data', []));
 ${readLinks}
         $m = new ${M}($wire['columns']);
-${localized ? `${STMT}$m->locale = ${forWrite};\n` : ""}${assignBlock}${persist("")}
+${localized ? `${STMT}$m->locale = ${forWrite};\n` : ""}${madeCheck(spec)}${assignBlock}${persist("")}
 
         return response()->json(['data' => $this->wire($request, $m->fresh()), 'meta' => new \\stdClass()], 201);`,
     updateBody: `        $wire = ${S}::fromWire((array) $request->input('data', []));
@@ -246,12 +290,14 @@ export const emitGeneratedController = (spec: ControllerSpec): string => {
   const { shape, secured } = spec;
   const M = shape.model;
   const parts = spec.layout === "strapi" ? strapiControllerParts(spec) : laravelParts(spec);
+  const single = spec.ct.kind === "single";
 
   const uses = [
     "App\\Http\\Controllers\\Controller",
     `App\\Http\\Serializers\\${M}Serializer`,
     `App\\Models\\${M}`,
     ...parts.uses,
+    ...(single ? ["App\\Support\\StrapiError"] : []),
     ...(secured ? ["Illuminate\\Foundation\\Auth\\Access\\AuthorizesRequests"] : []),
     "Illuminate\\Database\\Eloquent\\Builder",
     "Illuminate\\Http\\JsonResponse",
@@ -317,7 +363,7 @@ ${parts.updateBody}
     {
 ${parts.destroyBody}
     }
-}
+${single ? singleMethods(spec) : ""}}
 `;
 };
 

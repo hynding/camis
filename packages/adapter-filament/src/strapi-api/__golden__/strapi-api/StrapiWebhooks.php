@@ -34,6 +34,8 @@ final class StrapiWebhooks
         \App\Models\Book::class => ['api::book.book', 'book', \App\Http\Serializers\BookSerializer::class],
         \App\Models\Category::class => ['api::category.category', 'category', \App\Http\Serializers\CategorySerializer::class],
         \App\Models\Genre::class => ['api::genre.genre', 'genre', \App\Http\Serializers\GenreSerializer::class],
+        \App\Models\Global::class => ['api::global.global', 'global', \App\Http\Serializers\GlobalSerializer::class],
+        \App\Models\Homepage::class => ['api::homepage.homepage', 'homepage', \App\Http\Serializers\HomepageSerializer::class],
         \App\Models\Landing::class => ['api::landing.landing', 'landing', \App\Http\Serializers\LandingSerializer::class],
         \App\Models\Note::class => ['api::note.note', 'note', \App\Http\Serializers\NoteSerializer::class],
         \App\Models\Page::class => ['api::page.page', 'page', \App\Http\Serializers\PageSerializer::class],
