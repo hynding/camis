@@ -138,4 +138,7 @@ Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle):
 
     // Inside the group so hand-written routes inherit the Strapi error envelope.
     require __DIR__.'/api-custom.php';
+
+    // Strapi answers a path it has no route for with its error body, as it answers a missing row.
+    Route::fallback(fn () => abort(404));
 });
