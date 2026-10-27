@@ -8,8 +8,8 @@ import {
 
 /**
  * The admin side of users-permissions in Filament: the Users resource (Strapi's content-manager
- * view of the user type) and the Users & Permissions settings page (its advanced settings and
- * email templates).
+ * view of the user type) and the Users & Permissions plugin's settings pages (providers, email
+ * templates and advanced settings).
  */
 
 const page = (cls: string, base: string, uses: string[], body: string): string => `<?php
@@ -174,7 +174,7 @@ ${
 ];
 
 const emailTemplate = (key: string, title: string): string => `
-            Section::make('${title}')->statePath('email.${key}')->collapsed()->schema([
+            Section::make('${title}')->statePath('email.${key}')->schema([
                 TextInput::make('from.name')->label('Shipper name'),
                 TextInput::make('from.email')->label('Shipper email')->email(),
                 TextInput::make('response_email')->label('Response email')->email(),
@@ -222,41 +222,50 @@ const providerSection = (p: (typeof PROVIDERS)[number]): string => `
                         ->content(StrapiOAuth::redirectUri('${p.name}')),
                 ]),`;
 
+interface SettingsPage {
+  cls: string;
+  navigation: Navigation;
+  /** The users-permissions store key the page edits, also its form's state path. */
+  store: "advanced" | "email" | "grant";
+  load: string;
+  uses: string[];
+  schema: string;
+}
+
 /**
  * Strapi keeps these settings in its store and edits them in its admin, so they change without a
  * redeploy. Only someone who may update users may change how accounts are made.
  */
-export const emitUsersPermissionsSettingsPage = (secured: boolean): string => `<?php
+const settingsPage = (secured: boolean, p: SettingsPage): string => `<?php
 
 declare(strict_types=1);
 
 namespace App\\Filament\\Pages;
 
-use App\\Filament\\StrapiNavigation;
-use App\\Support\\StrapiOAuth;
-use App\\Support\\StrapiProviders;
-use App\\Support\\StrapiSettings;
-use App\\Support\\StrapiUsers;
-use BackedEnum;
-use Filament\\Actions\\Action;
-use Filament\\Forms\\Components\\Placeholder;
-use Filament\\Forms\\Components\\Textarea;
-use Filament\\Forms\\Components\\TextInput;
-use Filament\\Forms\\Components\\Toggle;
-use Filament\\Notifications\\Notification;
-use Filament\\Pages\\Page;
-use Filament\\Schemas\\Components\\Actions;
-use Filament\\Schemas\\Components\\EmbeddedSchema;
-use Filament\\Schemas\\Components\\Form;
-use Filament\\Schemas\\Components\\Section;
-use Filament\\Schemas\\Schema;
-use UnitEnum;
+${[
+  "App\\Filament\\StrapiNavigation",
+  "App\\Support\\StrapiSettings",
+  "BackedEnum",
+  "Filament\\Actions\\Action",
+  "Filament\\Notifications\\Notification",
+  "Filament\\Pages\\Page",
+  "Filament\\Schemas\\Components\\Actions",
+  "Filament\\Schemas\\Components\\EmbeddedSchema",
+  "Filament\\Schemas\\Components\\Form",
+  "Filament\\Schemas\\Components\\Section",
+  "Filament\\Schemas\\Schema",
+  "UnitEnum",
+  ...p.uses,
+]
+  .sort()
+  .map((u) => `use ${u};`)
+  .join("\n")}
 
-class UsersPermissionsSettings extends Page
+class ${p.cls} extends Page
 {
     protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-cog-6-tooth';
-${navigationProperties(SETTINGS.usersPermissions)}
-    protected static ?string $title = 'Users & Permissions';
+${navigationProperties(p.navigation)}
+    protected static ?string $title = '${p.navigation.label}';
 
     public ?array $data = [];
 
@@ -267,25 +276,12 @@ ${navigationProperties(SETTINGS.usersPermissions)}
 
     public function mount(): void
     {
-        $this->form->fill(['advanced' => StrapiUsers::advanced(), 'email' => StrapiUsers::emails(), 'grant' => StrapiProviders::settings()]);
+        $this->form->fill(['${p.store}' => ${p.load}]);
     }
 
     public function form(Schema $schema): Schema
     {
-        return $schema->components([
-            Section::make('Advanced settings')->statePath('advanced')->schema([
-                Toggle::make('allow_register')->label('Enable sign-ups'),
-                Toggle::make('email_confirmation')->label('Enable email confirmation'),
-                Toggle::make('unique_email')->label('One account per email address'),
-                TextInput::make('email_confirmation_redirection')->label('Redirection url')->url(),
-                TextInput::make('email_reset_password')->label('Reset password page')->url(),
-            ]),${emailTemplate("email_confirmation", "Email address confirmation")}${emailTemplate("reset_password", "Reset password")}
-            // A provider's secret is kept in the database, as Strapi keeps it in its store.
-            Section::make('Providers')->statePath('grant')->collapsed()->schema([
-                Section::make('Email')->statePath('email')->collapsed()->schema([
-                    Toggle::make('enabled'),
-                ]),${PROVIDERS.map(providerSection).join("")}
-            ]),
+        return $schema->components([${p.schema}
         ])->statePath('data');
     }
 
@@ -302,10 +298,71 @@ ${navigationProperties(SETTINGS.usersPermissions)}
     public function save(): void
     {
         $state = $this->form->getState();
-        StrapiSettings::merge('users-permissions.advanced', $state['advanced']);
-        StrapiSettings::merge('users-permissions.email', $state['email']);
-        StrapiSettings::merge('users-permissions.grant', $state['grant']);
+        StrapiSettings::merge('users-permissions.${p.store}', $state['${p.store}']);
         Notification::make()->success()->title('Saved')->send();
     }
 }
 `;
+
+const SETTINGS_PAGES: SettingsPage[] = [
+  {
+    cls: "UsersPermissionsProviders",
+    navigation: SETTINGS.providers,
+    store: "grant",
+    load: "StrapiProviders::settings()",
+    uses: [
+      "App\\Support\\StrapiOAuth",
+      "App\\Support\\StrapiProviders",
+      "Filament\\Forms\\Components\\Placeholder",
+      "Filament\\Forms\\Components\\TextInput",
+      "Filament\\Forms\\Components\\Toggle",
+    ],
+    schema: `
+            // A provider's secret is kept in the database, as Strapi keeps it in its store.
+            Section::make('Providers')->statePath('grant')->schema([
+                Section::make('Email')->statePath('email')->collapsed()->schema([
+                    Toggle::make('enabled'),
+                ]),${PROVIDERS.map(providerSection).join("")}
+            ]),`,
+  },
+  {
+    cls: "UsersPermissionsEmailTemplates",
+    navigation: SETTINGS.emailTemplates,
+    store: "email",
+    load: "StrapiUsers::emails()",
+    uses: [
+      "App\\Support\\StrapiUsers",
+      "Filament\\Forms\\Components\\Textarea",
+      "Filament\\Forms\\Components\\TextInput",
+    ],
+    schema: `${emailTemplate("email_confirmation", "Email address confirmation")}${emailTemplate("reset_password", "Reset password")}`,
+  },
+  {
+    cls: "UsersPermissionsAdvancedSettings",
+    navigation: SETTINGS.advancedSettings,
+    store: "advanced",
+    load: "StrapiUsers::advanced()",
+    uses: [
+      "App\\Support\\StrapiUsers",
+      "Filament\\Forms\\Components\\TextInput",
+      "Filament\\Forms\\Components\\Toggle",
+    ],
+    schema: `
+            Section::make('Advanced settings')->statePath('advanced')->schema([
+                Toggle::make('allow_register')->label('Enable sign-ups'),
+                Toggle::make('email_confirmation')->label('Enable email confirmation'),
+                Toggle::make('unique_email')->label('One account per email address'),
+                TextInput::make('email_confirmation_redirection')->label('Redirection url')->url(),
+                TextInput::make('email_reset_password')->label('Reset password page')->url(),
+            ]),`,
+  },
+];
+
+/** The Users & Permissions plugin's settings as Strapi's pages, after Roles. */
+export const emitUsersPermissionsSettingsPages = (
+  secured: boolean,
+): { path: string; content: string }[] =>
+  SETTINGS_PAGES.map((p) => ({
+    path: `app/Filament/Pages/${p.cls}.php`,
+    content: settingsPage(secured, p),
+  }));
