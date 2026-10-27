@@ -1,0 +1,218 @@
+{
+  "a single type with no entry answers null": {
+    "data": {
+      "homepage": null
+    },
+    "errors": []
+  },
+  "deleting a single type with no entry is not found": {
+    "data": {
+      "deleteHomepage": null
+    },
+    "errors": [
+      {
+        "message": "Document not found",
+        "code": "STRAPI_NOT_FOUND_ERROR",
+        "path": [
+          "deleteHomepage"
+        ],
+        "error": {
+          "name": "NotFoundError",
+          "message": "Document not found"
+        }
+      }
+    ]
+  },
+  "the first update makes the entry as a draft": {
+    "data": {
+      "updateHomepage": {
+        "body": "Hello",
+        "featured": {
+          "title": "Dune"
+        },
+        "price": {
+          "currency": "EUR",
+          "minor": 500
+        },
+        "publishedAt": "absent",
+        "title": "Welcome"
+      }
+    },
+    "errors": []
+  },
+  "a draft is not published": {
+    "data": {
+      "homepage": null
+    },
+    "errors": []
+  },
+  "the draft is read by its status": {
+    "data": {
+      "homepage": {
+        "featured": {
+          "title": "Dune"
+        },
+        "publishedAt": "absent",
+        "title": "Welcome"
+      }
+    },
+    "errors": []
+  },
+  "an update with the default status publishes": {
+    "data": {
+      "updateHomepage": {
+        "body": "Hello",
+        "publishedAt": "present",
+        "title": "Welcome back"
+      }
+    },
+    "errors": []
+  },
+  "the published entry is read": {
+    "data": {
+      "homepage": {
+        "body": "Hello",
+        "price": {
+          "currency": "EUR",
+          "minor": 500
+        },
+        "publishedAt": "present",
+        "title": "Welcome back"
+      }
+    },
+    "errors": []
+  },
+  "the published entry is filtered by publication": {
+    "data": {
+      "homepage": {
+        "title": "Welcome back"
+      }
+    },
+    "errors": []
+  },
+  "an update with variables": {
+    "data": {
+      "updateHomepage": {
+        "body": "Edited",
+        "title": "Welcome back"
+      }
+    },
+    "errors": []
+  },
+  "a single type has no documentId argument": {
+    "data": null,
+    "errors": [
+      {
+        "message": "Unknown argument \"documentId\" on field \"homepage\" of type \"Query\".",
+        "code": "GRAPHQL_VALIDATION_FAILED",
+        "path": null
+      }
+    ]
+  },
+  "a single type has no list": {
+    "data": null,
+    "errors": [
+      {
+        "message": "Cannot query field \"homepages\" on type \"Query\". Did you mean \"homepage\" or \"pages\"?",
+        "code": "GRAPHQL_VALIDATION_FAILED",
+        "path": null
+      }
+    ]
+  },
+  "a single type has no create": {
+    "data": null,
+    "errors": [
+      {
+        "message": "Cannot query field \"createHomepage\" on type \"Mutation\". Did you mean \"updateHomepage\", \"createPage\", \"deleteHomepage\", \"createGenre\", or \"createTopic\"?",
+        "code": "GRAPHQL_VALIDATION_FAILED",
+        "path": null
+      }
+    ]
+  },
+  "deleting the entry answers its documentId": {
+    "data": {
+      "deleteHomepage": {}
+    },
+    "errors": []
+  },
+  "the deleted entry is gone": {
+    "data": {
+      "homepage": null
+    },
+    "errors": []
+  },
+  "a localized single type is made in the default locale": {
+    "data": {
+      "updateGlobal": {
+        "contact": "hi@example.test",
+        "locale": "en",
+        "siteName": "Books"
+      }
+    },
+    "errors": []
+  },
+  "and in another locale": {
+    "data": {
+      "updateGlobal": {
+        "contact": "hi@example.test",
+        "locale": "fr",
+        "siteName": "Livres"
+      }
+    },
+    "errors": []
+  },
+  "the default locale is read": {
+    "data": {
+      "global": {
+        "contact": "hi@example.test",
+        "locale": "en",
+        "localizations": [
+          {
+            "locale": "fr",
+            "siteName": "Livres"
+          }
+        ],
+        "siteName": "Books"
+      }
+    },
+    "errors": []
+  },
+  "another locale is read": {
+    "data": {
+      "global": {
+        "contact": "hi@example.test",
+        "locale": "fr",
+        "siteName": "Livres"
+      }
+    },
+    "errors": []
+  },
+  "a locale with no entry answers null": {
+    "data": {
+      "global": null
+    },
+    "errors": []
+  },
+  "deleting one locale": {
+    "data": {
+      "deleteGlobal": {}
+    },
+    "errors": []
+  },
+  "leaves the others": {
+    "data": {
+      "global": {
+        "locale": "en",
+        "localizations": [],
+        "siteName": "Books"
+      }
+    },
+    "errors": []
+  },
+  "the deleted locale is gone": {
+    "data": {
+      "global": null
+    },
+    "errors": []
+  }
+}

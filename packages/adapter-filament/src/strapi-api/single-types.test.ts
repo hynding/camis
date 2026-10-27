@@ -59,15 +59,19 @@ describe("single types", () => {
     );
   });
 
-  it("no longer reports that the REST API serves a single type as a collection", () => {
+  // graphql-single-type-vectors.json, recorded from strapi-php, is the behaviour.
+  it("serves a single type over GraphQL as Strapi does", () => {
     const graphql = filamentAdapter.generate(strapiApiBundle, {
       projectName: "oyl",
       apiStyle: "strapi",
       graphql: true,
     });
-    const gap = graphql.gaps.gaps.find(
-      (g) => g.feature === "graphqlSingleTypes" && g.location.contentType === "Homepage",
-    );
-    expect(gap?.message).toBe('"Homepage" is a single type; GraphQL serves it as a collection.');
+    expect(graphql.gaps.gaps.map((g) => g.feature)).not.toContain("graphqlSingleTypes");
+    // A single type is not listed, so Strapi defines no filters or collection for it.
+    const sdl = graphql.files.find((f) => f.path === "graphql/schema.graphql")!.content;
+    for (const name of ["Homepage", "Global"]) {
+      expect(sdl).not.toContain(`input ${name}FiltersInput`);
+      expect(sdl).not.toContain(`type ${name}EntityResponseCollection`);
+    }
   });
 });
