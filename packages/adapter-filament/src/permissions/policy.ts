@@ -52,20 +52,19 @@ const recordData = (ct: ContentType, layout: StorageLayout): string[] => [
  * No role holds the key, so nothing the method could evaluate can grant it. Wrapping a condition
  * in `if (! false)` would leave unreachable code reading as if the condition still decided.
  */
-const alwaysDenies = (m: PolicyMethodSpec, layout: StorageLayout): boolean =>
-  layout === "strapi" && m.roles.length === 0;
+const alwaysDenies = (m: PolicyMethodSpec): boolean => m.roles.length === 0;
 
 /** The boolean expression that decides whether $user holds the method's grant at all. */
 const grantCheck = (m: PolicyMethodSpec, layout: StorageLayout, guests: boolean): string => {
+  if (alwaysDenies(m)) return "false";
   if (guests) return `PublicRole::allows($user, ${phpSingleQuoted(m.key)})`;
   if (layout !== "strapi") return `$user->can(${phpSingleQuoted(m.key)})`;
-  if (m.roles.length === 0) return "false";
   return `in_array($user->roleType(), [${m.roles.map(phpSingleQuoted).join(", ")}], true)`;
 };
 
 /** Whether the method's body actually evaluates its condition (and so needs Ring1). */
-const evaluatesCondition = (m: PolicyMethodSpec, layout: StorageLayout): boolean =>
-  m.condition !== undefined && !alwaysDenies(m, layout);
+const evaluatesCondition = (m: PolicyMethodSpec): boolean =>
+  m.condition !== undefined && !alwaysDenies(m);
 
 const method = (
   m: PolicyMethodSpec,
@@ -78,7 +77,7 @@ const method = (
     ? `    public function ${m.method}(${user}, ${filamentNames(ct).model} $record): bool`
     : `    public function ${m.method}(${user}): bool`;
   const check = grantCheck(m, layout, guests);
-  if (m.condition === undefined || alwaysDenies(m, layout)) {
+  if (m.condition === undefined || alwaysDenies(m)) {
     return `${sig}\n    {\n        return ${check};\n    }`;
   }
   const data = [
@@ -108,7 +107,7 @@ export const emitPolicy = (
   layout: StorageLayout = "laravel",
   guests = false,
 ): string => {
-  const hasCondition = spec.methods.some((m) => evaluatesCondition(m, layout));
+  const hasCondition = spec.methods.some((m) => evaluatesCondition(m));
   const supportUses = [
     ...(guests ? ["use App\\Support\\PublicRole;\n"] : []),
     ...(hasCondition ? ["use App\\Support\\Ring1;\n"] : []),

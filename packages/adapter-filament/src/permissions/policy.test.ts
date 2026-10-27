@@ -63,7 +63,7 @@ describe("emitPolicy", () => {
     };
     for (const out of [emitPolicy(denied, article), emitPolicy(denied, article, "laravel", true)])
       expect(out).toMatch(
-        /public function delete\(\??User \$user, Article \$record\): bool\n    \{\n        return false;\n    \}/,
+        /public function delete\(\??User \$user, Article \$record\): bool\n {4}\{\n {8}return false;\n {4}\}/,
       );
   });
   it("record-scoped condition method builds record.* data and is fail-closed", () => {
