@@ -710,6 +710,64 @@
         "required": ["documentId", "id", "title", "publishedAt"],
         "additionalProperties": false
       },
+      "ApiGlobalGlobalDocument": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "documentId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "The document ID, represented by a UUID"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "siteName": {
+            "description": "A string field",
+            "type": "string"
+          },
+          "contact": {
+            "description": "An email field",
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "createdAt": {
+            "description": "A datetime field",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "A datetime field",
+            "type": "string"
+          },
+          "publishedAt": {
+            "description": "A datetime field",
+            "type": "string"
+          },
+          "locale": {
+            "description": "A string field",
+            "type": "string"
+          },
+          "localizations": {
+            "readOnly": true,
+            "description": "A relational field",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiGlobalGlobalDocument"
+            }
+          }
+        },
+        "required": ["documentId", "id", "publishedAt"],
+        "additionalProperties": false
+      },
       "ApiPagePageDocument": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -8752,6 +8810,1148 @@
           }
         },
         "tags": ["genre"]
+      }
+    },
+    "/global": {
+      "get": {
+        "operationId": "global/get/global",
+        "parameters": [
+          {
+            "name": "fields",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "readOnly": true,
+              "description": "The fields to return, this doesn't include populatable fields like relations, components, files, or dynamic zones",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["siteName", "contact", "createdAt", "updatedAt", "publishedAt", "locale"]
+              }
+            },
+            "x-strapi-serialize": "querystring"
+          },
+          {
+            "name": "populate",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "anyOf": [
+                {
+                  "readOnly": true,
+                  "description": "Populate all the first level relations, components, files, and dynamic zones for the entry",
+                  "type": "string",
+                  "const": "*"
+                },
+                {
+                  "readOnly": true,
+                  "description": "Populate a single relation, component, file, or dynamic zone",
+                  "type": "string",
+                  "enum": ["localizations"]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": ["localizations"]
+                  },
+                  "description": "Populate a selection of multiple relations, components, files, or dynamic zones"
+                }
+              ]
+            },
+            "x-strapi-serialize": "querystring"
+          },
+          {
+            "name": "filters",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "object",
+              "propertyNames": {
+                "type": "string",
+                "enum": ["siteName", "contact", "createdAt", "updatedAt", "publishedAt", "locale"]
+              },
+              "additionalProperties": {},
+              "description": "Filters to apply to the query"
+            },
+            "style": "deepObject",
+            "explode": true,
+            "x-strapi-serialize": "querystring"
+          },
+          {
+            "name": "locale",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "string",
+              "description": "Select a locale"
+            },
+            "x-strapi-serialize": "querystring"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "documentId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                          "description": "The document ID, represented by a UUID"
+                        },
+                        "id": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            }
+                          ]
+                        },
+                        "siteName": {
+                          "description": "A string field",
+                          "type": "string"
+                        },
+                        "contact": {
+                          "description": "An email field",
+                          "type": "string",
+                          "format": "email",
+                          "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                        },
+                        "createdAt": {
+                          "description": "A datetime field",
+                          "type": "string"
+                        },
+                        "updatedAt": {
+                          "description": "A datetime field",
+                          "type": "string"
+                        },
+                        "publishedAt": {
+                          "description": "A datetime field",
+                          "type": "string"
+                        },
+                        "locale": {
+                          "description": "A string field",
+                          "type": "string"
+                        },
+                        "localizations": {
+                          "readOnly": true,
+                          "description": "A relational field",
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/ApiGlobalGlobalDocument"
+                          }
+                        }
+                      },
+                      "required": ["documentId", "id", "publishedAt"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "tags": ["global"]
+      },
+      "put": {
+        "operationId": "global/put/global",
+        "parameters": [
+          {
+            "name": "fields",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "readOnly": true,
+              "description": "The fields to return, this doesn't include populatable fields like relations, components, files, or dynamic zones",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["siteName", "contact", "createdAt", "updatedAt", "publishedAt", "locale"]
+              }
+            },
+            "x-strapi-serialize": "querystring"
+          },
+          {
+            "name": "populate",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "anyOf": [
+                {
+                  "readOnly": true,
+                  "description": "Populate all the first level relations, components, files, and dynamic zones for the entry",
+                  "type": "string",
+                  "const": "*"
+                },
+                {
+                  "readOnly": true,
+                  "description": "Populate a single relation, component, file, or dynamic zone",
+                  "type": "string",
+                  "enum": ["localizations"]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": ["localizations"]
+                  },
+                  "description": "Populate a selection of multiple relations, components, files, or dynamic zones"
+                }
+              ]
+            },
+            "x-strapi-serialize": "querystring"
+          },
+          {
+            "name": "locale",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "string",
+              "description": "Select a locale"
+            },
+            "x-strapi-serialize": "querystring"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "documentId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                          "description": "The document ID, represented by a UUID"
+                        },
+                        "id": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            }
+                          ]
+                        },
+                        "siteName": {
+                          "description": "A string field",
+                          "type": "string"
+                        },
+                        "contact": {
+                          "description": "An email field",
+                          "type": "string",
+                          "format": "email",
+                          "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                        },
+                        "createdAt": {
+                          "description": "A datetime field",
+                          "type": "string"
+                        },
+                        "updatedAt": {
+                          "description": "A datetime field",
+                          "type": "string"
+                        },
+                        "publishedAt": {
+                          "description": "A datetime field",
+                          "type": "string"
+                        },
+                        "locale": {
+                          "description": "A string field",
+                          "type": "string"
+                        },
+                        "localizations": {
+                          "readOnly": true,
+                          "description": "A relational field",
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/ApiGlobalGlobalDocument"
+                          }
+                        }
+                      },
+                      "required": ["documentId", "id", "publishedAt"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "tags": ["global"],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "data": {
+                    "type": "object",
+                    "properties": {
+                      "siteName": {
+                        "description": "A string field",
+                        "type": "string"
+                      },
+                      "contact": {
+                        "description": "An email field",
+                        "type": "string",
+                        "format": "email",
+                        "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                      },
+                      "publishedAt": {
+                        "description": "A datetime field",
+                        "type": "string"
+                      },
+                      "locale": {
+                        "description": "A string field",
+                        "type": "string"
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["data"],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "global/delete/global",
+        "parameters": [
+          {
+            "name": "fields",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "readOnly": true,
+              "description": "The fields to return, this doesn't include populatable fields like relations, components, files, or dynamic zones",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["siteName", "contact", "createdAt", "updatedAt", "publishedAt", "locale"]
+              }
+            },
+            "x-strapi-serialize": "querystring"
+          },
+          {
+            "name": "populate",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "anyOf": [
+                {
+                  "readOnly": true,
+                  "description": "Populate all the first level relations, components, files, and dynamic zones for the entry",
+                  "type": "string",
+                  "const": "*"
+                },
+                {
+                  "readOnly": true,
+                  "description": "Populate a single relation, component, file, or dynamic zone",
+                  "type": "string",
+                  "enum": ["localizations"]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": ["localizations"]
+                  },
+                  "description": "Populate a selection of multiple relations, components, files, or dynamic zones"
+                }
+              ]
+            },
+            "x-strapi-serialize": "querystring"
+          },
+          {
+            "name": "locale",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "string",
+              "description": "Select a locale"
+            },
+            "x-strapi-serialize": "querystring"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "documentId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                          "description": "The document ID, represented by a UUID"
+                        },
+                        "id": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            }
+                          ]
+                        },
+                        "siteName": {
+                          "description": "A string field",
+                          "type": "string"
+                        },
+                        "contact": {
+                          "description": "An email field",
+                          "type": "string",
+                          "format": "email",
+                          "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                        },
+                        "createdAt": {
+                          "description": "A datetime field",
+                          "type": "string"
+                        },
+                        "updatedAt": {
+                          "description": "A datetime field",
+                          "type": "string"
+                        },
+                        "publishedAt": {
+                          "description": "A datetime field",
+                          "type": "string"
+                        },
+                        "locale": {
+                          "description": "A string field",
+                          "type": "string"
+                        },
+                        "localizations": {
+                          "readOnly": true,
+                          "description": "A relational field",
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/ApiGlobalGlobalDocument"
+                          }
+                        }
+                      },
+                      "required": ["documentId", "id", "publishedAt"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "tags": ["global"]
+      }
+    },
+    "/homepage": {
+      "get": {
+        "operationId": "homepage/get/homepage",
+        "parameters": [
+          {
+            "name": "fields",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "readOnly": true,
+              "description": "The fields to return, this doesn't include populatable fields like relations, components, files, or dynamic zones",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["title", "body", "createdAt", "updatedAt", "publishedAt"]
+              }
+            },
+            "x-strapi-serialize": "querystring"
+          },
+          {
+            "name": "populate",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "anyOf": [
+                {
+                  "readOnly": true,
+                  "description": "Populate all the first level relations, components, files, and dynamic zones for the entry",
+                  "type": "string",
+                  "const": "*"
+                },
+                {
+                  "readOnly": true,
+                  "description": "Populate a single relation, component, file, or dynamic zone",
+                  "type": "string",
+                  "enum": ["featured", "price"]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": ["featured", "price"]
+                  },
+                  "description": "Populate a selection of multiple relations, components, files, or dynamic zones"
+                }
+              ]
+            },
+            "x-strapi-serialize": "querystring"
+          },
+          {
+            "name": "filters",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "object",
+              "propertyNames": {
+                "type": "string",
+                "enum": ["title", "body", "createdAt", "updatedAt", "publishedAt"]
+              },
+              "additionalProperties": {},
+              "description": "Filters to apply to the query"
+            },
+            "style": "deepObject",
+            "explode": true,
+            "x-strapi-serialize": "querystring"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "string",
+              "enum": ["draft", "published"],
+              "description": "Fetch documents based on their status. Default to \"published\" if not specified."
+            },
+            "x-strapi-serialize": "querystring"
+          },
+          {
+            "name": "publicationFilter",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "string",
+              "enum": [
+                "never-published",
+                "has-published-version",
+                "modified",
+                "unmodified",
+                "never-published-document",
+                "has-published-version-document",
+                "published-without-draft",
+                "published-with-draft"
+              ],
+              "description": "Derived publication cohort: pair-scoped (per documentId+locale), document-scoped variants (-document), or published-slice diagnostics (published-without-draft / published-with-draft)"
+            },
+            "x-strapi-serialize": "querystring"
+          },
+          {
+            "name": "hasPublishedVersion",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "enum": ["true", "false"]
+                }
+              ],
+              "description": "[Deprecated: prefer publicationFilter] Filter documents by whether they have a published version. Use with status=draft to find documents that have never been published"
+            },
+            "x-strapi-serialize": "querystring"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "documentId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                          "description": "The document ID, represented by a UUID"
+                        },
+                        "id": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            }
+                          ]
+                        },
+                        "title": {
+                          "description": "A string field",
+                          "type": "string"
+                        },
+                        "body": {
+                          "description": "A text field",
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "description": "A datetime field",
+                          "type": "string"
+                        },
+                        "updatedAt": {
+                          "description": "A datetime field",
+                          "type": "string"
+                        },
+                        "publishedAt": {
+                          "description": "A datetime field",
+                          "type": "string"
+                        },
+                        "featured": {
+                          "description": "A relational field",
+                          "$ref": "#/components/schemas/ApiBookBookDocument"
+                        },
+                        "price": {
+                          "description": "A component field",
+                          "$ref": "#/components/schemas/SharedMoneyEntry"
+                        }
+                      },
+                      "required": ["documentId", "id", "title", "publishedAt"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "tags": ["homepage"]
+      },
+      "put": {
+        "operationId": "homepage/put/homepage",
+        "parameters": [
+          {
+            "name": "fields",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "readOnly": true,
+              "description": "The fields to return, this doesn't include populatable fields like relations, components, files, or dynamic zones",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["title", "body", "createdAt", "updatedAt", "publishedAt"]
+              }
+            },
+            "x-strapi-serialize": "querystring"
+          },
+          {
+            "name": "populate",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "anyOf": [
+                {
+                  "readOnly": true,
+                  "description": "Populate all the first level relations, components, files, and dynamic zones for the entry",
+                  "type": "string",
+                  "const": "*"
+                },
+                {
+                  "readOnly": true,
+                  "description": "Populate a single relation, component, file, or dynamic zone",
+                  "type": "string",
+                  "enum": ["featured", "price"]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": ["featured", "price"]
+                  },
+                  "description": "Populate a selection of multiple relations, components, files, or dynamic zones"
+                }
+              ]
+            },
+            "x-strapi-serialize": "querystring"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "string",
+              "enum": ["draft", "published"],
+              "description": "Fetch documents based on their status. Default to \"published\" if not specified."
+            },
+            "x-strapi-serialize": "querystring"
+          },
+          {
+            "name": "publicationFilter",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "string",
+              "enum": [
+                "never-published",
+                "has-published-version",
+                "modified",
+                "unmodified",
+                "never-published-document",
+                "has-published-version-document",
+                "published-without-draft",
+                "published-with-draft"
+              ],
+              "description": "Derived publication cohort: pair-scoped (per documentId+locale), document-scoped variants (-document), or published-slice diagnostics (published-without-draft / published-with-draft)"
+            },
+            "x-strapi-serialize": "querystring"
+          },
+          {
+            "name": "hasPublishedVersion",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "enum": ["true", "false"]
+                }
+              ],
+              "description": "[Deprecated: prefer publicationFilter] Filter documents by whether they have a published version. Use with status=draft to find documents that have never been published"
+            },
+            "x-strapi-serialize": "querystring"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "documentId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                          "description": "The document ID, represented by a UUID"
+                        },
+                        "id": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            }
+                          ]
+                        },
+                        "title": {
+                          "description": "A string field",
+                          "type": "string"
+                        },
+                        "body": {
+                          "description": "A text field",
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "description": "A datetime field",
+                          "type": "string"
+                        },
+                        "updatedAt": {
+                          "description": "A datetime field",
+                          "type": "string"
+                        },
+                        "publishedAt": {
+                          "description": "A datetime field",
+                          "type": "string"
+                        },
+                        "featured": {
+                          "description": "A relational field",
+                          "$ref": "#/components/schemas/ApiBookBookDocument"
+                        },
+                        "price": {
+                          "description": "A component field",
+                          "$ref": "#/components/schemas/SharedMoneyEntry"
+                        }
+                      },
+                      "required": ["documentId", "id", "title", "publishedAt"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "tags": ["homepage"],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "data": {
+                    "type": "object",
+                    "properties": {
+                      "title": {
+                        "description": "A string field",
+                        "type": "string"
+                      },
+                      "body": {
+                        "description": "A text field",
+                        "type": "string"
+                      },
+                      "publishedAt": {
+                        "description": "A datetime field",
+                        "type": "string"
+                      },
+                      "featured": {
+                        "description": "A relational field",
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "price": {
+                        "description": "A component field"
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["data"],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "homepage/delete/homepage",
+        "parameters": [
+          {
+            "name": "fields",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "readOnly": true,
+              "description": "The fields to return, this doesn't include populatable fields like relations, components, files, or dynamic zones",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["title", "body", "createdAt", "updatedAt", "publishedAt"]
+              }
+            },
+            "x-strapi-serialize": "querystring"
+          },
+          {
+            "name": "populate",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "anyOf": [
+                {
+                  "readOnly": true,
+                  "description": "Populate all the first level relations, components, files, and dynamic zones for the entry",
+                  "type": "string",
+                  "const": "*"
+                },
+                {
+                  "readOnly": true,
+                  "description": "Populate a single relation, component, file, or dynamic zone",
+                  "type": "string",
+                  "enum": ["featured", "price"]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": ["featured", "price"]
+                  },
+                  "description": "Populate a selection of multiple relations, components, files, or dynamic zones"
+                }
+              ]
+            },
+            "x-strapi-serialize": "querystring"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "string",
+              "enum": ["draft", "published"],
+              "description": "Fetch documents based on their status. Default to \"published\" if not specified."
+            },
+            "x-strapi-serialize": "querystring"
+          },
+          {
+            "name": "publicationFilter",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "string",
+              "enum": [
+                "never-published",
+                "has-published-version",
+                "modified",
+                "unmodified",
+                "never-published-document",
+                "has-published-version-document",
+                "published-without-draft",
+                "published-with-draft"
+              ],
+              "description": "Derived publication cohort: pair-scoped (per documentId+locale), document-scoped variants (-document), or published-slice diagnostics (published-without-draft / published-with-draft)"
+            },
+            "x-strapi-serialize": "querystring"
+          },
+          {
+            "name": "hasPublishedVersion",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "enum": ["true", "false"]
+                }
+              ],
+              "description": "[Deprecated: prefer publicationFilter] Filter documents by whether they have a published version. Use with status=draft to find documents that have never been published"
+            },
+            "x-strapi-serialize": "querystring"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "documentId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                          "description": "The document ID, represented by a UUID"
+                        },
+                        "id": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            }
+                          ]
+                        },
+                        "title": {
+                          "description": "A string field",
+                          "type": "string"
+                        },
+                        "body": {
+                          "description": "A text field",
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "description": "A datetime field",
+                          "type": "string"
+                        },
+                        "updatedAt": {
+                          "description": "A datetime field",
+                          "type": "string"
+                        },
+                        "publishedAt": {
+                          "description": "A datetime field",
+                          "type": "string"
+                        },
+                        "featured": {
+                          "description": "A relational field",
+                          "$ref": "#/components/schemas/ApiBookBookDocument"
+                        },
+                        "price": {
+                          "description": "A component field",
+                          "$ref": "#/components/schemas/SharedMoneyEntry"
+                        }
+                      },
+                      "required": ["documentId", "id", "title", "publishedAt"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "tags": ["homepage"]
       }
     },
     "/landings": {

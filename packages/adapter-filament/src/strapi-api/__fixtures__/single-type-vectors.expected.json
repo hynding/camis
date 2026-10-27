@@ -1,0 +1,161 @@
+{
+  "a single type with no entry is not found": {
+    "status": 404,
+    "error": {
+      "name": "NotFoundError",
+      "message": "Not Found"
+    }
+  },
+  "deleting an entry that does not exist": {
+    "status": 204,
+    "data": null
+  },
+  "put with status=draft makes the entry as a draft only": {
+    "status": 200,
+    "data": {
+      "publishedAt": "absent",
+      "title": "Welcome"
+    }
+  },
+  "an entry with no published version is not found by default": {
+    "status": 404,
+    "error": {
+      "name": "NotFoundError",
+      "message": "Not Found"
+    }
+  },
+  "its draft is found with status=draft": {
+    "status": 200,
+    "data": {
+      "publishedAt": "absent",
+      "title": "Welcome"
+    }
+  },
+  "put updates the one entry and publishes it, with its relation and component": {
+    "status": 200,
+    "data": {
+      "featured": {
+        "title": "Dune"
+      },
+      "price": {
+        "currency": "EUR",
+        "minor": "500"
+      },
+      "publishedAt": "present",
+      "title": "Welcome home"
+    }
+  },
+  "get reads the published entry, populated": {
+    "status": 200,
+    "data": {
+      "featured": {
+        "title": "Dune"
+      },
+      "price": {
+        "currency": "EUR",
+        "minor": "500"
+      },
+      "publishedAt": "present",
+      "title": "Welcome home"
+    }
+  },
+  "fields narrow the entry": {
+    "status": 200,
+    "data": {
+      "title": "Welcome home"
+    }
+  },
+  "a later put changes only what it names": {
+    "status": 200,
+    "data": {
+      "body": "Hello",
+      "title": "Welcome home"
+    }
+  },
+  "the draft and the published version stay one entry": {
+    "status": 200,
+    "data": {
+      "body": "Hello",
+      "title": "Welcome home"
+    }
+  },
+  "a put without data is refused": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Missing \"data\" payload in the request body"
+    }
+  },
+  "a single type has no collection routes": {
+    "status": 404,
+    "error": {
+      "name": "NotFoundError",
+      "message": "Not Found"
+    }
+  },
+  "a localized single type starts empty in every locale": {
+    "status": 404,
+    "error": {
+      "name": "NotFoundError",
+      "message": "Not Found"
+    }
+  },
+  "put writes the default locale": {
+    "status": 200,
+    "data": {
+      "contact": "hello@example.test",
+      "locale": "en",
+      "siteName": "Site"
+    }
+  },
+  "put in another locale adds that locale to the entry, sharing what is not localized": {
+    "status": 200,
+    "data": {
+      "contact": "hello@example.test",
+      "locale": "fr",
+      "siteName": "Le site"
+    }
+  },
+  "get reads the default locale": {
+    "status": 200,
+    "data": {
+      "locale": "en",
+      "siteName": "Site"
+    }
+  },
+  "locale picks another": {
+    "status": 200,
+    "data": {
+      "locale": "fr",
+      "siteName": "Le site"
+    }
+  },
+  "delete with a locale removes only that locale": {
+    "status": 204,
+    "data": null
+  },
+  "the removed locale is not found": {
+    "status": 404,
+    "error": {
+      "name": "NotFoundError",
+      "message": "Not Found"
+    }
+  },
+  "the default locale is kept": {
+    "status": 200,
+    "data": {
+      "siteName": "Site"
+    }
+  },
+  "delete removes the entry": {
+    "status": 204,
+    "data": null
+  },
+  "every version of it is gone": {
+    "status": 404,
+    "error": {
+      "name": "NotFoundError",
+      "message": "Not Found"
+    }
+  }
+}
