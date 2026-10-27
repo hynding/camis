@@ -5,9 +5,17 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Filament\Resources\Articles\Pages\ListArticles;
+use App\Filament\Resources\Globals\GlobalResource;
+use App\Filament\Resources\Globals\Pages\ListGlobals;
+use App\Filament\Resources\Homepages\HomepageResource;
+use App\Filament\Resources\Homepages\Pages\CreateHomepage;
+use App\Filament\Resources\Homepages\Pages\ListHomepages;
 use App\Filament\Resources\Roles\Pages\ListRoles;
 use App\Filament\Resources\Roles\Pages\ViewRole;
 use App\Filament\Resources\Roles\RoleResource;
+use App\Models\GlobalModel;
+use App\Models\Homepage;
+use App\Models\Locale;
 use App\Models\User;
 use Filament\Facades\Filament;
 use Filament\Navigation\NavigationGroup;
@@ -18,9 +26,9 @@ use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 /**
- * The admin laid out as Strapi's: the menu's groups and order, the list's create button, and the
- * Roles page, which shows the IR's grants and changes nothing. CI copies this into the scaffolded
- * app's tests/Feature.
+ * The admin laid out as Strapi's: the menu's groups and order, the list's create button, a single
+ * type's one entry, and the Roles page, which shows the IR's grants and changes nothing. CI copies
+ * this into the scaffolded app's tests/Feature.
  */
 class StrapiAdminTest extends TestCase
 {
@@ -54,10 +62,11 @@ class StrapiAdminTest extends TestCase
 
     public function test_the_menu_is_strapis_content_manager_then_settings(): void
     {
-        $this->login(['user.update', 'article.read', 'book.read', 'note.read', 'file.read', 'user.read']);
+        $this->login(['user.update', 'article.read', 'book.read', 'note.read', 'file.read', 'user.read', 'homepage.read', 'global.read']);
         $menu = $this->menu();
 
-        $this->assertSame(['', 'Collection Types', 'Settings'], array_keys($menu));
+        $this->assertSame(['', 'Collection Types', 'Single Types', 'Settings'], array_keys($menu));
+        $this->assertSame(['Global', 'Homepage'], $menu['Single Types']);
         $types = $menu['Collection Types'];
         $this->assertSame(['Article', 'Book', 'Note', 'User'], array_values(array_intersect($types, ['Article', 'Book', 'Note', 'User'])));
         $this->assertContains('Media Library', $menu['']);
@@ -71,6 +80,50 @@ class StrapiAdminTest extends TestCase
     {
         $this->login(['article.read', 'article.create']);
         Livewire::test(ListArticles::class)->assertActionVisible('create')->assertSee('Create new entry');
+    }
+
+    public function test_a_single_type_with_no_entry_opens_its_create_form(): void
+    {
+        $this->login(['homepage.read', 'homepage.update']);
+        Livewire::test(ListHomepages::class)->assertRedirect(HomepageResource::getUrl('create'));
+    }
+
+    public function test_a_single_type_opens_its_one_entry(): void
+    {
+        $this->login(['homepage.read', 'homepage.update']);
+        $entry = Homepage::create(['title' => 'Welcome']);
+
+        Livewire::test(ListHomepages::class)->assertRedirect(HomepageResource::getUrl('edit', ['record' => $entry]));
+        Livewire::test(CreateHomepage::class)->assertRedirect(HomepageResource::getUrl('edit', ['record' => $entry]));
+    }
+
+    public function test_a_single_types_entry_is_made_with_its_update_grant(): void
+    {
+        $this->login(['homepage.read', 'homepage.update']);
+        Livewire::test(CreateHomepage::class)->fillForm(['title' => 'Welcome'])->call('create')->assertHasNoFormErrors();
+        $this->assertSame(['Welcome'], Homepage::query()->pluck('title')->all());
+    }
+
+    public function test_a_single_types_entry_is_not_made_without_its_update_grant(): void
+    {
+        $this->login(['homepage.read']);
+        Livewire::test(CreateHomepage::class)->assertForbidden();
+        $this->assertSame(0, Homepage::query()->count());
+    }
+
+    public function test_a_localized_single_type_opens_its_default_locale(): void
+    {
+        $this->login(['global.read', 'global.update']);
+        Locale::firstOrCreate(['code' => 'fr'], ['name' => 'French (fr)']);
+        $fr = new GlobalModel(['site_name' => 'Le site']);
+        $fr->locale = 'fr';
+        $fr->save();
+        $en = new GlobalModel(['site_name' => 'Site']);
+        $en->locale = 'en';
+        $en->document_id = $fr->document_id;
+        $en->save();
+
+        Livewire::test(ListGlobals::class)->assertRedirect(GlobalResource::getUrl('edit', ['record' => $en]));
     }
 
     public function test_the_roles_page_lists_each_role_with_strapis_description(): void
