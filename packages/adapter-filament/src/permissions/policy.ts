@@ -120,8 +120,7 @@ declare(strict_types=1);
 
 namespace App\\Policies;
 
-use App\\Models\\${spec.model};
-use App\\Models\\User;
+${spec.model === "User" ? "" : `use App\\Models\\${spec.model};\n`}use App\\Models\\User;
 ${supportUses}
 class ${spec.model}Policy
 {
