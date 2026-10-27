@@ -37,13 +37,60 @@ describe("projectFilamentPermissions", () => {
     expect(out.permissionKeys).toEqual(["article.read", "article.update"]);
     expect(out.roleGrants).toEqual([{ role: "Editor", keys: ["article.read", "article.update"] }]);
     const article = out.policies.find((p) => p.contentType === "Article")!;
-    expect(article.methods.map((m) => m.method)).toEqual(["viewAny", "view", "update"]);
+    // Every action has a method, so the admin, which allows what a policy has no method for,
+    // refuses what no role grants as the API does.
+    expect(article.methods.map((m) => m.method)).toEqual([
+      "create",
+      "delete",
+      "viewAny",
+      "view",
+      "update",
+    ]);
     // Every method carries the roles whose grants hold its key, so a layout without a
-    // permission table can gate on role membership instead.
-    expect(article.methods.map((m) => m.roles)).toEqual([["Editor"], ["Editor"], ["Editor"]]);
+    // permission table can gate on role membership instead; none holds create or delete.
+    expect(article.methods.map((m) => m.roles)).toEqual([
+      [],
+      [],
+      ["Editor"],
+      ["Editor"],
+      ["Editor"],
+    ]);
     expect(article.methods.find((m) => m.method === "view")!.condition).toEqual(condition);
     expect(out.gaps).toEqual([]);
   });
+  it("gives a type no role mentions a policy that refuses everything", () => {
+    const withNote: IrDocument = {
+      ...doc,
+      contentTypes: [...doc.contentTypes, { name: "Note", kind: "collection", fields: [] }],
+    };
+    const roles: Role[] = [
+      { name: "Editor", grants: [{ contentType: "Article", actions: ["read"] }] },
+    ];
+    const note = projectFilamentPermissions(withNote, roles).policies.find(
+      (p) => p.contentType === "Note",
+    )!;
+    expect(note.methods.map((m) => m.method)).toEqual([
+      "create",
+      "delete",
+      "viewAny",
+      "view",
+      "update",
+    ]);
+    expect(note.methods.every((m) => m.roles.length === 0)).toBe(true);
+  });
+
+  it("adds publish for a draft-and-publish type", () => {
+    const versioned: IrDocument = {
+      ...doc,
+      contentTypes: [{ ...doc.contentTypes[0]!, options: { draftPublish: true } }],
+    };
+    const roles: Role[] = [
+      { name: "Editor", grants: [{ contentType: "Article", actions: ["read"] }] },
+    ];
+    const article = projectFilamentPermissions(versioned, roles).policies[0]!;
+    expect(article.methods.map((m) => m.method)).toContain("publish");
+  });
+
   it("gaps a field-level rule", () => {
     const roles: Role[] = [
       {

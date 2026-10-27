@@ -56,6 +56,16 @@ describe("emitPolicy", () => {
     expect(php).toContain("public function create(User $user): bool");
     expect(php).toContain("return $user->can('article.create');");
   });
+  it("refuses outright what no role holds, on every layout", () => {
+    const denied: PolicySpec = {
+      ...spec,
+      methods: [{ method: "delete", key: "article.delete", record: true, roles: [] }],
+    };
+    for (const out of [emitPolicy(denied, article), emitPolicy(denied, article, "laravel", true)])
+      expect(out).toMatch(
+        /public function delete\(\??User \$user, Article \$record\): bool\n    \{\n        return false;\n    \}/,
+      );
+  });
   it("record-scoped condition method builds record.* data and is fail-closed", () => {
     expect(php).toContain("public function view(User $user, Article $record): bool");
     expect(php).toContain("if (! $user->can('article.read')) {");
