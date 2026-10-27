@@ -152,6 +152,10 @@ export const emitStrapiRoutes = (
     .map((ct) => {
       const p = routePath(ct);
       const c = `${filamentNames(ct).model}ApiController::class`;
+      if (ct.kind === "single")
+        return `        Route::get('/${p}', [${c}, 'single']);
+        Route::put('/${p}', [${c}, 'putSingle']);
+        Route::delete('/${p}', [${c}, 'destroySingle']);`;
       return `        Route::get('/${p}', [${c}, 'index']);
         Route::post('/${p}', [${c}, 'store']);
         Route::get('/${p}/{key}', [${c}, 'show']);
@@ -276,6 +280,9 @@ ${
 
     // Inside the group so hand-written routes inherit the Strapi error envelope.
     require __DIR__.'/api-custom.php';
+
+    // Strapi answers a path it has no route for with its error body, as it answers a missing row.
+    Route::fallback(fn () => abort(404));
 });
 `;
 };

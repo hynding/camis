@@ -1,0 +1,131 @@
+{
+  "about": "Strapi 5 single types over REST, checked against strapi-php. Run on an empty database whose locales are en (the default) and fr, in order, with strapi-populate-vectors.mjs. Homepage is a single type with draft and publish, a relation and a component; Global is a localized single type whose contact is shared by every locale.",
+  "publishedAt": "presence",
+  "seed": [{ "path": "/books", "as": "books:Dune", "data": { "title": "Dune" } }],
+  "reads": [],
+  "writes": [
+    { "name": "a single type with no entry is not found", "method": "GET", "path": "/homepage" },
+    { "name": "deleting an entry that does not exist", "method": "DELETE", "path": "/homepage" },
+    {
+      "name": "put with status=draft makes the entry as a draft only",
+      "method": "PUT",
+      "path": "/homepage",
+      "query": "status=draft&fields[0]=title&fields[1]=publishedAt",
+      "data": { "title": "Welcome" }
+    },
+    {
+      "name": "an entry with no published version is not found by default",
+      "method": "GET",
+      "path": "/homepage"
+    },
+    {
+      "name": "its draft is found with status=draft",
+      "method": "GET",
+      "path": "/homepage",
+      "query": "status=draft&fields[0]=title&fields[1]=publishedAt"
+    },
+    {
+      "name": "put updates the one entry and publishes it, with its relation and component",
+      "method": "PUT",
+      "path": "/homepage",
+      "query": "populate[featured][fields][0]=title&populate[price]=true",
+      "data": {
+        "title": "Welcome home",
+        "featured": "@books:Dune",
+        "price": { "minor": 500, "currency": "EUR" }
+      }
+    },
+    {
+      "name": "get reads the published entry, populated",
+      "method": "GET",
+      "path": "/homepage",
+      "query": "populate[featured][fields][0]=title&populate[price]=true"
+    },
+    {
+      "name": "fields narrow the entry",
+      "method": "GET",
+      "path": "/homepage",
+      "query": "fields[0]=title"
+    },
+    {
+      "name": "a later put changes only what it names",
+      "method": "PUT",
+      "path": "/homepage",
+      "query": "fields[0]=title&fields[1]=body",
+      "data": { "body": "Hello" }
+    },
+    {
+      "name": "the draft and the published version stay one entry",
+      "method": "GET",
+      "path": "/homepage",
+      "query": "status=draft&fields[0]=title&fields[1]=body"
+    },
+    {
+      "name": "a put without data is refused",
+      "method": "PUT",
+      "path": "/homepage"
+    },
+    {
+      "name": "a single type has no collection routes",
+      "method": "GET",
+      "path": "/homepages"
+    },
+    {
+      "name": "a localized single type starts empty in every locale",
+      "method": "GET",
+      "path": "/global",
+      "query": "locale=fr"
+    },
+    {
+      "name": "put writes the default locale",
+      "method": "PUT",
+      "path": "/global",
+      "query": "fields[0]=siteName&fields[1]=contact&fields[2]=locale",
+      "data": { "siteName": "Site", "contact": "hello@example.test" }
+    },
+    {
+      "name": "put in another locale adds that locale to the entry, sharing what is not localized",
+      "method": "PUT",
+      "path": "/global",
+      "query": "locale=fr&fields[0]=siteName&fields[1]=contact&fields[2]=locale",
+      "data": { "siteName": "Le site" }
+    },
+    {
+      "name": "get reads the default locale",
+      "method": "GET",
+      "path": "/global",
+      "query": "fields[0]=siteName&fields[1]=locale"
+    },
+    {
+      "name": "locale picks another",
+      "method": "GET",
+      "path": "/global",
+      "query": "locale=fr&fields[0]=siteName&fields[1]=locale"
+    },
+    {
+      "name": "delete with a locale removes only that locale",
+      "method": "DELETE",
+      "path": "/global",
+      "query": "locale=fr"
+    },
+    {
+      "name": "the removed locale is not found",
+      "method": "GET",
+      "path": "/global",
+      "query": "locale=fr"
+    },
+    {
+      "name": "the default locale is kept",
+      "method": "GET",
+      "path": "/global",
+      "query": "fields[0]=siteName"
+    },
+    { "name": "delete removes the entry", "method": "DELETE", "path": "/homepage" },
+    {
+      "name": "every version of it is gone",
+      "method": "GET",
+      "path": "/homepage",
+      "query": "status=draft"
+    }
+  ]
+}

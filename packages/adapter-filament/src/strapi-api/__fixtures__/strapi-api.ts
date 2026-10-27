@@ -162,6 +162,30 @@ export const strapiApiBundle: IrBundle = {
           { type: "dynamicZone", name: "blocks", components: ["Hero", "Quantity"] },
         ],
       },
+      // Single types (single-type-vectors.json): Homepage has draft and publish, a relation and a
+      // component; Global is localized, its contact shared by every locale.
+      {
+        name: "Homepage",
+        kind: "single",
+        names: { plural: "Homepages" },
+        options: { draftPublish: true },
+        fields: [
+          { type: "string", name: "title", required: true },
+          { type: "text", name: "body" },
+          { type: "relation", name: "featured", relationKind: "manyToOne", target: "Book" },
+          { type: "component", name: "price", component: "Money", repeatable: false },
+        ],
+      },
+      {
+        name: "Global",
+        kind: "single",
+        names: { plural: "Globals" },
+        options: { localized: true },
+        fields: [
+          { type: "string", name: "siteName" },
+          { type: "email", name: "contact", localized: false },
+        ],
+      },
       // Relation targets for Book: a to-one with an inverse side, and a to-many without one.
       {
         name: "Author",
@@ -276,6 +300,9 @@ export const strapiApiBundle: IrBundle = {
         { contentType: "Article", actions: ["create", "read", "update", "delete"] },
         { contentType: "Page", actions: ["create", "read", "update", "delete", "publish"] },
         { contentType: "Landing", actions: ["create", "read", "update", "delete", "publish"] },
+        // A single type's create is Strapi's update: its one entry is made by the first put.
+        { contentType: "Homepage", actions: ["read", "update", "delete", "publish"] },
+        { contentType: "Global", actions: ["read", "update", "delete"] },
       ],
     },
     {

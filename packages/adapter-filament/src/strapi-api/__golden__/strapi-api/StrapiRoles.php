@@ -88,6 +88,23 @@ final class StrapiRoles
                 'delete' => ['genre.delete'],
             ],
         ],
+        'api::global.global' => [
+            'label' => 'Global',
+            'actions' => [
+                'find' => ['global.read'],
+                'update' => ['global.create', 'global.update'],
+                'delete' => ['global.delete'],
+            ],
+        ],
+        'api::homepage.homepage' => [
+            'label' => 'Homepage',
+            'actions' => [
+                'find' => ['homepage.read'],
+                'update' => ['homepage.create', 'homepage.update'],
+                'delete' => ['homepage.delete'],
+                'publish' => ['homepage.publish'],
+            ],
+        ],
         'api::landing.landing' => [
             'label' => 'Landing',
             'actions' => [

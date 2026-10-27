@@ -1026,9 +1026,24 @@ Part 1's exit: `StrapiAdminTest.php` in the boot job checks the menu's groups an
 create button, the roles list and a role's actions and conditions, and that the page offers no
 create, edit or delete; the earlier admin tests still pass on SQLite, MySQL and Postgres.
 
-Known gaps: single types are listed under Single Types but kept as a list, as the REST API serves
-them as collections; Strapi's one-entry editor needs that API first. The Users & Permissions
-settings stay one page where Strapi has four.
+Known gaps: the Users & Permissions settings stay one page where Strapi has four.
+
+**Part 2 — single types.** A single type is served as Strapi serves it: `GET`, `PUT` and `DELETE
+/api/{singularName}` find, make or update, and delete its one entry, whichever version or locale its
+rows hold (the entry is found by any of them, as Strapi's single-type service finds its document).
+The first `PUT` makes the entry and needs Strapi's update grant, not create, and a `PUT` without
+`data` is refused with Strapi's error. Status and locale parameters work as on a collection's
+document. API tokens name its actions find, update and delete, the OpenAPI document lists the three
+routes as strapi-php does, and a path with no route answers with Strapi's 404 body. In the admin it
+sits under Single Types and opens its one entry (the draft, in the default locale), or its create
+form while it has none. A type named as PHP reserves (Strapi's starter `global`) gets a model class
+with a `Model` suffix; its table, routes, resource and pages keep the type's name.
+
+Part 2's exit: `single-type-vectors.json` (22 checks, recorded from strapi-php with a draft-and-
+publish and a localized single type) passes in the `strapi-api` boot job on SQLite, MySQL and
+Postgres, with `StrapiAdminTest.php`'s single-type checks; every earlier suite still passes.
+
+Known gaps: GraphQL still serves a single type as a collection (`graphqlSingleTypes`).
 
 ---
 

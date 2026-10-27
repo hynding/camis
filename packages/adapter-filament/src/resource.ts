@@ -50,8 +50,11 @@ export const emitResourceFiles = (
 
   // Page class names follow v5's make:filament-resource convention: List<plural>, Create<singular>, Edit<singular>.
   const listPage = `List${n.resourceDir}`;
-  const createPage = `Create${n.model}`;
-  const editPage = `Edit${n.model}`;
+  const createPage = `Create${n.subject}`;
+  const editPage = `Edit${n.subject}`;
+  // On a Strapi-like admin a single type opens its one entry, as Strapi's Content Manager does.
+  const single = navigation !== undefined && ct.kind === "single";
+  const secured = options.secured === true;
 
   // One row per document: its draft, which every edit goes through, with its published version.
   const draftQuery = `
@@ -76,7 +79,7 @@ use ${ns}\\Schemas\\${n.tableClass};${navigation === undefined ? "" : `\nuse ${S
 use App\\Models\\${n.model};
 use Filament\\Resources\\Resource;
 use Filament\\Schemas\\Schema;
-use Filament\\Tables\\Table;${versioned ? "\nuse Illuminate\\Database\\Eloquent\\Builder;" : ""}${navigation === undefined ? "" : "\nuse UnitEnum;"}
+use Filament\\Tables\\Table;${versioned ? "\nuse Illuminate\\Database\\Eloquent\\Builder;" : ""}${single && secured ? "\nuse Illuminate\\Support\\Facades\\Gate;" : ""}${single && localized ? "\nuse App\\Support\\StrapiLocales;" : ""}${navigation === undefined ? "" : "\nuse UnitEnum;"}
 
 class ${n.resourceClass} extends Resource
 {
@@ -101,7 +104,7 @@ ${navigation === undefined ? "" : navigationProperties(navigation)}
             'create' => ${createPage}::route('/create'),
             'edit' => ${editPage}::route('/{record}/edit'),
         ];
-    }${versioned ? draftQuery : ""}
+    }${versioned ? draftQuery : ""}${single ? singleEntry(n.model, localized, secured) : ""}
 }
 `;
 
@@ -197,19 +200,52 @@ ${tableBody}
 }
 `;
 
-  const page = (cls: string, base: string, baseImport: string, header = false): string => `<?php
+  const page = (cls: string, base: string, baseImport: string, body = ""): string => `<?php
 
 declare(strict_types=1);
 
 namespace ${ns}\\Pages;
 
-${useBlock([`${ns}\\${n.resourceClass}`, baseImport, ...(header ? [CREATE_ACTION_IMPORT] : [])])}
+${useBlock([`${ns}\\${n.resourceClass}`, baseImport, ...(body === createNewEntryActions ? [CREATE_ACTION_IMPORT] : [])])}
 
 class ${cls} extends ${base}
 {
-    protected static string $resource = ${n.resourceClass}::class;${header ? createNewEntryActions : ""}
+    protected static string $resource = ${n.resourceClass}::class;${body}
 }
 `;
+  const openEntry = `$this->redirect(${n.resourceClass}::getUrl('edit', ['record' => $entry]));`;
+  const listBody = single
+    ? `
+
+    /** Strapi's Content Manager opens a single type's one entry, or its create form while it has none. */
+    public function mount(): void
+    {
+        parent::mount();
+        $entry = ${n.resourceClass}::entry();
+        if ($entry !== null) {
+            ${openEntry}
+        } elseif (${n.resourceClass}::canCreate()) {
+            $this->redirect(${n.resourceClass}::getUrl('create'));
+        }
+    }`
+    : navigation !== undefined
+      ? createNewEntryActions
+      : "";
+  const createBody = single
+    ? `
+
+    /** A single type has one entry: once it is made, its edit page is where it changes. */
+    public function mount(): void
+    {
+        $entry = ${n.resourceClass}::entry();
+        if ($entry !== null) {
+            ${openEntry}
+
+            return;
+        }
+        parent::mount();
+    }`
+    : "";
 
   return [
     { path: `${dir}/${n.resourceClass}.php`, content: resource },
@@ -217,16 +253,16 @@ class ${cls} extends ${base}
     { path: `${dir}/Schemas/${n.tableClass}.php`, content: table },
     {
       path: `${dir}/Pages/${listPage}.php`,
-      content: page(
-        listPage,
-        "ListRecords",
-        "Filament\\Resources\\Pages\\ListRecords",
-        navigation !== undefined,
-      ),
+      content: page(listPage, "ListRecords", "Filament\\Resources\\Pages\\ListRecords", listBody),
     },
     {
       path: `${dir}/Pages/${createPage}.php`,
-      content: page(createPage, "CreateRecord", "Filament\\Resources\\Pages\\CreateRecord"),
+      content: page(
+        createPage,
+        "CreateRecord",
+        "Filament\\Resources\\Pages\\CreateRecord",
+        createBody,
+      ),
     },
     {
       path: `${dir}/Pages/${editPage}.php`,
@@ -241,6 +277,27 @@ class ${cls} extends ${base}
     },
   ];
 };
+
+/**
+ * A single type's one entry, as its list and create pages find it: the row the resource lists (a
+ * draft-and-publish type's draft), in the default locale where it has several. Strapi's single
+ * type has no create action, so its update grant makes the entry, as on the API.
+ */
+const singleEntry = (model: string, localized: boolean, secured: boolean): string => `
+
+    public static function entry(): ?${model}
+    {
+        return static::getEloquentQuery()${localized ? "->orderByRaw('locale = ? desc', [StrapiLocales::default()])" : ""}->orderBy('id')->first();
+    }${
+      secured
+        ? `
+
+    public static function canCreate(): bool
+    {
+        return Gate::allows('update', new ${model}());
+    }`
+        : ""
+    }`;
 
 /**
  * The edit page of a draft-and-publish type edits the draft; its header actions publish it (saving

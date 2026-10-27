@@ -12,6 +12,8 @@ use App\Http\Controllers\Api\AuthorApiController;
 use App\Http\Controllers\Api\BookApiController;
 use App\Http\Controllers\Api\CategoryApiController;
 use App\Http\Controllers\Api\GenreApiController;
+use App\Http\Controllers\Api\GlobalModelApiController;
+use App\Http\Controllers\Api\HomepageApiController;
 use App\Http\Controllers\Api\LandingApiController;
 use App\Http\Controllers\Api\NoteApiController;
 use App\Http\Controllers\Api\PageApiController;
@@ -83,6 +85,14 @@ Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle):
         Route::put('/genres/{key}', [GenreApiController::class, 'update']);
         Route::delete('/genres/{key}', [GenreApiController::class, 'destroy']);
 
+        Route::get('/global', [GlobalModelApiController::class, 'single']);
+        Route::put('/global', [GlobalModelApiController::class, 'putSingle']);
+        Route::delete('/global', [GlobalModelApiController::class, 'destroySingle']);
+
+        Route::get('/homepage', [HomepageApiController::class, 'single']);
+        Route::put('/homepage', [HomepageApiController::class, 'putSingle']);
+        Route::delete('/homepage', [HomepageApiController::class, 'destroySingle']);
+
         Route::get('/landings', [LandingApiController::class, 'index']);
         Route::post('/landings', [LandingApiController::class, 'store']);
         Route::get('/landings/{key}', [LandingApiController::class, 'show']);
@@ -128,4 +138,7 @@ Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle):
 
     // Inside the group so hand-written routes inherit the Strapi error envelope.
     require __DIR__.'/api-custom.php';
+
+    // Strapi answers a path it has no route for with its error body, as it answers a missing row.
+    Route::fallback(fn () => abort(404));
 });

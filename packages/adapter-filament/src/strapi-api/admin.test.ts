@@ -79,6 +79,34 @@ describe("the Strapi-like admin", () => {
     expect(resource).toContain("CheckboxList::make(");
   });
 
+  // Strapi's Content Manager opens a single type's one entry, or its create form while it has none.
+  it("opens a single type's one entry under Single Types", () => {
+    const resource = content("app/Filament/Resources/Homepages/HomepageResource.php");
+    expect(resource).toContain(
+      "protected static string | UnitEnum | null $navigationGroup = StrapiNavigation::SingleTypes;",
+    );
+    // Its update grant makes the entry, as on the API.
+    expect(resource).toContain("return Gate::allows('update', new Homepage());");
+    const list = content("app/Filament/Resources/Homepages/Pages/ListHomepages.php");
+    expect(list).toContain("public function mount(): void");
+    expect(list).toContain(
+      "$this->redirect(HomepageResource::getUrl('edit', ['record' => $entry]));",
+    );
+    expect(list).not.toContain("Create new entry");
+    const create = content("app/Filament/Resources/Homepages/Pages/CreateHomepage.php");
+    expect(create).toContain(
+      "$this->redirect(HomepageResource::getUrl('edit', ['record' => $entry]));",
+    );
+    // A localized single type opens its default locale.
+    expect(content("app/Filament/Resources/Globals/GlobalResource.php")).toContain(
+      "->orderByRaw('locale = ? desc', [StrapiLocales::default()])",
+    );
+    // A reserved-name model keeps its type's name on its pages.
+    expect(strapi.files.map((f) => f.path)).toContain(
+      "app/Filament/Resources/Globals/Pages/EditGlobal.php",
+    );
+  });
+
   it("leaves the Laravel API style's admin as it was", () => {
     const laravel = filamentAdapter.generate(strapiApiBundle, { projectName: "oyl" });
     expect(laravel.files.some((f) => f.path === "app/Filament/StrapiNavigation.php")).toBe(false);

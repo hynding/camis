@@ -1,5 +1,5 @@
 import { phpSingleQuoted } from "../../php-literal";
-import { authLine, NESTED_STMT, STMT } from "../controller-shared";
+import { authLine, createCheck, madeCheck, NESTED_STMT, STMT } from "../controller-shared";
 import type { ControllerLink, ControllerParts, ControllerSpec } from "../controller";
 
 /** A PHP single-quoted string literal, or `null` for an absent value. */
@@ -117,8 +117,8 @@ ${secured ? `        $rows = $rows->filter(fn (${M} $m) => Gate::allows('view', 
 
         return response()->json(['data' => ${S}::toWire($m)]);`,
     storeBody: `        $wire = ${S}::fromWire((array) $request->input('data', []));
-${duplicateGuard}${auth(`$this->authorize('create', ${M}::class);`)}        $m = new ${M}();
-${createTransaction(STMT, false)}
+${duplicateGuard}${createCheck(spec)}        $m = new ${M}();
+${madeCheck(spec)}${createTransaction(STMT, false)}
 
 ${reload(STMT)}
 

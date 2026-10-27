@@ -342,7 +342,7 @@ class DocumentBuilder {
     };
   }
 
-  /** A content type's five core routes, as Strapi's core router declares and documents them. */
+  /** A content type's core routes (five, or a single type's three), as Strapi's core router declares and documents them. */
   private routes(ct: ContentType): Record<string, unknown> {
     const attributes = this.ordered(this.attributes(ct));
     const scalars = attributes.filter(SCALAR).map((a) => a.name);
@@ -381,6 +381,30 @@ class DocumentBuilder {
       ...ERROR_RESPONSES,
     });
     const tags = [singular];
+    if (ct.kind === "single")
+      return {
+        [`/${plural}`]: {
+          get: {
+            operationId: operation("get", false),
+            parameters: [fields, populate, filters, ...extra],
+            responses: ok(document),
+            tags,
+          },
+          put: {
+            operationId: operation("put", false),
+            parameters: [fields, populate, ...extra],
+            responses: ok(document),
+            tags,
+            requestBody: body(true),
+          },
+          delete: {
+            operationId: operation("delete", false),
+            parameters: [fields, populate, ...extra],
+            responses: ok(document),
+            tags,
+          },
+        },
+      };
     return {
       [`/${plural}`]: {
         get: {
