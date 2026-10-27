@@ -90,7 +90,6 @@ type Query {
   genres_connection(filters: GenreFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): GenreEntityResponseCollection
   genres(filters: GenreFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [Genre]!
   global(
-    documentId: ID!
     status: PublicationStatus = PUBLISHED
     hasPublishedVersion: Boolean
     publicationFilter: PublicationFilter
@@ -98,31 +97,7 @@ type Query {
     "The locale to use for the query"
     locale: I18NLocaleCode
   ): Global
-  globals_connection(
-    filters: GlobalFiltersInput
-    pagination: PaginationArg = {  }
-    sort: [String] = []
-    status: PublicationStatus = PUBLISHED
-    hasPublishedVersion: Boolean
-    publicationFilter: PublicationFilter
-
-    "The locale to use for the query"
-    locale: I18NLocaleCode
-  ): GlobalEntityResponseCollection
-  globals(
-    filters: GlobalFiltersInput
-    pagination: PaginationArg = {  }
-    sort: [String] = []
-    status: PublicationStatus = PUBLISHED
-    hasPublishedVersion: Boolean
-    publicationFilter: PublicationFilter
-
-    "The locale to use for the query"
-    locale: I18NLocaleCode
-  ): [Global]!
-  homepage(documentId: ID!, status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): Homepage
-  homepages_connection(filters: HomepageFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): HomepageEntityResponseCollection
-  homepages(filters: HomepageFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [Homepage]!
+  homepage(status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): Homepage
   landing(documentId: ID!, status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): Landing
   landings_connection(filters: LandingFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): LandingEntityResponseCollection
   landings(filters: LandingFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [Landing]!
@@ -232,15 +207,7 @@ type Mutation {
   createGenre(status: PublicationStatus = PUBLISHED, data: GenreInput!): Genre
   updateGenre(documentId: ID!, status: PublicationStatus = PUBLISHED, data: GenreInput!): Genre
   deleteGenre(documentId: ID!): DeleteMutationResponse
-  createGlobal(
-    status: PublicationStatus = PUBLISHED
-    data: GlobalInput!
-
-    "The locale to use for the query"
-    locale: I18NLocaleCode
-  ): Global
   updateGlobal(
-    documentId: ID!
     status: PublicationStatus = PUBLISHED
     data: GlobalInput!
 
@@ -248,14 +215,11 @@ type Mutation {
     locale: I18NLocaleCode
   ): Global
   deleteGlobal(
-    documentId: ID!
-
     "The locale to use for the query"
     locale: I18NLocaleCode
   ): DeleteMutationResponse
-  createHomepage(status: PublicationStatus = PUBLISHED, data: HomepageInput!): Homepage
-  updateHomepage(documentId: ID!, status: PublicationStatus = PUBLISHED, data: HomepageInput!): Homepage
-  deleteHomepage(documentId: ID!): DeleteMutationResponse
+  updateHomepage(status: PublicationStatus = PUBLISHED, data: HomepageInput!): Homepage
+  deleteHomepage: DeleteMutationResponse
   createLanding(status: PublicationStatus = PUBLISHED, data: LandingInput!): Landing
   updateLanding(documentId: ID!, status: PublicationStatus = PUBLISHED, data: LandingInput!): Landing
   deleteLanding(documentId: ID!): DeleteMutationResponse
@@ -575,6 +539,14 @@ type Activity {
   publishedAt: DateTime
 }
 
+input ActivityInput {
+  recordId: String
+  name: String
+  visibility: ENUM_ACTIVITY_VISIBILITY
+  publishedAt: DateTime
+  locale: String
+}
+
 input ActivityFiltersInput {
   documentId: IDFilterInput
   recordId: StringFilterInput
@@ -586,14 +558,6 @@ input ActivityFiltersInput {
   and: [ActivityFiltersInput]
   or: [ActivityFiltersInput]
   not: ActivityFiltersInput
-}
-
-input ActivityInput {
-  recordId: String
-  name: String
-  visibility: ENUM_ACTIVITY_VISIBILITY
-  publishedAt: DateTime
-  locale: String
 }
 
 type ActivityEntityResponseCollection {
@@ -641,6 +605,13 @@ type ActivitySession {
   publishedAt: DateTime
 }
 
+input ActivitySessionInput {
+  recordId: String
+  quantities: [ComponentSharedQuantityInput]
+  publishedAt: DateTime
+  locale: String
+}
+
 input ActivitySessionFiltersInput {
   documentId: IDFilterInput
   recordId: StringFilterInput
@@ -651,13 +622,6 @@ input ActivitySessionFiltersInput {
   and: [ActivitySessionFiltersInput]
   or: [ActivitySessionFiltersInput]
   not: ActivitySessionFiltersInput
-}
-
-input ActivitySessionInput {
-  recordId: String
-  quantities: [ComponentSharedQuantityInput]
-  publishedAt: DateTime
-  locale: String
 }
 
 type ActivitySessionEntityResponseCollection {
@@ -688,6 +652,14 @@ type Article {
   localizations(filters: ArticleFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): [Article]!
 }
 
+input ArticleInput {
+  title: String
+  code: String
+  category: ID
+  genres: [ID]
+  publishedAt: DateTime
+}
+
 input ArticleFiltersInput {
   documentId: IDFilterInput
   title: StringFilterInput
@@ -702,14 +674,6 @@ input ArticleFiltersInput {
   and: [ArticleFiltersInput]
   or: [ArticleFiltersInput]
   not: ArticleFiltersInput
-}
-
-input ArticleInput {
-  title: String
-  code: String
-  category: ID
-  genres: [ID]
-  publishedAt: DateTime
 }
 
 type ArticleEntityResponseCollection {
@@ -734,6 +698,13 @@ type Author {
   publishedAt: DateTime
 }
 
+input AuthorInput {
+  name: String
+  books: [ID]
+  publishedAt: DateTime
+  locale: String
+}
+
 input AuthorFiltersInput {
   documentId: IDFilterInput
   name: StringFilterInput
@@ -744,13 +715,6 @@ input AuthorFiltersInput {
   and: [AuthorFiltersInput]
   or: [AuthorFiltersInput]
   not: AuthorFiltersInput
-}
-
-input AuthorInput {
-  name: String
-  books: [ID]
-  publishedAt: DateTime
-  locale: String
 }
 
 type AuthorEntityResponseCollection {
@@ -886,6 +850,25 @@ type Book {
   publishedAt: DateTime
 }
 
+input BookInput {
+  title: String
+  pages: Int
+  rating: Float
+  inStock: Boolean
+  publishedOn: Date
+  releasedAt: DateTime
+  price: ComponentSharedMoneyInput
+  editions: [ComponentSharedQuantityInput]
+  author: ID
+  genres: [ID]
+  topic: ID
+  category: ID
+  cover: ID
+  attachments: [ID]
+  publishedAt: DateTime
+  locale: String
+}
+
 input BookFiltersInput {
   documentId: IDFilterInput
   title: StringFilterInput
@@ -908,25 +891,6 @@ input BookFiltersInput {
   not: BookFiltersInput
 }
 
-input BookInput {
-  title: String
-  pages: Int
-  rating: Float
-  inStock: Boolean
-  publishedOn: Date
-  releasedAt: DateTime
-  price: ComponentSharedMoneyInput
-  editions: [ComponentSharedQuantityInput]
-  author: ID
-  genres: [ID]
-  topic: ID
-  category: ID
-  cover: ID
-  attachments: [ID]
-  publishedAt: DateTime
-  locale: String
-}
-
 type BookEntityResponseCollection {
   nodes: [Book!]!
   pageInfo: Pagination!
@@ -947,6 +911,11 @@ type Category {
   localizations(filters: CategoryFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): [Category]!
 }
 
+input CategoryInput {
+  name: String
+  publishedAt: DateTime
+}
+
 input CategoryFiltersInput {
   documentId: IDFilterInput
   name: StringFilterInput
@@ -958,11 +927,6 @@ input CategoryFiltersInput {
   and: [CategoryFiltersInput]
   or: [CategoryFiltersInput]
   not: CategoryFiltersInput
-}
-
-input CategoryInput {
-  name: String
-  publishedAt: DateTime
 }
 
 type CategoryEntityResponseCollection {
@@ -978,6 +942,12 @@ type Genre {
   publishedAt: DateTime
 }
 
+input GenreInput {
+  name: String
+  publishedAt: DateTime
+  locale: String
+}
+
 input GenreFiltersInput {
   documentId: IDFilterInput
   name: StringFilterInput
@@ -987,12 +957,6 @@ input GenreFiltersInput {
   and: [GenreFiltersInput]
   or: [GenreFiltersInput]
   not: GenreFiltersInput
-}
-
-input GenreInput {
-  name: String
-  publishedAt: DateTime
-  locale: String
 }
 
 type GenreEntityResponseCollection {
@@ -1012,33 +976,14 @@ type Global {
   updatedAt: DateTime
   publishedAt: DateTime
   locale: String
-  localizations_connection(filters: GlobalFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): GlobalRelationResponseCollection
-  localizations(filters: GlobalFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): [Global]!
-}
-
-input GlobalFiltersInput {
-  documentId: IDFilterInput
-  siteName: StringFilterInput
-  contact: StringFilterInput
-  createdAt: DateTimeFilterInput
-  updatedAt: DateTimeFilterInput
-  publishedAt: DateTimeFilterInput
-  locale: StringFilterInput
-  localizations: GlobalFiltersInput
-  and: [GlobalFiltersInput]
-  or: [GlobalFiltersInput]
-  not: GlobalFiltersInput
+  localizations_connection: GlobalRelationResponseCollection
+  localizations: [Global]!
 }
 
 input GlobalInput {
   siteName: String
   contact: String
   publishedAt: DateTime
-}
-
-type GlobalEntityResponseCollection {
-  nodes: [Global!]!
-  pageInfo: Pagination!
 }
 
 type Homepage {
@@ -1052,20 +997,6 @@ type Homepage {
   publishedAt: DateTime
 }
 
-input HomepageFiltersInput {
-  documentId: IDFilterInput
-  title: StringFilterInput
-  body: StringFilterInput
-  featured: BookFiltersInput
-  price: ComponentSharedMoneyFiltersInput
-  createdAt: DateTimeFilterInput
-  updatedAt: DateTimeFilterInput
-  publishedAt: DateTimeFilterInput
-  and: [HomepageFiltersInput]
-  or: [HomepageFiltersInput]
-  not: HomepageFiltersInput
-}
-
 input HomepageInput {
   title: String
   body: String
@@ -1073,11 +1004,6 @@ input HomepageInput {
   price: ComponentSharedMoneyInput
   publishedAt: DateTime
   locale: String
-}
-
-type HomepageEntityResponseCollection {
-  nodes: [Homepage!]!
-  pageInfo: Pagination!
 }
 
 type ComponentSharedHero {
@@ -1105,6 +1031,13 @@ type Landing {
   publishedAt: DateTime
 }
 
+input LandingInput {
+  title: String
+  blocks: [LandingBlocksDynamicZoneInput!]
+  publishedAt: DateTime
+  locale: String
+}
+
 input LandingFiltersInput {
   documentId: IDFilterInput
   title: StringFilterInput
@@ -1114,13 +1047,6 @@ input LandingFiltersInput {
   and: [LandingFiltersInput]
   or: [LandingFiltersInput]
   not: LandingFiltersInput
-}
-
-input LandingInput {
-  title: String
-  blocks: [LandingBlocksDynamicZoneInput!]
-  publishedAt: DateTime
-  locale: String
 }
 
 type LandingEntityResponseCollection {
@@ -1139,6 +1065,15 @@ type Note {
   publishedAt: DateTime
 }
 
+input NoteInput {
+  recordId: String
+  text: String
+  tags: JSON
+  occurredAt: DateTime
+  publishedAt: DateTime
+  locale: String
+}
+
 input NoteFiltersInput {
   documentId: IDFilterInput
   recordId: StringFilterInput
@@ -1151,15 +1086,6 @@ input NoteFiltersInput {
   and: [NoteFiltersInput]
   or: [NoteFiltersInput]
   not: NoteFiltersInput
-}
-
-input NoteInput {
-  recordId: String
-  text: String
-  tags: JSON
-  occurredAt: DateTime
-  publishedAt: DateTime
-  locale: String
 }
 
 type NoteEntityResponseCollection {
@@ -1182,6 +1108,11 @@ type Page {
   localizations(filters: PageFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): [Page]!
 }
 
+input PageInput {
+  title: String
+  publishedAt: DateTime
+}
+
 input PageFiltersInput {
   documentId: IDFilterInput
   title: StringFilterInput
@@ -1193,11 +1124,6 @@ input PageFiltersInput {
   and: [PageFiltersInput]
   or: [PageFiltersInput]
   not: PageFiltersInput
-}
-
-input PageInput {
-  title: String
-  publishedAt: DateTime
 }
 
 type PageEntityResponseCollection {
@@ -1222,6 +1148,16 @@ type Post {
   publishedAt: DateTime
 }
 
+input PostInput {
+  title: String
+  views: Int
+  author: ID
+  topics: [ID]
+  image: ID
+  publishedAt: DateTime
+  locale: String
+}
+
 input PostFiltersInput {
   documentId: IDFilterInput
   title: StringFilterInput
@@ -1234,16 +1170,6 @@ input PostFiltersInput {
   and: [PostFiltersInput]
   or: [PostFiltersInput]
   not: PostFiltersInput
-}
-
-input PostInput {
-  title: String
-  views: Int
-  author: ID
-  topics: [ID]
-  image: ID
-  publishedAt: DateTime
-  locale: String
 }
 
 type PostEntityResponseCollection {
@@ -1259,6 +1185,12 @@ type Tag {
   publishedAt: DateTime
 }
 
+input TagInput {
+  label: String
+  publishedAt: DateTime
+  locale: String
+}
+
 input TagFiltersInput {
   documentId: IDFilterInput
   label: StringFilterInput
@@ -1268,12 +1200,6 @@ input TagFiltersInput {
   and: [TagFiltersInput]
   or: [TagFiltersInput]
   not: TagFiltersInput
-}
-
-input TagInput {
-  label: String
-  publishedAt: DateTime
-  locale: String
 }
 
 type TagEntityResponseCollection {
@@ -1289,6 +1215,12 @@ type Topic {
   publishedAt: DateTime
 }
 
+input TopicInput {
+  name: String
+  publishedAt: DateTime
+  locale: String
+}
+
 input TopicFiltersInput {
   documentId: IDFilterInput
   name: StringFilterInput
@@ -1298,12 +1230,6 @@ input TopicFiltersInput {
   and: [TopicFiltersInput]
   or: [TopicFiltersInput]
   not: TopicFiltersInput
-}
-
-input TopicInput {
-  name: String
-  publishedAt: DateTime
-  locale: String
 }
 
 type TopicEntityResponseCollection {
@@ -1322,6 +1248,15 @@ type Transaction {
   publishedAt: DateTime
 }
 
+input TransactionInput {
+  recordId: String
+  amount: ComponentSharedMoneyInput
+  fee: Float
+  occurredOn: Date
+  publishedAt: DateTime
+  locale: String
+}
+
 input TransactionFiltersInput {
   documentId: IDFilterInput
   recordId: StringFilterInput
@@ -1334,15 +1269,6 @@ input TransactionFiltersInput {
   and: [TransactionFiltersInput]
   or: [TransactionFiltersInput]
   not: TransactionFiltersInput
-}
-
-input TransactionInput {
-  recordId: String
-  amount: ComponentSharedMoneyInput
-  fee: Float
-  occurredOn: Date
-  publishedAt: DateTime
-  locale: String
 }
 
 type TransactionEntityResponseCollection {

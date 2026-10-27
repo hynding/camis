@@ -268,6 +268,18 @@ jobs:
           F=../packages/adapter-filament/src/strapi-api/__fixtures__
           node ../packages/adapter-filament/scripts/strapi-populate-vectors.mjs http://127.0.0.1:8765/api \
             --token "$T" --vectors $F/graphql-vectors.json --expected $F/graphql-vectors.expected.json
+      - name: Strapi single types over GraphQL (recorded from strapi-php, locales en and fr)
+        run: |
+          cd app
+          php artisan migrate:fresh --force
+          php artisan db:seed --class="Database\\Seeders\\RolePermissionSeeder" --force
+          php artisan tinker --execute='\App\Models\Locale::create(["code" => "fr", "name" => "French (fr)"]);'
+          T=$(curl -s -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' \
+            --data '{"username":"gsingles","email":"gsingles@example.test","password":"secret1"}' \
+            http://127.0.0.1:8765/api/auth/local/register | jq -r .jwt)
+          F=../packages/adapter-filament/src/strapi-api/__fixtures__
+          node ../packages/adapter-filament/scripts/strapi-populate-vectors.mjs http://127.0.0.1:8765/api \
+            --token "$T" --vectors $F/graphql-single-type-vectors.json --expected $F/graphql-single-type-vectors.expected.json
       - name: Strapi publication filters over REST and GraphQL (recorded from strapi-php, locales en and fr)
         run: |
           cd app

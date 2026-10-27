@@ -1,0 +1,105 @@
+{
+  "about": "Strapi 5 single types over GraphQL, checked against strapi-php's GraphQL plugin. Run on an empty database whose locales are en (the default) and fr, in order, with strapi-populate-vectors.mjs. Homepage is a single type with draft and publish, a relation and a component; Global is a localized single type whose contact is shared by every locale.",
+  "publishedAt": "presence",
+  "seed": [
+    {
+      "path": "/books",
+      "as": "books:Dune",
+      "data": {
+        "title": "Dune"
+      }
+    }
+  ],
+  "reads": [],
+  "writes": [
+    {
+      "name": "a single type with no entry answers null",
+      "graphql": "{ homepage { title } }"
+    },
+    {
+      "name": "deleting a single type with no entry is not found",
+      "graphql": "mutation { deleteHomepage { documentId } }"
+    },
+    {
+      "name": "the first update makes the entry as a draft",
+      "graphql": "mutation { updateHomepage(status: DRAFT, data: { title: \"Welcome\", body: \"Hello\", featured: \"@books:Dune\", price: { minor: 500, currency: \"EUR\" } }) { title body publishedAt featured { title } price { minor currency } } }"
+    },
+    {
+      "name": "a draft is not published",
+      "graphql": "{ homepage { title } }"
+    },
+    {
+      "name": "the draft is read by its status",
+      "graphql": "{ homepage(status: DRAFT) { title publishedAt featured { title } } }"
+    },
+    {
+      "name": "an update with the default status publishes",
+      "graphql": "mutation { updateHomepage(data: { title: \"Welcome back\" }) { title body publishedAt } }"
+    },
+    {
+      "name": "the published entry is read",
+      "graphql": "{ homepage { title body publishedAt price { minor currency } } }"
+    },
+    {
+      "name": "the published entry is filtered by publication",
+      "graphql": "{ homepage(status: DRAFT, hasPublishedVersion: true) { title } }"
+    },
+    {
+      "name": "an update with variables",
+      "graphql": "mutation Edit($data: HomepageInput!) { updateHomepage(status: DRAFT, data: $data) { title body } }",
+      "variables": {
+        "data": {
+          "body": "Edited"
+        }
+      }
+    },
+    {
+      "name": "a single type has no documentId argument",
+      "graphql": "{ homepage(documentId: \"x\") { title } }"
+    },
+    {
+      "name": "a single type has no list",
+      "graphql": "{ homepages { title } }"
+    },
+    {
+      "name": "deleting the entry answers its documentId",
+      "graphql": "mutation { deleteHomepage { documentId } }"
+    },
+    {
+      "name": "the deleted entry is gone",
+      "graphql": "{ homepage(status: DRAFT) { title } }"
+    },
+    {
+      "name": "a localized single type is made in the default locale",
+      "graphql": "mutation { updateGlobal(data: { siteName: \"Books\", contact: \"hi@example.test\" }) { siteName contact locale } }"
+    },
+    {
+      "name": "and in another locale",
+      "graphql": "mutation { updateGlobal(locale: \"fr\", data: { siteName: \"Livres\" }) { siteName contact locale } }"
+    },
+    {
+      "name": "the default locale is read",
+      "graphql": "{ global { siteName contact locale localizations { siteName locale } } }"
+    },
+    {
+      "name": "another locale is read",
+      "graphql": "{ global(locale: \"fr\") { siteName contact locale } }"
+    },
+    {
+      "name": "a locale with no entry answers null",
+      "graphql": "{ global(locale: \"de\") { siteName } }"
+    },
+    {
+      "name": "deleting one locale",
+      "graphql": "mutation { deleteGlobal(locale: \"fr\") { documentId } }"
+    },
+    {
+      "name": "leaves the others",
+      "graphql": "{ global { siteName locale localizations { locale } } }"
+    },
+    {
+      "name": "the deleted locale is gone",
+      "graphql": "{ global(locale: \"fr\") { siteName } }"
+    }
+  ]
+}

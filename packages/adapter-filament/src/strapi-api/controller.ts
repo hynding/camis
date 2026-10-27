@@ -70,6 +70,14 @@ const singleMethods = (spec: ControllerSpec): string => {
         return $key === null ? $this->store($request)->setStatusCode(200) : $this->update($request, $key);
     }
 
+    /** The entry's documentId, which GraphQL's delete answers with. */
+    public function singleDocumentId(): ?string
+    {
+        $documentId = ${M}::query()->orderBy('id')->value('document_id');
+
+        return $documentId === null ? null : (string) $documentId;
+    }
+
     public function destroySingle(Request $request): JsonResponse
     {
         $key = $this->singleKey();

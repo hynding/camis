@@ -82,6 +82,15 @@ type Query {
   genre(documentId: ID!, status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): Genre
   genres_connection(filters: GenreFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): GenreEntityResponseCollection
   genres(filters: GenreFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [Genre]!
+  global(
+    status: PublicationStatus = PUBLISHED
+    hasPublishedVersion: Boolean
+    publicationFilter: PublicationFilter
+
+    "The locale to use for the query"
+    locale: I18NLocaleCode
+  ): Global
+  homepage(status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): Homepage
   landing(documentId: ID!, status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): Landing
   landings_connection(filters: LandingFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): LandingEntityResponseCollection
   landings(filters: LandingFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [Landing]!
@@ -167,7 +176,7 @@ type UploadFile {
 "The `JSON` scalar type represents JSON values as specified by [ECMA-404](http://www.ecma-international.org/publications/files/ECMA-ST/ECMA-404.pdf)."
 scalar JSON
 
-union GenericMorph = ComponentSharedHero | ComponentSharedMoney | ComponentSharedQuantity | UploadFile | I18NLocale | UsersPermissionsPermission | UsersPermissionsRole | UsersPermissionsUser | Article | Author | Book | Category | Genre | Landing | Page | Post | Topic
+union GenericMorph = ComponentSharedHero | ComponentSharedMoney | ComponentSharedQuantity | UploadFile | I18NLocale | UsersPermissionsPermission | UsersPermissionsRole | UsersPermissionsUser | Article | Author | Book | Category | Genre | Global | Homepage | Landing | Page | Post | Topic
 
 type ComponentSharedHero {
   id: ID!
@@ -746,6 +755,33 @@ type UploadFileRelationResponseCollection {
   nodes: [UploadFile!]!
 }
 
+type Global {
+  documentId: ID!
+  siteName: String
+  contact: String
+  createdAt: DateTime
+  updatedAt: DateTime
+  publishedAt: DateTime
+  locale: String
+  localizations_connection: GlobalRelationResponseCollection
+  localizations: [Global]!
+}
+
+type GlobalRelationResponseCollection {
+  nodes: [Global!]!
+}
+
+type Homepage {
+  documentId: ID!
+  title: String!
+  body: String
+  featured: Book
+  price: ComponentSharedMoney
+  createdAt: DateTime
+  updatedAt: DateTime
+  publishedAt: DateTime
+}
+
 type Landing {
   documentId: ID!
   title: String!
@@ -794,9 +830,9 @@ type Post {
   documentId: ID!
   title: String!
   views: Int
+  author: Author
   topics_connection(filters: TopicFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): TopicRelationResponseCollection
   topics(filters: TopicFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): [Topic]!
-  author: Author
   image: UploadFile
   createdAt: DateTime
   updatedAt: DateTime
@@ -899,8 +935,8 @@ input PostFiltersInput {
   documentId: IDFilterInput
   title: StringFilterInput
   views: IntFilterInput
-  topics: TopicFiltersInput
   author: AuthorFiltersInput
+  topics: TopicFiltersInput
   createdAt: DateTimeFilterInput
   updatedAt: DateTimeFilterInput
   publishedAt: DateTimeFilterInput
@@ -988,6 +1024,19 @@ type Mutation {
   createGenre(status: PublicationStatus = PUBLISHED, data: GenreInput!): Genre
   updateGenre(documentId: ID!, status: PublicationStatus = PUBLISHED, data: GenreInput!): Genre
   deleteGenre(documentId: ID!): DeleteMutationResponse
+  updateGlobal(
+    status: PublicationStatus = PUBLISHED
+    data: GlobalInput!
+
+    "The locale to use for the query"
+    locale: I18NLocaleCode
+  ): Global
+  deleteGlobal(
+    "The locale to use for the query"
+    locale: I18NLocaleCode
+  ): DeleteMutationResponse
+  updateHomepage(status: PublicationStatus = PUBLISHED, data: HomepageInput!): Homepage
+  deleteHomepage: DeleteMutationResponse
   createLanding(status: PublicationStatus = PUBLISHED, data: LandingInput!): Landing
   updateLanding(documentId: ID!, status: PublicationStatus = PUBLISHED, data: LandingInput!): Landing
   deleteLanding(documentId: ID!): DeleteMutationResponse
@@ -1118,6 +1167,21 @@ input GenreInput {
   locale: String
 }
 
+input GlobalInput {
+  siteName: String
+  contact: String
+  publishedAt: DateTime
+}
+
+input HomepageInput {
+  title: String
+  body: String
+  featured: ID
+  price: ComponentSharedMoneyInput
+  publishedAt: DateTime
+  locale: String
+}
+
 input LandingInput {
   title: String
   blocks: [LandingBlocksDynamicZoneInput!]
@@ -1135,8 +1199,8 @@ input PageInput {
 input PostInput {
   title: String
   views: Int
-  topics: [ID]
   author: ID
+  topics: [ID]
   image: ID
   publishedAt: DateTime
   locale: String

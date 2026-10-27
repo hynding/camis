@@ -1047,7 +1047,12 @@ Part 2's exit: `single-type-vectors.json` (22 checks, recorded from strapi-php w
 publish and a localized single type) passes in the `strapi-api` boot job on SQLite, MySQL and
 Postgres, with `StrapiAdminTest.php`'s single-type checks; every earlier suite still passes.
 
-Known gaps: GraphQL still serves a single type as a collection (`graphqlSingleTypes`).
+Over GraphQL a single type is Strapi's too: `{singularName}` finds its entry (with the status,
+publication and locale arguments, and no `documentId`), `update{Name}` makes or updates it, and
+`delete{Name}` deletes it, answering with its `documentId`, or Strapi's not-found error when there
+is none. It has no list, no `create{Name}` and no filters, as strapi-php's schema has none;
+`graphql-single-type-vectors.json` (21 checks, recorded from strapi-php) runs in the `strapi-api`
+boot job.
 
 **Admin permissions follow the grants.** Every content type's policy has a method for each of its
 actions, and one no role grants refuses outright: Filament allows an action whose policy method is
