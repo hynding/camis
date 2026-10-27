@@ -1014,7 +1014,8 @@ is laid out as Strapi's.
 order (`App\Filament\StrapiNavigation`): the Content Manager's collection types under their
 Strapi display names, alphabetically and with the users-permissions User among them, the Media
 Library, then Settings as Strapi orders them (API Tokens, Internationalization, Transfer Tokens,
-Webhooks, then the Data transfer page, Roles and Users & Permissions). A list's create button
+Webhooks, then the Data transfer page, and the Users & Permissions plugin's Roles, Providers, Email
+templates and Advanced settings). A list's create button
 reads "Create new entry". Settings › Roles lists each role with its description (the IR's, else
 Strapi's for `authenticated` and `public`) and user count, and a role's page lays out its
 users-permissions actions as Strapi's Roles page does (one section per type, plus `publish` for a
@@ -1026,7 +1027,10 @@ Part 1's exit: `StrapiAdminTest.php` in the boot job checks the menu's groups an
 create button, the roles list and a role's actions and conditions, and that the page offers no
 create, edit or delete; the earlier admin tests still pass on SQLite, MySQL and Postgres.
 
-Known gaps: the Users & Permissions settings stay one page where Strapi has four.
+The plugin's settings are Strapi's four pages, each saving only its own part of the store.
+
+Known gaps: the default role for new accounts is the IR's, so Advanced settings does not offer it.
+An app built before the split keeps a stale `UsersPermissionsSettings.php`, to be deleted.
 
 **Part 2 — single types.** A single type is served as Strapi serves it: `GET`, `PUT` and `DELETE
 /api/{singularName}` find, make or update, and delete its one entry, whichever version or locale its

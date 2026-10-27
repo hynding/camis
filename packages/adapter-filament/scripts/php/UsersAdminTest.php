@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
-use App\Filament\Pages\UsersPermissionsSettings;
+use App\Filament\Pages\UsersPermissionsAdvancedSettings;
+use App\Filament\Pages\UsersPermissionsEmailTemplates;
+use App\Filament\Pages\UsersPermissionsProviders;
 use App\Filament\Resources\Users\Pages\CreateUser;
 use App\Filament\Resources\Users\Pages\EditUser;
 use App\Filament\Resources\Users\Pages\ListUsers;
@@ -18,7 +20,7 @@ use Tests\TestCase;
 
 /**
  * The generated Filament admin for users-permissions (the strapi-api fixture's builtin User): an
- * account made or blocked here is one the API sees, the advanced settings change without a
+ * account made or blocked here is one the API sees, the settings pages change without a
  * redeploy, and both are out of reach without the user grants. CI copies this into the scaffolded
  * app's tests/Feature.
  */
@@ -69,7 +71,7 @@ class UsersAdminTest extends TestCase
     {
         $this->login(['user.read', 'user.update']);
         $this->assertTrue((bool) StrapiUsers::advanced()['allow_register']);
-        Livewire::test(UsersPermissionsSettings::class)
+        Livewire::test(UsersPermissionsAdvancedSettings::class)
             ->fillForm(['advanced.allow_register' => false, 'advanced.email_confirmation_redirection' => 'https://example.test/welcome'])
             ->call('save')
             ->assertHasNoFormErrors();
@@ -79,12 +81,26 @@ class UsersAdminTest extends TestCase
         $this->assertSame('Reset password', StrapiUsers::emails()['reset_password']['object']);
     }
 
+    public function test_the_email_templates_change_on_their_own_page(): void
+    {
+        $this->login(['user.read', 'user.update']);
+        Livewire::test(UsersPermissionsEmailTemplates::class)
+            ->fillForm(['email.reset_password.object' => 'Choose a new password'])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertSame('Choose a new password', StrapiUsers::emails()['reset_password']['object']);
+        $this->assertTrue((bool) StrapiUsers::advanced()['allow_register'], 'saving the templates leaves the advanced settings be');
+    }
+
     public function test_users_and_their_settings_are_denied_without_the_user_grants(): void
     {
         $this->login(['book.read']);
         Livewire::test(ListUsers::class)->assertForbidden();
         Livewire::test(CreateUser::class)->assertForbidden();
-        Livewire::test(UsersPermissionsSettings::class)->assertForbidden();
+        Livewire::test(UsersPermissionsProviders::class)->assertForbidden();
+        Livewire::test(UsersPermissionsEmailTemplates::class)->assertForbidden();
+        Livewire::test(UsersPermissionsAdvancedSettings::class)->assertForbidden();
     }
 
     public function test_reading_users_does_not_open_making_them(): void
@@ -92,6 +108,8 @@ class UsersAdminTest extends TestCase
         $this->login(['user.read']);
         Livewire::test(ListUsers::class)->assertOk();
         Livewire::test(CreateUser::class)->assertForbidden();
-        Livewire::test(UsersPermissionsSettings::class)->assertForbidden();
+        Livewire::test(UsersPermissionsProviders::class)->assertForbidden();
+        Livewire::test(UsersPermissionsEmailTemplates::class)->assertForbidden();
+        Livewire::test(UsersPermissionsAdvancedSettings::class)->assertForbidden();
     }
 }

@@ -26,7 +26,9 @@ export const SETTINGS = {
   webhooks: settings("Webhooks", 40),
   dataTransfer: settings("Data transfer", 50),
   roles: settings("Roles", 60),
-  usersPermissions: settings("Users & Permissions", 70),
+  providers: settings("Providers", 70),
+  emailTemplates: settings("Email templates", 80),
+  advancedSettings: settings("Advanced settings", 90),
 } as const;
 
 /** A resource's or page's navigation properties; it imports StrapiNavigation and UnitEnum. */

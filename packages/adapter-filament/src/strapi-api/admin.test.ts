@@ -53,7 +53,9 @@ describe("the Strapi-like admin", () => {
       ["app/Filament/Resources/Webhooks/WebhookResource.php", "Webhooks"],
       ["app/Filament/Pages/DataTransfer.php", "Data transfer"],
       ["app/Filament/Resources/Roles/RoleResource.php", "Roles"],
-      ["app/Filament/Pages/UsersPermissionsSettings.php", "Users & Permissions"],
+      ["app/Filament/Pages/UsersPermissionsProviders.php", "Providers"],
+      ["app/Filament/Pages/UsersPermissionsEmailTemplates.php", "Email templates"],
+      ["app/Filament/Pages/UsersPermissionsAdvancedSettings.php", "Advanced settings"],
     ] as const;
     const sorts = settings.map(([path, label]) => {
       const source = content(path);
@@ -64,6 +66,27 @@ describe("the Strapi-like admin", () => {
       return Number(/\$navigationSort = (\d+);/.exec(source)?.[1]);
     });
     expect(sorts).toEqual([...sorts].sort((a, b) => a - b));
+  });
+
+  // Strapi's Users & Permissions plugin settings are four pages: Roles, Providers, Email templates
+  // and Advanced settings, each saving only its own part of the store.
+  it("splits the Users & Permissions settings into Strapi's pages", () => {
+    expect(strapi.files.some((f) => f.path.endsWith("UsersPermissionsSettings.php"))).toBe(false);
+    const pages = [
+      ["UsersPermissionsProviders", "Providers", "grant"],
+      ["UsersPermissionsEmailTemplates", "Email templates", "email"],
+      ["UsersPermissionsAdvancedSettings", "Advanced settings", "advanced"],
+    ] as const;
+    for (const [cls, title, store] of pages) {
+      const source = content(`app/Filament/Pages/${cls}.php`);
+      expect(source).toContain(`class ${cls} extends Page`);
+      expect(source).toContain(`protected static ?string $title = '${title}';`);
+      expect(source).toContain("return auth()->user()?->can('user.update') ?? false;");
+      expect(source.match(/StrapiSettings::merge\(/g)).toHaveLength(1);
+      expect(source).toContain(
+        `StrapiSettings::merge('users-permissions.${store}', $state['${store}']);`,
+      );
+    }
   });
 
   it("shows each role's actions as Strapi's Roles page does, with the IR's conditions", async () => {

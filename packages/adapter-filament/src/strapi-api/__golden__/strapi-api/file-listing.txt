@@ -2,7 +2,9 @@ overwrite DEPLOY.md
 overwrite app/Console/Commands/StrapiExport.php
 overwrite app/Console/Commands/StrapiImport.php
 overwrite app/Filament/Pages/DataTransfer.php
-overwrite app/Filament/Pages/UsersPermissionsSettings.php
+overwrite app/Filament/Pages/UsersPermissionsAdvancedSettings.php
+overwrite app/Filament/Pages/UsersPermissionsEmailTemplates.php
+overwrite app/Filament/Pages/UsersPermissionsProviders.php
 overwrite app/Filament/Resources/Activities/ActivityResource.php
 overwrite app/Filament/Resources/Activities/Pages/CreateActivity.php
 overwrite app/Filament/Resources/Activities/Pages/EditActivity.php

@@ -124,7 +124,10 @@ import { emitStrapiExport } from "./transfer-export-runtime";
 import { emitStrapiImport } from "./transfer-runtime";
 import { wireShape, type WireShape } from "./wire-shape";
 import { emitStrapiZones } from "./zones-runtime";
-import { emitUserResourceFiles, emitUsersPermissionsSettingsPage } from "./users-permissions-admin";
+import {
+  emitUserResourceFiles,
+  emitUsersPermissionsSettingsPages,
+} from "./users-permissions-admin";
 import {
   emitSettingsMigration,
   emitStrapiActiveUser,
@@ -428,10 +431,7 @@ const usersPermissionsFiles = (
   { path: "app/Http/Controllers/Api/ConnectController.php", content: emitConnectController() },
   { path: PASSWORDLESS_MIGRATION_PATH, content: emitPasswordlessMigration() },
   ...emitUserResourceFiles(secured, userNavigation),
-  {
-    path: "app/Filament/Pages/UsersPermissionsSettings.php",
-    content: emitUsersPermissionsSettingsPage(secured),
-  },
+  ...emitUsersPermissionsSettingsPages(secured),
 ];
 
 /** Strapi's content API tokens, which stand in for a role, and their admin. */
