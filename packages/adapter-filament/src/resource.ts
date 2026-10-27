@@ -3,6 +3,13 @@ import type { GeneratedFile } from "@camis/adapter-kernel";
 import type { RepeaterEmit } from "./components";
 import { emitField, type FieldEmit } from "./fields";
 import { filamentNames } from "./names";
+import {
+  CREATE_ACTION_IMPORT,
+  createNewEntryActions,
+  navigationProperties,
+  STRAPI_NAVIGATION_CLASS,
+  type Navigation,
+} from "./strapi-api/admin-navigation";
 
 const useBlock = (imports: string[]): string =>
   [...new Set(imports)]
@@ -21,9 +28,12 @@ export const emitResourceFiles = (
     secured?: boolean;
     /** Media fields, picked from the media library. */
     media?: { field: string; multiple: boolean }[];
+    /** Its place in a Strapi-like menu, which also words the list's create button as Strapi's. */
+    navigation?: Navigation;
   } = {},
 ): GeneratedFile[] => {
   const versioned = options.versioned === true;
+  const navigation = options.navigation;
   const localized = options.localized === true;
   // A document's rows (versions, locales) share every value, so per-row uniqueness cannot hold.
   const manyRows = versioned || localized;
@@ -62,18 +72,18 @@ use ${ns}\\Pages\\${createPage};
 use ${ns}\\Pages\\${editPage};
 use ${ns}\\Pages\\${listPage};
 use ${ns}\\Schemas\\${n.formClass};
-use ${ns}\\Schemas\\${n.tableClass};
+use ${ns}\\Schemas\\${n.tableClass};${navigation === undefined ? "" : `\nuse ${STRAPI_NAVIGATION_CLASS};`}
 use App\\Models\\${n.model};
 use Filament\\Resources\\Resource;
 use Filament\\Schemas\\Schema;
-use Filament\\Tables\\Table;${versioned ? "\nuse Illuminate\\Database\\Eloquent\\Builder;" : ""}
+use Filament\\Tables\\Table;${versioned ? "\nuse Illuminate\\Database\\Eloquent\\Builder;" : ""}${navigation === undefined ? "" : "\nuse UnitEnum;"}
 
 class ${n.resourceClass} extends Resource
 {
     protected static ?string $model = ${n.model}::class;
 
     protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-rectangle-stack';
-
+${navigation === undefined ? "" : navigationProperties(navigation)}
     public static function form(Schema $schema): Schema
     {
         return ${n.formClass}::configure($schema);
@@ -187,18 +197,17 @@ ${tableBody}
 }
 `;
 
-  const page = (cls: string, base: string, baseImport: string): string => `<?php
+  const page = (cls: string, base: string, baseImport: string, header = false): string => `<?php
 
 declare(strict_types=1);
 
 namespace ${ns}\\Pages;
 
-use ${ns}\\${n.resourceClass};
-use ${baseImport};
+${useBlock([`${ns}\\${n.resourceClass}`, baseImport, ...(header ? [CREATE_ACTION_IMPORT] : [])])}
 
 class ${cls} extends ${base}
 {
-    protected static string $resource = ${n.resourceClass}::class;
+    protected static string $resource = ${n.resourceClass}::class;${header ? createNewEntryActions : ""}
 }
 `;
 
@@ -208,7 +217,12 @@ class ${cls} extends ${base}
     { path: `${dir}/Schemas/${n.tableClass}.php`, content: table },
     {
       path: `${dir}/Pages/${listPage}.php`,
-      content: page(listPage, "ListRecords", "Filament\\Resources\\Pages\\ListRecords"),
+      content: page(
+        listPage,
+        "ListRecords",
+        "Filament\\Resources\\Pages\\ListRecords",
+        navigation !== undefined,
+      ),
     },
     {
       path: `${dir}/Pages/${createPage}.php`,

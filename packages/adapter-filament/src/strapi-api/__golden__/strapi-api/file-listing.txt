@@ -83,6 +83,9 @@ overwrite app/Filament/Resources/Posts/Pages/ListPosts.php
 overwrite app/Filament/Resources/Posts/PostResource.php
 overwrite app/Filament/Resources/Posts/Schemas/PostForm.php
 overwrite app/Filament/Resources/Posts/Schemas/PostsTable.php
+overwrite app/Filament/Resources/Roles/Pages/ListRoles.php
+overwrite app/Filament/Resources/Roles/Pages/ViewRole.php
+overwrite app/Filament/Resources/Roles/RoleResource.php
 overwrite app/Filament/Resources/Tags/Pages/CreateTag.php
 overwrite app/Filament/Resources/Tags/Pages/EditTag.php
 overwrite app/Filament/Resources/Tags/Pages/ListTags.php
@@ -113,6 +116,7 @@ overwrite app/Filament/Resources/Webhooks/Pages/CreateWebhook.php
 overwrite app/Filament/Resources/Webhooks/Pages/EditWebhook.php
 overwrite app/Filament/Resources/Webhooks/Pages/ListWebhooks.php
 overwrite app/Filament/Resources/Webhooks/WebhookResource.php
+overwrite app/Filament/StrapiNavigation.php
 overwrite app/Filament/Support/MediaPicker.php
 overwrite app/Http/Controllers/Admin/StrapiTransferDownload.php
 overwrite app/Http/Controllers/Admin/StrapiTransferRunner.php
@@ -213,6 +217,7 @@ overwrite app/Support/StrapiPopulate.php
 overwrite app/Support/StrapiProviders.php
 overwrite app/Support/StrapiQuery.php
 overwrite app/Support/StrapiRelations.php
+overwrite app/Support/StrapiRoles.php
 overwrite app/Support/StrapiSessions.php
 overwrite app/Support/StrapiSettings.php
 overwrite app/Support/StrapiTransferArchives.php

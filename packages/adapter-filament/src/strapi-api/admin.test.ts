@@ -69,12 +69,10 @@ describe("the Strapi-like admin", () => {
   it("shows each role's actions as Strapi's Roles page does, with the IR's conditions", async () => {
     const roles = content("app/Support/StrapiRoles.php");
     expect(roles).toContain("'api::article.article' => [");
-    expect(roles).toContain("'findOne' => 'article.read',");
-    expect(roles).toContain("'publish' => 'post.publish',");
+    expect(roles).toContain("'findOne' => ['article.read'],");
+    expect(roles).toContain("'publish' => ['post.publish'],");
     expect(roles).toContain("'note.read' => 'record.ownerId = user.id',");
-    expect(roles).toContain(
-      "'authenticated' => 'Default role given to authenticated user.',",
-    );
+    expect(roles).toContain("'authenticated' => 'Default role given to authenticated user.',");
     await expect(roles).toMatchFileSnapshot("./__golden__/strapi-api/StrapiRoles.php");
     const resource = content("app/Filament/Resources/Roles/RoleResource.php");
     expect(resource).toContain("public static function canCreate(): bool");

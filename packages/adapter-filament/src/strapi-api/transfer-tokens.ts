@@ -1,4 +1,5 @@
 import type { CapabilityGap } from "@camis/ir-schema";
+import { navigationProperties, SETTINGS } from "./admin-navigation";
 import { PHP_MARKER } from "../hooks/names";
 
 /**
@@ -329,6 +330,7 @@ namespace App\\Filament\\Resources\\TransferTokens;
 use App\\Filament\\Resources\\TransferTokens\\Pages\\CreateTransferToken;
 use App\\Filament\\Resources\\TransferTokens\\Pages\\EditTransferToken;
 use App\\Filament\\Resources\\TransferTokens\\Pages\\ListTransferTokens;
+use App\\Filament\\StrapiNavigation;
 use App\\Models\\StrapiTransferToken;
 use BackedEnum;
 use Filament\\Forms\\Components\\CheckboxList;
@@ -346,11 +348,7 @@ class TransferTokenResource extends Resource
     protected static ?string $model = StrapiTransferToken::class;
 
     protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-arrows-right-left';
-
-    protected static string | UnitEnum | null $navigationGroup = 'Settings';
-
-    protected static ?string $navigationLabel = 'Transfer Tokens';
-
+${navigationProperties(SETTINGS.transferTokens)}
     protected static ?string $modelLabel = 'transfer token';
 
     public static function form(Schema $schema): Schema

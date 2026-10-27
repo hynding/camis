@@ -92,6 +92,14 @@ import {
   TRANSFER_SCHEMAS_PATH,
 } from "./transfer";
 import {
+  emitStrapiNavigation,
+  SETTINGS,
+  STRAPI_NAVIGATION_PATH,
+  USER_DISPLAY_NAME,
+  type Navigation,
+} from "./admin-navigation";
+import { emitRoleResourceFiles, emitStrapiRoles, STRAPI_ROLES_PATH } from "./roles-admin";
+import {
   emitStrapiTransferRunner,
   emitStrapiTransferTokens,
   emitTransferRoutes,
@@ -156,6 +164,8 @@ export interface StrapiApiInput {
    * owns the model and already receives the flag directly.
    */
   observedModels?: ReadonlySet<string>;
+  /** Each Content Manager entry's place in the admin's menu, by display name (`contentManagerSorts`). */
+  contentManager?: ReadonlyMap<string, number> | undefined;
 }
 export interface StrapiApiEmission {
   files: GeneratedFile[];
@@ -239,7 +249,29 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     content: emitAuthController(bundle.defaultRole),
   });
   files.push({ path: USERNAME_MIGRATION_PATH, content: emitUsernameMigration() });
-  files.push(...usersPermissionsFiles(secured, guests, bundle.defaultRole));
+  files.push(
+    ...usersPermissionsFiles(secured, guests, bundle.defaultRole, {
+      group: "CollectionTypes",
+      label: USER_DISPLAY_NAME,
+      sort: input.contentManager?.get(USER_DISPLAY_NAME) ?? 1,
+    }),
+    { path: STRAPI_NAVIGATION_PATH, content: emitStrapiNavigation() },
+  );
+  if (secured) {
+    files.push(
+      {
+        path: STRAPI_ROLES_PATH,
+        content: emitStrapiRoles({
+          roles: bundle.roles,
+          emitted,
+          versioned,
+          fileType: input.media?.name,
+          userType: doc.contentTypes.find((ct) => ct.builtin === "user")?.name,
+        }),
+      },
+      ...emitRoleResourceFiles(),
+    );
+  }
   if (secured) {
     files.push(
       ...apiTokenFiles(
@@ -374,6 +406,7 @@ const usersPermissionsFiles = (
   secured: boolean,
   guests: boolean,
   defaultRole: string | undefined,
+  userNavigation: Navigation,
 ): GeneratedFile[] => [
   { path: "app/Support/StrapiUsers.php", content: emitStrapiUsers() },
   { path: "app/Support/StrapiSettings.php", content: emitStrapiSettings() },
@@ -393,7 +426,7 @@ const usersPermissionsFiles = (
   { path: "app/Support/StrapiOAuth.php", content: emitStrapiOAuth() },
   { path: "app/Http/Controllers/Api/ConnectController.php", content: emitConnectController() },
   { path: PASSWORDLESS_MIGRATION_PATH, content: emitPasswordlessMigration() },
-  ...emitUserResourceFiles(secured),
+  ...emitUserResourceFiles(secured, userNavigation),
   {
     path: "app/Filament/Pages/UsersPermissionsSettings.php",
     content: emitUsersPermissionsSettingsPage(secured),
@@ -497,5 +530,5 @@ const localeFiles = (): GeneratedFile[] => [
   { path: "app/Models/Locale.php", content: emitLocaleModel() },
   { path: "app/Http/Controllers/Api/LocaleController.php", content: emitLocaleController() },
   { path: LOCALES_MIGRATION_PATH, content: emitLocalesMigration() },
-  ...emitResourceFiles(LOCALE),
+  ...emitResourceFiles(LOCALE, [], [], [], { navigation: SETTINGS.internationalization }),
 ];

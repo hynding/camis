@@ -1,8 +1,8 @@
 import { fieldApiName, type CapabilityGap, type ContentType, type Field } from "@camis/ir-schema";
 import { PHP_MARKER } from "../hooks/names";
-import { permissionKey } from "../permissions/keys";
 import { filamentNames } from "../names";
 import { phpSingleQuoted } from "../php-literal";
+import { strapiActions } from "./strapi-actions";
 import { FILE_UID } from "./media-runtime";
 import { kebab } from "./names";
 import type { WireScalar, WireShape } from "./wire-shape";
@@ -158,34 +158,6 @@ const links = (shape: WireShape, ct: ContentType, userType: string | undefined) 
   return out;
 };
 
-/**
- * The users-permissions actions each camis permission is in Strapi: a role's grants, as an
- * export writes them for Strapi's roles.
- */
-const actions = (input: TransferMapInput): Record<string, string[]> => {
-  const out: Record<string, string[]> = {};
-  for (const ct of input.emitted) {
-    const api = `${uidOf(ct)}.`;
-    const single = ct.kind === "single";
-    out[permissionKey(ct.name, "read")] = single ? [`${api}find`] : [`${api}find`, `${api}findOne`];
-    out[permissionKey(ct.name, "create")] = [`${api}${single ? "update" : "create"}`];
-    out[permissionKey(ct.name, "update")] = [`${api}update`];
-    out[permissionKey(ct.name, "delete")] = [`${api}delete`];
-  }
-  if (input.fileType !== undefined) {
-    const upload = "plugin::upload.content-api.";
-    out[permissionKey(input.fileType, "read")] = [`${upload}find`, `${upload}findOne`];
-    out[permissionKey(input.fileType, "create")] = [`${upload}upload`];
-    out[permissionKey(input.fileType, "update")] = [`${upload}upload`];
-    out[permissionKey(input.fileType, "delete")] = [`${upload}destroy`];
-  }
-  if (input.userType !== undefined) {
-    const user = "plugin::users-permissions.user.";
-    out[permissionKey(input.userType, "read")] = [`${user}find`, `${user}findOne`, `${user}count`];
-  }
-  return out;
-};
-
 const required = (ct: ContentType, relation: string): boolean =>
   ct.fields.some((f) => f.type === "relation" && f.name === relation && f.required === true);
 
@@ -268,7 +240,7 @@ final class StrapiTransferMap
     public const TYPES = ${php(types, 1)};
 
     /** The users-permissions actions each of this app's permissions is in Strapi, for \`strapi:export\`. */
-    public const ACTIONS = ${php(actions(input), 1)};
+    public const ACTIONS = ${php(strapiActions(input), 1)};
 }
 `;
   return { content, gaps };

@@ -1,4 +1,5 @@
 import { PHP_MARKER } from "../hooks/names";
+import { navigationProperties, SETTINGS } from "./admin-navigation";
 
 /**
  * Strapi 5's content API tokens (the admin's API Tokens settings and its `content-api-token`
@@ -507,6 +508,7 @@ namespace App\\Filament\\Resources\\ApiTokens;
 use App\\Filament\\Resources\\ApiTokens\\Pages\\CreateApiToken;
 use App\\Filament\\Resources\\ApiTokens\\Pages\\EditApiToken;
 use App\\Filament\\Resources\\ApiTokens\\Pages\\ListApiTokens;
+use App\\Filament\\StrapiNavigation;
 use App\\Models\\StrapiApiToken;
 use App\\Support\\StrapiApiTokens;
 use BackedEnum;
@@ -526,11 +528,7 @@ class ApiTokenResource extends Resource
     protected static ?string $model = StrapiApiToken::class;
 
     protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-key';
-
-    protected static string | UnitEnum | null $navigationGroup = 'Settings';
-
-    protected static ?string $navigationLabel = 'API Tokens';
-
+${navigationProperties(SETTINGS.apiTokens)}
     protected static ?string $modelLabel = 'API token';
 
     public static function form(Schema $schema): Schema

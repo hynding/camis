@@ -1,4 +1,5 @@
 import { PHP_MARKER } from "../hooks/names";
+import { navigationProperties, SETTINGS } from "./admin-navigation";
 
 /**
  * Strapi 5's webhooks (the admin's Webhooks settings, and the `entry.*` and `media.*` events its
@@ -358,6 +359,7 @@ namespace App\\Filament\\Resources\\Webhooks;
 use App\\Filament\\Resources\\Webhooks\\Pages\\CreateWebhook;
 use App\\Filament\\Resources\\Webhooks\\Pages\\EditWebhook;
 use App\\Filament\\Resources\\Webhooks\\Pages\\ListWebhooks;
+use App\\Filament\\StrapiNavigation;
 use App\\Models\\StrapiWebhook;
 use App\\Support\\StrapiWebhooks;
 use BackedEnum;
@@ -379,11 +381,7 @@ class WebhookResource extends Resource
     protected static ?string $model = StrapiWebhook::class;
 
     protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-bolt';
-
-    protected static string | UnitEnum | null $navigationGroup = 'Settings';
-
-    protected static ?string $navigationLabel = 'Webhooks';
-
+${navigationProperties(SETTINGS.webhooks)}
     private const URL = '${URL_PATTERN}';
 
     public static function form(Schema $schema): Schema
