@@ -54,8 +54,8 @@ overwrite app/Filament/Resources/Genres/Pages/ListGenres.php
 overwrite app/Filament/Resources/Genres/Schemas/GenreForm.php
 overwrite app/Filament/Resources/Genres/Schemas/GenresTable.php
 overwrite app/Filament/Resources/Globals/GlobalResource.php
-overwrite app/Filament/Resources/Globals/Pages/CreateGlobalModel.php
-overwrite app/Filament/Resources/Globals/Pages/EditGlobalModel.php
+overwrite app/Filament/Resources/Globals/Pages/CreateGlobal.php
+overwrite app/Filament/Resources/Globals/Pages/EditGlobal.php
 overwrite app/Filament/Resources/Globals/Pages/ListGlobals.php
 overwrite app/Filament/Resources/Globals/Schemas/GlobalForm.php
 overwrite app/Filament/Resources/Globals/Schemas/GlobalsTable.php

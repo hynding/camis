@@ -14,6 +14,7 @@ describe("filamentNames", () => {
   it("derives model/table/resource names for a simple type", () => {
     expect(filamentNames(ct("Article"))).toEqual({
       model: "Article",
+      subject: "Article",
       table: "articles",
       resourceDir: "Articles",
       resourceClass: "ArticleResource",

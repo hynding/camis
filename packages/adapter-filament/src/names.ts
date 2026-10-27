@@ -2,6 +2,8 @@ import type { ContentType } from "@camis/ir-schema";
 
 export interface FilamentNames {
   model: string;
+  /** The type's class-name form, which names its resource and pages even where the model's differs. */
+  subject: string;
   table: string;
   resourceDir: string;
   resourceClass: string;
@@ -50,6 +52,7 @@ export const filamentNames = (ct: ContentType): FilamentNames => {
   const resourceDir = studly(pluralSnake);
   return {
     model,
+    subject: base,
     table: pluralSnake,
     resourceDir,
     resourceClass: `${base}Resource`,
