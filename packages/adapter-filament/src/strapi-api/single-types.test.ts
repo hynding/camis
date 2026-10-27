@@ -22,6 +22,12 @@ describe("single types", () => {
     expect(routes).not.toContain(`[${c}, 'index']`);
   });
 
+  // Asked for the collection path a single type does not have, Strapi answers with its 404 body.
+  it("answers a path with no route with Strapi's error body", () => {
+    const routes = content("routes/api.php");
+    expect(routes).toContain("    Route::fallback(fn () => abort(404));\n});");
+  });
+
   it("finds, makes or updates, and deletes the one entry", () => {
     const controller = content("app/Http/Controllers/Api/Generated/HomepageApiController.php");
     expect(controller).toContain("public function single(Request $request): JsonResponse");
