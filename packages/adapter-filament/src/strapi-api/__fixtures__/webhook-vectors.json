@@ -1,6 +1,5 @@
 {
   "about": "Strapi 5's webhooks, checked against strapi-php. Run on an empty database, in order, with strapi-auth-vectors.mjs and webhook-receiver.mjs listening on 127.0.0.1:9555. A webhook named all hears every event, failing hears entry.create and answers 500; a delivery step records what each got since the last one.",
-  "dropNulls": true,
   "steps": [
     {
       "hook": ["role", "public", "api::book.book.find", "api::book.book.findOne"]

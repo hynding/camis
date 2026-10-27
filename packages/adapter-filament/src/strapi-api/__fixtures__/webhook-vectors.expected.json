@@ -106,7 +106,11 @@
     "status": 201,
     "body": {
       "data": {
+        "inStock": null,
         "pages": 412,
+        "publishedOn": null,
+        "rating": null,
+        "releasedAt": null,
         "title": "Dune"
       },
       "meta": {}
@@ -130,6 +134,8 @@
               "name": "Frank Herbert",
               "published": true
             },
+            "category": null,
+            "cover": null,
             "editions": [
               {
                 "amount": 2,
@@ -142,13 +148,18 @@
                 "published": true
               }
             ],
+            "inStock": null,
             "pages": 412,
             "price": {
               "currency": "EUR",
               "minor": "999"
             },
             "published": true,
-            "title": "Dune"
+            "publishedOn": null,
+            "rating": null,
+            "releasedAt": null,
+            "title": "Dune",
+            "topic": null
           },
           "event": "entry.create",
           "model": "book",
@@ -169,6 +180,8 @@
               "name": "Frank Herbert",
               "published": true
             },
+            "category": null,
+            "cover": null,
             "editions": [
               {
                 "amount": 2,
@@ -181,13 +194,18 @@
                 "published": true
               }
             ],
+            "inStock": null,
             "pages": 412,
             "price": {
               "currency": "EUR",
               "minor": "999"
             },
             "published": true,
-            "title": "Dune"
+            "publishedOn": null,
+            "rating": null,
+            "releasedAt": null,
+            "title": "Dune",
+            "topic": null
           },
           "event": "entry.create",
           "model": "book",
@@ -201,7 +219,11 @@
     "status": 200,
     "body": {
       "data": {
+        "inStock": null,
         "pages": 500,
+        "publishedOn": null,
+        "rating": null,
+        "releasedAt": null,
         "title": "Dune"
       },
       "meta": {}
@@ -225,6 +247,8 @@
               "name": "Frank Herbert",
               "published": true
             },
+            "category": null,
+            "cover": null,
             "editions": [
               {
                 "amount": 2,
@@ -237,13 +261,18 @@
                 "published": true
               }
             ],
+            "inStock": null,
             "pages": 500,
             "price": {
               "currency": "EUR",
               "minor": "999"
             },
             "published": true,
-            "title": "Dune"
+            "publishedOn": null,
+            "rating": null,
+            "releasedAt": null,
+            "title": "Dune",
+            "topic": null
           },
           "event": "entry.update",
           "model": "book",
@@ -270,7 +299,8 @@
     "status": 201,
     "body": {
       "data": {
-        "title": "First"
+        "title": "First",
+        "views": null
       },
       "meta": {}
     }
@@ -292,8 +322,10 @@
               "name": "Frank Herbert",
               "published": true
             },
+            "image": null,
             "title": "First",
-            "topics": []
+            "topics": [],
+            "views": null
           },
           "event": "entry.create",
           "model": "post",
@@ -314,9 +346,11 @@
               "name": "Frank Herbert",
               "published": true
             },
+            "image": null,
             "published": true,
             "title": "First",
-            "topics": []
+            "topics": [],
+            "views": null
           },
           "event": "entry.publish",
           "model": "post",
@@ -336,8 +370,10 @@
               "name": "Frank Herbert",
               "published": true
             },
+            "image": null,
             "title": "First",
-            "topics": []
+            "topics": [],
+            "views": null
           },
           "event": "entry.create",
           "model": "post",
@@ -351,7 +387,8 @@
     "status": 201,
     "body": {
       "data": {
-        "title": "Second"
+        "title": "Second",
+        "views": null
       },
       "meta": {}
     }
@@ -369,8 +406,11 @@
         "body": {
           "at": "<date>",
           "entry": {
+            "author": null,
+            "image": null,
             "title": "Second",
-            "topics": []
+            "topics": [],
+            "views": null
           },
           "event": "entry.create",
           "model": "post",
@@ -386,8 +426,11 @@
         "body": {
           "at": "<date>",
           "entry": {
+            "author": null,
+            "image": null,
             "title": "Second",
-            "topics": []
+            "topics": [],
+            "views": null
           },
           "event": "entry.create",
           "model": "post",
@@ -401,7 +444,8 @@
     "status": 200,
     "body": {
       "data": {
-        "title": "First, again"
+        "title": "First, again",
+        "views": null
       },
       "meta": {}
     }
@@ -423,8 +467,10 @@
               "name": "Frank Herbert",
               "published": true
             },
+            "image": null,
             "title": "First, again",
-            "topics": []
+            "topics": [],
+            "views": null
           },
           "event": "entry.update",
           "model": "post",
@@ -445,9 +491,11 @@
               "name": "Frank Herbert",
               "published": true
             },
+            "image": null,
             "published": true,
             "title": "First, again",
-            "topics": []
+            "topics": [],
+            "views": null
           },
           "event": "entry.publish",
           "model": "post",
@@ -480,6 +528,8 @@
         "body": {
           "at": "<date>",
           "entry": {
+            "author": null,
+            "image": null,
             "title": "Second",
             "topics": [],
             "views": 3
@@ -509,7 +559,8 @@
         "body": {
           "at": "<date>",
           "entry": {
-            "title": "First, again"
+            "title": "First, again",
+            "views": null
           },
           "event": "entry.delete",
           "model": "post",
@@ -527,7 +578,8 @@
           "at": "<date>",
           "entry": {
             "published": true,
-            "title": "First, again"
+            "title": "First, again",
+            "views": null
           },
           "event": "entry.delete",
           "model": "post",
@@ -554,8 +606,12 @@
         "body": {
           "at": "<date>",
           "entry": {
+            "inStock": null,
             "pages": 500,
             "published": true,
+            "publishedOn": null,
+            "rating": null,
+            "releasedAt": null,
             "title": "Dune"
           },
           "event": "entry.delete",
@@ -570,15 +626,22 @@
     "status": 201,
     "body": [
       {
+        "alternativeText": null,
         "caption": "Notes",
         "ext": ".txt",
+        "focalPoint": null,
+        "formats": null,
         "hash": "notes_<hash>",
+        "height": null,
         "isUrlSigned": false,
         "mime": "text/plain",
         "name": "notes.txt",
+        "previewUrl": null,
         "provider": "local",
+        "provider_metadata": null,
         "size": 0.01,
-        "url": "/uploads/notes_<hash>.txt"
+        "url": "/uploads/notes_<hash>.txt",
+        "width": null
       }
     ]
   },
@@ -596,15 +659,22 @@
           "at": "<date>",
           "event": "media.create",
           "media": {
+            "alternativeText": null,
             "caption": "Notes",
             "ext": ".txt",
+            "focalPoint": null,
+            "formats": null,
             "hash": "notes_<hash>",
+            "height": null,
             "mime": "text/plain",
             "name": "notes.txt",
+            "previewUrl": null,
             "provider": "local",
+            "provider_metadata": null,
             "published": true,
             "size": 0.01,
-            "url": "/uploads/notes_<hash>.txt"
+            "url": "/uploads/notes_<hash>.txt",
+            "width": null
           }
         }
       }
@@ -617,13 +687,19 @@
       "alternativeText": "the notes",
       "caption": "Notes",
       "ext": ".txt",
+      "focalPoint": null,
+      "formats": null,
       "hash": "notes_<hash>",
+      "height": null,
       "isUrlSigned": false,
       "mime": "text/plain",
       "name": "notes.txt",
+      "previewUrl": null,
       "provider": "local",
+      "provider_metadata": null,
       "size": 0.01,
-      "url": "/uploads/notes_<hash>.txt"
+      "url": "/uploads/notes_<hash>.txt",
+      "width": null
     }
   },
   {
@@ -643,13 +719,19 @@
             "alternativeText": "the notes",
             "caption": "Notes",
             "ext": ".txt",
+            "focalPoint": null,
+            "formats": null,
             "hash": "notes_<hash>",
+            "height": null,
             "mime": "text/plain",
             "name": "notes.txt",
+            "previewUrl": null,
             "provider": "local",
+            "provider_metadata": null,
             "published": true,
             "size": 0.01,
-            "url": "/uploads/notes_<hash>.txt"
+            "url": "/uploads/notes_<hash>.txt",
+            "width": null
           }
         }
       }
@@ -662,13 +744,19 @@
       "alternativeText": "the notes",
       "caption": "Notes",
       "ext": ".txt",
+      "focalPoint": null,
+      "formats": null,
       "hash": "notes_<hash>",
+      "height": null,
       "isUrlSigned": false,
       "mime": "text/plain",
       "name": "notes.txt",
+      "previewUrl": null,
       "provider": "local",
+      "provider_metadata": null,
       "size": 0.01,
-      "url": "/uploads/notes_<hash>.txt"
+      "url": "/uploads/notes_<hash>.txt",
+      "width": null
     }
   },
   {
@@ -688,13 +776,19 @@
             "alternativeText": "the notes",
             "caption": "Notes",
             "ext": ".txt",
+            "focalPoint": null,
+            "formats": null,
             "hash": "notes_<hash>",
+            "height": null,
             "mime": "text/plain",
             "name": "notes.txt",
+            "previewUrl": null,
             "provider": "local",
+            "provider_metadata": null,
             "published": true,
             "size": 0.01,
-            "url": "/uploads/notes_<hash>.txt"
+            "url": "/uploads/notes_<hash>.txt",
+            "width": null
           }
         }
       }

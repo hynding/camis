@@ -23,7 +23,8 @@
           },
           {
             "__component": "shared.hero",
-            "heading": "Bye"
+            "heading": "Bye",
+            "subheading": null
           }
         ],
         "publishedAt": "present",
@@ -52,7 +53,8 @@
         },
         {
           "__component": "shared.hero",
-          "heading": "Bye"
+          "heading": "Bye",
+          "subheading": null
         }
       ],
       "publishedAt": "present",
@@ -75,7 +77,8 @@
         },
         {
           "__component": "shared.hero",
-          "heading": "Bye"
+          "heading": "Bye",
+          "subheading": null
         }
       ],
       "publishedAt": "present",
@@ -102,7 +105,9 @@
         },
         {
           "__component": "shared.hero",
-          "heading": "Bye"
+          "heading": "Bye",
+          "price": null,
+          "subheading": null
         }
       ],
       "publishedAt": "present",
@@ -124,7 +129,9 @@
         },
         {
           "__component": "shared.hero",
-          "heading": "Bye"
+          "heading": "Bye",
+          "price": null,
+          "subheading": null
         }
       ],
       "publishedAt": "present",
@@ -168,7 +175,8 @@
       "blocks": [
         {
           "__component": "shared.hero",
-          "heading": "Soon"
+          "heading": "Soon",
+          "subheading": null
         }
       ],
       "publishedAt": "absent",
@@ -234,7 +242,9 @@
         },
         {
           "__component": "shared.hero",
-          "heading": "Bye"
+          "heading": "Bye",
+          "price": null,
+          "subheading": null
         }
       ],
       "publishedAt": "present",
@@ -254,8 +264,10 @@
           "__component": "shared.hero",
           "heading": "New",
           "price": {
-            "currency": "USD"
-          }
+            "currency": "USD",
+            "minor": null
+          },
+          "subheading": null
         }
       ],
       "publishedAt": "present",
@@ -275,8 +287,10 @@
           "__component": "shared.hero",
           "heading": "New",
           "price": {
-            "currency": "USD"
-          }
+            "currency": "USD",
+            "minor": null
+          },
+          "subheading": null
         }
       ],
       "publishedAt": "present",
@@ -296,8 +310,10 @@
           "__component": "shared.hero",
           "heading": "New",
           "price": {
-            "currency": "USD"
-          }
+            "currency": "USD",
+            "minor": null
+          },
+          "subheading": null
         }
       ],
       "publishedAt": "absent",
@@ -317,7 +333,9 @@
       "blocks": [
         {
           "__component": "shared.hero",
-          "heading": "Kept"
+          "heading": "Kept",
+          "price": null,
+          "subheading": null
         }
       ],
       "publishedAt": "present",

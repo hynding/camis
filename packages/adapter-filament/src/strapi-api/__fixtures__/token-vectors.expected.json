@@ -33,7 +33,11 @@
     "status": 201,
     "body": {
       "data": {
+        "inStock": null,
         "pages": 412,
+        "publishedOn": null,
+        "rating": null,
+        "releasedAt": null,
         "title": "Dune"
       },
       "meta": {}
@@ -45,7 +49,11 @@
     "body": {
       "data": [
         {
+          "inStock": null,
           "pages": 412,
+          "publishedOn": null,
+          "rating": null,
+          "releasedAt": null,
           "title": "Dune"
         }
       ],
@@ -64,7 +72,11 @@
     "status": 200,
     "body": {
       "data": {
+        "inStock": null,
         "pages": 412,
+        "publishedOn": null,
+        "rating": null,
+        "releasedAt": null,
         "title": "Dune"
       },
       "meta": {}
@@ -98,14 +110,22 @@
         "author": {
           "name": "Frank Herbert"
         },
+        "category": null,
+        "cover": null,
         "editions": [],
         "genres": [
           {
             "name": "Science fiction"
           }
         ],
+        "inStock": null,
         "pages": 412,
-        "title": "Dune"
+        "price": null,
+        "publishedOn": null,
+        "rating": null,
+        "releasedAt": null,
+        "title": "Dune",
+        "topic": null
       },
       "meta": {}
     }
@@ -158,7 +178,11 @@
     "body": {
       "data": [
         {
+          "inStock": null,
           "pages": 412,
+          "publishedOn": null,
+          "rating": null,
+          "releasedAt": null,
           "title": "Dune"
         }
       ],
@@ -199,7 +223,11 @@
           "author": {
             "name": "Frank Herbert"
           },
+          "inStock": null,
           "pages": 412,
+          "publishedOn": null,
+          "rating": null,
+          "releasedAt": null,
           "title": "Dune"
         }
       ],
@@ -222,7 +250,11 @@
           "author": {
             "name": "Frank Herbert"
           },
+          "inStock": null,
           "pages": 412,
+          "publishedOn": null,
+          "rating": null,
+          "releasedAt": null,
           "title": "Dune"
         }
       ],
@@ -255,7 +287,11 @@
     "status": 200,
     "body": {
       "data": {
+        "inStock": null,
         "pages": 412,
+        "publishedOn": null,
+        "rating": null,
+        "releasedAt": null,
         "title": "Dune"
       },
       "meta": {}
@@ -455,7 +491,11 @@
     "body": {
       "data": [
         {
+          "inStock": null,
           "pages": 412,
+          "publishedOn": null,
+          "rating": null,
+          "releasedAt": null,
           "title": "Dune"
         }
       ],
@@ -474,7 +514,11 @@
     "status": 200,
     "body": {
       "data": {
+        "inStock": null,
         "pages": 500,
+        "publishedOn": null,
+        "rating": null,
+        "releasedAt": null,
         "title": "Dune"
       },
       "meta": {}

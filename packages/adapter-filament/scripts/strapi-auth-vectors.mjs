@@ -49,7 +49,7 @@ if (base === undefined || values.hook === undefined) {
   console.error("usage: strapi-auth-vectors.mjs <api-base> --hook CMD [--record]");
   process.exit(2);
 }
-const { steps, dropNulls = false } = JSON.parse(readFileSync(values.vectors, "utf8"));
+const { steps } = JSON.parse(readFileSync(values.vectors, "utf8"));
 const graphqlEndpoint = base.replace(/\/api\/?$/, "/graphql");
 
 const sessions = new Map();
@@ -140,8 +140,7 @@ const cookiesOf = (response) =>
   );
 
 // Server-assigned keys differ between runs and runtimes; tokens, session times and generated
-// device ids are compared by presence. A vector file over content sets `dropNulls`, as camis
-// leaves null scalars off the wire (a known gap, PLAN.md Phase 19).
+// device ids are compared by presence.
 const VOLATILE = new Set(["id", "documentId", "createdAt", "updatedAt", "publishedAt"]);
 const PRESENCE = {
   jwt: "<jwt>",
@@ -163,7 +162,7 @@ const normalize = (value) => {
   if (value !== null && typeof value === "object")
     return Object.fromEntries(
       Object.entries(value)
-        .filter(([k, v]) => !VOLATILE.has(k) && !(dropNulls && v === null))
+        .filter(([k]) => !VOLATILE.has(k))
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([k, v]) => [k, masked(k, v)]),
     );

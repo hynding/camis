@@ -34,6 +34,7 @@
   "put updates the one entry and publishes it, with its relation and component": {
     "status": 200,
     "data": {
+      "body": null,
       "featured": {
         "title": "Dune"
       },
@@ -48,6 +49,7 @@
   "get reads the published entry, populated": {
     "status": 200,
     "data": {
+      "body": null,
       "featured": {
         "title": "Dune"
       },

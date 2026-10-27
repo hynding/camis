@@ -187,7 +187,8 @@
   "a type without draft and publish links a draft-only target as nothing yet": {
     "status": 201,
     "data": {
-      "title": "Bound"
+      "title": "Bound",
+      "topic": null
     }
   },
   "publish that topic": {

@@ -76,6 +76,7 @@
   "a new locale copies the shared fields but not the links": {
     "status": 200,
     "data": {
+      "category": null,
       "code": "A1",
       "genres": [],
       "locale": "fr",
