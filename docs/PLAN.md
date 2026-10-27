@@ -1045,6 +1045,12 @@ Postgres, with `StrapiAdminTest.php`'s single-type checks; every earlier suite s
 
 Known gaps: GraphQL still serves a single type as a collection (`graphqlSingleTypes`).
 
+**Admin permissions follow the grants.** Every content type's policy has a method for each of its
+actions, and one no role grants refuses outright: Filament allows an action whose policy method is
+missing, so before this an admin could create, edit or delete a type no role may change, where the
+API refused it. `StrapiAdminTest.php` checks a user granted only a type's read sees its list but is
+offered no create, edit or delete.
+
 ---
 
 ## Sequencing rationale (quick reference)

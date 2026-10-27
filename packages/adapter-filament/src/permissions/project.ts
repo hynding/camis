@@ -116,7 +116,14 @@ export const projectFilamentPermissions = (doc: IrDocument, roles: Role[]): Fila
     for (const key of keys) rolesByKey.set(key, [...(rolesByKey.get(key) ?? []), role]);
   }
 
-  const policies: PolicySpec[] = [...actionsByCt.entries()]
+  // Every type gets every action's method, held by no role where none grants it: Filament allows
+  // what a policy has no method for, so a missing method would open the admin to every user.
+  const policyTypes = doc.contentTypes.filter((ct) => actionsByCt.has(ct.name) || !ct.builtin);
+  const policies: PolicySpec[] = policyTypes
+    .map((ct): [string, string[]] => [
+      ct.name,
+      ["create", "delete", "read", "update", ...(ct.options?.draftPublish ? ["publish"] : [])],
+    ])
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([ctName, actions]): PolicySpec => {
       const methods: PolicyMethodSpec[] = [];

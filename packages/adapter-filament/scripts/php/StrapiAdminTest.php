@@ -13,9 +13,11 @@ use App\Filament\Resources\Homepages\Pages\ListHomepages;
 use App\Filament\Resources\Roles\Pages\ListRoles;
 use App\Filament\Resources\Roles\Pages\ViewRole;
 use App\Filament\Resources\Roles\RoleResource;
+use App\Filament\Resources\Tags\TagResource;
 use App\Models\GlobalModel;
 use App\Models\Homepage;
 use App\Models\Locale;
+use App\Models\Tag;
 use App\Models\User;
 use Filament\Facades\Filament;
 use Filament\Navigation\NavigationGroup;
@@ -124,6 +126,18 @@ class StrapiAdminTest extends TestCase
         $en->save();
 
         Livewire::test(ListGlobals::class)->assertRedirect(GlobalResource::getUrl('edit', ['record' => $en]));
+    }
+
+    // The IR's roles only read tags: the admin refuses the rest, as the API does.
+    public function test_the_admin_refuses_what_no_role_grants(): void
+    {
+        $this->login(['tag.read']);
+        $tag = Tag::create(['label' => 'news']);
+
+        $this->assertTrue(TagResource::canViewAny());
+        $this->assertFalse(TagResource::canCreate());
+        $this->assertFalse(TagResource::canEdit($tag));
+        $this->assertFalse(TagResource::canDelete($tag));
     }
 
     public function test_the_roles_page_lists_each_role_with_strapis_description(): void

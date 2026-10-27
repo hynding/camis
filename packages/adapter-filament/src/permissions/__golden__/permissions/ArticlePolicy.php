@@ -10,6 +10,16 @@ use App\Support\Ring1;
 
 class ArticlePolicy
 {
+    public function create(User $user): bool
+    {
+        return false;
+    }
+
+    public function delete(User $user, Article $record): bool
+    {
+        return false;
+    }
+
     public function viewAny(User $user): bool
     {
         return $user->can('article.read');
