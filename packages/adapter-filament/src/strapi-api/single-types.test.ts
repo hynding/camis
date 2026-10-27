@@ -72,6 +72,7 @@ describe("single types", () => {
     for (const name of ["Homepage", "Global"]) {
       expect(sdl).not.toContain(`input ${name}FiltersInput`);
       expect(sdl).not.toContain(`type ${name}EntityResponseCollection`);
+      expect(sdl).not.toContain(`  create${name}(`);
     }
   });
 });

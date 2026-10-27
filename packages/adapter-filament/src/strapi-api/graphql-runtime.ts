@@ -349,16 +349,17 @@ final class StrapiGraphql
         [$typeName, $action] = ($root === 'Query' ? StrapiGraphqlTypes::QUERIES : StrapiGraphqlTypes::MUTATIONS)[$info->fieldName];
         $type = StrapiGraphqlTypes::TYPES[$typeName];
         $nodes = $action === 'connection' ? self::nodes($info->fieldNodes, Type::getNamedType($info->returnType)->name, $info) : $info->fieldNodes;
-        [$populate, $claims] = $action === 'delete' ? [[], ['claims' => [], 'children' => []]] : self::populate($typeName, $nodes, $info);
+        $deletes = $action === 'delete' || $action === 'deleteSingle';
+        [$populate, $claims] = $deletes ? [[], ['claims' => [], 'children' => []]] : self::populate($typeName, $nodes, $info);
         $params = ['populate' => $populate];
-        if ($type['draftPublish'] && $action !== 'delete') {
+        if ($type['draftPublish'] && ! $deletes) {
             $params['status'] = strtolower((string) ($args['status'] ?? 'PUBLISHED'));
         }
         if (isset($args['locale'])) {
             $params['locale'] = $args['locale'];
         }
         $cohort = self::cohort($args);
-        if ($cohort !== null && $action !== 'delete') {
+        if ($cohort !== null && ! $deletes) {
             $params['publicationFilter'] = $cohort;
         }
         $context = ['status' => $params['status'] ?? null, 'locale' => $params['locale'] ?? null, 'cohort' => $params['publicationFilter'] ?? null];
@@ -380,6 +381,19 @@ final class StrapiGraphql
                 return $one(self::call($type, 'store', $params, $request, self::data($type, $args['data'] ?? [])));
             case 'update':
                 return $key === null ? null : $one(self::found(fn () => self::call($type, 'update', $params, $request, self::data($type, $args['data'] ?? []), $key)));
+            case 'findSingle':
+                return $one(self::found(fn () => self::call($type, 'single', $params, $request)));
+            case 'updateSingle':
+                return $one(self::call($type, 'putSingle', $params, $request, self::data($type, $args['data'] ?? [])));
+            case 'deleteSingle':
+                // Strapi answers with the entry it found, after the caller's grant is checked.
+                $documentId = app($type['controller'])->singleDocumentId();
+                self::call($type, 'destroySingle', $params, $request);
+                if ($documentId === null) {
+                    throw new StrapiError(404, 'NotFoundError', 'Document not found');
+                }
+
+                return ['documentId' => $documentId];
             default:
                 if ($key !== null) {
                     self::found(fn () => self::call($type, 'destroy', $params, $request, null, $key));

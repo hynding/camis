@@ -62,8 +62,16 @@ export interface GraphqlComponent {
 }
 export interface GraphqlSchema {
   sdl: string;
-  queries: [field: string, type: string, action: "findOne" | "find" | "connection"][];
-  mutations: [field: string, type: string, action: "create" | "update" | "delete"][];
+  queries: [
+    field: string,
+    type: string,
+    action: "findOne" | "find" | "connection" | "findSingle",
+  ][];
+  mutations: [
+    field: string,
+    type: string,
+    action: "create" | "update" | "delete" | "updateSingle" | "deleteSingle",
+  ][];
   types: GraphqlContentType[];
   components: GraphqlComponent[];
   /** Every component's GraphQL type name → its uid, for a zone's items. */
@@ -443,7 +451,13 @@ export const buildGraphqlSchema = (input: GraphqlSchemaInput): GraphqlSchema => 
       zones: [],
     };
     const typeFields: Member[] = [{ name: "documentId", type: "ID!" }];
-    const filterFields: Member[] = [{ name: "documentId", type: b.scalarFilter("ID") }];
+    // A single type is never listed, so Strapi defines no filters for it (nor a collection).
+    const listed = ct.kind !== "single";
+    const filterFields: Member[] = [];
+    const filter = (field: string, type: () => string): void => {
+      if (listed) filterFields.push({ name: field, type: type() });
+    };
+    filter("documentId", () => b.scalarFilter("ID"));
     const inputFields: Member[] = [];
 
     for (const { field, key, relation } of contentFields(ct, shape)) {
@@ -461,7 +475,7 @@ export const buildGraphqlSchema = (input: GraphqlSchemaInput): GraphqlSchema => 
         } else {
           typeFields.push({ name: key, type: target });
         }
-        if (!media) filterFields.push({ name: key, type: `${target}FiltersInput` });
+        if (!media) filter(key, () => `${target}FiltersInput`);
         inputFields.push({ name: key, type: many ? "[ID]" : "ID" });
         continue;
       }
@@ -473,7 +487,7 @@ export const buildGraphqlSchema = (input: GraphqlSchemaInput): GraphqlSchema => 
           repeatable: field.repeatable,
         };
         typeFields.push(b.componentField(key, component, field.repeatable));
-        filterFields.push({ name: key, type: b.componentFilters(component) });
+        filter(key, () => b.componentFilters(component));
         const componentInput = b.componentInput(component);
         inputFields.push({
           name: key,
@@ -499,32 +513,27 @@ export const buildGraphqlSchema = (input: GraphqlSchemaInput): GraphqlSchema => 
       } else {
         const type = b.scalarType(name, field);
         typeFields.push({ name: key, type: `${type}${field.required === true ? "!" : ""}` });
-        filterFields.push({ name: key, type: b.scalarFilter(scalarOf(field.type)) });
+        filter(key, () => b.scalarFilter(scalarOf(field.type)));
         inputFields.push({ name: key, type });
       }
     }
 
-    const dateTimeFilter = b.scalarFilter("DateTime");
     typeFields.push(...TIMESTAMPS.map((t) => ({ name: t, type: "DateTime" })));
-    filterFields.push(...TIMESTAMPS.map((t) => ({ name: t, type: dateTimeFilter })));
+    for (const t of TIMESTAMPS) filter(t, () => b.scalarFilter("DateTime"));
     if (shape.localized) {
-      const args = listArguments(filters);
+      const args = listed ? listArguments(filters) : [];
       map.relations.localizations = { type: name, many: true };
       typeFields.push(
         { name: "locale", type: "String" },
         { name: "localizations_connection", args, type: b.relationCollection(name) },
         { name: "localizations", args, type: `[${name}]!` },
       );
-      filterFields.push(
-        { name: "locale", type: b.scalarFilter("String") },
-        { name: "localizations", type: filters },
-      );
+      filter("locale", () => b.scalarFilter("String"));
+      filter("localizations", () => filters);
     }
-    filterFields.push(
-      { name: "and", type: `[${filters}]` },
-      { name: "or", type: `[${filters}]` },
-      { name: "not", type: filters },
-    );
+    filter("and", () => `[${filters}]`);
+    filter("or", () => `[${filters}]`);
+    filter("not", () => filters);
     // Strapi's input carries a locale only on the types that keep none: it is the i18n plugin's
     // own attribute, which a localized type sets through the locale argument instead.
     inputFields.push(
@@ -533,21 +542,26 @@ export const buildGraphqlSchema = (input: GraphqlSchemaInput): GraphqlSchema => 
     );
 
     b.define({ kind: "type", name, fields: typeFields });
-    b.define({ kind: "input", name: filters, fields: filterFields });
     b.define({ kind: "input", name: `${name}Input`, fields: inputFields });
-    b.need(`${name}EntityResponseCollection`, () => ({
-      kind: "type",
-      name: `${name}EntityResponseCollection`,
-      fields: [
-        { name: "nodes", type: `[${name}!]!` },
-        { name: "pageInfo", type: "Pagination!" },
-      ],
-    }));
-    b.need("Pagination", () => ({
-      kind: "type",
-      name: "Pagination",
-      fields: ["total", "page", "pageSize", "pageCount"].map((f) => ({ name: f, type: "Int!" })),
-    }));
+    if (listed) {
+      b.define({ kind: "input", name: filters, fields: filterFields });
+      b.need(`${name}EntityResponseCollection`, () => ({
+        kind: "type",
+        name: `${name}EntityResponseCollection`,
+        fields: [
+          { name: "nodes", type: `[${name}!]!` },
+          { name: "pageInfo", type: "Pagination!" },
+        ],
+      }));
+      b.need("Pagination", () => ({
+        kind: "type",
+        name: "Pagination",
+        fields: ["total", "page", "pageSize", "pageCount"].map((f) => ({
+          name: f,
+          type: "Int!",
+        })),
+      }));
+    }
     b.need("DeleteMutationResponse", () => ({
       kind: "type",
       name: "DeleteMutationResponse",
@@ -556,47 +570,53 @@ export const buildGraphqlSchema = (input: GraphqlSchemaInput): GraphqlSchema => 
     if (shape.localized) b.scalar("I18NLocaleCode");
 
     const locale = shape.localized ? [LOCALE_ARGUMENT] : [];
-    const documentId: Argument = { name: "documentId", type: "ID!" };
-    const single = singularField(ct);
-    const plural = pluralField(ct);
-    queryFields.push(
-      { name: single, args: [documentId, ...PUBLICATION_ARGUMENTS, ...locale], type: name },
-      {
-        name: `${plural}_connection`,
-        args: [...listArguments(filters), ...PUBLICATION_ARGUMENTS, ...locale],
-        type: `${name}EntityResponseCollection`,
-      },
-      {
-        name: plural,
-        args: [...listArguments(filters), ...PUBLICATION_ARGUMENTS, ...locale],
-        type: `[${name}]!`,
-      },
-    );
-    queries.push(
-      [single, name, "findOne"],
-      [`${plural}_connection`, name, "connection"],
-      [plural, name, "find"],
-    );
     const data: Argument = { name: "data", type: `${name}Input!` };
-    mutationFields.push(
-      { name: `create${name}`, args: [STATUS_ARGUMENT, data, ...locale], type: name },
-      { name: `update${name}`, args: [documentId, STATUS_ARGUMENT, data, ...locale], type: name },
-      { name: `delete${name}`, args: [documentId, ...locale], type: "DeleteMutationResponse" },
-    );
-    mutations.push(
-      [`create${name}`, name, "create"],
-      [`update${name}`, name, "update"],
-      [`delete${name}`, name, "delete"],
-    );
-    types.push(map);
-    if (ct.kind === "single") {
-      gaps.push({
-        feature: "graphqlSingleTypes",
-        location: { contentType: ct.name },
-        severity: "downgrade",
-        message: `"${ct.name}" is a single type; GraphQL serves it as a collection.`,
-      });
+    const single = singularField(ct);
+    if (listed) {
+      const documentId: Argument = { name: "documentId", type: "ID!" };
+      const plural = pluralField(ct);
+      queryFields.push(
+        { name: single, args: [documentId, ...PUBLICATION_ARGUMENTS, ...locale], type: name },
+        {
+          name: `${plural}_connection`,
+          args: [...listArguments(filters), ...PUBLICATION_ARGUMENTS, ...locale],
+          type: `${name}EntityResponseCollection`,
+        },
+        {
+          name: plural,
+          args: [...listArguments(filters), ...PUBLICATION_ARGUMENTS, ...locale],
+          type: `[${name}]!`,
+        },
+      );
+      queries.push(
+        [single, name, "findOne"],
+        [`${plural}_connection`, name, "connection"],
+        [plural, name, "find"],
+      );
+      mutationFields.push(
+        { name: `create${name}`, args: [STATUS_ARGUMENT, data, ...locale], type: name },
+        { name: `update${name}`, args: [documentId, STATUS_ARGUMENT, data, ...locale], type: name },
+        { name: `delete${name}`, args: [documentId, ...locale], type: "DeleteMutationResponse" },
+      );
+      mutations.push(
+        [`create${name}`, name, "create"],
+        [`update${name}`, name, "update"],
+        [`delete${name}`, name, "delete"],
+      );
+    } else {
+      // Strapi's single type: its one entry, found, made or updated, and deleted by its locale.
+      queryFields.push({ name: single, args: [...PUBLICATION_ARGUMENTS, ...locale], type: name });
+      queries.push([single, name, "findSingle"]);
+      mutationFields.push(
+        { name: `update${name}`, args: [STATUS_ARGUMENT, data, ...locale], type: name },
+        { name: `delete${name}`, args: locale, type: "DeleteMutationResponse" },
+      );
+      mutations.push(
+        [`update${name}`, name, "updateSingle"],
+        [`delete${name}`, name, "deleteSingle"],
+      );
     }
+    types.push(map);
   }
   if (input.media) {
     types.push({

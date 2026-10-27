@@ -119,16 +119,6 @@
       }
     ]
   },
-  "a single type has no create": {
-    "data": null,
-    "errors": [
-      {
-        "message": "Cannot query field \"createHomepage\" on type \"Mutation\". Did you mean \"updateHomepage\", \"createPage\", \"deleteHomepage\", \"createGenre\", or \"createTopic\"?",
-        "code": "GRAPHQL_VALIDATION_FAILED",
-        "path": null
-      }
-    ]
-  },
   "deleting the entry answers its documentId": {
     "data": {
       "deleteHomepage": {}
