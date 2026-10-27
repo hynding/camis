@@ -37,6 +37,12 @@ describe("single types", () => {
     expect(book).not.toContain("function single(");
   });
 
+  it("types a reserved-name model's policy by its class", () => {
+    expect(content("app/Policies/GlobalModelPolicy.php")).toContain(
+      "public function update(?User $user, GlobalModel $record): bool",
+    );
+  });
+
   it("names a single type's token actions find, update and delete", () => {
     const tokens = content("app/Support/StrapiApiTokens.php");
     expect(tokens).toContain(
