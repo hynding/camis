@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
-use App\Filament\Pages\UsersPermissionsSettings;
+use App\Filament\Pages\UsersPermissionsProviders;
 use App\Models\User;
 use App\Support\StrapiProviders;
 use Filament\Facades\Filament;
@@ -110,7 +110,7 @@ class ProvidersTest extends TestCase
         Filament::setCurrentPanel(Filament::getPanel('admin'));
         $this->assertFalse(StrapiProviders::enabled('github'));
 
-        Livewire::test(UsersPermissionsSettings::class)
+        Livewire::test(UsersPermissionsProviders::class)
             ->fillForm(['grant.github.enabled' => true, 'grant.github.key' => 'client', 'grant.github.secret' => 'shh', 'grant.github.callback' => 'https://app.example.test/github'])
             ->call('save')
             ->assertHasNoFormErrors();

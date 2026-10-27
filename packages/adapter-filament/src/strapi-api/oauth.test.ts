@@ -101,8 +101,8 @@ describe("users-permissions sign-in providers", () => {
     expect(migration).toContain("$table->string('password')->nullable()->change();");
   });
 
-  it("edits the providers on the admin's Users & Permissions page", () => {
-    const page = content("app/Filament/Pages/UsersPermissionsSettings.php");
+  it("edits the providers on the admin's Providers page", () => {
+    const page = content("app/Filament/Pages/UsersPermissionsProviders.php");
     expect(page).toContain("Section::make('Providers')->statePath('grant')");
     expect(page).toContain("StrapiSettings::merge('users-permissions.grant', $state['grant']);");
   });

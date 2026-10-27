@@ -41,7 +41,9 @@ const generated = [
   "app/Filament/Resources/Users/Pages/CreateUser.php",
   "app/Filament/Resources/Users/Pages/EditUser.php",
   "app/Filament/Resources/Users/Pages/ListUsers.php",
-  "app/Filament/Pages/UsersPermissionsSettings.php",
+  "app/Filament/Pages/UsersPermissionsProviders.php",
+  "app/Filament/Pages/UsersPermissionsEmailTemplates.php",
+  "app/Filament/Pages/UsersPermissionsAdvancedSettings.php",
   "_add_users_permissions_to_users_table.php",
   "_create_strapi_settings_table.php",
 ];
