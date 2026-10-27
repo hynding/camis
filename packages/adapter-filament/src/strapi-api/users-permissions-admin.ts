@@ -1,3 +1,11 @@
+import {
+  CREATE_ACTION_IMPORT,
+  createNewEntryActions,
+  navigationProperties,
+  SETTINGS,
+  type Navigation,
+} from "./admin-navigation";
+
 /**
  * The admin side of users-permissions in Filament: the Users resource (Strapi's content-manager
  * view of the user type) and the Users & Permissions settings page (its advanced settings and
@@ -24,7 +32,10 @@ class ${cls} extends ${base}
 // The users table's own columns, which the host's User model does not list as fillable.
 const ACCOUNT_KEYS = "['username', 'email', 'password', 'confirmed', 'blocked']";
 
-export const emitUserResourceFiles = (secured: boolean): { path: string; content: string }[] => [
+export const emitUserResourceFiles = (
+  secured: boolean,
+  navigation: Navigation,
+): { path: string; content: string }[] => [
   {
     path: "app/Filament/Resources/Users/UserResource.php",
     content: `<?php
@@ -36,6 +47,7 @@ namespace App\\Filament\\Resources\\Users;
 use App\\Filament\\Resources\\Users\\Pages\\CreateUser;
 use App\\Filament\\Resources\\Users\\Pages\\EditUser;
 use App\\Filament\\Resources\\Users\\Pages\\ListUsers;
+use App\\Filament\\StrapiNavigation;
 use App\\Models\\User;
 use BackedEnum;
 use Filament\\Forms\\Components\\Select;
@@ -47,13 +59,14 @@ use Filament\\Tables\\Columns\\IconColumn;
 use Filament\\Tables\\Columns\\TextColumn;
 use Filament\\Tables\\Table;${secured ? "\nuse Illuminate\\Database\\Eloquent\\Model;" : ""}
 use Illuminate\\Support\\Facades\\Hash;
+use UnitEnum;
 
 class UserResource extends Resource
 {
     protected static ?string $model = User::class;
 
     protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-users';
-
+${navigationProperties(navigation)}
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
@@ -122,7 +135,7 @@ ${
   },
   {
     path: "app/Filament/Resources/Users/Pages/ListUsers.php",
-    content: page("ListUsers", "ListRecords", [], ""),
+    content: page("ListUsers", "ListRecords", [CREATE_ACTION_IMPORT], createNewEntryActions),
   },
   {
     path: "app/Filament/Resources/Users/Pages/CreateUser.php",
@@ -219,6 +232,7 @@ declare(strict_types=1);
 
 namespace App\\Filament\\Pages;
 
+use App\\Filament\\StrapiNavigation;
 use App\\Support\\StrapiOAuth;
 use App\\Support\\StrapiProviders;
 use App\\Support\\StrapiSettings;
@@ -241,11 +255,7 @@ use UnitEnum;
 class UsersPermissionsSettings extends Page
 {
     protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-cog-6-tooth';
-
-    protected static string | UnitEnum | null $navigationGroup = 'Settings';
-
-    protected static ?string $navigationLabel = 'Users & Permissions';
-
+${navigationProperties(SETTINGS.usersPermissions)}
     protected static ?string $title = 'Users & Permissions';
 
     public ?array $data = [];

@@ -1005,6 +1005,33 @@ downloads an export through its signed link only, and imports that export again.
 
 ---
 
+## Phase 30 — a Strapi-like admin (`adapter-filament`, `expr`)
+
+Filament stays the admin (owner's call, 2026-10-16); on the Strapi API style over Laravel storage it
+is laid out as Strapi's.
+
+**Part 1 — the Content Manager, Settings and Roles.** The menu has Strapi's groups, in Strapi's
+order (`App\Filament\StrapiNavigation`): the Content Manager's collection types under their
+Strapi display names, alphabetically and with the users-permissions User among them, the Media
+Library, then Settings as Strapi orders them (API Tokens, Internationalization, Transfer Tokens,
+Webhooks, then the Data transfer page, Roles and Users & Permissions). A list's create button
+reads "Create new entry". Settings › Roles lists each role with its description (the IR's, else
+Strapi's for `authenticated` and `public`) and user count, and a role's page lays out its
+users-permissions actions as Strapi's Roles page does (one section per type, plus `publish` for a
+draft-and-publish type), read from the permissions the IR's grants seeded, with the IR's
+conditions written out (`formatExpression` in `@camis/expr`), which a checkbox cannot show. The
+page changes nothing: roles are the IR's, so a change is made there and rebuilt.
+
+Part 1's exit: `StrapiAdminTest.php` in the boot job checks the menu's groups and order, the
+create button, the roles list and a role's actions and conditions, and that the page offers no
+create, edit or delete; the earlier admin tests still pass on SQLite, MySQL and Postgres.
+
+Known gaps: single types are listed under Single Types but kept as a list, as the REST API serves
+them as collections; Strapi's one-entry editor needs that API first. The Users & Permissions
+settings stay one page where Strapi has four.
+
+---
+
 ## Sequencing rationale (quick reference)
 
 1. **Strapi first** — mature schema validates the IR fastest, with the thinnest adapter.

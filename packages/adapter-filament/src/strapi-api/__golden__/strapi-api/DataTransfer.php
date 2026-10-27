@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Pages;
 
+use App\Filament\StrapiNavigation;
 use App\Support\StrapiExport;
 use App\Support\StrapiImport;
 use App\Support\StrapiTransferArchives;
@@ -29,9 +30,11 @@ class DataTransfer extends Page
 {
     protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-arrow-path-rounded-square';
 
-    protected static string | UnitEnum | null $navigationGroup = 'Settings';
+    protected static string | UnitEnum | null $navigationGroup = StrapiNavigation::Settings;
 
     protected static ?string $navigationLabel = 'Data transfer';
+
+    protected static ?int $navigationSort = 50;
 
     protected static ?string $title = 'Data transfer';
 

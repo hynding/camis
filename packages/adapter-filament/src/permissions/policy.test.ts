@@ -69,6 +69,19 @@ describe("emitPolicy", () => {
   });
 });
 
+// The user type's own policy: its model is User, which every policy already imports, and PHP
+// refuses a second `use` of one name, so the whole policy (and every Gate check on a user) fails.
+describe("emitPolicy — the user type", () => {
+  it("imports User once", () => {
+    const user = { name: "User", kind: "collection", fields: [] } as unknown as ContentType;
+    const php = emitPolicy(
+      { contentType: "User", model: "User", methods: spec.methods.slice(0, 1) },
+      user,
+    );
+    expect(php.split("use App\\Models\\User;").length).toBe(2);
+  });
+});
+
 describe("emitPolicy — ownership via relation FKs", () => {
   const note: ContentType = {
     name: "Note",

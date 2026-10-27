@@ -5,3 +5,4 @@ export type { Expression } from "./ast";
 export { vectors } from "./vectors";
 export type { Vector } from "./vectors";
 export { freeVars } from "./free-vars";
+export { formatExpression } from "./format";

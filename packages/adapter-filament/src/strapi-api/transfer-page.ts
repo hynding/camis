@@ -1,4 +1,5 @@
 import { PHP_MARKER } from "../hooks/names";
+import { navigationProperties, SETTINGS } from "./admin-navigation";
 
 /**
  * strapi:export and strapi:import from the admin, for a shared host with no shell. An export is
@@ -93,6 +94,7 @@ declare(strict_types=1);
 
 namespace App\\Filament\\Pages;
 
+use App\\Filament\\StrapiNavigation;
 use App\\Support\\StrapiExport;
 use App\\Support\\StrapiImport;
 use App\\Support\\StrapiTransferArchives;
@@ -117,11 +119,7 @@ use UnitEnum;
 class DataTransfer extends Page
 {
     protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-arrow-path-rounded-square';
-
-    protected static string | UnitEnum | null $navigationGroup = 'Settings';
-
-    protected static ?string $navigationLabel = 'Data transfer';
-
+${navigationProperties(SETTINGS.dataTransfer)}
     protected static ?string $title = 'Data transfer';
 
     private const TYPES = ['content' => 'Content', 'files' => 'Files', 'config' => 'Settings'];

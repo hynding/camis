@@ -7,6 +7,7 @@ import {
   type GenerationResult,
 } from "@camis/adapter-kernel";
 import { normalize } from "@camis/ir-core";
+import { strapiNames } from "@camis/strapi-schema";
 import type { CapabilityGap } from "@camis/ir-schema";
 import { aiFieldContentTypes, aiProviderFile, emitAiObserver, hasAiField } from "./ai";
 import {
@@ -39,6 +40,7 @@ import { guestsPlan } from "./strapi-api/guests";
 import { localizationPlan, sharedAcrossLocalesMethod } from "./strapi-api/localization";
 import { mediaFields, mediaPlan } from "./strapi-api/media";
 import { mediaRelationMethod } from "./strapi-api/media-runtime";
+import { contentManagerSorts, USER_DISPLAY_NAME } from "./strapi-api/admin-navigation";
 import { emitStrapiApi } from "./strapi-api/emit";
 import { emitStrapiStorage } from "./strapi-api/storage/emit";
 import { zoneBuilder } from "./strapi-api/zones-admin";
@@ -118,8 +120,17 @@ export const filamentAdapter: GenerateAdapter = {
     // The Strapi storage layout emits its own models, so the observer registration that
     // `emitModel` writes on the Laravel layout has to travel with the input; `emitStrapiApi`
     // ignores it, because on that layout `emitModel` still owns the model.
+    // The Filament admin is laid out as Strapi's wherever it serves Strapi's API over its own tables.
+    const contentManager =
+      apiStyle === "strapi" && storage !== "strapi"
+        ? contentManagerSorts([
+            ...emitted.map((ct) => strapiNames(ct).displayName),
+            USER_DISPLAY_NAME,
+          ])
+        : undefined;
     const strapiInput = {
       doc,
+      contentManager,
       bundle: ir,
       emitted,
       fkNames: rel.fkNames,
@@ -253,6 +264,15 @@ export const filamentAdapter: GenerateAdapter = {
             localized: localized.has(ct.name),
             secured: ir.roles.length > 0,
             media: mediaOf.map((f) => ({ field: f.name, multiple: f.multiple === true })),
+            ...(contentManager === undefined
+              ? {}
+              : {
+                  navigation: {
+                    group: ct.kind === "single" ? "SingleTypes" : "CollectionTypes",
+                    label: strapiNames(ct).displayName,
+                    sort: contentManager.get(strapiNames(ct).displayName)!,
+                  },
+                }),
           },
         ),
       );
