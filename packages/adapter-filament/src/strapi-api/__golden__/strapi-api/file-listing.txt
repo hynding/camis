@@ -54,8 +54,8 @@ overwrite app/Filament/Resources/Genres/Pages/ListGenres.php
 overwrite app/Filament/Resources/Genres/Schemas/GenreForm.php
 overwrite app/Filament/Resources/Genres/Schemas/GenresTable.php
 overwrite app/Filament/Resources/Globals/GlobalResource.php
-overwrite app/Filament/Resources/Globals/Pages/CreateGlobal.php
-overwrite app/Filament/Resources/Globals/Pages/EditGlobal.php
+overwrite app/Filament/Resources/Globals/Pages/CreateGlobalModel.php
+overwrite app/Filament/Resources/Globals/Pages/EditGlobalModel.php
 overwrite app/Filament/Resources/Globals/Pages/ListGlobals.php
 overwrite app/Filament/Resources/Globals/Schemas/GlobalForm.php
 overwrite app/Filament/Resources/Globals/Schemas/GlobalsTable.php
@@ -141,7 +141,7 @@ overwrite app/Http/Controllers/Api/Generated/AuthorApiController.php
 overwrite app/Http/Controllers/Api/Generated/BookApiController.php
 overwrite app/Http/Controllers/Api/Generated/CategoryApiController.php
 overwrite app/Http/Controllers/Api/Generated/GenreApiController.php
-overwrite app/Http/Controllers/Api/Generated/GlobalApiController.php
+overwrite app/Http/Controllers/Api/Generated/GlobalModelApiController.php
 overwrite app/Http/Controllers/Api/Generated/HomepageApiController.php
 overwrite app/Http/Controllers/Api/Generated/LandingApiController.php
 overwrite app/Http/Controllers/Api/Generated/NoteApiController.php
@@ -167,7 +167,7 @@ overwrite app/Http/Serializers/BookSerializer.php
 overwrite app/Http/Serializers/CategorySerializer.php
 overwrite app/Http/Serializers/FileSerializer.php
 overwrite app/Http/Serializers/GenreSerializer.php
-overwrite app/Http/Serializers/GlobalSerializer.php
+overwrite app/Http/Serializers/GlobalModelSerializer.php
 overwrite app/Http/Serializers/HomepageSerializer.php
 overwrite app/Http/Serializers/LandingSerializer.php
 overwrite app/Http/Serializers/NoteSerializer.php
@@ -191,7 +191,7 @@ overwrite app/Models/Concerns/HasLocale.php
 overwrite app/Models/Concerns/HasMedia.php
 overwrite app/Models/File.php
 overwrite app/Models/Genre.php
-overwrite app/Models/Global.php
+overwrite app/Models/GlobalModel.php
 overwrite app/Models/Homepage.php
 overwrite app/Models/Landing.php
 overwrite app/Models/LandingBlocksHero.php
@@ -214,7 +214,7 @@ overwrite app/Policies/BookPolicy.php
 overwrite app/Policies/CategoryPolicy.php
 overwrite app/Policies/FilePolicy.php
 overwrite app/Policies/GenrePolicy.php
-overwrite app/Policies/GlobalPolicy.php
+overwrite app/Policies/GlobalModelPolicy.php
 overwrite app/Policies/HomepagePolicy.php
 overwrite app/Policies/LandingPolicy.php
 overwrite app/Policies/NotePolicy.php
@@ -293,7 +293,7 @@ seed app/Http/Controllers/Api/AuthorApiController.php
 seed app/Http/Controllers/Api/BookApiController.php
 seed app/Http/Controllers/Api/CategoryApiController.php
 seed app/Http/Controllers/Api/GenreApiController.php
-seed app/Http/Controllers/Api/GlobalApiController.php
+seed app/Http/Controllers/Api/GlobalModelApiController.php
 seed app/Http/Controllers/Api/HomepageApiController.php
 seed app/Http/Controllers/Api/LandingApiController.php
 seed app/Http/Controllers/Api/NoteApiController.php

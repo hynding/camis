@@ -2,7 +2,7 @@ import type { StorageLayout } from "@camis/adapter-kernel";
 import { emitPhp } from "@camis/expr-php-emit";
 import type { ContentType } from "@camis/ir-schema";
 import { PUBLIC_ROLE } from "@camis/permissions";
-import { snakeColumn } from "../names";
+import { filamentNames, snakeColumn } from "../names";
 import { phpSingleQuoted } from "../php-literal";
 import type { PolicyMethodSpec, PolicySpec } from "./project";
 
@@ -75,7 +75,7 @@ const method = (
 ): string => {
   const user = guests ? "?User $user" : "User $user";
   const sig = m.record
-    ? `    public function ${m.method}(${user}, ${ct.name} $record): bool`
+    ? `    public function ${m.method}(${user}, ${filamentNames(ct).model} $record): bool`
     : `    public function ${m.method}(${user}): bool`;
   const check = grantCheck(m, layout, guests);
   if (m.condition === undefined || alwaysDenies(m, layout)) {

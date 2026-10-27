@@ -12,7 +12,7 @@ use App\Http\Controllers\Api\AuthorApiController;
 use App\Http\Controllers\Api\BookApiController;
 use App\Http\Controllers\Api\CategoryApiController;
 use App\Http\Controllers\Api\GenreApiController;
-use App\Http\Controllers\Api\GlobalApiController;
+use App\Http\Controllers\Api\GlobalModelApiController;
 use App\Http\Controllers\Api\HomepageApiController;
 use App\Http\Controllers\Api\LandingApiController;
 use App\Http\Controllers\Api\NoteApiController;
@@ -85,9 +85,9 @@ Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle):
         Route::put('/genres/{key}', [GenreApiController::class, 'update']);
         Route::delete('/genres/{key}', [GenreApiController::class, 'destroy']);
 
-        Route::get('/global', [GlobalApiController::class, 'single']);
-        Route::put('/global', [GlobalApiController::class, 'putSingle']);
-        Route::delete('/global', [GlobalApiController::class, 'destroySingle']);
+        Route::get('/global', [GlobalModelApiController::class, 'single']);
+        Route::put('/global', [GlobalModelApiController::class, 'putSingle']);
+        Route::delete('/global', [GlobalModelApiController::class, 'destroySingle']);
 
         Route::get('/homepage', [HomepageApiController::class, 'single']);
         Route::put('/homepage', [HomepageApiController::class, 'putSingle']);
