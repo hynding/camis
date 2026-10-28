@@ -346,6 +346,48 @@ final class StrapiUsers
  * (with API tokens, in place of `auth:sanctum`): a session or an API token, which StrapiApiToken
  * has already checked against the route and which acts for no account.
  */
+/**
+ * The user as a relation target: populate, filters and sort reach it through these maps, and it
+ * renders as users-permissions' user. Its role is a relation as on Strapi, which no content grant
+ * reaches, so populate leaves it out and a filter on it is an invalid key; a project without roles
+ * keeps none.
+ */
+export const emitUserSerializer = (secured: boolean): string => `<?php
+${PHP_MARKER}
+
+declare(strict_types=1);
+
+namespace App\\Http\\Serializers;
+
+use App\\Models\\User;
+use App\\Support\\StrapiUsers;
+
+final class UserSerializer
+{
+    /** Wire path → column, for StrapiQuery's filters, sort and fields. */
+    public const FIELDS = StrapiUsers::FIELDS + [${
+      secured
+        ? `
+        'role' => ['relation' => 'roles', 'kind' => 'belongsToMany', 'model' => \\Spatie\\Permission\\Models\\Role::class, 'serializer' => null, 'foreignKey' => null, 'uid' => 'plugin::users-permissions.role', 'holder' => 'self', 'draftPublish' => false, 'localized' => false],
+    `
+        : ""
+    }];
+
+    public const COMPONENTS = [];
+
+    public const ZONES = [];
+
+    public const DRAFT_PUBLISH = false;
+
+    public const LOCALIZED = false;
+
+    public static function toWire(User $m): array
+    {
+        return StrapiUsers::wire($m);
+    }
+}
+`;
+
 export const emitStrapiCredentials = (tokens = false): string => `<?php
 ${PHP_MARKER}
 

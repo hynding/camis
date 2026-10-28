@@ -134,6 +134,7 @@ import {
   emitStrapiCredentials,
   emitStrapiSettings,
   emitStrapiUsers,
+  emitUserSerializer,
   emitUserController,
   emitUsersPermissionsMigration,
   SETTINGS_MIGRATION_PATH,
@@ -413,6 +414,7 @@ const usersPermissionsFiles = (
   userNavigation: Navigation,
 ): GeneratedFile[] => [
   { path: "app/Support/StrapiUsers.php", content: emitStrapiUsers() },
+  { path: "app/Http/Serializers/UserSerializer.php", content: emitUserSerializer(secured) },
   { path: "app/Support/StrapiSettings.php", content: emitStrapiSettings() },
   {
     path: "app/Http/Controllers/Api/UserController.php",

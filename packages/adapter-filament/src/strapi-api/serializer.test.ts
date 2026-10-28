@@ -70,13 +70,14 @@ describe("emitSerializer", () => {
   });
   // Strapi sends every attribute, null when it has no value; populate-vectors.expected.json,
   // recorded from strapi-php, keeps those nulls.
-  it("sends a null attribute as null, as Strapi does, and never emits relation FKs", () => {
+  it("sends a null attribute as null, as Strapi does, and never reads or writes relation FKs", () => {
     const php = emitSerializer(shape("Note"));
     expect(php).not.toContain("omitNulls");
     expect(php).toContain(
       "public static function toWire(Note $m): array\n    {\n        return [\n",
     );
-    expect(php).not.toContain("owner_id");
+    // The foreign key is named only in the relation map, which StrapiRelations writes through.
+    expect(php.slice(php.indexOf("public static function toWire"))).not.toContain("owner_id");
   });
 
   // Strapi renders a datetime the way JavaScript does — three fractional digits, Zulu — while

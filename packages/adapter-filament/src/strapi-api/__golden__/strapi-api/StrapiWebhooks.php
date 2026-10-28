@@ -40,6 +40,7 @@ final class StrapiWebhooks
         \App\Models\Note::class => ['api::note.note', 'note', \App\Http\Serializers\NoteSerializer::class],
         \App\Models\Page::class => ['api::page.page', 'page', \App\Http\Serializers\PageSerializer::class],
         \App\Models\Post::class => ['api::post.post', 'post', \App\Http\Serializers\PostSerializer::class],
+        \App\Models\Review::class => ['api::review.review', 'review', \App\Http\Serializers\ReviewSerializer::class],
         \App\Models\Tag::class => ['api::tag.tag', 'tag', \App\Http\Serializers\TagSerializer::class],
         \App\Models\Topic::class => ['api::topic.topic', 'topic', \App\Http\Serializers\TopicSerializer::class],
         \App\Models\Transaction::class => ['api::transaction.transaction', 'transaction', \App\Http\Serializers\TransactionSerializer::class],

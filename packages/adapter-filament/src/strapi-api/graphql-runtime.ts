@@ -30,7 +30,10 @@ export const emitStrapiGraphqlTypes = (schema: GraphqlSchema, tokens: boolean): 
             'draftPublish' => ${phpBool(t.draftPublish)},
             'localized' => ${phpBool(t.localized)},
             'relations' => [${Object.entries(t.relations)
-              .map(([k, r]) => `'${k}' => ['type' => '${r.type}', 'many' => ${phpBool(r.many)}]`)
+              .map(
+                ([k, r]) =>
+                  `'${k}' => ['type' => '${r.type}', 'many' => ${phpBool(r.many)}, 'model' => \\App\\Models\\${r.model}::class]`,
+              )
               .join(", ")}],
             'components' => [${nested(t.components)}],
             'zones' => [${t.zones.map(phpString).join(", ")}],
@@ -125,6 +128,7 @@ export const emitStrapiGraphql = (): string =>
   String.raw`
 use App\Support\StrapiApiTokens;
 use App\Support\StrapiError;
+use App\Support\StrapiQuery;
 use GraphQL\Error\Error;
 use GraphQL\Error\SyntaxError;
 use GraphQL\Executor\Values;
@@ -407,6 +411,10 @@ final class StrapiGraphql
     private static function related(array $source, string $parent, string $key, bool $connection, array $args, Request $request, ResolveInfo $info): mixed
     {
         $relation = StrapiGraphqlTypes::TYPES[$parent]['relations'][$key];
+        // Strapi refuses the field, where REST's populate leaves it out, when no grant reads its target.
+        if (! StrapiQuery::readable($relation, $request->user())) {
+            throw new AuthorizationException();
+        }
         $fetch = self::fetching($args, $info->fieldDefinition->getArg('filters')?->getType());
         $meta = $source[self::META] ?? null;
         if (is_array($meta) && ($meta['claims']['claims'][$key] ?? null) === $fetch && array_key_exists($key, $source)) {

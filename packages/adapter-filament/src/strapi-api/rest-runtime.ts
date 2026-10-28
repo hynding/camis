@@ -26,12 +26,13 @@ const viewerDoc = (secured: boolean): string =>
  */`;
 const unsecured = (secured: boolean): string =>
   secured ? "self::$unrestricted || " : "self::$unrestricted || $viewer === null || ";
+// The users-permissions user, a relation target with a read grant, keeps no row scope.
 const scopeBody = (secured: boolean): string =>
   secured
-    ? `        if (! self::$unrestricted) {
+    ? `        if (! self::$unrestricted && $query->getModel()->hasNamedScope('forUser')) {
             $query->forUser($viewer);
         }`
-    : `        if (! self::$unrestricted && $viewer !== null) {
+    : `        if (! self::$unrestricted && $viewer !== null && $query->getModel()->hasNamedScope('forUser')) {
             $query->forUser($viewer);
         }`;
 

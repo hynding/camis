@@ -186,6 +186,18 @@ export const strapiApiBundle: IrBundle = {
           { type: "email", name: "contact", localized: false },
         ],
       },
+      // Relations to the users-permissions user (user-relation-vectors.json): populated only for a
+      // caller who may read users, as Strapi does.
+      {
+        name: "Review",
+        kind: "collection",
+        names: { plural: "Reviews" },
+        fields: [
+          { type: "string", name: "title", required: true },
+          { type: "relation", name: "reviewer", relationKind: "manyToOne", target: "User" },
+          { type: "relation", name: "readers", relationKind: "manyToMany", target: "User" },
+        ],
+      },
       // Relation targets for Book: a to-one with an inverse side, and a to-many without one.
       {
         name: "Author",
@@ -303,6 +315,7 @@ export const strapiApiBundle: IrBundle = {
         // A single type's create is Strapi's update: its one entry is made by the first put.
         { contentType: "Homepage", actions: ["read", "update", "delete", "publish"] },
         { contentType: "Global", actions: ["read", "update", "delete"] },
+        { contentType: "Review", actions: ["create", "read", "update", "delete"] },
       ],
     },
     {
@@ -312,6 +325,7 @@ export const strapiApiBundle: IrBundle = {
         { contentType: "Book", actions: ["read"] },
         { contentType: "Tag", actions: ["read"] },
         { contentType: "Activity", actions: ["read"], condition: publicOrMine },
+        { contentType: "Review", actions: ["create", "read", "update", "delete"] },
       ],
     },
   ],

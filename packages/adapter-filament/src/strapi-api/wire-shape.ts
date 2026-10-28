@@ -195,12 +195,16 @@ const mediaRelations = (ct: ContentType, fileModel: string): WireRelation[] =>
       : [],
   );
 
-const strapiUid = (ct: ContentType): string => `api::${kebab(ct.name)}.${kebab(ct.name)}`;
+/** The users-permissions user's uid, which its relation errors name. */
+export const USER_UID = "plugin::users-permissions.user";
+
+const strapiUid = (ct: ContentType): string =>
+  ct.builtin === "user" ? USER_UID : `api::${kebab(ct.name)}.${kebab(ct.name)}`;
 
 /**
- * Mirrors `resolveRelations`' method names and foreign keys. A relation to the built-in user is
- * left out: there is no user serializer to expose it through, and the grant that assigns it
- * (`assign: { owner: "user.id" }`) already owns its writes.
+ * Mirrors `resolveRelations`' method names and foreign keys. A relation to the users-permissions
+ * user is one like any other (rendered by `UserSerializer`); the user keeps no inverse side, and
+ * other built-in targets are reached through their own fields (media).
  */
 const wireRelations = (
   doc: IrDocument,
@@ -231,7 +235,8 @@ const wireRelations = (
   for (const f of ct.fields) {
     if (f.type !== "relation") continue;
     const target = byName.get(f.target);
-    if (target === undefined || target.builtin !== undefined) continue;
+    if (target === undefined || (target.builtin !== undefined && target.builtin !== "user"))
+      continue;
     if (f.relationKind === "manyToOne" || f.relationKind === "oneToOne") {
       own.push(
         entry(fieldApiName(f), f.name, "belongsTo", target, `${snakeColumn(f.name)}_id`, "self"),

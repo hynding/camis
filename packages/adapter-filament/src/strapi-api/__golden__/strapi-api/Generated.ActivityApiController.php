@@ -70,7 +70,7 @@ class ActivityApiController extends Controller
     {
         $this->authorize('create', Activity::class);
         $wire = ActivitySerializer::fromWire((array) $request->input('data', []));
-        $links = StrapiRelations::read((array) $request->input('data', []), ActivitySerializer::FIELDS, $request->user());
+        $links = StrapiRelations::read(array_diff_key((array) $request->input('data', []), ['creator' => true]), ActivitySerializer::FIELDS, $request->user());
         $m = new Activity($wire['columns']);
         $m->creator_id = $request->user()?->id;
         DB::transaction(function () use ($m, $wire, $links): void {
@@ -86,7 +86,7 @@ class ActivityApiController extends Controller
     public function update(Request $request, string $key): JsonResponse
     {
         $wire = ActivitySerializer::fromWire((array) $request->input('data', []));
-        $links = StrapiRelations::read((array) $request->input('data', []), ActivitySerializer::FIELDS, $request->user());
+        $links = StrapiRelations::read(array_diff_key((array) $request->input('data', []), ['creator' => true]), ActivitySerializer::FIELDS, $request->user());
         $m = $this->scoped($request)->where(self::KEY, $key)->first();
         if ($m !== null && Gate::allows('view', $m)) {
             $this->authorize('update', $m);

@@ -18,6 +18,7 @@ use App\Http\Controllers\Api\LandingApiController;
 use App\Http\Controllers\Api\NoteApiController;
 use App\Http\Controllers\Api\PageApiController;
 use App\Http\Controllers\Api\PostApiController;
+use App\Http\Controllers\Api\ReviewApiController;
 use App\Http\Controllers\Api\TagApiController;
 use App\Http\Controllers\Api\TopicApiController;
 use App\Http\Controllers\Api\TransactionApiController;
@@ -116,6 +117,12 @@ Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle):
         Route::get('/posts/{key}', [PostApiController::class, 'show']);
         Route::put('/posts/{key}', [PostApiController::class, 'update']);
         Route::delete('/posts/{key}', [PostApiController::class, 'destroy']);
+
+        Route::get('/reviews', [ReviewApiController::class, 'index']);
+        Route::post('/reviews', [ReviewApiController::class, 'store']);
+        Route::get('/reviews/{key}', [ReviewApiController::class, 'show']);
+        Route::put('/reviews/{key}', [ReviewApiController::class, 'update']);
+        Route::delete('/reviews/{key}', [ReviewApiController::class, 'destroy']);
 
         Route::get('/tags', [TagApiController::class, 'index']);
         Route::post('/tags', [TagApiController::class, 'store']);

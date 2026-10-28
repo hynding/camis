@@ -70,7 +70,7 @@ class NoteApiController extends Controller
     {
         $this->authorize('create', Note::class);
         $wire = NoteSerializer::fromWire((array) $request->input('data', []));
-        $links = StrapiRelations::read((array) $request->input('data', []), NoteSerializer::FIELDS, $request->user());
+        $links = StrapiRelations::read(array_diff_key((array) $request->input('data', []), ['owner' => true]), NoteSerializer::FIELDS, $request->user());
         $m = new Note($wire['columns']);
         $m->owner_id = $request->user()?->id;
         DB::transaction(function () use ($m, $wire, $links): void {
@@ -86,7 +86,7 @@ class NoteApiController extends Controller
     public function update(Request $request, string $key): JsonResponse
     {
         $wire = NoteSerializer::fromWire((array) $request->input('data', []));
-        $links = StrapiRelations::read((array) $request->input('data', []), NoteSerializer::FIELDS, $request->user());
+        $links = StrapiRelations::read(array_diff_key((array) $request->input('data', []), ['owner' => true]), NoteSerializer::FIELDS, $request->user());
         $m = $this->scoped($request)->where(self::KEY, $key)->first();
         if ($m !== null && Gate::allows('view', $m)) {
             $this->authorize('update', $m);

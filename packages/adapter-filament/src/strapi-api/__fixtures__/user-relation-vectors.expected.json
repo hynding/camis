@@ -1,0 +1,378 @@
+{
+  "no populate: the user relations are left out": {
+    "status": 200,
+    "data": [
+      {
+        "title": "First"
+      },
+      {
+        "title": "Second"
+      },
+      {
+        "title": "Third"
+      }
+    ]
+  },
+  "populate a to-one user relation": {
+    "status": 200,
+    "data": [
+      {
+        "reviewer": {
+          "blocked": false,
+          "confirmed": true,
+          "email": "ann@example.test",
+          "provider": "local",
+          "username": "ann"
+        },
+        "title": "First"
+      },
+      {
+        "reviewer": {
+          "blocked": false,
+          "confirmed": true,
+          "email": "bob@example.test",
+          "provider": "local",
+          "username": "bob"
+        },
+        "title": "Second"
+      },
+      {
+        "reviewer": null,
+        "title": "Third"
+      }
+    ]
+  },
+  "populate=* reaches both user relations": {
+    "status": 200,
+    "data": {
+      "readers": [
+        {
+          "blocked": false,
+          "confirmed": true,
+          "email": "ann@example.test",
+          "provider": "local",
+          "username": "ann"
+        },
+        {
+          "blocked": false,
+          "confirmed": true,
+          "email": "bob@example.test",
+          "provider": "local",
+          "username": "bob"
+        }
+      ],
+      "reviewer": {
+        "blocked": false,
+        "confirmed": true,
+        "email": "ann@example.test",
+        "provider": "local",
+        "username": "ann"
+      },
+      "title": "First"
+    }
+  },
+  "a populated user keeps the fields asked for": {
+    "status": 200,
+    "data": {
+      "reviewer": {
+        "username": "ann"
+      },
+      "title": "First"
+    }
+  },
+  "a to-many user relation counted": {
+    "status": 200,
+    "data": {
+      "readers": {
+        "count": 2
+      },
+      "title": "First"
+    }
+  },
+  "a to-many user relation filtered": {
+    "status": 200,
+    "data": {
+      "readers": [
+        {
+          "blocked": false,
+          "confirmed": true,
+          "email": "bob@example.test",
+          "provider": "local",
+          "username": "bob"
+        }
+      ],
+      "title": "First"
+    }
+  },
+  "filter by a user's field": {
+    "status": 200,
+    "data": [
+      {
+        "title": "First"
+      }
+    ]
+  },
+  "filter by a to-many user relation": {
+    "status": 200,
+    "data": [
+      {
+        "title": "First"
+      }
+    ]
+  },
+  "the user's role is not populated for a caller who may not read roles": {
+    "status": 200,
+    "data": {
+      "reviewer": {
+        "blocked": false,
+        "confirmed": true,
+        "email": "ann@example.test",
+        "provider": "local",
+        "username": "ann"
+      },
+      "title": "First"
+    }
+  },
+  "public: populate=* leaves the user relations out": {
+    "status": 200,
+    "data": {
+      "title": "First"
+    }
+  },
+  "public: populating a user relation leaves it out": {
+    "status": 200,
+    "data": [
+      {
+        "title": "First"
+      },
+      {
+        "title": "Second"
+      },
+      {
+        "title": "Third"
+      }
+    ]
+  },
+  "public: filtering by a user relation is an invalid key": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid key reviewer",
+      "details": {
+        "key": "reviewer",
+        "path": "reviewer",
+        "source": "query",
+        "param": "filters"
+      }
+    }
+  },
+  "GraphQL: user relations resolve to the users-permissions user": {
+    "data": {
+      "reviews": [
+        {
+          "readers": [
+            {
+              "username": "ann"
+            },
+            {
+              "username": "bob"
+            }
+          ],
+          "readers_connection": {
+            "nodes": [
+              {
+                "username": "ann"
+              },
+              {
+                "username": "bob"
+              }
+            ]
+          },
+          "reviewer": {
+            "email": "ann@example.test",
+            "username": "ann"
+          },
+          "title": "First"
+        },
+        {
+          "readers": [],
+          "readers_connection": {
+            "nodes": []
+          },
+          "reviewer": {
+            "email": "bob@example.test",
+            "username": "bob"
+          },
+          "title": "Second"
+        },
+        {
+          "readers": [],
+          "readers_connection": {
+            "nodes": []
+          },
+          "reviewer": null,
+          "title": "Third"
+        }
+      ]
+    },
+    "errors": []
+  },
+  "GraphQL: filter by a user's field": {
+    "data": {
+      "reviews": [
+        {
+          "title": "Second"
+        }
+      ]
+    },
+    "errors": []
+  },
+  "GraphQL public: the user relations of a caller who may not read users": {
+    "data": {
+      "reviews": [null, null, null]
+    },
+    "errors": [
+      {
+        "message": "Forbidden access",
+        "code": "FORBIDDEN",
+        "path": ["reviews", 0, "reviewer"],
+        "error": {
+          "name": "ForbiddenError",
+          "message": "Forbidden access"
+        }
+      },
+      {
+        "message": "Forbidden access",
+        "code": "FORBIDDEN",
+        "path": ["reviews", 0, "readers"],
+        "error": {
+          "name": "ForbiddenError",
+          "message": "Forbidden access"
+        }
+      },
+      {
+        "message": "Forbidden access",
+        "code": "FORBIDDEN",
+        "path": ["reviews", 1, "reviewer"],
+        "error": {
+          "name": "ForbiddenError",
+          "message": "Forbidden access"
+        }
+      },
+      {
+        "message": "Forbidden access",
+        "code": "FORBIDDEN",
+        "path": ["reviews", 1, "readers"],
+        "error": {
+          "name": "ForbiddenError",
+          "message": "Forbidden access"
+        }
+      },
+      {
+        "message": "Forbidden access",
+        "code": "FORBIDDEN",
+        "path": ["reviews", 2, "reviewer"],
+        "error": {
+          "name": "ForbiddenError",
+          "message": "Forbidden access"
+        }
+      },
+      {
+        "message": "Forbidden access",
+        "code": "FORBIDDEN",
+        "path": ["reviews", 2, "readers"],
+        "error": {
+          "name": "ForbiddenError",
+          "message": "Forbidden access"
+        }
+      }
+    ]
+  },
+  "create linking users by id and by connect": {
+    "status": 201,
+    "data": {
+      "readers": [
+        {
+          "blocked": false,
+          "confirmed": true,
+          "email": "bob@example.test",
+          "provider": "local",
+          "username": "bob"
+        }
+      ],
+      "reviewer": {
+        "blocked": false,
+        "confirmed": true,
+        "email": "ann@example.test",
+        "provider": "local",
+        "username": "ann"
+      },
+      "title": "Fourth"
+    }
+  },
+  "update: unlink the to-one user": {
+    "status": 200,
+    "data": {
+      "readers": [
+        {
+          "blocked": false,
+          "confirmed": true,
+          "email": "bob@example.test",
+          "provider": "local",
+          "username": "bob"
+        }
+      ],
+      "reviewer": null,
+      "title": "Fourth"
+    }
+  },
+  "update: disconnect a to-many user": {
+    "status": 200,
+    "data": {
+      "readers": [],
+      "reviewer": null,
+      "title": "Fourth"
+    }
+  },
+  "a user that does not exist is refused": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Document with id \"missing-user\", locale \"\" not found"
+    }
+  },
+  "public: writing a user relation is an invalid key": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid key reviewer",
+      "details": {
+        "key": "reviewer",
+        "path": "reviewer",
+        "source": "body"
+      }
+    }
+  },
+  "public: a write without the user relations is allowed": {
+    "status": 201,
+    "data": {
+      "title": "Seventh"
+    }
+  },
+  "GraphQL: create linking users": {
+    "data": {
+      "createReview": {
+        "readers": [
+          {
+            "username": "ann"
+          }
+        ],
+        "reviewer": {
+          "username": "bob"
+        },
+        "title": "Eighth"
+      }
+    },
+    "errors": []
+  }
+}

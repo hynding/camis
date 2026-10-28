@@ -148,6 +148,16 @@ final class StrapiRoles
                 'publish' => ['post.publish'],
             ],
         ],
+        'api::review.review' => [
+            'label' => 'Review',
+            'actions' => [
+                'find' => ['review.read'],
+                'findOne' => ['review.read'],
+                'create' => ['review.create'],
+                'update' => ['review.update'],
+                'delete' => ['review.delete'],
+            ],
+        ],
         'api::tag.tag' => [
             'label' => 'Tag',
             'actions' => [

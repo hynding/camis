@@ -26,7 +26,7 @@ import {
 } from "./graphql-sdl";
 import { definePluginApis, type PluginAction } from "./graphql-plugin-schema";
 import { FILE_UID } from "./media-runtime";
-import type { WireShape } from "./wire-shape";
+import { USER_UID, type WireShape } from "./wire-shape";
 
 /**
  * Strapi 5's GraphQL schema for a project's content types, printed as webonyx's (and
@@ -41,6 +41,8 @@ import type { WireShape } from "./wire-shape";
 export interface GraphqlRelation {
   type: string;
   many: boolean;
+  /** The target's model, whose read grant the caller needs to see the relation at all. */
+  model: string;
 }
 export interface GraphqlContentType {
   name: string;
@@ -390,7 +392,7 @@ const contentFields = (ct: ContentType, shape: WireShape): ContentField[] => {
     const key = fieldApiName(f);
     if (f.type === "relation" || f.type === "media") {
       const relation = relations.get(key);
-      // A link to the built-in user stays off the content API, as it does on REST.
+      // A link the wire shape leaves out (media without a media library) stays off it too.
       return relation === undefined ? [] : [{ field: f, key, relation }];
     }
     return [{ field: f, key }];
@@ -428,6 +430,7 @@ export const buildGraphqlSchema = (input: GraphqlSchemaInput): GraphqlSchema => 
   /** The GraphQL type a relation reaches. */
   const targetType = (relation: WireShape["relations"][number]): string => {
     if (relation.kind === "mediaOne" || relation.kind === "mediaMany") return "UploadFile";
+    if (relation.uid === USER_UID) return "UsersPermissionsUser";
     const target = byModel.get(relation.model);
     if (target === undefined) throw new Error(`unknown relation target "${relation.model}"`);
     return typeName(target);
@@ -464,7 +467,7 @@ export const buildGraphqlSchema = (input: GraphqlSchemaInput): GraphqlSchema => 
       if (relation !== undefined) {
         const target = targetType(relation);
         const many = MANY.has(relation.kind);
-        map.relations[key] = { type: target, many };
+        map.relations[key] = { type: target, many, model: relation.model };
         const media = target === "UploadFile";
         if (many) {
           const args = listArguments(`${target}FiltersInput`);
@@ -522,7 +525,7 @@ export const buildGraphqlSchema = (input: GraphqlSchemaInput): GraphqlSchema => 
     for (const t of TIMESTAMPS) filter(t, () => b.scalarFilter("DateTime"));
     if (shape.localized) {
       const args = listed ? listArguments(filters) : [];
-      map.relations.localizations = { type: name, many: true };
+      map.relations.localizations = { type: name, many: true, model: shape.model };
       typeFields.push(
         { name: "locale", type: "String" },
         { name: "localizations_connection", args, type: b.relationCollection(name) },
