@@ -1,5 +1,5 @@
 {
-  "about": "Strapi 5 populate, relation filters and relation writes, checked against strapi-php. Run on an empty database: seeds in order, then reads, then writes in order. '@type:Name' is that row's documentId, '#type:Name' its numeric id. Responses are compared after dropping null values and the id, documentId, createdAt, updatedAt and publishedAt keys.",
+  "about": "Strapi 5 populate, relation filters and relation writes, checked against strapi-php. Run on an empty database: seeds in order, then reads, then writes in order. '@type:Name' is that row's documentId, '#type:Name' its numeric id. Responses are compared after dropping the id, documentId, createdAt, updatedAt and publishedAt keys.",
   "seed": [
     { "path": "/authors", "as": "authors:Ann", "data": { "name": "Ann" } },
     { "path": "/authors", "as": "authors:Bob", "data": { "name": "Bob" } },

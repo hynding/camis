@@ -109,7 +109,7 @@ final class StrapiQuery
     /** Narrows a target's query to the rows the caller's grants let it list. */
     public static function scope(mixed $query, ?Authenticatable $viewer): void
     {
-        if (! self::$unrestricted && $viewer !== null) {
+        if (! self::$unrestricted && $viewer !== null && $query->getModel()->hasNamedScope('forUser')) {
             $query->forUser($viewer);
         }
     }

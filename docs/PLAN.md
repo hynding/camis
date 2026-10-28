@@ -425,7 +425,7 @@ generated app as against strapi-php, on the laravel storage layout.
   a list (with dotted nesting, `books.genres`), or an object whose entries take `fields`,
   `filters`, `sort`, a nested `populate` and `count`. Unknown keys are Strapi's 400s.
 - Relations appear from both sides (an inverse such as `Author.books` too), as their target's wire
-  object; a to-many in id order. Relations to the built-in user stay off the wire.
+  object; a to-many in id order. A relation to the users-permissions user is one too (Phase 31).
 - A generated runtime, `App\Support\StrapiPopulate`, eager-loads each populated relation once per
   level for the whole page, so a list costs one query per populated relation, not one per row.
 - Reads of a target go through its read grant (`viewAny`), its `forUser` scope and its `view`
@@ -450,7 +450,8 @@ vectors showed every client 400 landing in `laravel.log`.
 Known gaps: `connect` positions are accepted but not kept, and to-many relations list in id order
 where Strapi keeps link order (the pivot has no order column); `populate` inside a relation ignores
 `pagination`; a component nested in a component comes with its parent rather than needing its own
-`populate`; relations to the built-in user cannot be populated (no user serializer yet, Phase 24);
+`populate`; relations to the built-in user cannot be populated (no user serializer yet, Phase 24;
+closed in Phase 31);
 the strapi storage layout still always sends components; relation filters and sort trust the
 target's `forUser` scope, so a read condition with no SQL form (the Phase 19 overcount gap) can be
 probed through them.
@@ -1073,6 +1074,18 @@ removed).
 
 Part 1's exit: every vector suite in the `strapi-api` boot job passes with nulls compared, on
 SQLite, MySQL and Postgres.
+
+**Part 2 — relations to users.** A relation to the users-permissions user is populated, filtered,
+sorted, counted and written like any other, and renders as users-permissions renders a user
+(`UserSerializer`, over `StrapiUsers::wire`). A caller whose role may not read users gets what
+Strapi gives: populate leaves the relation out, a filter or a write naming it is a 400 "Invalid
+key", and GraphQL refuses the field (as it now does for any relation whose target the caller may
+not read). The user's role is a relation no content grant reaches, so it is never populated. A
+relation a grant assigns (`assign: { owner: "user.id" }`) is not read from the body, so the grant
+keeps its writes. `user-relation-vectors.json` is recorded from strapi-php with a Review type
+added to its project.
+
+Part 2's exit: the user relation vectors pass in the `strapi-api` boot job on all three databases.
 
 ---
 

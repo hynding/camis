@@ -90,6 +90,12 @@ ${emptyDelete}            return response()->json(null, 204);
 `;
 };
 
+/** The request's data as relation input, without the relations a grant assigns: those stay the caller's. */
+const linkData = (assigns: string[]): string =>
+  assigns.length === 0
+    ? "(array) $request->input('data', [])"
+    : `array_diff_key((array) $request->input('data', []), [${assigns.map((a) => `'${a}' => true`).join(", ")}])`;
+
 const laravelParts = (spec: ControllerSpec): ControllerParts => {
   const { shape, secured, scoped } = spec;
   const M = shape.model;
@@ -106,7 +112,7 @@ ${indent}    $m->save();
 ${indent}    ${S}::syncChildren($m, $wire['children']);
 ${indent}    StrapiRelations::link($m, $links);
 ${indent}});`;
-  const readLinks = `${STMT}$links = StrapiRelations::read((array) $request->input('data', []), ${S}::FIELDS, ${viewer});`;
+  const readLinks = `${STMT}$links = StrapiRelations::read(${linkData(spec.assigns)}, ${S}::FIELDS, ${viewer});`;
   const auth = authLine(secured);
   const assign = spec.assigns
     .map((name) => `${STMT}$m->${snakeColumn(name)}_id = $request->user()?->id;`)
@@ -206,7 +212,7 @@ const documentParts = (
   const assignBlock = assign ? `${assign}\n` : "";
   const forWrite = "StrapiLocales::forWrite($request->query())";
   const readLinks = localized
-    ? `${STMT}$links = StrapiRelations::read((array) $request->input('data', []), ${S}::FIELDS, ${viewer}, ${forWrite});`
+    ? `${STMT}$links = StrapiRelations::read(${linkData(spec.assigns)}, ${S}::FIELDS, ${viewer}, ${forWrite});`
     : plainReadLinks;
   const publish = versioned
     ? `${STMT}    if (! StrapiDocuments::draftOnly($request->query())) {
