@@ -35,10 +35,10 @@ final class TransactionSerializer
     /** Whether each document keeps one row per locale. */
     public const LOCALIZED = false;
 
-    /** Strapi-shaped wire object: camelCase keys, nested components, nulls omitted. */
+    /** Strapi-shaped wire object: camelCase keys, nested components, null where there is no value. */
     public static function toWire(Transaction $m): array
     {
-        return self::omitNulls([
+        return [
             'id' => $m->id,
             'documentId' => $m->document_id,
             'recordId' => $m->record_id,
@@ -51,7 +51,7 @@ final class TransactionSerializer
                 'minor' => $m->amount_minor === null ? null : (string) $m->amount_minor,
                 'currency' => $m->amount_currency,
             ]),
-        ]);
+        ];
     }
 
     /** Inverse of toWire: ['columns' => [...], 'children' => [relation => list<row>]]. Unknown keys ignored. */
@@ -73,17 +73,10 @@ final class TransactionSerializer
     {
     }
 
-    private static function omitNulls(array $a): array
-    {
-        return array_filter($a, fn ($v) => $v !== null);
-    }
-
-    /** Like omitNulls, but an all-null result collapses to null so the parent array drops the key. */
+    /** A component's fields, or null when none has a value. */
     private static function nested(array $a): ?array
     {
-        $a = self::omitNulls($a);
-
-        return $a === [] ? null : $a;
+        return array_filter($a, fn ($v) => $v !== null) === [] ? null : $a;
     }
 
     private static function dig(array $a, array $path): mixed
