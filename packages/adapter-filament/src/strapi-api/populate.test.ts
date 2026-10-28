@@ -90,8 +90,37 @@ describe("serializer relation and component maps", () => {
       "'books' => ['relation' => 'books', 'kind' => 'hasMany', 'model' => \\App\\Models\\Book::class, 'serializer' => BookSerializer::class, 'foreignKey' => 'author_id', 'uid' => 'api::book.book', 'holder' => 'target', 'draftPublish' => false, 'localized' => false],",
     );
   });
-  it("leaves out relations to the built-in user, which has no serializer to expose it through", () => {
-    expect(serializer("Note")).not.toContain("'owner' =>");
+  it("maps a relation to the users-permissions user to its serializer and Strapi uid", () => {
+    expect(serializer("Review")).toContain(
+      "'reviewer' => ['relation' => 'reviewer', 'kind' => 'belongsTo', 'model' => \\App\\Models\\User::class, 'serializer' => UserSerializer::class, 'foreignKey' => 'reviewer_id', 'uid' => 'plugin::users-permissions.user', 'holder' => 'self', 'draftPublish' => false, 'localized' => false],",
+    );
+    expect(serializer("Review")).toContain(
+      "'readers' => ['relation' => 'readers', 'kind' => 'belongsToMany', 'model' => \\App\\Models\\User::class, 'serializer' => UserSerializer::class, 'foreignKey' => null, 'uid' => 'plugin::users-permissions.user', 'holder' => 'self', 'draftPublish' => false, 'localized' => false],",
+    );
+  });
+  it("renders a populated user as users-permissions does, its role a relation no grant reaches", () => {
+    const user = serializer("User");
+    expect(user).toContain("public const FIELDS = StrapiUsers::FIELDS + [");
+    expect(user).toContain(
+      "'role' => ['relation' => 'roles', 'kind' => 'belongsToMany', 'model' => \\Spatie\\Permission\\Models\\Role::class,",
+    );
+    expect(user).toContain("return StrapiUsers::wire($m);");
+  });
+});
+
+describe("relations a grant assigns", () => {
+  it("are not read from the body, so a caller cannot hand a row to another user", () => {
+    expect(controller("Note")).toContain(
+      "$links = StrapiRelations::read(array_diff_key((array) $request->input('data', []), ['owner' => true]), NoteSerializer::FIELDS, $request->user());",
+    );
+  });
+});
+
+describe("relation targets without a read scope", () => {
+  it("are narrowed only when their model has one (the user model has none)", () => {
+    expect(content("app/Support/StrapiQuery.php")).toContain(
+      "if (! self::$unrestricted && $query->getModel()->hasNamedScope('forUser')) {",
+    );
   });
 });
 
@@ -152,7 +181,6 @@ const vectors = JSON.parse(fixture("populate-vectors.json")) as {
   reads: { name: string }[];
   writes: { name: string }[];
 };
-const expected = JSON.parse(fixture("populate-vectors.expected.json")) as Record<string, unknown>;
 
 describe("populate conformance vectors", () => {
   it("seed rows only use fields their content type declares", () => {
@@ -168,9 +196,14 @@ describe("populate conformance vectors", () => {
       for (const k of Object.keys(row.data)) expect(names).toContain(k);
     }
   });
-  it("every read and write has a unique name and a recorded strapi-php outcome", () => {
-    const names = [...vectors.reads, ...vectors.writes].map((v) => v.name);
-    expect(new Set(names).size).toBe(names.length);
-    expect(Object.keys(expected).sort()).toEqual([...names].sort());
-  });
+  it.each(["populate-vectors", "user-relation-vectors"])(
+    "%s: every read and write has a unique name and a recorded strapi-php outcome",
+    (file) => {
+      const set = JSON.parse(fixture(`${file}.json`)) as typeof vectors;
+      const recorded = JSON.parse(fixture(`${file}.expected.json`)) as Record<string, unknown>;
+      const names = [...set.reads, ...set.writes].map((v) => v.name);
+      expect(new Set(names).size).toBe(names.length);
+      expect(Object.keys(recorded).sort()).toEqual([...names].sort());
+    },
+  );
 });

@@ -66,6 +66,12 @@ B=$(req POST /auth/local/register '' '{"username":"bob","email":"bob@example.tes
 TB=$(echo "$B" | body | jq -r .jwt)
 [[ "$(req GET /activities "$TB" | body | jq -c '[.data[].recordId]')" == '["a1"]' ]] || fail "catalog scope"
 
+# The grant assigns a note's owner: one named in the body is ignored, so alice cannot hand bob a note.
+BID=$(echo "$B" | body | jq -r .user.id)
+GIFT=$(req POST '/notes?populate=owner' "$TA" "{\"data\":{\"recordId\":\"n3\",\"text\":\"gift\",\"occurredAt\":\"2026-09-08T12:00:00.000Z\",\"owner\":$BID}}")
+[[ "$(echo "$GIFT" | status)" == "201" && "$(echo "$GIFT" | body | jq -r .data.owner.username)" == "alice" ]] || fail "assigned owner: $GIFT"
+req DELETE /notes/n3 "$TA" >/dev/null
+
 # Readable is not writable: bob sees alice's public activity but may not change or delete it.
 BPUT=$(req PUT /activities/a1 "$TB" '{"data":{"name":"hijacked"}}')
 [[ "$(echo "$BPUT" | status)" == "403" ]] || fail "catalog write status: $BPUT"

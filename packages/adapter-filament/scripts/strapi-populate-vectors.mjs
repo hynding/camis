@@ -10,6 +10,9 @@
 // else /graphql beside the API base); a mutation's `as` names the document its first field returns.
 // A step with only `wait` pauses that many milliseconds, so a later write lands in a later second.
 // A file's `compare` lists server-assigned keys to compare after all (`documentId`).
+// A step with `public` is sent without the token, as the public role. A seed row with `raw` posts
+// its data as the whole body without the token (`/auth/local/register`) and names the `user` it
+// answers with.
 //
 // usage: strapi-populate-vectors.mjs <api-base> [--token T] [--vectors F] [--expected F] [--graphql URL] [--record]
 import { readFileSync, writeFileSync } from "node:fs";
@@ -64,16 +67,16 @@ const multipart = (upload, form) => {
   return body;
 };
 
-const call = async (method, path, query, data, upload, form) => {
+const call = async (method, path, query, data, { upload, form, anonymous, raw } = {}) => {
   const url = `${base}${resolveText(path)}${query ? `?${resolveText(query)}` : ""}`;
   const headers = { Accept: "application/json" };
-  if (values.token) headers.Authorization = `Bearer ${values.token}`;
+  if (values.token && !anonymous) headers.Authorization = `Bearer ${values.token}`;
   const init = { method, headers };
   if (upload !== undefined) {
     init.body = multipart(upload, form);
   } else if (data !== undefined) {
     headers["Content-Type"] = "application/json";
-    init.body = JSON.stringify({ data: resolve(data) });
+    init.body = JSON.stringify(raw ? resolve(data) : { data: resolve(data) });
   }
   const response = await fetch(url, init);
   const text = await response.text();
@@ -84,9 +87,9 @@ const call = async (method, path, query, data, upload, form) => {
   }
 };
 
-const graphql = async (query, variables) => {
+const graphql = async (query, variables, anonymous = false) => {
   const headers = { Accept: "application/json", "Content-Type": "application/json" };
-  if (values.token) headers.Authorization = `Bearer ${values.token}`;
+  if (values.token && !anonymous) headers.Authorization = `Bearer ${values.token}`;
   const response = await fetch(graphqlEndpoint, {
     method: "POST",
     headers,
@@ -178,41 +181,42 @@ function bare(body) {
 const written = (body) => (Array.isArray(body) ? body[0] : bare(body) ? body : body?.data);
 
 for (const row of vectors.seed) {
-  const { status, body } = await call(row.method ?? "POST", row.path, row.query ?? "", row.data);
+  const { status, body } = await call(row.method ?? "POST", row.path, row.query ?? "", row.data, {
+    raw: row.raw === true,
+    anonymous: row.raw === true,
+  });
   if (status !== 200 && status !== 201) {
     console.error(`SEED FAIL ${row.as} (${status}): ${JSON.stringify(body)}`);
     process.exit(1);
   }
-  refs.set(row.as, { id: body.data.id, documentId: body.data.documentId });
+  const made = row.raw === true ? body.user : body.data;
+  refs.set(row.as, { id: made.id, documentId: made.documentId });
 }
 
 const results = {};
 for (const v of vectors.reads)
   results[v.name] =
     v.graphql !== undefined
-      ? graphqlOutcome(await graphql(v.graphql, v.variables))
-      : outcome(await call("GET", v.path, v.query));
+      ? graphqlOutcome(await graphql(v.graphql, v.variables, v.public === true))
+      : outcome(await call("GET", v.path, v.query, undefined, { anonymous: v.public === true }));
 for (const v of vectors.writes) {
   if (v.wait !== undefined) {
     await pause(v.wait);
     continue;
   }
   if (v.graphql !== undefined) {
-    const response = await graphql(v.graphql, v.variables);
+    const response = await graphql(v.graphql, v.variables, v.public === true);
     const target = Object.values(response.body.data ?? {})[0];
     if (v.as !== undefined && target?.documentId !== undefined)
       refs.set(v.as, { id: null, documentId: target.documentId });
     results[v.name] = graphqlOutcome(response);
     continue;
   }
-  const response = await call(
-    v.method ?? "POST",
-    v.path,
-    v.query ?? vectors.defaultQuery,
-    v.data,
-    v.upload,
-    v.form,
-  );
+  const response = await call(v.method ?? "POST", v.path, v.query ?? vectors.defaultQuery, v.data, {
+    upload: v.upload,
+    form: v.form,
+    anonymous: v.public === true,
+  });
   const target = written(response.body);
   if (v.as !== undefined && target?.id !== undefined)
     refs.set(v.as, { id: target.id, documentId: target.documentId });
