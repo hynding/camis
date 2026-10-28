@@ -121,10 +121,8 @@ const normalize = (value) => {
     return Object.fromEntries(
       Object.entries(value)
         .filter(
-          ([k, v]) =>
-            !VOLATILE.has(k) &&
-            !encoded(value, k) &&
-            (k !== "publishedAt" || publishedAtPresence),
+          ([k]) =>
+            !VOLATILE.has(k) && !encoded(value, k) && (k !== "publishedAt" || publishedAtPresence),
         )
         .map(([k, v]) =>
           (k === "hash" || k === "url") && typeof v === "string"

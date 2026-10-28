@@ -202,7 +202,9 @@ const graphqlOutcome = ({ status, body }) => ({
 });
 // A step with `ownMessage` lets each runtime word its error: what to do about it names its own tools.
 const worded = (result, own) =>
-  own && result.error !== undefined ? { ...result, error: { ...result.error, message: "<own>" } } : result;
+  own && result.error !== undefined
+    ? { ...result, error: { ...result.error, message: "<own>" } }
+    : result;
 const outcome = ({ status, location, body }, cookie) => {
   if (status >= 300 && status < 400)
     return { status, location: maskLocation(fill(location ?? "")) };
