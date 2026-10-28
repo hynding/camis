@@ -98,9 +98,8 @@ const graphql = async (query, variables) => {
   return { status: response.status, body: await response.json() };
 };
 
-// Server-assigned keys differ between runs and runtimes; nulls are dropped because camis leaves
-// null scalars off the wire (a known gap, PLAN.md Phase 19). publishedAt is dropped too unless the
-// vector file asks for its presence: Strapi stamps it even on types without draft and publish.
+// Server-assigned keys differ between runs and runtimes. publishedAt is dropped unless the vector
+// file asks for its presence: Strapi stamps it even on types without draft and publish.
 const publishedAtPresence = vectors.publishedAt === "presence";
 // A stored file's hash (and so its url) ends in random hex, and an image's byte size depends on
 // the encoder that resized it (sharp, GD), so neither is compared.
@@ -115,17 +114,15 @@ const encoded = (file, key) =>
   (key === "size" || key === "sizeInBytes") &&
   typeof file.width === "number" &&
   String(file.mime).startsWith("image/");
-const normalize = (value, keepNulls = false) => {
-  if (Array.isArray(value)) return value.map((v) => normalize(v, keepNulls));
+const normalize = (value) => {
+  if (Array.isArray(value)) return value.map(normalize);
   if (typeof value === "string") return value;
   if (value !== null && typeof value === "object")
     return Object.fromEntries(
       Object.entries(value)
         .filter(
-          ([k, v]) =>
-            !VOLATILE.has(k) &&
-            !encoded(value, k) &&
-            (k === "publishedAt" ? publishedAtPresence : keepNulls || v !== null),
+          ([k]) =>
+            !VOLATILE.has(k) && !encoded(value, k) && (k !== "publishedAt" || publishedAtPresence),
         )
         .map(([k, v]) =>
           (k === "hash" || k === "url") && typeof v === "string"
@@ -134,7 +131,7 @@ const normalize = (value, keepNulls = false) => {
         )
         .map(([k, v]) => (k === "publishedAt" ? [k, v === null ? "absent" : "present"] : [k, v]))
         .sort(([a], [b]) => a.localeCompare(b))
-        .map(([k, v]) => [k, normalize(v, keepNulls)]),
+        .map(([k, v]) => [k, normalize(v)]),
     );
   return value;
 };
@@ -150,10 +147,10 @@ const outcome = ({ status, body }) => {
   return { status, data: normalize(bare(body) ? body : (body?.data ?? null)) };
 };
 
-// A GraphQL answer keeps its nulls (the schema sends every field asked for); an error compares by
-// message, code, path and Strapi's error, never by the stack trace a development server adds.
+// A GraphQL error compares by message, code, path and Strapi's error, never by the stack trace a
+// development server adds.
 const graphqlOutcome = ({ body }) => ({
-  data: normalize(body.data ?? null, true),
+  data: normalize(body.data ?? null),
   errors: (body.errors ?? []).map((e) => {
     const error = e.extensions?.error;
     const keyed = error?.details && typeof error.details === "object" && "key" in error.details;

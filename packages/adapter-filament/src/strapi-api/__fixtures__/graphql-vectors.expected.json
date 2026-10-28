@@ -217,7 +217,9 @@
       {
         "message": "Cannot use both page & offset pagination in the same query",
         "code": "STRAPI_PAGINATION_ERROR",
-        "path": ["books"],
+        "path": [
+          "books"
+        ],
         "error": {
           "name": "PaginationError",
           "message": "Cannot use both page & offset pagination in the same query"
@@ -335,7 +337,9 @@
       {
         "message": "Invalid key nope",
         "code": "BAD_USER_INPUT",
-        "path": ["books"],
+        "path": [
+          "books"
+        ],
         "error": {
           "name": "ValidationError",
           "message": "Invalid key nope",

@@ -57,9 +57,8 @@ const insert = (root: Node, key: string[], expr: string): void => {
   });
   cur.leaves.set(key[key.length - 1]!, expr);
 };
-// `self::nested(...)` (not `omitNulls`) for branches: an all-null component must
-// disappear from its parent array entirely, not survive as `[]` (a JSON array),
-// so the enclosing `omitNulls` needs a `null` to filter out, not an empty array.
+// `self::nested(...)` for branches: a component stored as all-null columns has no value, so it is
+// null, as Strapi sends an unset component, not `[]` (a JSON array) or an object of nulls.
 const render = (n: Node, indent: string): string => {
   const rows: string[] = [];
   for (const [k, v] of n.leaves) rows.push(`${indent}'${k}' => ${v},`);
@@ -107,9 +106,9 @@ const zoneMemberWire = (member: WireZoneMember, indent: string): string => {
   insert(item, ["__component"], `'${member.uid}'`);
   insert(item, ["id"], "$c->id");
   for (const s of member.scalars) insert(item, s.key, read(s, "$c", "laravel"));
-  return `${indent}...$m->${member.relation}->map(fn ($c) => [$c->position, self::omitNulls([
+  return `${indent}...$m->${member.relation}->map(fn ($c) => [$c->position, [
 ${render(item, `${indent}${UNIT}`)}
-${indent}])])->all(),`;
+${indent}]])->all(),`;
 };
 
 const zoneWire = (zone: WireZone, indent: string): string =>
@@ -287,12 +286,12 @@ use App\\Models\\${shape.model};${zoneImport}
 
 final class ${shape.model}Serializer
 {${layout === "laravel" ? fieldsConstant(shape) : ""}
-    /** Strapi-shaped wire object: camelCase keys, nested components, nulls omitted${shape.draftPublish ? " (but publishedAt, null on a draft)" : ""}. */
+    /** Strapi-shaped wire object: camelCase keys, nested components, null where there is no value. */
     public static function toWire(${shape.model} $m): array
     {
-        return self::omitNulls([
+        return [
 ${toWireBody(shape, l3, layout)}
-        ])${shape.draftPublish && layout === "laravel" ? ` + [\n${l3}'publishedAt' => $m->published_at${ZULU_MS},\n        ]` : ""};
+        ]${shape.draftPublish && layout === "laravel" ? ` + [\n${l3}'publishedAt' => $m->published_at${ZULU_MS},\n        ]` : ""};
     }
 
     /** Inverse of toWire: ['columns' => [...], 'children' => [relation => list<row>]]. Unknown keys ignored. */
@@ -310,17 +309,10 @@ ${fromWireChildStatements(shape.children, l2)}${zones.length === 0 ? "" : `\n${f
     {${syncChildrenBody}
     }
 
-    private static function omitNulls(array $a): array
-    {
-        return array_filter($a, fn ($v) => $v !== null);
-    }
-
-    /** Like omitNulls, but an all-null result collapses to null so the parent array drops the key. */
+    /** A component's fields, or null when none has a value. */
     private static function nested(array $a): ?array
     {
-        $a = self::omitNulls($a);
-
-        return $a === [] ? null : $a;
+        return array_filter($a, fn ($v) => $v !== null) === [] ? null : $a;
     }
 
     private static function dig(array $a, array $path): mixed

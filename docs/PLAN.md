@@ -411,7 +411,7 @@ Filament v5 app (SQLite, all caches on); the existing smoke passes unchanged.
 
 Known gaps left for later phases: the strapi storage layout keeps its own query path (no
 `filters`/`sort`/`pagination` yet); nulls are still omitted from the wire (a Phase 16 choice that
-diverges from Strapi, revisit with Phase 20); a secured list post-filters each page through the
+diverges from Strapi; closed in Phase 31); a secured list post-filters each page through the
 policy when the read condition has no SQL form, so its `total` can overcount.
 
 ---
@@ -655,7 +655,7 @@ admin tests pass.
 Known gaps: OAuth providers (`/connect/:provider`) come next. Ending a session revokes its access
 tokens at once, where Strapi's stateless JWTs live until they expire (stricter, so no vector
 checks it). The Filament admin has no role matrix (Phase 30). Null scalars are left off the wire
-where Strapi sends them.
+where Strapi sends them (closed in Phase 31).
 
 ---
 
@@ -1059,6 +1059,20 @@ actions, and one no role grants refuses outright: Filament allows an action whos
 missing, so before this an admin could create, edit or delete a type no role may change, where the
 API refused it. `StrapiAdminTest.php` checks a user granted only a type's read sees its list but is
 offered no create, edit or delete.
+
+## Phase 31 — the gaps Strapi clients see (`adapter-filament`)
+
+The known gaps an API client written for Strapi notices first, closed one part at a time
+(owner's call, 2026-10-27).
+
+**Part 1 — nulls.** A REST answer sends every attribute, `null` where it has no value, as Strapi
+does: a scalar, a component with no value, a field inside a component that has one, and a dynamic
+zone item's fields. The vector scripts keep nulls, and every expected file they compare against
+was re-recorded from strapi-php with them (each matches its earlier recording once nulls are
+removed).
+
+Part 1's exit: every vector suite in the `strapi-api` boot job passes with nulls compared, on
+SQLite, MySQL and Postgres.
 
 ---
 

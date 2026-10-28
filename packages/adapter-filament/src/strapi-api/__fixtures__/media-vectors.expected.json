@@ -6,6 +6,7 @@
         "alternativeText": "red",
         "caption": "A red box",
         "ext": ".png",
+        "focalPoint": null,
         "formats": {
           "large": {
             "ext": ".png",
@@ -13,6 +14,7 @@
             "height": 667,
             "mime": "image/png",
             "name": "large_wide.png",
+            "path": null,
             "url": "/uploads/large_wide_<hash>.png",
             "width": 1000
           },
@@ -22,6 +24,7 @@
             "height": 500,
             "mime": "image/png",
             "name": "medium_wide.png",
+            "path": null,
             "url": "/uploads/medium_wide_<hash>.png",
             "width": 750
           },
@@ -31,6 +34,7 @@
             "height": 333,
             "mime": "image/png",
             "name": "small_wide.png",
+            "path": null,
             "url": "/uploads/small_wide_<hash>.png",
             "width": 500
           },
@@ -40,6 +44,7 @@
             "height": 156,
             "mime": "image/png",
             "name": "thumbnail_wide.png",
+            "path": null,
             "url": "/uploads/thumbnail_wide_<hash>.png",
             "width": 234
           }
@@ -49,7 +54,9 @@
         "isUrlSigned": false,
         "mime": "image/png",
         "name": "wide.png",
+        "previewUrl": null,
         "provider": "local",
+        "provider_metadata": null,
         "url": "/uploads/wide_<hash>.png",
         "width": 1200
       }
@@ -59,14 +66,22 @@
     "status": 201,
     "data": [
       {
+        "alternativeText": null,
+        "caption": null,
         "ext": ".txt",
+        "focalPoint": null,
+        "formats": null,
         "hash": "my_notes_<hash>",
+        "height": null,
         "isUrlSigned": false,
         "mime": "text/plain",
         "name": "my-notes.txt",
+        "previewUrl": null,
         "provider": "local",
+        "provider_metadata": null,
         "size": 0.01,
-        "url": "/uploads/my_notes_<hash>.txt"
+        "url": "/uploads/my_notes_<hash>.txt",
+        "width": null
       }
     ]
   },
@@ -104,14 +119,22 @@
   "one file": {
     "status": 200,
     "data": {
+      "alternativeText": null,
+      "caption": null,
       "ext": ".txt",
+      "focalPoint": null,
+      "formats": null,
       "hash": "my_notes_<hash>",
+      "height": null,
       "isUrlSigned": false,
       "mime": "text/plain",
       "name": "my-notes.txt",
+      "previewUrl": null,
       "provider": "local",
+      "provider_metadata": null,
       "size": 0.01,
-      "url": "/uploads/my_notes_<hash>.txt"
+      "url": "/uploads/my_notes_<hash>.txt",
+      "width": null
     }
   },
   "a missing file": {
@@ -124,15 +147,22 @@
   "upload with an id updates the file's info": {
     "status": 200,
     "data": {
+      "alternativeText": null,
       "caption": "cap",
       "ext": ".txt",
+      "focalPoint": null,
+      "formats": null,
       "hash": "my_notes_<hash>",
+      "height": null,
       "isUrlSigned": false,
       "mime": "text/plain",
       "name": "renamed.txt",
+      "previewUrl": null,
       "provider": "local",
+      "provider_metadata": null,
       "size": 0.01,
-      "url": "/uploads/my_notes_<hash>.txt"
+      "url": "/uploads/my_notes_<hash>.txt",
+      "width": null
     }
   },
   "updating a missing file": {
@@ -178,6 +208,11 @@
   "media stays off the wire unless populated": {
     "status": 200,
     "data": {
+      "inStock": null,
+      "pages": null,
+      "publishedOn": null,
+      "rating": null,
+      "releasedAt": null,
       "title": "Covered"
     }
   },
@@ -186,19 +221,27 @@
     "data": {
       "attachments": [
         {
+          "alternativeText": null,
           "caption": "cap",
           "ext": ".txt",
+          "focalPoint": null,
+          "formats": null,
           "hash": "my_notes_<hash>",
+          "height": null,
           "mime": "text/plain",
           "name": "renamed.txt",
+          "previewUrl": null,
           "provider": "local",
+          "provider_metadata": null,
           "size": 0.01,
-          "url": "/uploads/my_notes_<hash>.txt"
+          "url": "/uploads/my_notes_<hash>.txt",
+          "width": null
         },
         {
           "alternativeText": "red",
           "caption": "A red box",
           "ext": ".png",
+          "focalPoint": null,
           "formats": {
             "large": {
               "ext": ".png",
@@ -206,6 +249,7 @@
               "height": 667,
               "mime": "image/png",
               "name": "large_wide.png",
+              "path": null,
               "url": "/uploads/large_wide_<hash>.png",
               "width": 1000
             },
@@ -215,6 +259,7 @@
               "height": 500,
               "mime": "image/png",
               "name": "medium_wide.png",
+              "path": null,
               "url": "/uploads/medium_wide_<hash>.png",
               "width": 750
             },
@@ -224,6 +269,7 @@
               "height": 333,
               "mime": "image/png",
               "name": "small_wide.png",
+              "path": null,
               "url": "/uploads/small_wide_<hash>.png",
               "width": 500
             },
@@ -233,6 +279,7 @@
               "height": 156,
               "mime": "image/png",
               "name": "thumbnail_wide.png",
+              "path": null,
               "url": "/uploads/thumbnail_wide_<hash>.png",
               "width": 234
             }
@@ -241,15 +288,20 @@
           "height": 800,
           "mime": "image/png",
           "name": "wide.png",
+          "previewUrl": null,
           "provider": "local",
+          "provider_metadata": null,
           "url": "/uploads/wide_<hash>.png",
           "width": 1200
         }
       ],
+      "author": null,
+      "category": null,
       "cover": {
         "alternativeText": "red",
         "caption": "A red box",
         "ext": ".png",
+        "focalPoint": null,
         "formats": {
           "large": {
             "ext": ".png",
@@ -257,6 +309,7 @@
             "height": 667,
             "mime": "image/png",
             "name": "large_wide.png",
+            "path": null,
             "url": "/uploads/large_wide_<hash>.png",
             "width": 1000
           },
@@ -266,6 +319,7 @@
             "height": 500,
             "mime": "image/png",
             "name": "medium_wide.png",
+            "path": null,
             "url": "/uploads/medium_wide_<hash>.png",
             "width": 750
           },
@@ -275,6 +329,7 @@
             "height": 333,
             "mime": "image/png",
             "name": "small_wide.png",
+            "path": null,
             "url": "/uploads/small_wide_<hash>.png",
             "width": 500
           },
@@ -284,6 +339,7 @@
             "height": 156,
             "mime": "image/png",
             "name": "thumbnail_wide.png",
+            "path": null,
             "url": "/uploads/thumbnail_wide_<hash>.png",
             "width": 234
           }
@@ -292,13 +348,17 @@
         "height": 800,
         "mime": "image/png",
         "name": "wide.png",
+        "previewUrl": null,
         "provider": "local",
+        "provider_metadata": null,
         "url": "/uploads/wide_<hash>.png",
         "width": 1200
       },
       "editions": [],
       "genres": [],
-      "title": "Covered"
+      "price": null,
+      "title": "Covered",
+      "topic": null
     }
   },
   "filters reach into media": {
@@ -323,6 +383,7 @@
   "null clears a single file": {
     "status": 200,
     "data": {
+      "cover": null,
       "title": "ByDocument"
     }
   },
@@ -330,14 +391,22 @@
     "status": 201,
     "data": [
       {
+        "alternativeText": null,
+        "caption": null,
         "ext": ".txt",
+        "focalPoint": null,
+        "formats": null,
         "hash": "notes_<hash>",
+        "height": null,
         "isUrlSigned": false,
         "mime": "text/plain",
         "name": "notes.txt",
+        "previewUrl": null,
         "provider": "local",
+        "provider_metadata": null,
         "size": 0.01,
-        "url": "/uploads/notes_<hash>.txt"
+        "url": "/uploads/notes_<hash>.txt",
+        "width": null
       }
     ]
   },
@@ -379,15 +448,22 @@
         "related": [
           {
             "__type": "api::book.book",
+            "inStock": null,
+            "pages": null,
+            "publishedOn": null,
+            "rating": null,
+            "releasedAt": null,
             "title": "Covered"
           },
           {
             "__type": "api::post.post",
-            "title": "Pictured"
+            "title": "Pictured",
+            "views": null
           },
           {
             "__type": "api::post.post",
-            "title": "Pictured"
+            "title": "Pictured",
+            "views": null
           }
         ]
       },
@@ -397,6 +473,11 @@
         "related": [
           {
             "__type": "api::book.book",
+            "inStock": null,
+            "pages": null,
+            "publishedOn": null,
+            "rating": null,
+            "releasedAt": null,
             "title": "Covered"
           }
         ]
@@ -407,6 +488,11 @@
         "related": [
           {
             "__type": "api::book.book",
+            "inStock": null,
+            "pages": null,
+            "publishedOn": null,
+            "rating": null,
+            "releasedAt": null,
             "title": "ByDocument"
           }
         ]
@@ -419,6 +505,7 @@
       "alternativeText": "red",
       "caption": "A red box",
       "ext": ".png",
+      "focalPoint": null,
       "formats": {
         "large": {
           "ext": ".png",
@@ -426,6 +513,7 @@
           "height": 667,
           "mime": "image/png",
           "name": "large_wide.png",
+          "path": null,
           "url": "/uploads/large_wide_<hash>.png",
           "width": 1000
         },
@@ -435,6 +523,7 @@
           "height": 500,
           "mime": "image/png",
           "name": "medium_wide.png",
+          "path": null,
           "url": "/uploads/medium_wide_<hash>.png",
           "width": 750
         },
@@ -444,6 +533,7 @@
           "height": 333,
           "mime": "image/png",
           "name": "small_wide.png",
+          "path": null,
           "url": "/uploads/small_wide_<hash>.png",
           "width": 500
         },
@@ -453,6 +543,7 @@
           "height": 156,
           "mime": "image/png",
           "name": "thumbnail_wide.png",
+          "path": null,
           "url": "/uploads/thumbnail_wide_<hash>.png",
           "width": 234
         }
@@ -462,19 +553,28 @@
       "isUrlSigned": false,
       "mime": "image/png",
       "name": "wide.png",
+      "previewUrl": null,
       "provider": "local",
+      "provider_metadata": null,
       "related": [
         {
           "__type": "api::book.book",
+          "inStock": null,
+          "pages": null,
+          "publishedOn": null,
+          "rating": null,
+          "releasedAt": null,
           "title": "Covered"
         },
         {
           "__type": "api::post.post",
-          "title": "Pictured"
+          "title": "Pictured",
+          "views": null
         },
         {
           "__type": "api::post.post",
-          "title": "Pictured"
+          "title": "Pictured",
+          "views": null
         }
       ],
       "url": "/uploads/wide_<hash>.png",
@@ -487,6 +587,7 @@
       "alternativeText": "red",
       "caption": "A red box",
       "ext": ".png",
+      "focalPoint": null,
       "formats": {
         "large": {
           "ext": ".png",
@@ -494,6 +595,7 @@
           "height": 667,
           "mime": "image/png",
           "name": "large_wide.png",
+          "path": null,
           "url": "/uploads/large_wide_<hash>.png",
           "width": 1000
         },
@@ -503,6 +605,7 @@
           "height": 500,
           "mime": "image/png",
           "name": "medium_wide.png",
+          "path": null,
           "url": "/uploads/medium_wide_<hash>.png",
           "width": 750
         },
@@ -512,6 +615,7 @@
           "height": 333,
           "mime": "image/png",
           "name": "small_wide.png",
+          "path": null,
           "url": "/uploads/small_wide_<hash>.png",
           "width": 500
         },
@@ -521,6 +625,7 @@
           "height": 156,
           "mime": "image/png",
           "name": "thumbnail_wide.png",
+          "path": null,
           "url": "/uploads/thumbnail_wide_<hash>.png",
           "width": 234
         }
@@ -530,7 +635,9 @@
       "isUrlSigned": false,
       "mime": "image/png",
       "name": "wide.png",
+      "previewUrl": null,
       "provider": "local",
+      "provider_metadata": null,
       "url": "/uploads/wide_<hash>.png",
       "width": 1200
     }
@@ -538,15 +645,22 @@
   "deleting a file returns it": {
     "status": 200,
     "data": {
+      "alternativeText": null,
       "caption": "cap",
       "ext": ".txt",
+      "focalPoint": null,
+      "formats": null,
       "hash": "my_notes_<hash>",
+      "height": null,
       "isUrlSigned": false,
       "mime": "text/plain",
       "name": "renamed.txt",
+      "previewUrl": null,
       "provider": "local",
+      "provider_metadata": null,
       "size": 0.01,
-      "url": "/uploads/my_notes_<hash>.txt"
+      "url": "/uploads/my_notes_<hash>.txt",
+      "width": null
     }
   },
   "and unlinks it": {

@@ -38,15 +38,15 @@ final class LandingSerializer
     /** Whether each document keeps one row per locale. */
     public const LOCALIZED = false;
 
-    /** Strapi-shaped wire object: camelCase keys, nested components, nulls omitted (but publishedAt, null on a draft). */
+    /** Strapi-shaped wire object: camelCase keys, nested components, null where there is no value. */
     public static function toWire(Landing $m): array
     {
-        return self::omitNulls([
+        return [
             'id' => $m->id,
             'documentId' => $m->document_id,
             'title' => $m->title,
             'blocks' => self::zone([
-                ...$m->blocksHero->map(fn ($c) => [$c->position, self::omitNulls([
+                ...$m->blocksHero->map(fn ($c) => [$c->position, [
                     '__component' => 'shared.hero',
                     'id' => $c->id,
                     'heading' => $c->heading,
@@ -55,17 +55,17 @@ final class LandingSerializer
                         'minor' => $c->price_minor === null ? null : (string) $c->price_minor,
                         'currency' => $c->price_currency,
                     ]),
-                ])])->all(),
-                ...$m->blocksQuantity->map(fn ($c) => [$c->position, self::omitNulls([
+                ]])->all(),
+                ...$m->blocksQuantity->map(fn ($c) => [$c->position, [
                     '__component' => 'shared.quantity',
                     'id' => $c->id,
                     'amount' => $c->amount === null ? null : (float) $c->amount,
                     'unit' => $c->unit,
-                ])])->all(),
+                ]])->all(),
             ]),
             'createdAt' => $m->created_at?->toIso8601ZuluString('millisecond'),
             'updatedAt' => $m->updated_at?->toIso8601ZuluString('millisecond'),
-        ]) + [
+        ] + [
             'publishedAt' => $m->published_at?->toIso8601ZuluString('millisecond'),
         ];
     }
@@ -102,17 +102,10 @@ final class LandingSerializer
         }
     }
 
-    private static function omitNulls(array $a): array
-    {
-        return array_filter($a, fn ($v) => $v !== null);
-    }
-
-    /** Like omitNulls, but an all-null result collapses to null so the parent array drops the key. */
+    /** A component's fields, or null when none has a value. */
     private static function nested(array $a): ?array
     {
-        $a = self::omitNulls($a);
-
-        return $a === [] ? null : $a;
+        return array_filter($a, fn ($v) => $v !== null) === [] ? null : $a;
     }
 
     private static function dig(array $a, array $path): mixed

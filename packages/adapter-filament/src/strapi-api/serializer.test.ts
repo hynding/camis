@@ -68,9 +68,14 @@ describe("emitSerializer", () => {
     // Datetimes still go through Carbon there: they keep the StrapiDateTime cast.
     expect(php).toContain("$m->created_at?->toIso8601ZuluString('millisecond')");
   });
-  it("omits nulls via the shared helper and never emits relation FKs", () => {
+  // Strapi sends every attribute, null when it has no value; populate-vectors.expected.json,
+  // recorded from strapi-php, keeps those nulls.
+  it("sends a null attribute as null, as Strapi does, and never emits relation FKs", () => {
     const php = emitSerializer(shape("Note"));
-    expect(php).toContain("self::omitNulls(");
+    expect(php).not.toContain("omitNulls");
+    expect(php).toContain(
+      "public static function toWire(Note $m): array\n    {\n        return [\n",
+    );
     expect(php).not.toContain("owner_id");
   });
 
@@ -110,7 +115,8 @@ describe("emitSerializer", () => {
     expect(php).toContain("if (self::has($data, ['quantities'])) {");
     expect(php).toContain("$children['quantities'] = array_map(");
   });
-  it("uses self::nested for component/child branches so an all-null branch is omitted, not []", () => {
+  // A component with no value is null; one with a value sends its own nulls.
+  it("uses self::nested for component/child branches so an all-null branch is null, not []", () => {
     const transaction = emitSerializer(shape("Transaction"));
     expect(transaction).toContain("self::nested(");
     const activitySession = emitSerializer(shape("ActivitySession"));

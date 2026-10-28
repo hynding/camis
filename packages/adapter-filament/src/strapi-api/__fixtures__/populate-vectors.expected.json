@@ -3,13 +3,27 @@
     "status": 200,
     "data": [
       {
+        "inStock": null,
         "pages": 100,
+        "publishedOn": null,
+        "rating": null,
+        "releasedAt": null,
         "title": "Alpha"
       },
       {
+        "inStock": null,
+        "pages": null,
+        "publishedOn": null,
+        "rating": null,
+        "releasedAt": null,
         "title": "Beta"
       },
       {
+        "inStock": null,
+        "pages": null,
+        "publishedOn": null,
+        "rating": null,
+        "releasedAt": null,
         "title": "Gamma"
       }
     ]
@@ -22,6 +36,8 @@
         "author": {
           "name": "Ann"
         },
+        "category": null,
+        "cover": null,
         "editions": [
           {
             "amount": 1,
@@ -36,31 +52,55 @@
             "name": "Horror"
           }
         ],
+        "inStock": null,
         "pages": 100,
         "price": {
           "currency": "USD",
           "minor": "100"
         },
-        "title": "Alpha"
+        "publishedOn": null,
+        "rating": null,
+        "releasedAt": null,
+        "title": "Alpha",
+        "topic": null
       },
       {
         "attachments": [],
         "author": {
           "name": "Bob"
         },
+        "category": null,
+        "cover": null,
         "editions": [],
         "genres": [
           {
             "name": "Horror"
           }
         ],
-        "title": "Beta"
+        "inStock": null,
+        "pages": null,
+        "price": null,
+        "publishedOn": null,
+        "rating": null,
+        "releasedAt": null,
+        "title": "Beta",
+        "topic": null
       },
       {
         "attachments": [],
+        "author": null,
+        "category": null,
+        "cover": null,
         "editions": [],
         "genres": [],
-        "title": "Gamma"
+        "inStock": null,
+        "pages": null,
+        "price": null,
+        "publishedOn": null,
+        "rating": null,
+        "releasedAt": null,
+        "title": "Gamma",
+        "topic": null
       }
     ]
   },
@@ -80,6 +120,7 @@
         "title": "Beta"
       },
       {
+        "author": null,
         "title": "Gamma"
       }
     ]
@@ -108,10 +149,12 @@
             "name": "Horror"
           }
         ],
+        "price": null,
         "title": "Beta"
       },
       {
         "genres": [],
+        "price": null,
         "title": "Gamma"
       }
     ]
@@ -139,6 +182,7 @@
         "title": "Beta"
       },
       {
+        "author": null,
         "editions": [],
         "title": "Gamma"
       }
@@ -155,9 +199,11 @@
         "title": "Alpha"
       },
       {
+        "price": null,
         "title": "Beta"
       },
       {
+        "price": null,
         "title": "Gamma"
       }
     ]
@@ -178,6 +224,7 @@
         "title": "Beta"
       },
       {
+        "author": null,
         "title": "Gamma"
       }
     ]
@@ -192,9 +239,11 @@
         "title": "Alpha"
       },
       {
+        "price": null,
         "title": "Beta"
       },
       {
+        "price": null,
         "title": "Gamma"
       }
     ]
@@ -344,7 +393,11 @@
                 "name": "Horror"
               }
             ],
+            "inStock": null,
             "pages": 100,
+            "publishedOn": null,
+            "rating": null,
+            "releasedAt": null,
             "title": "Alpha"
           }
         ],
@@ -358,6 +411,11 @@
                 "name": "Horror"
               }
             ],
+            "inStock": null,
+            "pages": null,
+            "publishedOn": null,
+            "rating": null,
+            "releasedAt": null,
             "title": "Beta"
           }
         ],
@@ -372,7 +430,11 @@
         "author": {
           "books": [
             {
+              "inStock": null,
               "pages": 100,
+              "publishedOn": null,
+              "rating": null,
+              "releasedAt": null,
               "title": "Alpha"
             }
           ],
@@ -384,6 +446,11 @@
         "author": {
           "books": [
             {
+              "inStock": null,
+              "pages": null,
+              "publishedOn": null,
+              "rating": null,
+              "releasedAt": null,
               "title": "Beta"
             }
           ],
@@ -392,6 +459,7 @@
         "title": "Beta"
       },
       {
+        "author": null,
         "title": "Gamma"
       }
     ]
@@ -403,6 +471,8 @@
       "author": {
         "name": "Ann"
       },
+      "category": null,
+      "cover": null,
       "editions": [
         {
           "amount": 1,
@@ -421,7 +491,8 @@
         "currency": "USD",
         "minor": "100"
       },
-      "title": "Alpha"
+      "title": "Alpha",
+      "topic": null
     }
   },
   "filter by a to-one relation's field": {
@@ -554,6 +625,7 @@
           "name": "Poetry"
         }
       ],
+      "pages": null,
       "title": "Delta"
     }
   },
@@ -715,6 +787,7 @@
   "to-one null clears": {
     "status": 200,
     "data": {
+      "author": null,
       "genres": [],
       "pages": 7,
       "title": "Delta"
@@ -734,6 +807,7 @@
   "to-one disconnect": {
     "status": 200,
     "data": {
+      "author": null,
       "genres": [],
       "pages": 7,
       "title": "Delta"
@@ -821,6 +895,7 @@
   "a failed write changed nothing": {
     "status": 200,
     "data": {
+      "author": null,
       "genres": [],
       "pages": 7,
       "title": "Delta"
