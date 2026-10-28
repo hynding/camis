@@ -1,0 +1,564 @@
+{
+  "a set keeps the order it was given": {
+    "status": 200,
+    "data": {
+      "genres": [
+        {
+          "name": "Charlie"
+        },
+        {
+          "name": "Alpha"
+        }
+      ],
+      "inStock": null,
+      "pages": null,
+      "publishedOn": null,
+      "rating": null,
+      "releasedAt": null,
+      "title": "Linked"
+    }
+  },
+  "a list populates each row in link order": {
+    "status": 200,
+    "data": [
+      {
+        "genres": [],
+        "inStock": null,
+        "pages": null,
+        "publishedOn": null,
+        "rating": null,
+        "releasedAt": null,
+        "title": "Empty"
+      },
+      {
+        "genres": [
+          {
+            "name": "Charlie"
+          },
+          {
+            "name": "Alpha"
+          }
+        ],
+        "inStock": null,
+        "pages": null,
+        "publishedOn": null,
+        "rating": null,
+        "releasedAt": null,
+        "title": "Linked"
+      },
+      {
+        "genres": [],
+        "inStock": null,
+        "pages": null,
+        "publishedOn": null,
+        "rating": null,
+        "releasedAt": null,
+        "title": "Xray"
+      },
+      {
+        "genres": [],
+        "inStock": null,
+        "pages": null,
+        "publishedOn": null,
+        "rating": null,
+        "releasedAt": null,
+        "title": "Yankee"
+      }
+    ]
+  },
+  "a sort replaces the link order": {
+    "status": 200,
+    "data": {
+      "genres": [
+        {
+          "name": "Alpha"
+        },
+        {
+          "name": "Charlie"
+        }
+      ],
+      "inStock": null,
+      "pages": null,
+      "publishedOn": null,
+      "rating": null,
+      "releasedAt": null,
+      "title": "Linked"
+    }
+  },
+  "a published version keeps its links' order": {
+    "status": 200,
+    "data": {
+      "title": "Ordered",
+      "topics": [
+        {
+          "name": "Three"
+        },
+        {
+          "name": "One"
+        }
+      ],
+      "views": null
+    }
+  },
+  "connect before a linked relation": {
+    "status": 200,
+    "data": {
+      "genres": [
+        {
+          "name": "Bravo"
+        },
+        {
+          "name": "Charlie"
+        },
+        {
+          "name": "Alpha"
+        }
+      ],
+      "inStock": null,
+      "pages": null,
+      "publishedOn": null,
+      "rating": null,
+      "releasedAt": null,
+      "title": "Linked"
+    }
+  },
+  "connect at the start": {
+    "status": 200,
+    "data": {
+      "genres": [
+        {
+          "name": "Delta"
+        },
+        {
+          "name": "Bravo"
+        },
+        {
+          "name": "Charlie"
+        },
+        {
+          "name": "Alpha"
+        }
+      ],
+      "inStock": null,
+      "pages": null,
+      "publishedOn": null,
+      "rating": null,
+      "releasedAt": null,
+      "title": "Linked"
+    }
+  },
+  "move a linked relation to the end": {
+    "status": 200,
+    "data": {
+      "genres": [
+        {
+          "name": "Delta"
+        },
+        {
+          "name": "Bravo"
+        },
+        {
+          "name": "Alpha"
+        },
+        {
+          "name": "Charlie"
+        }
+      ],
+      "inStock": null,
+      "pages": null,
+      "publishedOn": null,
+      "rating": null,
+      "releasedAt": null,
+      "title": "Linked"
+    }
+  },
+  "move a linked relation after another": {
+    "status": 200,
+    "data": {
+      "genres": [
+        {
+          "name": "Delta"
+        },
+        {
+          "name": "Alpha"
+        },
+        {
+          "name": "Bravo"
+        },
+        {
+          "name": "Charlie"
+        }
+      ],
+      "inStock": null,
+      "pages": null,
+      "publishedOn": null,
+      "rating": null,
+      "releasedAt": null,
+      "title": "Linked"
+    }
+  },
+  "connect a linked relation without a position moves it to the end": {
+    "status": 200,
+    "data": {
+      "genres": [
+        {
+          "name": "Delta"
+        },
+        {
+          "name": "Alpha"
+        },
+        {
+          "name": "Charlie"
+        },
+        {
+          "name": "Bravo"
+        }
+      ],
+      "inStock": null,
+      "pages": null,
+      "publishedOn": null,
+      "rating": null,
+      "releasedAt": null,
+      "title": "Linked"
+    }
+  },
+  "positions by numeric id": {
+    "status": 200,
+    "data": {
+      "genres": [
+        {
+          "name": "Delta"
+        },
+        {
+          "name": "Alpha"
+        },
+        {
+          "name": "Bravo"
+        },
+        {
+          "name": "Charlie"
+        }
+      ],
+      "inStock": null,
+      "pages": null,
+      "publishedOn": null,
+      "rating": null,
+      "releasedAt": null,
+      "title": "Linked"
+    }
+  },
+  "disconnect and connect the same relation keeps it, positioned among its neighbours": {
+    "status": 200,
+    "data": {
+      "genres": [
+        {
+          "name": "Alpha"
+        },
+        {
+          "name": "Bravo"
+        },
+        {
+          "name": "Delta"
+        },
+        {
+          "name": "Charlie"
+        }
+      ],
+      "inStock": null,
+      "pages": null,
+      "publishedOn": null,
+      "rating": null,
+      "releasedAt": null,
+      "title": "Linked"
+    }
+  },
+  "a connect positioned next to one connected in the same request": {
+    "status": 200,
+    "data": {
+      "genres": [
+        {
+          "name": "Alpha"
+        },
+        {
+          "name": "Bravo"
+        }
+      ],
+      "inStock": null,
+      "pages": null,
+      "publishedOn": null,
+      "rating": null,
+      "releasedAt": null,
+      "title": "Empty"
+    }
+  },
+  "a position next to a relation that is not linked is refused": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "There was a problem connecting relation with id 3 at position {\"before\":4,\"locale\":\"en\"}. The relation with id 4 needs to be connected first."
+    }
+  },
+  "a position next to a document that does not exist is refused": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Document with id \"nothing\", locale \"\" not found"
+    }
+  },
+  "the same relation connected twice is refused": {
+    "status": 200,
+    "data": {
+      "genres": [
+        {
+          "name": "Alpha"
+        },
+        {
+          "name": "Bravo"
+        },
+        {
+          "name": "Charlie"
+        }
+      ],
+      "inStock": null,
+      "pages": null,
+      "publishedOn": null,
+      "rating": null,
+      "releasedAt": null,
+      "title": "Empty"
+    }
+  },
+  "a set replaces the order": {
+    "status": 200,
+    "data": {
+      "genres": [
+        {
+          "name": "Bravo"
+        },
+        {
+          "name": "Delta"
+        }
+      ],
+      "inStock": null,
+      "pages": null,
+      "publishedOn": null,
+      "rating": null,
+      "releasedAt": null,
+      "title": "Linked"
+    }
+  },
+  "a plain connect appends": {
+    "status": 200,
+    "data": {
+      "genres": [
+        {
+          "name": "Bravo"
+        },
+        {
+          "name": "Delta"
+        },
+        {
+          "name": "Alpha"
+        }
+      ],
+      "inStock": null,
+      "pages": null,
+      "publishedOn": null,
+      "rating": null,
+      "releasedAt": null,
+      "title": "Linked"
+    }
+  },
+  "link Yankee to Ann": {
+    "status": 200,
+    "data": {
+      "author": {
+        "name": "Ann"
+      },
+      "inStock": null,
+      "pages": null,
+      "publishedOn": null,
+      "rating": null,
+      "releasedAt": null,
+      "title": "Yankee"
+    }
+  },
+  "link Xray to Ann": {
+    "status": 200,
+    "data": {
+      "author": {
+        "name": "Ann"
+      },
+      "inStock": null,
+      "pages": null,
+      "publishedOn": null,
+      "rating": null,
+      "releasedAt": null,
+      "title": "Xray"
+    }
+  },
+  "link Linked to Ann": {
+    "status": 200,
+    "data": {
+      "author": {
+        "name": "Ann"
+      },
+      "inStock": null,
+      "pages": null,
+      "publishedOn": null,
+      "rating": null,
+      "releasedAt": null,
+      "title": "Linked"
+    }
+  },
+  "the other side lists rows in the order they were linked": {
+    "status": 200,
+    "data": {
+      "books": [
+        {
+          "inStock": null,
+          "pages": null,
+          "publishedOn": null,
+          "rating": null,
+          "releasedAt": null,
+          "title": "Yankee"
+        },
+        {
+          "inStock": null,
+          "pages": null,
+          "publishedOn": null,
+          "rating": null,
+          "releasedAt": null,
+          "title": "Xray"
+        },
+        {
+          "inStock": null,
+          "pages": null,
+          "publishedOn": null,
+          "rating": null,
+          "releasedAt": null,
+          "title": "Linked"
+        }
+      ],
+      "name": "Ann"
+    }
+  },
+  "the other side honours a connect position": {
+    "status": 200,
+    "data": {
+      "books": [
+        {
+          "inStock": null,
+          "pages": null,
+          "publishedOn": null,
+          "rating": null,
+          "releasedAt": null,
+          "title": "Linked"
+        },
+        {
+          "inStock": null,
+          "pages": null,
+          "publishedOn": null,
+          "rating": null,
+          "releasedAt": null,
+          "title": "Yankee"
+        },
+        {
+          "inStock": null,
+          "pages": null,
+          "publishedOn": null,
+          "rating": null,
+          "releasedAt": null,
+          "title": "Xray"
+        }
+      ],
+      "name": "Ann"
+    }
+  },
+  "the other side's set replaces the order and unlinks the rest": {
+    "status": 200,
+    "data": {
+      "books": [
+        {
+          "inStock": null,
+          "pages": null,
+          "publishedOn": null,
+          "rating": null,
+          "releasedAt": null,
+          "title": "Xray"
+        },
+        {
+          "inStock": null,
+          "pages": null,
+          "publishedOn": null,
+          "rating": null,
+          "releasedAt": null,
+          "title": "Yankee"
+        }
+      ],
+      "name": "Ann"
+    }
+  },
+  "an unlinked row has no author": {
+    "status": 200,
+    "data": {
+      "author": null,
+      "inStock": null,
+      "pages": null,
+      "publishedOn": null,
+      "rating": null,
+      "releasedAt": null,
+      "title": "Linked"
+    }
+  },
+  "a draft's links move while the published version keeps its order": {
+    "status": 200,
+    "data": {
+      "title": "Ordered",
+      "topics": [
+        {
+          "name": "Two"
+        },
+        {
+          "name": "Three"
+        },
+        {
+          "name": "One"
+        }
+      ],
+      "views": null
+    }
+  },
+  "the published version before publishing": {
+    "status": 200,
+    "data": {
+      "title": "Ordered",
+      "topics": [
+        {
+          "name": "Three"
+        },
+        {
+          "name": "One"
+        }
+      ],
+      "views": null
+    }
+  },
+  "publishing carries the draft's order": {
+    "status": 200,
+    "data": {
+      "title": "Ordered",
+      "topics": [
+        {
+          "name": "Two"
+        },
+        {
+          "name": "Three"
+        },
+        {
+          "name": "One"
+        }
+      ],
+      "views": null
+    }
+  }
+}

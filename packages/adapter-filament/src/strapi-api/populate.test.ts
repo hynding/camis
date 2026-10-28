@@ -77,17 +77,17 @@ describe("serializer relation and component maps", () => {
   });
   it("maps a to-one relation to its target serializer, model, foreign key and Strapi uid", () => {
     expect(serializer("Book")).toContain(
-      "'author' => ['relation' => 'author', 'kind' => 'belongsTo', 'model' => \\App\\Models\\Author::class, 'serializer' => AuthorSerializer::class, 'foreignKey' => 'author_id', 'uid' => 'api::author.author', 'holder' => 'self', 'draftPublish' => false, 'localized' => false],",
+      "'author' => ['relation' => 'author', 'kind' => 'belongsTo', 'model' => \\App\\Models\\Author::class, 'serializer' => AuthorSerializer::class, 'foreignKey' => 'author_id', 'uid' => 'api::author.author', 'holder' => 'self', 'draftPublish' => false, 'localized' => false, 'order' => null, 'inverseOrder' => 'author_ord'],",
     );
   });
-  it("maps a to-many relation through its pivot", () => {
+  it("maps a to-many relation through its pivot, which keeps both sides' link order", () => {
     expect(serializer("Book")).toContain(
-      "'genres' => ['relation' => 'genres', 'kind' => 'belongsToMany', 'model' => \\App\\Models\\Genre::class, 'serializer' => GenreSerializer::class, 'foreignKey' => null, 'uid' => 'api::genre.genre', 'holder' => 'self', 'draftPublish' => false, 'localized' => false],",
+      "'genres' => ['relation' => 'genres', 'kind' => 'belongsToMany', 'model' => \\App\\Models\\Genre::class, 'serializer' => GenreSerializer::class, 'foreignKey' => null, 'uid' => 'api::genre.genre', 'holder' => 'self', 'draftPublish' => false, 'localized' => false, 'order' => 'genre_ord', 'inverseOrder' => 'book_ord'],",
     );
   });
-  it("maps the inverse side of a relation, whose foreign key lives on the other table", () => {
+  it("maps the inverse side of a relation, whose foreign key and link order live on the other table", () => {
     expect(serializer("Author")).toContain(
-      "'books' => ['relation' => 'books', 'kind' => 'hasMany', 'model' => \\App\\Models\\Book::class, 'serializer' => BookSerializer::class, 'foreignKey' => 'author_id', 'uid' => 'api::book.book', 'holder' => 'target', 'draftPublish' => false, 'localized' => false],",
+      "'books' => ['relation' => 'books', 'kind' => 'hasMany', 'model' => \\App\\Models\\Book::class, 'serializer' => BookSerializer::class, 'foreignKey' => 'author_id', 'uid' => 'api::book.book', 'holder' => 'target', 'draftPublish' => false, 'localized' => false, 'order' => 'author_ord', 'inverseOrder' => null],",
     );
   });
   it("maps a relation to the users-permissions user to its serializer and Strapi uid", () => {
@@ -105,6 +105,33 @@ describe("serializer relation and component maps", () => {
       "'role' => ['relation' => 'roles', 'kind' => 'belongsToMany', 'model' => \\Spatie\\Permission\\Models\\Role::class,",
     );
     expect(user).toContain("return StrapiUsers::wire($m);");
+  });
+});
+
+describe("link order", () => {
+  const migration = (): string =>
+    content("database/migrations/0001_01_03_000000_add_link_order_columns.php");
+  it("keeps a many-to-many's order for both sides on its pivot, as Strapi's link table does", () => {
+    expect(migration()).toContain(
+      "        Schema::table('book_genre', function (Blueprint $table): void {\n            $table->double('book_ord')->nullable();\n            $table->double('genre_ord')->nullable();\n        });",
+    );
+  });
+  it("keeps the order of a many-to-one's other side beside the foreign key", () => {
+    expect(migration()).toContain(
+      "        Schema::table('books', function (Blueprint $table): void {\n            $table->double('author_ord')->nullable();\n        });",
+    );
+  });
+  it("adds none for a relation no side lists", () => {
+    // Book.topic is a many-to-one Topic does not list.
+    expect(migration()).not.toMatch(/Schema::table\('books'[^}]*topic_ord/);
+    expect(migration()).not.toContain("Schema::table('notes'");
+  });
+  it("writes connects through Strapi's relation orderer", () => {
+    const php = content("app/Support/StrapiLinkOrder.php");
+    expect(php).toContain(
+      "public static function write(Model $row, Relation $eloquent, array $link): void",
+    );
+    expect(php).toContain("The relation with id %s needs to be connected first.");
   });
 });
 
@@ -196,7 +223,7 @@ describe("populate conformance vectors", () => {
       for (const k of Object.keys(row.data)) expect(names).toContain(k);
     }
   });
-  it.each(["populate-vectors", "user-relation-vectors"])(
+  it.each(["populate-vectors", "user-relation-vectors", "link-order-vectors"])(
     "%s: every read and write has a unique name and a recorded strapi-php outcome",
     (file) => {
       const set = JSON.parse(fixture(`${file}.json`)) as typeof vectors;
