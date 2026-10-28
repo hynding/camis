@@ -167,12 +167,14 @@ final class StrapiPopulate
             StrapiQuery::order($query, $sub['sort'] ?? null, $relation['serializer']::FIELDS, $viewer);
         };
         $count = self::counted($sub);
+        // A to-many lists its links in the order they were made unless the entry sorts it.
+        $order = ! $count && ! isset($sub['sort']) ? ($relation['order'] ?? null) : null;
         $links = $relation['kind'] === 'localizations'
             ? self::localizations($rows, $relation['draftPublish'] ? $published : null, $narrow, $count)
             : match (self::projection($relation, $serializer::DRAFT_PUBLISH, $published)) {
-                'forward' => self::forward($rows, $relation, $narrow, $count),
-                'parent' => self::parent($rows, $relation, $narrow, $count),
-                default => self::linked($rows, $relation, $relation['draftPublish'] ? $published : null, $narrow, $count),
+                'forward' => self::forward($rows, $relation, $narrow, $count, $order),
+                'parent' => self::parent($rows, $relation, $narrow, $count, $order),
+                default => self::linked($rows, $relation, $relation['draftPublish'] ? $published : null, $narrow, $count, $order),
             };
         if ($count) {
             return ['count' => true, 'links' => $links, 'wires' => []];
@@ -213,15 +215,18 @@ final class StrapiPopulate
      *
      * @return array<int|string, list<Model>|int> row key → its targets, or their number when counted
      */
-    private static function linked(Collection $rows, array $relation, ?bool $status, Closure $narrow, bool $count): array
+    private static function linked(Collection $rows, array $relation, ?bool $status, Closure $narrow, bool $count, ?string $order = null): array
     {
         $name = $relation['relation'];
         // load() hands the closure the relation, loadCount() the target's own query.
         $media = in_array($relation['kind'], ['mediaOne', 'mediaMany'], true);
-        $constrain = function (Relation|Builder $query) use ($status, $narrow, $media): void {
+        $constrain = function (Relation|Builder $query) use ($status, $narrow, $media, $order): void {
             // A media field lists its files in the order they were given, before any sort.
             if ($media && $query instanceof BelongsToMany) {
                 $query->orderByPivot('order');
+            }
+            if ($order !== null && $query instanceof Relation) {
+                StrapiLinkOrder::sort($query, $query instanceof BelongsToMany ? $query->qualifyPivotColumn($order) : $query->getRelated()->qualifyColumn($order));
             }
             $builder = $query instanceof Relation ? $query->getQuery() : $query;
             if ($status !== null) {
@@ -247,10 +252,14 @@ final class StrapiPopulate
     }
 
     /** @return array<int|string, list<Model>|int> */
-    private static function forward(Collection $rows, array $relation, Closure $narrow, bool $count): array
+    private static function forward(Collection $rows, array $relation, Closure $narrow, bool $count, ?string $order): array
     {
         $name = $relation['relation'];
-        $rows->load($name);
+        $rows->load([$name => function (Relation $query) use ($order): void {
+            if ($order !== null) {
+                StrapiLinkOrder::sort($query, $query instanceof BelongsToMany ? $query->qualifyPivotColumn($order) : $query->getRelated()->qualifyColumn($order));
+            }
+        }]);
         $columns = $relation['localized'] ? ['document_id', 'locale'] : ['document_id'];
         $drafts = [];
         foreach ($rows as $row) {
@@ -266,6 +275,10 @@ final class StrapiPopulate
         foreach ($drafts as $key => $linkedDrafts) {
             $versions = array_map(fn (Model $draft) => StrapiDocuments::versionKey($draft, $columns), $linkedDrafts);
             $linked = $published->filter(fn (Model $target) => in_array(StrapiDocuments::versionKey($target, $columns), $versions, true))->values()->all();
+            if ($order !== null) {
+                // In the drafts' link order, not the published query's.
+                usort($linked, fn (Model $a, Model $b) => array_search(StrapiDocuments::versionKey($a, $columns), $versions, true) <=> array_search(StrapiDocuments::versionKey($b, $columns), $versions, true));
+            }
             $links[$key] = $count ? count($linked) : $linked;
         }
 
@@ -273,7 +286,7 @@ final class StrapiPopulate
     }
 
     /** @return array<int|string, list<Model>|int> */
-    private static function parent(Collection $rows, array $relation, Closure $narrow, bool $count): array
+    private static function parent(Collection $rows, array $relation, Closure $narrow, bool $count, ?string $order): array
     {
         $first = $rows->first();
         if ($first === null) {
@@ -281,7 +294,7 @@ final class StrapiPopulate
         }
         $query = $first->newQuery();
         $drafts = StrapiDocuments::withStatus($query->whereIn($query->qualifyColumn('document_id'), $rows->pluck('document_id')->unique()->values()->all()), false)->get();
-        $byDraft = self::linked($drafts, $relation, null, $narrow, $count);
+        $byDraft = self::linked($drafts, $relation, null, $narrow, $count, $order);
         $draftOf = $drafts->pluck($first->getKeyName(), 'document_id')->all();
         $links = [];
         foreach ($rows as $row) {

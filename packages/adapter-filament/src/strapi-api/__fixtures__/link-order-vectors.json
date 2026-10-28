@@ -1,0 +1,240 @@
+{
+  "about": "Strapi 5 keeps to-many relations in the order they were linked and honours connect positions (before, after, start, end), checked against strapi-php. Run on an empty database: seeds in order, then reads, then writes in order. '@type:Name' is that row's documentId, '#type:Name' its numeric id. Responses are compared after dropping the id, documentId, createdAt, updatedAt and publishedAt keys.",
+  "defaultQuery": "populate=genres",
+  "seed": [
+    { "path": "/genres", "as": "genres:Alpha", "data": { "name": "Alpha" } },
+    { "path": "/genres", "as": "genres:Bravo", "data": { "name": "Bravo" } },
+    { "path": "/genres", "as": "genres:Charlie", "data": { "name": "Charlie" } },
+    { "path": "/genres", "as": "genres:Delta", "data": { "name": "Delta" } },
+    {
+      "path": "/books",
+      "as": "books:Linked",
+      "data": { "title": "Linked", "genres": ["@genres:Charlie", "@genres:Alpha"] }
+    },
+    { "path": "/books", "as": "books:Empty", "data": { "title": "Empty" } },
+    { "path": "/books", "as": "books:Xray", "data": { "title": "Xray" } },
+    { "path": "/books", "as": "books:Yankee", "data": { "title": "Yankee" } },
+    { "path": "/authors", "as": "authors:Ann", "data": { "name": "Ann" } },
+    { "path": "/topics", "as": "topics:One", "data": { "name": "One" } },
+    { "path": "/topics", "as": "topics:Two", "data": { "name": "Two" } },
+    { "path": "/topics", "as": "topics:Three", "data": { "name": "Three" } },
+    {
+      "path": "/posts",
+      "as": "posts:Ordered",
+      "data": { "title": "Ordered", "topics": ["@topics:Three", "@topics:One"] }
+    }
+  ],
+  "reads": [
+    {
+      "name": "a set keeps the order it was given",
+      "path": "/books/@books:Linked",
+      "query": "populate=genres"
+    },
+    {
+      "name": "a list populates each row in link order",
+      "path": "/books",
+      "query": "populate=genres&sort=title"
+    },
+    {
+      "name": "a sort replaces the link order",
+      "path": "/books/@books:Linked",
+      "query": "populate[genres][sort]=name"
+    },
+    {
+      "name": "a published version keeps its links' order",
+      "path": "/posts/@posts:Ordered",
+      "query": "populate=topics"
+    }
+  ],
+  "writes": [
+    {
+      "name": "connect before a linked relation",
+      "method": "PUT",
+      "path": "/books/@books:Linked",
+      "data": {
+        "genres": {
+          "connect": [
+            { "documentId": "@genres:Bravo", "position": { "before": "@genres:Charlie" } }
+          ]
+        }
+      }
+    },
+    {
+      "name": "connect at the start",
+      "method": "PUT",
+      "path": "/books/@books:Linked",
+      "data": {
+        "genres": { "connect": [{ "documentId": "@genres:Delta", "position": { "start": true } }] }
+      }
+    },
+    {
+      "name": "move a linked relation to the end",
+      "method": "PUT",
+      "path": "/books/@books:Linked",
+      "data": {
+        "genres": { "connect": [{ "documentId": "@genres:Charlie", "position": { "end": true } }] }
+      }
+    },
+    {
+      "name": "move a linked relation after another",
+      "method": "PUT",
+      "path": "/books/@books:Linked",
+      "data": {
+        "genres": {
+          "connect": [{ "documentId": "@genres:Alpha", "position": { "after": "@genres:Delta" } }]
+        }
+      }
+    },
+    {
+      "name": "connect a linked relation without a position moves it to the end",
+      "method": "PUT",
+      "path": "/books/@books:Linked",
+      "data": { "genres": { "connect": ["@genres:Bravo"] } }
+    },
+    {
+      "name": "positions by numeric id",
+      "method": "PUT",
+      "path": "/books/@books:Linked",
+      "data": {
+        "genres": {
+          "connect": [{ "id": "#genres:Charlie", "position": { "after": "#genres:Bravo" } }]
+        }
+      }
+    },
+    {
+      "name": "disconnect and connect the same relation keeps it, positioned among its neighbours",
+      "method": "PUT",
+      "path": "/books/@books:Linked",
+      "data": {
+        "genres": {
+          "disconnect": ["@genres:Delta"],
+          "connect": [{ "documentId": "@genres:Delta", "position": { "start": true } }]
+        }
+      }
+    },
+    {
+      "name": "a connect positioned next to one connected in the same request",
+      "method": "PUT",
+      "path": "/books/@books:Empty",
+      "data": {
+        "genres": {
+          "connect": [
+            { "documentId": "@genres:Alpha", "position": { "before": "@genres:Bravo" } },
+            { "documentId": "@genres:Bravo" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a position next to a relation that is not linked is refused",
+      "method": "PUT",
+      "path": "/books/@books:Empty",
+      "data": {
+        "genres": {
+          "connect": [
+            { "documentId": "@genres:Charlie", "position": { "before": "@genres:Delta" } }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a position next to a document that does not exist is refused",
+      "method": "PUT",
+      "path": "/books/@books:Empty",
+      "data": {
+        "genres": {
+          "connect": [{ "documentId": "@genres:Charlie", "position": { "before": "nothing" } }]
+        }
+      }
+    },
+    {
+      "name": "the same relation connected twice is refused",
+      "method": "PUT",
+      "path": "/books/@books:Empty",
+      "data": { "genres": { "connect": ["@genres:Charlie", "@genres:Charlie"] } }
+    },
+    {
+      "name": "a set replaces the order",
+      "method": "PUT",
+      "path": "/books/@books:Linked",
+      "data": { "genres": ["@genres:Bravo", "@genres:Delta"] }
+    },
+    {
+      "name": "a plain connect appends",
+      "method": "PUT",
+      "path": "/books/@books:Linked",
+      "data": { "genres": { "connect": ["@genres:Alpha"] } }
+    },
+    {
+      "name": "link Yankee to Ann",
+      "method": "PUT",
+      "path": "/books/@books:Yankee",
+      "query": "populate=author",
+      "data": { "author": "@authors:Ann" }
+    },
+    {
+      "name": "link Xray to Ann",
+      "method": "PUT",
+      "path": "/books/@books:Xray",
+      "query": "populate=author",
+      "data": { "author": "@authors:Ann" }
+    },
+    {
+      "name": "link Linked to Ann",
+      "method": "PUT",
+      "path": "/books/@books:Linked",
+      "query": "populate=author",
+      "data": { "author": "@authors:Ann" }
+    },
+    {
+      "name": "the other side lists rows in the order they were linked",
+      "method": "GET",
+      "path": "/authors/@authors:Ann",
+      "query": "populate=books"
+    },
+    {
+      "name": "the other side honours a connect position",
+      "method": "PUT",
+      "path": "/authors/@authors:Ann",
+      "query": "populate=books",
+      "data": {
+        "books": { "connect": [{ "documentId": "@books:Linked", "position": { "start": true } }] }
+      }
+    },
+    {
+      "name": "the other side's set replaces the order and unlinks the rest",
+      "method": "PUT",
+      "path": "/authors/@authors:Ann",
+      "query": "populate=books",
+      "data": { "books": ["@books:Xray", "@books:Yankee"] }
+    },
+    {
+      "name": "an unlinked row has no author",
+      "method": "GET",
+      "path": "/books/@books:Linked",
+      "query": "populate=author"
+    },
+    {
+      "name": "a draft's links move while the published version keeps its order",
+      "method": "PUT",
+      "path": "/posts/@posts:Ordered",
+      "query": "status=draft&populate=topics",
+      "data": {
+        "topics": { "connect": [{ "documentId": "@topics:Two", "position": { "start": true } }] }
+      }
+    },
+    {
+      "name": "the published version before publishing",
+      "method": "GET",
+      "path": "/posts/@posts:Ordered",
+      "query": "populate=topics"
+    },
+    {
+      "name": "publishing carries the draft's order",
+      "method": "PUT",
+      "path": "/posts/@posts:Ordered",
+      "query": "populate=topics",
+      "data": { "title": "Ordered" }
+    }
+  ]
+}

@@ -145,7 +145,7 @@ describe("media fields", () => {
   it("are populated like relations to the files", () => {
     const book = content("app/Http/Serializers/BookSerializer.php");
     expect(book).toContain(
-      "'cover' => ['relation' => 'cover', 'kind' => 'mediaOne', 'model' => \\App\\Models\\File::class, 'serializer' => FileSerializer::class, 'foreignKey' => null, 'uid' => 'plugin::upload.file', 'holder' => 'self', 'draftPublish' => false, 'localized' => false],",
+      "'cover' => ['relation' => 'cover', 'kind' => 'mediaOne', 'model' => \\App\\Models\\File::class, 'serializer' => FileSerializer::class, 'foreignKey' => null, 'uid' => 'plugin::upload.file', 'holder' => 'self', 'draftPublish' => false, 'localized' => false, 'order' => null, 'inverseOrder' => null],",
     );
     expect(book).toMatch(/'attachments' => \['relation' => 'attachments', 'kind' => 'mediaMany',/);
     expect(book).not.toContain("$m->cover");

@@ -13,7 +13,7 @@ final class StrapiRelations
     /**
      * The relation keys of a request's data, resolved to target ids.
      *
-     * @return array<string, array{relation: array, set: ?list<int>, connect: list<int>, disconnect: list<int>}>
+     * @return array<string, array{relation: array, set: ?list<int>, connect: list<array{id: int, position: ?array}>, disconnect: list<int>}>
      */
     public static function read(array $data, array $fields, ?Authenticatable $viewer, ?string $locale = null): array
     {
@@ -33,7 +33,10 @@ final class StrapiRelations
         return $links;
     }
 
-    /** To-one foreign keys on the row itself: set before it is saved, so a required one holds. */
+    /**
+     * To-one foreign keys on the row itself: set before it is saved, so a required one holds. A
+     * row linked to a new target takes the end of the target's list, when the target lists it.
+     */
     public static function associate(Model $row, array $links): void
     {
         foreach ($links as $link) {
@@ -41,7 +44,12 @@ final class StrapiRelations
                 continue;
             }
             $column = $link['relation']['foreignKey'];
-            $row->setAttribute($column, self::single($row->getAttribute($column), $link));
+            $target = self::single($row->getAttribute($column), $link);
+            $order = $link['relation']['inverseOrder'] ?? null;
+            if ($order !== null && ($target === null || (string) $target !== (string) $row->getAttribute($column))) {
+                $row->setAttribute($order, StrapiLinkOrder::next($row, $column, $order, $target));
+            }
+            $row->setAttribute($column, $target);
         }
     }
 
@@ -61,6 +69,11 @@ final class StrapiRelations
             $media = in_array($relation['kind'], ['mediaOne', 'mediaMany'], true);
             if ($media) {
                 $eloquent->orderByPivot('order');
+            }
+            if (($relation['order'] ?? null) !== null) {
+                StrapiLinkOrder::write($row, $eloquent, $link);
+
+                continue;
             }
             $current = array_map('intval', $eloquent->pluck($eloquent->getRelated()->getQualifiedKeyName())->all());
             $wanted = in_array($relation['kind'], ['hasOne', 'mediaOne'], true)
@@ -116,7 +129,7 @@ final class StrapiRelations
             return $link['set'] === [] ? null : end($link['set']);
         }
         if ($link['connect'] !== []) {
-            return end($link['connect']);
+            return end($link['connect'])['id'];
         }
 
         return in_array((int) $current, $link['disconnect'], true) ? null : $current;
@@ -132,7 +145,7 @@ final class StrapiRelations
             return $link['set'];
         }
         $ids = array_values(array_diff($current, $link['disconnect']));
-        foreach ($link['connect'] as $id) {
+        foreach (array_column($link['connect'], 'id') as $id) {
             if (! in_array($id, $ids, true)) {
                 $ids[] = $id;
             }
@@ -143,7 +156,7 @@ final class StrapiRelations
 
     // ----------------------------------------------------------------------------- reading
 
-    /** @return array{relation: array, set: ?list<int>, connect: list<int>, disconnect: list<int>} */
+    /** @return array{relation: array, set: ?list<int>, connect: list<array{id: int, position: ?array}>, disconnect: list<int>} */
     private static function instruction(array $relation, mixed $value, ?Authenticatable $viewer): array
     {
         $link = ['relation' => $relation, 'set' => null, 'connect' => [], 'disconnect' => []];
@@ -156,11 +169,55 @@ final class StrapiRelations
         } elseif (array_key_exists('set', $value)) {
             $link['set'] = self::resolve($relation, self::references($value['set']), $viewer);
         } else {
-            $link['connect'] = self::resolve($relation, self::references($value['connect'] ?? []), $viewer);
+            $link['connect'] = self::connects($relation, self::references($value['connect'] ?? []), $viewer);
             $link['disconnect'] = self::resolve($relation, self::references($value['disconnect'] ?? []), $viewer);
         }
 
         return $link;
+    }
+
+    /**
+     * Connect references with their positions, the neighbours a position names resolved as the
+     * references are. A position named by documentId carries the locale it was looked up in, as
+     * Strapi's does (its errors show it).
+     *
+     * @return list<array{id: int, position: ?array}>
+     */
+    private static function connects(array $relation, array $references, ?Authenticatable $viewer): array
+    {
+        $positions = [];
+        $neighbours = [];
+        foreach ($references as $i => $reference) {
+            $position = is_array($reference) && is_array($reference['position'] ?? null) ? $reference['position'] : null;
+            foreach (['before', 'after'] as $side) {
+                if (! empty($position[$side])) {
+                    $neighbours[] = $position[$side];
+                }
+            }
+            $positions[$i] = $position;
+        }
+        $ids = self::resolveEach($relation, $references, $viewer);
+        $neighbourIds = array_combine(array_map('strval', $neighbours), self::resolveEach($relation, $neighbours, $viewer)) ?: [];
+        $connect = [];
+        foreach ($references as $i => $reference) {
+            if (isset($connect[$ids[$i]])) {
+                continue;
+            }
+            $position = $positions[$i];
+            if ($position !== null) {
+                foreach (['before', 'after'] as $side) {
+                    if (! empty($position[$side])) {
+                        $position[$side] = $neighbourIds[(string) $position[$side]];
+                    }
+                }
+                if (is_array($reference) && isset($reference['documentId']) && empty($position['locale'])) {
+                    $position['locale'] = $relation['locale'] ?? (class_exists(StrapiLocales::class) ? StrapiLocales::default() : 'en');
+                }
+            }
+            $connect[$ids[$i]] = ['id' => $ids[$i], 'position' => $position];
+        }
+
+        return array_values($connect);
     }
 
     private static function references(mixed $value): array
@@ -169,12 +226,12 @@ final class StrapiRelations
     }
 
     /**
-     * documentIds and numeric ids to the target's ids, in the order given, counting only rows the
-     * caller can see.
+     * documentIds and numeric ids to the target's ids, one for each reference in the order given,
+     * counting only rows the caller can see.
      *
      * @return list<int>
      */
-    private static function resolve(array $relation, array $references, ?Authenticatable $viewer): array
+    private static function resolveEach(array $relation, array $references, ?Authenticatable $viewer): array
     {
         $documentIds = [];
         $ids = [];
@@ -211,7 +268,13 @@ final class StrapiRelations
             $resolved[] = is_string($reference) && ! ctype_digit($reference) ? $byDocumentId[$reference] : $byId[(int) $reference];
         }
 
-        return array_values(array_unique($resolved));
+        return $resolved;
+    }
+
+    /** @return list<int> */
+    private static function resolve(array $relation, array $references, ?Authenticatable $viewer): array
+    {
+        return array_values(array_unique(self::resolveEach($relation, $references, $viewer)));
     }
 
     /** @return array<int|string, int> column value → id */

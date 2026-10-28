@@ -244,12 +244,14 @@ overwrite app/Support/StrapiDocuments.php
 overwrite app/Support/StrapiError.php
 overwrite app/Support/StrapiExport.php
 overwrite app/Support/StrapiImport.php
+overwrite app/Support/StrapiLinkOrder.php
 overwrite app/Support/StrapiLocales.php
 overwrite app/Support/StrapiOAuth.php
 overwrite app/Support/StrapiPopulate.php
 overwrite app/Support/StrapiProviders.php
 overwrite app/Support/StrapiQuery.php
 overwrite app/Support/StrapiRelations.php
+overwrite app/Support/StrapiRelationsOrderer.php
 overwrite app/Support/StrapiRoles.php
 overwrite app/Support/StrapiSessions.php
 overwrite app/Support/StrapiSettings.php
@@ -297,6 +299,7 @@ overwrite database/migrations/0001_01_02_000022_create_activity_sessions_quantit
 overwrite database/migrations/0001_01_02_000023_create_books_editions_table.php
 overwrite database/migrations/0001_01_02_000024_create_landings_blocks_hero_table.php
 overwrite database/migrations/0001_01_02_000025_create_landings_blocks_quantity_table.php
+overwrite database/migrations/0001_01_03_000000_add_link_order_columns.php
 overwrite database/seeders/RolePermissionSeeder.php
 overwrite resources/strapi/schemas.jsonl
 overwrite routes/api.php

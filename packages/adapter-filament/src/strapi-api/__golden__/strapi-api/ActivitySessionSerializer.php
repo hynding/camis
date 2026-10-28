@@ -18,7 +18,7 @@ final class ActivitySessionSerializer
             'amount' => ['column' => 'amount', 'type' => 'decimal'],
             'unit' => ['column' => 'unit', 'type' => 'string'],
         ]],
-        'owner' => ['relation' => 'owner', 'kind' => 'belongsTo', 'model' => \App\Models\User::class, 'serializer' => UserSerializer::class, 'foreignKey' => 'owner_id', 'uid' => 'plugin::users-permissions.user', 'holder' => 'self', 'draftPublish' => false, 'localized' => false],
+        'owner' => ['relation' => 'owner', 'kind' => 'belongsTo', 'model' => \App\Models\User::class, 'serializer' => UserSerializer::class, 'foreignKey' => 'owner_id', 'uid' => 'plugin::users-permissions.user', 'holder' => 'self', 'draftPublish' => false, 'localized' => false, 'order' => null, 'inverseOrder' => null],
         'createdAt' => ['column' => 'created_at', 'type' => 'dateTime'],
         'updatedAt' => ['column' => 'updated_at', 'type' => 'dateTime'],
         'publishedAt' => ['column' => 'updated_at', 'type' => 'dateTime'],
