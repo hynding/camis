@@ -137,8 +137,8 @@ describe("serializers of localized types", () => {
     );
   });
   it("say whether each relation's target is localized", () => {
-    expect(article).toMatch(/'category' => \[[^\n]*'localized' => true\],/);
-    expect(article).toMatch(/'genres' => \[[^\n]*'localized' => false\],/);
+    expect(article).toMatch(/'category' => \[[^\n]*'localized' => true,/);
+    expect(article).toMatch(/'genres' => \[[^\n]*'localized' => false,/);
   });
 });
 

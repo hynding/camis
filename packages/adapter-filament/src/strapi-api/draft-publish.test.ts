@@ -106,10 +106,10 @@ describe("serializers of draft-and-publish types", () => {
   it("say which side holds each relation's link and whether its target keeps versions", () => {
     expect(post).toContain("'topics' => ['relation' => 'topics', 'kind' => 'belongsToMany',");
     expect(post).toMatch(
-      /'topics' => \[[^\n]*'holder' => 'self', 'draftPublish' => true, 'localized' => false\],/,
+      /'topics' => \[[^\n]*'holder' => 'self', 'draftPublish' => true, 'localized' => false,/,
     );
     expect(content("app/Http/Serializers/AuthorSerializer.php")).toMatch(
-      /'books' => \[[^\n]*'holder' => 'target', 'draftPublish' => false, 'localized' => false\],/,
+      /'books' => \[[^\n]*'holder' => 'target', 'draftPublish' => false, 'localized' => false,/,
     );
   });
 });

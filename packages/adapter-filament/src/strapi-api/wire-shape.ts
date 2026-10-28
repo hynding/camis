@@ -57,6 +57,15 @@ export interface WireRelation {
   draftPublish: boolean;
   /** Whether the target keeps one row per locale (Phase 22). */
   localized: boolean;
+  /** Where a to-many side keeps its targets' link order (Strapi's `*_ord`), when it has one. */
+  order: LinkOrder | null;
+  /** Where this row's place in the target's own to-many list is kept, when the target lists it. */
+  inverseOrder: LinkOrder | null;
+}
+/** An order column: on the pivot for a many-to-many, else on the table holding the foreign key. */
+export interface LinkOrder {
+  table: string;
+  column: string;
 }
 export interface WireShape {
   model: string;
@@ -166,6 +175,8 @@ export const wireShape = (
               holder: "self" as const,
               draftPublish: versioned.has(ct.name),
               localized: true,
+              order: null,
+              inverseOrder: null,
             },
           ]
         : []),
@@ -190,6 +201,8 @@ const mediaRelations = (ct: ContentType, fileModel: string): WireRelation[] =>
             holder: "self" as const,
             draftPublish: false,
             localized: false,
+            order: null,
+            inverseOrder: null,
           },
         ]
       : [],
@@ -220,6 +233,7 @@ const wireRelations = (
     target: ContentType,
     foreignKey: string | null,
     holder: WireRelation["holder"],
+    order: Pick<WireRelation, "order" | "inverseOrder"> = { order: null, inverseOrder: null },
   ): WireRelation => ({
     key,
     relation: name,
@@ -230,7 +244,23 @@ const wireRelations = (
     holder,
     draftPublish: versioned.has(target.name),
     localized: localized.has(target.name),
+    ...order,
   });
+  const table = (c: ContentType): string => filamentNames(c).table;
+  // A many-to-many keeps both sides' orders on its pivot, as Strapi's link table does: the
+  // column named for a side holds that side's place in the other's list.
+  const pivotOrder = (
+    self: ContentType,
+    target: ContentType,
+  ): Pick<WireRelation, "order" | "inverseOrder"> => {
+    const [a, b] = [snake(self.name), snake(target.name)];
+    if (a === b) return { order: null, inverseOrder: null };
+    const pivot = a < b ? `${a}_${b}` : `${b}_${a}`;
+    return {
+      order: { table: pivot, column: `${b}_ord` },
+      inverseOrder: { table: pivot, column: `${a}_ord` },
+    };
+  };
   const own: WireRelation[] = [];
   for (const f of ct.fields) {
     if (f.type !== "relation") continue;
@@ -238,14 +268,35 @@ const wireRelations = (
     if (target === undefined || (target.builtin !== undefined && target.builtin !== "user"))
       continue;
     if (f.relationKind === "manyToOne" || f.relationKind === "oneToOne") {
+      const base = snakeColumn(f.name);
+      // The target lists this row only through a declared inverse of a many-to-one.
+      const listed = f.relationKind === "manyToOne" && f.inverse !== undefined;
       own.push(
-        entry(fieldApiName(f), f.name, "belongsTo", target, `${snakeColumn(f.name)}_id`, "self"),
+        entry(fieldApiName(f), f.name, "belongsTo", target, `${base}_id`, "self", {
+          order: null,
+          inverseOrder: listed ? { table: table(ct), column: `${base}_ord` } : null,
+        }),
       );
     } else if (f.relationKind === "oneToMany") {
-      const fk = `${snakeColumn(f.inverse ?? snake(ct.name))}_id`;
-      own.push(entry(fieldApiName(f), f.name, "hasMany", target, fk, "target"));
+      const base = snakeColumn(f.inverse ?? snake(ct.name));
+      own.push(
+        entry(fieldApiName(f), f.name, "hasMany", target, `${base}_id`, "target", {
+          order: { table: table(target), column: `${base}_ord` },
+          inverseOrder: null,
+        }),
+      );
     } else {
-      own.push(entry(fieldApiName(f), f.name, "belongsToMany", target, null, "self"));
+      own.push(
+        entry(
+          fieldApiName(f),
+          f.name,
+          "belongsToMany",
+          target,
+          null,
+          "self",
+          pivotOrder(ct, target),
+        ),
+      );
     }
   }
   const inverse: WireRelation[] = [];
@@ -254,19 +305,37 @@ const wireRelations = (
       for (const g of other.fields) {
         if (g.type !== "relation" || g.target !== ct.name || g.inverse === undefined) continue;
         if (g.relationKind === "manyToOne") {
+          const base = snakeColumn(g.name);
           inverse.push(
-            entry(g.inverse, g.inverse, "hasMany", other, `${snakeColumn(g.name)}_id`, "target"),
+            entry(g.inverse, g.inverse, "hasMany", other, `${base}_id`, "target", {
+              order: { table: table(other), column: `${base}_ord` },
+              inverseOrder: null,
+            }),
           );
         } else if (g.relationKind === "oneToOne") {
           inverse.push(
             entry(g.inverse, g.inverse, "hasOne", other, `${snakeColumn(g.name)}_id`, "target"),
           );
         } else if (g.relationKind === "oneToMany") {
+          const base = snakeColumn(g.inverse);
           inverse.push(
-            entry(g.inverse, g.inverse, "belongsTo", other, `${snakeColumn(g.inverse)}_id`, "self"),
+            entry(g.inverse, g.inverse, "belongsTo", other, `${base}_id`, "self", {
+              order: null,
+              inverseOrder: { table: table(ct), column: `${base}_ord` },
+            }),
           );
         } else {
-          inverse.push(entry(g.inverse, g.inverse, "belongsToMany", other, null, "target"));
+          inverse.push(
+            entry(
+              g.inverse,
+              g.inverse,
+              "belongsToMany",
+              other,
+              null,
+              "target",
+              pivotOrder(ct, other),
+            ),
+          );
         }
       }
     }

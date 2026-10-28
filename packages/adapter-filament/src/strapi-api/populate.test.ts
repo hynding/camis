@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PHP_MARKER } from "../hooks/names";
 import { filamentAdapter } from "../generate";
 import { strapiApiBundle } from "./__fixtures__/strapi-api";
+import { emitStrapiLinkOrder, emitStrapiRelationsOrderer } from "./link-order";
 import { emitStrapiPopulate, emitStrapiRelations } from "./populate-runtime";
 
 const hasPhp = (): boolean => {
@@ -34,6 +35,8 @@ const controller = (model: string): string =>
 const runtimes = [
   { path: "app/Support/StrapiPopulate.php", emit: emitStrapiPopulate },
   { path: "app/Support/StrapiRelations.php", emit: emitStrapiRelations },
+  { path: "app/Support/StrapiLinkOrder.php", emit: emitStrapiLinkOrder },
+  { path: "app/Support/StrapiRelationsOrderer.php", emit: emitStrapiRelationsOrderer },
 ];
 
 describe("populate and relation runtime files", () => {
@@ -50,6 +53,14 @@ describe("populate and relation runtime files", () => {
   it("StrapiRelations golden", async () => {
     await expect(emitStrapiRelations()).toMatchFileSnapshot(
       "./__golden__/strapi-api/StrapiRelations.php",
+    );
+  });
+  it("StrapiLinkOrder and StrapiRelationsOrderer golden", async () => {
+    await expect(emitStrapiLinkOrder()).toMatchFileSnapshot(
+      "./__golden__/strapi-api/StrapiLinkOrder.php",
+    );
+    await expect(emitStrapiRelationsOrderer()).toMatchFileSnapshot(
+      "./__golden__/strapi-api/StrapiRelationsOrderer.php",
     );
   });
 
@@ -92,10 +103,10 @@ describe("serializer relation and component maps", () => {
   });
   it("maps a relation to the users-permissions user to its serializer and Strapi uid", () => {
     expect(serializer("Review")).toContain(
-      "'reviewer' => ['relation' => 'reviewer', 'kind' => 'belongsTo', 'model' => \\App\\Models\\User::class, 'serializer' => UserSerializer::class, 'foreignKey' => 'reviewer_id', 'uid' => 'plugin::users-permissions.user', 'holder' => 'self', 'draftPublish' => false, 'localized' => false],",
+      "'reviewer' => ['relation' => 'reviewer', 'kind' => 'belongsTo', 'model' => \\App\\Models\\User::class, 'serializer' => UserSerializer::class, 'foreignKey' => 'reviewer_id', 'uid' => 'plugin::users-permissions.user', 'holder' => 'self', 'draftPublish' => false, 'localized' => false, 'order' => null, 'inverseOrder' => null],",
     );
     expect(serializer("Review")).toContain(
-      "'readers' => ['relation' => 'readers', 'kind' => 'belongsToMany', 'model' => \\App\\Models\\User::class, 'serializer' => UserSerializer::class, 'foreignKey' => null, 'uid' => 'plugin::users-permissions.user', 'holder' => 'self', 'draftPublish' => false, 'localized' => false],",
+      "'readers' => ['relation' => 'readers', 'kind' => 'belongsToMany', 'model' => \\App\\Models\\User::class, 'serializer' => UserSerializer::class, 'foreignKey' => null, 'uid' => 'plugin::users-permissions.user', 'holder' => 'self', 'draftPublish' => false, 'localized' => false, 'order' => 'user_ord', 'inverseOrder' => 'review_ord'],",
     );
   });
   it("renders a populated user as users-permissions does, its role a relation no grant reaches", () => {
@@ -127,11 +138,12 @@ describe("link order", () => {
     expect(migration()).not.toContain("Schema::table('notes'");
   });
   it("writes connects through Strapi's relation orderer", () => {
-    const php = content("app/Support/StrapiLinkOrder.php");
-    expect(php).toContain(
+    expect(content("app/Support/StrapiLinkOrder.php")).toContain(
       "public static function write(Model $row, Relation $eloquent, array $link): void",
     );
-    expect(php).toContain("The relation with id %s needs to be connected first.");
+    expect(content("app/Support/StrapiRelationsOrderer.php")).toContain(
+      "The relation with id %s needs to be connected first.",
+    );
   });
 });
 

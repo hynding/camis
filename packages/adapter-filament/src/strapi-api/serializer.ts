@@ -217,8 +217,10 @@ const hasHelper = `
 const fieldEntry = (s: WireScalar, indent: string): string =>
   `${indent}'${s.key.join(".")}' => ['column' => '${s.column}', 'type' => '${s.type}'],`;
 
+const column = (c: string | null | undefined): string => (c == null ? "null" : `'${c}'`);
+
 const relationEntry = (r: WireRelation, indent: string): string =>
-  `${indent}'${r.key}' => ['relation' => '${r.relation}', 'kind' => '${r.kind}', 'model' => \\App\\Models\\${r.model}::class, 'serializer' => ${r.model}Serializer::class, 'foreignKey' => ${r.foreignKey === null ? "null" : `'${r.foreignKey}'`}, 'uid' => '${r.uid}', 'holder' => '${r.holder}', 'draftPublish' => ${r.draftPublish}, 'localized' => ${r.localized}],`;
+  `${indent}'${r.key}' => ['relation' => '${r.relation}', 'kind' => '${r.kind}', 'model' => \\App\\Models\\${r.model}::class, 'serializer' => ${r.model}Serializer::class, 'foreignKey' => ${column(r.foreignKey)}, 'uid' => '${r.uid}', 'holder' => '${r.holder}', 'draftPublish' => ${r.draftPublish}, 'localized' => ${r.localized}, 'order' => ${column(r.order?.column)}, 'inverseOrder' => ${column(r.inverseOrder?.column)}],`;
 
 /**
  * The wire path → column map `App\Support\StrapiQuery` filters, sorts and selects by: every

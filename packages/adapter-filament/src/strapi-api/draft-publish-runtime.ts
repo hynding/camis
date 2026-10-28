@@ -213,8 +213,15 @@ final class StrapiDocuments
                 $to->{$field['relation']}()->sync(StrapiRelations::ordered($media->pluck($media->getRelated()->getQualifiedKeyName())->all()));
             } elseif (($field['kind'] ?? null) === 'belongsToMany' && $field['holder'] === 'self') {
                 $relation = $from->{$field['relation']}();
+                if (($field['order'] ?? null) !== null) {
+                    StrapiLinkOrder::sort($relation, $relation->qualifyPivotColumn($field['order']));
+                }
                 $ids = $relation->orderBy($relation->getRelated()->getQualifiedKeyName())->pluck($relation->getRelated()->getQualifiedKeyName())->all();
-                $to->{$field['relation']}()->sync(self::counterparts($field, $ids, $published));
+                $targets = self::counterparts($field, $ids, $published);
+                // The version written keeps the links in the order the other one holds them.
+                ($field['order'] ?? null) !== null
+                    ? StrapiLinkOrder::write($to, $to->{$field['relation']}(), ['relation' => $field, 'set' => $targets, 'connect' => [], 'disconnect' => []])
+                    : $to->{$field['relation']}()->sync($targets);
             }
         }
         foreach ($serializer::ZONES as $members) {

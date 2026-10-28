@@ -425,7 +425,8 @@ generated app as against strapi-php, on the laravel storage layout.
   a list (with dotted nesting, `books.genres`), or an object whose entries take `fields`,
   `filters`, `sort`, a nested `populate` and `count`. Unknown keys are Strapi's 400s.
 - Relations appear from both sides (an inverse such as `Author.books` too), as their target's wire
-  object; a to-many in id order. A relation to the users-permissions user is one too (Phase 31).
+  object; a to-many in link order (Phase 31). A relation to the users-permissions user is one too
+  (Phase 31).
 - A generated runtime, `App\Support\StrapiPopulate`, eager-loads each populated relation once per
   level for the whole page, so a list costs one query per populated relation, not one per row.
 - Reads of a target go through its read grant (`viewAny`), its `forUser` scope and its `view`
@@ -448,7 +449,7 @@ Filament v5 app on SQLite and Postgres with all caches on. A StrapiError is no l
 vectors showed every client 400 landing in `laravel.log`.
 
 Known gaps: `connect` positions are accepted but not kept, and to-many relations list in id order
-where Strapi keeps link order (the pivot has no order column); `populate` inside a relation ignores
+where Strapi keeps link order (the pivot has no order column; closed in Phase 31); `populate` inside a relation ignores
 `pagination`; a component nested in a component comes with its parent rather than needing its own
 `populate`; relations to the built-in user cannot be populated (no user serializer yet, Phase 24;
 closed in Phase 31);
@@ -1086,6 +1087,19 @@ keeps its writes. `user-relation-vectors.json` is recorded from strapi-php with 
 added to its project.
 
 Part 2's exit: the user relation vectors pass in the `strapi-api` boot job on all three databases.
+
+**Part 3 — link order.** A to-many relation lists in the order its links were made, from either
+side, as Strapi keeps it: each link table (and each foreign key a one-to-many writes) gains
+Strapi's order columns (`<target>_ord`, and `<self>_ord` for the other side) in a generated
+migration. A `set` keeps the order given; a `connect` appends, or lands where its `position`
+(`before`, `after`, `start`, `end`, by documentId or id) puts it, through
+`App\Support\StrapiRelationsOrderer`, a port of strapi-php's relations orderer, with its strict
+error for a position next to a relation that is not linked. A populate `sort` replaces the order,
+and publishing copies the draft's order. Links made by the Filament admin or by a transfer import
+have no position yet, so they list after the ordered ones.
+
+Part 3's exit: `link-order-vectors.json` (27 checks, recorded from strapi-php) passes in the
+`strapi-api` boot job on all three databases.
 
 ---
 

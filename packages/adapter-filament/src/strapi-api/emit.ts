@@ -48,6 +48,13 @@ import {
   emitStrapiProviders,
   PASSWORDLESS_MIGRATION_PATH,
 } from "./oauth";
+import {
+  emitLinkOrderMigration,
+  emitStrapiLinkOrder,
+  emitStrapiRelationsOrderer,
+  LINK_ORDER_MIGRATION_PATH,
+  linkOrderColumns,
+} from "./link-order";
 import { emitSerializer } from "./serializer";
 import {
   emitRoleController,
@@ -223,6 +230,9 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     }
   }
 
+  const linkOrder = linkOrderColumns(shapes.values());
+  if (linkOrder.length > 0)
+    files.push({ path: LINK_ORDER_MIGRATION_PATH, content: emitLinkOrderMigration(linkOrder) });
   files.push({
     path: "routes/api.php",
     content: emitStrapiRoutes(
@@ -310,6 +320,11 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
   files.push({ path: "app/Support/StrapiQuery.php", content: emitStrapiQuery(secured) });
   files.push({ path: "app/Support/StrapiPopulate.php", content: emitStrapiPopulate() });
   files.push({ path: "app/Support/StrapiRelations.php", content: emitStrapiRelations() });
+  files.push({ path: "app/Support/StrapiLinkOrder.php", content: emitStrapiLinkOrder() });
+  files.push({
+    path: "app/Support/StrapiRelationsOrderer.php",
+    content: emitStrapiRelationsOrderer(),
+  });
   if (emitted.some((ct) => ct.fields.some((f) => f.type === "dynamicZone")))
     files.push({
       path: "app/Support/StrapiZones.php",
