@@ -126,7 +126,8 @@ export const resolveRelations = (
       if (kind === "manyToOne" || kind === "oneToOne") {
         const fk = `${snakeColumn(f.name)}_id`;
         push(out.methods, owner, method("BelongsTo", f.name, targetN.model, `'${fk}'`));
-        const unique = kind === "oneToOne" ? "->unique()" : "";
+        // A document with a row per version or locale links its target from each of them.
+        const unique = kind === "oneToOne" && !removable(owner) ? "->unique()" : "";
         push(out.fkColumns, owner, {
           column: fk,
           references: target,
