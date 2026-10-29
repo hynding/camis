@@ -154,3 +154,39 @@ describe("resolveRelations — oneToOne and oneToMany", () => {
     ).toBe(true);
   });
 });
+
+// Strapi's content manager labels a relation's entries by the target's main field, by default its
+// first string attribute, else its id.
+describe("resolveRelations — the picker's label", () => {
+  const labelled: IrDocument = {
+    ...doc,
+    contentTypes: [
+      {
+        ...doc.contentTypes[0]!,
+        fields: [{ type: "string", name: "title" }, ...doc.contentTypes[0]!.fields],
+      },
+      {
+        name: "Author",
+        kind: "collection",
+        fields: [
+          { type: "text", name: "bio" },
+          { type: "string", name: "fullName" },
+        ],
+      },
+      { name: "Tag", kind: "collection", fields: [] },
+    ],
+  };
+  const r = resolveRelations(labelled);
+  const form = (name: string): string => r.formFields.get(name)!.join("\n");
+  it("labels a target by its first string field", () => {
+    expect(form("Article")).toContain(
+      "Select::make('author_id')->relationship(name: 'author', titleAttribute: 'full_name')",
+    );
+  });
+  it("labels an inverse's targets by their first string field too", () => {
+    expect(form("Tag")).toContain("relationship(name: 'articles', titleAttribute: 'title')");
+  });
+  it("labels a target without a string field by its id", () => {
+    expect(form("Article")).toContain("relationship(name: 'tags', titleAttribute: 'id')");
+  });
+});
