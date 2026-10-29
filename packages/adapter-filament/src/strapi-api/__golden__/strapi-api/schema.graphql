@@ -1108,6 +1108,26 @@ type NoteEntityResponseCollection {
   pageInfo: Pagination!
 }
 
+type ComponentSharedPanel {
+  id: ID!
+  heading: String
+  items(filters: ComponentSharedQuantityFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): [ComponentSharedQuantity]
+}
+
+input ComponentSharedPanelFiltersInput {
+  heading: StringFilterInput
+  items: ComponentSharedQuantityFiltersInput
+  and: [ComponentSharedPanelFiltersInput]
+  or: [ComponentSharedPanelFiltersInput]
+  not: ComponentSharedPanelFiltersInput
+}
+
+input ComponentSharedPanelInput {
+  id: ID
+  heading: String
+  items: [ComponentSharedQuantityInput]
+}
+
 type PageRelationResponseCollection {
   nodes: [Page!]!
 }
@@ -1115,6 +1135,7 @@ type PageRelationResponseCollection {
 type Page {
   documentId: ID!
   title: String
+  panel: ComponentSharedPanel
   createdAt: DateTime
   updatedAt: DateTime
   publishedAt: DateTime
@@ -1125,12 +1146,14 @@ type Page {
 
 input PageInput {
   title: String
+  panel: ComponentSharedPanelInput
   publishedAt: DateTime
 }
 
 input PageFiltersInput {
   documentId: IDFilterInput
   title: StringFilterInput
+  panel: ComponentSharedPanelFiltersInput
   createdAt: DateTimeFilterInput
   updatedAt: DateTimeFilterInput
   publishedAt: DateTimeFilterInput
@@ -1543,4 +1566,4 @@ type UsersPermissionsPasswordPayload {
   ok: Boolean!
 }
 
-union GenericMorph = ComponentSharedHero | ComponentSharedMoney | ComponentSharedQuantity | UploadFile | I18NLocale | UsersPermissionsPermission | UsersPermissionsRole | UsersPermissionsUser | Activity | ActivitySession | Article | Author | Book | Category | Genre | Global | Homepage | Landing | Note | Page | Post | Review | Tag | Topic | Transaction
+union GenericMorph = ComponentSharedHero | ComponentSharedMoney | ComponentSharedPanel | ComponentSharedQuantity | UploadFile | I18NLocale | UsersPermissionsPermission | UsersPermissionsRole | UsersPermissionsUser | Activity | ActivitySession | Article | Author | Book | Category | Genre | Global | Homepage | Landing | Note | Page | Post | Review | Tag | Topic | Transaction

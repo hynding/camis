@@ -955,14 +955,13 @@ empty. All of it runs in one PHP process, with no queue or cron.
 
 Part 2's exit: `transfer/strapi-php-export.tar.gz` and its encrypted twin, written by strapi-php
 from `transfer/seed-vectors.json`, import in the boot job; the archive's user signs in with the
-password strapi-php hashed, and the 16 reads of `read-vectors.json` (documentIds compared) answer
+password strapi-php hashed, and the reads of `read-vectors.json` (documentIds compared) answer
 as strapi-php answers them after importing the same archive. Passes on SQLite and Postgres,
 including a second import over the first.
 
-Known gaps: roles' permissions and admin data are not imported (the IR's grants are the
-permissions; Strapi does not export admin data). Upload folders are imported since Phase 23's
-folders (2026-10-29).
-Repeatable components inside a component are reported and left empty.
+Known gaps: admin data is not imported (Strapi does not export it). Upload folders are imported
+since Phase 23's folders (2026-10-29); roles' permissions, tokens and repeatables inside a
+component, gaps here at first, are Part 6's.
 
 **Part 3 — exporting to Strapi.** `php artisan strapi:export` takes `strapi export`'s options
 (`--file`, `--key`, `--no-encrypt`, `--no-compress`, `--only`, `--exclude`) and writes its archive,
@@ -981,8 +980,8 @@ archive is written as a ustar stream, gzipped and encrypted a megabyte at a time
 
 Part 3's exit: in the boot job, strapi-php's archive imported and exported again holds the same
 entries, links, files and settings (`scripts/strapi-transfer-compare.mjs`), and imports again
-with the same 16 reads, plain and encrypted, on SQLite, MySQL and Postgres. strapi-php itself
-imports camis's export (checked locally against the oracle) and answers the 16 reads as before.
+with the same reads, plain and encrypted, on SQLite, MySQL and Postgres. strapi-php itself
+imports camis's export (checked locally against the oracle) and answers the reads as before.
 The export also fixes the import's email templates, which Strapi keeps under `options`.
 
 Known gaps: admin data is not exported, nor the content manager's view settings (upload folders
@@ -1019,6 +1018,34 @@ replaces the content.
 Part 5's exit: `DataTransferTest.php` in the boot job imports strapi-php's archive uploaded
 (encrypted) and picked from the directory, refuses a wrong key without changing anything,
 downloads an export through its signed link only, and imports that export again.
+
+**Part 6 — what an archive's import left behind.** Three kinds of data a Strapi project moved in
+without (owner's call, 2026-10-29), each against a strapi-php recording:
+
+- *Repeatables inside a component.* A repeatable component in an embedded one is a child table of
+  the owning type (Phase 27), and `StrapiTransferMap` now names it under its component, so
+  `strapi:import` writes its rows and `strapi:export` nests them back. A repeatable inside a
+  repeatable stays the storage gap it is (`nestedRepeatable`).
+- *Role permissions.* Roles are the IR's and view-only in the admin, so an import does not write
+  them. `camis import strapi <project> --roles-from <archive> [--key …] [--roles-out roles.json]`
+  (and `camis new --from-strapi … --roles-from …`) reads an export's users-permissions roles into
+  the roles file, the inverse of the actions the Strapi target writes: a grant only where the role
+  holds all of its Strapi actions (half of one is reported, not widened), a draft-and-publish type
+  written is published too, the builtin user and file types added when granted, and Strapi's
+  default role kept. `strapi:import` names each archived role this project lacks, or whose
+  permissions differ from its own, as `Not imported:`.
+- *API and transfer tokens.* `strapi export` leaves them out, so `php artisan strapi:import-tokens
+  --database=<Strapi's database> [--encryption-key=…]` reads Strapi's token tables (SQLite path or
+  database URL) and keeps each token's HMAC, type, actions, lifespan and dates; with Strapi's
+  salts its clients' keys keep working, and with its `ENCRYPTION_KEY` the admin can show an API
+  token's key again. Admin tokens (`kind: admin`) are reported, not made Content API ones.
+
+Part 6's exit: Page gains a `panel` component holding repeatable `items`, the fixture archive is
+re-recorded from strapi-php with them, with three roles and with tokens
+(`transfer/strapi-php-tokens.sql`), and in the boot job its import names the Editor role, the 18
+reads of `read-vectors.json` answer as strapi-php does, the imported tokens answer
+`token-import-vectors.json` (10 requests) as strapi-php answers them, and `TokenImportTest.php`
+covers the command; the CLI imports the archive's roles in its tests.
 
 ---
 

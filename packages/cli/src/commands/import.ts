@@ -6,6 +6,7 @@ import { validate } from "@camis/ir-core";
 import type { CapabilityGap, IrDocument, Result } from "@camis/ir-schema";
 import type { Io } from "../io";
 import { printGaps } from "./generate";
+import { strapiRoles, type StrapiRolesSource } from "./strapi-roles";
 import { locStr } from "./validate";
 
 const abs = (io: Io, p: string): string => (isAbsolute(p) ? p : resolve(io.cwd, p));
@@ -15,15 +16,25 @@ export const importCommand = async (
   projectDir: string,
   outPath: string,
   io: Io,
-  opts: { upsertBy?: string } = {},
+  opts: {
+    upsertBy?: string;
+    /** A Strapi export whose roles become the IR's, and where to write them. */
+    roles?: StrapiRolesSource & { out: string };
+  } = {},
 ): Promise<number> => {
   const dir = abs(io, projectDir);
   let imported: Result<IrDocument>;
   let gaps: CapabilityGap[] = [];
   if (target === "strapi") {
-    const read = await readStrapiProject(dir, opts);
+    const read = await readStrapiProject(
+      dir,
+      opts.upsertBy !== undefined ? { upsertBy: opts.upsertBy } : {},
+    );
     imported = read.document;
     gaps = read.gaps.gaps;
+  } else if (opts.roles !== undefined) {
+    io.out("✗ --roles-from reads a Strapi export, so it applies only to `import strapi`");
+    return 1;
   } else if (target === "express") {
     let content: string;
     try {
@@ -48,8 +59,16 @@ export const importCommand = async (
       io.out(`✗ [${e.code}] ${locStr(e.location)} — ${e.message}`);
     return 1;
   }
+  let document = revalidated.value;
+  if (opts.roles !== undefined) {
+    const roles = await strapiRoles(io, document, opts.roles);
+    if (!roles.ok) return 1;
+    document = roles.document;
+    await io.writeFile(abs(io, opts.roles.out), stableJson(roles.roles));
+    io.out(`✓ roles → ${opts.roles.out}`);
+  }
   const out = abs(io, outPath);
-  await io.writeFile(out, stableJson(revalidated.value));
+  await io.writeFile(out, stableJson(document));
   io.out(`✓ imported → ${outPath}`);
   printGaps(io, gaps);
   return 0;

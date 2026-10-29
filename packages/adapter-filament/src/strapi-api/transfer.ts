@@ -1,4 +1,4 @@
-import { fieldApiName, type CapabilityGap, type ContentType, type Field } from "@camis/ir-schema";
+import { fieldApiName, type ContentType, type Field } from "@camis/ir-schema";
 import { PHP_MARKER } from "../hooks/names";
 import { filamentNames } from "../names";
 import { phpSingleQuoted } from "../php-literal";
@@ -35,10 +35,6 @@ export interface TransferMapInput {
   /** The builtin file type's name, whose grants are the upload plugin's actions. */
   fileType: string | undefined;
 }
-export interface TransferMapEmission {
-  content: string;
-  gaps: CapabilityGap[];
-}
 
 const uidOf = (ct: ContentType): string => `api::${kebab(ct.name)}.${kebab(ct.name)}`;
 
@@ -69,7 +65,7 @@ const scalar = (s: WireScalar, from: number) => ({
 });
 
 /** Where each key of an archived entry goes: a column, a component's columns, child rows. */
-const attributes = (shape: WireShape, gaps: CapabilityGap[], ct: ContentType) => {
+const attributes = (shape: WireShape) => {
   const out: Record<string, unknown> = {
     documentId: { column: "document_id", type: "string" },
   };
@@ -86,17 +82,15 @@ const attributes = (shape: WireShape, gaps: CapabilityGap[], ct: ContentType) =>
   for (const child of shape.children) {
     const [first] = child.key;
     if (first === undefined) continue;
-    if (child.key.length > 1) {
-      gaps.push({
-        feature: "dataTransfer",
-        location: { contentType: ct.name, field: child.key.join(".") },
-        severity: "downgrade",
-        message:
-          "`strapi:import` restores repeatable components at the top level of an entry only; this one, inside a component, is left empty.",
-      });
-      continue;
+    const rows = { repeatable: child.relation, scalars: child.scalars.map((s) => scalar(s, 0)) };
+    if (child.key.length === 1) {
+      out[first] = rows;
+    } else {
+      // A repeatable inside a component: its items are child rows of the entry, found under the
+      // rest of its key within the component's value.
+      const group = (out[first] ??= { component: [] }) as { children?: unknown[] };
+      (group.children ??= []).push({ key: child.key.slice(1), ...rows });
     }
-    out[first] = { repeatable: child.relation, scalars: child.scalars.map((s) => scalar(s, 0)) };
   }
   for (const zone of shape.zones) {
     out[zone.key] = {
@@ -199,8 +193,7 @@ const insertOrder = (
  * its entries go here. Content types come from the IR, in insert order; Strapi's plugin types map
  * onto the tables camis keeps for them, or name why they are not imported.
  */
-export const emitStrapiTransferMap = (input: TransferMapInput): TransferMapEmission => {
-  const gaps: CapabilityGap[] = [];
+export const emitStrapiTransferMap = (input: TransferMapInput): string => {
   const types: Record<string, unknown> = {
     [USER_UID]: { plugin: "user", model: "\\App\\Models\\User" },
     "plugin::users-permissions.role": { plugin: "role" },
@@ -224,17 +217,17 @@ export const emitStrapiTransferMap = (input: TransferMapInput): TransferMapEmiss
       model: `\\App\\Models\\${filamentNames(ct).model}`,
       draftPublish: shape.draftPublish,
       localized: shape.localized,
-      attributes: attributes(shape, gaps, ct),
+      attributes: attributes(shape),
       links: links(shape, ct, input.userType),
     };
   }
-  const content =
+  return (
     header("App\\Support") +
     `
 /**
  * Where each type of a Strapi export archive goes in this app, for \`strapi:import\` and
  * \`strapi:export\`. Generated from the IR: an entry's \`attributes\` name the column (or a
- * component's columns, or the child rows) each key of an archived entry is written to, \`null\`
+ * component's columns and child rows, or the child rows) each key of an archived entry is written to, \`null\`
  * when this app keeps no such value; its \`links\` name the Eloquent relation that stores each
  * link, and for a link the type declares, its Strapi relation and the target's inverse key.
  */
@@ -248,8 +241,8 @@ final class StrapiTransferMap
     /** The users-permissions actions each of this app's permissions is in Strapi, for \`strapi:export\`. */
     public const ACTIONS = ${php(strapiActions(input), 1)};
 }
-`;
-  return { content, gaps };
+`
+  );
 };
 
 /** The command: Strapi's `strapi import` options, its prompt, and its summary. */

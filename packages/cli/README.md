@@ -135,6 +135,10 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
   `defaultRole` is assigned on `/auth/local/register`.
 - `camis import strapi <dir> --upsert-by recordId` sets `options.upsertBy` on every imported
   type that has a unique field of that name, so the IR stays fully regenerable.
+- `camis import strapi <dir> --roles-from export.tar.gz.enc --key <key>` also writes the roles
+  file (`--roles-out`, default `roles.json`) from a `strapi export` archive's users-permissions
+  roles; `camis new --from-strapi <dir> --roles-from …` does the same for a new project. A role
+  holding only part of a camis grant's Strapi actions is reported, not granted.
 
 The Filament target also generates a JSON API: `routes/api.php` +
 `app/Http/Controllers/Api/*ApiController.php` per content type (index/show/store/update/

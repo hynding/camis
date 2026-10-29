@@ -107,4 +107,24 @@ describe("Strapi data import", () => {
     expect(content(IMPORT_ENGINE)).not.toContain("not supported");
     expect(content("DEPLOY.md")).toContain("--key");
   });
+
+  // Page.panel is an embedded component holding a repeatable one: its items are child rows.
+  it("carries a repeatable component nested in an embedded one, rather than reporting it", () => {
+    const map = content("app/Support/StrapiTransferMap.php");
+    expect(map).toMatch(/'panel' => \[[\s\S]*?'children' => \[[\s\S]*?'key' => \['items'\]/);
+    expect(result.gaps.gaps.filter((g) => g.feature === "dataTransfer")).toEqual([]);
+  });
+
+  it("names a role whose permissions differ from the archive's, as the IR's roles are kept", () => {
+    expect(content(IMPORT_ENGINE)).toContain("roles are the IR's");
+  });
+
+  it("adds `php artisan strapi:import-tokens`, reading Strapi's tokens from its database", () => {
+    const command = content("app/Console/Commands/StrapiImportTokens.php");
+    expect(command).toContain("protected $signature = 'strapi:import-tokens");
+    for (const option of ["{--database=", "{--encryption-key=", "{--force"])
+      expect(command).toContain(option);
+    expect(content("app/Support/StrapiTokenImport.php")).toContain("final class StrapiTokenImport");
+    expect(content("DEPLOY.md")).toContain("php artisan strapi:import-tokens");
+  });
 });

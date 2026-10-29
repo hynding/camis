@@ -5,7 +5,7 @@
       {
         "books": [
           {
-            "documentId": "hi6fpq8iee7jhottcyh39hxj",
+            "documentId": "dgee7ohe9u9n3o44cnrcfea2",
             "inStock": true,
             "pages": 100,
             "publishedOn": "2024-05-01",
@@ -14,13 +14,13 @@
             "title": "Alpha"
           }
         ],
-        "documentId": "rvrwkxz01r1nec3h402rzfh5",
+        "documentId": "w2nq3l8lkmcyhlm1ww2p3eod",
         "name": "Ann"
       },
       {
         "books": [
           {
-            "documentId": "v28l23fm7sfmvwnl3wxlsbxi",
+            "documentId": "lnmqu6vbhlmh6ycjmpixruig",
             "inStock": null,
             "pages": null,
             "publishedOn": null,
@@ -29,7 +29,7 @@
             "title": "Beta"
           }
         ],
-        "documentId": "dshxymqa649007piix4zl1qb",
+        "documentId": "b73d0xcmr89ta7ezd2aq18dh",
         "name": "Bob"
       }
     ]
@@ -38,11 +38,11 @@
     "status": 200,
     "data": [
       {
-        "documentId": "i2ja3eaaix1b37mf6oqnnc70",
+        "documentId": "gdmt84c9i8h00ca38279ij6r",
         "name": "Fantasy"
       },
       {
-        "documentId": "rpfq9nugzgf5aafjweh61px8",
+        "documentId": "mp3h42aswl0ium6chgqp56l9",
         "name": "Horror"
       }
     ]
@@ -55,7 +55,7 @@
           {
             "alternativeText": null,
             "caption": null,
-            "documentId": "l3h8lbtu7ic85tmjs1swclnr",
+            "documentId": "qy41toqbpdq53q037ido822n",
             "ext": ".txt",
             "focalPoint": null,
             "formats": null,
@@ -73,7 +73,7 @@
           {
             "alternativeText": "red",
             "caption": "A red box",
-            "documentId": "vg6gjw8e2pkgs9luaklbwle5",
+            "documentId": "tl7u2wj1ylrxh87om1tqnp6k",
             "ext": ".png",
             "focalPoint": null,
             "formats": {
@@ -130,18 +130,18 @@
           }
         ],
         "author": {
-          "documentId": "rvrwkxz01r1nec3h402rzfh5",
+          "documentId": "w2nq3l8lkmcyhlm1ww2p3eod",
           "name": "Ann"
         },
         "category": {
-          "documentId": "lvr8jjhc3zu7mocqj5a8463t",
+          "documentId": "xigpg3wi5z03omx9ic0p24di",
           "locale": "en",
           "name": "News"
         },
         "cover": {
           "alternativeText": "red",
           "caption": "A red box",
-          "documentId": "vg6gjw8e2pkgs9luaklbwle5",
+          "documentId": "tl7u2wj1ylrxh87om1tqnp6k",
           "ext": ".png",
           "focalPoint": null,
           "formats": {
@@ -196,7 +196,7 @@
           "url": "/uploads/wide_<hash>.png",
           "width": 1200
         },
-        "documentId": "hi6fpq8iee7jhottcyh39hxj",
+        "documentId": "dgee7ohe9u9n3o44cnrcfea2",
         "editions": [
           {
             "amount": 1,
@@ -209,11 +209,11 @@
         ],
         "genres": [
           {
-            "documentId": "i2ja3eaaix1b37mf6oqnnc70",
+            "documentId": "gdmt84c9i8h00ca38279ij6r",
             "name": "Fantasy"
           },
           {
-            "documentId": "rpfq9nugzgf5aafjweh61px8",
+            "documentId": "mp3h42aswl0ium6chgqp56l9",
             "name": "Horror"
           }
         ],
@@ -228,19 +228,19 @@
         "releasedAt": "2024-05-01T10:30:00.000Z",
         "title": "Alpha",
         "topic": {
-          "documentId": "oflrlo06h6cb5i1ft1ita39q",
+          "documentId": "mawypfxt2kvqpbrp0crnmet1",
           "name": "Live"
         }
       },
       {
         "attachments": [],
         "author": {
-          "documentId": "dshxymqa649007piix4zl1qb",
+          "documentId": "b73d0xcmr89ta7ezd2aq18dh",
           "name": "Bob"
         },
         "category": null,
         "cover": null,
-        "documentId": "v28l23fm7sfmvwnl3wxlsbxi",
+        "documentId": "lnmqu6vbhlmh6ycjmpixruig",
         "editions": [],
         "genres": [],
         "inStock": null,
@@ -262,7 +262,7 @@
           {
             "alternativeText": null,
             "caption": null,
-            "documentId": "l3h8lbtu7ic85tmjs1swclnr",
+            "documentId": "qy41toqbpdq53q037ido822n",
             "ext": ".txt",
             "focalPoint": null,
             "formats": null,
@@ -280,7 +280,7 @@
           {
             "alternativeText": "red",
             "caption": "A red box",
-            "documentId": "vg6gjw8e2pkgs9luaklbwle5",
+            "documentId": "tl7u2wj1ylrxh87om1tqnp6k",
             "ext": ".png",
             "focalPoint": null,
             "formats": {
@@ -339,7 +339,7 @@
         "cover": {
           "alternativeText": "red",
           "caption": "A red box",
-          "documentId": "vg6gjw8e2pkgs9luaklbwle5",
+          "documentId": "tl7u2wj1ylrxh87om1tqnp6k",
           "ext": ".png",
           "focalPoint": null,
           "formats": {
@@ -394,7 +394,7 @@
           "url": "/uploads/wide_<hash>.png",
           "width": 1200
         },
-        "documentId": "hi6fpq8iee7jhottcyh39hxj",
+        "documentId": "dgee7ohe9u9n3o44cnrcfea2",
         "editions": [
           {
             "amount": 1,
@@ -422,7 +422,7 @@
     "status": 200,
     "data": [
       {
-        "documentId": "oflrlo06h6cb5i1ft1ita39q",
+        "documentId": "mawypfxt2kvqpbrp0crnmet1",
         "name": "Live"
       }
     ]
@@ -431,11 +431,11 @@
     "status": 200,
     "data": [
       {
-        "documentId": "a5uehmv7nzolukp1eycdu0el",
+        "documentId": "ctxrn9cs78tj19h9y8lksjve",
         "name": "DraftOnly"
       },
       {
-        "documentId": "oflrlo06h6cb5i1ft1ita39q",
+        "documentId": "mawypfxt2kvqpbrp0crnmet1",
         "name": "Live"
       }
     ]
@@ -445,14 +445,14 @@
     "data": [
       {
         "author": {
-          "documentId": "rvrwkxz01r1nec3h402rzfh5",
+          "documentId": "w2nq3l8lkmcyhlm1ww2p3eod",
           "name": "Ann"
         },
-        "documentId": "b3orssx2ys2of74gyt9x2qsm",
+        "documentId": "oz9q5461cxh8r2u2tyu1rrqd",
         "image": {
           "alternativeText": "red",
           "caption": "A red box",
-          "documentId": "vg6gjw8e2pkgs9luaklbwle5",
+          "documentId": "tl7u2wj1ylrxh87om1tqnp6k",
           "ext": ".png",
           "focalPoint": null,
           "formats": {
@@ -510,7 +510,7 @@
         "title": "Live",
         "topics": [
           {
-            "documentId": "oflrlo06h6cb5i1ft1ita39q",
+            "documentId": "mawypfxt2kvqpbrp0crnmet1",
             "name": "Live"
           }
         ],
@@ -523,28 +523,28 @@
     "data": [
       {
         "author": {
-          "documentId": "dshxymqa649007piix4zl1qb",
+          "documentId": "b73d0xcmr89ta7ezd2aq18dh",
           "name": "Bob"
         },
-        "documentId": "sjhugnimjqttk48u6baigx53",
+        "documentId": "souc7i116noy8bfuq1tbyxpn",
         "title": "Draft",
         "topics": [],
         "views": null
       },
       {
         "author": {
-          "documentId": "rvrwkxz01r1nec3h402rzfh5",
+          "documentId": "w2nq3l8lkmcyhlm1ww2p3eod",
           "name": "Ann"
         },
-        "documentId": "b3orssx2ys2of74gyt9x2qsm",
+        "documentId": "oz9q5461cxh8r2u2tyu1rrqd",
         "title": "Live (edited)",
         "topics": [
           {
-            "documentId": "a5uehmv7nzolukp1eycdu0el",
+            "documentId": "ctxrn9cs78tj19h9y8lksjve",
             "name": "DraftOnly"
           },
           {
-            "documentId": "oflrlo06h6cb5i1ft1ita39q",
+            "documentId": "mawypfxt2kvqpbrp0crnmet1",
             "name": "Live"
           }
         ],
@@ -556,12 +556,12 @@
     "status": 200,
     "data": [
       {
-        "documentId": "lvr8jjhc3zu7mocqj5a8463t",
+        "documentId": "xigpg3wi5z03omx9ic0p24di",
         "locale": "fr",
         "name": "Actualités"
       },
       {
-        "documentId": "lvr8jjhc3zu7mocqj5a8463t",
+        "documentId": "xigpg3wi5z03omx9ic0p24di",
         "locale": "en",
         "name": "News"
       }
@@ -572,15 +572,15 @@
     "data": [
       {
         "category": {
-          "documentId": "lvr8jjhc3zu7mocqj5a8463t",
+          "documentId": "xigpg3wi5z03omx9ic0p24di",
           "locale": "en",
           "name": "News"
         },
         "code": "A1",
-        "documentId": "t50czdriyrwnqoxst41omtm4",
+        "documentId": "vc0u6t6y9nt6btesweqliofj",
         "genres": [
           {
-            "documentId": "i2ja3eaaix1b37mf6oqnnc70",
+            "documentId": "gdmt84c9i8h00ca38279ij6r",
             "name": "Fantasy"
           }
         ],
@@ -588,7 +588,7 @@
         "localizations": [
           {
             "code": "A1",
-            "documentId": "t50czdriyrwnqoxst41omtm4",
+            "documentId": "vc0u6t6y9nt6btesweqliofj",
             "locale": "fr",
             "title": "Bonjour"
           }
@@ -603,13 +603,13 @@
       {
         "category": null,
         "code": "A1",
-        "documentId": "t50czdriyrwnqoxst41omtm4",
+        "documentId": "vc0u6t6y9nt6btesweqliofj",
         "genres": [],
         "locale": "fr",
         "localizations": [
           {
             "code": "A1",
-            "documentId": "t50czdriyrwnqoxst41omtm4",
+            "documentId": "vc0u6t6y9nt6btesweqliofj",
             "locale": "en",
             "title": "Hello"
           }
@@ -622,7 +622,7 @@
     "status": 200,
     "data": [
       {
-        "documentId": "i58jpy802f2ea2h4e92jilkn",
+        "documentId": "o1i60gc4juhn9f9foagjgdsq",
         "locale": "en",
         "title": "Home"
       }
@@ -632,13 +632,73 @@
     "status": 200,
     "data": [
       {
-        "documentId": "i58jpy802f2ea2h4e92jilkn",
+        "documentId": "o1i60gc4juhn9f9foagjgdsq",
         "locale": "fr",
         "title": "Accueil"
       },
       {
-        "documentId": "i58jpy802f2ea2h4e92jilkn",
+        "documentId": "o1i60gc4juhn9f9foagjgdsq",
         "locale": "en",
+        "title": "Home"
+      }
+    ]
+  },
+  "pages' panels and the items inside them, published": {
+    "status": 200,
+    "data": [
+      {
+        "documentId": "o1i60gc4juhn9f9foagjgdsq",
+        "locale": "en",
+        "panel": {
+          "heading": "Intro",
+          "items": [
+            {
+              "amount": 1,
+              "unit": "step"
+            },
+            {
+              "amount": 2,
+              "unit": "steps"
+            }
+          ]
+        },
+        "title": "Home"
+      }
+    ]
+  },
+  "pages' panels and the items inside them, drafts": {
+    "status": 200,
+    "data": [
+      {
+        "documentId": "o1i60gc4juhn9f9foagjgdsq",
+        "locale": "fr",
+        "panel": {
+          "heading": "Intro (fr)",
+          "items": [
+            {
+              "amount": 3,
+              "unit": "étape"
+            }
+          ]
+        },
+        "title": "Accueil"
+      },
+      {
+        "documentId": "o1i60gc4juhn9f9foagjgdsq",
+        "locale": "en",
+        "panel": {
+          "heading": "Intro",
+          "items": [
+            {
+              "amount": 1,
+              "unit": "step"
+            },
+            {
+              "amount": 2,
+              "unit": "steps"
+            }
+          ]
+        },
         "title": "Home"
       }
     ]
@@ -663,7 +723,7 @@
             "unit": "kg"
           }
         ],
-        "documentId": "uhi1g54om4riey48zyh3rk1v",
+        "documentId": "ujwsvlpzle7xba1dsg9zv36e",
         "title": "Home"
       }
     ]
@@ -674,7 +734,7 @@
       {
         "alternativeText": null,
         "caption": null,
-        "documentId": "l3h8lbtu7ic85tmjs1swclnr",
+        "documentId": "qy41toqbpdq53q037ido822n",
         "ext": ".txt",
         "focalPoint": null,
         "formats": null,
@@ -693,7 +753,7 @@
       {
         "alternativeText": "red",
         "caption": "A red box",
-        "documentId": "vg6gjw8e2pkgs9luaklbwle5",
+        "documentId": "tl7u2wj1ylrxh87om1tqnp6k",
         "ext": ".png",
         "focalPoint": null,
         "formats": {
@@ -756,13 +816,13 @@
     "data": [
       {
         "code": "en",
-        "documentId": "l10q4o2h2ry4tjj8ep35m4xe",
+        "documentId": "vf1uhs8hnwhdvfpfph7bxabd",
         "isDefault": true,
         "name": "English (en)"
       },
       {
         "code": "fr",
-        "documentId": "h49n75p80eva5036uykgk91g",
+        "documentId": "r6hsd044rzzwuhjepov8w69s",
         "isDefault": false,
         "name": "French (fr)"
       }

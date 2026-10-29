@@ -14,6 +14,7 @@ import {
 } from "../templates";
 import { generateCommand, printGaps } from "./generate";
 import { scaffoldCommand } from "./scaffold";
+import { strapiRoles, type StrapiRolesSource } from "./strapi-roles";
 import { locStr } from "./validate";
 
 type TargetName = TargetConfig["target"];
@@ -27,6 +28,8 @@ export interface NewOptions {
   targets?: string[];
   dialect?: string;
   fromStrapi?: string;
+  /** With `fromStrapi`: a Strapi export whose roles become the project's. */
+  strapiRoles?: StrapiRolesSource;
   skipScaffold?: boolean;
   skipBuild?: boolean;
 }
@@ -39,6 +42,9 @@ interface Plan {
 const planFrom = (options: NewOptions): { ok: true; plan: Plan } | { ok: false; error: string } => {
   if (options.fromStrapi !== undefined && options.template !== undefined) {
     return { ok: false, error: "--from-strapi and --template cannot be combined" };
+  }
+  if (options.strapiRoles !== undefined && options.fromStrapi === undefined) {
+    return { ok: false, error: "--roles-from reads a Strapi export, so it needs --from-strapi" };
   }
   if (options.template !== undefined && !isProjectTemplateName(options.template)) {
     return {
@@ -168,7 +174,13 @@ export const newCommand = async (dir: string, io: Io, options: NewOptions): Prom
   if (options.fromStrapi !== undefined) {
     const imported = await importFromStrapi(io, options.fromStrapi);
     if (!imported.ok) return 1;
-    content = { document: imported.document, roles: strapiDefaultRoles() };
+    if (options.strapiRoles === undefined) {
+      content = { document: imported.document, roles: strapiDefaultRoles() };
+    } else {
+      const roles = await strapiRoles(io, imported.document, options.strapiRoles);
+      if (!roles.ok) return 1;
+      content = { document: roles.document, roles: roles.roles };
+    }
   } else {
     content = projectTemplate(
       options.template !== undefined && isProjectTemplateName(options.template)

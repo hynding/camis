@@ -4,8 +4,9 @@
 // the same entries in the same positions. Ids differ between databases, so entries are named by
 // type, documentId, locale and version; timestamps are compared to the second, which is what a
 // Laravel timestamp column keeps. What camis does not keep is left out: users-permissions
-// permissions (the IR's grants), a role's documentId and timestamps, and a plain type's
-// publishedAt.
+// permissions (the IR's grants), a role's documentId and timestamps, a plain type's publishedAt,
+// and a role only the expected archive has: roles are the IR's, so `strapi:import` reports one
+// the IR lacks instead of making it, and an export does not hold it.
 // usage: strapi-transfer-compare.mjs <expected.tar.gz> <actual.tar.gz>
 import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
@@ -118,8 +119,10 @@ function normalize(value, versioned, top = true) {
 const expected = read(expectedPath);
 const actual = read(actualPath);
 const failures = [];
+const ROLE = "plugin::users-permissions.role|";
 for (const [name, data] of expected.entities) {
   const ours = actual.entities.get(name);
+  if (ours === undefined && name.startsWith(ROLE)) continue;
   if (ours === undefined) failures.push(`missing entity ${name}`);
   else if (JSON.stringify(ours) !== JSON.stringify(data))
     failures.push(

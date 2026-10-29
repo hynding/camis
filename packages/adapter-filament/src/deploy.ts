@@ -140,10 +140,17 @@ published versions and locales, and the files' bytes go to the upload disk. \`--
 \`--exclude\` take Strapi's \`content\`, \`files\` and \`config\`; \`--force\` skips the prompt. Users
 are matched by email and keep their password hashes, so they sign in as before; accounts the
 archive lacks, such as the admin's, are kept. A user's Strapi role becomes the camis role of the
-same name, else the default one. Roles' permissions are not imported: the IR's grants are the
-permissions. The import refuses an archive holding a content type or attribute this project
+same name, else the default one. Roles' permissions are the IR's grants, so they are not written
+here: \`camis import strapi <project> --roles-from export.tar.gz.enc --key=…\` turns the archive's
+roles into the roles file, and this import names each role whose permissions differ from it. The import refuses an archive holding a content type or attribute this project
 lacks, and names each one. On shared hosting without a shell, use Settings › Data transfer
 (below).
+
+An archive holds no API or transfer tokens, so \`php artisan strapi:import-tokens
+--database=<Strapi's database> --encryption-key=…\` reads them from the Strapi project's database (a
+SQLite file's path, or a URL such as \`mysql://user:password@host/database\`). With
+\`API_TOKEN_SALT\` and \`TRANSFER_TOKEN_SALT\` set to the Strapi project's, every key its clients
+hold keeps working; given its \`ENCRYPTION_KEY\`, the admin can show an API token's key again.
 
 ## Moving data out to Strapi
 

@@ -33,6 +33,16 @@
     { "name": "pages, published", "path": "/pages", "query": "locale=*" },
     { "name": "pages, drafts", "path": "/pages", "query": "locale=*&status=draft&sort=title" },
     {
+      "name": "pages' panels and the items inside them, published",
+      "path": "/pages",
+      "query": "locale=*&sort=title&populate[panel][populate]=items"
+    },
+    {
+      "name": "pages' panels and the items inside them, drafts",
+      "path": "/pages",
+      "query": "locale=*&status=draft&sort=title&populate[panel][populate]=items"
+    },
+    {
       "name": "landings and their zone",
       "path": "/landings",
       "query": "populate[blocks][populate]=*"

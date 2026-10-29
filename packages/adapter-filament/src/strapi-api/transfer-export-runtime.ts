@@ -451,7 +451,7 @@ final class StrapiExport
                 if (isset($attribute['column'])) {
                     $data[$key] = self::value($row[$attribute['column']] ?? null, $attribute['type']);
                 } elseif (isset($attribute['component'])) {
-                    $components[$key] = $this->component($attribute['component'], $row);
+                    $components[$key] = $this->component($attribute['component'], $row, $this->repeatables($model, $id, $attribute['children'] ?? []));
                 } elseif (isset($attribute['repeatable'])) {
                     $components[$key] = array_map(fn (array $child): array => $this->item($attribute['scalars'], $child), $this->children($model, $id, $attribute['repeatable']));
                 } else {
@@ -512,15 +512,30 @@ final class StrapiExport
     }
 
     /**
-     * A component from its columns, its own components nested under their keys; null when it
-     * holds no value at all, which is how this app keeps an absent one. Strapi gives each instance
-     * an id, which an import maps to its own.
+     * The items of each repeatable inside a component, by its key there.
+     *
+     * @param list<array{key: list<string>, repeatable: string, scalars: list<array<string, mixed>>}> $children
+     * @return list<array{key: list<string>, items: list<array<string, mixed>>}>
+     */
+    private function repeatables(Model $model, int $id, array $children): array
+    {
+        return array_map(fn (array $child): array => [
+            'key' => $child['key'],
+            'items' => array_map(fn (array $row): array => $this->item($child['scalars'], $row), $this->children($model, $id, $child['repeatable'])),
+        ], $children);
+    }
+
+    /**
+     * A component from its columns, its own components nested under their keys and the items of
+     * the repeatables inside it; null when it holds no value at all, which is how this app keeps
+     * an absent one. Strapi gives each instance an id, which an import maps to its own.
      *
      * @param list<array<string, mixed>> $scalars
      * @param array<string, mixed> $row
+     * @param list<array{key: list<string>, items: list<array<string, mixed>>}> $repeatables
      * @return array<string, mixed>|null
      */
-    private function component(array $scalars, array $row): ?array
+    private function component(array $scalars, array $row, array $repeatables = []): ?array
     {
         $values = [];
         $nested = [];
@@ -529,11 +544,19 @@ final class StrapiExport
             if (count($key) === 1) {
                 $values[$key[0]] = self::value($row[$scalar['column']] ?? null, $scalar['type']);
             } else {
-                $nested[$key[0]][] = ['key' => array_slice($key, 1)] + $scalar;
+                $nested[$key[0]]['scalars'][] = ['key' => array_slice($key, 1)] + $scalar;
             }
         }
-        $nested = array_map(fn (array $inner): ?array => $this->component($inner, $row), $nested);
-        if (array_filter([...$values, ...$nested], fn ($v) => $v !== null) === []) {
+        foreach ($repeatables as $repeatable) {
+            $key = $repeatable['key'];
+            if (count($key) === 1) {
+                $values[$key[0]] = $repeatable['items'];
+            } else {
+                $nested[$key[0]]['repeatables'][] = ['key' => array_slice($key, 1), 'items' => $repeatable['items']];
+            }
+        }
+        $nested = array_map(fn (array $inner): ?array => $this->component($inner['scalars'] ?? [], $row, $inner['repeatables'] ?? []), $nested);
+        if (array_filter([...$values, ...$nested], fn ($v) => $v !== null && $v !== []) === []) {
             return null;
         }
 
