@@ -155,6 +155,7 @@ const scalarOf = (type: Field["type"]): string => {
     case "timestamp":
       return "DateTime";
     case "json":
+    case "blocks":
       return "JSON";
     default:
       return "String";

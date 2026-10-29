@@ -269,6 +269,7 @@ class DocumentBuilder {
       case "media":
         return this.decorate(a, description, many(this.ref(a.target!)), false);
       case "dynamiczone":
+      case "blocks":
         return this.decorate(a, description, { type: "array", items: {} }, false);
       default:
         return this.decorate(a, description, scalarSchema(a, false), true);
@@ -288,6 +289,7 @@ class DocumentBuilder {
       case "media":
         return { description, ...many({}) };
       case "dynamiczone":
+      case "blocks":
         return { description, type: "array", items: {} };
       default:
         return this.withDefault(a, { description, ...scalarSchema(a, true) });

@@ -741,7 +741,7 @@ final class StrapiExport
             'date' => substr((string) $value, 0, 10),
             'time' => strlen((string) $value) >= 12 ? substr((string) $value, 0, 12) : substr((string) $value . ':00', 0, 8) . '.000',
             'dateTime', 'timestamp' => self::stamp($value),
-            'json' => self::json($value),
+            'json', 'blocks' => self::json($value),
             default => $value,
         };
     }

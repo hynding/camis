@@ -20,6 +20,7 @@ import {
   type ChildTableEmit,
 } from "./components";
 import { apiCustomSeed, emitApiController, emitApiRoutes } from "./api";
+import { emitBlocksFiles, hasBlocksFields } from "./blocks";
 import { deployFile } from "./deploy";
 import { emitField, isSupportedField } from "./fields";
 import { emitHookFiles } from "./hooks/emit";
@@ -329,6 +330,10 @@ export const filamentAdapter: GenerateAdapter = {
       });
     }
     files.push(apiCustomSeed());
+    // Edited in the admin, which the Strapi storage layout does not have.
+    if (storage !== "strapi" && hasBlocksFields(doc)) {
+      files.push(...emitBlocksFiles(fileModel !== undefined));
+    }
 
     // Pivot and child tables are Strapi's `_lnk` and component tables on the Strapi layout, so
     // there is nothing here to migrate.

@@ -877,7 +877,7 @@ final class StrapiImport
 
         return match ($type) {
             'dateTime', 'timestamp' => CarbonImmutable::parse((string) $value)->utc()->format('Y-m-d H:i:s'),
-            'json' => json_encode($value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            'json', 'blocks' => json_encode($value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
             'boolean' => (bool) $value,
             default => is_array($value) ? json_encode($value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE) : $value,
         };

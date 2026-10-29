@@ -18,14 +18,19 @@ const hasPhp = (): boolean => {
   }
 };
 
-const bundle = (fields: IrBundle["document"]["contentTypes"][number]["fields"]): IrBundle => ({
+const BIO = { name: "Bio", fields: [{ type: "blocks" as const, name: "text" }] };
+
+const bundle = (
+  fields: IrBundle["document"]["contentTypes"][number]["fields"],
+  components: IrBundle["document"]["components"] = [BIO],
+): IrBundle => ({
   document: {
     version: 1,
     contentTypes: [
       { name: "File", kind: "collection", builtin: "file", fields: [] },
       { name: "Article", kind: "collection", fields },
     ],
-    components: [{ name: "Bio", fields: [{ type: "blocks", name: "text" }] }],
+    components,
   },
   roles: [],
 });
@@ -59,7 +64,7 @@ describe("blocks fields on the Filament target", () => {
   });
 
   it("generates no runtime without a blocks field", () => {
-    const plain = filamentAdapter.generate(bundle([{ type: "string", name: "title" }]), {
+    const plain = filamentAdapter.generate(bundle([{ type: "string", name: "title" }], []), {
       projectName: "blog",
     });
     const paths = plain.files.map((f) => f.path);
