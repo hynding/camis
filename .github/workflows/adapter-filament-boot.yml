@@ -320,7 +320,9 @@ jobs:
           php artisan migrate:fresh --force
           php artisan db:seed --class="Database\\Seeders\\RolePermissionSeeder" --force
           F=../packages/adapter-filament/src/strapi-api/__fixtures__/transfer
-          php artisan strapi:import --file=$F/strapi-php-export.tar.gz --force
+          php artisan strapi:import --file=$F/strapi-php-export.tar.gz --force | tee $RUNNER_TEMP/strapi-import.log
+          # The archive's Editor role is not one of the IR's, so the import names it rather than making it.
+          grep -q "Not imported: role editor" $RUNNER_TEMP/strapi-import.log
           # Exported again, it is the archive strapi-php wrote; imported again, it reads the same.
           php artisan strapi:export --no-encrypt --file=$RUNNER_TEMP/camis-export
           node ../packages/adapter-filament/scripts/strapi-transfer-compare.mjs \
@@ -397,6 +399,21 @@ jobs:
           node ../packages/adapter-filament/scripts/strapi-auth-vectors.mjs http://127.0.0.1:8765 \
             --hook "bash ../packages/adapter-filament/scripts/strapi-auth-hook.sh" \
             --vectors $F/transfer-token-vectors.json --expected $F/transfer-token-vectors.expected.json
+      - name: Strapi token import (strapi-php's token tables, whose keys keep working; recorded from strapi-php)
+        run: |
+          cd app
+          printf 'API_TOKEN_SALT=tobemodified\nTRANSFER_TOKEN_SALT=tobemodified\n' >> .env
+          php artisan config:cache
+          php artisan migrate:fresh --force
+          php artisan db:seed --class="Database\\Seeders\\RolePermissionSeeder" --force
+          F=../packages/adapter-filament/src/strapi-api/__fixtures__/transfer
+          php -r '$p = new PDO("sqlite:" . $argv[1]); $p->exec(file_get_contents($argv[2]));' \
+            $RUNNER_TEMP/strapi-tokens.db $F/strapi-php-tokens.sql
+          php artisan strapi:import --file=$F/strapi-php-export.tar.gz --force
+          php artisan strapi:import-tokens --database=$RUNNER_TEMP/strapi-tokens.db --encryption-key=tobemodified --force
+          node ../packages/adapter-filament/scripts/strapi-auth-vectors.mjs http://127.0.0.1:8765 \
+            --hook "bash ../packages/adapter-filament/scripts/strapi-auth-hook.sh" \
+            --vectors $F/token-import-vectors.json --expected $F/token-import-vectors.expected.json
       - name: Strapi webhook vectors (recorded from strapi-php)
         run: |
           (node packages/adapter-filament/scripts/webhook-receiver.mjs > "$RUNNER_TEMP/webhook-receiver.log" 2>&1 &)
@@ -420,14 +437,14 @@ jobs:
             --vectors $F/session-vectors.json --expected $F/session-vectors.expected.json
       - name: Strapi's OpenAPI document at /documentation lists only routes the app serves
         run: node packages/adapter-filament/scripts/strapi-openapi-routes.mjs app http://127.0.0.1:8765
-      - name: Filament admin publishes drafts, translates, keeps the media library, manages users, API and transfer tokens, exports and imports Strapi archives, builds dynamic zones; GraphQL refuses what REST refuses
+      - name: Filament admin publishes drafts, translates, keeps the media library, manages users, API and transfer tokens, exports and imports Strapi archives, builds dynamic zones, imports Strapi's tokens; GraphQL refuses what REST refuses
         run: |
           cd app
           # The cached config would point the tests at the served database instead of :memory:.
           php artisan config:clear
           S=../packages/adapter-filament/scripts/php
-          cp $S/DraftAdminTest.php $S/LocaleAdminTest.php $S/MediaAdminTest.php $S/UsersAdminTest.php $S/ProvidersTest.php $S/ApiTokensTest.php $S/TransferTokensTest.php $S/DataTransferTest.php $S/StrapiAdminTest.php $S/WebhooksTest.php $S/DynamicZonesTest.php $S/GraphqlTest.php tests/Feature/
-          php artisan test tests/Feature/DraftAdminTest.php tests/Feature/LocaleAdminTest.php tests/Feature/MediaAdminTest.php tests/Feature/UsersAdminTest.php tests/Feature/ProvidersTest.php tests/Feature/ApiTokensTest.php tests/Feature/TransferTokensTest.php tests/Feature/DataTransferTest.php tests/Feature/StrapiAdminTest.php tests/Feature/WebhooksTest.php tests/Feature/DynamicZonesTest.php tests/Feature/GraphqlTest.php
+          cp $S/DraftAdminTest.php $S/LocaleAdminTest.php $S/MediaAdminTest.php $S/UsersAdminTest.php $S/ProvidersTest.php $S/ApiTokensTest.php $S/TransferTokensTest.php $S/DataTransferTest.php $S/StrapiAdminTest.php $S/WebhooksTest.php $S/DynamicZonesTest.php $S/GraphqlTest.php $S/TokenImportTest.php tests/Feature/
+          php artisan test tests/Feature/DraftAdminTest.php tests/Feature/LocaleAdminTest.php tests/Feature/MediaAdminTest.php tests/Feature/UsersAdminTest.php tests/Feature/ProvidersTest.php tests/Feature/ApiTokensTest.php tests/Feature/TransferTokensTest.php tests/Feature/DataTransferTest.php tests/Feature/StrapiAdminTest.php tests/Feature/WebhooksTest.php tests/Feature/DynamicZonesTest.php tests/Feature/GraphqlTest.php tests/Feature/TokenImportTest.php
       - name: Server log on failure
         if: failure()
         run: cat app/serve.log app/storage/logs/laravel.log "$RUNNER_TEMP/oauth/serve.log" || true
