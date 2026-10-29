@@ -43,6 +43,14 @@ import {
   emitUploadController,
   FILES_MIGRATION_PATH,
 } from "./media-runtime";
+import {
+  emitStrapiFolders,
+  emitUploadFolderModel,
+  emitUploadFolderPolicy,
+  emitUploadFolderResourceFiles,
+  emitUploadFoldersMigration,
+  UPLOAD_FOLDERS_MIGRATION_PATH,
+} from "./upload-folders";
 import { emitStrapiPopulate, emitStrapiRelations } from "./populate-runtime";
 import { emitHasDocumentId, emitStrapiError, emitStrapiQuery } from "./rest-runtime";
 import { emitApiConfig, emitStrapiRoutes } from "./routes";
@@ -55,11 +63,14 @@ import {
   PASSWORDLESS_MIGRATION_PATH,
 } from "./oauth";
 import {
+  emitHasLinkOrder,
   emitLinkOrderMigration,
   emitStrapiLinkOrder,
+  emitStrapiLinkPivot,
   emitStrapiRelationsOrderer,
   LINK_ORDER_MIGRATION_PATH,
   linkOrderColumns,
+  toOneLinkOrders,
 } from "./link-order";
 import { emitSerializer } from "./serializer";
 import {
@@ -148,6 +159,7 @@ import {
   emitStrapiSettings,
   emitStrapiUsers,
   emitUserSerializer,
+  emitRoleSerializer,
   emitUserController,
   emitUsersPermissionsMigration,
   SETTINGS_MIGRATION_PATH,
@@ -189,6 +201,11 @@ export interface StrapiApiEmission {
   gaps: CapabilityGap[];
   /** content type name → scopeForUser PHP method (spliced into the model). */
   scopeMethods: Map<string, string>;
+  /**
+   * content type name → its listed to-one foreign keys and their order columns, which the model's
+   * `HasLinkOrder` keeps (Laravel storage only: Strapi storage writes its own models).
+   */
+  linkOrders?: Map<string, Record<string, string>>;
 }
 
 export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
@@ -236,6 +253,13 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     }
   }
 
+  const linkOrders = new Map<string, Record<string, string>>();
+  for (const [name, shape] of shapes) {
+    const listed = toOneLinkOrders(shape);
+    if (Object.keys(listed).length > 0) linkOrders.set(name, listed);
+  }
+  if (linkOrders.size > 0)
+    files.push({ path: "app/Models/Concerns/HasLinkOrder.php", content: emitHasLinkOrder() });
   const linkOrder = linkOrderColumns(shapes.values());
   if (linkOrder.length > 0)
     files.push({ path: LINK_ORDER_MIGRATION_PATH, content: emitLinkOrderMigration(linkOrder) });
@@ -327,6 +351,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
   files.push({ path: "app/Support/StrapiPopulate.php", content: emitStrapiPopulate() });
   files.push({ path: "app/Support/StrapiRelations.php", content: emitStrapiRelations() });
   files.push({ path: "app/Support/StrapiLinkOrder.php", content: emitStrapiLinkOrder() });
+  files.push({ path: "app/Support/StrapiLinkPivot.php", content: emitStrapiLinkPivot() });
   files.push({
     path: "app/Support/StrapiRelationsOrderer.php",
     content: emitStrapiRelationsOrderer(),
@@ -425,7 +450,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     { path: DATA_TRANSFER_PAGE_PATH, content: emitDataTransferPage(secured) },
   );
   gaps.push(remoteTransferGap);
-  return { files, gaps, scopeMethods };
+  return { files, gaps, scopeMethods, linkOrders };
 };
 
 /** users-permissions beyond register and login: accounts, their settings and their admin. */
@@ -437,6 +462,9 @@ const usersPermissionsFiles = (
 ): GeneratedFile[] => [
   { path: "app/Support/StrapiUsers.php", content: emitStrapiUsers() },
   { path: "app/Http/Serializers/UserSerializer.php", content: emitUserSerializer(secured) },
+  ...(secured
+    ? [{ path: "app/Http/Serializers/RoleSerializer.php", content: emitRoleSerializer() }]
+    : []),
   { path: "app/Support/StrapiSettings.php", content: emitStrapiSettings() },
   {
     path: "app/Http/Controllers/Api/UserController.php",
@@ -534,6 +562,18 @@ const mediaLibraryFiles = (
     { path: FILES_MIGRATION_PATH, content: emitFilesMigration() },
     { path: "app/Filament/Support/MediaPicker.php", content: emitMediaPicker(names.model) },
     ...emitFileResourceFiles(names.model, names.resourceDir, names.resourceDir),
+    { path: UPLOAD_FOLDERS_MIGRATION_PATH, content: emitUploadFoldersMigration() },
+    { path: "app/Models/UploadFolder.php", content: emitUploadFolderModel(names.model) },
+    { path: "app/Support/StrapiFolders.php", content: emitStrapiFolders(names.model) },
+    ...(secured
+      ? [
+          {
+            path: "app/Policies/UploadFolderPolicy.php",
+            content: emitUploadFolderPolicy(file.name),
+          },
+        ]
+      : []),
+    ...emitUploadFolderResourceFiles(names.model, names.resourceDir),
   ];
 };
 

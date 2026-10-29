@@ -59,6 +59,16 @@ describe("Strapi data import", () => {
     for (const type of types) expect(map, type).toContain(`'${type}' => [`);
   });
 
+  it("restores the media library's folders and each file's folder", () => {
+    const map = content("app/Support/StrapiTransferMap.php");
+    expect(map).toContain(
+      "'plugin::upload.folder' => [\n            'plugin' => 'folder',\n            'model' => \\App\\Models\\UploadFolder::class,\n        ],",
+    );
+    const engine = content(IMPORT_ENGINE);
+    expect(engine).toContain("'folder' => $this->folder($type, $entity['id'], $entity['data']),");
+    expect(engine).toContain("'plugin_upload_api-folder'");
+  });
+
   it("knows every attribute and link of the archive's content types", () => {
     const map = content("app/Support/StrapiTransferMap.php");
     for (const entity of lines("entities").filter((e) => String(e.type).startsWith("api::")))
@@ -69,6 +79,13 @@ describe("Strapi data import", () => {
       if (left.type.startsWith("api::"))
         expect(map, `${left.type}.${left.field}`).toContain(`'${left.field}' => `);
     }
+  });
+
+  it("keeps each link's archived position in the list's order column", () => {
+    // link-order-export.tar.gz: strapi-php lists these links out of id order.
+    const map = content("app/Support/StrapiTransferMap.php");
+    expect(map).toMatch(/'order' => 'genre_ord',\s+'inverseOrder' => 'book_ord',/);
+    expect(map).toMatch(/'order' => null,\s+'inverseOrder' => 'author_ord',/);
   });
 
   it("is generated only on the Strapi API style over Laravel storage", () => {

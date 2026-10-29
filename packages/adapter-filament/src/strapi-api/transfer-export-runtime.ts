@@ -39,6 +39,8 @@ final class StrapiExport
 
     private const FILE = 'plugin::upload.file';
 
+    private const FOLDER = 'plugin::upload.folder';
+
     /** Strapi's own roles, as users-permissions makes them: name, description, default actions. */
     private const ROLES = [
         'authenticated' => ['Authenticated', 'Default role given to authenticated user.', [
@@ -365,6 +367,39 @@ final class StrapiExport
         }
         if ($entries) {
             $this->mediaLinks();
+            $this->folders((new $model())->getTable());
+        }
+    }
+
+    /**
+     * The media library's folders, with Strapi's links from each file to its folder and from each
+     * folder to its parent, both listed on the target in id order.
+     */
+    private function folders(string $files): void
+    {
+        $model = StrapiTransferMap::TYPES[self::FOLDER]['model'] ?? null;
+        if ($model === null) {
+            return;
+        }
+        $table = (new $model())->getTable();
+        $parents = [];
+        foreach (DB::table($table)->orderBy('id')->get() as $row) {
+            $created = self::stamp($row->created_at);
+            $this->entity(self::FOLDER, (int) $row->id, [
+                'documentId' => $row->document_id, 'name' => $row->name, 'pathId' => (int) $row->path_id, 'path' => $row->path,
+                'createdAt' => $created, 'updatedAt' => self::stamp($row->updated_at), 'publishedAt' => self::stamp($row->published_at) ?? $created, 'locale' => null,
+            ]);
+            if ($row->parent_id !== null) {
+                $parents[] = [(int) $row->id, (int) $row->parent_id];
+            }
+        }
+        foreach ($this->rightPositions($parents) as [$child, $parent, $position]) {
+            $this->link('relation.basic', 'manyToOne', ['type' => self::FOLDER, 'field' => 'parent', 'ref' => $child], ['type' => self::FOLDER, 'field' => 'children', 'ref' => $parent, 'pos' => $position]);
+        }
+        $placed = DB::table($files)->whereNotNull('folder_id')->orderBy('id')->get(['id', 'folder_id'])
+            ->map(fn (object $file): array => [(int) $file->id, (int) $file->folder_id])->all();
+        foreach ($this->rightPositions($placed) as [$file, $folder, $position]) {
+            $this->link('relation.basic', 'manyToOne', ['type' => self::FILE, 'field' => 'folder', 'ref' => $file], ['type' => self::FOLDER, 'field' => 'files', 'ref' => $folder, 'pos' => $position]);
         }
     }
 
@@ -541,58 +576,62 @@ final class StrapiExport
                 continue;
             }
             $target = StrapiTransferMap::TYPES[$link['target']] ?? [];
-            $pairs = $this->pairs($model->{$link['relation']}());
+            $pairs = $this->pairs($model->{$link['relation']}(), $link);
             if (! $type['draftPublish'] && ($target['draftPublish'] ?? false) && $link['kind'] !== 'hasMany' && $link['kind'] !== 'hasOne') {
                 $pairs = $this->withPublished($pairs, $target);
             }
             $leftMany = in_array($link['declares'], ['oneToMany', 'manyToMany'], true);
             $rightMany = $link['inverse'] !== null && in_array($link['declares'], ['manyToOne', 'manyToMany'], true);
-            $leftPos = [];
-            $rightPos = [];
-            foreach ($this->rightPositions($pairs) as [$left, $right, $position]) {
-                $leftPos[$left] = ($leftPos[$left] ?? 0) + 1;
+            $leftPositions = self::positions($pairs, 0, 1, 2);
+            $rightPositions = self::positions($pairs, 1, 0, 3);
+            foreach ($pairs as $i => [$left, $right]) {
                 $this->link(
                     'relation.basic',
                     $link['declares'],
-                    ['type' => $uid, 'field' => $field, 'ref' => $left, 'pos' => $leftMany ? $leftPos[$left] : null],
-                    ['type' => $link['target'], 'field' => $link['inverse'], 'ref' => $right, 'pos' => $rightMany ? $position : null],
+                    ['type' => $uid, 'field' => $field, 'ref' => $left, 'pos' => $leftMany ? $leftPositions[$i] : null],
+                    ['type' => $link['target'], 'field' => $link['inverse'], 'ref' => $right, 'pos' => $rightMany ? $rightPositions[$i] : null],
                 );
             }
         }
     }
 
     /**
-     * Who links whom, as [this side's id, the target's id], in each list's order.
+     * Who links whom, as [this side's id, the target's id, the target's place in this side's list,
+     * this side's place in the target's list], each place read from its order column when the
+     * relation keeps one.
      *
-     * @return list<array{0: int, 1: int}>
+     * @param array<string, mixed> $link
+     * @return list<array{0: int, 1: int, 2: ?float, 3: ?float}>
      */
-    private function pairs(mixed $relation): array
+    private function pairs(mixed $relation, array $link): array
     {
+        $order = fn (object $r, ?string $column): ?float => $column === null || $r->{$column} === null ? null : (float) $r->{$column};
+        $columns = array_values(array_filter([$link['order'], $link['inverseOrder']]));
         if ($relation instanceof BelongsTo) {
             $key = $relation->getForeignKeyName();
-            $rows = DB::table($relation->getParent()->getTable())->whereNotNull($key)->orderBy('id')->get(['id', $key]);
+            $rows = DB::table($relation->getParent()->getTable())->whereNotNull($key)->orderBy('id')->get(['id', $key, ...$columns]);
 
-            return $rows->map(fn (object $r): array => [(int) $r->id, (int) $r->{$key}])->all();
+            return $rows->map(fn (object $r): array => [(int) $r->id, (int) $r->{$key}, null, $order($r, $link['inverseOrder'])])->all();
         }
         if ($relation instanceof BelongsToMany) {
             [$own, $other] = [$relation->getForeignPivotKeyName(), $relation->getRelatedPivotKeyName()];
-            $rows = DB::table($relation->getTable())->orderBy($own)->orderBy($other)->get([$own, $other]);
+            $rows = DB::table($relation->getTable())->orderBy($own)->orderBy($other)->get([$own, $other, ...$columns]);
 
-            return $rows->map(fn (object $r): array => [(int) $r->{$own}, (int) $r->{$other}])->all();
+            return $rows->map(fn (object $r): array => [(int) $r->{$own}, (int) $r->{$other}, $order($r, $link['order']), $order($r, $link['inverseOrder'])])->all();
         }
         assert($relation instanceof HasOneOrMany);
         $key = $relation->getForeignKeyName();
-        $rows = DB::table($relation->getRelated()->getTable())->whereNotNull($key)->orderBy($key)->orderBy('id')->get(['id', $key]);
+        $rows = DB::table($relation->getRelated()->getTable())->whereNotNull($key)->orderBy($key)->orderBy('id')->get(['id', $key, ...$columns]);
 
-        return $rows->map(fn (object $r): array => [(int) $r->{$key}, (int) $r->id])->all();
+        return $rows->map(fn (object $r): array => [(int) $r->{$key}, (int) $r->id, $order($r, $link['order']), null])->all();
     }
 
     /**
      * Each link to a draft, followed by the same link to that document's published version.
      *
-     * @param list<array{0: int, 1: int}> $pairs
+     * @param list<array{0: int, 1: int, 2: ?float, 3: ?float}> $pairs
      * @param array<string, mixed> $target
-     * @return list<array{0: int, 1: int}>
+     * @return list<array{0: int, 1: int, 2: ?float, 3: ?float}>
      */
     private function withPublished(array $pairs, array $target): array
     {
@@ -610,10 +649,10 @@ final class StrapiExport
             }
         }
         $out = [];
-        foreach ($pairs as [$left, $right]) {
-            $out[] = [$left, $right];
-            if (($twin[$right] ?? null) !== null) {
-                $out[] = [$left, $twin[$right]];
+        foreach ($pairs as $pair) {
+            $out[] = $pair;
+            if (($twin[$pair[1]] ?? null) !== null) {
+                $out[] = [$pair[0], $twin[$pair[1]], $pair[2], $pair[3]];
             }
         }
 
@@ -621,26 +660,28 @@ final class StrapiExport
     }
 
     /**
-     * Each pair with its position in the target's list, which holds its linkers by id.
+     * Each pair's place, from 1, in the list its $list side holds: in link order, a link without
+     * an order (made before the app kept one) after those with one, ties as the pairs come.
      *
-     * @param list<array{0: int, 1: int}> $pairs
-     * @return list<array{0: int, 1: int, 2: int}>
+     * @param list<array{0: int, 1: int, 2: ?float, 3: ?float}> $pairs
+     * @return list<int>
      */
-    private function rightPositions(array $pairs): array
+    private static function positions(array $pairs, int $list, int $member, int $order): array
     {
-        $byTarget = [];
-        foreach ($pairs as [$left, $right]) {
-            $byTarget[$right][] = $left;
+        $indexes = array_keys($pairs);
+        usort($indexes, fn (int $a, int $b): int => [$pairs[$a][$list], $pairs[$a][$order] === null, $pairs[$a][$order]] <=> [$pairs[$b][$list], $pairs[$b][$order] === null, $pairs[$b][$order]]);
+        $positions = [];
+        $seen = [];
+        foreach ($indexes as $i) {
+            $owner = $pairs[$i][$list];
+            $seen[$owner] ??= [];
+            // A member linked twice holds one place.
+            $seen[$owner][$pairs[$i][$member]] ??= count($seen[$owner]) + 1;
+            $positions[$i] = $seen[$owner][$pairs[$i][$member]];
         }
-        $position = [];
-        foreach ($byTarget as $right => $lefts) {
-            sort($lefts);
-            foreach (array_values(array_unique($lefts)) as $index => $left) {
-                $position["{$left}|{$right}"] = $index + 1;
-            }
-        }
+        ksort($positions);
 
-        return array_map(fn (array $p): array => [$p[0], $p[1], $position["{$p[0]}|{$p[1]}"]], $pairs);
+        return array_values($positions);
     }
 
     private function configuration(): void
@@ -659,6 +700,10 @@ final class StrapiExport
         }
         $store($email, $templates);
         $store($grant, StrapiProviders::settings());
+        $folder = StrapiSettings::get('upload.api-folder')['id'] ?? null;
+        if (isset(StrapiTransferMap::TYPES[self::FOLDER]['model']) && is_int($folder)) {
+            $store('plugin_upload_api-folder', ['id' => $folder]);
+        }
         $locale = StrapiTransferMap::TYPES['plugin::i18n.locale']['model'] ?? null;
         if ($locale !== null) {
             $default = DB::table((new $locale())->getTable())->where('is_default', true)->value('code');

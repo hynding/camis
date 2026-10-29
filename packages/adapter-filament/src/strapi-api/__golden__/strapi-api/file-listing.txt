@@ -129,6 +129,10 @@ overwrite app/Filament/Resources/TransferTokens/Pages/CreateTransferToken.php
 overwrite app/Filament/Resources/TransferTokens/Pages/EditTransferToken.php
 overwrite app/Filament/Resources/TransferTokens/Pages/ListTransferTokens.php
 overwrite app/Filament/Resources/TransferTokens/TransferTokenResource.php
+overwrite app/Filament/Resources/UploadFolders/Pages/CreateUploadFolder.php
+overwrite app/Filament/Resources/UploadFolders/Pages/EditUploadFolder.php
+overwrite app/Filament/Resources/UploadFolders/Pages/ListUploadFolders.php
+overwrite app/Filament/Resources/UploadFolders/UploadFolderResource.php
 overwrite app/Filament/Resources/Users/Pages/CreateUser.php
 overwrite app/Filament/Resources/Users/Pages/EditUser.php
 overwrite app/Filament/Resources/Users/Pages/ListUsers.php
@@ -184,6 +188,7 @@ overwrite app/Http/Serializers/NoteSerializer.php
 overwrite app/Http/Serializers/PageSerializer.php
 overwrite app/Http/Serializers/PostSerializer.php
 overwrite app/Http/Serializers/ReviewSerializer.php
+overwrite app/Http/Serializers/RoleSerializer.php
 overwrite app/Http/Serializers/TagSerializer.php
 overwrite app/Http/Serializers/TopicSerializer.php
 overwrite app/Http/Serializers/TransactionSerializer.php
@@ -199,6 +204,7 @@ overwrite app/Models/Category.php
 overwrite app/Models/Concerns/EmitsStrapiEvents.php
 overwrite app/Models/Concerns/HasDocumentId.php
 overwrite app/Models/Concerns/HasDraftAndPublish.php
+overwrite app/Models/Concerns/HasLinkOrder.php
 overwrite app/Models/Concerns/HasLocale.php
 overwrite app/Models/Concerns/HasMedia.php
 overwrite app/Models/File.php
@@ -220,6 +226,7 @@ overwrite app/Models/StrapiWebhook.php
 overwrite app/Models/Tag.php
 overwrite app/Models/Topic.php
 overwrite app/Models/Transaction.php
+overwrite app/Models/UploadFolder.php
 overwrite app/Policies/ActivityPolicy.php
 overwrite app/Policies/ActivitySessionPolicy.php
 overwrite app/Policies/ArticlePolicy.php
@@ -238,6 +245,7 @@ overwrite app/Policies/ReviewPolicy.php
 overwrite app/Policies/TagPolicy.php
 overwrite app/Policies/TopicPolicy.php
 overwrite app/Policies/TransactionPolicy.php
+overwrite app/Policies/UploadFolderPolicy.php
 overwrite app/Policies/UserPolicy.php
 overwrite app/Support/PublicRole.php
 overwrite app/Support/Ring1.php
@@ -245,8 +253,10 @@ overwrite app/Support/StrapiApiTokens.php
 overwrite app/Support/StrapiDocuments.php
 overwrite app/Support/StrapiError.php
 overwrite app/Support/StrapiExport.php
+overwrite app/Support/StrapiFolders.php
 overwrite app/Support/StrapiImport.php
 overwrite app/Support/StrapiLinkOrder.php
+overwrite app/Support/StrapiLinkPivot.php
 overwrite app/Support/StrapiLocales.php
 overwrite app/Support/StrapiOAuth.php
 overwrite app/Support/StrapiPopulate.php
@@ -304,6 +314,7 @@ overwrite database/migrations/0001_01_02_000024_create_landings_blocks_hero_tabl
 overwrite database/migrations/0001_01_02_000025_create_landings_blocks_quantity_table.php
 overwrite database/migrations/0001_01_02_000026_create_pages_panel_items_table.php
 overwrite database/migrations/0001_01_03_000000_add_link_order_columns.php
+overwrite database/migrations/0001_01_03_000001_create_upload_folders_table.php
 overwrite database/seeders/RolePermissionSeeder.php
 overwrite resources/strapi/schemas.jsonl
 overwrite routes/api.php

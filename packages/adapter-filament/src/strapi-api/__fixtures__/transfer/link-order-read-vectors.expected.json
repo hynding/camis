@@ -1,0 +1,98 @@
+{
+  "an author's books in link order": {
+    "status": 200,
+    "data": [
+      {
+        "books": [
+          {
+            "documentId": "p47dexq18oi3tiemxrilxbqy",
+            "inStock": null,
+            "pages": null,
+            "publishedOn": null,
+            "rating": null,
+            "releasedAt": null,
+            "title": "One"
+          },
+          {
+            "documentId": "ddif3w0th7d9hfx2ih4vjnqq",
+            "inStock": null,
+            "pages": null,
+            "publishedOn": null,
+            "rating": null,
+            "releasedAt": null,
+            "title": "Three"
+          },
+          {
+            "documentId": "e8q97bxtwhmlem0p4e4usscb",
+            "inStock": null,
+            "pages": null,
+            "publishedOn": null,
+            "rating": null,
+            "releasedAt": null,
+            "title": "Two"
+          }
+        ],
+        "documentId": "c6ngey8e0v0x2ahfke7bpr8m",
+        "name": "Ann"
+      }
+    ]
+  },
+  "books' genres in link order": {
+    "status": 200,
+    "data": [
+      {
+        "documentId": "p47dexq18oi3tiemxrilxbqy",
+        "genres": [
+          {
+            "documentId": "csc9iej8wn52a8qrjh8xauvj",
+            "name": "Bravo"
+          },
+          {
+            "documentId": "bl5p1csh4mx3h3sic5ojdvwi",
+            "name": "Charlie"
+          },
+          {
+            "documentId": "pwcfgvbayno01pyfbjwc0xhl",
+            "name": "Alpha"
+          }
+        ],
+        "inStock": null,
+        "pages": null,
+        "publishedOn": null,
+        "rating": null,
+        "releasedAt": null,
+        "title": "One"
+      },
+      {
+        "documentId": "ddif3w0th7d9hfx2ih4vjnqq",
+        "genres": [
+          {
+            "documentId": "pwcfgvbayno01pyfbjwc0xhl",
+            "name": "Alpha"
+          }
+        ],
+        "inStock": null,
+        "pages": null,
+        "publishedOn": null,
+        "rating": null,
+        "releasedAt": null,
+        "title": "Three"
+      },
+      {
+        "documentId": "e8q97bxtwhmlem0p4e4usscb",
+        "genres": [
+          {
+            "documentId": "csc9iej8wn52a8qrjh8xauvj",
+            "name": "Bravo"
+          }
+        ],
+        "inStock": null,
+        "pages": null,
+        "publishedOn": null,
+        "rating": null,
+        "releasedAt": null,
+        "title": "Two"
+      }
+    ]
+  }
+}

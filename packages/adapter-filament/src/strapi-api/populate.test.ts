@@ -7,7 +7,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PHP_MARKER } from "../hooks/names";
 import { filamentAdapter } from "../generate";
 import { strapiApiBundle } from "./__fixtures__/strapi-api";
-import { emitStrapiLinkOrder, emitStrapiRelationsOrderer } from "./link-order";
+import {
+  emitHasLinkOrder,
+  emitStrapiLinkOrder,
+  emitStrapiLinkPivot,
+  emitStrapiRelationsOrderer,
+} from "./link-order";
 import { emitStrapiPopulate, emitStrapiRelations } from "./populate-runtime";
 
 const hasPhp = (): boolean => {
@@ -37,6 +42,7 @@ const runtimes = [
   { path: "app/Support/StrapiRelations.php", emit: emitStrapiRelations },
   { path: "app/Support/StrapiLinkOrder.php", emit: emitStrapiLinkOrder },
   { path: "app/Support/StrapiRelationsOrderer.php", emit: emitStrapiRelationsOrderer },
+  { path: "app/Support/StrapiLinkPivot.php", emit: emitStrapiLinkPivot },
 ];
 
 describe("populate and relation runtime files", () => {
@@ -61,6 +67,14 @@ describe("populate and relation runtime files", () => {
     );
     await expect(emitStrapiRelationsOrderer()).toMatchFileSnapshot(
       "./__golden__/strapi-api/StrapiRelationsOrderer.php",
+    );
+  });
+  it("StrapiLinkPivot and HasLinkOrder golden", async () => {
+    await expect(emitStrapiLinkPivot()).toMatchFileSnapshot(
+      "./__golden__/strapi-api/StrapiLinkPivot.php",
+    );
+    await expect(emitHasLinkOrder()).toMatchFileSnapshot(
+      "./__golden__/strapi-api/HasLinkOrder.php",
     );
   });
 
@@ -109,11 +123,11 @@ describe("serializer relation and component maps", () => {
       "'readers' => ['relation' => 'readers', 'kind' => 'belongsToMany', 'model' => \\App\\Models\\User::class, 'serializer' => UserSerializer::class, 'foreignKey' => null, 'uid' => 'plugin::users-permissions.user', 'holder' => 'self', 'draftPublish' => false, 'localized' => false, 'order' => 'user_ord', 'inverseOrder' => 'review_ord'],",
     );
   });
-  it("renders a populated user as users-permissions does, its role a relation no grant reaches", () => {
+  it("renders a populated user as users-permissions does, its role one relation only a token reaches", () => {
     const user = serializer("User");
     expect(user).toContain("public const FIELDS = StrapiUsers::FIELDS + [");
     expect(user).toContain(
-      "'role' => ['relation' => 'roles', 'kind' => 'belongsToMany', 'model' => \\Spatie\\Permission\\Models\\Role::class,",
+      "'role' => ['relation' => 'roles', 'kind' => 'morphToOne', 'model' => \\Spatie\\Permission\\Models\\Role::class, 'serializer' => \\App\\Http\\Serializers\\RoleSerializer::class,",
     );
     expect(user).toContain("return StrapiUsers::wire($m);");
   });
@@ -136,6 +150,25 @@ describe("link order", () => {
     // Book.topic is a many-to-one Topic does not list.
     expect(migration()).not.toMatch(/Schema::table\('books'[^}]*topic_ord/);
     expect(migration()).not.toContain("Schema::table('notes'");
+  });
+  it("places a to-one link made outside the API at the end of the list it joins", () => {
+    // Book.author is listed by Author.books; the admin's select and any save go through the model.
+    const book = content("app/Models/Book.php");
+    expect(book).toContain("    use HasLinkOrder;\n");
+    expect(book).toContain("    public const LINK_ORDERS = ['author_id' => 'author_ord'];");
+    expect(content("app/Models/Note.php")).not.toContain("HasLinkOrder");
+    expect(content("app/Models/Concerns/HasLinkOrder.php")).toContain(
+      "StrapiLinkOrder::next($row, $foreignKey, $order, $row->getAttribute($foreignKey))",
+    );
+  });
+  it("places a pivot link made outside the API at the end of both sides' lists", () => {
+    // The admin's multi-select syncs the pivot; each attached row is a StrapiLinkPivot.
+    expect(content("app/Models/Book.php")).toContain(
+      "return $this->belongsToMany(Genre::class, 'book_genre', 'book_id', 'genre_id')->using(\\App\\Support\\StrapiLinkPivot::class);",
+    );
+    expect(content("app/Support/StrapiLinkPivot.php")).toContain(
+      "final class StrapiLinkPivot extends Pivot",
+    );
   });
   it("writes connects through Strapi's relation orderer", () => {
     expect(content("app/Support/StrapiLinkOrder.php")).toContain(
