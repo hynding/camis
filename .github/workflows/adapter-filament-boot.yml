@@ -407,6 +407,18 @@ jobs:
           node ../packages/adapter-filament/scripts/strapi-auth-vectors.mjs http://127.0.0.1:8765/api \
             --hook "bash ../packages/adapter-filament/scripts/strapi-auth-hook.sh" \
             --vectors $F/webhook-vectors.json --expected $F/webhook-vectors.expected.json
+      - name: Strapi register allowedFields and /users pagination and populate (recorded from strapi-php)
+        run: |
+          cd app
+          # The oracle's config/plugins.php allowed the same register keys.
+          echo "CAMIS_REGISTER_ALLOWED_FIELDS=blocked,nickname" >> .env
+          php artisan config:cache
+          php artisan migrate:fresh --force
+          php artisan db:seed --class="Database\\Seeders\\RolePermissionSeeder" --force
+          F=../packages/adapter-filament/src/strapi-api/__fixtures__
+          node ../packages/adapter-filament/scripts/strapi-auth-vectors.mjs http://127.0.0.1:8765/api \
+            --hook "bash ../packages/adapter-filament/scripts/strapi-auth-hook.sh" \
+            --vectors $F/user-query-vectors.json --expected $F/user-query-vectors.expected.json
       - name: Strapi refresh-token session vectors (recorded from strapi-php in refresh mode)
         run: |
           cd app
