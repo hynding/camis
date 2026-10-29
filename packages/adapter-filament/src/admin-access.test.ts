@@ -45,7 +45,9 @@ describe("admin access", () => {
   it("makes the first admin with camis:admin", () => {
     const command = file(result, COMMAND);
     expect(command).toContain("protected $signature = 'camis:admin");
-    expect(command).toContain("AdminAccess::ADMIN_ROLES");
+    // PHP refuses a trait's constant read through the trait, so the command reads them off User.
+    expect(command).toContain("User::ADMIN_ROLES");
+    expect(command).not.toMatch(/AdminAccess::[A-Z]/);
     expect(command).toContain("assignRole(");
   });
 
@@ -64,9 +66,7 @@ describe("admin access", () => {
     expect(file(closed, TRAIT)).toContain("public const EVERY_USER = false;");
     expect(file(closed, TRAIT)).toContain("$this->hasAnyRole(self::ADMIN_ROLES)");
     expect(file(closed, TRAIT)).not.toContain("return true;");
-    expect(file(closed, COMMAND)).toContain(
-      "! AdminAccess::EVERY_USER && AdminAccess::ADMIN_ROLES === []",
-    );
+    expect(file(closed, COMMAND)).toContain("! User::EVERY_USER && User::ADMIN_ROLES === []");
   });
 
   it("reports a project whose roles let nobody in", () => {
