@@ -17,7 +17,8 @@ export const ADMIN_COMMAND_PATH = "app/Console/Commands/CamisAdmin.php";
 const adminRoles = (roles: readonly Role[]): string[] =>
   roles.filter((r) => r.admin === true).map((r) => r.name);
 
-const emitAdminAccess = (names: readonly string[]): string => `<?php
+// Without roles there is nothing to tell users apart by; with roles, only an admin role lets in.
+const emitAdminAccess = (everyUser: boolean, names: readonly string[]): string => `<?php
 ${PHP_MARKER}
 
 declare(strict_types=1);
@@ -29,6 +30,9 @@ use Filament\\Panel;
 /** The roles whose users may sign in to the admin; a blocked user never may. */
 trait AdminAccess
 {
+    /** The project has no roles, so every signed-in user may use the admin. */
+    public const EVERY_USER = ${everyUser ? "true" : "false"};
+
     public const ADMIN_ROLES = [${names.map(phpSingleQuoted).join(", ")}];
 
     public function canAccessPanel(Panel $panel): bool
@@ -37,7 +41,7 @@ trait AdminAccess
             return false;
         }
 
-        return ${names.length === 0 ? "true" : "$this->hasAnyRole(self::ADMIN_ROLES)"};
+        return ${everyUser ? "true" : "$this->hasAnyRole(self::ADMIN_ROLES)"};
     }
 }
 `;
@@ -70,8 +74,13 @@ final class CamisAdmin extends Command
 
     public function handle(): int
     {
-        $role = $this->option('role') ?? (AdminAccess::ADMIN_ROLES[0] ?? null);
-        if (AdminAccess::ADMIN_ROLES !== [] && ! in_array($role, AdminAccess::ADMIN_ROLES, true)) {
+        if (! AdminAccess::EVERY_USER && AdminAccess::ADMIN_ROLES === []) {
+            $this->error('No role may sign in to the admin: mark one with "admin": true in the roles file, then rebuild');
+
+            return self::FAILURE;
+        }
+        $role = AdminAccess::EVERY_USER ? null : $this->option('role') ?? AdminAccess::ADMIN_ROLES[0];
+        if ($role !== null && ! in_array($role, AdminAccess::ADMIN_ROLES, true)) {
             $this->error("\\"{$role}\\" is not an admin role; admin roles: " . implode(', ', AdminAccess::ADMIN_ROLES));
 
             return self::FAILURE;
@@ -132,7 +141,7 @@ export const emitAdminAccessFiles = (
   roles: readonly Role[],
 ): { files: GeneratedFile[]; gaps: CapabilityGap[] } => ({
   files: [
-    { path: ADMIN_ACCESS_PATH, content: emitAdminAccess(adminRoles(roles)) },
+    { path: ADMIN_ACCESS_PATH, content: emitAdminAccess(roles.length === 0, adminRoles(roles)) },
     { path: ADMIN_COMMAND_PATH, content: ADMIN_COMMAND },
   ],
   gaps: noAdminRole(roles),
