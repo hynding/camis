@@ -2,6 +2,7 @@ import {
   buildManifest,
   columnField,
   expandComponents,
+  privateFieldGaps,
   type GenerateAdapter,
   type GeneratedFile,
   type GenerationResult,
@@ -82,6 +83,8 @@ export const filamentAdapter: GenerateAdapter = {
       ...localization.gaps,
       ...media.gaps,
       ...guestGaps,
+      // The Strapi API style keeps private fields out of its answers; the Laravel one cannot.
+      ...(apiStyle === "strapi" ? [] : privateFieldGaps(doc, "the Laravel API style")),
     ];
     if (storage !== requestedStorage) {
       gaps.push({
