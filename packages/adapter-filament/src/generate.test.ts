@@ -563,3 +563,64 @@ describe("API emission", () => {
     expect(controller.content).toContain("$this->authorize('view', $note);");
   });
 });
+
+describe("filamentAdapter — owning relations that reference each other", () => {
+  // Strapi keeps every relation in a link table, so two types pointing at each other is ordinary
+  // there (getstarted's Tag and Kitchensink); here a foreign key needs its table to exist first.
+  const cyclic: IrBundle = {
+    document: {
+      version: 1,
+      contentTypes: [
+        {
+          name: "Article",
+          kind: "collection",
+          fields: [
+            { type: "string", name: "title" },
+            {
+              type: "relation",
+              name: "featuredComment",
+              relationKind: "manyToOne",
+              target: "Comment",
+            },
+          ],
+        },
+        {
+          name: "Comment",
+          kind: "collection",
+          fields: [
+            { type: "string", name: "body" },
+            { type: "relation", name: "article", relationKind: "manyToOne", target: "Article" },
+          ],
+        },
+      ],
+      components: [],
+    },
+    roles: [],
+  };
+  const result = filamentAdapter.generate(cyclic, { projectName: "blog" });
+  const file = (part: string) => result.files.find((f) => f.path.includes(part));
+
+  it("generates, with no gap", () => {
+    expect(result.gaps.gaps).toEqual([]);
+  });
+
+  it("creates the first table with the column but not yet its constraint", () => {
+    const articles = file("create_articles_table")!;
+    expect(articles.path).toBe("database/migrations/0001_01_02_000001_create_articles_table.php");
+    expect(articles.content).toContain("$table->foreignId('featured_comment_id')->nullable();");
+    expect(articles.content).not.toContain("constrained('comments')");
+    expect(file("create_comments_table")!.content).toContain(
+      "$table->foreignId('article_id')->nullable()->constrained('articles');",
+    );
+  });
+
+  it("adds the deferred constraint once every table exists, and drops it on the way down", () => {
+    const keys = file("add_articles_foreign_keys")!;
+    expect(keys.path).toBe("database/migrations/0001_01_02_000003_add_articles_foreign_keys.php");
+    expect(keys.content).toContain("Schema::table('articles', function (Blueprint $table): void {");
+    expect(keys.content).toContain(
+      "$table->foreign('featured_comment_id')->references('id')->on('comments');",
+    );
+    expect(keys.content).toContain("$table->dropForeign(['featured_comment_id']);");
+  });
+});

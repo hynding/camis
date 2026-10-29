@@ -1,0 +1,654 @@
+{
+  "roundTrip": [
+    {
+      "name": "a paragraph with marks and a link, as Strapi's editor normalizes it",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "children": [
+            {
+              "type": "text",
+              "text": "Plain, "
+            },
+            {
+              "type": "text",
+              "text": "bold",
+              "bold": true
+            },
+            {
+              "type": "text",
+              "text": " and a "
+            },
+            {
+              "type": "link",
+              "url": "https://example.com",
+              "children": [
+                {
+                  "type": "text",
+                  "text": "link"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": ""
+            }
+          ]
+        }
+      ],
+      "editor": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Plain, "
+              },
+              {
+                "type": "text",
+                "text": "bold",
+                "marks": [
+                  {
+                    "type": "bold"
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": " and a "
+              },
+              {
+                "type": "text",
+                "text": "link",
+                "marks": [
+                  {
+                    "type": "link",
+                    "attrs": {
+                      "href": "https://example.com"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "headings, and every mark on one text",
+      "blocks": [
+        {
+          "type": "heading",
+          "level": 1,
+          "children": [
+            {
+              "type": "text",
+              "text": "Top"
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "level": 6,
+          "children": [
+            {
+              "type": "text",
+              "text": "all",
+              "bold": true,
+              "italic": true,
+              "underline": true,
+              "strikethrough": true,
+              "code": true
+            }
+          ]
+        }
+      ],
+      "editor": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 1
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Top"
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 6
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "all",
+                "marks": [
+                  {
+                    "type": "bold"
+                  },
+                  {
+                    "type": "italic"
+                  },
+                  {
+                    "type": "underline"
+                  },
+                  {
+                    "type": "strike"
+                  },
+                  {
+                    "type": "code"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a quote whose text breaks a line",
+      "blocks": [
+        {
+          "type": "quote",
+          "children": [
+            {
+              "type": "text",
+              "text": "To be\nor not"
+            }
+          ]
+        }
+      ],
+      "editor": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "blockquote",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "To be"
+                  },
+                  {
+                    "type": "hardBreak"
+                  },
+                  {
+                    "type": "text",
+                    "text": "or not"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "code blocks, with and without a language",
+      "blocks": [
+        {
+          "type": "code",
+          "language": "php",
+          "children": [
+            {
+              "type": "text",
+              "text": "echo 1;\necho 2;"
+            }
+          ]
+        },
+        {
+          "type": "code",
+          "children": [
+            {
+              "type": "text",
+              "text": "plain"
+            }
+          ]
+        }
+      ],
+      "editor": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "codeBlock",
+            "attrs": {
+              "language": "php"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "echo 1;\necho 2;"
+              }
+            ]
+          },
+          {
+            "type": "codeBlock",
+            "attrs": {
+              "language": null
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "plain"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a list with a nested list",
+      "blocks": [
+        {
+          "type": "list",
+          "format": "unordered",
+          "children": [
+            {
+              "type": "list-item",
+              "children": [
+                {
+                  "type": "text",
+                  "text": "one"
+                }
+              ]
+            },
+            {
+              "type": "list",
+              "format": "ordered",
+              "indentLevel": 1,
+              "children": [
+                {
+                  "type": "list-item",
+                  "children": [
+                    {
+                      "type": "text",
+                      "text": "one.a"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "list-item",
+              "children": [
+                {
+                  "type": "text",
+                  "text": "two"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "editor": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "bulletList",
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "one"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "orderedList",
+                    "content": [
+                      {
+                        "type": "listItem",
+                        "content": [
+                          {
+                            "type": "paragraph",
+                            "content": [
+                              {
+                                "type": "text",
+                                "text": "one.a"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "two"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "an empty paragraph between two",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "children": [
+            {
+              "type": "text",
+              "text": "a"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "children": [
+            {
+              "type": "text",
+              "text": ""
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "children": [
+            {
+              "type": "text",
+              "text": "b"
+            }
+          ]
+        }
+      ],
+      "editor": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "a"
+              }
+            ]
+          },
+          {
+            "type": "paragraph"
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "b"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "an image from the media library",
+      "files": {
+        "/uploads/a.png": {
+          "name": "a.png",
+          "alternativeText": "A",
+          "url": "/uploads/a.png",
+          "caption": "cap",
+          "width": 2,
+          "height": 2,
+          "formats": null,
+          "hash": "a",
+          "ext": ".png",
+          "mime": "image/png",
+          "size": 0.39,
+          "previewUrl": null,
+          "provider": "local",
+          "provider_metadata": null,
+          "createdAt": "2026-10-29T07:07:00.000Z",
+          "updatedAt": "2026-10-29T07:07:00.000Z"
+        }
+      },
+      "blocks": [
+        {
+          "type": "image",
+          "image": {
+            "name": "a.png",
+            "alternativeText": "A",
+            "url": "/uploads/a.png",
+            "caption": "cap",
+            "width": 2,
+            "height": 2,
+            "formats": null,
+            "hash": "a",
+            "ext": ".png",
+            "mime": "image/png",
+            "size": 0.39,
+            "previewUrl": null,
+            "provider": "local",
+            "provider_metadata": null,
+            "createdAt": "2026-10-29T07:07:00.000Z",
+            "updatedAt": "2026-10-29T07:07:00.000Z"
+          },
+          "children": [
+            {
+              "type": "text",
+              "text": ""
+            }
+          ]
+        }
+      ],
+      "editor": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "image",
+            "attrs": {
+              "src": "/uploads/a.png",
+              "alt": "A",
+              "title": "cap"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "fromEditor": [
+    {
+      "name": "an empty document is no value",
+      "editor": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph"
+          }
+        ]
+      },
+      "blocks": null
+    },
+    {
+      "name": "no document is no value",
+      "editor": null,
+      "blocks": null
+    },
+    {
+      "name": "a link opening a paragraph gets the empty text Strapi's editor keeps before it",
+      "editor": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "go",
+                "marks": [
+                  {
+                    "type": "link",
+                    "attrs": {
+                      "href": "/about",
+                      "target": null,
+                      "rel": null
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": " now"
+              }
+            ]
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "paragraph",
+          "children": [
+            {
+              "type": "text",
+              "text": ""
+            },
+            {
+              "type": "link",
+              "url": "/about",
+              "children": [
+                {
+                  "type": "text",
+                  "text": "go"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " now"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a quote of two paragraphs keeps them as lines",
+      "editor": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "blockquote",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "one"
+                  }
+                ]
+              },
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "two"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "quote",
+          "children": [
+            {
+              "type": "text",
+              "text": "one\ntwo"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "an image not in the media library keeps what the editor knows of it",
+      "editor": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "image",
+            "attrs": {
+              "src": "https://cdn.example/x.png",
+              "alt": null,
+              "title": null
+            }
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "image",
+          "image": {
+            "url": "https://cdn.example/x.png",
+            "alternativeText": null,
+            "caption": null
+          },
+          "children": [
+            {
+              "type": "text",
+              "text": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "what blocks cannot hold is left out",
+      "editor": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "horizontalRule"
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "kept"
+              }
+            ]
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "paragraph",
+          "children": [
+            {
+              "type": "text",
+              "text": "kept"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

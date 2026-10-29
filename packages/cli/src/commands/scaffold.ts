@@ -245,6 +245,8 @@ export const scaffoldCommand = async (
       : []),
   ];
 
+  // composer create-project runs in the parent, which `camis new` has not created yet.
+  await io.makeDir(dirname(appDir));
   for (const step of stepList) {
     io.out(`→ ${step.cmd} ${step.args.join(" ")}`);
     const code = await io.exec(step.cmd, step.args, step.cwd);

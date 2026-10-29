@@ -1,8 +1,15 @@
-import type { CapabilityGap, ContentType, IrDocument } from "@camis/ir-schema";
+import type { ContentType, IrDocument } from "@camis/ir-schema";
+
+/** A foreign key whose constraint waits until every table exists: `table`'s key to `references`. */
+export interface DeferredForeignKey {
+  table: string;
+  references: string;
+}
 
 export interface MigrationOrderResult {
   order: ContentType[];
-  gaps: CapabilityGap[];
+  /** The keys cut to break cycles; the caller constrains them in a migration after the tables. */
+  deferred: DeferredForeignKey[];
 }
 
 type RelationField = Extract<ContentType["fields"][number], { type: "relation" }>;
@@ -17,12 +24,14 @@ type RelationField = Extract<ContentType["fields"][number], { type: "relation" }
  *
  * A stable topological sort (Kahn's algorithm) breaks ties by IR position, so a document
  * with no relations — or none that reorder anything — regenerates in its original order.
- * A genuine dependency cycle can't be ordered at all; it is reported as a capability gap and
- * the cyclic types are appended, in IR order, after everything that could be sorted.
+ * A cycle (types whose owning relations point at each other, ordinary in a Strapi project, which
+ * keeps every relation in a link table) is broken where the sort gets stuck: the first stuck type
+ * in IR order is created without the constraints of its keys to the other stuck types, which are
+ * returned as `deferred`, and the sort carries on.
  */
 // `doc` is unused: every relation lives on the content types themselves, so ordering only
 // needs to walk `emitted`. It stays in the signature because the caller (and every other
-// gap-producing pass in this adapter) is handed the full IR document, not just its own slice.
+// pass in this adapter) is handed the full IR document, not just its own slice.
 export const migrationOrder = (_doc: IrDocument, emitted: ContentType[]): MigrationOrderResult => {
   const emittedNames = new Set(emitted.map((ct) => ct.name));
 
@@ -58,31 +67,30 @@ export const migrationOrder = (_doc: IrDocument, emitted: ContentType[]): Migrat
   const remaining = new Map(emitted.map((ct) => [ct.name, dependsOn.get(ct.name)?.size ?? 0]));
   const placed = new Set<string>();
   const order: ContentType[] = [];
+  const deferred: DeferredForeignKey[] = [];
 
-  for (;;) {
-    const next = emitted.find((ct) => !placed.has(ct.name) && (remaining.get(ct.name) ?? 0) === 0);
-    if (next === undefined) break;
-    placed.add(next.name);
-    order.push(next);
-    for (const dependent of dependents.get(next.name) ?? []) {
+  const place = (ct: ContentType): void => {
+    placed.add(ct.name);
+    order.push(ct);
+    for (const dependent of dependents.get(ct.name) ?? []) {
       remaining.set(dependent, (remaining.get(dependent) ?? 1) - 1);
     }
+  };
+
+  while (placed.size < emitted.length) {
+    const next = emitted.find((ct) => !placed.has(ct.name) && (remaining.get(ct.name) ?? 0) === 0);
+    if (next !== undefined) {
+      place(next);
+      continue;
+    }
+    const stuck = emitted.find((ct) => !placed.has(ct.name))!;
+    for (const before of dependsOn.get(stuck.name) ?? []) {
+      if (placed.has(before)) continue;
+      deferred.push({ table: stuck.name, references: before });
+      dependents.get(before)?.delete(stuck.name);
+    }
+    place(stuck);
   }
 
-  const gaps: CapabilityGap[] = [];
-  const unplaced = emitted.filter((ct) => !placed.has(ct.name));
-  if (unplaced.length > 0) {
-    gaps.push({
-      feature: "relationCycle",
-      severity: "error",
-      location: { contentType: unplaced[0]!.name },
-      message:
-        `content types ${unplaced.map((ct) => ct.name).join(", ")} reference each other ` +
-        "through owning relations; their migrations cannot be ordered — break the cycle or " +
-        "make one side a oneToMany with an inverse",
-    });
-    order.push(...unplaced);
-  }
-
-  return { order, gaps };
+  return { order, deferred };
 };

@@ -48,10 +48,11 @@ final class ConsumableSerializer
             'publishedAt' => $m->updated_at?->toIso8601ZuluString('millisecond'),
             'facts' => self::nested([
                 'calories' => $m->facts_calories === null ? null : (float) $m->facts_calories,
-                'additional' => $m->factsAdditional->map(fn ($c) => self::nested([
+                'additional' => $m->factsAdditional->map(fn ($c) => [
+                    'id' => $c->id,
                     'slug' => $c->slug,
                     'amount' => $c->amount === null ? null : (float) $c->amount,
-                ]))->filter(fn ($r) => $r !== null)->values()->all(),
+                ])->all(),
             ]),
         ];
     }

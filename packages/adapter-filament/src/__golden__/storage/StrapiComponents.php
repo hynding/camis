@@ -387,7 +387,7 @@ final class StrapiComponents
 
         return match ($type) {
             'dateTime', 'timestamp' => StrapiDateTime::fromStorage($value),
-            'json' => is_string($value) ? json_decode($value, true) : $value,
+            'json', 'blocks' => is_string($value) ? json_decode($value, true) : $value,
             'boolean' => (bool) $value,
             default => $value,
         };
@@ -402,7 +402,7 @@ final class StrapiComponents
 
         return match ($type) {
             'dateTime', 'timestamp' => StrapiDateTime::toStorage($value, $driver),
-            'json' => is_string($value) ? $value : json_encode($value),
+            'json', 'blocks' => is_string($value) ? $value : json_encode($value),
             // The query builder binds a PHP bool as the integer or boolean the driver wants.
             'boolean' => (bool) $value,
             default => $value,

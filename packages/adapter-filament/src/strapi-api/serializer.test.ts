@@ -39,6 +39,34 @@ const nestedDoc: IrDocument = normalize({
   ],
 });
 
+const zonedDoc: IrDocument = normalize({
+  version: 1,
+  contentTypes: [
+    {
+      name: "Page",
+      kind: "collection",
+      fields: [{ type: "dynamicZone", name: "sections", components: ["Banner"] }],
+    },
+  ],
+  components: [
+    {
+      name: "Banner",
+      fields: [
+        { type: "string", name: "title" },
+        { type: "media", name: "picture" },
+      ],
+    },
+  ],
+});
+
+const stampedDoc: IrDocument = normalize({
+  version: 1,
+  contentTypes: [
+    { name: "Visit", kind: "collection", fields: [{ type: "timestamp", name: "seenAt" }] },
+  ],
+  components: [],
+});
+
 describe("emitSerializer", () => {
   it("Transaction serializer golden (embedded component + decimal + bigInteger)", async () => {
     await expect(emitSerializer(shape("Transaction"))).toMatchFileSnapshot(
@@ -117,11 +145,9 @@ describe("emitSerializer", () => {
     expect(php).toContain("$children['quantities'] = array_map(");
   });
   // A component with no value is null; one with a value sends its own nulls.
-  it("uses self::nested for component/child branches so an all-null branch is null, not []", () => {
+  it("uses self::nested for an embedded component so an all-null one is null, not []", () => {
     const transaction = emitSerializer(shape("Transaction"));
     expect(transaction).toContain("self::nested(");
-    const activitySession = emitSerializer(shape("ActivitySession"));
-    expect(activitySession).toContain("->filter(fn ($r) => $r !== null)->values()->all()");
   });
   it("emits a clean empty $children array and an empty syncChildren body with no children", () => {
     const php = emitSerializer(shape("Transaction"));
@@ -143,5 +169,28 @@ describe("emitSerializer", () => {
     await expect(
       emitSerializer(wireShape(nestedDoc, nestedDoc.contentTypes[0]!, [])),
     ).toMatchFileSnapshot("./__golden__/strapi-api/ConsumableNestedSerializer.php");
+  });
+  // Strapi sends a `timestamp` attribute as its epoch in milliseconds, as a string
+  // ("1772359200000"), and takes either that or a date string on a write.
+  it("serializes a timestamp as Strapi does, epoch milliseconds as a string, and reads one back", () => {
+    const php = emitSerializer(wireShape(stampedDoc, stampedDoc.contentTypes[0]!, []));
+    expect(php).toContain(
+      "'seenAt' => $m->seen_at === null ? null : (string) $m->seen_at->getTimestampMs(),",
+    );
+    expect(php).toContain("'seen_at' => self::epoch(self::dig($data, ['seenAt'])),");
+    expect(php).toContain("private static function epoch(mixed $value): mixed");
+    expect(emitSerializer(shape("Note"))).not.toContain("function epoch");
+  });
+  // Strapi sends every component it stores as a row with that row's id.
+  it("sends a repeatable component's items with their ids", () => {
+    const php = emitSerializer(shape("ActivitySession"));
+    expect(php).toMatch(
+      /'quantities' => \$m->quantities->map\(fn \(\$c\) => \[\n\s+'id' => \$c->id,/,
+    );
+  });
+  // A zone item's media, like its own components, waits for the zone's populate to name it.
+  it("lists a zone member's media among the keys its populate names", () => {
+    const php = emitSerializer(wireShape(zonedDoc, zonedDoc.contentTypes[0]!, []));
+    expect(php).toContain("'components' => ['picture']");
   });
 });

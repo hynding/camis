@@ -10,7 +10,7 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createHmac } from "node:crypto";
 import { once } from "node:events";
-import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { filamentAdapter } from "@camis/adapter-filament";
@@ -462,6 +462,9 @@ const main = async (): Promise<void> => {
       readFile: (p) => readFile(p, "utf8"),
       writeFile: (p, c) => writeFile(p, c),
       materialize,
+      makeDir: async (p) => {
+        await mkdir(p, { recursive: true });
+      },
       copyDir: (s, d) => cp(s, d, { recursive: true, force: true }),
       exec: (cmd, args, cwd) =>
         new Promise((resolvePromise, rejectPromise) => {

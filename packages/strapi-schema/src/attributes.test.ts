@@ -14,6 +14,13 @@ describe("toAttribute — scalars", () => {
     expect(toAttribute({ type: "dateTime", name: "at" })).toEqual({ type: "datetime" });
   });
 
+  it("maps blocks to Strapi's blocks attribute", () => {
+    expect(toAttribute({ type: "blocks", name: "body", required: true })).toEqual({
+      type: "blocks",
+      required: true,
+    });
+  });
+
   it("maps enumeration values to enum", () => {
     expect(
       toAttribute({

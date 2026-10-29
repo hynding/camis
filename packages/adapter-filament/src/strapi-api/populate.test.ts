@@ -92,6 +92,19 @@ describe("populate and relation runtime files", () => {
   });
 });
 
+// A published row reaches a plain type's link through its draft, which shares its document and
+// locale: getstarted's French category would otherwise answer for the English one's addresses.
+describe("links reached through a document's draft", () => {
+  it("find the draft in the row's own locale", () => {
+    const php = emitStrapiPopulate();
+    const parent = php.slice(php.indexOf("private static function parent"));
+    expect(parent).toContain(
+      "$version = fn (Model $row): string => $row->getAttribute('document_id') . '|' . $row->getAttribute('locale');",
+    );
+    expect(parent).toContain("$draft = $draftOf[$version($row)] ?? null;");
+  });
+});
+
 describe("serializer relation and component maps", () => {
   it("lists the top-level components populate can name", () => {
     expect(serializer("Book")).toContain("public const COMPONENTS = ['price', 'editions'];");
@@ -278,4 +291,60 @@ describe("populate conformance vectors", () => {
       expect(Object.keys(recorded).sort()).toEqual([...names].sort());
     },
   );
+});
+
+// Strapi's populate reaches one level: `populate=*` (or naming a component) sends the component's
+// own scalars, but its nested components and media only when the component's populate names them.
+describe.skipIf(!hasPhp())("populated components, run by PHP", () => {
+  let dir = "";
+  beforeAll(() => {
+    dir = mkdtempSync(join(tmpdir(), "camis-populate-components-"));
+    writeFileSync(join(dir, "StrapiPopulate.php"), emitStrapiPopulate());
+  });
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+  const SERIALIZER = `final class PeriodSerializer {
+    public const FIELDS = [
+      'period.label' => ['column' => 'period_label', 'type' => 'string'],
+      'period.picture' => ['column' => 'period_picture', 'type' => 'media'],
+      'period.note.text' => ['column' => 'period_note_text', 'type' => 'string'],
+      'period.dishes' => ['component' => 'periodDishes', 'fields' => [
+        'name' => ['column' => 'name', 'type' => 'string'],
+      ]],
+      'services' => ['component' => 'services', 'fields' => [
+        'name' => ['column' => 'name', 'type' => 'string'],
+        'media' => ['column' => 'media', 'type' => 'media'],
+      ]],
+    ];
+    public const COMPONENTS = ['period', 'services'];
+    public const ZONES = [];
+  }`;
+  const PERIOD = {
+    label: "Summer",
+    picture: "a.png",
+    note: { text: "closed" },
+    dishes: [{ id: 1, name: "Gelato" }],
+  };
+  const SERVICES = [{ id: 4, name: "Terrace", media: "b.png" }];
+
+  const component = (key: string, value: unknown, sub: unknown): unknown => {
+    const script = `require '${dir}/StrapiPopulate.php'; ${SERIALIZER}
+      $component = Closure::bind(fn (...$a) => static::component(...$a), null, App\\Support\\StrapiPopulate::class);
+      echo json_encode($component(json_decode('${JSON.stringify(value)}', true), '${key}', json_decode('${JSON.stringify(sub)}', true), PeriodSerializer::class));`;
+    return JSON.parse(execFileSync("php", ["-r", script], { encoding: "utf8" }));
+  };
+
+  it("sends an embedded component's scalars, not its nested components or media", () => {
+    expect(component("period", PERIOD, [])).toEqual({ label: "Summer" });
+  });
+  it("sends a repeatable component's items with their ids, not their media", () => {
+    expect(component("services", SERVICES, [])).toEqual([{ id: 4, name: "Terrace" }]);
+  });
+  it("sends what the component's own populate names", () => {
+    expect(component("period", PERIOD, { populate: { dishes: [] } })).toEqual({
+      label: "Summer",
+      dishes: [{ id: 1, name: "Gelato" }],
+    });
+    expect(component("period", PERIOD, { populate: "*" })).toEqual(PERIOD);
+  });
 });

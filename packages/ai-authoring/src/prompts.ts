@@ -11,7 +11,7 @@ Each op is one of:
 - { "op": "removeField", "contentType": <TypeName>, "field": <FieldName> }
 - { "op": "renameField", "contentType": <TypeName>, "from": <FieldName>, "to": <FieldName> }
 A ContentType is { "name", "kind": "collection"|"single", "fields": Field[] }.
-A Field is { "type": <one of string|text|richText|email|uid|integer|bigInteger|float|decimal|boolean|enumeration|date|time|dateTime|timestamp|json|media|relation|component|dynamicZone>, "name", ... }.
+A Field is { "type": <one of string|text|richText|email|uid|integer|bigInteger|float|decimal|boolean|enumeration|date|time|dateTime|timestamp|json|blocks|media|relation|component|dynamicZone>, "name", ... }.
 TypeName is PascalCase; FieldName is camelCase. Return ONLY the JSON array of ops.`;
 
 export const buildUserPrompt = (doc: IrDocument, instruction: string): string =>

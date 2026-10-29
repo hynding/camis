@@ -7,6 +7,8 @@ export interface Io {
   materialize(result: GenerationResult, destDir: string): Promise<void>;
   /** Recursively copy a directory tree, overwriting files that already exist. */
   copyDir(src: string, dest: string): Promise<void>;
+  /** Create a directory and its parents; an existing directory is not an error. */
+  makeDir(path: string): Promise<void>;
   /** Run a child process (stdio inherited); resolves with its exit code. */
   exec(cmd: string, args: string[], cwd: string): Promise<number>;
   out(line: string): void;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { IrDocument } from "@camis/ir-schema";
-import { resolveRelations } from "./relations";
+import { constrainedColumn, resolveRelations } from "./relations";
 
 const doc: IrDocument = {
   version: 1,
@@ -42,6 +42,7 @@ describe("resolveRelations", () => {
     expect(
       r.fkColumns
         .get("Article")!
+        .map(constrainedColumn)
         .some((c) => c === "$table->foreignId('author_id')->nullable()->constrained('authors')"),
     ).toBe(true);
     expect(
@@ -117,7 +118,7 @@ describe("resolveRelations — oneToOne and oneToMany", () => {
         .get("Article")!
         .some((m) => m.php.includes("belongsTo(Profile::class, 'profile_id')")),
     ).toBe(true);
-    expect(r.fkColumns.get("Article")!).toContain(
+    expect(r.fkColumns.get("Article")!.map(constrainedColumn)).toContain(
       "$table->foreignId('profile_id')->nullable()->unique()->constrained('profiles')",
     );
     expect(
@@ -125,11 +126,22 @@ describe("resolveRelations — oneToOne and oneToMany", () => {
     ).toBe(true);
   });
 
+  it("oneToOne from a type with a row per version or locale: the key is not unique", () => {
+    // A draft-and-publish document's draft and published rows link the same target.
+    for (const many of [
+      resolveRelations(doc2, new Set(["Article"])),
+      resolveRelations(doc2, new Set(), new Set(["Article"])),
+    ])
+      expect(many.fkColumns.get("Article")!.map(constrainedColumn)).toContain(
+        "$table->foreignId('profile_id')->nullable()->constrained('profiles')",
+      );
+  });
+
   it("oneToMany: owner hasMany; FK injected on the target table; inverse belongsTo + Select on target", () => {
     expect(
       r.methods.get("Author")!.some((m) => m.php.includes("hasMany(Post::class, 'writer_id')")),
     ).toBe(true);
-    expect(r.fkColumns.get("Post")!).toContain(
+    expect(r.fkColumns.get("Post")!.map(constrainedColumn)).toContain(
       "$table->foreignId('writer_id')->nullable()->constrained('authors')",
     );
     expect(
@@ -140,5 +152,41 @@ describe("resolveRelations — oneToOne and oneToMany", () => {
         .get("Post")!
         .some((s) => s.includes("Select::make('writer_id')->relationship(name: 'writer'")),
     ).toBe(true);
+  });
+});
+
+// Strapi's content manager labels a relation's entries by the target's main field, by default its
+// first string attribute, else its id.
+describe("resolveRelations — the picker's label", () => {
+  const labelled: IrDocument = {
+    ...doc,
+    contentTypes: [
+      {
+        ...doc.contentTypes[0]!,
+        fields: [{ type: "string", name: "title" }, ...doc.contentTypes[0]!.fields],
+      },
+      {
+        name: "Author",
+        kind: "collection",
+        fields: [
+          { type: "text", name: "bio" },
+          { type: "string", name: "fullName" },
+        ],
+      },
+      { name: "Tag", kind: "collection", fields: [] },
+    ],
+  };
+  const r = resolveRelations(labelled);
+  const form = (name: string): string => r.formFields.get(name)!.join("\n");
+  it("labels a target by its first string field", () => {
+    expect(form("Article")).toContain(
+      "Select::make('author_id')->relationship(name: 'author', titleAttribute: 'full_name')",
+    );
+  });
+  it("labels an inverse's targets by their first string field too", () => {
+    expect(form("Tag")).toContain("relationship(name: 'articles', titleAttribute: 'title')");
+  });
+  it("labels a target without a string field by its id", () => {
+    expect(form("Article")).toContain("relationship(name: 'tags', titleAttribute: 'id')");
   });
 });

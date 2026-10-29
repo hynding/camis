@@ -32,6 +32,7 @@ const SUPPORTED = new Set<string>([
   "dateTime",
   "timestamp",
   "json",
+  "blocks",
   "media",
 ]);
 export const isSupportedField = (t: string): boolean => SUPPORTED.has(t);
@@ -156,6 +157,15 @@ const base = (field: Field, c: string): Base => {
         formComponent: `KeyValue::make('${c}')`,
         tableColumn: `TextColumn::make('${c}')`,
         formImport: "Filament\\Forms\\Components\\KeyValue",
+        tableImport: TEXT_COLUMN,
+        cast: "'array'",
+      };
+    case "blocks":
+      return {
+        migration: `$table->json('${c}')`,
+        formComponent: `BlocksEditor::make('${c}')`,
+        tableColumn: `TextColumn::make('${c}')->state(fn ($record): string => \\App\\Support\\StrapiBlocks::plainText($record->${c}))->limit(50)`,
+        formImport: "App\\Filament\\Forms\\BlocksEditor",
         tableImport: TEXT_COLUMN,
         cast: "'array'",
       };

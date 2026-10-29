@@ -29,6 +29,13 @@ describe("strapi-api auth", () => {
       "./__golden__/strapi-api/add_username_to_users_table.php",
     );
   });
+  // Strapi's columns are all nullable, a required username is the API's rule, not the table's: an
+  // admin made with make:filament-user, or a user who predates the column, has none.
+  it("adds username as a nullable unique column", () => {
+    expect(emitUsernameMigration()).toContain(
+      "$table->string('username')->nullable()->unique()->after('name');",
+    );
+  });
   it("errors middleware golden", async () => {
     await expect(emitStrapiErrorsMiddleware()).toMatchFileSnapshot(
       "./__golden__/strapi-api/StrapiErrors.php",

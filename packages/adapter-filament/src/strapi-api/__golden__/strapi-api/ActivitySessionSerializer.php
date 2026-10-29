@@ -43,10 +43,11 @@ final class ActivitySessionSerializer
             'id' => $m->id,
             'documentId' => $m->document_id,
             'recordId' => $m->record_id,
-            'quantities' => $m->quantities->map(fn ($c) => self::nested([
+            'quantities' => $m->quantities->map(fn ($c) => [
+                'id' => $c->id,
                 'amount' => $c->amount === null ? null : (float) $c->amount,
                 'unit' => $c->unit,
-            ]))->filter(fn ($r) => $r !== null)->values()->all(),
+            ])->all(),
             'createdAt' => $m->created_at?->toIso8601ZuluString('millisecond'),
             'updatedAt' => $m->updated_at?->toIso8601ZuluString('millisecond'),
             'publishedAt' => $m->updated_at?->toIso8601ZuluString('millisecond'),

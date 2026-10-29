@@ -1,12 +1,15 @@
 import type { ContentType } from "@camis/ir-schema";
 import { emitField, type FieldEmit } from "./fields";
 import { filamentNames } from "./names";
-import type { PivotTable } from "./relations";
+import type { ForeignKeyColumn, PivotTable } from "./relations";
 
 export const migrationFilename = (ct: ContentType, ordinal: number): string => {
   const table = filamentNames(ct).table;
   return `database/migrations/0001_01_02_${String(ordinal).padStart(6, "0")}_create_${table}_table.php`;
 };
+
+export const foreignKeysMigrationFilename = (ct: ContentType, ordinal: number): string =>
+  `database/migrations/0001_01_02_${String(ordinal).padStart(6, "0")}_add_${filamentNames(ct).table}_foreign_keys.php`;
 
 export const pivotMigrationFilename = (pivot: PivotTable, ordinal: number): string =>
   `database/migrations/0001_01_02_${String(ordinal).padStart(6, "0")}_create_${pivot.table}_table.php`;
@@ -92,3 +95,38 @@ return new class extends Migration
     }
 };
 `;
+
+/** Constrains keys a create-table migration declared bare, once the tables they point at exist. */
+export const emitForeignKeysMigration = (ct: ContentType, keys: ForeignKeyColumn[]): string => {
+  const table = filamentNames(ct).table;
+  const add = keys.map(
+    (k) =>
+      `            $table->foreign('${k.column}')->references('id')->on('${k.table}')${k.onDelete};`,
+  );
+  const drop = keys.map((k) => `            $table->dropForeign(['${k.column}']);`);
+  return `<?php
+
+declare(strict_types=1);
+
+use Illuminate\\Database\\Migrations\\Migration;
+use Illuminate\\Database\\Schema\\Blueprint;
+use Illuminate\\Support\\Facades\\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::table('${table}', function (Blueprint $table): void {
+${add.join("\n")}
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::table('${table}', function (Blueprint $table): void {
+${drop.join("\n")}
+        });
+    }
+};
+`;
+};

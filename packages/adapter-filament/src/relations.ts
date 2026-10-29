@@ -14,10 +14,26 @@ export interface PivotTable {
   leftFk: string;
   rightFk: string;
 }
+/** A foreign key column a relation puts on a content type's table. */
+export interface ForeignKeyColumn {
+  column: string;
+  /** The content type whose table the key points at. */
+  references: string;
+  table: string;
+  /** The column without its constraint: `$table->foreignId('author_id')->nullable()`. */
+  definition: string;
+  /** What deleting the referenced row does, as a constraint modifier (`->nullOnDelete()`), or "". */
+  onDelete: string;
+}
+
+/** The column with its constraint, as a create-table migration declares it. */
+export const constrainedColumn = (key: ForeignKeyColumn): string =>
+  `${key.definition}->constrained('${key.table}')${key.onDelete}`;
+
 export interface ResolvedRelations {
   methods: Map<string, RelationMethod[]>;
   formFields: Map<string, string[]>;
-  fkColumns: Map<string, string[]>;
+  fkColumns: Map<string, ForeignKeyColumn[]>;
   fkNames: Map<string, string[]>; // plain FK column names (for $fillable)
   pivots: PivotTable[];
 }
@@ -95,6 +111,11 @@ export const resolveRelations = (
   const seenPivot = new Set<string>();
   const names = (n: string): ReturnType<typeof filamentNames> =>
     filamentNames(byName.get(n) as ContentType);
+  // Strapi's default main field: the first string attribute, else the id.
+  const label = (n: string): string => {
+    const main = byName.get(n)?.fields.find((f) => f.type === "string");
+    return main === undefined ? "id" : snakeColumn(main.name);
+  };
 
   for (const ct of doc.contentTypes) {
     for (const rawField of ct.fields) {
@@ -110,17 +131,20 @@ export const resolveRelations = (
       if (kind === "manyToOne" || kind === "oneToOne") {
         const fk = `${snakeColumn(f.name)}_id`;
         push(out.methods, owner, method("BelongsTo", f.name, targetN.model, `'${fk}'`));
-        const unique = kind === "oneToOne" ? "->unique()" : "";
-        push(
-          out.fkColumns,
-          owner,
-          `$table->foreignId('${fk}')${required ? "" : "->nullable()"}${unique}->constrained('${targetN.table}')${!required && removable(target) ? "->nullOnDelete()" : ""}`,
-        );
+        // A document with a row per version or locale links its target from each of them.
+        const unique = kind === "oneToOne" && !removable(owner) ? "->unique()" : "";
+        push(out.fkColumns, owner, {
+          column: fk,
+          references: target,
+          table: targetN.table,
+          definition: `$table->foreignId('${fk}')${required ? "" : "->nullable()"}${unique}`,
+          onDelete: !required && removable(target) ? "->nullOnDelete()" : "",
+        });
         push(out.fkNames, owner, fk);
         push(
           out.formFields,
           owner,
-          `Select::make('${fk}')->relationship(name: '${f.name}', titleAttribute: 'id'${picker(target, owner)})`,
+          `Select::make('${fk}')->relationship(name: '${f.name}', titleAttribute: '${label(target)}'${picker(target, owner)})`,
         );
         if (f.inverse !== undefined) {
           push(
@@ -133,18 +157,20 @@ export const resolveRelations = (
         const inverseName = f.inverse ?? snake(owner);
         const fk = `${snakeColumn(inverseName)}_id`;
         push(out.methods, owner, method("HasMany", f.name, targetN.model, `'${fk}'`));
-        push(
-          out.fkColumns,
-          target,
-          `$table->foreignId('${fk}')->nullable()->constrained('${ownerN.table}')${removable(owner) ? "->nullOnDelete()" : ""}`,
-        );
+        push(out.fkColumns, target, {
+          column: fk,
+          references: owner,
+          table: ownerN.table,
+          definition: `$table->foreignId('${fk}')->nullable()`,
+          onDelete: removable(owner) ? "->nullOnDelete()" : "",
+        });
         push(out.fkNames, target, fk);
         if (f.inverse !== undefined) {
           push(out.methods, target, method("BelongsTo", f.inverse, ownerN.model, `'${fk}'`));
           push(
             out.formFields,
             target,
-            `Select::make('${fk}')->relationship(name: '${f.inverse}', titleAttribute: 'id'${picker(owner, target)})`,
+            `Select::make('${fk}')->relationship(name: '${f.inverse}', titleAttribute: '${label(owner)}'${picker(owner, target)})`,
           );
         }
       } else {
@@ -171,7 +197,7 @@ export const resolveRelations = (
         push(
           out.formFields,
           owner,
-          `Select::make('${f.name}')->multiple()->relationship(name: '${f.name}', titleAttribute: 'id'${picker(target, owner)})`,
+          `Select::make('${f.name}')->multiple()->relationship(name: '${f.name}', titleAttribute: '${label(target)}'${picker(target, owner)})`,
         );
         if (f.inverse !== undefined) {
           push(
@@ -188,7 +214,7 @@ export const resolveRelations = (
           push(
             out.formFields,
             target,
-            `Select::make('${f.inverse}')->multiple()->relationship(name: '${f.inverse}', titleAttribute: 'id'${picker(owner, target)})`,
+            `Select::make('${f.inverse}')->multiple()->relationship(name: '${f.inverse}', titleAttribute: '${label(owner)}'${picker(owner, target)})`,
           );
         }
         if (!seenPivot.has(pivot)) {

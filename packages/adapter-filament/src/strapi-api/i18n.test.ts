@@ -197,7 +197,7 @@ describe("the Filament admin edits one locale at a time", () => {
   });
   it("offers link targets in the record's locale, or the default one from a type without", () => {
     expect(content("app/Filament/Resources/Articles/Schemas/ArticleForm.php")).toContain(
-      "Select::make('category_id')->relationship(name: 'category', titleAttribute: 'id', modifyQueryUsing: fn ($query, $get) => $query->where('locale', $get('locale')))",
+      "Select::make('category_id')->relationship(name: 'category', titleAttribute: 'name', modifyQueryUsing: fn ($query, $get) => $query->where('locale', $get('locale')))",
     );
     expect(content("app/Filament/Resources/Books/Schemas/BookForm.php")).toContain(
       "modifyQueryUsing: fn ($query) => $query->where('locale', \\App\\Support\\StrapiLocales::default()))",

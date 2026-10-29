@@ -18,8 +18,15 @@ interface ExecCall {
 const fakeIo = (opts: {
   files?: Record<string, string>;
   execResults?: number[];
-}): { io: Io; calls: ExecCall[]; lines: string[]; written: Record<string, string> } => {
+}): {
+  io: Io;
+  calls: ExecCall[];
+  lines: string[];
+  written: Record<string, string>;
+  madeDirs: string[];
+} => {
   const calls: ExecCall[] = [];
+  const madeDirs: string[] = [];
   const lines: string[] = [];
   const written: Record<string, string> = {};
   const files = opts.files ?? {};
@@ -33,6 +40,10 @@ const fakeIo = (opts: {
     },
     materialize: () => Promise.resolve(),
     copyDir: () => Promise.resolve(),
+    makeDir: (p) => {
+      madeDirs.push(p);
+      return Promise.resolve();
+    },
     exec: (cmd, args, cwd) => {
       calls.push({ cmd, args, cwd });
       return Promise.resolve(execResults[calls.length - 1] ?? 0);
@@ -40,7 +51,7 @@ const fakeIo = (opts: {
     out: (l) => lines.push(l),
     cwd: "/proj",
   };
-  return { io, calls, lines, written };
+  return { io, calls, lines, written, madeDirs };
 };
 
 const STOCK_USER = `<?php
@@ -208,6 +219,20 @@ describe("patchBootstrapTransfer", () => {
 });
 
 describe("scaffoldCommand", () => {
+  it("creates the app's parent directory before composer runs in it", async () => {
+    // `camis new` scaffolds into generated/filament before generated/ exists; spawning composer
+    // with a missing cwd fails with ENOENT.
+    const { io, calls, madeDirs } = fakeIo({
+      files: {
+        "/proj/generated/filament/app/Models/User.php": STOCK_USER,
+        "/proj/generated/filament/bootstrap/app.php": STOCK_BOOTSTRAP,
+      },
+    });
+    expect(await scaffoldCommand("filament", "generated/filament", io)).toBe(0);
+    expect(madeDirs).toEqual(["/proj/generated"]);
+    expect(calls[0]!.cwd).toBe("/proj/generated");
+  });
+
   it("installs webonyx/graphql-php and routes /graphql with --graphql", async () => {
     const { io, calls, written } = fakeIo({
       files: {

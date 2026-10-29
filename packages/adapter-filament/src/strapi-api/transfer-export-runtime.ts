@@ -740,8 +740,9 @@ final class StrapiExport
             'boolean' => (bool) $value,
             'date' => substr((string) $value, 0, 10),
             'time' => strlen((string) $value) >= 12 ? substr((string) $value, 0, 12) : substr((string) $value . ':00', 0, 8) . '.000',
-            'dateTime', 'timestamp' => self::stamp($value),
-            'json' => self::json($value),
+            'dateTime' => self::stamp($value),
+            'timestamp' => self::milliseconds($value),
+            'json', 'blocks' => self::json($value),
             default => $value,
         };
     }
@@ -751,9 +752,23 @@ final class StrapiExport
         if ($value === null || $value === '') {
             return null;
         }
-        $time = $value instanceof \DateTimeInterface ? CarbonImmutable::instance($value) : CarbonImmutable::parse((string) $value, 'UTC');
 
-        return $time->utc()->format('Y-m-d\TH:i:s.v\Z');
+        return self::instant($value)->utc()->format('Y-m-d\TH:i:s.v\Z');
+    }
+
+    /** A timestamp attribute as Strapi stores one: its epoch in milliseconds, as a string. */
+    private static function milliseconds(mixed $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        return (string) self::instant($value)->getTimestampMs();
+    }
+
+    private static function instant(mixed $value): CarbonImmutable
+    {
+        return $value instanceof \DateTimeInterface ? CarbonImmutable::instance($value) : CarbonImmutable::parse((string) $value, 'UTC');
     }
 
     private static function json(mixed $value): mixed

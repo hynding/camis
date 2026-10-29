@@ -22,6 +22,17 @@ describe("emitField", () => {
     expect(f.column).toBe("published_at");
     expect(f.cast).toBe("'datetime'");
   });
+  it("maps blocks to a JSON column, an array cast and the blocks editor", () => {
+    const f = emitField({ type: "blocks", name: "body" } as Field);
+    expect(f.migration).toBe("$table->json('body')->nullable()");
+    expect(f.cast).toBe("'array'");
+    expect(f.formComponent).toBe("BlocksEditor::make('body')");
+    expect(f.formImport).toBe("App\\Filament\\Forms\\BlocksEditor");
+    expect(f.tableColumn).toBe(
+      "TextColumn::make('body')->state(fn ($record): string => \\App\\Support\\StrapiBlocks::plainText($record->body))->limit(50)",
+    );
+    expect(isSupportedField("blocks")).toBe(true);
+  });
   it("isSupportedField gates the supported subset", () => {
     expect(isSupportedField("string")).toBe(true);
     expect(isSupportedField("relation")).toBe(false);

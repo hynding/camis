@@ -131,12 +131,15 @@ final class StrapiImport
 
     /**
      * What of the archive has nowhere to go here: a content type, or an attribute, this app does
-     * not have. A type or attribute this app has and the archive lacks is fine; it stays empty.
+     * not have, that the archive holds data for. A type or attribute this app has and the archive
+     * lacks is fine; it stays empty. So is one this app lacks while no entity holds a value for it
+     * and no link uses it, and an inverse relation, whose links Strapi exports from the owning side.
      *
      * @return list<string>
      */
     public function schemaDiffs(): array
     {
+        $held = $this->heldData();
         $diffs = [];
         foreach ($this->lines('schemas') as $schema) {
             $uid = (string) ($schema['uid'] ?? '');
@@ -145,17 +148,53 @@ final class StrapiImport
             }
             $type = StrapiTransferMap::TYPES[$uid] ?? null;
             if ($type === null) {
-                $diffs[] = "{$uid} is in the archive but not in this project";
+                if (isset($held[$uid])) {
+                    $diffs[] = "{$uid} is in the archive but not in this project";
+                }
 
                 continue;
             }
             $ours = [...array_keys($type['attributes']), ...array_keys($type['links'])];
-            foreach (array_diff(array_keys((array) ($schema['attributes'] ?? [])), self::SYSTEM, $ours) as $attribute) {
-                $diffs[] = "{$uid}.{$attribute} is in the archive but not in this project";
+            $owned = array_filter((array) ($schema['attributes'] ?? []), fn (mixed $a): bool => ! isset($a['mappedBy']) && ! isset($a['morphBy']));
+            foreach (array_diff(array_keys($owned), self::SYSTEM, $ours) as $attribute) {
+                if (isset($held[$uid][$attribute])) {
+                    $diffs[] = "{$uid}.{$attribute} is in the archive but not in this project";
+                }
             }
         }
 
         return $diffs;
+    }
+
+    /**
+     * The types the archive holds entities or links of, and the attributes it holds a value or a
+     * link for: uid → attribute → true (a type with no attribute in use is an empty list).
+     *
+     * @return array<string, array<string, true>>
+     */
+    private function heldData(): array
+    {
+        $held = [];
+        foreach ($this->lines('entities') as $entity) {
+            $uid = (string) ($entity['type'] ?? '');
+            $held[$uid] ??= [];
+            foreach ((array) ($entity['data'] ?? []) as $attribute => $value) {
+                if ($value !== null && $value !== []) {
+                    $held[$uid][(string) $attribute] = true;
+                }
+            }
+        }
+        foreach ($this->lines('links') as $link) {
+            foreach (['left', 'right'] as $side) {
+                $uid = (string) ($link[$side]['type'] ?? '');
+                $held[$uid] ??= [];
+                if (isset($link[$side]['field'])) {
+                    $held[$uid][(string) $link[$side]['field']] = true;
+                }
+            }
+        }
+
+        return $held;
     }
 
     /**
@@ -837,8 +876,9 @@ final class StrapiImport
         }
 
         return match ($type) {
-            'dateTime', 'timestamp' => CarbonImmutable::parse((string) $value)->utc()->format('Y-m-d H:i:s'),
-            'json' => json_encode($value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            'dateTime' => CarbonImmutable::parse((string) $value)->utc()->format('Y-m-d H:i:s'),
+            'timestamp' => (is_numeric($value) ? CarbonImmutable::createFromTimestampMsUTC((float) $value) : CarbonImmutable::parse((string) $value))->utc()->format('Y-m-d H:i:s'),
+            'json', 'blocks' => json_encode($value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
             'boolean' => (bool) $value,
             default => is_array($value) ? json_encode($value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE) : $value,
         };
