@@ -8,12 +8,14 @@ import { validateCommand } from "./commands/validate";
 const USAGE = `camis — content-model build tool
 
 Usage:
-  camis new <dir> [--template vanilla|example | --from-strapi <strapiProjectDir>]
+  camis new <dir> [--template vanilla|example | --from-strapi <strapiProjectDir>
+                  [--roles-from <strapiExport.tar.gz[.enc]> [--key <key>]]]
                   [--targets strapi,filament,express] [--dialect sqlite|mysql|pgsql]
                   [--skip-scaffold] [--skip-build]
                                                  (create a project, then scaffold and build it)
   camis validate <ir.json>
   camis import <strapi|express> <projectDir> [--out ir.json] [--upsert-by <field>]
+               [--roles-from <strapiExport.tar.gz[.enc]> [--key <key>] [--roles-out roles.json]]
   camis scaffold filament <dir> [--storage laravel|strapi] [--graphql]
                                                  (create the Laravel host app for the overlay)
   camis generate [--config camis.config.json]   (dry-run: lists files + gaps)
@@ -42,11 +44,16 @@ export const run = async (argv: string[], io: Io): Promise<number> => {
       const targets = optionalFlag(rest, "--targets");
       const dialect = optionalFlag(rest, "--dialect");
       const fromStrapi = optionalFlag(rest, "--from-strapi");
+      const rolesFrom = optionalFlag(rest, "--roles-from");
+      const key = optionalFlag(rest, "--key");
       return newCommand(rest[0], io, {
         ...(template !== undefined ? { template } : {}),
         ...(targets !== undefined ? { targets: targets.split(",") } : {}),
         ...(dialect !== undefined ? { dialect } : {}),
         ...(fromStrapi !== undefined ? { fromStrapi } : {}),
+        ...(rolesFrom !== undefined
+          ? { strapiRoles: { archive: rolesFrom, ...(key !== undefined ? { key } : {}) } }
+          : {}),
         skipScaffold: rest.includes("--skip-scaffold"),
         skipBuild: rest.includes("--skip-build"),
       });
@@ -64,8 +71,19 @@ export const run = async (argv: string[], io: Io): Promise<number> => {
         return 1;
       }
       const upsertBy = flag(rest, "--upsert-by", "");
+      const rolesFrom = optionalFlag(rest, "--roles-from");
+      const key = optionalFlag(rest, "--key");
       return importCommand(rest[0], rest[1], flag(rest, "--out", "camis.json"), io, {
         ...(upsertBy ? { upsertBy } : {}),
+        ...(rolesFrom !== undefined
+          ? {
+              roles: {
+                archive: rolesFrom,
+                out: flag(rest, "--roles-out", "roles.json"),
+                ...(key !== undefined ? { key } : {}),
+              },
+            }
+          : {}),
       });
     }
     case "scaffold": {
