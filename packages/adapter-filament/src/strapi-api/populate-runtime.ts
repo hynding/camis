@@ -316,10 +316,12 @@ final class StrapiPopulate
         $query = $first->newQuery();
         $drafts = StrapiDocuments::withStatus($query->whereIn($query->qualifyColumn('document_id'), $rows->pluck('document_id')->unique()->values()->all()), false)->get();
         $byDraft = self::linked($drafts, $relation, null, $narrow, $count, $order);
-        $draftOf = $drafts->pluck($first->getKeyName(), 'document_id')->all();
+        // A document keeps one draft per locale.
+        $version = fn (Model $row): string => $row->getAttribute('document_id') . '|' . $row->getAttribute('locale');
+        $draftOf = $drafts->mapWithKeys(fn (Model $draft) => [$version($draft) => $draft->getKey()])->all();
         $links = [];
         foreach ($rows as $row) {
-            $draft = $draftOf[$row->getAttribute('document_id')] ?? null;
+            $draft = $draftOf[$version($row)] ?? null;
             $links[$row->getKey()] = $draft === null ? ($count ? 0 : []) : $byDraft[$draft];
         }
 
