@@ -9,9 +9,9 @@ const emittedOf = (doc: IrDocument): ContentType[] =>
 describe("migrationOrder", () => {
   it("orders the catalog fixture Author, Article, Tag (Article depends on Author)", () => {
     const emitted = emittedOf(catalog.document);
-    const { order, gaps } = migrationOrder(catalog.document, emitted);
+    const { order, deferred } = migrationOrder(catalog.document, emitted);
     expect(order.map((ct) => ct.name)).toEqual(["Author", "Article", "Tag"]);
-    expect(gaps).toEqual([]);
+    expect(deferred).toEqual([]);
   });
 
   it("keeps IR order when there are no relations", () => {
@@ -24,9 +24,9 @@ describe("migrationOrder", () => {
       components: [],
     };
     const emitted = emittedOf(doc);
-    const { order, gaps } = migrationOrder(doc, emitted);
+    const { order, deferred } = migrationOrder(doc, emitted);
     expect(order.map((ct) => ct.name)).toEqual(["Article", "Tag"]);
-    expect(gaps).toEqual([]);
+    expect(deferred).toEqual([]);
   });
 
   it("places the oneToMany FK-holding target after the owner, even when it comes first in IR order", () => {
@@ -56,9 +56,9 @@ describe("migrationOrder", () => {
       components: [],
     };
     const emitted = emittedOf(doc);
-    const { order, gaps } = migrationOrder(doc, emitted);
+    const { order, deferred } = migrationOrder(doc, emitted);
     expect(order.map((ct) => ct.name)).toEqual(["Article", "Comment"]);
-    expect(gaps).toEqual([]);
+    expect(deferred).toEqual([]);
   });
 
   it("keeps IR order and adds no gap for a self-reference", () => {
@@ -82,9 +82,9 @@ describe("migrationOrder", () => {
       components: [],
     };
     const emitted = emittedOf(doc);
-    const { order, gaps } = migrationOrder(doc, emitted);
+    const { order, deferred } = migrationOrder(doc, emitted);
     expect(order.map((ct) => ct.name)).toEqual(["Category"]);
-    expect(gaps).toEqual([]);
+    expect(deferred).toEqual([]);
   });
 
   it("breaks a two-type cycle by deferring the first type's foreign key to the other, with no gap", () => {
@@ -121,10 +121,9 @@ describe("migrationOrder", () => {
       components: [],
     };
     const emitted = emittedOf(doc);
-    const { order, gaps, deferred } = migrationOrder(doc, emitted);
+    const { order, deferred } = migrationOrder(doc, emitted);
     expect(order.map((ct) => ct.name)).toEqual(["Article", "Comment"]);
     expect(deferred).toEqual([{ table: "Article", references: "Comment" }]);
-    expect(gaps).toEqual([]);
   });
 
   it("breaks a three-type cycle with one deferred key and keeps the rest ordered", () => {
@@ -143,10 +142,9 @@ describe("migrationOrder", () => {
       ],
       components: [],
     };
-    const { order, gaps, deferred } = migrationOrder(doc, emittedOf(doc));
+    const { order, deferred } = migrationOrder(doc, emittedOf(doc));
     expect(order.map((ct) => ct.name)).toEqual(["A", "C", "B"]);
     expect(deferred).toEqual([{ table: "A", references: "B" }]);
-    expect(gaps).toEqual([]);
   });
 
   it("ignores a relation to a type outside emitted (the builtin user type)", () => {
@@ -176,8 +174,8 @@ describe("migrationOrder", () => {
       components: [],
     };
     const emitted = emittedOf(doc);
-    const { order, gaps } = migrationOrder(doc, emitted);
+    const { order, deferred } = migrationOrder(doc, emitted);
     expect(order.map((ct) => ct.name)).toEqual(["Note"]);
-    expect(gaps).toEqual([]);
+    expect(deferred).toEqual([]);
   });
 });

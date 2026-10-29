@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { IrDocument } from "@camis/ir-schema";
-import { resolveRelations } from "./relations";
+import { constrainedColumn, resolveRelations } from "./relations";
 
 const doc: IrDocument = {
   version: 1,
@@ -42,6 +42,7 @@ describe("resolveRelations", () => {
     expect(
       r.fkColumns
         .get("Article")!
+        .map(constrainedColumn)
         .some((c) => c === "$table->foreignId('author_id')->nullable()->constrained('authors')"),
     ).toBe(true);
     expect(
@@ -117,7 +118,7 @@ describe("resolveRelations — oneToOne and oneToMany", () => {
         .get("Article")!
         .some((m) => m.php.includes("belongsTo(Profile::class, 'profile_id')")),
     ).toBe(true);
-    expect(r.fkColumns.get("Article")!).toContain(
+    expect(r.fkColumns.get("Article")!.map(constrainedColumn)).toContain(
       "$table->foreignId('profile_id')->nullable()->unique()->constrained('profiles')",
     );
     expect(
@@ -129,7 +130,7 @@ describe("resolveRelations — oneToOne and oneToMany", () => {
     expect(
       r.methods.get("Author")!.some((m) => m.php.includes("hasMany(Post::class, 'writer_id')")),
     ).toBe(true);
-    expect(r.fkColumns.get("Post")!).toContain(
+    expect(r.fkColumns.get("Post")!.map(constrainedColumn)).toContain(
       "$table->foreignId('writer_id')->nullable()->constrained('authors')",
     );
     expect(

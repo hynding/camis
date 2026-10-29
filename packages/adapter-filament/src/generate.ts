@@ -25,15 +25,17 @@ import { emitField, isSupportedField } from "./fields";
 import { emitHookFiles } from "./hooks/emit";
 import { emitPermissions } from "./permissions/emit";
 import {
+  emitForeignKeysMigration,
   emitMigration,
   emitPivotMigration,
+  foreignKeysMigrationFilename,
   migrationFilename,
   pivotMigrationFilename,
 } from "./migration";
 import { migrationOrder } from "./migration-order";
 import { emitModel } from "./model";
 import { filamentNames, snakeColumn } from "./names";
-import { resolveRelations } from "./relations";
+import { constrainedColumn, resolveRelations, type ForeignKeyColumn } from "./relations";
 import { emitResourceFiles } from "./resource";
 import { draftPublishPlan } from "./strapi-api/draft-publish";
 import { guestsPlan } from "./strapi-api/guests";
@@ -117,11 +119,11 @@ export const filamentAdapter: GenerateAdapter = {
     // User/users table; the host app owns those files, so nothing is emitted for them.
     const emitted = doc.contentTypes.filter((ct) => ct.builtin === undefined);
     // The Strapi storage layout emits no migrations (`emitStrapiStorage` owns its own schema),
-    // so ordering create-table migrations only matters — and only needs reporting — on the
-    // laravel storage layout.
-    const { order: migrationTypeOrder, gaps: migrationOrderGaps } =
-      storage === "strapi" ? { order: emitted, gaps: [] } : migrationOrder(doc, emitted);
-    gaps.push(...migrationOrderGaps);
+    // so ordering create-table migrations only matters on the laravel storage layout.
+    const { order: migrationTypeOrder, deferred } =
+      storage === "strapi" ? { order: emitted, deferred: [] } : migrationOrder(doc, emitted);
+    const isDeferred = (owner: string, key: ForeignKeyColumn): boolean =>
+      deferred.some((d) => d.table === owner && d.references === key.references);
     const migrationOrdinal = new Map(migrationTypeOrder.map((ct, i) => [ct.name, i + 1]));
     // The Strapi storage layout emits its own models, so the observer registration that
     // `emitModel` writes on the Laravel layout has to travel with the input; `emitStrapiApi`
@@ -253,11 +255,18 @@ export const filamentAdapter: GenerateAdapter = {
       });
       files.push({
         path: migrationFilename(ct, migrationOrdinal.get(ct.name)!),
-        content: emitMigration(columns, rel.fkColumns.get(ct.name) ?? [], embeddedEmits, {
-          documentId: apiStyle === "strapi",
-          draftPublish: versioned.has(ct.name),
-          localized: localized.has(ct.name),
-        }),
+        content: emitMigration(
+          columns,
+          (rel.fkColumns.get(ct.name) ?? []).map((k) =>
+            isDeferred(ct.name, k) ? k.definition : constrainedColumn(k),
+          ),
+          embeddedEmits,
+          {
+            documentId: apiStyle === "strapi",
+            draftPublish: versioned.has(ct.name),
+            localized: localized.has(ct.name),
+          },
+        ),
       });
       files.push(
         ...emitResourceFiles(
@@ -339,6 +348,20 @@ export const filamentAdapter: GenerateAdapter = {
           files.push({
             path: childMigrationFilename(child, emitted.length + rel.pivots.length + 1 + k),
             content: emitChildMigration(ct, child),
+          });
+        });
+
+      const afterTables = emitted.length + rel.pivots.length + children.length;
+      migrationTypeOrder
+        .map((ct) => ({
+          ct,
+          keys: (rel.fkColumns.get(ct.name) ?? []).filter((k) => isDeferred(ct.name, k)),
+        }))
+        .filter(({ keys }) => keys.length > 0)
+        .forEach(({ ct, keys }, i) => {
+          files.push({
+            path: foreignKeysMigrationFilename(ct, afterTables + 1 + i),
+            content: emitForeignKeysMigration(ct, keys),
           });
         });
     }
