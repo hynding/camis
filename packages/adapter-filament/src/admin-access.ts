@@ -53,7 +53,6 @@ declare(strict_types=1);
 
 namespace App\\Console\\Commands;
 
-use App\\Models\\Concerns\\AdminAccess;
 use App\\Models\\User;
 use Illuminate\\Console\\Command;
 use Illuminate\\Support\\Facades\\Hash;
@@ -74,14 +73,14 @@ final class CamisAdmin extends Command
 
     public function handle(): int
     {
-        if (! AdminAccess::EVERY_USER && AdminAccess::ADMIN_ROLES === []) {
+        if (! User::EVERY_USER && User::ADMIN_ROLES === []) {
             $this->error('No role may sign in to the admin: mark one with "admin": true in the roles file, then rebuild');
 
             return self::FAILURE;
         }
-        $role = AdminAccess::EVERY_USER ? null : $this->option('role') ?? AdminAccess::ADMIN_ROLES[0];
-        if ($role !== null && ! in_array($role, AdminAccess::ADMIN_ROLES, true)) {
-            $this->error("\\"{$role}\\" is not an admin role; admin roles: " . implode(', ', AdminAccess::ADMIN_ROLES));
+        $role = User::EVERY_USER ? null : $this->option('role') ?? User::ADMIN_ROLES[0];
+        if ($role !== null && ! in_array($role, User::ADMIN_ROLES, true)) {
+            $this->error("\\"{$role}\\" is not an admin role; admin roles: " . implode(', ', User::ADMIN_ROLES));
 
             return self::FAILURE;
         }
