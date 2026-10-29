@@ -67,6 +67,14 @@ describe("Strapi data export", () => {
       expect(command).toContain(option);
   });
 
+  it("calls only methods the export engine defines", () => {
+    // A merge once left the folders' links calling a helper this engine no longer had.
+    const engine = content("app/Support/StrapiExport.php");
+    const defined = new Set([...engine.matchAll(/function (\w+)\(/g)].map((m) => m[1]));
+    for (const [, name] of engine.matchAll(/(?:\$this->|self::)(\w+)\(/g))
+      expect(defined, name).toContain(name);
+  });
+
   it("writes Strapi's own schema for every type and component the archive holds", () => {
     const ours = new Map(jsonl(content(SCHEMAS_PATH)).map((s) => [s.uid as string, s]));
     for (const schema of archived)

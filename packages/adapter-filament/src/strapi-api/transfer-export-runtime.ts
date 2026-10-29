@@ -390,15 +390,17 @@ final class StrapiExport
                 'createdAt' => $created, 'updatedAt' => self::stamp($row->updated_at), 'publishedAt' => self::stamp($row->published_at) ?? $created, 'locale' => null,
             ]);
             if ($row->parent_id !== null) {
-                $parents[] = [(int) $row->id, (int) $row->parent_id];
+                $parents[] = [(int) $row->id, (int) $row->parent_id, null, null];
             }
         }
-        foreach ($this->rightPositions($parents) as [$child, $parent, $position]) {
+        foreach (self::positions($parents, 1, 0, 3) as $i => $position) {
+            [$child, $parent] = $parents[$i];
             $this->link('relation.basic', 'manyToOne', ['type' => self::FOLDER, 'field' => 'parent', 'ref' => $child], ['type' => self::FOLDER, 'field' => 'children', 'ref' => $parent, 'pos' => $position]);
         }
         $placed = DB::table($files)->whereNotNull('folder_id')->orderBy('id')->get(['id', 'folder_id'])
-            ->map(fn (object $file): array => [(int) $file->id, (int) $file->folder_id])->all();
-        foreach ($this->rightPositions($placed) as [$file, $folder, $position]) {
+            ->map(fn (object $file): array => [(int) $file->id, (int) $file->folder_id, null, null])->all();
+        foreach (self::positions($placed, 1, 0, 3) as $i => $position) {
+            [$file, $folder] = $placed[$i];
             $this->link('relation.basic', 'manyToOne', ['type' => self::FILE, 'field' => 'folder', 'ref' => $file], ['type' => self::FOLDER, 'field' => 'files', 'ref' => $folder, 'pos' => $position]);
         }
     }
