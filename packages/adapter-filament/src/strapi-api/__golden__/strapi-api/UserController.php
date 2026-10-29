@@ -6,9 +6,11 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Serializers\UserSerializer;
 use App\Models\User;
 use App\Support\StrapiApiTokens;
 use App\Support\StrapiError;
+use App\Support\StrapiPopulate;
 use App\Support\StrapiQuery;
 use App\Support\StrapiUsers;
 use Illuminate\Database\Eloquent\Builder;
@@ -25,27 +27,37 @@ final class UserController extends Controller
     {
         $this->allow($request, 'user.read');
         $params = $request->query();
+        $query = $this->filtered($request);
+        StrapiUsers::paginate($query, $params);
 
-        return response()->json($this->filtered($request)->get()
-            ->map(fn (User $user) => StrapiQuery::select(StrapiUsers::wire($user), $params, StrapiUsers::FIELDS))
-            ->values()
-            ->all());
+        return response()->json(StrapiPopulate::many($query->get(), $params, UserSerializer::class, $request->user()));
     }
 
-    /** Strapi answers a user it cannot find with an empty body, not a 404. */
+    /**
+     * Strapi answers a user it cannot find with an empty body, not a 404. Its fetch keeps the
+     * query's start, so any start past 0 finds nothing.
+     */
     public function findOne(Request $request, string $id): JsonResponse|Response
     {
         $this->allow($request, 'user.read');
-        $user = User::query()->find($id);
+        $params = $request->query();
+        $query = User::query()->whereKey($id);
+        StrapiUsers::paginate($query, $params);
+        $user = $query->first();
 
-        return $user === null ? response()->noContent() : response()->json(StrapiUsers::wire($user));
+        return $user === null
+            ? response()->noContent()
+            : response()->json(StrapiPopulate::one($user, $params, UserSerializer::class, $request->user()));
     }
 
+    /** Strapi checks start and limit on a count too, though it counts every match. */
     public function count(Request $request): JsonResponse
     {
         $this->allow($request, 'user.read');
+        $query = $this->filtered($request);
+        StrapiUsers::paginate($query->clone(), $request->query());
 
-        return response()->json($this->filtered($request)->count());
+        return response()->json($query->count());
     }
 
     /** An API token's request reaches here with no account of its own. */
@@ -53,7 +65,7 @@ final class UserController extends Controller
     {
         $user = $request->user() ?? throw new StrapiError(401, 'UnauthorizedError', 'Unauthorized');
 
-        return response()->json(StrapiUsers::wire($user));
+        return response()->json(StrapiPopulate::one($user, $request->query(), UserSerializer::class, $user));
     }
 
     public function create(Request $request): JsonResponse
@@ -123,8 +135,8 @@ final class UserController extends Controller
     {
         $params = $request->query();
         $query = User::query();
-        StrapiQuery::filter($query, $params, StrapiUsers::FIELDS, $request->user(), null);
-        StrapiQuery::order($query, $params['sort'] ?? null, StrapiUsers::FIELDS, $request->user());
+        StrapiQuery::filter($query, $params, UserSerializer::FIELDS, $request->user(), null);
+        StrapiQuery::order($query, $params['sort'] ?? null, UserSerializer::FIELDS, $request->user());
 
         return $query;
     }

@@ -183,6 +183,7 @@ overwrite app/Http/Serializers/NoteSerializer.php
 overwrite app/Http/Serializers/PageSerializer.php
 overwrite app/Http/Serializers/PostSerializer.php
 overwrite app/Http/Serializers/ReviewSerializer.php
+overwrite app/Http/Serializers/RoleSerializer.php
 overwrite app/Http/Serializers/TagSerializer.php
 overwrite app/Http/Serializers/TopicSerializer.php
 overwrite app/Http/Serializers/TransactionSerializer.php
