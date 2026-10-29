@@ -126,6 +126,17 @@ describe("resolveRelations — oneToOne and oneToMany", () => {
     ).toBe(true);
   });
 
+  it("oneToOne from a type with a row per version or locale: the key is not unique", () => {
+    // A draft-and-publish document's draft and published rows link the same target.
+    for (const many of [
+      resolveRelations(doc2, new Set(["Article"])),
+      resolveRelations(doc2, new Set(), new Set(["Article"])),
+    ])
+      expect(many.fkColumns.get("Article")!.map(constrainedColumn)).toContain(
+        "$table->foreignId('profile_id')->nullable()->constrained('profiles')",
+      );
+  });
+
   it("oneToMany: owner hasMany; FK injected on the target table; inverse belongsTo + Select on target", () => {
     expect(
       r.methods.get("Author")!.some((m) => m.php.includes("hasMany(Post::class, 'writer_id')")),

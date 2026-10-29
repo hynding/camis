@@ -83,6 +83,12 @@ describe("Strapi data export", () => {
       );
   });
 
+  it("writes a timestamp as Strapi stores one, its epoch in milliseconds", () => {
+    const engine = content("app/Support/StrapiExport.php");
+    expect(engine).toContain("'timestamp' => self::milliseconds($value),");
+    expect(engine).toContain("return (string) self::instant($value)->getTimestampMs();");
+  });
+
   it("is generated only on the Strapi API style over Laravel storage", () => {
     for (const options of [{ apiStyle: "laravel" }, { storageLayout: "strapi" }] as const)
       expect(

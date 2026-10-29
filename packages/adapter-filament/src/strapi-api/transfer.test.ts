@@ -53,6 +53,12 @@ describe("Strapi data import", () => {
       expect(command).toContain(option);
   });
 
+  it("reads a timestamp as Strapi exports one, its epoch in milliseconds", () => {
+    expect(content(IMPORT_ENGINE)).toContain(
+      "'timestamp' => (is_numeric($value) ? CarbonImmutable::createFromTimestampMsUTC((float) $value) : CarbonImmutable::parse((string) $value))->utc()->format('Y-m-d H:i:s'),",
+    );
+  });
+
   it("knows where every entity type of a Strapi archive goes", () => {
     const map = content("app/Support/StrapiTransferMap.php");
     const types = new Set(lines("entities").map((e) => e.type as string));
