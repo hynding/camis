@@ -53,7 +53,20 @@ describe("admin access", () => {
     const open = filamentAdapter.generate(bundle([]), { projectName: "blog" });
     expect(file(open, TRAIT)).toContain("public const ADMIN_ROLES = [];");
     expect(file(open, TRAIT)).toContain("return true;");
+    expect(file(open, TRAIT)).toContain("public const EVERY_USER = true;");
     expect(open.gaps.gaps.filter((g) => g.feature === "adminRole")).toEqual([]);
+  });
+
+  // Strapi's own roles (authenticated, public) are API roles: a user who signed up through the API
+  // must not reach the admin just because no role was flagged.
+  it("lets no user in when roles exist but none is an admin role", () => {
+    const closed = filamentAdapter.generate(bundle([reader]), { projectName: "blog" });
+    expect(file(closed, TRAIT)).toContain("public const EVERY_USER = false;");
+    expect(file(closed, TRAIT)).toContain("$this->hasAnyRole(self::ADMIN_ROLES)");
+    expect(file(closed, TRAIT)).not.toContain("return true;");
+    expect(file(closed, COMMAND)).toContain(
+      "! AdminAccess::EVERY_USER && AdminAccess::ADMIN_ROLES === []",
+    );
   });
 
   it("reports a project whose roles let nobody in", () => {
