@@ -79,17 +79,40 @@ describe("importDocument", () => {
           pluginOptions: {},
           attributes: {
             title: { type: "string" },
-            body: { type: "blocks" },
+            secret: { type: "password" },
           },
         }),
       },
     ];
     const { document, gaps } = importDocument(files);
-    expect(gaps.gaps.some((g) => g.feature === "blocks")).toBe(true);
+    expect(gaps.gaps.some((g) => g.feature === "password")).toBe(true);
     expect(document.ok).toBe(true);
     if (!document.ok) return;
     expect(document.value.contentTypes[0]!.fields.map((f) => f.name)).toEqual(["title"]);
   });
+});
+
+it("imports a blocks attribute as a blocks field", () => {
+  const files = [
+    {
+      path: "src/api/article/content-types/article/schema.json",
+      content: JSON.stringify({
+        kind: "collectionType",
+        collectionName: "articles",
+        info: { singularName: "article", pluralName: "articles", displayName: "Article" },
+        options: {},
+        pluginOptions: {},
+        attributes: { body: { type: "blocks", required: true } },
+      }),
+    },
+  ];
+  const { document, gaps } = importDocument(files);
+  expect(gaps.gaps).toEqual([]);
+  expect(document.ok).toBe(true);
+  if (!document.ok) return;
+  expect(document.value.contentTypes[0]!.fields).toEqual([
+    { type: "blocks", name: "body", required: true },
+  ]);
 });
 
 describe("importDocument — builtin user synthesis", () => {

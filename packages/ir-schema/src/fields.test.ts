@@ -4,6 +4,11 @@ import { field, componentField, fieldApiName } from "./fields";
 const parse = (v: unknown) => field.safeParse(v);
 
 describe("scalar fields", () => {
+  it("accepts a blocks field (a rich-text document as a tree of blocks), also in a component", () => {
+    expect(parse({ type: "blocks", name: "body", required: true }).success).toBe(true);
+    expect(componentField.safeParse({ type: "blocks", name: "bio" }).success).toBe(true);
+  });
+
   it("accepts a string field with constraints", () => {
     expect(parse({ type: "string", name: "title", required: true, maxLength: 200 }).success).toBe(
       true,
