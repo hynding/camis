@@ -87,7 +87,7 @@ describe("migrationOrder", () => {
     expect(gaps).toEqual([]);
   });
 
-  it("gaps a two-type cycle through owning relations and appends both types in IR order", () => {
+  it("breaks a two-type cycle by deferring the first type's foreign key to the other, with no gap", () => {
     const doc: IrDocument = {
       version: 1,
       contentTypes: [
@@ -121,19 +121,32 @@ describe("migrationOrder", () => {
       components: [],
     };
     const emitted = emittedOf(doc);
-    const { order, gaps } = migrationOrder(doc, emitted);
+    const { order, gaps, deferred } = migrationOrder(doc, emitted);
     expect(order.map((ct) => ct.name)).toEqual(["Article", "Comment"]);
-    expect(gaps).toEqual([
-      {
-        feature: "relationCycle",
-        severity: "error",
-        location: { contentType: "Article" },
-        message:
-          "content types Article, Comment reference each other through owning relations; " +
-          "their migrations cannot be ordered — break the cycle or make one side a oneToMany " +
-          "with an inverse",
-      },
-    ]);
+    expect(deferred).toEqual([{ table: "Article", references: "Comment" }]);
+    expect(gaps).toEqual([]);
+  });
+
+  it("breaks a three-type cycle with one deferred key and keeps the rest ordered", () => {
+    const rel = (name: string, target: string) => ({
+      type: "relation" as const,
+      name,
+      relationKind: "manyToOne" as const,
+      target,
+    });
+    const doc: IrDocument = {
+      version: 1,
+      contentTypes: [
+        { name: "A", kind: "collection", fields: [rel("b", "B")] },
+        { name: "B", kind: "collection", fields: [rel("c", "C")] },
+        { name: "C", kind: "collection", fields: [rel("a", "A")] },
+      ],
+      components: [],
+    };
+    const { order, gaps, deferred } = migrationOrder(doc, emittedOf(doc));
+    expect(order.map((ct) => ct.name)).toEqual(["A", "C", "B"]);
+    expect(deferred).toEqual([{ table: "A", references: "B" }]);
+    expect(gaps).toEqual([]);
   });
 
   it("ignores a relation to a type outside emitted (the builtin user type)", () => {
