@@ -45,13 +45,19 @@ jobs:
           cd app
           composer require filament/filament:"^5.0" --no-interaction
           php artisan filament:install --panels --no-interaction
-      - name: Install Spatie + HasRoles
+      - name: Install Sanctum + Spatie, patch the User model as camis scaffold does
         run: |
           cd app
+          php artisan install:api --no-interaction
           composer require spatie/laravel-permission --no-interaction
           php artisan vendor:publish --provider="Spatie\Permission\PermissionServiceProvider" --no-interaction
-          php -r '$f="app/Models/User.php";$c=file_get_contents($f);$c=str_replace("use HasFactory, Notifiable;","use HasFactory, Notifiable, \\Spatie\\Permission\\Traits\\HasRoles;",$c);file_put_contents($f,$c);'
-          grep -q HasRoles app/Models/User.php || { echo "User model patch did not apply"; exit 1; }
+          cd "$GITHUB_WORKSPACE"
+          pnpm --filter @camis/cli exec tsx -e "import { readFileSync, writeFileSync } from 'node:fs';
+            import { isPatchedUserModel, patchUserModel } from './src/commands/scaffold';
+            const f = process.env.GITHUB_WORKSPACE + '/app/app/Models/User.php';
+            const patched = patchUserModel(readFileSync(f, 'utf8'));
+            if (!isPatchedUserModel(patched)) { console.error('User model patch did not apply'); process.exit(1); }
+            writeFileSync(f, patched);"
       - name: Overlay camis-generated files
         run: pnpm --filter @camis/adapter-filament overlay "$GITHUB_WORKSPACE/app"
       - name: Hook reference impl (uppercase title on publish)
@@ -93,6 +99,22 @@ jobs:
             $art->published_at = now(); $art->save();
             if ($art->fresh()->title !== "HELLO") { fwrite(STDERR, "HOOK MISMATCH title=".$art->fresh()->title."\n"); exit(1); }
             echo "HOOK OK\n";
+          '
+      - name: Admin access (only an admin role signs in; camis:admin makes the first admin)
+        run: |
+          cd app
+          php artisan camis:admin first@example.test --name=First --password=first-admin-pass
+          if php artisan camis:admin second@example.test --password=second-pass --role=Reader; then echo "camis:admin gave a role that is not an admin role"; exit 1; fi
+          if php artisan camis:admin third@example.test --password=short; then echo "camis:admin took a short password"; exit 1; fi
+          php artisan tinker --execute='
+            $panel = \Filament\Facades\Filament::getPanel("admin");
+            $first = \App\Models\User::where("email", "first@example.test")->firstOrFail();
+            $reader = \App\Models\User::factory()->create();
+            $reader->assignRole("Reader");
+            $none = \App\Models\User::factory()->create();
+            $seen = [$first->hasRole("Editor"), $first->canAccessPanel($panel), $reader->canAccessPanel($panel), $none->canAccessPanel($panel), \App\Models\User::where("email", "second@example.test")->exists()];
+            if ($seen !== [true, true, false, false, false]) { fwrite(STDERR, "ADMIN ACCESS MISMATCH ".json_encode($seen)."\n"); exit(1); }
+            echo "ADMIN ACCESS OK\n";
           '
   strapi-api:
     runs-on: ubuntu-latest
@@ -141,8 +163,13 @@ jobs:
           composer require spatie/laravel-permission --no-interaction
           php artisan vendor:publish --provider="Spatie\Permission\PermissionServiceProvider" --no-interaction
           composer require webonyx/graphql-php:"^15.19" --no-interaction
-          php -r '$f="app/Models/User.php";$c=file_get_contents($f);$c=str_replace("use HasFactory, Notifiable;","use HasFactory, Notifiable, \\Spatie\\Permission\\Traits\\HasRoles, \\Laravel\\Sanctum\\HasApiTokens;",$c);file_put_contents($f,$c);'
-          grep -q HasApiTokens app/Models/User.php || { echo "User model patch did not apply"; exit 1; }
+          cd "$GITHUB_WORKSPACE"
+          pnpm --filter @camis/cli exec tsx -e "import { readFileSync, writeFileSync } from 'node:fs';
+            import { isPatchedUserModel, patchUserModel } from './src/commands/scaffold';
+            const f = process.env.GITHUB_WORKSPACE + '/app/app/Models/User.php';
+            const patched = patchUserModel(readFileSync(f, 'utf8'));
+            if (!isPatchedUserModel(patched)) { console.error('User model patch did not apply'); process.exit(1); }
+            writeFileSync(f, patched);"
       - name: Overlay (apiStyle strapi)
         run: pnpm --filter @camis/adapter-filament overlay "$GITHUB_WORKSPACE/app" --style strapi
       - name: Patch bootstrap/app.php as camis scaffold does
@@ -399,6 +426,17 @@ jobs:
           php artisan db:seed --class="Database\\Seeders\\RolePermissionSeeder" --force
           node ../packages/adapter-filament/scripts/strapi-auth-vectors.mjs http://127.0.0.1:8765/api \
             --hook "bash ../packages/adapter-filament/scripts/strapi-auth-hook.sh"
+      - name: A user signed up through the API stays out of the admin (no Strapi role is an admin role)
+        run: |
+          cd app
+          if php artisan camis:admin admin@example.test --password=first-admin-pass; then echo "camis:admin made an admin with no admin role"; exit 1; fi
+          php artisan tinker --execute='
+            $panel = \Filament\Facades\Filament::getPanel("admin");
+            $user = \App\Models\User::factory()->create(["username" => "signed-up", "email" => "signed-up@example.test"]);
+            $user->assignRole("authenticated");
+            if ($user->canAccessPanel($panel) !== false) { fwrite(STDERR, "an API user may sign in to the admin\n"); exit(1); }
+            echo "ADMIN ACCESS OK\n";
+          '
       - name: Strapi sign-in provider vectors (recorded from strapi-php against a stand-in provider)
         run: |
           bash packages/adapter-filament/scripts/fake-oauth-cert.sh "$RUNNER_TEMP/oauth"

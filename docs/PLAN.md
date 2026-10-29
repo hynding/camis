@@ -1174,6 +1174,43 @@ Part 5's exit: `transfer/link-order-export.tar.gz`, strapi-php's export of links
 picks genres and an author in the admin between API writes, in the `strapi-api` boot job on all
 three databases.
 
+## Phase 32 — the audit's first three gaps (`ir-schema`, `permissions`, `adapter-strapi`, `adapter-kernel`, `adapter-filament`, `adapter-express`, `cli`)
+
+The three gaps the 2026-10-29 Strapi parity audit put first, closed together (owner's call,
+2026-10-29).
+
+**Part 1 — private fields and patterns.** A field may be `private`, Strapi's `private: true`: the
+Strapi API style leaves it out of every answer (a scalar, a relation, a component and the scalars
+inside it), refuses it with Strapi's 400 "Invalid key" in `filters`, `sort` and `fields`, refuses
+it in a named `populate` and skips it in `populate=*`, and still writes it. GraphQL leaves it out
+of the type and the filters and keeps it in the input type; the OpenAPI document leaves it out.
+A target that would answer with a private field (Express, and the Laravel API style) reports a
+`privateField` gap. A text-like field or a uid may carry a `pattern`, Strapi's `regex`; the admin
+checks it. The API checks no field constraint yet, a pattern among them, so the API accepting a
+value that breaks one stays a known gap. The Strapi importer and exporter carry both.
+
+Part 1's exit: `private-field-vectors.json` (20 checks, recorded from strapi-php with
+`Review.moderatorNote` and `Review.flaggedBy` private) passes in the `strapi-api` boot job on all
+three databases.
+
+**Part 2 — editors.** The admin edits a richText field in Filament's Markdown editor and a json
+field as JSON text (`App\Filament\Forms\JsonEditor` over `App\Support\JsonText`, which keeps an
+object an object and refuses text that is not JSON). This changes the Laravel API style's admin
+too.
+
+**Part 3 — who signs in to the admin.** A role may be `admin: true` (never the public role). The
+User model implements Filament's `FilamentUser` through the generated `AdminAccess` trait, which
+lets in only a user holding an admin role, and never a blocked one; a project with no roles lets
+every signed-in user in. A project whose roles include no admin role lets nobody in and reports an
+`adminRole` gap, as an imported Strapi project does (its roles are API roles).
+`php artisan camis:admin <email>` makes the first admin, or gives an existing user an admin role.
+`camis scaffold` patches the User model; an app scaffolded earlier is patched by hand
+(DEPLOY.md).
+
+Part 3's exit: the boot job's admin access step (an Editor made by `camis:admin` gets in, a Reader
+and a user without a role do not) and the `strapi-api` job's (a user signed up through the API
+does not get in) pass.
+
 ---
 
 ## Sequencing rationale (quick reference)

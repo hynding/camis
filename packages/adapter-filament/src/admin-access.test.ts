@@ -82,6 +82,14 @@ describe("admin access", () => {
     ]);
   });
 
+  it("tells a deploy how to make the first admin, and how to let an older app's User model in", () => {
+    const deploy = file(result, "DEPLOY.md");
+    expect(deploy).toContain("## Admin sign-in");
+    expect(deploy).toContain("php artisan camis:admin admin@example.com");
+    expect(deploy).toContain("implements \\Filament\\Models\\Contracts\\FilamentUser");
+    expect(deploy).toContain("\\App\\Models\\Concerns\\AdminAccess");
+  });
+
   it("has no admin to let anyone into on the Strapi storage layout", () => {
     const strapi = filamentAdapter.generate(bundle([editor]), {
       projectName: "blog",
@@ -91,5 +99,6 @@ describe("admin access", () => {
     const paths = strapi.files.map((f) => f.path);
     expect(paths).not.toContain(TRAIT);
     expect(paths).not.toContain(COMMAND);
+    expect(file(strapi, "DEPLOY.md")).not.toContain("camis:admin");
   });
 });
