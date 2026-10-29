@@ -92,6 +92,19 @@ describe("populate and relation runtime files", () => {
   });
 });
 
+// A published row reaches a plain type's link through its draft, which shares its document and
+// locale: getstarted's French category would otherwise answer for the English one's addresses.
+describe("links reached through a document's draft", () => {
+  it("find the draft in the row's own locale", () => {
+    const php = emitStrapiPopulate();
+    const parent = php.slice(php.indexOf("private static function parent"));
+    expect(parent).toContain(
+      "$version = fn (Model $row): string => $row->getAttribute('document_id') . '|' . $row->getAttribute('locale');",
+    );
+    expect(parent).toContain("$draft = $draftOf[$version($row)] ?? null;");
+  });
+});
+
 describe("serializer relation and component maps", () => {
   it("lists the top-level components populate can name", () => {
     expect(serializer("Book")).toContain("public const COMPONENTS = ['price', 'editions'];");
