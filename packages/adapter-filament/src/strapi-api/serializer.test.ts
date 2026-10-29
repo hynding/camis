@@ -39,6 +39,14 @@ const nestedDoc: IrDocument = normalize({
   ],
 });
 
+const stampedDoc: IrDocument = normalize({
+  version: 1,
+  contentTypes: [
+    { name: "Visit", kind: "collection", fields: [{ type: "timestamp", name: "seenAt" }] },
+  ],
+  components: [],
+});
+
 describe("emitSerializer", () => {
   it("Transaction serializer golden (embedded component + decimal + bigInteger)", async () => {
     await expect(emitSerializer(shape("Transaction"))).toMatchFileSnapshot(
@@ -143,5 +151,16 @@ describe("emitSerializer", () => {
     await expect(
       emitSerializer(wireShape(nestedDoc, nestedDoc.contentTypes[0]!, [])),
     ).toMatchFileSnapshot("./__golden__/strapi-api/ConsumableNestedSerializer.php");
+  });
+  // Strapi sends a `timestamp` attribute as its epoch in milliseconds, as a string
+  // ("1772359200000"), and takes either that or a date string on a write.
+  it("serializes a timestamp as Strapi does, epoch milliseconds as a string, and reads one back", () => {
+    const php = emitSerializer(wireShape(stampedDoc, stampedDoc.contentTypes[0]!, []));
+    expect(php).toContain(
+      "'seenAt' => $m->seen_at === null ? null : (string) $m->seen_at->getTimestampMs(),",
+    );
+    expect(php).toContain("'seen_at' => self::epoch(self::dig($data, ['seenAt'])),");
+    expect(php).toContain("private static function epoch(mixed $value): mixed");
+    expect(emitSerializer(shape("Note"))).not.toContain("function epoch");
   });
 });
