@@ -38,7 +38,7 @@ import { emitResourceFiles } from "./resource";
 import { draftPublishPlan } from "./strapi-api/draft-publish";
 import { guestsPlan } from "./strapi-api/guests";
 import { localizationPlan, sharedAcrossLocalesMethod } from "./strapi-api/localization";
-import { mediaFields, mediaPlan } from "./strapi-api/media";
+import { mediaAllowedTypes, mediaFields, mediaPlan } from "./strapi-api/media";
 import { mediaRelationMethod } from "./strapi-api/media-runtime";
 import { contentManagerSorts, USER_DISPLAY_NAME } from "./strapi-api/admin-navigation";
 import { emitStrapiApi } from "./strapi-api/emit";
@@ -263,7 +263,11 @@ export const filamentAdapter: GenerateAdapter = {
             versioned: versioned.has(ct.name),
             localized: localized.has(ct.name),
             secured: ir.roles.length > 0,
-            media: mediaOf.map((f) => ({ field: f.name, multiple: f.multiple === true })),
+            media: mediaOf.map((f) => ({
+              field: f.name,
+              multiple: f.multiple === true,
+              ...mediaAllowedTypes(f),
+            })),
             ...(contentManager === undefined
               ? {}
               : {

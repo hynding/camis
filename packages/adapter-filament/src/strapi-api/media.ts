@@ -1,5 +1,5 @@
 import type { ApiStyle, StorageLayout } from "@camis/adapter-kernel";
-import type { CapabilityGap, ContentType, IrDocument } from "@camis/ir-schema";
+import type { CapabilityGap, ContentType, Field, IrDocument } from "@camis/ir-schema";
 import type { IrBundle } from "@camis/permissions";
 
 /** The media library a document's media fields use when it declares no builtin file type. */
@@ -11,6 +11,15 @@ const IMPLICIT_FILE: ContentType = {
 };
 
 export const mediaFields = (ct: ContentType) => ct.fields.filter((f) => f.type === "media");
+
+const MEDIA_KINDS = ["image", "video", "audio", "file"] as const;
+
+/** A media field's allowedTypes, in a stable order; none when it takes every kind, as Strapi reads it. */
+export const mediaAllowedTypes = (field: Field): { allowedTypes?: string[] } => {
+  if (field.type !== "media" || field.allowedTypes === undefined) return {};
+  const kinds = MEDIA_KINDS.filter((kind) => field.allowedTypes?.includes(kind));
+  return kinds.length === MEDIA_KINDS.length ? {} : { allowedTypes: kinds };
+};
 
 export interface MediaPlan {
   /** The builtin file type, declared or implied by a media field; undefined without a library. */
