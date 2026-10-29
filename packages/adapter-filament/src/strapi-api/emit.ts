@@ -37,6 +37,14 @@ import {
   emitUploadController,
   FILES_MIGRATION_PATH,
 } from "./media-runtime";
+import {
+  emitStrapiFolders,
+  emitUploadFolderModel,
+  emitUploadFolderPolicy,
+  emitUploadFolderResourceFiles,
+  emitUploadFoldersMigration,
+  UPLOAD_FOLDERS_MIGRATION_PATH,
+} from "./upload-folders";
 import { emitStrapiPopulate, emitStrapiRelations } from "./populate-runtime";
 import { emitHasDocumentId, emitStrapiError, emitStrapiQuery } from "./rest-runtime";
 import { emitApiConfig, emitStrapiRoutes } from "./routes";
@@ -145,6 +153,7 @@ import {
   emitStrapiSettings,
   emitStrapiUsers,
   emitUserSerializer,
+  emitRoleSerializer,
   emitUserController,
   emitUsersPermissionsMigration,
   SETTINGS_MIGRATION_PATH,
@@ -446,6 +455,9 @@ const usersPermissionsFiles = (
 ): GeneratedFile[] => [
   { path: "app/Support/StrapiUsers.php", content: emitStrapiUsers() },
   { path: "app/Http/Serializers/UserSerializer.php", content: emitUserSerializer(secured) },
+  ...(secured
+    ? [{ path: "app/Http/Serializers/RoleSerializer.php", content: emitRoleSerializer() }]
+    : []),
   { path: "app/Support/StrapiSettings.php", content: emitStrapiSettings() },
   {
     path: "app/Http/Controllers/Api/UserController.php",
@@ -543,6 +555,18 @@ const mediaLibraryFiles = (
     { path: FILES_MIGRATION_PATH, content: emitFilesMigration() },
     { path: "app/Filament/Support/MediaPicker.php", content: emitMediaPicker(names.model) },
     ...emitFileResourceFiles(names.model, names.resourceDir, names.resourceDir),
+    { path: UPLOAD_FOLDERS_MIGRATION_PATH, content: emitUploadFoldersMigration() },
+    { path: "app/Models/UploadFolder.php", content: emitUploadFolderModel(names.model) },
+    { path: "app/Support/StrapiFolders.php", content: emitStrapiFolders(names.model) },
+    ...(secured
+      ? [
+          {
+            path: "app/Policies/UploadFolderPolicy.php",
+            content: emitUploadFolderPolicy(file.name),
+          },
+        ]
+      : []),
+    ...emitUploadFolderResourceFiles(names.model, names.resourceDir),
   ];
 };
 

@@ -188,13 +188,18 @@ export const emitStrapiApiTokens = (input: ApiTokensInput): string => {
           .join("\n")}\n        ],`,
     )
     .join("\n");
+  const appModel = (name: string): string => `\\App\\Models\\${name}`;
   const models = [
-    ...contentTypes.map((ct) => [ct.model, ct.uid]),
-    ["User", `${USERS_PERMISSIONS}.user`],
-    ...(input.fileModel === undefined ? [] : [[input.fileModel, "plugin::upload.content-api"]]),
+    ...contentTypes.map((ct) => [appModel(ct.model), ct.uid]),
+    [appModel("User"), `${USERS_PERMISSIONS}.user`],
+    // A user's populated role, which a token reads with the role's find.
+    ["\\Spatie\\Permission\\Models\\Role", `${USERS_PERMISSIONS}.role`],
+    ...(input.fileModel === undefined
+      ? []
+      : [[appModel(input.fileModel), "plugin::upload.content-api"]]),
   ]
     .sort(([a], [b]) => a!.localeCompare(b!))
-    .map(([model, uid]) => `        \\App\\Models\\${model}::class => '${uid}',`)
+    .map(([model, uid]) => `        ${model}::class => '${uid}',`)
     .join("\n");
   return `<?php
 ${PHP_MARKER}

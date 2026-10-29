@@ -39,6 +39,8 @@ final class StrapiExport
 
     private const FILE = 'plugin::upload.file';
 
+    private const FOLDER = 'plugin::upload.folder';
+
     /** Strapi's own roles, as users-permissions makes them: name, description, default actions. */
     private const ROLES = [
         'authenticated' => ['Authenticated', 'Default role given to authenticated user.', [
@@ -365,6 +367,41 @@ final class StrapiExport
         }
         if ($entries) {
             $this->mediaLinks();
+            $this->folders((new $model())->getTable());
+        }
+    }
+
+    /**
+     * The media library's folders, with Strapi's links from each file to its folder and from each
+     * folder to its parent, both listed on the target in id order.
+     */
+    private function folders(string $files): void
+    {
+        $model = StrapiTransferMap::TYPES[self::FOLDER]['model'] ?? null;
+        if ($model === null) {
+            return;
+        }
+        $table = (new $model())->getTable();
+        $parents = [];
+        foreach (DB::table($table)->orderBy('id')->get() as $row) {
+            $created = self::stamp($row->created_at);
+            $this->entity(self::FOLDER, (int) $row->id, [
+                'documentId' => $row->document_id, 'name' => $row->name, 'pathId' => (int) $row->path_id, 'path' => $row->path,
+                'createdAt' => $created, 'updatedAt' => self::stamp($row->updated_at), 'publishedAt' => self::stamp($row->published_at) ?? $created, 'locale' => null,
+            ]);
+            if ($row->parent_id !== null) {
+                $parents[] = [(int) $row->id, (int) $row->parent_id, null, null];
+            }
+        }
+        foreach (self::positions($parents, 1, 0, 3) as $i => $position) {
+            [$child, $parent] = $parents[$i];
+            $this->link('relation.basic', 'manyToOne', ['type' => self::FOLDER, 'field' => 'parent', 'ref' => $child], ['type' => self::FOLDER, 'field' => 'children', 'ref' => $parent, 'pos' => $position]);
+        }
+        $placed = DB::table($files)->whereNotNull('folder_id')->orderBy('id')->get(['id', 'folder_id'])
+            ->map(fn (object $file): array => [(int) $file->id, (int) $file->folder_id, null, null])->all();
+        foreach (self::positions($placed, 1, 0, 3) as $i => $position) {
+            [$file, $folder] = $placed[$i];
+            $this->link('relation.basic', 'manyToOne', ['type' => self::FILE, 'field' => 'folder', 'ref' => $file], ['type' => self::FOLDER, 'field' => 'files', 'ref' => $folder, 'pos' => $position]);
         }
     }
 
@@ -642,6 +679,10 @@ final class StrapiExport
         }
         $store($email, $templates);
         $store($grant, StrapiProviders::settings());
+        $folder = StrapiSettings::get('upload.api-folder')['id'] ?? null;
+        if (isset(StrapiTransferMap::TYPES[self::FOLDER]['model']) && is_int($folder)) {
+            $store('plugin_upload_api-folder', ['id' => $folder]);
+        }
         $locale = StrapiTransferMap::TYPES['plugin::i18n.locale']['model'] ?? null;
         if ($locale !== null) {
             $default = DB::table((new $locale())->getTable())->where('is_default', true)->value('code');

@@ -40,6 +40,14 @@ const generated = [
   "app/Filament/Resources/Files/Pages/ListFiles.php",
   "app/Policies/FilePolicy.php",
   "_create_files_table.php",
+  "app/Models/UploadFolder.php",
+  "app/Support/StrapiFolders.php",
+  "app/Policies/UploadFolderPolicy.php",
+  "app/Filament/Resources/UploadFolders/UploadFolderResource.php",
+  "app/Filament/Resources/UploadFolders/Pages/CreateUploadFolder.php",
+  "app/Filament/Resources/UploadFolders/Pages/EditUploadFolder.php",
+  "app/Filament/Resources/UploadFolders/Pages/ListUploadFolders.php",
+  "_create_upload_folders_table.php",
 ];
 
 describe("media runtime files", () => {
@@ -58,6 +66,16 @@ describe("media runtime files", () => {
   });
   it("HasMedia golden", async () => {
     await expect(emitHasMedia()).toMatchFileSnapshot("./__golden__/strapi-api/HasMedia.php");
+  });
+  it("StrapiFolders golden", async () => {
+    await expect(content("app/Support/StrapiFolders.php")).toMatchFileSnapshot(
+      "./__golden__/strapi-api/StrapiFolders.php",
+    );
+  });
+  it("MediaPicker golden", async () => {
+    await expect(content("app/Filament/Support/MediaPicker.php")).toMatchFileSnapshot(
+      "./__golden__/strapi-api/MediaPicker.php",
+    );
   });
   it("UploadController golden", async () => {
     await expect(content("app/Http/Controllers/Api/UploadController.php")).toMatchFileSnapshot(
@@ -131,6 +149,43 @@ describe("the media library", () => {
   });
 });
 
+describe("the media library's folders", () => {
+  it("keep Strapi's upload_folders table, and each file's folder beside its folder path", () => {
+    const migration = content("_create_upload_folders_table.php");
+    expect(migration).toContain("Schema::create('upload_folders'");
+    expect(migration).toContain("$table->unsignedInteger('path_id')->unique();");
+    expect(migration).toContain("$table->string('path')->unique();");
+    expect(migration).toContain("Schema::table('files'");
+    expect(migration).toContain("$table->unsignedBigInteger('folder_id')->nullable()->index();");
+    // After the files table, so a project that already ran it gains the folders on migrate.
+    const files = result.files.find((f) => f.path.endsWith("_create_files_table.php"))!.path;
+    const folders = result.files.find((f) =>
+      f.path.endsWith("_create_upload_folders_table.php"),
+    )!.path;
+    expect(folders > files).toBe(true);
+    expect(content("app/Models/UploadFolder.php")).toContain(
+      "protected $table = 'upload_folders';",
+    );
+    expect(content("app/Models/File.php")).toContain("public function folder(): BelongsTo");
+  });
+  it("hold API uploads in Strapi's API Uploads folder", () => {
+    expect(content("app/Http/Controllers/Api/UploadController.php")).toContain(
+      "['folder' => StrapiFolders::apiUploads()->getKey()]",
+    );
+  });
+  it("are browsed, made and moved in the admin behind the file grants", () => {
+    const resource = content("app/Filament/Resources/UploadFolders/UploadFolderResource.php");
+    expect(resource).toContain("protected static ?string $model = UploadFolder::class;");
+    expect(resource).toContain("protected static ?string $navigationParentItem = 'Media Library';");
+    const policy = content("app/Policies/UploadFolderPolicy.php");
+    expect(policy).toContain("return $user->can('file.read');");
+    expect(policy).toContain("return $user->can('file.delete');");
+    const files = content("app/Filament/Resources/Files/FileResource.php");
+    expect(files).toContain("SelectFilter::make('folder')");
+    expect(files).toContain("BulkAction::make('move')");
+  });
+});
+
 describe("media fields", () => {
   it("are links, not columns", () => {
     expect(content("_create_books_table.php")).not.toContain("'cover'");
@@ -152,7 +207,7 @@ describe("media fields", () => {
   });
   it("are picked from, or uploaded to, the media library in the admin", () => {
     const form = content("app/Filament/Resources/Books/Schemas/BookForm.php");
-    expect(form).toContain("MediaPicker::make('cover', multiple: false),");
+    expect(form).toContain("MediaPicker::make('cover', multiple: false, allowedTypes: ['image']),");
     expect(form).toContain("MediaPicker::make('attachments', multiple: true),");
     expect(form).not.toContain("FileUpload::make('cover')");
   });

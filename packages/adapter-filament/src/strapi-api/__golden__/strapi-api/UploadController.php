@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Serializers\FileSerializer;
 use App\Models\File;
 use App\Support\StrapiError;
+use App\Support\StrapiFolders;
 use App\Support\StrapiPopulate;
 use App\Support\StrapiQuery;
 use App\Support\StrapiUpload;
@@ -43,9 +44,11 @@ class UploadController extends Controller
         $infos = $this->infos($request);
         $entry = $this->entry($request);
         $stored = DB::transaction(function () use ($uploads, $infos, $entry): array {
+            // As Strapi's Content API: every upload goes to the API Uploads folder.
+            $folder = ['folder' => StrapiFolders::apiUploads()->getKey()];
             $stored = [];
             foreach ($uploads as $i => $upload) {
-                $file = StrapiUpload::store($upload, $infos[$i] ?? []);
+                $file = StrapiUpload::store($upload, [...($infos[$i] ?? []), ...$folder]);
                 if ($entry !== null) {
                     StrapiUpload::attach($entry['row'], $entry['relation'], $file);
                 }

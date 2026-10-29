@@ -60,7 +60,7 @@ use Illuminate\\Support\\Facades\\Hash;${defaultRole !== undefined ? "\nuse Spat
 
 class AuthController extends Controller
 {
-    private const REGISTER_KEYS = ['username', 'password', 'email'];
+    private const ALWAYS_ALLOWED_KEYS = ['username', 'password', 'email'];
 
     public function register(Request $request): JsonResponse
     {
@@ -69,7 +69,9 @@ class AuthController extends Controller
             throw StrapiUsers::application('Register action is currently disabled');
         }
         $body = $request->json()->all();
-        $invalid = array_diff(array_map('strval', array_keys($body)), self::REGISTER_KEYS);
+        // Not narrowed to the user's public attributes: a project may knowingly allow any of them.
+        $allowed = [...self::ALWAYS_ALLOWED_KEYS, ...(array) config('camis.users_permissions.register.allowed_fields', [])];
+        $invalid = array_diff(array_map('strval', array_keys($body)), $allowed);
         if ($invalid !== []) {
             throw StrapiError::validation('Invalid parameters: '.implode(', ', $invalid));
         }
@@ -89,6 +91,8 @@ ${
         }
         $confirm = (bool) ($settings['email_confirmation'] ?? false);
         $user = StrapiUsers::add([
+            ...array_intersect_key($body, array_flip($allowed)),
+            'provider' => 'local',
             'username' => $username,
             'email' => $email,
             'password' => Hash::make((string) $body['password']),

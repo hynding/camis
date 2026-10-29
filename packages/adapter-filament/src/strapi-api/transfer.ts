@@ -4,6 +4,7 @@ import { filamentNames } from "../names";
 import { phpSingleQuoted } from "../php-literal";
 import { strapiActions } from "./strapi-actions";
 import { FILE_UID } from "./media-runtime";
+import { FOLDER_UID } from "./upload-folders";
 import { kebab } from "./names";
 import type { WireScalar, WireShape } from "./wire-shape";
 
@@ -209,9 +210,9 @@ export const emitStrapiTransferMap = (input: TransferMapInput): TransferMapEmiss
     [FILE_UID]: input.media
       ? { plugin: "file", model: "\\App\\Models\\File" }
       : { skip: "this project keeps no media library" },
-    "plugin::upload.folder": {
-      skip: "camis keeps a file's folder path, not the media library's folders",
-    },
+    [FOLDER_UID]: input.media
+      ? { plugin: "folder", model: "\\App\\Models\\UploadFolder" }
+      : { skip: "this project keeps no media library" },
     "plugin::i18n.locale": input.localized
       ? { plugin: "locale", model: "\\App\\Models\\Locale" }
       : { skip: "this project keeps no locales" },

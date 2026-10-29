@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -121,6 +121,45 @@ describe("users-permissions routes", () => {
     expect(routes).toContain(
       "Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware([$authThrottle, StrapiCredentials::class.':guest']);",
     );
+  });
+});
+
+// user-query-vectors.json, recorded from strapi-php, is the behaviour: register's allowedFields,
+// and the /users routes' start/limit pagination and populate (the role for an API token alone).
+describe("users-permissions register and /users queries", () => {
+  it("lets a project allow more register keys, as users-permissions' register.allowedFields", () => {
+    expect(content("config/camis.php")).toContain(
+      "'allowed_fields' => array_values(array_filter(array_map('trim', explode(',', (string) env('CAMIS_REGISTER_ALLOWED_FIELDS', ''))))),",
+    );
+    const auth = content("app/Http/Controllers/Api/AuthController.php");
+    expect(auth).toContain("config('camis.users_permissions.register.allowed_fields', [])");
+    expect(auth).not.toContain("private const REGISTER_KEYS");
+  });
+  it("lists users with start and limit, and populates them", () => {
+    const php = content("app/Http/Controllers/Api/UserController.php");
+    expect(php).toContain("StrapiUsers::paginate($query, $params)");
+    expect(php).toContain("StrapiPopulate::many(");
+    expect(php).toContain("StrapiPopulate::one(");
+  });
+  it("renders a populated role through a role serializer an API token may read", () => {
+    expect(content("app/Http/Serializers/UserSerializer.php")).toContain(
+      "'serializer' => \\App\\Http\\Serializers\\RoleSerializer::class",
+    );
+    expect(content("app/Http/Serializers/RoleSerializer.php")).toContain(
+      "public static function toWire(Role $m): array",
+    );
+    expect(content("app/Support/StrapiApiTokens.php")).toContain(
+      "\\Spatie\\Permission\\Models\\Role::class => 'plugin::users-permissions.role'",
+    );
+  });
+  it("user-query-vectors: every step has a unique name and a recorded strapi-php outcome", () => {
+    const read = (file: string): unknown =>
+      JSON.parse(readFileSync(join(__dirname, "__fixtures__", file), "utf8"));
+    const { steps } = read("user-query-vectors.json") as { steps: { name?: string }[] };
+    const names = steps.flatMap((s) => (s.name === undefined ? [] : [s.name]));
+    expect(new Set(names).size).toBe(names.length);
+    const recorded = read("user-query-vectors.expected.json") as { name: string }[];
+    expect(recorded.map((o) => o.name)).toEqual(names);
   });
 });
 

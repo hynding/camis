@@ -117,6 +117,7 @@ final class StrapiApiTokens
         \App\Models\Topic::class => 'api::topic.topic',
         \App\Models\Transaction::class => 'api::transaction.transaction',
         \App\Models\User::class => 'plugin::users-permissions.user',
+        \Spatie\Permission\Models\Role::class => 'plugin::users-permissions.role',
     ];
 
     /**
