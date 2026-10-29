@@ -1111,7 +1111,7 @@ migration. A `set` keeps the order given; a `connect` appends, or lands where it
 `App\Support\StrapiRelationsOrderer`, a port of strapi-php's relations orderer, with its strict
 error for a position next to a relation that is not linked. A populate `sort` replaces the order,
 and publishing copies the draft's order. Links made by the Filament admin or by a transfer import
-have no position yet, so they list after the ordered ones (closed in Part 4).
+have no position yet, so they list after the ordered ones (closed in Part 5).
 
 Part 3's exit: `link-order-vectors.json` (27 checks, recorded from strapi-php) passes in the
 `strapi-api` boot job on all three databases.
