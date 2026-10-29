@@ -20,6 +20,7 @@ export const FIELD_TYPES = [
   "dateTime",
   "timestamp",
   "json",
+  "blocks",
   "media",
   "relation",
   "component",
@@ -89,6 +90,12 @@ const enumerationField = z.object({
   default: z.string().optional(),
 });
 const jsonField = z.object({ type: z.literal("json"), ...common });
+/**
+ * Rich text kept as a document tree rather than markup: a list of blocks (paragraph, heading,
+ * quote, code, list, image), each holding inline text and link nodes, in the node shape Strapi's
+ * blocks editor stores.
+ */
+const blocksField = z.object({ type: z.literal("blocks"), ...common });
 const mediaField = z.object({
   type: z.literal("media"),
   ...common,
@@ -113,6 +120,7 @@ export const SCALAR_VARIANTS = [
   temporal("dateTime"),
   temporal("timestamp"),
   jsonField,
+  blocksField,
   mediaField,
 ] as const;
 
