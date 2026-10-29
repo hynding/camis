@@ -26,6 +26,8 @@ export const PUBLIC_ROLE = "public";
 export const role = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
+  /** Its users may sign in to the admin of a target that has one. */
+  admin: z.boolean().optional(),
   grants: z.array(grant),
 });
 export type Role = z.infer<typeof role>;

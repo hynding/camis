@@ -49,6 +49,7 @@ import { contentManagerSorts, USER_DISPLAY_NAME } from "./strapi-api/admin-navig
 import { emitStrapiApi } from "./strapi-api/emit";
 import { linkOrdersConstant } from "./strapi-api/link-order";
 import { emitStrapiStorage } from "./strapi-api/storage/emit";
+import { emitAdminAccessFiles } from "./admin-access";
 import { zoneBuilder } from "./strapi-api/zones-admin";
 
 export const filamentAdapter: GenerateAdapter = {
@@ -339,6 +340,11 @@ export const filamentAdapter: GenerateAdapter = {
       files.push(...emitBlocksFiles(fileModel !== undefined));
     }
     if (storage !== "strapi" && hasJsonFields(doc)) files.push(...emitJsonEditorFiles());
+    if (storage !== "strapi") {
+      const admin = emitAdminAccessFiles(ir.roles);
+      files.push(...admin.files);
+      gaps.push(...admin.gaps);
+    }
 
     // Pivot and child tables are Strapi's `_lnk` and component tables on the Strapi layout, so
     // there is nothing here to migrate.

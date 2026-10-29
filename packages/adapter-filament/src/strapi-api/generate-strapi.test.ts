@@ -34,8 +34,9 @@ describe("filamentAdapter apiStyle strapi", () => {
         (f) => f.path === "app/Http/Controllers/Api/Generated/NoteApiController.php",
       ),
     ).toBe(true);
-    // The one project-wide gap: remote transfer needs a WebSocket server (transfer-tokens.test.ts).
-    expect(result.gaps.gaps.map((g) => g.feature)).toEqual(["remoteDataTransfer"]);
+    // The project-wide gaps: remote transfer needs a WebSocket server (transfer-tokens.test.ts),
+    // and a Strapi project's roles are API roles, none of them flagged for the admin.
+    expect(result.gaps.gaps.map((g) => g.feature)).toEqual(["remoteDataTransfer", "adminRole"]);
   });
   it("is idempotent", () => {
     expect(

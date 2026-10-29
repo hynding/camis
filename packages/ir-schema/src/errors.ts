@@ -19,6 +19,7 @@ export type IrErrorCode =
   | "unknown_assign_field"
   | "assign_not_user_relation"
   | "unknown_default_role"
+  | "public_admin_role"
   | "duplicate_content_type_name"
   | "duplicate_component_name"
   | "cyclic_component_reference"

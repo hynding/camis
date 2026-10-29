@@ -1,4 +1,5 @@
 overwrite DEPLOY.md
+overwrite app/Console/Commands/CamisAdmin.php
 overwrite app/Console/Commands/StrapiExport.php
 overwrite app/Console/Commands/StrapiImport.php
 overwrite app/Console/Commands/StrapiImportTokens.php
@@ -202,6 +203,7 @@ overwrite app/Models/Author.php
 overwrite app/Models/Book.php
 overwrite app/Models/BookEditions.php
 overwrite app/Models/Category.php
+overwrite app/Models/Concerns/AdminAccess.php
 overwrite app/Models/Concerns/EmitsStrapiEvents.php
 overwrite app/Models/Concerns/HasDocumentId.php
 overwrite app/Models/Concerns/HasDraftAndPublish.php

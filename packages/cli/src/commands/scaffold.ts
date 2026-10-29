@@ -4,24 +4,42 @@ import type { Io } from "../io";
 
 const STOCK_TRAIT_USE = "use HasFactory, Notifiable;";
 const ROLES_ONLY_TRAIT_USE = "use HasFactory, Notifiable, \\Spatie\\Permission\\Traits\\HasRoles;";
-const PATCHED_TRAIT_USE =
+const TOKENS_TRAIT_USE =
   "use HasFactory, Notifiable, \\Spatie\\Permission\\Traits\\HasRoles, \\Laravel\\Sanctum\\HasApiTokens;";
+const PATCHED_TRAIT_USE = TOKENS_TRAIT_USE.replace(";", ", \\App\\Models\\Concerns\\AdminAccess;");
+const STOCK_CLASS_LINE = "class User extends Authenticatable\n";
+const PATCHED_CLASS_LINE =
+  "class User extends Authenticatable implements \\Filament\\Models\\Contracts\\FilamentUser\n";
+
+const patchTraitUse = (source: string): string => {
+  if (source.includes(PATCHED_TRAIT_USE)) return source;
+  const from = [TOKENS_TRAIT_USE, ROLES_ONLY_TRAIT_USE, STOCK_TRAIT_USE].find((form) =>
+    source.includes(form),
+  );
+  return from === undefined ? source : source.replace(from, PATCHED_TRAIT_USE);
+};
+
+const patchClassLine = (source: string): string =>
+  source.includes(PATCHED_CLASS_LINE)
+    ? source
+    : source.replace(STOCK_CLASS_LINE, PATCHED_CLASS_LINE);
 
 /**
- * Add Spatie's HasRoles and Sanctum's HasApiTokens to the Laravel User model. Idempotent.
+ * Add Spatie's HasRoles, Sanctum's HasApiTokens and the generated AdminAccess to the Laravel User
+ * model, and make it a FilamentUser so AdminAccess decides who may sign in to the admin.
+ * Idempotent.
  *
- * Handles the roles-only form as well as the stock one: an app already patched by the non-strapi
- * boot path has HasRoles but no HasApiTokens, and returning it unchanged would leave an app that
- * cannot issue Sanctum tokens. A source matching neither is returned unchanged; the caller treats
- * that as a failure rather than reporting a patch that never happened.
+ * Handles every earlier patched form as well as the stock one: an app already patched by the
+ * non-strapi boot path has HasRoles but no HasApiTokens, and one scaffolded before admin roles
+ * has both but no AdminAccess; returning either unchanged would leave an app that cannot issue
+ * Sanctum tokens or that no one can sign in to. A source matching none is returned unchanged; the
+ * caller treats that as a failure rather than reporting a patch that never happened.
  */
-export const patchUserModel = (source: string): string => {
-  if (source.includes("HasApiTokens")) return source;
-  if (source.includes(ROLES_ONLY_TRAIT_USE)) {
-    return source.replace(ROLES_ONLY_TRAIT_USE, PATCHED_TRAIT_USE);
-  }
-  return source.replace(STOCK_TRAIT_USE, PATCHED_TRAIT_USE);
-};
+export const patchUserModel = (source: string): string => patchClassLine(patchTraitUse(source));
+
+/** Whether the User model carries every trait and the FilamentUser contract. */
+export const isPatchedUserModel = (source: string): boolean =>
+  source.includes(PATCHED_TRAIT_USE) && source.includes(PATCHED_CLASS_LINE);
 
 const STOCK_ROUTING_CONSOLE = "commands: __DIR__.'/../routes/console.php',";
 const ROUTING_WITH_API = `api: __DIR__.'/../routes/api.php',\n        ${STOCK_ROUTING_CONSOLE}`;
@@ -268,14 +286,16 @@ export const scaffoldCommand = async (
   try {
     const source = await io.readFile(userModelPath);
     const patched = patchUserModel(source);
-    if (patched === source && !source.includes("HasApiTokens")) {
+    if (!isPatchedUserModel(patched)) {
       io.out(
-        "✗ could not patch app/Models/User.php: no recognised `use HasFactory, Notifiable…` trait line",
+        "✗ could not patch app/Models/User.php: no recognised `use HasFactory, Notifiable…` trait line or `class User extends Authenticatable`",
       );
       return 1;
     }
     await io.writeFile(userModelPath, patched);
-    io.out("✓ patched app/Models/User.php with Spatie HasRoles and Sanctum HasApiTokens");
+    io.out(
+      "✓ patched app/Models/User.php with Spatie HasRoles, Sanctum HasApiTokens and the admin access",
+    );
   } catch (e) {
     io.out(`✗ cannot patch ${userModelPath}: ${(e as Error).message}`);
     return 1;

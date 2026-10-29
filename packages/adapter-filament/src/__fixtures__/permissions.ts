@@ -18,6 +18,7 @@ export const permissionsBundle: IrBundle = {
   roles: [
     {
       name: "Editor",
+      admin: true,
       grants: [
         {
           contentType: "Article",
