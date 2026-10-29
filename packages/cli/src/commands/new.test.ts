@@ -223,7 +223,7 @@ describe("newCommand — scaffold and build", () => {
   it("scaffolds the Laravel host app before building a filament target", async () => {
     const { io, files, calls, materialized } = memoryIo();
     files["/work/p/generated/filament/app/Models/User.php"] =
-      "class User\n{\n    use HasFactory, Notifiable;\n}\n";
+      "class User extends Authenticatable\n{\n    use HasFactory, Notifiable;\n}\n";
     files["/work/p/generated/filament/bootstrap/app.php"] = STOCK_BOOTSTRAP;
     expect(await newCommand("p", io, { targets: ["filament"] })).toBe(0);
     expect(calls[0]).toMatchObject({

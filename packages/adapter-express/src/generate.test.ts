@@ -409,3 +409,26 @@ describe("the builtin file type", () => {
     ]);
   });
 });
+
+describe("private fields", () => {
+  it("reports a private field, which the Express target answers with, rather than drop the rule", () => {
+    const result = expressAdapter.generate(
+      {
+        document: {
+          version: 1,
+          contentTypes: [
+            {
+              name: "Review",
+              kind: "collection",
+              fields: [{ type: "text", name: "moderatorNote", private: true }],
+            },
+          ],
+          components: [],
+        },
+        roles: [],
+      },
+      { projectName: "blog" },
+    );
+    expect(result.gaps.gaps.filter((g) => g.feature === "privateField")).toHaveLength(1);
+  });
+});

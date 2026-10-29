@@ -1,5 +1,5 @@
 import { fail, ok, type IrDocument, type IrError, type Result } from "@camis/ir-schema";
-import type { Role } from "./model";
+import { PUBLIC_ROLE, type Role } from "./model";
 
 export interface IrBundle {
   document: IrDocument;
@@ -13,6 +13,14 @@ export const validateBundle = (bundle: IrBundle): Result<IrBundle> => {
   const byName = new Map(bundle.document.contentTypes.map((ct) => [ct.name, ct]));
   const errors: IrError[] = [];
   bundle.roles.forEach((role, ri) => {
+    if (role.name === PUBLIC_ROLE && role.admin === true) {
+      errors.push({
+        code: "public_admin_role",
+        message: `the "${PUBLIC_ROLE}" role cannot be an admin role: a guest has no account to sign in with`,
+        location: { rule: role.name },
+        path: ["roles", ri, "admin"],
+      });
+    }
     role.grants.forEach((grant, gi) => {
       const ct = byName.get(grant.contentType);
       if (!ct) {

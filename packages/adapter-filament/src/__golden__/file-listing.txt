@@ -1,4 +1,5 @@
 overwrite DEPLOY.md
+overwrite app/Console/Commands/CamisAdmin.php
 overwrite app/Filament/Resources/Articles/ArticleResource.php
 overwrite app/Filament/Resources/Articles/Pages/CreateArticle.php
 overwrite app/Filament/Resources/Articles/Pages/EditArticle.php
@@ -7,6 +8,7 @@ overwrite app/Filament/Resources/Articles/Schemas/ArticleForm.php
 overwrite app/Filament/Resources/Articles/Schemas/ArticlesTable.php
 overwrite app/Http/Controllers/Api/ArticleApiController.php
 overwrite app/Models/Article.php
+overwrite app/Models/Concerns/AdminAccess.php
 overwrite database/migrations/0001_01_02_000001_create_articles_table.php
 overwrite routes/api.php
 seed routes/api-custom.php

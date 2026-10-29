@@ -1,6 +1,7 @@
 import {
   buildManifest,
   expandComponents,
+  privateFieldGaps,
   type ExpandedContentType,
   type GenerateAdapter,
   type GeneratedFile,
@@ -58,7 +59,7 @@ export const expressAdapterFor = (dialect: Dialect): GenerateAdapter => ({
     const doc = normalize(ir.document);
     const rel = resolveRelations(doc, dialect);
     const secured = ir.roles.length > 0;
-    const gaps: CapabilityGap[] = [];
+    const gaps: CapabilityGap[] = [...privateFieldGaps(doc, "the Express target")];
     const files: GeneratedFile[] = [
       ...skeletonFiles(doc, options.projectName, dialect, { secured }),
     ];

@@ -1,0 +1,215 @@
+{
+  "a list leaves the private fields out": {
+    "status": 200,
+    "data": [
+      {
+        "title": "First"
+      },
+      {
+        "title": "Second"
+      }
+    ]
+  },
+  "one entry leaves them out too": {
+    "status": 200,
+    "data": {
+      "title": "First"
+    }
+  },
+  "populate=* skips the private relation": {
+    "status": 200,
+    "data": {
+      "readers": [],
+      "reviewer": null,
+      "title": "First"
+    }
+  },
+  "populate naming the private relation": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid key flaggedBy",
+      "details": {
+        "key": "flaggedBy",
+        "path": "flaggedBy",
+        "source": "query",
+        "param": "populate"
+      }
+    }
+  },
+  "populate object naming the private relation": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid key flaggedBy",
+      "details": {
+        "key": "flaggedBy",
+        "path": "flaggedBy",
+        "source": "query",
+        "param": "populate"
+      }
+    }
+  },
+  "fields naming the private field": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid key moderatorNote",
+      "details": {
+        "key": "moderatorNote",
+        "path": "moderatorNote",
+        "source": "query",
+        "param": "fields"
+      }
+    }
+  },
+  "filter by the private field": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid key moderatorNote",
+      "details": {
+        "key": "moderatorNote",
+        "path": "moderatorNote",
+        "source": "query",
+        "param": "filters"
+      }
+    }
+  },
+  "filter through the private relation": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid key flaggedBy",
+      "details": {
+        "key": "flaggedBy",
+        "path": "flaggedBy",
+        "source": "query",
+        "param": "filters"
+      }
+    }
+  },
+  "filter by the private relation's id": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid key flaggedBy",
+      "details": {
+        "key": "flaggedBy",
+        "path": "flaggedBy",
+        "source": "query",
+        "param": "filters"
+      }
+    }
+  },
+  "filter by the private field inside $or": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid key moderatorNote",
+      "details": {
+        "key": "moderatorNote",
+        "path": "moderatorNote",
+        "source": "query",
+        "param": "filters"
+      }
+    }
+  },
+  "sort by the private field": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid key moderatorNote",
+      "details": {
+        "key": "moderatorNote",
+        "path": "moderatorNote",
+        "source": "query",
+        "param": "sort"
+      }
+    }
+  },
+  "sort by the private field, as an array": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid key moderatorNote",
+      "details": {
+        "key": "moderatorNote",
+        "path": "moderatorNote",
+        "source": "query",
+        "param": "sort"
+      }
+    }
+  },
+  "sort through the private relation": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid key flaggedBy",
+      "details": {
+        "key": "flaggedBy",
+        "path": "flaggedBy",
+        "source": "query",
+        "param": "sort"
+      }
+    }
+  },
+  "GraphQL: a private field is not on the type": {
+    "data": null,
+    "errors": [
+      {
+        "message": "Cannot query field \"moderatorNote\" on type \"Review\".",
+        "code": "GRAPHQL_VALIDATION_FAILED",
+        "path": null
+      }
+    ]
+  },
+  "GraphQL: a private relation is not on the type": {
+    "data": null,
+    "errors": [
+      {
+        "message": "Cannot query field \"flaggedBy\" on type \"Review\".",
+        "code": "GRAPHQL_VALIDATION_FAILED",
+        "path": null
+      }
+    ]
+  },
+  "GraphQL: nor among the filters": {
+    "data": null,
+    "errors": [
+      {
+        "message": "Field \"moderatorNote\" is not defined by type \"ReviewFiltersInput\".",
+        "code": "GRAPHQL_VALIDATION_FAILED",
+        "path": null
+      }
+    ]
+  },
+  "create with the private fields answers without them": {
+    "status": 201,
+    "data": {
+      "title": "Third"
+    }
+  },
+  "update a private field": {
+    "status": 200,
+    "data": {
+      "title": "Third"
+    }
+  },
+  "unlink the private relation": {
+    "status": 200,
+    "data": {
+      "readers": [],
+      "reviewer": null,
+      "title": "Third"
+    }
+  },
+  "GraphQL: create with the private fields, which the input takes": {
+    "data": {
+      "createReview": {
+        "title": "Fourth"
+      }
+    },
+    "errors": []
+  }
+}

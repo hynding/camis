@@ -1268,6 +1268,8 @@ input ReviewInput {
   title: String
   reviewer: ID
   readers: [ID]
+  moderatorNote: String
+  flaggedBy: ID
   publishedAt: DateTime
   locale: String
 }

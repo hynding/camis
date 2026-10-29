@@ -79,3 +79,10 @@ describe("parseRolesFile", () => {
     if (!r.ok) expect(r.issues.join("; ")).toContain("roles.0.grants.0.actions.0");
   });
 });
+
+describe("admin roles", () => {
+  it("accepts a role whose users may sign in to the admin", () => {
+    const r = role.safeParse({ name: "editor", admin: true, grants: [] });
+    expect(r.success && r.data.admin).toBe(true);
+  });
+});

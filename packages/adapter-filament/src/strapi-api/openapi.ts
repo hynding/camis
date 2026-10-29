@@ -121,31 +121,34 @@ class DocumentBuilder {
     return ct === undefined ? `api::${kebab(name)}.${kebab(name)}` : this.uid(ct);
   }
 
+  /** Strapi's document leaves a private field out of every schema, input and output alike. */
   private fieldAttributes(fields: readonly (Field | ComponentFieldT)[]): Attribute[] {
-    return fields.map((f): Attribute => {
-      const a: Attribute = { name: fieldApiName(f), type: STRAPI_TYPES[f.type] ?? f.type };
-      if (f.required === true) a.required = true;
-      if ("default" in f && f.default !== undefined) a.default = f.default;
-      if ("min" in f && f.min !== undefined) a.min = f.min;
-      if ("max" in f && f.max !== undefined) a.max = f.max;
-      if ("minLength" in f && f.minLength !== undefined) a.minLength = f.minLength;
-      if ("maxLength" in f && f.maxLength !== undefined) a.maxLength = f.maxLength;
-      if (f.type === "enumeration") a.values = f.values;
-      if (f.type === "media") {
-        a.target = FILE_UID;
-        if (f.multiple === true) a.many = true;
-      }
-      if (f.type === "component") {
-        const component = this.components.get(f.component);
-        if (component !== undefined) a.target = componentUid(component);
-        if (f.repeatable) a.many = true;
-      }
-      if (f.type === "relation") {
-        a.target = this.targetUid(f.target);
-        if (f.relationKind === "oneToMany" || f.relationKind === "manyToMany") a.many = true;
-      }
-      return a;
-    });
+    return fields
+      .filter((f) => f.private !== true)
+      .map((f): Attribute => {
+        const a: Attribute = { name: fieldApiName(f), type: STRAPI_TYPES[f.type] ?? f.type };
+        if (f.required === true) a.required = true;
+        if ("default" in f && f.default !== undefined) a.default = f.default;
+        if ("min" in f && f.min !== undefined) a.min = f.min;
+        if ("max" in f && f.max !== undefined) a.max = f.max;
+        if ("minLength" in f && f.minLength !== undefined) a.minLength = f.minLength;
+        if ("maxLength" in f && f.maxLength !== undefined) a.maxLength = f.maxLength;
+        if (f.type === "enumeration") a.values = f.values;
+        if (f.type === "media") {
+          a.target = FILE_UID;
+          if (f.multiple === true) a.many = true;
+        }
+        if (f.type === "component") {
+          const component = this.components.get(f.component);
+          if (component !== undefined) a.target = componentUid(component);
+          if (f.repeatable) a.many = true;
+        }
+        if (f.type === "relation") {
+          a.target = this.targetUid(f.target);
+          if (f.relationKind === "oneToMany" || f.relationKind === "manyToMany") a.many = true;
+        }
+        return a;
+      });
   }
 
   /** The other side of every relation that names this type and an inverse field. */

@@ -146,3 +146,42 @@ describe("toAttributes", () => {
     expect(attrs.title).toEqual({ type: "string" });
   });
 });
+
+describe("toAttribute — private and regex", () => {
+  it("writes private on a scalar, a relation and a component", () => {
+    expect(toAttribute({ type: "string", name: "notes", private: true })).toEqual({
+      type: "string",
+      private: true,
+    });
+    expect(
+      toAttribute({
+        type: "relation",
+        name: "owner",
+        relationKind: "manyToOne",
+        target: "Author",
+        private: true,
+      }),
+    ).toEqual({
+      type: "relation",
+      relation: "manyToOne",
+      target: "api::author.author",
+      private: true,
+    });
+    expect(
+      toAttribute({
+        type: "component",
+        name: "seo",
+        component: "Seo",
+        repeatable: false,
+        private: true,
+      }),
+    ).toEqual({ type: "component", component: "shared.seo", repeatable: false, private: true });
+  });
+
+  it("writes a pattern as Strapi's regex", () => {
+    expect(toAttribute({ type: "string", name: "code", pattern: "^[A-Z]{3}$" })).toEqual({
+      type: "string",
+      regex: "^[A-Z]{3}$",
+    });
+  });
+});

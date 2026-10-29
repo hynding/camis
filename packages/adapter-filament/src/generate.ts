@@ -2,6 +2,7 @@ import {
   buildManifest,
   columnField,
   expandComponents,
+  privateFieldGaps,
   type GenerateAdapter,
   type GeneratedFile,
   type GenerationResult,
@@ -21,6 +22,7 @@ import {
 } from "./components";
 import { apiCustomSeed, emitApiController, emitApiRoutes } from "./api";
 import { emitBlocksFiles, hasBlocksFields } from "./blocks";
+import { emitJsonEditorFiles, hasJsonFields } from "./json-editor";
 import { deployFile } from "./deploy";
 import { emitField, isSupportedField } from "./fields";
 import { emitHookFiles } from "./hooks/emit";
@@ -47,6 +49,7 @@ import { contentManagerSorts, USER_DISPLAY_NAME } from "./strapi-api/admin-navig
 import { emitStrapiApi } from "./strapi-api/emit";
 import { linkOrdersConstant } from "./strapi-api/link-order";
 import { emitStrapiStorage } from "./strapi-api/storage/emit";
+import { emitAdminAccessFiles } from "./admin-access";
 import { zoneBuilder } from "./strapi-api/zones-admin";
 
 export const filamentAdapter: GenerateAdapter = {
@@ -81,6 +84,8 @@ export const filamentAdapter: GenerateAdapter = {
       ...localization.gaps,
       ...media.gaps,
       ...guestGaps,
+      // The Strapi API style keeps private fields out of its answers; the Laravel one cannot.
+      ...(apiStyle === "strapi" ? [] : privateFieldGaps(doc, "the Laravel API style")),
     ];
     if (storage !== requestedStorage) {
       gaps.push({
@@ -333,6 +338,12 @@ export const filamentAdapter: GenerateAdapter = {
     // Edited in the admin, which the Strapi storage layout does not have.
     if (storage !== "strapi" && hasBlocksFields(doc)) {
       files.push(...emitBlocksFiles(fileModel !== undefined));
+    }
+    if (storage !== "strapi" && hasJsonFields(doc)) files.push(...emitJsonEditorFiles());
+    if (storage !== "strapi") {
+      const admin = emitAdminAccessFiles(ir.roles);
+      files.push(...admin.files);
+      gaps.push(...admin.gaps);
     }
 
     // Pivot and child tables are Strapi's `_lnk` and component tables on the Strapi layout, so

@@ -1,7 +1,9 @@
 overwrite DEPLOY.md
+overwrite app/Console/Commands/CamisAdmin.php
 overwrite app/Console/Commands/StrapiExport.php
 overwrite app/Console/Commands/StrapiImport.php
 overwrite app/Console/Commands/StrapiImportTokens.php
+overwrite app/Filament/Forms/JsonEditor.php
 overwrite app/Filament/Pages/DataTransfer.php
 overwrite app/Filament/Pages/UsersPermissionsAdvancedSettings.php
 overwrite app/Filament/Pages/UsersPermissionsEmailTemplates.php
@@ -201,6 +203,7 @@ overwrite app/Models/Author.php
 overwrite app/Models/Book.php
 overwrite app/Models/BookEditions.php
 overwrite app/Models/Category.php
+overwrite app/Models/Concerns/AdminAccess.php
 overwrite app/Models/Concerns/EmitsStrapiEvents.php
 overwrite app/Models/Concerns/HasDocumentId.php
 overwrite app/Models/Concerns/HasDraftAndPublish.php
@@ -247,6 +250,7 @@ overwrite app/Policies/TopicPolicy.php
 overwrite app/Policies/TransactionPolicy.php
 overwrite app/Policies/UploadFolderPolicy.php
 overwrite app/Policies/UserPolicy.php
+overwrite app/Support/JsonText.php
 overwrite app/Support/PublicRole.php
 overwrite app/Support/Ring1.php
 overwrite app/Support/StrapiApiTokens.php
@@ -298,9 +302,9 @@ overwrite database/migrations/0001_01_02_000008_create_articles_table.php
 overwrite database/migrations/0001_01_02_000009_create_pages_table.php
 overwrite database/migrations/0001_01_02_000010_create_landings_table.php
 overwrite database/migrations/0001_01_02_000011_create_globals_table.php
-overwrite database/migrations/0001_01_02_000012_create_reviews_table.php
-overwrite database/migrations/0001_01_02_000013_create_authors_table.php
-overwrite database/migrations/0001_01_02_000014_create_posts_table.php
+overwrite database/migrations/0001_01_02_000012_create_authors_table.php
+overwrite database/migrations/0001_01_02_000013_create_posts_table.php
+overwrite database/migrations/0001_01_02_000014_create_reviews_table.php
 overwrite database/migrations/0001_01_02_000015_create_genres_table.php
 overwrite database/migrations/0001_01_02_000016_create_books_table.php
 overwrite database/migrations/0001_01_02_000017_create_homepages_table.php

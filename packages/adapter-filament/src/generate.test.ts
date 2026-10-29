@@ -624,3 +624,31 @@ describe("filamentAdapter — owning relations that reference each other", () =>
     expect(keys.content).toContain("$table->dropForeign(['featured_comment_id']);");
   });
 });
+
+describe("private fields", () => {
+  const privateBundle = {
+    document: {
+      version: 1 as const,
+      contentTypes: [
+        {
+          name: "Review",
+          kind: "collection" as const,
+          fields: [{ type: "text" as const, name: "moderatorNote", private: true }],
+        },
+      ],
+      components: [],
+    },
+    roles: [],
+  };
+  it("are kept out of the Strapi API style's answers, so nothing is reported", () => {
+    const result = filamentAdapter.generate(privateBundle, {
+      projectName: "blog",
+      apiStyle: "strapi",
+    });
+    expect(result.gaps.gaps.filter((g) => g.feature === "privateField")).toEqual([]);
+  });
+  it("are reported on the Laravel API style, which answers with every column", () => {
+    const result = filamentAdapter.generate(privateBundle, { projectName: "blog" });
+    expect(result.gaps.gaps.filter((g) => g.feature === "privateField")).toHaveLength(1);
+  });
+});

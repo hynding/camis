@@ -17,6 +17,7 @@ export type {
   ExpandedZone,
   ExpandedZoneMember,
 } from "./expand";
+export { privateFieldGaps } from "./private-fields";
 export { stableJson } from "./stable-json";
 export { TS_MARKER, withMarker } from "./marker";
 export { buildManifest, MANIFEST_PATH, sha256 } from "./manifest";

@@ -74,8 +74,29 @@ describe("emitField", () => {
       "$table->json('cover')->nullable()",
     );
     expect(emitField({ type: "richText", name: "body" } as Field).formComponent).toBe(
-      "RichEditor::make('body')",
+      "MarkdownEditor::make('body')",
     );
     expect(emitField({ type: "decimal", name: "price" } as Field).cast).toBe("'decimal:2'");
+  });
+  // Strapi's richtext is Markdown: an HTML editor would rewrite it on the first save.
+  it("edits richText as Markdown", () => {
+    const f = emitField({ type: "richText", name: "body" } as Field);
+    expect(f.formComponent).toBe("MarkdownEditor::make('body')");
+    expect(f.formImport).toBe("Filament\\Forms\\Components\\MarkdownEditor");
+  });
+  // A key/value editor holds only a flat map of strings; JSON holds any value.
+  it("edits json as JSON text, keeping nested values, arrays, numbers and booleans", () => {
+    const f = emitField({ type: "json", name: "meta" } as Field);
+    expect(f.formComponent).toBe("JsonEditor::make('meta')");
+    expect(f.formImport).toBe("App\\Filament\\Forms\\JsonEditor");
+    expect(f.cast).toBe("'array'");
+  });
+  it("checks a pattern in the admin form, as a PCRE whose delimiter cannot clash", () => {
+    expect(
+      emitField({ type: "string", name: "code", pattern: "^[A-Z]{3}$" } as Field).formComponent,
+    ).toBe("TextInput::make('code')->regex('~^[A-Z]{3}$~')");
+    expect(
+      emitField({ type: "text", name: "path", pattern: "^a~b\\~c/d'$" } as Field).formComponent,
+    ).toBe("Textarea::make('path')->regex('~^a\\\\~b\\\\~c/d\\'$~')");
   });
 });

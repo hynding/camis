@@ -275,6 +275,7 @@ class SchemaBuilder implements DefinitionSink {
       const fields: Member[] = [{ name: "id", type: "ID!" }];
       for (const f of component.fields) {
         const key = fieldApiName(f);
+        if (f.private === true) continue;
         if (f.type === "component") {
           const target = this.component(f.component);
           nested[key] = { type: componentTypeName(target), repeatable: f.repeatable };
@@ -305,11 +306,18 @@ class SchemaBuilder implements DefinitionSink {
       name,
       fields: [
         ...component.fields.flatMap((f): Member[] =>
-          f.type === "component"
-            ? [{ name: fieldApiName(f), type: this.componentFilters(this.component(f.component)) }]
-            : f.type === "relation" || f.type === "media"
-              ? []
-              : [{ name: fieldApiName(f), type: this.scalarFilter(scalarOf(f.type)) }],
+          f.private === true
+            ? []
+            : f.type === "component"
+              ? [
+                  {
+                    name: fieldApiName(f),
+                    type: this.componentFilters(this.component(f.component)),
+                  },
+                ]
+              : f.type === "relation" || f.type === "media"
+                ? []
+                : [{ name: fieldApiName(f), type: this.scalarFilter(scalarOf(f.type)) }],
         ),
         { name: "and", type: `[${name}]` },
         { name: "or", type: `[${name}]` },
@@ -407,6 +415,27 @@ const contentFields = (ct: ContentType, shape: WireShape): ContentField[] => {
 
 const MANY = new Set(["hasMany", "belongsToMany", "localizations", "mediaMany"]);
 
+/** What a content type's input takes for a private field, which its type and filters leave out. */
+const privateInput = (
+  b: SchemaBuilder,
+  typeName: string,
+  key: string,
+  field: Field,
+  relation: WireShape["relations"][number] | undefined,
+): string => {
+  if (relation !== undefined) return MANY.has(relation.kind) ? "[ID]" : "ID";
+  if (field.type === "component") {
+    const input = b.componentInput(b.component(field.component));
+    return field.repeatable ? `[${input}]` : input;
+  }
+  if (field.type === "dynamicZone") {
+    const input = `${typeName}${pascal(key)}DynamicZoneInput`;
+    b.need(input, () => ({ kind: "scalar", name: input }));
+    return `[${input}!]`;
+  }
+  return b.scalarType(typeName, field);
+};
+
 export const buildGraphqlSchema = (input: GraphqlSchemaInput): GraphqlSchema => {
   const { shapes } = input;
   const b = new SchemaBuilder(input);
@@ -465,6 +494,11 @@ export const buildGraphqlSchema = (input: GraphqlSchemaInput): GraphqlSchema => 
     const inputFields: Member[] = [];
 
     for (const { field, key, relation } of contentFields(ct, shape)) {
+      // Strapi's type and filters leave a private field out; its input still takes it.
+      if (field?.private === true) {
+        inputFields.push({ name: key, type: privateInput(b, name, key, field, relation) });
+        continue;
+      }
       if (relation !== undefined) {
         const target = targetType(relation);
         const many = MANY.has(relation.kind);

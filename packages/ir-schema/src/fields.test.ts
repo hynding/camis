@@ -161,3 +161,33 @@ describe("a field's name on the API", () => {
     );
   });
 });
+
+describe("private fields and patterns", () => {
+  it("accepts private on any field: kept out of every API answer, still written", () => {
+    expect(parse({ type: "string", name: "notes", private: true }).success).toBe(true);
+    expect(
+      parse({
+        type: "relation",
+        name: "owner",
+        relationKind: "manyToOne",
+        target: "User",
+        private: true,
+      }).success,
+    ).toBe(true);
+    expect(componentField.safeParse({ type: "integer", name: "cost", private: true }).success).toBe(
+      true,
+    );
+  });
+
+  it("accepts a pattern on text-like fields and uids", () => {
+    expect(parse({ type: "string", name: "code", pattern: "^[A-Z]{3}$" }).success).toBe(true);
+    expect(parse({ type: "text", name: "notes", pattern: "^\\S" }).success).toBe(true);
+    expect(parse({ type: "uid", name: "slug", pattern: "^[a-z-]+$" }).success).toBe(true);
+  });
+
+  it("rejects a pattern that is not a regular expression, naming the field's pattern", () => {
+    const r = parse({ type: "string", name: "code", pattern: "([a-z" });
+    expect(r.success).toBe(false);
+    expect(r.success ? [] : r.error.issues.map((i) => i.path.join("."))).toContain("pattern");
+  });
+});

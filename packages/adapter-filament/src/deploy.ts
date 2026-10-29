@@ -92,6 +92,26 @@ php artisan config:cache
 php artisan route:cache
 \`\`\``;
 
+/** Who may sign in to the Filament admin (the Strapi storage layout serves Strapi's admin instead). */
+const adminSection = `## Admin sign-in
+
+Only a user holding a role the roles file marks \`"admin": true\` may sign in to the admin, and
+never a blocked one; a project without roles lets every signed-in user in. Make the first admin
+after seeding (the password is asked for when \`--password\` is left out):
+
+\`\`\`sh
+php artisan camis:admin admin@example.com --name="Admin"
+\`\`\`
+
+\`camis scaffold filament\` makes the User model a Filament user whose access the generated
+\`AdminAccess\` trait decides. On an app scaffolded before admin roles, edit
+\`app/Models/User.php\` by hand: declare
+\`class User extends Authenticatable implements \\Filament\\Models\\Contracts\\FilamentUser\`
+and add \`\\App\\Models\\Concerns\\AdminAccess\` to its \`use\` line. Until then Filament refuses
+every user outside \`APP_ENV=local\`.
+
+`;
+
 const offlineStep = (layout: StorageLayout): string =>
   layout === "strapi"
     ? `Run \`php artisan camis:strapi-schema-check\` via your host's one-off
@@ -232,7 +252,7 @@ DB_PASSWORD=secret
 
 ${firstDeploy(layout)}
 
-${graphql ? graphqlSection.slice(2) + "\n\n" : ""}${documentation ? documentationSection.slice(2) + "\n\n" : ""}${transfer ? transferSection.slice(2) + "\n\n" : ""}## Shared hosting (no shell)
+${layout === "strapi" ? "" : adminSection}${graphql ? graphqlSection.slice(2) + "\n\n" : ""}${documentation ? documentationSection.slice(2) + "\n\n" : ""}${transfer ? transferSection.slice(2) + "\n\n" : ""}## Shared hosting (no shell)
 
 Build locally (scaffold + \`camis build\` + \`composer install\`), upload the whole app
 directory, and point the document root at \`public/\`. Laravel's \`.htaccess\` ships in

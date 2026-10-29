@@ -41,7 +41,27 @@ const common = {
   computed: expression.optional(),
   /** On a localized content type: whether the value varies per locale (it does by default). */
   localized: z.boolean().optional(),
+  /** Kept out of every API answer, filter, sort and populate; still written and still exported. */
+  private: z.boolean().optional(),
 };
+/** A regular expression's source (no delimiters or flags) the whole value must match. */
+const pattern = z
+  .string()
+  .refine(
+    (source) => {
+      try {
+        new RegExp(source);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    {
+      message: "pattern must be a valid regular expression",
+      params: { irCode: "invalid_pattern" },
+    },
+  )
+  .optional();
 const len = {
   minLength: z.number().int().nonnegative().optional(),
   maxLength: z.number().int().nonnegative().optional(),
@@ -54,6 +74,7 @@ const textLike = (type: "string" | "text" | "richText" | "email") =>
     ...common,
     unique: z.boolean().optional(),
     ...len,
+    pattern,
     default: z.string().optional(),
     ...(type === "email" ? {} : { ai: ai.optional() }),
   });
@@ -75,6 +96,7 @@ const uidField = z.object({
   ...common,
   unique: z.boolean().optional(),
   ...len,
+  pattern,
   targetField: fieldName.optional(),
   default: z.string().optional(),
 });

@@ -25,12 +25,16 @@ export const toAttribute = (
 ): Attribute => {
   const f = field as Field & Record<string, unknown>;
   const attr: Attribute = { type: TYPE_MAP[field.type] ?? field.type };
+  const withPrivate = (a: Attribute): Attribute => {
+    put(a, "private", field.private);
+    return a;
+  };
 
   if (field.type === "enumeration") {
     attr.enum = field.values;
     put(attr, "default", field.default);
     put(attr, "required", f.required);
-    return attr;
+    return withPrivate(attr);
   }
 
   if (field.type === "relation") {
@@ -40,18 +44,18 @@ export const toAttribute = (
       ? PLUGIN_USER_UID
       : `api::${targetSingular}.${targetSingular}`;
     put(attr, "inversedBy", field.inverse);
-    return attr;
+    return withPrivate(attr);
   }
 
   if (field.type === "dynamicZone") {
     attr.components = field.components.map((c) => componentUids.get(c) ?? `shared.${kebab(c)}`);
-    return attr;
+    return withPrivate(attr);
   }
 
   if (field.type === "component") {
     attr.component = componentUids.get(field.component) ?? `shared.${kebab(field.component)}`;
     attr.repeatable = field.repeatable;
-    return attr;
+    return withPrivate(attr);
   }
 
   put(attr, "required", f.required);
@@ -63,10 +67,11 @@ export const toAttribute = (
   put(attr, "default", f.default);
   put(attr, "targetField", f.targetField);
   put(attr, "multiple", f.multiple);
+  put(attr, "regex", f.pattern);
   if (field.type === "media" && field.allowedTypes !== undefined) {
     attr.allowedTypes = toStrapiMediaKinds(field.allowedTypes);
   }
-  return attr;
+  return withPrivate(attr);
 };
 
 export const toAttributes = (

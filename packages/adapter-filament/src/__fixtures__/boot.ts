@@ -3,7 +3,8 @@ import { catalog } from "./catalog";
 
 // Gated-CI-only bundle: catalog's content/relations PLUS an Editor role with a record-level
 // condition, so the boot job exercises migrations, relations, the Spatie seeder, and Policy
-// enforcement in one app. Not golden-tested (it is free to combine).
+// enforcement in one app; Editor is the admin role and Reader is not, for the admin access check.
+// Not golden-tested (it is free to combine).
 export const bootBundle: IrBundle = {
   document: {
     ...catalog.document,
@@ -20,6 +21,7 @@ export const bootBundle: IrBundle = {
   roles: [
     {
       name: "Editor",
+      admin: true,
       grants: [
         {
           contentType: "Article",
@@ -32,5 +34,6 @@ export const bootBundle: IrBundle = {
         },
       ],
     },
+    { name: "Reader", grants: [{ contentType: "Article", actions: ["read"] }] },
   ],
 };

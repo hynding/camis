@@ -193,3 +193,41 @@ describe("irField — what strapi-php projects carry", () => {
     expect(r.gap).toMatchObject({ feature: "morphRelation", severity: "downgrade" });
   });
 });
+
+describe("irField — private and regex", () => {
+  it("keeps private on a scalar, a relation and a component", () => {
+    expect(irField("notes", { type: "text", private: true }, loc).field).toEqual({
+      type: "text",
+      name: "notes",
+      private: true,
+    });
+    expect(
+      irField(
+        "owner",
+        { type: "relation", relation: "manyToOne", target: "api::author.author", private: true },
+        loc,
+      ).field,
+    ).toMatchObject({ type: "relation", name: "owner", private: true });
+    expect(
+      irField(
+        "seo",
+        { type: "component", component: "shared.seo", repeatable: false, private: true },
+        loc,
+      ).field,
+    ).toMatchObject({ type: "component", name: "seo", private: true });
+  });
+
+  it("keeps a regex as the field's pattern", () => {
+    expect(irField("code", { type: "string", regex: "^[A-Z]{3}$" }, loc).field).toEqual({
+      type: "string",
+      name: "code",
+      pattern: "^[A-Z]{3}$",
+    });
+  });
+
+  it("reports a regex that is not one JavaScript can read, instead of dropping it silently", () => {
+    const r = irField("code", { type: "string", regex: "(?<!x" }, loc);
+    expect(r.field).toEqual({ type: "string", name: "code" });
+    expect(r.gap?.feature).toBe("fieldPattern");
+  });
+});
