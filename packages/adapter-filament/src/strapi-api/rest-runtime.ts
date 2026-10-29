@@ -165,6 +165,9 @@ ${scopeBody(secured)}
             throw StrapiError::validation('Invalid fields parameter. Expected a string or an array of strings');
         }
         foreach ($wanted as $key) {
+            if (isset($fields[$key]['private'])) {
+                throw StrapiError::invalidKey($key, $key, 'fields');
+            }
             if (! isset($fields[$key]['column']) || str_contains($key, '.')) {
                 // Strapi names the path only when the key is a component it refused to select.
                 $isComponent = isset($fields[$key]['component']) || isset($fields[$key]['zone']) || self::isComponent($fields, $key);
@@ -214,6 +217,9 @@ ${scopeBody(secured)}
             $wirePath = $path === null ? $key : "{$path}.{$key}";
             $errorPath = self::join($at, $path);
             $field = $fields[$wirePath] ?? null;
+            if (isset($field['private'])) {
+                throw StrapiError::invalidKey($key, self::join($at, $wirePath), 'filters');
+            }
             if (isset($field['column'])) {
                 self::attribute($query, $query->qualifyColumn($field['column']), $field['type'], $value, self::join($at, $wirePath));
             } elseif (isset($field['component'])) {
@@ -435,6 +441,9 @@ ${scopeBody(secured)}
         foreach ($orders as [$path, $direction]) {
             $field = $fields[$path] ?? null;
             $head = explode('.', $path, 2);
+            if (isset($field['private']) || isset($fields[$head[0]]['private'])) {
+                throw StrapiError::invalidKey($head[0], $head[0], 'sort');
+            }
             if (! isset($field) && isset($head[1], $fields[$head[0]]['relation'])) {
                 self::sortByRelation($query, $fields[$head[0]], $head[0], $head[1], $direction, $viewer);
                 continue;

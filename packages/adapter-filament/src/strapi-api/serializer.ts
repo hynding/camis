@@ -69,15 +69,18 @@ const render = (n: Node, indent: string): string => {
   return rows.join("\n");
 };
 
+/** The scalars an answer carries: every one but the private, which are only written. */
+const answered = (scalars: WireScalar[]): WireScalar[] => scalars.filter((s) => s.private !== true);
+
 const toWireBody = (shape: WireShape, indent: string, layout: StorageLayout): string => {
   const root = node();
   insert(root, ["id"], "$m->id");
   insert(root, ["documentId"], "$m->document_id");
-  for (const s of shape.scalars) insert(root, s.key, read(s, "$m", layout));
-  for (const c of shape.children) {
+  for (const s of answered(shape.scalars)) insert(root, s.key, read(s, "$m", layout));
+  for (const c of shape.children.filter((c) => c.private !== true)) {
     const inner = node();
     insert(inner, ["id"], "$c->id");
-    for (const s of c.scalars) insert(inner, s.key, read(s, "$c", layout));
+    for (const s of answered(c.scalars)) insert(inner, s.key, read(s, "$c", layout));
     // The child's own row is rendered by `render` one branch level per path segment above
     // it (depth = c.key.length - 1), matching how it indents a nested `self::nested([`
     // branch body — so the map's rows sit a further level in, and its closing
@@ -107,7 +110,7 @@ const zoneMemberWire = (member: WireZoneMember, indent: string): string => {
   const item = node();
   insert(item, ["__component"], `'${member.uid}'`);
   insert(item, ["id"], "$c->id");
-  for (const s of member.scalars) insert(item, s.key, read(s, "$c", "laravel"));
+  for (const s of answered(member.scalars)) insert(item, s.key, read(s, "$c", "laravel"));
   return `${indent}...$m->${member.relation}->map(fn ($c) => [$c->position, [
 ${render(item, `${indent}${UNIT}`)}
 ${indent}]])->all(),`;
@@ -234,13 +237,16 @@ const hasTimestamp = (shape: WireShape, zones: WireZone[]): boolean =>
     ...zones.flatMap((z) => z.members.flatMap((m) => m.scalars)),
   ].some((s) => s.type === "timestamp");
 
+const privateEntry = (entry: { private?: true }): string =>
+  entry.private === true ? ", 'private' => true" : "";
+
 const fieldEntry = (s: WireScalar, indent: string): string =>
-  `${indent}'${s.key.join(".")}' => ['column' => '${s.column}', 'type' => '${s.type}'],`;
+  `${indent}'${s.key.join(".")}' => ['column' => '${s.column}', 'type' => '${s.type}'${privateEntry(s)}],`;
 
 const column = (c: string | null | undefined): string => (c == null ? "null" : `'${c}'`);
 
 const relationEntry = (r: WireRelation, indent: string): string =>
-  `${indent}'${r.key}' => ['relation' => '${r.relation}', 'kind' => '${r.kind}', 'model' => \\App\\Models\\${r.model}::class, 'serializer' => ${r.model}Serializer::class, 'foreignKey' => ${column(r.foreignKey)}, 'uid' => '${r.uid}', 'holder' => '${r.holder}', 'draftPublish' => ${r.draftPublish}, 'localized' => ${r.localized}, 'order' => ${column(r.order?.column)}, 'inverseOrder' => ${column(r.inverseOrder?.column)}],`;
+  `${indent}'${r.key}' => ['relation' => '${r.relation}', 'kind' => '${r.kind}', 'model' => \\App\\Models\\${r.model}::class, 'serializer' => ${r.model}Serializer::class, 'foreignKey' => ${column(r.foreignKey)}, 'uid' => '${r.uid}', 'holder' => '${r.holder}', 'draftPublish' => ${r.draftPublish}, 'localized' => ${r.localized}, 'order' => ${column(r.order?.column)}, 'inverseOrder' => ${column(r.inverseOrder?.column)}${privateEntry(r)}],`;
 
 /**
  * The wire path → column map `App\Support\StrapiQuery` filters, sorts and selects by: every
@@ -266,7 +272,7 @@ const fieldsConstant = (shape: WireShape): string => {
   ];
   const children = shape.children.map(
     (c) =>
-      `${l2}'${c.key.join(".")}' => ['component' => '${c.relation}', 'fields' => [\n${c.scalars.map((s) => fieldEntry(s, l3)).join("\n")}\n${l2}]],`,
+      `${l2}'${c.key.join(".")}' => ['component' => '${c.relation}', 'fields' => [\n${c.scalars.map((s) => fieldEntry(s, l3)).join("\n")}\n${l2}]${privateEntry(c)}],`,
   );
   const rows = [
     ...[id, documentId, ...shape.scalars].map((s) => fieldEntry(s, l2)),

@@ -9,12 +9,15 @@ export interface WireScalar {
   key: string[];
   column: string;
   type: FieldType;
+  /** Written, but never answered, filtered, sorted or selected (Strapi's `private`). */
+  private?: true;
 }
 export interface WireChild {
   key: string[];
   relation: string;
   model: string;
   scalars: WireScalar[];
+  private?: true;
 }
 /** One component a dynamic zone holds: its uid on the wire and the child relation its items live in. */
 export interface WireZoneMember {
@@ -61,6 +64,7 @@ export interface WireRelation {
   order: LinkOrder | null;
   /** Where this row's place in the target's own to-many list is kept, when the target lists it. */
   inverseOrder: LinkOrder | null;
+  private?: true;
 }
 /** An order column: on the pivot for a many-to-many, else on the table holding the foreign key. */
 export interface LinkOrder {
@@ -100,6 +104,10 @@ export const wireShape = (
 ): WireShape => {
   const names = filamentNames(ct);
   const expansion = expandComponents(doc, ct);
+  // A private component keeps every field inside it private too: Strapi never reaches into it.
+  const privateKeys = new Set(ct.fields.filter((f) => f.private === true).map(fieldApiName));
+  const privacy = (isPrivate: boolean): { private?: true } => (isPrivate ? { private: true } : {});
+  const within = (apiPath: string[]): boolean => privateKeys.has(apiPath[0] ?? "");
   const top: WireScalar[] = ct.fields
     .filter(
       (f) =>
@@ -108,11 +116,17 @@ export const wireShape = (
         f.type !== "dynamicZone" &&
         (f.type !== "media" || fileModel === undefined),
     )
-    .map((f) => ({ key: [fieldApiName(f)], column: snakeColumn(f.name), type: f.type }));
+    .map((f) => ({
+      key: [fieldApiName(f)],
+      column: snakeColumn(f.name),
+      type: f.type,
+      ...privacy(f.private === true),
+    }));
   const embedded: WireScalar[] = expansion.scalars.map((s) => ({
     key: s.apiPath,
     column: s.path.map(snakeColumn).join("_"),
     type: s.field.type,
+    ...privacy(s.field.private === true || within(s.apiPath)),
   }));
   const children: WireChild[] = expansion.tables.map((t) => {
     const child = childTableEmit(ct, t);
@@ -124,11 +138,14 @@ export const wireShape = (
         key: s.apiPath,
         column: s.path.map(snakeColumn).join("_"),
         type: s.field.type,
+        ...privacy(s.field.private === true),
       })),
+      ...privacy(within(t.apiPath)),
     };
   });
+  // What populate can name: a private component is not among them, so naming it is refused.
   const components = ct.fields
-    .filter((f) => f.type === "component" || f.type === "dynamicZone")
+    .filter((f) => (f.type === "component" || f.type === "dynamicZone") && f.private !== true)
     .map((f) => fieldApiName(f));
   const zones: WireZone[] = expansion.zones.map((z) => ({
     key: z.apiName,
@@ -143,6 +160,7 @@ export const wireShape = (
           key: s.apiPath,
           column: s.path.map(snakeColumn).join("_"),
           type: s.field.type,
+          ...privacy(s.field.private === true),
         })),
         components: m.component.fields
           .filter((f) => f.type === "component" || f.type === "media")
@@ -160,8 +178,10 @@ export const wireShape = (
     components,
     zones,
     relations: [
-      ...wireRelations(doc, ct, versioned, localized),
-      ...(fileModel === undefined ? [] : mediaRelations(ct, fileModel)),
+      ...[
+        ...wireRelations(doc, ct, versioned, localized),
+        ...(fileModel === undefined ? [] : mediaRelations(ct, fileModel)),
+      ].map((r) => ({ ...r, ...privacy(privateKeys.has(r.key)) })),
       // Strapi's `localizations`: the document's other locales, populated like a relation.
       ...(localized.has(ct.name)
         ? [

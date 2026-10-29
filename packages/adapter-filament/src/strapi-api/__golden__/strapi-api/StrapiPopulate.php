@@ -61,7 +61,7 @@ final class StrapiPopulate
         if ($populate === '*') {
             $tree = array_fill_keys($serializer::COMPONENTS, []);
             foreach ($serializer::FIELDS as $key => $field) {
-                if (isset($field['relation']) && StrapiQuery::readable($field, $viewer)) {
+                if (isset($field['relation']) && ! isset($field['private']) && StrapiQuery::readable($field, $viewer)) {
                     $tree[$key] = [];
                 }
             }
@@ -126,10 +126,11 @@ final class StrapiPopulate
         return self::tree($sub['populate'], $field['serializer'], $viewer, self::join($at, $key));
     }
 
-    /** A key populate may name: a component or a relation. $path is what the error reports. */
+    /** A key populate may name: a component or a relation, not a private one. $path is what the error reports. */
     private static function known(string $key, string $serializer, ?string $path, ?string $at): void
     {
-        if (! in_array($key, $serializer::COMPONENTS, true) && ! isset($serializer::FIELDS[$key]['relation'])) {
+        $field = $serializer::FIELDS[$key] ?? [];
+        if (isset($field['private']) || (! in_array($key, $serializer::COMPONENTS, true) && ! isset($field['relation']))) {
             throw StrapiError::invalidKey($key, $path ?? $at, 'populate');
         }
     }
