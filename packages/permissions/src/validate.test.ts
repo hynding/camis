@@ -143,3 +143,16 @@ describe("validateBundle assign", () => {
     }
   });
 });
+
+describe("validateBundle — admin roles", () => {
+  it("refuses the public role as an admin role: a guest has no account to sign in with", () => {
+    const r = validateBundle({
+      document: doc,
+      roles: [{ name: "public", admin: true, grants: [] }],
+    });
+    expect(r.ok).toBe(false);
+    expect(r.ok ? [] : r.errors.map((e) => [e.code, e.location])).toEqual([
+      ["public_admin_role", { rule: "public" }],
+    ]);
+  });
+});

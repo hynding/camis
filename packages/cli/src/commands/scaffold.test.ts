@@ -70,6 +70,7 @@ class User extends Authenticatable
 
 const FULL_TRAIT_USE =
   "use HasFactory, Notifiable, \\Spatie\\Permission\\Traits\\HasRoles, \\Laravel\\Sanctum\\HasApiTokens;";
+const ADMIN_TRAIT_USE = FULL_TRAIT_USE.replace(";", ", \\App\\Models\\Concerns\\AdminAccess;");
 // The shape left by the non-strapi boot workflow, which adds HasRoles but not HasApiTokens.
 const ROLES_ONLY_USER = STOCK_USER.replace(
   "use HasFactory, Notifiable;",
@@ -78,20 +79,41 @@ const ROLES_ONLY_USER = STOCK_USER.replace(
 
 describe("patchUserModel", () => {
   it("adds the HasRoles trait to the stock User model", () => {
-    expect(patchUserModel(STOCK_USER)).toContain(FULL_TRAIT_USE);
+    expect(patchUserModel(STOCK_USER)).toContain(ADMIN_TRAIT_USE);
   });
 
   // Without this arm the HasApiTokens-less roles-only form fell through unchanged, so Sanctum
   // token creation blew up at runtime instead of at scaffold time.
   it("upgrades a User model that already has HasRoles but not HasApiTokens", () => {
     const patched = patchUserModel(ROLES_ONLY_USER);
-    expect(patched).toContain(FULL_TRAIT_USE);
+    expect(patched).toContain(ADMIN_TRAIT_USE);
     expect(patched).not.toBe(ROLES_ONLY_USER);
   });
 
   it("is idempotent", () => {
     const once = patchUserModel(STOCK_USER);
     expect(patchUserModel(once)).toBe(once);
+  });
+
+  // Filament refuses every user outside APP_ENV=local unless the model is a FilamentUser; the
+  // generated AdminAccess decides who is let in (the IR's admin roles).
+  it("makes the User a Filament user whose access the generated AdminAccess decides", () => {
+    for (const source of [STOCK_USER, ROLES_ONLY_USER, patchUserModel(STOCK_USER)]) {
+      const patched = patchUserModel(source);
+      expect(patched).toContain(
+        "class User extends Authenticatable implements \\Filament\\Models\\Contracts\\FilamentUser\n",
+      );
+      expect(patched).toContain(", \\App\\Models\\Concerns\\AdminAccess;");
+      expect(patchUserModel(patched)).toBe(patched);
+    }
+  });
+
+  // An app scaffolded before admin roles has HasApiTokens but not AdminAccess.
+  it("adds AdminAccess to a User model patched before it existed", () => {
+    const before = STOCK_USER.replace("use HasFactory, Notifiable;", FULL_TRAIT_USE);
+    expect(patchUserModel(before)).toContain(
+      "\\Laravel\\Sanctum\\HasApiTokens, \\App\\Models\\Concerns\\AdminAccess;",
+    );
   });
 });
 
