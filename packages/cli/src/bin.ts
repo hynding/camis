@@ -13,6 +13,9 @@ const io: Io = {
   },
   materialize,
   copyDir: (s, d) => cp(s, d, { recursive: true, force: true }),
+  makeDir: async (p) => {
+    await mkdir(p, { recursive: true });
+  },
   exec: (cmd, args, cwd) =>
     new Promise((resolvePromise, rejectPromise) => {
       const child = spawn(cmd, args, { cwd, stdio: "inherit" });

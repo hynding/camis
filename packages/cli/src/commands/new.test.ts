@@ -31,6 +31,7 @@ const memoryIo = (opts: { files?: Record<string, string>; execResults?: number[]
       materialized.push(dest);
       return Promise.resolve();
     },
+    makeDir: () => Promise.resolve(),
     copyDir: (src, dest) => {
       copied.push({ src, dest });
       return Promise.resolve();

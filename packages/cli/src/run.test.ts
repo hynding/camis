@@ -20,6 +20,9 @@ const realIo = (cwd: string): Io => ({
   readFile: (p) => readFile(p, "utf8"),
   writeFile: (p, c) => writeFile(p, c),
   materialize,
+  makeDir: async (p) => {
+    await mkdir(p, { recursive: true });
+  },
   copyDir: (s, d) => cp(s, d, { recursive: true, force: true }),
   exec: () => Promise.resolve(0),
   out: (l) => lines.push(l),
@@ -32,6 +35,7 @@ describe("run", () => {
       readFile: () => Promise.resolve(""),
       writeFile: () => Promise.resolve(),
       materialize: () => Promise.resolve(),
+      makeDir: () => Promise.resolve(),
       copyDir: () => Promise.resolve(),
       exec: () => Promise.resolve(0),
       out: (l) => lines.push(l),
@@ -194,6 +198,7 @@ describe("run — scaffold --storage", () => {
           : Promise.reject(new Error(`ENOENT ${p}`)),
       writeFile: () => Promise.resolve(),
       materialize: () => Promise.resolve(),
+      makeDir: () => Promise.resolve(),
       copyDir: () => Promise.resolve(),
       exec: (cmd, args) => {
         execCalls.push([cmd, ...args]);

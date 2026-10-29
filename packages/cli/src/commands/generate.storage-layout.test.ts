@@ -36,6 +36,7 @@ const makeIo = (config: string): Io => ({
   readFile: (p) => Promise.resolve(p.endsWith("camis.config.json") ? config : ir),
   writeFile: () => Promise.resolve(),
   materialize: () => Promise.resolve(),
+  makeDir: () => Promise.resolve(),
   copyDir: () => Promise.resolve(),
   exec: () => Promise.resolve(0),
   out: () => {},
