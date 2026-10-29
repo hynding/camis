@@ -23,8 +23,8 @@ class ArticleForm
             KeyValue::make('meta'),
             FileUpload::make('cover'),
             DateTimePicker::make('published_at'),
-            Select::make('author_id')->relationship(name: 'author', titleAttribute: 'id'),
-            Select::make('tags')->multiple()->relationship(name: 'tags', titleAttribute: 'id'),
+            Select::make('author_id')->relationship(name: 'author', titleAttribute: 'name'),
+            Select::make('tags')->multiple()->relationship(name: 'tags', titleAttribute: 'label'),
         ]);
     }
 }

@@ -111,6 +111,11 @@ export const resolveRelations = (
   const seenPivot = new Set<string>();
   const names = (n: string): ReturnType<typeof filamentNames> =>
     filamentNames(byName.get(n) as ContentType);
+  // Strapi's default main field: the first string attribute, else the id.
+  const label = (n: string): string => {
+    const main = byName.get(n)?.fields.find((f) => f.type === "string");
+    return main === undefined ? "id" : snakeColumn(main.name);
+  };
 
   for (const ct of doc.contentTypes) {
     for (const rawField of ct.fields) {
@@ -139,7 +144,7 @@ export const resolveRelations = (
         push(
           out.formFields,
           owner,
-          `Select::make('${fk}')->relationship(name: '${f.name}', titleAttribute: 'id'${picker(target, owner)})`,
+          `Select::make('${fk}')->relationship(name: '${f.name}', titleAttribute: '${label(target)}'${picker(target, owner)})`,
         );
         if (f.inverse !== undefined) {
           push(
@@ -165,7 +170,7 @@ export const resolveRelations = (
           push(
             out.formFields,
             target,
-            `Select::make('${fk}')->relationship(name: '${f.inverse}', titleAttribute: 'id'${picker(owner, target)})`,
+            `Select::make('${fk}')->relationship(name: '${f.inverse}', titleAttribute: '${label(owner)}'${picker(owner, target)})`,
           );
         }
       } else {
@@ -192,7 +197,7 @@ export const resolveRelations = (
         push(
           out.formFields,
           owner,
-          `Select::make('${f.name}')->multiple()->relationship(name: '${f.name}', titleAttribute: 'id'${picker(target, owner)})`,
+          `Select::make('${f.name}')->multiple()->relationship(name: '${f.name}', titleAttribute: '${label(target)}'${picker(target, owner)})`,
         );
         if (f.inverse !== undefined) {
           push(
@@ -209,7 +214,7 @@ export const resolveRelations = (
           push(
             out.formFields,
             target,
-            `Select::make('${f.inverse}')->multiple()->relationship(name: '${f.inverse}', titleAttribute: 'id'${picker(owner, target)})`,
+            `Select::make('${f.inverse}')->multiple()->relationship(name: '${f.inverse}', titleAttribute: '${label(owner)}'${picker(owner, target)})`,
           );
         }
         if (!seenPivot.has(pivot)) {

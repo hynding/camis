@@ -164,7 +164,7 @@ describe("the Filament admin edits drafts", () => {
   });
   it("offers only drafts when linking a draft-and-publish type", () => {
     expect(content("app/Filament/Resources/Posts/Schemas/PostForm.php")).toContain(
-      "Select::make('topics')->multiple()->relationship(name: 'topics', titleAttribute: 'id', modifyQueryUsing: fn ($query) => $query->whereNull('published_at'))",
+      "Select::make('topics')->multiple()->relationship(name: 'topics', titleAttribute: 'name', modifyQueryUsing: fn ($query) => $query->whereNull('published_at'))",
     );
   });
 });
