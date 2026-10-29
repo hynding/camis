@@ -13,7 +13,7 @@ const NUMERIC_INT = new Set(["integer"]);
 // Strapi renders a `biginteger` as a string: a 64-bit value does not survive a JSON number.
 const NUMERIC_STRING = new Set(["bigInteger"]);
 const NUMERIC_FLOAT = new Set(["float", "decimal"]);
-const DATETIME = new Set(["dateTime", "timestamp"]);
+const DATETIME = new Set(["dateTime"]);
 // Strapi renders a `date` attribute as YYYY-MM-DD; a datetime would append a fabricated time.
 const DATE_ONLY = new Set(["date"]);
 // Strapi renders a datetime the way JavaScript's Date#toISOString does — UTC, three fractional
@@ -36,6 +36,8 @@ const read = (s: WireScalar, src: string, layout: StorageLayout): string => {
   if (NUMERIC_FLOAT.has(s.type)) return `${col} === null ? null : (float) ${col}`;
   if (DATE_ONLY.has(s.type)) return layout === "strapi" ? col : `${col}?->toDateString()`;
   if (DATETIME.has(s.type)) return `${col}${ZULU_MS}`;
+  // Strapi sends a timestamp as its epoch in milliseconds, as a string.
+  if (s.type === "timestamp") return `${col} === null ? null : (string) ${col}->getTimestampMs()`;
   return col;
 };
 
@@ -116,10 +118,10 @@ const zoneWire = (zone: WireZone, indent: string): string =>
 
 const fromWireColumns = (scalars: WireScalar[], src: string, indent: string): string =>
   scalars
-    .map(
-      (s) =>
-        `${indent}'${s.column}' => self::dig(${src}, [${s.key.map((k) => `'${k}'`).join(", ")}]),`,
-    )
+    .map((s) => {
+      const value = `self::dig(${src}, [${s.key.map((k) => `'${k}'`).join(", ")}])`;
+      return `${indent}'${s.column}' => ${s.type === "timestamp" ? `self::epoch(${value})` : value},`;
+    })
     .join("\n");
 
 // Each child key is set only when the wire payload mentions it, mirroring `syncChildren`'s
@@ -214,6 +216,24 @@ const hasHelper = `
         return true;
     }`;
 
+// Emitted only for a shape with a timestamp scalar, so no other serializer carries it unused.
+const epochHelper = `
+
+    /** A timestamp as Strapi takes one: its epoch in milliseconds, or a date string. */
+    private static function epoch(mixed $value): mixed
+    {
+        return is_int($value) || is_float($value) || (is_string($value) && ctype_digit($value))
+            ? \\Carbon\\CarbonImmutable::createFromTimestampMsUTC((float) $value)
+            : $value;
+    }`;
+
+const hasTimestamp = (shape: WireShape, zones: WireZone[]): boolean =>
+  [
+    ...shape.scalars,
+    ...shape.children.flatMap((c) => c.scalars),
+    ...zones.flatMap((z) => z.members.flatMap((m) => m.scalars)),
+  ].some((s) => s.type === "timestamp");
+
 const fieldEntry = (s: WireScalar, indent: string): string =>
   `${indent}'${s.key.join(".")}' => ['column' => '${s.column}', 'type' => '${s.type}'],`;
 
@@ -276,6 +296,7 @@ export const emitSerializer = (shape: WireShape, layout: StorageLayout = "larave
     .join("");
   const hasHelperBody = shape.children.length === 0 ? "" : hasHelper;
   const zoneHelperBody = zones.length === 0 ? "" : zoneHelper;
+  const epochHelperBody = hasTimestamp(shape, zones) ? epochHelper : "";
   const zoneImport = zones.length === 0 ? "" : "\nuse App\\Support\\StrapiZones;";
   return `<?php
 ${PHP_MARKER}
@@ -328,7 +349,7 @@ ${fromWireChildStatements(shape.children, l2)}${zones.length === 0 ? "" : `\n${f
         }
 
         return $cur;
-    }${hasHelperBody}${zoneHelperBody}
+    }${hasHelperBody}${zoneHelperBody}${epochHelperBody}
 }
 `;
 };
