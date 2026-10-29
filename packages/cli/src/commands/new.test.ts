@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { Io } from "../io";
 import { newCommand } from "./new";
@@ -156,6 +157,37 @@ describe("newCommand — from an existing Strapi project", () => {
     const { io, lines } = memoryIo();
     expect(await newCommand("p", io, { fromStrapi: source, template: "example" })).toBe(1);
     expect(lines.join("\n")).toContain("--from-strapi and --template");
+  });
+
+  it("takes its roles from the project's export instead of Strapi's defaults", async () => {
+    const source = await strapiProject();
+    const archive = join(
+      dirname(fileURLToPath(import.meta.url)),
+      "../../../adapter-filament/src/strapi-api/__fixtures__/transfer/strapi-php-export.tar.gz",
+    );
+    const { io, files } = memoryIo();
+    expect(
+      await newCommand("migrated", io, {
+        fromStrapi: source,
+        strapiRoles: { archive },
+        skipScaffold: true,
+        skipBuild: true,
+      }),
+    ).toBe(0);
+    const roles = json(files, "/work/migrated/roles.json") as {
+      roles: { name: string; grants: { contentType: string }[] }[];
+    };
+    expect(roles.roles.map((r) => r.name)).toEqual(["public", "authenticated", "editor"]);
+    // Only Page is in this project: the archive's grants on its other types are reported.
+    expect(roles.roles[1]?.grants.map((g) => g.contentType)).toEqual(["File", "Page", "User"]);
+  });
+
+  it("reads roles only along with --from-strapi", async () => {
+    const { io, lines } = memoryIo();
+    expect(await newCommand("p", io, { strapiRoles: { archive: "export.tar.gz" } })).toBe(1);
+    expect(lines.join("\n")).toContain(
+      "--roles-from reads a Strapi export, so it needs --from-strapi",
+    );
   });
 
   it("fails on a directory with no Strapi schemas", async () => {

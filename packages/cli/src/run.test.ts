@@ -1,6 +1,7 @@
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { materialize } from "@camis/adapter-kernel";
 import type { Io } from "./io";
@@ -114,6 +115,59 @@ describe("run", () => {
     const genCode = await run(["generate", "--config", join(tmp, "camis.config.json")], io);
     expect(genCode).toBe(0);
     expect(lines.some((l) => l.includes("filament:"))).toBe(true);
+  });
+});
+
+describe("run — import strapi --roles-from", () => {
+  it("writes the export's roles beside the IR, and a build takes both", async () => {
+    tmp = await mkdtemp(join(tmpdir(), "camis-cli-roles-"));
+    const schemaDir = join(tmp, "strapi-app/src/api/book/content-types/book");
+    await mkdir(schemaDir, { recursive: true });
+    await writeFile(
+      join(schemaDir, "schema.json"),
+      JSON.stringify({
+        kind: "collectionType",
+        info: { singularName: "book", pluralName: "books", displayName: "Book" },
+        attributes: { title: { type: "string" } },
+      }),
+    );
+    const archive = join(
+      dirname(fileURLToPath(import.meta.url)),
+      "../../adapter-filament/src/strapi-api/__fixtures__/transfer/strapi-php-export.tar.gz.enc",
+    );
+    const io = realIo(tmp);
+    const code = await run(
+      [
+        "import",
+        "strapi",
+        join(tmp, "strapi-app"),
+        "--out",
+        join(tmp, "camis.json"),
+        "--roles-from",
+        archive,
+        "--key",
+        "camis-fixture-key",
+        "--roles-out",
+        join(tmp, "roles.json"),
+      ],
+      io,
+    );
+    expect(code, lines.join("\n")).toBe(0);
+    const roles = JSON.parse(await readFile(join(tmp, "roles.json"), "utf8")) as {
+      roles: { name: string; grants: unknown[] }[];
+    };
+    expect(roles.roles.find((r) => r.name === "public")?.grants).toEqual([
+      { contentType: "Book", actions: ["read"] },
+    ]);
+    await writeFile(
+      join(tmp, "camis.config.json"),
+      JSON.stringify({
+        ir: "./camis.json",
+        roles: "./roles.json",
+        targets: [{ target: "filament", out: "./generated/admin", apiStyle: "strapi" }],
+      }),
+    );
+    expect(await run(["generate", "--config", join(tmp, "camis.config.json")], io)).toBe(0);
   });
 });
 

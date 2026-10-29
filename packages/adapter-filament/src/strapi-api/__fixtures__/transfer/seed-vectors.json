@@ -1,5 +1,5 @@
 {
-  "about": "The data strapi-php's export of transfer/strapi-php-export.tar.gz holds: run on an empty strapi-php project (with the fixture's types and the fr locale), then register the user alice (POST /api/auth/local/register, password secret123) and `php bin/strapi export --no-encrypt -f strapi-php-export`. Every Strapi feature an archive carries: components, relations both ways, draft and published versions, locales, a dynamic zone, media with their files, and a user.",
+  "about": "The data strapi-php's export of transfer/strapi-php-export.tar.gz holds: run on an empty strapi-php project (with the fixture's types and the fr locale, its roles set through the admin: public reads books, authenticated works every type, the media library and the users, and an Editor role reads and updates articles and reads pages; the tokens of strapi-php-tokens.sql), seeded with the full-access token, then register the user alice (POST /api/auth/local/register, password secret123) and `php bin/strapi export --no-encrypt -f strapi-php-export`. Every Strapi feature an archive carries: components, a repeatable inside a component, relations both ways, draft and published versions, locales, a dynamic zone, media with their files, a user, and roles with their permissions.",
   "seed": [
     { "path": "/authors", "as": "authors:Ann", "data": { "name": "Ann" } },
     { "path": "/authors", "as": "authors:Bob", "data": { "name": "Bob" } },
@@ -29,7 +29,20 @@
         ]
       }
     },
-    { "path": "/pages", "as": "pages:Home", "data": { "title": "Home" } }
+    {
+      "path": "/pages",
+      "as": "pages:Home",
+      "data": {
+        "title": "Home",
+        "panel": {
+          "heading": "Intro",
+          "items": [
+            { "amount": 1, "unit": "step" },
+            { "amount": 2, "unit": "steps" }
+          ]
+        }
+      }
+    }
   ],
   "reads": [],
   "writes": [
@@ -138,7 +151,10 @@
       "method": "PUT",
       "path": "/pages/@pages:Home",
       "query": "locale=fr&status=draft",
-      "data": { "title": "Accueil" }
+      "data": {
+        "title": "Accueil",
+        "panel": { "heading": "Intro (fr)", "items": [{ "amount": 3, "unit": "étape" }] }
+      }
     }
   ]
 }

@@ -1,0 +1,78 @@
+{
+  "about": "The API and transfer tokens strapi-php made (transfer/strapi-php-tokens.sql holds its token tables), used against strapi-php and, after `php artisan strapi:import-tokens`, against camis, both holding transfer/strapi-php-export.tar.gz's content. Keys are hashed with API_TOKEN_SALT and TRANSFER_TOKEN_SALT `tobemodified`; ENCRYPTION_KEY `tobemodified` decrypts the API tokens' keys, so the admin can show them.",
+  "steps": [
+    {
+      "name": "a full-access token strapi-php made writes",
+      "path": "/api/genres",
+      "bearer": "f292c0c7802ac838b55247c6391b588f09e86c4604191645cde23573996cc93325901507c2a7215d050c02519e021228287a23a7d0e69aac16d12fbf299383cc3d3950e04dd17efa3802f994446d6415e26d5fcc2e3b328bf89f05fa48062fd516fe257556c3a33647b954e547684a2f64c28d63e37dc7f2d17da3d6bee7985a",
+      "body": {
+        "data": {
+          "name": "Satire"
+        }
+      }
+    },
+    {
+      "name": "Strapi's own Full Access token, made on its first start, writes too",
+      "path": "/api/genres",
+      "bearer": "14ec6e1c8d6a57c4fb3a8fa4d8fe43fea948fbc8952479516f8f9eb9e8c2e9aeb03aeeafb0c57f0ac5926ce36ed90df30c9230fa79e1a0a2991ec01fe8b5f70713d9c79dfa3409daf462d167e7c2b1c2eb2616a02f778286484a46042757d5e36cc04818861b8b873cd59b00e27cbfb7040c24892808b514f421f53c9cb004a1",
+      "body": {
+        "data": {
+          "name": "Memoir"
+        }
+      }
+    },
+    {
+      "name": "its Read Only token lists",
+      "method": "GET",
+      "path": "/api/genres?sort=name&fields[0]=name",
+      "bearer": "c33b2dec8ebe6adc30d9506d7779e87f35571ecc152cd806eeadaf7e572528fd6bf586b0088cf7d3bc0e3199fd3c758bb18ecbe06183c9fe8fc133a988a209137a5b020ce445e7b5a0bda2dc00295ad2176ef7223e72d6c1fc52d9251f986cbf55b4a575903cdf54a9d61364f6c2103545a3728308b449cef1468e5931f4e0b4"
+    },
+    {
+      "name": "a read-only token with a lifespan lists",
+      "method": "GET",
+      "path": "/api/authors?sort=name&fields[0]=name",
+      "bearer": "2d50b7bd0d9faf0841a7f64f684b50adcf44457412ea225a5118b19b52b8c97e489a0c9f5d4ef51cba6f54e669dcab7a1f307654e3e91fdb7206bac5177ce7528833d0fc73c91dd85a9b6e04f1dfc34b82dc8b120d5f1b4674811c79fd4a0c1ca99d6eb175500e09ffe36da6d89eb0c836fdef45a275e898290206fd8da8a476"
+    },
+    {
+      "name": "a read-only token may not write",
+      "path": "/api/genres",
+      "bearer": "2d50b7bd0d9faf0841a7f64f684b50adcf44457412ea225a5118b19b52b8c97e489a0c9f5d4ef51cba6f54e669dcab7a1f307654e3e91fdb7206bac5177ce7528833d0fc73c91dd85a9b6e04f1dfc34b82dc8b120d5f1b4674811c79fd4a0c1ca99d6eb175500e09ffe36da6d89eb0c836fdef45a275e898290206fd8da8a476",
+      "body": {
+        "data": {
+          "name": "Refused"
+        }
+      }
+    },
+    {
+      "name": "a custom token lists what it was given",
+      "method": "GET",
+      "path": "/api/books?sort=title&fields[0]=title",
+      "bearer": "3fb577b7be0014cb62512b326c6cfd4eb51236e744d21f5692511939bf0e192c56c4396ea88c66d89e9b787076aeb5d6d305bb0b7535c2a5f79fd92ef923fd808dc79a958df978a4b980de80849e5cef0432ad72189797a163096e6cd57147ee85c91b0deca0176431e1a818f6cdd41a7f4c2ace573424f988527113dfb616cf"
+    },
+    {
+      "name": "a custom token may not list what it was not given",
+      "method": "GET",
+      "path": "/api/authors",
+      "bearer": "3fb577b7be0014cb62512b326c6cfd4eb51236e744d21f5692511939bf0e192c56c4396ea88c66d89e9b787076aeb5d6d305bb0b7535c2a5f79fd92ef923fd808dc79a958df978a4b980de80849e5cef0432ad72189797a163096e6cd57147ee85c91b0deca0176431e1a818f6cdd41a7f4c2ace573424f988527113dfb616cf"
+    },
+    {
+      "name": "an expired token is refused",
+      "method": "GET",
+      "path": "/api/books",
+      "bearer": "c9b65f2f02d59a2a209e9b8cbb919bb75d342e73538965b1b036ed4b78347b33bc0a5a099df921dfb8fa856a10d2e1db6bb7b966d3f64912f0f3c7fe9b75f3d5e9f8de2f65ef13c8d79e378cc11a23b968c2b06e78b1f4d0cb31b4ab1f2eae0fbe216b3dd0d368fee6637162f548d57cc7b1d50857625c13c5cc0f06b556364d"
+    },
+    {
+      "name": "a transfer token strapi-php made reaches the pull runner",
+      "method": "GET",
+      "path": "/admin/transfer/runner/pull",
+      "bearer": "071f6032197a0e6d8c26e3d72d418ca16d5ea29a15d2633c1b1093c6124625c607e6c2744aa5c455c9b23533ccfd4c3262c1f2aeb5920918d460d92cd1456398f2744ad69b4557f7c1b5b43fa69105993ae3c4612f7d77b4e1ec7d511344993f49a7e1deb75408c87accba9a2eebb4bf78da25713e33bf4dd74825e52b67a7f1",
+      "ownMessage": true
+    },
+    {
+      "name": "it may not push",
+      "method": "GET",
+      "path": "/admin/transfer/runner/push",
+      "bearer": "071f6032197a0e6d8c26e3d72d418ca16d5ea29a15d2633c1b1093c6124625c607e6c2744aa5c455c9b23533ccfd4c3262c1f2aeb5920918d460d92cd1456398f2744ad69b4557f7c1b5b43fa69105993ae3c4612f7d77b4e1ec7d511344993f49a7e1deb75408c87accba9a2eebb4bf78da25713e33bf4dd74825e52b67a7f1"
+    }
+  ]
+}

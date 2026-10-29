@@ -148,7 +148,10 @@ export const strapiApiBundle: IrBundle = {
         kind: "collection",
         names: { plural: "Pages" },
         options: { localized: true, draftPublish: true },
-        fields: [{ type: "string", name: "title" }],
+        fields: [
+          { type: "string", name: "title" },
+          { type: "component", name: "panel", component: "Panel", repeatable: false },
+        ],
       },
       // Dynamic zones (dynamic-zone-vectors.json): Landing's blocks hold Hero and Quantity items,
       // with draft and publish so publishing copies them.
@@ -252,6 +255,15 @@ export const strapiApiBundle: IrBundle = {
           { type: "string", name: "heading", required: true },
           { type: "text", name: "subheading" },
           { type: "component", name: "price", component: "Money", repeatable: false },
+        ],
+      },
+      // An embedded component holding a repeatable one (transfer/read-vectors.json): its items
+      // are child rows of the owning type, kept per version and locale.
+      {
+        name: "Panel",
+        fields: [
+          { type: "string", name: "heading" },
+          { type: "component", name: "items", component: "Quantity", repeatable: true },
         ],
       },
       {

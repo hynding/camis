@@ -1,0 +1,139 @@
+[
+  {
+    "name": "a full-access token strapi-php made writes",
+    "status": 201,
+    "body": {
+      "data": {
+        "name": "Satire"
+      },
+      "meta": {}
+    }
+  },
+  {
+    "name": "Strapi's own Full Access token, made on its first start, writes too",
+    "status": 201,
+    "body": {
+      "data": {
+        "name": "Memoir"
+      },
+      "meta": {}
+    }
+  },
+  {
+    "name": "its Read Only token lists",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "name": "Fantasy"
+        },
+        {
+          "name": "Horror"
+        },
+        {
+          "name": "Memoir"
+        },
+        {
+          "name": "Satire"
+        }
+      ],
+      "meta": {
+        "pagination": {
+          "page": 1,
+          "pageCount": 1,
+          "pageSize": 25,
+          "total": 4
+        }
+      }
+    }
+  },
+  {
+    "name": "a read-only token with a lifespan lists",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "name": "Ann"
+        },
+        {
+          "name": "Bob"
+        }
+      ],
+      "meta": {
+        "pagination": {
+          "page": 1,
+          "pageCount": 1,
+          "pageSize": 25,
+          "total": 2
+        }
+      }
+    }
+  },
+  {
+    "name": "a read-only token may not write",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "a custom token lists what it was given",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "title": "Alpha"
+        },
+        {
+          "title": "Beta"
+        }
+      ],
+      "meta": {
+        "pagination": {
+          "page": 1,
+          "pageCount": 1,
+          "pageSize": 25,
+          "total": 2
+        }
+      }
+    }
+  },
+  {
+    "name": "a custom token may not list what it was not given",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  },
+  {
+    "name": "an expired token is refused",
+    "status": 401,
+    "error": {
+      "name": "UnauthorizedError",
+      "message": "Token expired",
+      "details": {}
+    }
+  },
+  {
+    "name": "a transfer token strapi-php made reaches the pull runner",
+    "status": 501,
+    "error": {
+      "name": "NotImplementedError",
+      "message": "<own>",
+      "details": {}
+    }
+  },
+  {
+    "name": "it may not push",
+    "status": 403,
+    "error": {
+      "name": "ForbiddenError",
+      "message": "Forbidden",
+      "details": {}
+    }
+  }
+]

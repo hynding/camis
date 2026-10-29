@@ -768,6 +768,24 @@
         "required": ["documentId", "id", "publishedAt"],
         "additionalProperties": false
       },
+      "SharedPanelEntry": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "heading": {
+            "description": "A string field",
+            "type": "string"
+          },
+          "items": {
+            "description": "A component field",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SharedQuantityEntry"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
       "ApiPagePageDocument": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -807,6 +825,10 @@
           "locale": {
             "description": "A string field",
             "type": "string"
+          },
+          "panel": {
+            "description": "A component field",
+            "$ref": "#/components/schemas/SharedPanelEntry"
           },
           "localizations": {
             "readOnly": true,
@@ -12568,13 +12590,13 @@
                   "readOnly": true,
                   "description": "Populate a single relation, component, file, or dynamic zone",
                   "type": "string",
-                  "enum": ["localizations"]
+                  "enum": ["panel", "localizations"]
                 },
                 {
                   "type": "array",
                   "items": {
                     "type": "string",
-                    "enum": ["localizations"]
+                    "enum": ["panel", "localizations"]
                   },
                   "description": "Populate a selection of multiple relations, components, files, or dynamic zones"
                 }
@@ -12696,6 +12718,10 @@
                             "description": "A string field",
                             "type": "string"
                           },
+                          "panel": {
+                            "description": "A component field",
+                            "$ref": "#/components/schemas/SharedPanelEntry"
+                          },
                           "localizations": {
                             "readOnly": true,
                             "description": "A relational field",
@@ -12770,13 +12796,13 @@
                   "readOnly": true,
                   "description": "Populate a single relation, component, file, or dynamic zone",
                   "type": "string",
-                  "enum": ["localizations"]
+                  "enum": ["panel", "localizations"]
                 },
                 {
                   "type": "array",
                   "items": {
                     "type": "string",
-                    "enum": ["localizations"]
+                    "enum": ["panel", "localizations"]
                   },
                   "description": "Populate a selection of multiple relations, components, files, or dynamic zones"
                 }
@@ -12896,6 +12922,10 @@
                           "description": "A string field",
                           "type": "string"
                         },
+                        "panel": {
+                          "description": "A component field",
+                          "$ref": "#/components/schemas/SharedPanelEntry"
+                        },
                         "localizations": {
                           "readOnly": true,
                           "description": "A relational field",
@@ -12953,6 +12983,9 @@
                       "locale": {
                         "description": "A string field",
                         "type": "string"
+                      },
+                      "panel": {
+                        "description": "A component field"
                       }
                     },
                     "required": ["publishedAt"],
@@ -13016,13 +13049,13 @@
                   "readOnly": true,
                   "description": "Populate a single relation, component, file, or dynamic zone",
                   "type": "string",
-                  "enum": ["localizations"]
+                  "enum": ["panel", "localizations"]
                 },
                 {
                   "type": "array",
                   "items": {
                     "type": "string",
-                    "enum": ["localizations"]
+                    "enum": ["panel", "localizations"]
                   },
                   "description": "Populate a selection of multiple relations, components, files, or dynamic zones"
                 }
@@ -13208,6 +13241,10 @@
                           "description": "A string field",
                           "type": "string"
                         },
+                        "panel": {
+                          "description": "A component field",
+                          "$ref": "#/components/schemas/SharedPanelEntry"
+                        },
                         "localizations": {
                           "readOnly": true,
                           "description": "A relational field",
@@ -13293,13 +13330,13 @@
                   "readOnly": true,
                   "description": "Populate a single relation, component, file, or dynamic zone",
                   "type": "string",
-                  "enum": ["localizations"]
+                  "enum": ["panel", "localizations"]
                 },
                 {
                   "type": "array",
                   "items": {
                     "type": "string",
-                    "enum": ["localizations"]
+                    "enum": ["panel", "localizations"]
                   },
                   "description": "Populate a selection of multiple relations, components, files, or dynamic zones"
                 }
@@ -13419,6 +13456,10 @@
                           "description": "A string field",
                           "type": "string"
                         },
+                        "panel": {
+                          "description": "A component field",
+                          "$ref": "#/components/schemas/SharedPanelEntry"
+                        },
                         "localizations": {
                           "readOnly": true,
                           "description": "A relational field",
@@ -13476,6 +13517,9 @@
                       "locale": {
                         "description": "A string field",
                         "type": "string"
+                      },
+                      "panel": {
+                        "description": "A component field"
                       }
                     },
                     "additionalProperties": false
@@ -13536,13 +13580,13 @@
                   "readOnly": true,
                   "description": "Populate a single relation, component, file, or dynamic zone",
                   "type": "string",
-                  "enum": ["localizations"]
+                  "enum": ["panel", "localizations"]
                 },
                 {
                   "type": "array",
                   "items": {
                     "type": "string",
-                    "enum": ["localizations"]
+                    "enum": ["panel", "localizations"]
                   },
                   "description": "Populate a selection of multiple relations, components, files, or dynamic zones"
                 }
@@ -13679,6 +13723,10 @@
                         "locale": {
                           "description": "A string field",
                           "type": "string"
+                        },
+                        "panel": {
+                          "description": "A component field",
+                          "$ref": "#/components/schemas/SharedPanelEntry"
                         },
                         "localizations": {
                           "readOnly": true,
