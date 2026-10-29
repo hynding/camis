@@ -60,7 +60,81 @@ ${tables((cols) => `            $table->dropColumn([${cols.map((c) => `'${c}'`).
 `;
 };
 
-const header = `<?php\n${PHP_MARKER}\n\ndeclare(strict_types=1);\n\nnamespace App\\Support;\n`;
+/**
+ * A model's to-one foreign keys whose target lists it, each with the column keeping its place in
+ * that list (on this model's table): what `HasLinkOrder` fills when a link is made outside the API.
+ */
+export const toOneLinkOrders = (shape: WireShape): Record<string, string> => {
+  const orders: Record<string, string> = {};
+  for (const r of shape.relations) {
+    if (r.kind === "belongsTo" && r.foreignKey !== null && r.inverseOrder !== null)
+      orders[r.foreignKey] = r.inverseOrder.column;
+  }
+  return orders;
+};
+
+/** The model member `HasLinkOrder` reads: foreign key → order column. */
+export const linkOrdersConstant = (orders: Record<string, string>): string =>
+  `    public const LINK_ORDERS = [${Object.entries(orders)
+    .map(([foreignKey, column]) => `'${foreignKey}' => '${column}'`)
+    .join(", ")}];`;
+
+const header = (namespace = "App\\Support"): string =>
+  `<?php\n${PHP_MARKER}\n\ndeclare(strict_types=1);\n\nnamespace ${namespace};\n`;
+
+/**
+ * A row linked to-one outside the API (the admin's select, a hook's save) takes the end of its
+ * target's list, as Strapi places a link made without a position. A save that sets the order
+ * itself (the API's writes, publishing) keeps it.
+ */
+export const emitHasLinkOrder = (): string =>
+  header("App\\Models\\Concerns") +
+  String.raw`
+use App\Support\StrapiLinkOrder;
+use Illuminate\Database\Eloquent\Model;
+
+trait HasLinkOrder
+{
+    protected static function bootHasLinkOrder(): void
+    {
+        static::saving(function (Model $row): void {
+            foreach ($row::LINK_ORDERS as $foreignKey => $order) {
+                if ($row->isDirty($foreignKey) && ! $row->isDirty($order)) {
+                    $row->setAttribute($order, StrapiLinkOrder::next($row, $foreignKey, $order, $row->getAttribute($foreignKey)));
+                }
+            }
+        });
+    }
+}
+`;
+
+/**
+ * A pivot link made outside the API (the admin's multi-select syncs, a hook attaches) takes the
+ * end of both sides' lists unless it is given a place, as a Strapi connect without a position
+ * does. An order column is named for the side whose place it keeps (`genre_ord` is a genre's
+ * place in its book's list), beside that side's key (`genre_id`).
+ */
+export const emitStrapiLinkPivot = (): string =>
+  header() +
+  String.raw`
+use Illuminate\Database\Eloquent\Relations\Pivot;
+use Illuminate\Support\Facades\DB;
+
+final class StrapiLinkPivot extends Pivot
+{
+    protected static function booted(): void
+    {
+        static::creating(function (self $link): void {
+            foreach ([[$link->getForeignKey(), $link->getRelatedKey()], [$link->getRelatedKey(), $link->getForeignKey()]] as [$list, $member]) {
+                $order = substr($member, 0, -strlen('_id')).'_ord';
+                if ($link->getAttribute($order) === null) {
+                    $link->setAttribute($order, (float) (DB::table($link->getTable())->where($list, $link->getAttribute($list))->max($order) ?? 0) + 1);
+                }
+            }
+        });
+    }
+}
+`;
 
 /**
  * Strapi's link order over Eloquent: a to-many relation's links, on its pivot or beside the target's
@@ -70,7 +144,7 @@ const header = `<?php\n${PHP_MARKER}\n\ndeclare(strict_types=1);\n\nnamespace Ap
  * takes the end of the target's own list. `link-order-vectors.json` is the check.
  */
 export const emitStrapiLinkOrder = (): string =>
-  header +
+  header() +
   String.raw`
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -290,7 +364,7 @@ final class StrapiLinkOrder
  * there is refused, as Strapi's strict mode does.
  */
 export const emitStrapiRelationsOrderer = (): string =>
-  header +
+  header() +
   String.raw`
 final class StrapiRelationsOrderer
 {

@@ -1,0 +1,55 @@
+{
+  "about": "The data strapi-php's export of transfer/link-order-export.tar.gz holds: run on an empty strapi-php project (with the fixture's types), then `php bin/strapi export --no-encrypt -f link-order-export`. Links whose list order is not their id order, from both sides: a set given out of order and a connect placed before a linked genre (Book.genres), and an older book linked to an author last (Author.books, Book.author's other side).",
+  "seed": [
+    { "path": "/genres", "as": "genres:Alpha", "data": { "name": "Alpha" } },
+    { "path": "/genres", "as": "genres:Bravo", "data": { "name": "Bravo" } },
+    { "path": "/genres", "as": "genres:Charlie", "data": { "name": "Charlie" } },
+    { "path": "/authors", "as": "authors:Ann", "data": { "name": "Ann" } }
+  ],
+  "reads": [],
+  "writes": [
+    {
+      "name": "a book whose genres are set out of id order",
+      "method": "POST",
+      "path": "/books",
+      "as": "books:One",
+      "data": {
+        "title": "One",
+        "author": "@authors:Ann",
+        "genres": ["@genres:Charlie", "@genres:Alpha"]
+      }
+    },
+    {
+      "name": "a book with no author yet",
+      "method": "POST",
+      "path": "/books",
+      "as": "books:Two",
+      "data": { "title": "Two", "genres": ["@genres:Bravo"] }
+    },
+    {
+      "name": "a third book by Ann",
+      "method": "POST",
+      "path": "/books",
+      "as": "books:Three",
+      "data": { "title": "Three", "author": "@authors:Ann", "genres": ["@genres:Alpha"] }
+    },
+    {
+      "name": "a genre connected before a linked one",
+      "method": "PUT",
+      "path": "/books/@books:One",
+      "data": {
+        "genres": {
+          "connect": [
+            { "documentId": "@genres:Bravo", "position": { "before": "@genres:Charlie" } }
+          ]
+        }
+      }
+    },
+    {
+      "name": "the older book linked to Ann last",
+      "method": "PUT",
+      "path": "/books/@books:Two",
+      "data": { "author": "@authors:Ann" }
+    }
+  ]
+}
