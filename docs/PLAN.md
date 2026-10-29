@@ -574,10 +574,24 @@ REST checks, the three admin tests and the smoke pass on SQLite and Postgres wit
 
 Known gaps: originals are stored as uploaded, not re-encoded as sharp does, and an animated GIF's
 formats keep only its first frame; repeated `files` form keys need the `files[]` spelling (PHP keeps
-only the last one otherwise); there are no folders; `allowedTypes` is not enforced; `findOne`
+only the last one otherwise); `findOne`
 ignores `fields` and the file list ignores pagination, as strapi-php does; the admin's picker does
 not keep the order of a multiple media field; the Laravel API style keeps media as path columns and
 the strapi storage layout is not run against these vectors.
+
+**Folders and `allowedTypes` (2026-10-29).** The media library keeps Strapi's folders:
+`upload_folders` (name, `path_id`, `path` such as `/1/2`, parent) and each file's folder beside its
+`folder_path`, added by their own migration so a deployed project gains them on `migrate`. Content
+API uploads land in "API Uploads" (made on first use, "API Uploads (1)" beside a folder of that name,
+remembered by id as Strapi's core store does); the API never shows a file's folder, as Strapi keeps
+it private. The admin lists folders under the Media Library, makes, renames and moves them with
+Strapi's checks (no slashes, no surrounding spaces, unique among siblings, not inside itself),
+deletes one with every folder and file below it, filters files by folder and moves them in bulk;
+folders are behind the file grants. `strapi:export` writes folders, their `parent` and each file's
+`folder` links and `plugin_upload_api-folder`; `strapi:import` restores them, so the transfer
+compare no longer skips folders. A media field's `allowedTypes` narrows what the admin's picker
+lists, takes and uploads, as Strapi's admin does; Strapi's Content API takes any file into any media
+field, and so does camis's. `FoldersTest` checks these in the boot job.
 
 ---
 
@@ -945,8 +959,9 @@ password strapi-php hashed, and the 16 reads of `read-vectors.json` (documentIds
 as strapi-php answers them after importing the same archive. Passes on SQLite and Postgres,
 including a second import over the first.
 
-Known gaps: roles' permissions, upload folders and admin data are not imported (the IR's grants
-are the permissions; camis keeps a file's folder path only; Strapi does not export admin data).
+Known gaps: roles' permissions and admin data are not imported (the IR's grants are the
+permissions; Strapi does not export admin data). Upload folders are imported since Phase 23's
+folders (2026-10-29).
 Repeatable components inside a component are reported and left empty.
 
 **Part 3 — exporting to Strapi.** `php artisan strapi:export` takes `strapi export`'s options
@@ -970,8 +985,8 @@ with the same 16 reads, plain and encrypted, on SQLite, MySQL and Postgres. stra
 imports camis's export (checked locally against the oracle) and answers the 16 reads as before.
 The export also fixes the import's email templates, which Strapi keeps under `options`.
 
-Known gaps: upload folders and admin data are not exported, nor the content manager's view
-settings. Transfer tokens and `strapi transfer` between live instances (a websocket, which PHP-FPM
+Known gaps: admin data is not exported, nor the content manager's view settings (upload folders
+are, since 2026-10-29). Transfer tokens and `strapi transfer` between live instances (a websocket, which PHP-FPM
 cannot hold) are the next parts.
 
 **Part 4 — transfer tokens.** The admin's Settings › Transfer Tokens page makes, lists,

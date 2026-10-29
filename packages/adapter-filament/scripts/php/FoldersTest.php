@@ -178,11 +178,15 @@ class FoldersTest extends TestCase
         $this->assertFileDoesNotExist(public_path(ltrim($inside->url, '/')));
     }
 
-    public function test_folders_are_denied_without_the_file_grants(): void
+    public function test_folders_are_read_with_the_file_read_grant_and_changed_with_the_others(): void
     {
         $this->login(['book.read', 'file.read']);
         Livewire::test(ListUploadFolders::class)->assertOk();
         Livewire::test(CreateUploadFolder::class)->assertForbidden();
+    }
+
+    public function test_folders_are_denied_without_the_file_grants(): void
+    {
         $this->login(['book.read']);
         Livewire::test(ListUploadFolders::class)->assertForbidden();
     }

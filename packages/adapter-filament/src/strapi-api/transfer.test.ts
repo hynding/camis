@@ -62,7 +62,7 @@ describe("Strapi data import", () => {
   it("restores the media library's folders and each file's folder", () => {
     const map = content("app/Support/StrapiTransferMap.php");
     expect(map).toContain(
-      "'plugin::upload.folder' => [\n            'plugin' => 'folder',\n            'model' => '\\App\\Models\\UploadFolder',\n        ],",
+      "'plugin::upload.folder' => [\n            'plugin' => 'folder',\n            'model' => \\App\\Models\\UploadFolder::class,\n        ],",
     );
     const engine = content(IMPORT_ENGINE);
     expect(engine).toContain("'folder' => $this->folder($type, $entity['id'], $entity['data']),");

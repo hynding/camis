@@ -38,6 +38,11 @@ final class StrapiImport
         'plugin_users-permissions_grant' => 'users-permissions.grant',
     ];
 
+    private const FOLDER = 'plugin::upload.folder';
+
+    /** Where Strapi's core store keeps the folder Content API uploads go to, and where this app does. */
+    private const API_FOLDER = ['plugin_upload_api-folder', 'upload.api-folder'];
+
     private const FILE_COLUMNS = [
         'documentId' => 'document_id', 'name' => 'name', 'alternativeText' => 'alternative_text', 'caption' => 'caption',
         'focalPoint' => 'focal_point', 'width' => 'width', 'height' => 'height', 'formats' => 'formats', 'hash' => 'hash',
@@ -272,6 +277,10 @@ final class StrapiImport
                 }
             }
             DB::table($files)->delete();
+            $folder = StrapiTransferMap::TYPES[self::FOLDER]['model'] ?? null;
+            if ($folder !== null) {
+                DB::table((new $folder())->getTable())->delete();
+            }
         }
         foreach ($nullable as $table => $columns) {
             DB::table($table)->update(array_fill_keys(array_unique($columns), null));
@@ -329,6 +338,7 @@ final class StrapiImport
                     'user' => $this->user($entity['id'], $entity['data']),
                     'role' => $this->roles[$entity['id']] = (string) ($entity['data']['type'] ?? ''),
                     'file' => $this->file($type, $entity['id'], $entity['data']),
+                    'folder' => $this->folder($type, $entity['id'], $entity['data']),
                     'locale' => $this->locale($type, $entity['id'], $entity['data']),
                     default => $this->entry($uid, $type, $entity['id'], $entity['data']),
                 };
@@ -522,6 +532,45 @@ final class StrapiImport
     }
 
     /**
+     * A media library folder; its parent, and the files in it, come with the links.
+     *
+     * @param array<string, mixed> $type
+     * @param array<string, mixed> $data
+     */
+    private function folder(array $type, int|string $ref, array $data): void
+    {
+        $this->rows[self::FOLDER][$ref] = (int) DB::table((new ($type['model'])())->getTable())->insertGetId([
+            'document_id' => $data['documentId'] ?? null,
+            'name' => $data['name'],
+            'path_id' => $data['pathId'],
+            'path' => $data['path'],
+            'created_at' => self::value($data['createdAt'] ?? null, 'dateTime'),
+            'updated_at' => self::value($data['updatedAt'] ?? null, 'dateTime'),
+            'published_at' => self::value($data['publishedAt'] ?? null, 'dateTime'),
+        ]);
+    }
+
+    /**
+     * A file's folder, or a folder's parent: a key on the row, as this app keeps them. Paths came
+     * with the rows.
+     *
+     * @param array<string, mixed> $left
+     * @param array<string, mixed> $right
+     */
+    private function folderLink(array $left, array $right): void
+    {
+        $column = ['plugin::upload.file|folder' => 'folder_id', self::FOLDER . '|parent' => 'parent_id'][$left['type'] . '|' . $left['field']] ?? null;
+        $owner = $this->rows[$left['type']][$left['ref']] ?? null;
+        $target = $this->rows[$right['type']][$right['ref']] ?? null;
+        if ($column === null || $owner === null || $target === null) {
+            return;
+        }
+        $model = StrapiTransferMap::TYPES[$left['type']]['model'];
+        DB::table((new $model())->getTable())->where('id', $owner)->update([$column => $target]);
+        $this->counts['links'] = ($this->counts['links'] ?? 0) + 1;
+    }
+
+    /**
      * @param array<string, mixed> $type
      * @param array<string, mixed> $data
      */
@@ -552,6 +601,11 @@ final class StrapiImport
                     continue;
                 }
                 $attach[] = [$right['type'], $right['ref'], $descriptor['relation'], $this->rows['plugin::upload.file'][$left['ref']] ?? null, ['order' => $right['pos'] ?? 0], $right['pos'] ?? 0, $index];
+
+                continue;
+            }
+            if (($right['type'] ?? null) === self::FOLDER && isset(StrapiTransferMap::TYPES[self::FOLDER]['model'])) {
+                $this->folderLink($left, $right);
 
                 continue;
             }
@@ -614,7 +668,7 @@ final class StrapiImport
 
     private function configuration(): void
     {
-        DB::table('strapi_settings')->whereIn('key', array_values(self::SETTINGS))->delete();
+        DB::table('strapi_settings')->whereIn('key', [...array_values(self::SETTINGS), self::API_FOLDER[1]])->delete();
         DB::table('strapi_webhooks')->delete();
         $now = CarbonImmutable::now()->utc()->format('Y-m-d H:i:s');
         foreach ($this->lines('configuration') as $entry) {
@@ -642,6 +696,13 @@ final class StrapiImport
                 $table = (new $locale())->getTable();
                 DB::table($table)->update(['is_default' => false]);
                 DB::table($table)->where('code', (string) $stored)->update(['is_default' => true]);
+            } elseif ($key === self::API_FOLDER[0]) {
+                // The archive names the folder by its id there; it has another here.
+                $folder = $this->rows[self::FOLDER][$stored['id'] ?? ''] ?? null;
+                if ($folder === null) {
+                    continue;
+                }
+                DB::table('strapi_settings')->insert(['key' => self::API_FOLDER[1], 'value' => json_encode(['id' => $folder], JSON_THROW_ON_ERROR), 'created_at' => $now, 'updated_at' => $now]);
             } elseif (isset(self::SETTINGS[$key])) {
                 DB::table('strapi_settings')->insert(['key' => self::SETTINGS[$key], 'value' => json_encode($stored, JSON_THROW_ON_ERROR), 'created_at' => $now, 'updated_at' => $now]);
             } else {
