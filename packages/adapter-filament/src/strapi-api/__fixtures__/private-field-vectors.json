@@ -1,5 +1,5 @@
 {
-  "about": "Strapi 5 private attributes, checked against strapi-php: Review.moderatorNote (text) and Review.flaggedBy (a relation to Author) are written but never answered, filtered, sorted, selected or populated. Run on an empty database with the token of a caller whose role may write reviews and authors. '@type:Name' is that row's documentId, '#type:Name' its numeric id. Responses are compared after dropping the id, documentId, createdAt, updatedAt and publishedAt keys.",
+  "about": "Strapi 5 private attributes, checked against strapi-php: Review.moderatorNote (text) and Review.flaggedBy (a relation to Author) are written but never answered, filtered, sorted, selected or populated. Run on an empty database with the token of a caller whose role may write reviews and authors and read users (as the fixture's authenticated role may). '@type:Name' is that row's documentId, '#type:Name' its numeric id. Responses are compared after dropping the id, documentId, createdAt, updatedAt and publishedAt keys.",
   "seed": [
     {
       "path": "/authors",

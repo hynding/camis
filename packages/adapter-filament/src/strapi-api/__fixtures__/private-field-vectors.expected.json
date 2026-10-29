@@ -19,6 +19,8 @@
   "populate=* skips the private relation": {
     "status": 200,
     "data": {
+      "readers": [],
+      "reviewer": null,
       "title": "First"
     }
   },
@@ -197,6 +199,8 @@
   "unlink the private relation": {
     "status": 200,
     "data": {
+      "readers": [],
+      "reviewer": null,
       "title": "Third"
     }
   },
