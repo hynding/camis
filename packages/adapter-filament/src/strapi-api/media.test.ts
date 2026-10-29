@@ -205,6 +205,17 @@ describe("media fields", () => {
     expect(book).toMatch(/'attachments' => \['relation' => 'attachments', 'kind' => 'mediaMany',/);
     expect(book).not.toContain("$m->cover");
   });
+  it("are read and written with their entry, whatever the file grants, as Strapi does", () => {
+    // Strapi's restricted-relations visitors act on relations only, not on media attributes:
+    // a role with no upload grant still populates, filters and links an entry's media.
+    const query = content("app/Support/StrapiQuery.php");
+    expect(query).toContain(
+      "if (in_array($relation['kind'] ?? null, ['mediaOne', 'mediaMany'], true)) {\n            return true;\n        }",
+    );
+    expect(content("app/Support/StrapiPopulate.php")).toContain(
+      "$visible = $media ? $linked : array_values(array_filter($linked, fn (Model $target) => StrapiQuery::visible($target, $viewer)));",
+    );
+  });
   it("are picked from, or uploaded to, the media library in the admin", () => {
     const form = content("app/Filament/Resources/Books/Schemas/BookForm.php");
     expect(form).toContain("MediaPicker::make('cover', multiple: false, allowedTypes: ['image']),");
