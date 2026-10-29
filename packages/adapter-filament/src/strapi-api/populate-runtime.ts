@@ -146,11 +146,18 @@ final class StrapiPopulate
         return self::tree($sub['populate'], $field['serializer'], $viewer, self::join($at, $key));
     }
 
-    /** A key populate may name: a component or a relation, not a private one. $path is what the error reports. */
+    /**
+     * A key populate may name: a component or a relation, not a private one. $path is what the error
+     * reports; Strapi names a private key's own path even in the object form, which reports none for
+     * an unknown key.
+     */
     private static function known(string $key, string $serializer, ?string $path, ?string $at): void
     {
         $field = $serializer::FIELDS[$key] ?? [];
-        if (isset($field['private']) || (! in_array($key, $serializer::COMPONENTS, true) && ! isset($field['relation']))) {
+        if (isset($field['private'])) {
+            throw StrapiError::invalidKey($key, self::join($at, $key), 'populate');
+        }
+        if (! in_array($key, $serializer::COMPONENTS, true) && ! isset($field['relation'])) {
             throw StrapiError::invalidKey($key, $path ?? $at, 'populate');
         }
     }
