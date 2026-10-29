@@ -68,7 +68,9 @@ class MediaAdminTest extends TestCase
     public function test_a_book_links_its_cover_and_attachments(): void
     {
         $this->login(['book.read', 'book.create', 'file.read']);
-        [$cover, $first, $second] = array_map($this->upload(...), ['cover.txt', 'first.txt', 'second.txt']);
+        // The cover takes only images (its allowedTypes); the attachments take any file.
+        $cover = StrapiUpload::storePath(UploadedFile::fake()->image('cover.png', 10, 10)->getRealPath(), 'cover.png', []);
+        [$first, $second] = array_map($this->upload(...), ['first.txt', 'second.txt']);
 
         Livewire::test(CreateBook::class)
             ->fillForm(['title' => 'Dune', 'cover' => [$cover->getKey()], 'attachments' => [$second->getKey(), $first->getKey()]])

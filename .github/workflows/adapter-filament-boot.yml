@@ -420,14 +420,14 @@ jobs:
             --vectors $F/session-vectors.json --expected $F/session-vectors.expected.json
       - name: Strapi's OpenAPI document at /documentation lists only routes the app serves
         run: node packages/adapter-filament/scripts/strapi-openapi-routes.mjs app http://127.0.0.1:8765
-      - name: Filament admin publishes drafts, translates, keeps the media library, manages users, API and transfer tokens, exports and imports Strapi archives, builds dynamic zones; GraphQL refuses what REST refuses
+      - name: Filament admin publishes drafts, translates, keeps the media library and its folders, manages users, API and transfer tokens, exports and imports Strapi archives, builds dynamic zones; GraphQL refuses what REST refuses
         run: |
           cd app
           # The cached config would point the tests at the served database instead of :memory:.
           php artisan config:clear
           S=../packages/adapter-filament/scripts/php
-          cp $S/DraftAdminTest.php $S/LocaleAdminTest.php $S/MediaAdminTest.php $S/UsersAdminTest.php $S/ProvidersTest.php $S/ApiTokensTest.php $S/TransferTokensTest.php $S/DataTransferTest.php $S/StrapiAdminTest.php $S/WebhooksTest.php $S/DynamicZonesTest.php $S/GraphqlTest.php tests/Feature/
-          php artisan test tests/Feature/DraftAdminTest.php tests/Feature/LocaleAdminTest.php tests/Feature/MediaAdminTest.php tests/Feature/UsersAdminTest.php tests/Feature/ProvidersTest.php tests/Feature/ApiTokensTest.php tests/Feature/TransferTokensTest.php tests/Feature/DataTransferTest.php tests/Feature/StrapiAdminTest.php tests/Feature/WebhooksTest.php tests/Feature/DynamicZonesTest.php tests/Feature/GraphqlTest.php
+          cp $S/DraftAdminTest.php $S/LocaleAdminTest.php $S/MediaAdminTest.php $S/FoldersTest.php $S/UsersAdminTest.php $S/ProvidersTest.php $S/ApiTokensTest.php $S/TransferTokensTest.php $S/DataTransferTest.php $S/StrapiAdminTest.php $S/WebhooksTest.php $S/DynamicZonesTest.php $S/GraphqlTest.php tests/Feature/
+          php artisan test tests/Feature/DraftAdminTest.php tests/Feature/LocaleAdminTest.php tests/Feature/MediaAdminTest.php tests/Feature/FoldersTest.php tests/Feature/UsersAdminTest.php tests/Feature/ProvidersTest.php tests/Feature/ApiTokensTest.php tests/Feature/TransferTokensTest.php tests/Feature/DataTransferTest.php tests/Feature/StrapiAdminTest.php tests/Feature/WebhooksTest.php tests/Feature/DynamicZonesTest.php tests/Feature/GraphqlTest.php
       - name: Server log on failure
         if: failure()
         run: cat app/serve.log app/storage/logs/laravel.log "$RUNNER_TEMP/oauth/serve.log" || true
