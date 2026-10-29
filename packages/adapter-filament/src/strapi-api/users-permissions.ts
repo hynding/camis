@@ -115,6 +115,12 @@ export const usersPermissionsConfigKeys = (): string => `
     // Strapi's users-permissions settings as a new project starts with them; the admin's
     // Users & Permissions settings page overrides them at runtime (strapi_settings).
     'users_permissions' => [${sessionsConfigKeys()}
+        // users-permissions' register.allowedFields: body keys register takes beside username,
+        // email and password (comma separated). A key the user has no column for is accepted and
+        // dropped, as Strapi drops it.
+        'register' => [
+            'allowed_fields' => array_values(array_filter(array_map('trim', explode(',', (string) env('CAMIS_REGISTER_ALLOWED_FIELDS', ''))))),
+        ],
         'advanced' => [
             'unique_email' => true,
             'allow_register' => (bool) env('CAMIS_ALLOW_REGISTER', true),
@@ -152,6 +158,7 @@ namespace App\\Support;
 
 use App\\Models\\Concerns\\HasDocumentId;
 use App\\Models\\User;
+use Illuminate\\Database\\Eloquent\\Builder;
 use Illuminate\\Mail\\Message;
 use Illuminate\\Support\\Facades\\Mail;
 
@@ -273,6 +280,43 @@ final class StrapiUsers
         return new StrapiError(400, 'ApplicationError', $message);
     }
 
+    /**
+     * The top-level start and limit the /users routes take, through Strapi's query-params
+     * transform: page and pageSize are checked but never applied, and a limit of -1 or 0 is none.
+     */
+    public static function paginate(Builder $query, array $params): void
+    {
+        $page = $params['page'] ?? null;
+        $pageSize = $params['pageSize'] ?? null;
+        $start = $params['start'] ?? null;
+        $limit = $params['limit'] ?? null;
+        if (($page !== null || $pageSize !== null) && ($start !== null || $limit !== null)) {
+            throw new StrapiError(400, 'PaginationError', 'Invalid pagination attributes. The page parameters are incorrect and must be in the pagination object');
+        }
+        foreach (['page' => $page, 'pageSize' => $pageSize] as $name => $value) {
+            $number = self::number($value);
+            if ($value !== null && (! self::isInteger($number) || $number <= 0)) {
+                throw new StrapiError(400, 'PaginationError', "Invalid '{$name}' parameter. Expected an integer > 0, received: ".(is_scalar($value) ? (string) $value : json_encode($value)));
+            }
+        }
+        $offset = $start === null ? 0 : self::number($start);
+        if (! self::isInteger($offset) || $offset < 0) {
+            throw StrapiError::validation('convertStartQueryParams expected a positive integer got '.self::printed($offset));
+        }
+        $count = $limit === null ? -1 : self::number($limit);
+        if (! self::isInteger($count) || $count < -1) {
+            throw StrapiError::validation('convertLimitQueryParams expected a positive integer got '.self::printed($count));
+        }
+        if ($count > 0) {
+            $query->limit((int) $count);
+        } elseif ($offset > 0) {
+            $query->limit(PHP_INT_MAX); // MySQL accepts no OFFSET without a LIMIT
+        }
+        if ($offset > 0) {
+            $query->offset((int) $offset);
+        }
+    }
+
     private static function check(array $body, string $field, array $checks): ?string
     {
         $value = $body[$field] ?? null;
@@ -298,6 +342,30 @@ final class StrapiUsers
         }
 
         return null;
+    }
+
+    /** JavaScript's Number() of a query value: '' is 0, and what does not parse is NaN. */
+    private static function number(mixed $value): int|float
+    {
+        if (is_int($value) || is_float($value)) {
+            return $value;
+        }
+        if (! is_string($value)) {
+            return NAN;
+        }
+        $value = trim($value);
+
+        return $value === '' ? 0 : (is_numeric($value) ? $value + 0 : NAN);
+    }
+
+    private static function isInteger(int|float $number): bool
+    {
+        return is_int($number) || (is_finite($number) && floor($number) === $number);
+    }
+
+    private static function printed(int|float $number): string
+    {
+        return is_nan($number) ? 'NaN' : (self::isInteger($number) ? (string) (int) $number : (string) $number);
     }
 
     private static function send(User $user, array $template, array $variables): void
@@ -348,9 +416,10 @@ final class StrapiUsers
  */
 /**
  * The user as a relation target: populate, filters and sort reach it through these maps, and it
- * renders as users-permissions' user. Its role is a relation as on Strapi, which no content grant
- * reaches, so populate leaves it out and a filter on it is an invalid key; a project without roles
- * keeps none.
+ * renders as users-permissions' user. Its role is a relation as on Strapi, which only an API token
+ * holding the role's find reaches (no content grant does), so for anyone else populate leaves it
+ * out and a filter on it is an invalid key; a project without roles keeps none. Spatie keeps a
+ * user's roles as a morph-to-many, but Strapi's user holds one role, so it renders as one.
  */
 export const emitUserSerializer = (secured: boolean): string => `<?php
 ${PHP_MARKER}
@@ -368,7 +437,7 @@ final class UserSerializer
     public const FIELDS = StrapiUsers::FIELDS + [${
       secured
         ? `
-        'role' => ['relation' => 'roles', 'kind' => 'belongsToMany', 'model' => \\Spatie\\Permission\\Models\\Role::class, 'serializer' => null, 'foreignKey' => null, 'uid' => 'plugin::users-permissions.role', 'holder' => 'self', 'draftPublish' => false, 'localized' => false],
+        'role' => ['relation' => 'roles', 'kind' => 'morphToOne', 'model' => \\Spatie\\Permission\\Models\\Role::class, 'serializer' => \\App\\Http\\Serializers\\RoleSerializer::class, 'foreignKey' => null, 'uid' => 'plugin::users-permissions.role', 'holder' => 'self', 'draftPublish' => false, 'localized' => false],
     `
         : ""
     }];
@@ -384,6 +453,60 @@ final class UserSerializer
     public static function toWire(User $m): array
     {
         return StrapiUsers::wire($m);
+    }
+}
+`;
+
+/**
+ * users-permissions' role as a relation target (the user's role, populated for an API token that
+ * may read roles). Spatie's roles keep only the type: Strapi's name and description come from it
+ * and the IR, so a filter or sort on either reads the type.
+ */
+export const emitRoleSerializer = (): string => `<?php
+${PHP_MARKER}
+
+declare(strict_types=1);
+
+namespace App\\Http\\Serializers;
+
+use App\\Support\\StrapiRoles;
+use Spatie\\Permission\\Models\\Role;
+
+final class RoleSerializer
+{
+    /** Wire path → column, for StrapiQuery's filters, sort and fields. */
+    public const FIELDS = [
+        'id' => ['column' => 'id', 'type' => 'integer'],
+        // The role's type names it for good; Strapi's documentId is a random one.
+        'documentId' => ['column' => 'name', 'type' => 'string'],
+        'name' => ['column' => 'name', 'type' => 'string'],
+        'description' => ['column' => 'name', 'type' => 'string'],
+        'type' => ['column' => 'name', 'type' => 'string'],
+        'createdAt' => ['column' => 'created_at', 'type' => 'dateTime'],
+        'updatedAt' => ['column' => 'updated_at', 'type' => 'dateTime'],
+        'publishedAt' => ['column' => 'created_at', 'type' => 'dateTime'],
+    ];
+
+    public const COMPONENTS = [];
+
+    public const ZONES = [];
+
+    public const DRAFT_PUBLISH = false;
+
+    public const LOCALIZED = false;
+
+    public static function toWire(Role $m): array
+    {
+        return [
+            'id' => $m->getKey(),
+            'documentId' => $m->name,
+            'name' => ucfirst($m->name),
+            'description' => StrapiRoles::description($m),
+            'type' => $m->name,
+            'createdAt' => $m->created_at?->toIso8601ZuluString('millisecond'),
+            'updatedAt' => $m->updated_at?->toIso8601ZuluString('millisecond'),
+            'publishedAt' => $m->created_at?->toIso8601ZuluString('millisecond'),
+        ];
     }
 }
 `;
@@ -483,8 +606,10 @@ declare(strict_types=1);
 namespace App\\Http\\Controllers\\Api;
 
 use App\\Http\\Controllers\\Controller;
+use App\\Http\\Serializers\\UserSerializer;
 use App\\Models\\User;${guests ? "\nuse App\\Support\\PublicRole;" : ""}${secured ? "\nuse App\\Support\\StrapiApiTokens;" : ""}
 use App\\Support\\StrapiError;
+use App\\Support\\StrapiPopulate;
 use App\\Support\\StrapiQuery;
 use App\\Support\\StrapiUsers;
 use Illuminate\\Database\\Eloquent\\Builder;
@@ -499,25 +624,35 @@ final class UserController extends Controller
     public function find(Request $request): JsonResponse
     {${allow("user.read")}
         $params = $request->query();
+        $query = $this->filtered($request);
+        StrapiUsers::paginate($query, $params);
 
-        return response()->json($this->filtered($request)->get()
-            ->map(fn (User $user) => StrapiQuery::select(StrapiUsers::wire($user), $params, StrapiUsers::FIELDS))
-            ->values()
-            ->all());
+        return response()->json(StrapiPopulate::many($query->get(), $params, UserSerializer::class, $request->user()));
     }
 
-    /** Strapi answers a user it cannot find with an empty body, not a 404. */
+    /**
+     * Strapi answers a user it cannot find with an empty body, not a 404. Its fetch keeps the
+     * query's start, so any start past 0 finds nothing.
+     */
     public function findOne(Request $request, string $id): JsonResponse|Response
     {${allow("user.read")}
-        $user = User::query()->find($id);
+        $params = $request->query();
+        $query = User::query()->whereKey($id);
+        StrapiUsers::paginate($query, $params);
+        $user = $query->first();
 
-        return $user === null ? response()->noContent() : response()->json(StrapiUsers::wire($user));
+        return $user === null
+            ? response()->noContent()
+            : response()->json(StrapiPopulate::one($user, $params, UserSerializer::class, $request->user()));
     }
 
+    /** Strapi checks start and limit on a count too, though it counts every match. */
     public function count(Request $request): JsonResponse
     {${allow("user.read")}
+        $query = $this->filtered($request);
+        StrapiUsers::paginate($query->clone(), $request->query());
 
-        return response()->json($this->filtered($request)->count());
+        return response()->json($query->count());
     }
 
     /** An API token's request reaches here with no account of its own. */
@@ -525,7 +660,7 @@ final class UserController extends Controller
     {
         $user = $request->user() ?? throw new StrapiError(401, 'UnauthorizedError', 'Unauthorized');
 
-        return response()->json(StrapiUsers::wire($user));
+        return response()->json(StrapiPopulate::one($user, $request->query(), UserSerializer::class, $user));
     }
 
     public function create(Request $request): JsonResponse
@@ -586,8 +721,8 @@ ${assignRole}        $user = StrapiUsers::add([...$body, 'password' => Hash::mak
     {
         $params = $request->query();
         $query = User::query();
-        StrapiQuery::filter($query, $params, StrapiUsers::FIELDS, $request->user(), null);
-        StrapiQuery::order($query, $params['sort'] ?? null, StrapiUsers::FIELDS, $request->user());
+        StrapiQuery::filter($query, $params, UserSerializer::FIELDS, $request->user(), null);
+        StrapiQuery::order($query, $params['sort'] ?? null, UserSerializer::FIELDS, $request->user());
 
         return $query;
     }${

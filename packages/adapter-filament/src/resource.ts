@@ -27,7 +27,7 @@ export const emitResourceFiles = (
     localized?: boolean;
     secured?: boolean;
     /** Media fields, picked from the media library. */
-    media?: { field: string; multiple: boolean }[];
+    media?: { field: string; multiple: boolean; allowedTypes?: readonly string[] }[];
     /** Its place in a Strapi-like menu, which also words the list's create button as Strapi's. */
     navigation?: Navigation;
   } = {},
@@ -129,7 +129,8 @@ ${navigation === undefined ? "" : navigationProperties(navigation)}
     ),
     ...relationFields.map((s) => `            ${s},`),
     ...(options.media ?? []).map(
-      (m) => `            MediaPicker::make('${m.field}', multiple: ${m.multiple}),`,
+      (m) =>
+        `            MediaPicker::make('${m.field}', multiple: ${m.multiple}${m.allowedTypes === undefined ? "" : `, allowedTypes: [${m.allowedTypes.map((t) => `'${t}'`).join(", ")}]`}),`,
     ),
     ...repeaters.map((r) => `            ${r.component},`),
   ].join("\n");

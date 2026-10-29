@@ -38,13 +38,17 @@ final class StrapiUpload
     /** The images GD can resize; any other file keeps no formats. */
     private const RESIZABLE = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
-    /** Stores an uploaded file with its info (name, alternativeText, caption) and formats. */
+    /**
+     * Stores an uploaded file with its info (name, alternativeText, caption, and the folder it goes
+     * in, by id) and formats.
+     */
     public static function store(UploadedFile $upload, array $info): ${model}
     {
         $file = new ${model}();
         $file->name = $upload->getClientOriginalName();
         // Before put(): a format's name is the file's, as the info names it.
         self::describe($file, $info);
+        $file->folder_id = filled($info['folder'] ?? null) ? (int) $info['folder'] : null;
         self::put($file, $upload);
         $file->published_at = now();
         $file->save();
@@ -338,8 +342,10 @@ namespace App\\Models;
 
 use App\\Models\\Concerns\\EmitsStrapiEvents;
 use App\\Models\\Concerns\\HasDocumentId;
+use App\\Support\\StrapiFolders;
 use App\\Support\\StrapiUpload;${members.length > 0 ? "\nuse Illuminate\\Database\\Eloquent\\Builder;" : ""}
 use Illuminate\\Database\\Eloquent\\Model;
+use Illuminate\\Database\\Eloquent\\Relations\\BelongsTo;
 
 class ${model} extends Model
 {
@@ -352,6 +358,7 @@ class ${model} extends Model
         'name',
         'alternative_text',
         'caption',
+        'folder_id',
     ];
 
     protected function casts(): array
@@ -363,13 +370,25 @@ class ${model} extends Model
             'width' => 'integer',
             'height' => 'integer',
             'size' => 'float',
+            'folder_id' => 'integer',
             'published_at' => 'datetime',
         ];
     }
 
     protected static function booted(): void
     {
+        // Strapi keeps a file's folder path beside its folder, and selects by it.
+        static::saving(function (${model} $file): void {
+            if ($file->isDirty('folder_id') || $file->folder_path === null) {
+                $file->folder_path = StrapiFolders::pathOf($file->folder_id);
+            }
+        });
         static::deleting(fn (${model} $file) => StrapiUpload::forget($file));
+    }
+
+    public function folder(): BelongsTo
+    {
+        return $this->belongsTo(UploadFolder::class, 'folder_id');
     }
 ${members.map((m) => `\n${m}\n`).join("")}}
 `;
@@ -478,6 +497,7 @@ use App\\Http\\Controllers\\Controller;
 use App\\Http\\Serializers\\${S};
 use App\\Models\\${model};
 use App\\Support\\StrapiError;
+use App\\Support\\StrapiFolders;
 use App\\Support\\StrapiPopulate;
 use App\\Support\\StrapiQuery;
 use App\\Support\\StrapiUpload;
@@ -509,9 +529,11 @@ ${auth(`$this->authorize('create', ${model}::class);`)}        $uploads = $this-
         $infos = $this->infos($request);
         $entry = $this->entry($request);
         $stored = DB::transaction(function () use ($uploads, $infos, $entry): array {
+            // As Strapi's Content API: every upload goes to the API Uploads folder.
+            $folder = ['folder' => StrapiFolders::apiUploads()->getKey()];
             $stored = [];
             foreach ($uploads as $i => $upload) {
-                $file = StrapiUpload::store($upload, $infos[$i] ?? []);
+                $file = StrapiUpload::store($upload, [...($infos[$i] ?? []), ...$folder]);
                 if ($entry !== null) {
                     StrapiUpload::attach($entry['row'], $entry['relation'], $file);
                 }
@@ -677,7 +699,9 @@ ${auth("$this->authorize('update', $row);")}
 
 /**
  * The admin's media field: files picked from the media library (one, or a list in order), and a
- * new one uploaded into it in place.
+ * new one uploaded into it in place. A field's allowedTypes (image, video, audio, file — any other
+ * MIME type) narrow what it lists, takes and uploads, as Strapi's admin does; its Content API
+ * takes any file.
  */
 export const emitMediaPicker = (model: string): string => `<?php
 ${PHP_MARKER}
@@ -686,38 +710,71 @@ declare(strict_types=1);
 
 namespace App\\Filament\\Support;
 
+use App\\Models\\${model};
+use App\\Support\\StrapiFolders;
 use App\\Support\\StrapiUpload;
+use Closure;
 use Filament\\Forms\\Components\\FileUpload;
 use Filament\\Forms\\Components\\Select;
 use Filament\\Forms\\Components\\TextInput;
+use Illuminate\\Database\\Eloquent\\Builder;
 use Illuminate\\Support\\Facades\\Storage;
 
 final class MediaPicker
 {
-    public static function make(string $field, bool $multiple): Select
+    /** The MIME types Strapi names by their own kind; any other is a file. */
+    private const KINDS = ['image', 'video', 'audio'];
+
+    /** @param list<string>|null $allowedTypes */
+    public static function make(string $field, bool $multiple, ?array $allowedTypes = null): Select
     {
         return Select::make($field)
-            ->relationship(name: $field, titleAttribute: 'name')
+            ->relationship(name: $field, titleAttribute: 'name', modifyQueryUsing: fn (Builder $query): Builder => self::only($query, $allowedTypes))
             ->multiple()
             ->maxItems($multiple ? null : 1)
             ->preload()
             ->searchable()
-            ->createOptionForm(self::uploadForm())
+            ->rules([
+                fn (): Closure => function (string $attribute, mixed $value, Closure $fail) use ($allowedTypes): void {
+                    $mimes = ${model}::query()->whereKey(array_filter((array) $value))->pluck('mime');
+                    if ($mimes->contains(fn (mixed $mime): bool => ! self::allows($allowedTypes, (string) $mime))) {
+                        $fail('The file type is not allowed');
+                    }
+                },
+            ])
+            ->createOptionForm(self::uploadForm($allowedTypes))
             ->createOptionUsing(fn (array $data): int => (int) self::store($data)->getKey());
     }
 
-    /** @return list<\\Filament\\Schemas\\Components\\Component|\\Filament\\Forms\\Components\\Field> */
-    public static function uploadForm(): array
+    /**
+     * @param list<string>|null $allowedTypes
+     * @return list<\\Filament\\Schemas\\Components\\Component|\\Filament\\Forms\\Components\\Field>
+     */
+    public static function uploadForm(?array $allowedTypes = null): array
     {
+        $upload = FileUpload::make('upload')->disk('local')->directory('camis-uploads')->storeFileNamesIn('original_name')->required();
+        // A browser can be told which kinds to offer, but not "anything but these", so a field that
+        // takes files is checked when it is saved.
+        if ($allowedTypes !== null && ! in_array('file', $allowedTypes, true)) {
+            $upload->acceptedFileTypes(array_map(fn (string $kind): string => "{$kind}/*", $allowedTypes));
+        }
+
         return [
-            FileUpload::make('upload')->disk('local')->directory('camis-uploads')->storeFileNamesIn('original_name')->required(),
+            $upload,
             TextInput::make('alternative_text'),
             TextInput::make('caption'),
+            self::folder(),
         ];
     }
 
+    /** Where in the library a file goes: a folder, or its root. */
+    public static function folder(): Select
+    {
+        return Select::make('folder_id')->label('Location')->placeholder('Media Library')->options(fn (): array => StrapiFolders::options());
+    }
+
     /** Moves an admin upload from Filament's temporary disk into the media library. */
-    public static function store(array $data): \\App\\Models\\${model}
+    public static function store(array $data): ${model}
     {
         $disk = Storage::disk('local');
         $path = (string) $data['upload'];
@@ -725,15 +782,56 @@ final class MediaPicker
             return StrapiUpload::storePath($disk->path($path), (string) ($data['original_name'] ?? basename($path)), [
                 'alternativeText' => $data['alternative_text'] ?? null,
                 'caption' => $data['caption'] ?? null,
+                'folder' => $data['folder_id'] ?? null,
             ]);
         } finally {
             $disk->delete($path);
         }
     }
+
+    /** Strapi's kind of a MIME type: image, video, audio, or file. */
+    public static function kind(string $mime): string
+    {
+        $type = strtolower(explode('/', $mime)[0]);
+
+        return in_array($type, self::KINDS, true) ? $type : 'file';
+    }
+
+    /** @param list<string>|null $allowedTypes null for any */
+    public static function allows(?array $allowedTypes, string $mime): bool
+    {
+        return $allowedTypes === null || in_array(self::kind($mime), $allowedTypes, true);
+    }
+
+    /** @param list<string>|null $allowedTypes */
+    private static function only(Builder $query, ?array $allowedTypes): Builder
+    {
+        if ($allowedTypes === null) {
+            return $query;
+        }
+
+        return $query->where(function (Builder $where) use ($allowedTypes): void {
+            foreach (self::KINDS as $kind) {
+                if (in_array($kind, $allowedTypes, true)) {
+                    $where->orWhere('mime', 'like', "{$kind}/%");
+                }
+            }
+            if (in_array('file', $allowedTypes, true)) {
+                $where->orWhere(function (Builder $other): void {
+                    foreach (self::KINDS as $kind) {
+                        $other->where('mime', 'not like', "{$kind}/%");
+                    }
+                });
+            }
+        });
+    }
 }
 `;
 
-/** The media library in the admin: a list with previews, an upload page, and an info editor. */
+/**
+ * The media library in the admin: a list with previews that filters by folder and moves files
+ * between folders, an upload page, and an info editor.
+ */
 export const emitFileResourceFiles = (
   model: string,
   dir: string,
@@ -766,16 +864,20 @@ namespace ${ns};
 
 use App\\Filament\\Support\\MediaPicker;
 use App\\Models\\${model};
+use App\\Support\\StrapiFolders;
 use BackedEnum;
 use ${ns}\\Pages\\Create${model};
 use ${ns}\\Pages\\Edit${model};
 use ${ns}\\Pages\\List${plural};
+use Filament\\Actions\\BulkAction;
 use Filament\\Forms\\Components\\TextInput;
 use Filament\\Resources\\Resource;
 use Filament\\Schemas\\Schema;
 use Filament\\Tables\\Columns\\ImageColumn;
 use Filament\\Tables\\Columns\\TextColumn;
+use Filament\\Tables\\Filters\\SelectFilter;
 use Filament\\Tables\\Table;
+use Illuminate\\Support\\Collection;
 
 class ${resource} extends Resource
 {
@@ -795,6 +897,7 @@ class ${resource} extends Resource
             TextInput::make('name')->required()->visibleOn('edit'),
             TextInput::make('alternative_text')->visibleOn('edit'),
             TextInput::make('caption')->visibleOn('edit'),
+            MediaPicker::folder()->visibleOn('edit'),
         ]);
     }
 
@@ -805,8 +908,22 @@ class ${resource} extends Resource
             TextColumn::make('name')->searchable()->sortable(),
             TextColumn::make('ext'),
             TextColumn::make('size')->suffix(' kB')->sortable(),
+            TextColumn::make('folder')->state(fn (${model} $record): string => $record->folder_id === null ? 'Media Library' : (StrapiFolders::options()[$record->folder_id] ?? '')),
             TextColumn::make('created_at')->dateTime()->sortable(),
-        ])->defaultSort('created_at', 'desc');
+        ])->defaultSort('created_at', 'desc')
+            ->filters([
+                SelectFilter::make('folder')->attribute('folder_id')->options(fn (): array => StrapiFolders::options()),
+            ])
+            ->toolbarActions([
+                BulkAction::make('move')
+                    ->icon('heroicon-o-folder-arrow-down')
+                    ->schema([MediaPicker::folder()])
+                    ->authorizeIndividualRecords('update')
+                    ->action(fn (Collection $records, array $data) => $records->each(
+                        fn (${model} $file) => $file->update(['folder_id' => filled($data['folder_id'] ?? null) ? (int) $data['folder_id'] : null]),
+                    ))
+                    ->deselectRecordsAfterCompletion(),
+            ]);
     }
 
     public static function getPages(): array

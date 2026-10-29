@@ -23,13 +23,17 @@ final class StrapiUpload
     /** The images GD can resize; any other file keeps no formats. */
     private const RESIZABLE = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
-    /** Stores an uploaded file with its info (name, alternativeText, caption) and formats. */
+    /**
+     * Stores an uploaded file with its info (name, alternativeText, caption, and the folder it goes
+     * in, by id) and formats.
+     */
     public static function store(UploadedFile $upload, array $info): File
     {
         $file = new File();
         $file->name = $upload->getClientOriginalName();
         // Before put(): a format's name is the file's, as the info names it.
         self::describe($file, $info);
+        $file->folder_id = filled($info['folder'] ?? null) ? (int) $info['folder'] : null;
         self::put($file, $upload);
         $file->published_at = now();
         $file->save();

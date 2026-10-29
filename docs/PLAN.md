@@ -574,10 +574,24 @@ REST checks, the three admin tests and the smoke pass on SQLite and Postgres wit
 
 Known gaps: originals are stored as uploaded, not re-encoded as sharp does, and an animated GIF's
 formats keep only its first frame; repeated `files` form keys need the `files[]` spelling (PHP keeps
-only the last one otherwise); there are no folders; `allowedTypes` is not enforced; `findOne`
+only the last one otherwise); `findOne`
 ignores `fields` and the file list ignores pagination, as strapi-php does; the admin's picker does
 not keep the order of a multiple media field; the Laravel API style keeps media as path columns and
 the strapi storage layout is not run against these vectors.
+
+**Folders and `allowedTypes` (2026-10-29).** The media library keeps Strapi's folders:
+`upload_folders` (name, `path_id`, `path` such as `/1/2`, parent) and each file's folder beside its
+`folder_path`, added by their own migration so a deployed project gains them on `migrate`. Content
+API uploads land in "API Uploads" (made on first use, "API Uploads (1)" beside a folder of that name,
+remembered by id as Strapi's core store does); the API never shows a file's folder, as Strapi keeps
+it private. The admin lists folders under the Media Library, makes, renames and moves them with
+Strapi's checks (no slashes, no surrounding spaces, unique among siblings, not inside itself),
+deletes one with every folder and file below it, filters files by folder and moves them in bulk;
+folders are behind the file grants. `strapi:export` writes folders, their `parent` and each file's
+`folder` links and `plugin_upload_api-folder`; `strapi:import` restores them, so the transfer
+compare no longer skips folders. A media field's `allowedTypes` narrows what the admin's picker
+lists, takes and uploads, as Strapi's admin does; Strapi's Content API takes any file into any media
+field, and so does camis's. `FoldersTest` checks these in the boot job.
 
 ---
 
@@ -617,7 +631,7 @@ Known gaps, for part 2: refresh-token sessions (`/auth/refresh`, `logout`, `sess
 providers (`/connect/:provider`), the public role (grants to unauthenticated callers), and `/roles`
 and `/permissions`, whose roles live in the IR rather than in an editable matrix. Also: `/users`
 ignores pagination and `populate`; a register body takes no extra user fields
-(`register.allowedFields`); email senders default to Laravel's `mail.from` rather than Strapi's
+(`register.allowedFields`) (both closed in Phase 31); email senders default to Laravel's `mail.from` rather than Strapi's
 no-reply address; the strapi storage layout keeps register, login and `/users/me` only (reported).
 
 ---
@@ -945,8 +959,9 @@ password strapi-php hashed, and the 16 reads of `read-vectors.json` (documentIds
 as strapi-php answers them after importing the same archive. Passes on SQLite and Postgres,
 including a second import over the first.
 
-Known gaps: roles' permissions, upload folders and admin data are not imported (the IR's grants
-are the permissions; camis keeps a file's folder path only; Strapi does not export admin data).
+Known gaps: roles' permissions and admin data are not imported (the IR's grants are the
+permissions; Strapi does not export admin data). Upload folders are imported since Phase 23's
+folders (2026-10-29).
 Repeatable components inside a component are reported and left empty.
 
 **Part 3 — exporting to Strapi.** `php artisan strapi:export` takes `strapi export`'s options
@@ -970,8 +985,8 @@ with the same 16 reads, plain and encrypted, on SQLite, MySQL and Postgres. stra
 imports camis's export (checked locally against the oracle) and answers the 16 reads as before.
 The export also fixes the import's email templates, which Strapi keeps under `options`.
 
-Known gaps: upload folders and admin data are not exported, nor the content manager's view
-settings. Transfer tokens and `strapi transfer` between live instances (a websocket, which PHP-FPM
+Known gaps: admin data is not exported, nor the content manager's view settings (upload folders
+are, since 2026-10-29). Transfer tokens and `strapi transfer` between live instances (a websocket, which PHP-FPM
 cannot hold) are the next parts.
 
 **Part 4 — transfer tokens.** The admin's Settings › Transfer Tokens page makes, lists,
@@ -1101,7 +1116,22 @@ have no position yet, so they list after the ordered ones (closed in Part 4).
 Part 3's exit: `link-order-vectors.json` (27 checks, recorded from strapi-php) passes in the
 `strapi-api` boot job on all three databases.
 
-**Part 4 — link order outside the API.** A link made anywhere but the REST and GraphQL writes
+**Part 4 — register's allowed fields and `/users` queries.** `CAMIS_REGISTER_ALLOWED_FIELDS`
+(comma separated) is users-permissions' `register.allowedFields`: register takes those keys too,
+stores the ones the user has a column for (`blocked`) and drops the rest, as Strapi does; any
+other key is still "Invalid parameters". `/users` takes Strapi's top-level `start` and `limit`
+(a limit of -1 or 0 is none) with its messages for bad values; `page` and `pageSize` are checked
+but not applied, and `pagination[...]` is ignored, as on Strapi. The list, read and `/users/me`
+take `populate`, and the count checks `start` and `limit`. The user's role populates for an API
+token that may read roles (`plugin::users-permissions.role.find`), rendered by a new
+`RoleSerializer`; a session never reaches it, as no grant gives a role `role.find`. Spatie keeps
+only a role's type, so a filter or sort on its `name` or `description` reads the type.
+
+Part 4's exit: `user-query-vectors.json` (43 checks, recorded from strapi-php with
+`allowedFields: ['blocked', 'nickname']`) passes in the `strapi-api` boot job on all three
+databases.
+
+**Part 5 — link order outside the API.** A link made anywhere but the REST and GraphQL writes
 joins the end of its list, as the Strapi admin's relation picker places a link it adds: a model
 saved with a new to-one target takes the end of the target's list (`HasLinkOrder`, which reads the
 model's `LINK_ORDERS`, foreign key → order column), and a pivot row a BelongsToMany attaches (the
@@ -1111,7 +1141,7 @@ pivot class every ordered BelongsToMany uses). A write that sets the order itsel
 declaring side's list, `right.pos` to the inverse side's), as Strapi's import does, and
 `strapi:export` writes positions in link order, numbered from 1 per list.
 
-Part 4's exit: `transfer/link-order-export.tar.gz`, strapi-php's export of links out of id order
+Part 5's exit: `transfer/link-order-export.tar.gz`, strapi-php's export of links out of id order
 (`link-order-seed-vectors.json`), imports and reads back as strapi-php reads it
 (`link-order-read-vectors.json`) and exports with the same positions, and `LinkOrderAdminTest.php`
 picks genres and an author in the admin between API writes, in the `strapi-api` boot job on all
