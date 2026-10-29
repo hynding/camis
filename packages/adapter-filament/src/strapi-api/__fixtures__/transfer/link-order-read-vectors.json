@@ -1,0 +1,14 @@
+{
+  "about": "What strapi-php answers after `php bin/strapi import -f link-order-export.tar.gz --force` into an empty project, and what camis must answer after `php artisan strapi:import --file=link-order-export.tar.gz --force` into an empty app: to-many relations listed in the order the archive's link positions give, with no sort. documentIds are compared too.",
+  "compare": ["documentId"],
+  "seed": [],
+  "reads": [
+    { "name": "an author's books in link order", "path": "/authors", "query": "populate=books" },
+    {
+      "name": "books' genres in link order",
+      "path": "/books",
+      "query": "sort=title&populate=genres"
+    }
+  ],
+  "writes": []
+}

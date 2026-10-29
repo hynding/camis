@@ -137,6 +137,25 @@ describe("link order", () => {
     expect(migration()).not.toMatch(/Schema::table\('books'[^}]*topic_ord/);
     expect(migration()).not.toContain("Schema::table('notes'");
   });
+  it("places a to-one link made outside the API at the end of the list it joins", () => {
+    // Book.author is listed by Author.books; the admin's select and any save go through the model.
+    const book = content("app/Models/Book.php");
+    expect(book).toContain("    use HasLinkOrder;\n");
+    expect(book).toContain("    public const LINK_ORDERS = ['author_id' => 'author_ord'];");
+    expect(content("app/Models/Note.php")).not.toContain("HasLinkOrder");
+    expect(content("app/Models/Concerns/HasLinkOrder.php")).toContain(
+      "StrapiLinkOrder::next($row, $foreignKey, $order, $row->getAttribute($foreignKey))",
+    );
+  });
+  it("places a pivot link made outside the API at the end of both sides' lists", () => {
+    // The admin's multi-select syncs the pivot; each attached row is a StrapiLinkPivot.
+    expect(content("app/Models/Book.php")).toContain(
+      "return $this->belongsToMany(Genre::class, 'book_genre', 'book_id', 'genre_id')->using(\\App\\Support\\StrapiLinkPivot::class);",
+    );
+    expect(content("app/Support/StrapiLinkPivot.php")).toContain(
+      "final class StrapiLinkPivot extends Pivot",
+    );
+  });
   it("writes connects through Strapi's relation orderer", () => {
     expect(content("app/Support/StrapiLinkOrder.php")).toContain(
       "public static function write(Model $row, Relation $eloquent, array $link): void",
