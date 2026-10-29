@@ -1,0 +1,587 @@
+[
+  {
+    "name": "register",
+    "status": 200,
+    "body": {
+      "jwt": "<jwt>",
+      "user": {
+        "blocked": false,
+        "confirmed": true,
+        "email": "ann@example.test",
+        "provider": "local",
+        "username": "ann"
+      }
+    }
+  },
+  {
+    "name": "register with an allowed field the user has",
+    "status": 200,
+    "body": {
+      "jwt": "<jwt>",
+      "user": {
+        "blocked": true,
+        "confirmed": true,
+        "email": "bob@example.test",
+        "provider": "local",
+        "username": "bob"
+      }
+    }
+  },
+  {
+    "name": "the allowed field was kept",
+    "status": 400,
+    "error": {
+      "name": "ApplicationError",
+      "message": "Your account has been blocked by an administrator",
+      "details": {}
+    }
+  },
+  {
+    "name": "register with an allowed key the user lacks",
+    "status": 200,
+    "body": {
+      "jwt": "<jwt>",
+      "user": {
+        "blocked": false,
+        "confirmed": true,
+        "email": "cat@example.test",
+        "provider": "local",
+        "username": "cat"
+      }
+    }
+  },
+  {
+    "name": "register with a key not allowed",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid parameters: age, role",
+      "details": {}
+    }
+  },
+  {
+    "name": "users",
+    "status": 200,
+    "body": [
+      {
+        "blocked": false,
+        "confirmed": true,
+        "email": "ann@example.test",
+        "provider": "local",
+        "username": "ann"
+      },
+      {
+        "blocked": true,
+        "confirmed": true,
+        "email": "bob@example.test",
+        "provider": "local",
+        "username": "bob"
+      },
+      {
+        "blocked": false,
+        "confirmed": true,
+        "email": "cat@example.test",
+        "provider": "local",
+        "username": "cat"
+      }
+    ]
+  },
+  {
+    "name": "users limited",
+    "status": 200,
+    "body": [
+      {
+        "blocked": false,
+        "confirmed": true,
+        "email": "ann@example.test",
+        "provider": "local",
+        "username": "ann"
+      },
+      {
+        "blocked": true,
+        "confirmed": true,
+        "email": "bob@example.test",
+        "provider": "local",
+        "username": "bob"
+      }
+    ]
+  },
+  {
+    "name": "users from an offset",
+    "status": 200,
+    "body": [
+      {
+        "blocked": true,
+        "confirmed": true,
+        "email": "bob@example.test",
+        "provider": "local",
+        "username": "bob"
+      },
+      {
+        "blocked": false,
+        "confirmed": true,
+        "email": "cat@example.test",
+        "provider": "local",
+        "username": "cat"
+      }
+    ]
+  },
+  {
+    "name": "users offset and limit",
+    "status": 200,
+    "body": [
+      {
+        "blocked": true,
+        "confirmed": true,
+        "email": "bob@example.test",
+        "provider": "local",
+        "username": "bob"
+      }
+    ]
+  },
+  {
+    "name": "users past the end",
+    "status": 200,
+    "body": []
+  },
+  {
+    "name": "users limit -1 is every user",
+    "status": 200,
+    "body": [
+      {
+        "blocked": false,
+        "confirmed": true,
+        "email": "ann@example.test",
+        "provider": "local",
+        "username": "ann"
+      },
+      {
+        "blocked": true,
+        "confirmed": true,
+        "email": "bob@example.test",
+        "provider": "local",
+        "username": "bob"
+      },
+      {
+        "blocked": false,
+        "confirmed": true,
+        "email": "cat@example.test",
+        "provider": "local",
+        "username": "cat"
+      }
+    ]
+  },
+  {
+    "name": "users limit 0 is every user",
+    "status": 200,
+    "body": [
+      {
+        "blocked": false,
+        "confirmed": true,
+        "email": "ann@example.test",
+        "provider": "local",
+        "username": "ann"
+      },
+      {
+        "blocked": true,
+        "confirmed": true,
+        "email": "bob@example.test",
+        "provider": "local",
+        "username": "bob"
+      },
+      {
+        "blocked": false,
+        "confirmed": true,
+        "email": "cat@example.test",
+        "provider": "local",
+        "username": "cat"
+      }
+    ]
+  },
+  {
+    "name": "users empty start and limit",
+    "status": 200,
+    "body": [
+      {
+        "blocked": false,
+        "confirmed": true,
+        "email": "ann@example.test",
+        "provider": "local",
+        "username": "ann"
+      },
+      {
+        "blocked": true,
+        "confirmed": true,
+        "email": "bob@example.test",
+        "provider": "local",
+        "username": "bob"
+      },
+      {
+        "blocked": false,
+        "confirmed": true,
+        "email": "cat@example.test",
+        "provider": "local",
+        "username": "cat"
+      }
+    ]
+  },
+  {
+    "name": "users start not a number",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "convertStartQueryParams expected a positive integer got NaN",
+      "details": {}
+    }
+  },
+  {
+    "name": "users start negative",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "convertStartQueryParams expected a positive integer got -1",
+      "details": {}
+    }
+  },
+  {
+    "name": "users limit not an integer",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "convertLimitQueryParams expected a positive integer got 1.5",
+      "details": {}
+    }
+  },
+  {
+    "name": "users limit below -1",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "convertLimitQueryParams expected a positive integer got -2",
+      "details": {}
+    }
+  },
+  {
+    "name": "users page is checked but not applied",
+    "status": 200,
+    "body": [
+      {
+        "blocked": false,
+        "confirmed": true,
+        "email": "ann@example.test",
+        "provider": "local",
+        "username": "ann"
+      },
+      {
+        "blocked": true,
+        "confirmed": true,
+        "email": "bob@example.test",
+        "provider": "local",
+        "username": "bob"
+      },
+      {
+        "blocked": false,
+        "confirmed": true,
+        "email": "cat@example.test",
+        "provider": "local",
+        "username": "cat"
+      }
+    ]
+  },
+  {
+    "name": "users page 0",
+    "status": 400,
+    "error": {
+      "name": "PaginationError",
+      "message": "Invalid 'page' parameter. Expected an integer > 0, received: 0",
+      "details": {}
+    }
+  },
+  {
+    "name": "users pageSize not a number",
+    "status": 400,
+    "error": {
+      "name": "PaginationError",
+      "message": "Invalid 'pageSize' parameter. Expected an integer > 0, received: abc",
+      "details": {}
+    }
+  },
+  {
+    "name": "users page with start",
+    "status": 400,
+    "error": {
+      "name": "PaginationError",
+      "message": "Invalid pagination attributes. The page parameters are incorrect and must be in the pagination object",
+      "details": {}
+    }
+  },
+  {
+    "name": "users pagination object is ignored",
+    "status": 200,
+    "body": [
+      {
+        "blocked": false,
+        "confirmed": true,
+        "email": "ann@example.test",
+        "provider": "local",
+        "username": "ann"
+      },
+      {
+        "blocked": true,
+        "confirmed": true,
+        "email": "bob@example.test",
+        "provider": "local",
+        "username": "bob"
+      },
+      {
+        "blocked": false,
+        "confirmed": true,
+        "email": "cat@example.test",
+        "provider": "local",
+        "username": "cat"
+      }
+    ]
+  },
+  {
+    "name": "users limited with fields",
+    "status": 200,
+    "body": [
+      {
+        "username": "ann"
+      }
+    ]
+  },
+  {
+    "name": "users count ignores start and limit",
+    "status": 200,
+    "body": 3
+  },
+  {
+    "name": "users count checks start",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "convertStartQueryParams expected a positive integer got NaN",
+      "details": {}
+    }
+  },
+  {
+    "name": "users populate role, which the caller may not read",
+    "status": 200,
+    "body": [
+      {
+        "blocked": false,
+        "confirmed": true,
+        "email": "ann@example.test",
+        "provider": "local",
+        "username": "ann"
+      }
+    ]
+  },
+  {
+    "name": "users populate everything",
+    "status": 200,
+    "body": [
+      {
+        "blocked": false,
+        "confirmed": true,
+        "email": "ann@example.test",
+        "provider": "local",
+        "username": "ann"
+      }
+    ]
+  },
+  {
+    "name": "users populate role object",
+    "status": 200,
+    "body": [
+      {
+        "blocked": false,
+        "confirmed": true,
+        "email": "ann@example.test",
+        "provider": "local",
+        "username": "ann"
+      }
+    ]
+  },
+  {
+    "name": "users populate unknown",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid key nope",
+      "details": {
+        "key": "nope",
+        "path": "nope",
+        "source": "query",
+        "param": "populate"
+      }
+    }
+  },
+  {
+    "name": "users populate not a populate",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid populate parameter. Expected a string, an array of strings, a populate object",
+      "details": {}
+    }
+  },
+  {
+    "name": "users filter by role, which the caller may not read",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid key role",
+      "details": {
+        "key": "role",
+        "path": "role",
+        "source": "query",
+        "param": "filters"
+      }
+    }
+  },
+  {
+    "name": "user populate role",
+    "status": 200,
+    "body": {
+      "blocked": false,
+      "confirmed": true,
+      "email": "ann@example.test",
+      "provider": "local",
+      "username": "ann"
+    }
+  },
+  {
+    "name": "user populate unknown",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid key nope",
+      "details": {
+        "key": "nope",
+        "path": "nope",
+        "source": "query",
+        "param": "populate"
+      }
+    }
+  },
+  {
+    "name": "user with an offset finds nothing",
+    "status": 204,
+    "body": ""
+  },
+  {
+    "name": "me populate role",
+    "status": 200,
+    "body": {
+      "blocked": false,
+      "confirmed": true,
+      "email": "ann@example.test",
+      "provider": "local",
+      "username": "ann"
+    }
+  },
+  {
+    "name": "me populate unknown",
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid key nope",
+      "details": {
+        "key": "nope",
+        "path": "nope",
+        "source": "query",
+        "param": "populate"
+      }
+    }
+  },
+  {
+    "name": "full-access token populates the role",
+    "status": 200,
+    "body": [
+      {
+        "blocked": false,
+        "confirmed": true,
+        "email": "ann@example.test",
+        "provider": "local",
+        "role": {
+          "description": "Default role given to authenticated user.",
+          "name": "Authenticated",
+          "type": "authenticated"
+        },
+        "username": "ann"
+      }
+    ]
+  },
+  {
+    "name": "full-access token populate everything",
+    "status": 200,
+    "body": [
+      {
+        "blocked": false,
+        "confirmed": true,
+        "email": "ann@example.test",
+        "provider": "local",
+        "role": {
+          "description": "Default role given to authenticated user.",
+          "name": "Authenticated",
+          "type": "authenticated"
+        },
+        "username": "ann"
+      }
+    ]
+  },
+  {
+    "name": "full-access token role fields",
+    "status": 200,
+    "body": [
+      {
+        "role": {
+          "type": "authenticated"
+        },
+        "username": "ann"
+      }
+    ]
+  },
+  {
+    "name": "full-access token filters by role",
+    "status": 200,
+    "body": 3
+  },
+  {
+    "name": "full-access token reads one with its role",
+    "status": 200,
+    "body": {
+      "role": {
+        "description": "Default role given to authenticated user.",
+        "name": "Authenticated",
+        "type": "authenticated"
+      },
+      "username": "ann"
+    }
+  },
+  {
+    "name": "read-only token populates the role",
+    "status": 200,
+    "body": [
+      {
+        "role": {
+          "description": "Default role given to authenticated user.",
+          "name": "Authenticated",
+          "type": "authenticated"
+        },
+        "username": "ann"
+      }
+    ]
+  },
+  {
+    "name": "token without role find leaves the role out",
+    "status": 200,
+    "body": [
+      {
+        "username": "ann"
+      }
+    ]
+  }
+]

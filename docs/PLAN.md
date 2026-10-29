@@ -631,7 +631,7 @@ Known gaps, for part 2: refresh-token sessions (`/auth/refresh`, `logout`, `sess
 providers (`/connect/:provider`), the public role (grants to unauthenticated callers), and `/roles`
 and `/permissions`, whose roles live in the IR rather than in an editable matrix. Also: `/users`
 ignores pagination and `populate`; a register body takes no extra user fields
-(`register.allowedFields`); email senders default to Laravel's `mail.from` rather than Strapi's
+(`register.allowedFields`) (both closed in Phase 31); email senders default to Laravel's `mail.from` rather than Strapi's
 no-reply address; the strapi storage layout keeps register, login and `/users/me` only (reported).
 
 ---
@@ -1115,6 +1115,21 @@ have no position yet, so they list after the ordered ones.
 
 Part 3's exit: `link-order-vectors.json` (27 checks, recorded from strapi-php) passes in the
 `strapi-api` boot job on all three databases.
+
+**Part 4 — register's allowed fields and `/users` queries.** `CAMIS_REGISTER_ALLOWED_FIELDS`
+(comma separated) is users-permissions' `register.allowedFields`: register takes those keys too,
+stores the ones the user has a column for (`blocked`) and drops the rest, as Strapi does; any
+other key is still "Invalid parameters". `/users` takes Strapi's top-level `start` and `limit`
+(a limit of -1 or 0 is none) with its messages for bad values; `page` and `pageSize` are checked
+but not applied, and `pagination[...]` is ignored, as on Strapi. The list, read and `/users/me`
+take `populate`, and the count checks `start` and `limit`. The user's role populates for an API
+token that may read roles (`plugin::users-permissions.role.find`), rendered by a new
+`RoleSerializer`; a session never reaches it, as no grant gives a role `role.find`. Spatie keeps
+only a role's type, so a filter or sort on its `name` or `description` reads the type.
+
+Part 4's exit: `user-query-vectors.json` (43 checks, recorded from strapi-php with
+`allowedFields: ['blocked', 'nickname']`) passes in the `strapi-api` boot job on all three
+databases.
 
 ---
 

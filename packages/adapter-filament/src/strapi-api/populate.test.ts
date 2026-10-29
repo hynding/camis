@@ -109,11 +109,11 @@ describe("serializer relation and component maps", () => {
       "'readers' => ['relation' => 'readers', 'kind' => 'belongsToMany', 'model' => \\App\\Models\\User::class, 'serializer' => UserSerializer::class, 'foreignKey' => null, 'uid' => 'plugin::users-permissions.user', 'holder' => 'self', 'draftPublish' => false, 'localized' => false, 'order' => 'user_ord', 'inverseOrder' => 'review_ord'],",
     );
   });
-  it("renders a populated user as users-permissions does, its role a relation no grant reaches", () => {
+  it("renders a populated user as users-permissions does, its role one relation only a token reaches", () => {
     const user = serializer("User");
     expect(user).toContain("public const FIELDS = StrapiUsers::FIELDS + [");
     expect(user).toContain(
-      "'role' => ['relation' => 'roles', 'kind' => 'belongsToMany', 'model' => \\Spatie\\Permission\\Models\\Role::class,",
+      "'role' => ['relation' => 'roles', 'kind' => 'morphToOne', 'model' => \\Spatie\\Permission\\Models\\Role::class, 'serializer' => \\App\\Http\\Serializers\\RoleSerializer::class,",
     );
     expect(user).toContain("return StrapiUsers::wire($m);");
   });

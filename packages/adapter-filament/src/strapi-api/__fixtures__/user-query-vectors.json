@@ -1,0 +1,307 @@
+{
+  "about": "users-permissions' register allowedFields (the runtime configured with blocked and nickname allowed) and the /users routes' start/limit pagination and populate, recorded from strapi-php. Run on an empty database.",
+  "steps": [
+    {
+      "hook": [
+        "role",
+        "authenticated",
+        "plugin::users-permissions.user.find",
+        "plugin::users-permissions.user.findOne",
+        "plugin::users-permissions.user.count",
+        "plugin::users-permissions.user.me"
+      ]
+    },
+    {
+      "name": "register",
+      "path": "/auth/local/register",
+      "body": {
+        "username": "ann",
+        "email": "ann@example.test",
+        "password": "secret1"
+      },
+      "save": "ann",
+      "keep": {
+        "annId": "user.id"
+      }
+    },
+    {
+      "name": "register with an allowed field the user has",
+      "path": "/auth/local/register",
+      "body": {
+        "username": "bob",
+        "email": "bob@example.test",
+        "password": "secret1",
+        "blocked": true
+      }
+    },
+    {
+      "name": "the allowed field was kept",
+      "path": "/auth/local",
+      "body": {
+        "identifier": "bob",
+        "password": "secret1"
+      }
+    },
+    {
+      "name": "register with an allowed key the user lacks",
+      "path": "/auth/local/register",
+      "body": {
+        "username": "cat",
+        "email": "cat@example.test",
+        "password": "secret1",
+        "nickname": "kitty"
+      }
+    },
+    {
+      "name": "register with a key not allowed",
+      "path": "/auth/local/register",
+      "body": {
+        "username": "dan",
+        "email": "dan@example.test",
+        "password": "secret1",
+        "age": 3,
+        "role": 1
+      }
+    },
+    {
+      "name": "users",
+      "method": "GET",
+      "path": "/users?sort=id",
+      "as": "ann"
+    },
+    {
+      "name": "users limited",
+      "method": "GET",
+      "path": "/users?sort=id&limit=2",
+      "as": "ann"
+    },
+    {
+      "name": "users from an offset",
+      "method": "GET",
+      "path": "/users?sort=id&start=1",
+      "as": "ann"
+    },
+    {
+      "name": "users offset and limit",
+      "method": "GET",
+      "path": "/users?sort=username:desc&start=1&limit=1",
+      "as": "ann"
+    },
+    {
+      "name": "users past the end",
+      "method": "GET",
+      "path": "/users?sort=id&start=5&limit=1",
+      "as": "ann"
+    },
+    {
+      "name": "users limit -1 is every user",
+      "method": "GET",
+      "path": "/users?sort=id&limit=-1",
+      "as": "ann"
+    },
+    {
+      "name": "users limit 0 is every user",
+      "method": "GET",
+      "path": "/users?sort=id&limit=0",
+      "as": "ann"
+    },
+    {
+      "name": "users empty start and limit",
+      "method": "GET",
+      "path": "/users?sort=id&start=&limit=",
+      "as": "ann"
+    },
+    {
+      "name": "users start not a number",
+      "method": "GET",
+      "path": "/users?start=abc",
+      "as": "ann"
+    },
+    {
+      "name": "users start negative",
+      "method": "GET",
+      "path": "/users?start=-1",
+      "as": "ann"
+    },
+    {
+      "name": "users limit not an integer",
+      "method": "GET",
+      "path": "/users?limit=1.5",
+      "as": "ann"
+    },
+    {
+      "name": "users limit below -1",
+      "method": "GET",
+      "path": "/users?limit=-2",
+      "as": "ann"
+    },
+    {
+      "name": "users page is checked but not applied",
+      "method": "GET",
+      "path": "/users?sort=id&page=2&pageSize=1",
+      "as": "ann"
+    },
+    {
+      "name": "users page 0",
+      "method": "GET",
+      "path": "/users?page=0",
+      "as": "ann"
+    },
+    {
+      "name": "users pageSize not a number",
+      "method": "GET",
+      "path": "/users?pageSize=abc",
+      "as": "ann"
+    },
+    {
+      "name": "users page with start",
+      "method": "GET",
+      "path": "/users?page=1&start=0",
+      "as": "ann"
+    },
+    {
+      "name": "users pagination object is ignored",
+      "method": "GET",
+      "path": "/users?sort=id&pagination[page]=2&pagination[pageSize]=1",
+      "as": "ann"
+    },
+    {
+      "name": "users limited with fields",
+      "method": "GET",
+      "path": "/users?sort=id&limit=1&fields[0]=username",
+      "as": "ann"
+    },
+    {
+      "name": "users count ignores start and limit",
+      "method": "GET",
+      "path": "/users/count?start=1&limit=1",
+      "as": "ann"
+    },
+    {
+      "name": "users count checks start",
+      "method": "GET",
+      "path": "/users/count?start=abc",
+      "as": "ann"
+    },
+    {
+      "name": "users populate role, which the caller may not read",
+      "method": "GET",
+      "path": "/users?sort=id&limit=1&populate=role",
+      "as": "ann"
+    },
+    {
+      "name": "users populate everything",
+      "method": "GET",
+      "path": "/users?sort=id&limit=1&populate=*",
+      "as": "ann"
+    },
+    {
+      "name": "users populate role object",
+      "method": "GET",
+      "path": "/users?sort=id&limit=1&populate[role][fields][0]=name",
+      "as": "ann"
+    },
+    {
+      "name": "users populate unknown",
+      "method": "GET",
+      "path": "/users?populate=nope",
+      "as": "ann"
+    },
+    {
+      "name": "users populate not a populate",
+      "method": "GET",
+      "path": "/users?populate[0][x]=1",
+      "as": "ann"
+    },
+    {
+      "name": "users filter by role, which the caller may not read",
+      "method": "GET",
+      "path": "/users?filters[role][type][$eq]=authenticated",
+      "as": "ann"
+    },
+    {
+      "name": "user populate role",
+      "method": "GET",
+      "path": "/users/$annId?populate=role",
+      "as": "ann"
+    },
+    {
+      "name": "user populate unknown",
+      "method": "GET",
+      "path": "/users/$annId?populate=nope",
+      "as": "ann"
+    },
+    {
+      "name": "user with an offset finds nothing",
+      "method": "GET",
+      "path": "/users/$annId?start=1",
+      "as": "ann"
+    },
+    {
+      "name": "me populate role",
+      "method": "GET",
+      "path": "/users/me?populate=role",
+      "as": "ann"
+    },
+    {
+      "name": "me populate unknown",
+      "method": "GET",
+      "path": "/users/me?populate=nope",
+      "as": "ann"
+    },
+    {
+      "hook": ["token", "full", "full-access"],
+      "into": "full"
+    },
+    {
+      "hook": ["token", "reader", "read-only"],
+      "into": "reader"
+    },
+    {
+      "hook": ["token", "lister", "custom", "plugin::users-permissions.user.find"],
+      "into": "lister"
+    },
+    {
+      "name": "full-access token populates the role",
+      "method": "GET",
+      "path": "/users?sort=id&limit=1&populate=role",
+      "bearer": "$full"
+    },
+    {
+      "name": "full-access token populate everything",
+      "method": "GET",
+      "path": "/users?sort=id&limit=1&populate=*",
+      "bearer": "$full"
+    },
+    {
+      "name": "full-access token role fields",
+      "method": "GET",
+      "path": "/users?sort=id&limit=1&fields[0]=username&populate[role][fields][0]=type",
+      "bearer": "$full"
+    },
+    {
+      "name": "full-access token filters by role",
+      "method": "GET",
+      "path": "/users/count?filters[role][type][$eq]=authenticated",
+      "bearer": "$full"
+    },
+    {
+      "name": "full-access token reads one with its role",
+      "method": "GET",
+      "path": "/users/$annId?populate=role&fields[0]=username",
+      "bearer": "$full"
+    },
+    {
+      "name": "read-only token populates the role",
+      "method": "GET",
+      "path": "/users?sort=id&limit=1&fields[0]=username&populate=role",
+      "bearer": "$reader"
+    },
+    {
+      "name": "token without role find leaves the role out",
+      "method": "GET",
+      "path": "/users?sort=id&limit=1&fields[0]=username&populate=role",
+      "bearer": "$lister"
+    }
+  ]
+}

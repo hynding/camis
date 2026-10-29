@@ -150,6 +150,7 @@ import {
   emitStrapiSettings,
   emitStrapiUsers,
   emitUserSerializer,
+  emitRoleSerializer,
   emitUserController,
   emitUsersPermissionsMigration,
   SETTINGS_MIGRATION_PATH,
@@ -438,6 +439,9 @@ const usersPermissionsFiles = (
 ): GeneratedFile[] => [
   { path: "app/Support/StrapiUsers.php", content: emitStrapiUsers() },
   { path: "app/Http/Serializers/UserSerializer.php", content: emitUserSerializer(secured) },
+  ...(secured
+    ? [{ path: "app/Http/Serializers/RoleSerializer.php", content: emitRoleSerializer() }]
+    : []),
   { path: "app/Support/StrapiSettings.php", content: emitStrapiSettings() },
   {
     path: "app/Http/Controllers/Api/UserController.php",

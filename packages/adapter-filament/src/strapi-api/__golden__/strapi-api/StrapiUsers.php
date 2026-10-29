@@ -7,6 +7,7 @@ namespace App\Support;
 
 use App\Models\Concerns\HasDocumentId;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Mail\Message;
 use Illuminate\Support\Facades\Mail;
 
@@ -128,6 +129,43 @@ final class StrapiUsers
         return new StrapiError(400, 'ApplicationError', $message);
     }
 
+    /**
+     * The top-level start and limit the /users routes take, through Strapi's query-params
+     * transform: page and pageSize are checked but never applied, and a limit of -1 or 0 is none.
+     */
+    public static function paginate(Builder $query, array $params): void
+    {
+        $page = $params['page'] ?? null;
+        $pageSize = $params['pageSize'] ?? null;
+        $start = $params['start'] ?? null;
+        $limit = $params['limit'] ?? null;
+        if (($page !== null || $pageSize !== null) && ($start !== null || $limit !== null)) {
+            throw new StrapiError(400, 'PaginationError', 'Invalid pagination attributes. The page parameters are incorrect and must be in the pagination object');
+        }
+        foreach (['page' => $page, 'pageSize' => $pageSize] as $name => $value) {
+            $number = self::number($value);
+            if ($value !== null && (! self::isInteger($number) || $number <= 0)) {
+                throw new StrapiError(400, 'PaginationError', "Invalid '{$name}' parameter. Expected an integer > 0, received: ".(is_scalar($value) ? (string) $value : json_encode($value)));
+            }
+        }
+        $offset = $start === null ? 0 : self::number($start);
+        if (! self::isInteger($offset) || $offset < 0) {
+            throw StrapiError::validation('convertStartQueryParams expected a positive integer got '.self::printed($offset));
+        }
+        $count = $limit === null ? -1 : self::number($limit);
+        if (! self::isInteger($count) || $count < -1) {
+            throw StrapiError::validation('convertLimitQueryParams expected a positive integer got '.self::printed($count));
+        }
+        if ($count > 0) {
+            $query->limit((int) $count);
+        } elseif ($offset > 0) {
+            $query->limit(PHP_INT_MAX); // MySQL accepts no OFFSET without a LIMIT
+        }
+        if ($offset > 0) {
+            $query->offset((int) $offset);
+        }
+    }
+
     private static function check(array $body, string $field, array $checks): ?string
     {
         $value = $body[$field] ?? null;
@@ -153,6 +191,30 @@ final class StrapiUsers
         }
 
         return null;
+    }
+
+    /** JavaScript's Number() of a query value: '' is 0, and what does not parse is NaN. */
+    private static function number(mixed $value): int|float
+    {
+        if (is_int($value) || is_float($value)) {
+            return $value;
+        }
+        if (! is_string($value)) {
+            return NAN;
+        }
+        $value = trim($value);
+
+        return $value === '' ? 0 : (is_numeric($value) ? $value + 0 : NAN);
+    }
+
+    private static function isInteger(int|float $number): bool
+    {
+        return is_int($number) || (is_finite($number) && floor($number) === $number);
+    }
+
+    private static function printed(int|float $number): string
+    {
+        return is_nan($number) ? 'NaN' : (self::isInteger($number) ? (string) (int) $number : (string) $number);
     }
 
     private static function send(User $user, array $template, array $variables): void
