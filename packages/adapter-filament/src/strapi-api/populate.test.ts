@@ -279,3 +279,59 @@ describe("populate conformance vectors", () => {
     },
   );
 });
+
+// Strapi's populate reaches one level: `populate=*` (or naming a component) sends the component's
+// own scalars, but its nested components and media only when the component's populate names them.
+describe.skipIf(!hasPhp())("populated components, run by PHP", () => {
+  let dir = "";
+  beforeAll(() => {
+    dir = mkdtempSync(join(tmpdir(), "camis-populate-components-"));
+    writeFileSync(join(dir, "StrapiPopulate.php"), emitStrapiPopulate());
+  });
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+  const SERIALIZER = `final class PeriodSerializer {
+    public const FIELDS = [
+      'period.label' => ['column' => 'period_label', 'type' => 'string'],
+      'period.picture' => ['column' => 'period_picture', 'type' => 'media'],
+      'period.note.text' => ['column' => 'period_note_text', 'type' => 'string'],
+      'period.dishes' => ['component' => 'periodDishes', 'fields' => [
+        'name' => ['column' => 'name', 'type' => 'string'],
+      ]],
+      'services' => ['component' => 'services', 'fields' => [
+        'name' => ['column' => 'name', 'type' => 'string'],
+        'media' => ['column' => 'media', 'type' => 'media'],
+      ]],
+    ];
+    public const COMPONENTS = ['period', 'services'];
+    public const ZONES = [];
+  }`;
+  const PERIOD = {
+    label: "Summer",
+    picture: "a.png",
+    note: { text: "closed" },
+    dishes: [{ id: 1, name: "Gelato" }],
+  };
+  const SERVICES = [{ id: 4, name: "Terrace", media: "b.png" }];
+
+  const component = (key: string, value: unknown, sub: unknown): unknown => {
+    const script = `require '${dir}/StrapiPopulate.php'; ${SERIALIZER}
+      $component = Closure::bind(fn (...$a) => static::component(...$a), null, App\\Support\\StrapiPopulate::class);
+      echo json_encode($component(json_decode('${JSON.stringify(value)}', true), '${key}', json_decode('${JSON.stringify(sub)}', true), PeriodSerializer::class));`;
+    return JSON.parse(execFileSync("php", ["-r", script], { encoding: "utf8" }));
+  };
+
+  it("sends an embedded component's scalars, not its nested components or media", () => {
+    expect(component("period", PERIOD, [])).toEqual({ label: "Summer" });
+  });
+  it("sends a repeatable component's items with their ids, not their media", () => {
+    expect(component("services", SERVICES, [])).toEqual([{ id: 4, name: "Terrace" }]);
+  });
+  it("sends what the component's own populate names", () => {
+    expect(component("period", PERIOD, { populate: { dishes: [] } })).toEqual({
+      label: "Summer",
+      dishes: [{ id: 1, name: "Gelato" }],
+    });
+    expect(component("period", PERIOD, { populate: "*" })).toEqual(PERIOD);
+  });
+});

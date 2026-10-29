@@ -39,6 +39,26 @@ const nestedDoc: IrDocument = normalize({
   ],
 });
 
+const zonedDoc: IrDocument = normalize({
+  version: 1,
+  contentTypes: [
+    {
+      name: "Page",
+      kind: "collection",
+      fields: [{ type: "dynamicZone", name: "sections", components: ["Banner"] }],
+    },
+  ],
+  components: [
+    {
+      name: "Banner",
+      fields: [
+        { type: "string", name: "title" },
+        { type: "media", name: "picture" },
+      ],
+    },
+  ],
+});
+
 const stampedDoc: IrDocument = normalize({
   version: 1,
   contentTypes: [
@@ -162,5 +182,17 @@ describe("emitSerializer", () => {
     expect(php).toContain("'seen_at' => self::epoch(self::dig($data, ['seenAt'])),");
     expect(php).toContain("private static function epoch(mixed $value): mixed");
     expect(emitSerializer(shape("Note"))).not.toContain("function epoch");
+  });
+  // Strapi sends every component it stores as a row with that row's id.
+  it("sends a repeatable component's items with their ids", () => {
+    const php = emitSerializer(shape("ActivitySession"));
+    expect(php).toMatch(
+      /'quantities' => \$m->quantities->map\(fn \(\$c\) => \[\n\s+'id' => \$c->id,/,
+    );
+  });
+  // A zone item's media, like its own components, waits for the zone's populate to name it.
+  it("lists a zone member's media among the keys its populate names", () => {
+    const php = emitSerializer(wireShape(zonedDoc, zonedDoc.contentTypes[0]!, []));
+    expect(php).toContain("'components' => ['picture']");
   });
 });
