@@ -1,6 +1,12 @@
 import type { GeneratedFile } from "@camis/adapter-kernel";
 import type { CapabilityGap, ContentType, IrDocument } from "@camis/ir-schema";
 import type { IrBundle } from "@camis/permissions";
+import {
+  emitStrapiImportTokensCommand,
+  emitStrapiTokenImport,
+  TOKEN_IMPORT_COMMAND_PATH,
+  TOKEN_IMPORT_ENGINE_PATH,
+} from "./token-import";
 import { filamentNames } from "../names";
 import { projectFilamentPermissions } from "../permissions/project";
 import {
@@ -389,7 +395,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
       { path: DOCUMENTATION_PAGE_PATH, content: emitDocumentationPage(projectName) },
     );
   }
-  const transfer = emitStrapiTransferMap({
+  const transferMap = emitStrapiTransferMap({
     emitted,
     shapes,
     userType: doc.contentTypes.find((ct) => ct.builtin === "user")?.name,
@@ -398,9 +404,8 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     defaultRole: bundle.defaultRole,
     fileType: input.media?.name,
   });
-  gaps.push(...transfer.gaps);
   files.push(
-    { path: TRANSFER_MAP_PATH, content: transfer.content },
+    { path: TRANSFER_MAP_PATH, content: transferMap },
     { path: IMPORT_ENGINE_PATH, content: emitStrapiImport() },
     { path: TRANSFER_CIPHER_PATH, content: emitStrapiTransferCipher() },
     {
@@ -410,6 +415,8 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
         .join(""),
     },
     { path: IMPORT_COMMAND_PATH, content: emitStrapiImportCommand() },
+    { path: TOKEN_IMPORT_ENGINE_PATH, content: emitStrapiTokenImport() },
+    { path: TOKEN_IMPORT_COMMAND_PATH, content: emitStrapiImportTokensCommand() },
     { path: EXPORT_ENGINE_PATH, content: emitStrapiExport() },
     { path: EXPORT_COMMAND_PATH, content: emitStrapiExportCommand() },
     { path: TRANSFER_ROUTES_PATH, content: emitTransferRoutes(secured) },

@@ -294,6 +294,9 @@ final class StrapiImport
         if (isset($attribute['repeatable'])) {
             return [$attribute['repeatable']];
         }
+        if (isset($attribute['component'])) {
+            return array_map(fn (array $child): string => $child['repeatable'], $attribute['children'] ?? []);
+        }
 
         return isset($attribute['zone']) ? array_values(array_map(fn (array $m): string => $m['relation'], $attribute['zone'])) : [];
     }
@@ -343,6 +346,62 @@ final class StrapiImport
             DB::table($table)->where('id', $id)->update([$column => $target]);
         }
         $this->links($links);
+        $this->compareRoles($entities, $links);
+    }
+
+    /**
+     * Roles are the IR's, so an archive's permissions are not imported: a role this app lacks, and
+     * the Content API actions a role is granted on one side only (on the types both have), are
+     * reported instead.
+     *
+     * @param list<array<string, mixed>> $entities
+     * @param list<array<string, mixed>> $links
+     */
+    private function compareRoles(array $entities, array $links): void
+    {
+        $actions = [];
+        $types = [];
+        foreach ($entities as $entity) {
+            if ($entity['type'] === 'plugin::users-permissions.permission') {
+                $actions[$entity['id']] = (string) ($entity['data']['action'] ?? '');
+            } elseif ($entity['type'] === 'plugin::users-permissions.role') {
+                $types[$entity['id']] = (string) ($entity['data']['type'] ?? '');
+            }
+        }
+        $archived = array_fill_keys(array_values($types), []);
+        foreach ($links as $link) {
+            if ($link['left']['type'] === 'plugin::users-permissions.permission' && isset($actions[$link['left']['ref']], $types[$link['right']['ref']])) {
+                $archived[$types[$link['right']['ref']]][] = $actions[$link['left']['ref']];
+            }
+        }
+        if (! class_exists(Role::class)) {
+            return;
+        }
+        $mapped = array_merge(...array_values(StrapiTransferMap::ACTIONS));
+        // A type only this app has is not the archive's to grant.
+        $archivedTypes = array_column($this->lines('schemas'), 'uid');
+        $shared = fn (string $action): bool => str_starts_with($action, 'plugin::') || in_array(substr($action, 0, (int) strrpos($action, '.')), $archivedTypes, true);
+        foreach ($archived as $type => $granted) {
+            $role = Role::query()->where('name', $type)->first();
+            if ($role === null) {
+                $this->skipped["role {$type}"] ??= "this project has no such role; roles are the IR's, and 'camis import strapi <project> --roles-from <archive>' brings an export's in";
+
+                continue;
+            }
+            $ours = array_merge(...array_map(fn (string $permission): array => StrapiTransferMap::ACTIONS[$permission] ?? [], $role->permissions->pluck('name')->all()));
+            $theirs = array_values(array_intersect(array_unique($granted), $mapped));
+            $only = array_values(array_unique(array_diff($theirs, $ours)));
+            $missing = array_values(array_unique(array_diff(array_filter($ours, $shared), $theirs)));
+            sort($only);
+            sort($missing);
+            $differences = [
+                ...($only === [] ? [] : ['the archive also grants ' . implode(', ', $only)]),
+                ...($missing === [] ? [] : ['this project also grants ' . implode(', ', $missing)]),
+            ];
+            if ($differences !== []) {
+                $this->skipped["role {$type}'s permissions"] = implode('; ', $differences) . ". Roles are the IR's: change them there and rebuild";
+            }
+        }
     }
 
     /**
@@ -407,6 +466,9 @@ final class StrapiImport
             } elseif (isset($attribute['component'])) {
                 foreach ($attribute['component'] as $scalar) {
                     $row[$scalar['column']] = self::value(is_array($value) ? self::at($value, $scalar['key']) : null, $scalar['type']);
+                }
+                foreach ($attribute['children'] ?? [] as $child) {
+                    $children[$key . '.' . implode('.', $child['key'])] = [$child, is_array($value) ? self::at($value, $child['key']) : null];
                 }
             } else {
                 $children[$key] = [$attribute, $value];
