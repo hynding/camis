@@ -94,9 +94,16 @@ final class StrapiQuery
         }
     }
 
-    /** Whether the caller may read the target of a FIELDS relation entry at all. */
+    /**
+     * Whether the caller may read the target of a FIELDS relation entry at all. A media field is
+     * read with its entry, as Strapi reads it: the file grants authorize the media library only.
+     */
     public static function readable(array $relation, ?Authenticatable $viewer): bool
     {
+        if (in_array($relation['kind'] ?? null, ['mediaOne', 'mediaMany'], true)) {
+            return true;
+        }
+
         return self::$unrestricted || $viewer === null || Gate::forUser($viewer)->allows('viewAny', $relation['model']);
     }
 

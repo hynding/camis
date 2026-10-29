@@ -180,8 +180,9 @@ final class StrapiPopulate
             return ['count' => true, 'links' => $links, 'wires' => []];
         }
         $targets = new Collection();
+        $media = in_array($relation['kind'], ['mediaOne', 'mediaMany'], true);
         foreach ($links as $key => $linked) {
-            $visible = array_values(array_filter($linked, fn (Model $target) => StrapiQuery::visible($target, $viewer)));
+            $visible = $media ? $linked : array_values(array_filter($linked, fn (Model $target) => StrapiQuery::visible($target, $viewer)));
             foreach ($visible as $target) {
                 $targets[$target->getKey()] = $target;
             }

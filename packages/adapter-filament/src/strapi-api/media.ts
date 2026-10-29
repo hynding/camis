@@ -54,7 +54,7 @@ export const mediaPlan = (
             feature: "media",
             location: { contentType: file.name },
             severity: "downgrade",
-            message: `no role is granted the media library${declared === undefined ? ` (declare a content type with builtin: "file" to grant it)` : ` ("${file.name}")`}, so its files cannot be uploaded, listed or linked through the API`,
+            message: `no role is granted the media library${declared === undefined ? ` (declare a content type with builtin: "file" to grant it)` : ` ("${file.name}")`}, so its files cannot be uploaded or listed through the API (entries still read and link their media, as on Strapi)`,
           },
         ]
       : [];
