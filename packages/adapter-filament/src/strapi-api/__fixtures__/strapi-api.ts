@@ -199,6 +199,16 @@ export const strapiApiBundle: IrBundle = {
           { type: "string", name: "title", required: true },
           { type: "relation", name: "reviewer", relationKind: "manyToOne", target: "User" },
           { type: "relation", name: "readers", relationKind: "manyToMany", target: "User" },
+          // Private fields (private-field-vectors.json): written, never answered, filtered, sorted
+          // or populated.
+          { type: "text", name: "moderatorNote", private: true },
+          {
+            type: "relation",
+            name: "flaggedBy",
+            relationKind: "manyToOne",
+            target: "Author",
+            private: true,
+          },
         ],
       },
       // Relation targets for Book: a to-one with an inverse side, and a to-many without one.

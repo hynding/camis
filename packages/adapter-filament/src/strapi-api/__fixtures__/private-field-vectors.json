@@ -1,0 +1,142 @@
+{
+  "about": "Strapi 5 private attributes, checked against strapi-php: Review.moderatorNote (text) and Review.flaggedBy (a relation to Author) are written but never answered, filtered, sorted, selected or populated. Run on an empty database with the token of a caller whose role may write reviews and authors. '@type:Name' is that row's documentId, '#type:Name' its numeric id. Responses are compared after dropping the id, documentId, createdAt, updatedAt and publishedAt keys.",
+  "seed": [
+    {
+      "path": "/authors",
+      "as": "authors:Ann",
+      "data": {
+        "name": "Ann"
+      }
+    },
+    {
+      "path": "/reviews",
+      "as": "reviews:First",
+      "data": {
+        "title": "First",
+        "moderatorNote": "looks fine",
+        "flaggedBy": "@authors:Ann"
+      }
+    },
+    {
+      "path": "/reviews",
+      "as": "reviews:Second",
+      "data": {
+        "title": "Second"
+      }
+    }
+  ],
+  "reads": [
+    {
+      "name": "a list leaves the private fields out",
+      "path": "/reviews",
+      "query": "sort=title"
+    },
+    {
+      "name": "one entry leaves them out too",
+      "path": "/reviews/@reviews:First"
+    },
+    {
+      "name": "populate=* skips the private relation",
+      "path": "/reviews/@reviews:First",
+      "query": "populate=*"
+    },
+    {
+      "name": "populate naming the private relation",
+      "path": "/reviews",
+      "query": "populate=flaggedBy"
+    },
+    {
+      "name": "populate object naming the private relation",
+      "path": "/reviews",
+      "query": "populate[flaggedBy][fields][0]=name"
+    },
+    {
+      "name": "fields naming the private field",
+      "path": "/reviews",
+      "query": "fields[0]=title&fields[1]=moderatorNote"
+    },
+    {
+      "name": "filter by the private field",
+      "path": "/reviews",
+      "query": "filters[moderatorNote][$eq]=looks%20fine"
+    },
+    {
+      "name": "filter through the private relation",
+      "path": "/reviews",
+      "query": "filters[flaggedBy][name][$eq]=Ann"
+    },
+    {
+      "name": "filter by the private relation's id",
+      "path": "/reviews",
+      "query": "filters[flaggedBy][id][$notNull]=true"
+    },
+    {
+      "name": "filter by the private field inside $or",
+      "path": "/reviews",
+      "query": "filters[$or][0][title][$eq]=First&filters[$or][1][moderatorNote][$eq]=x"
+    },
+    {
+      "name": "sort by the private field",
+      "path": "/reviews",
+      "query": "sort=moderatorNote"
+    },
+    {
+      "name": "sort by the private field, as an array",
+      "path": "/reviews",
+      "query": "sort[0]=title&sort[1]=moderatorNote:desc"
+    },
+    {
+      "name": "sort through the private relation",
+      "path": "/reviews",
+      "query": "sort=flaggedBy.name"
+    },
+    {
+      "name": "GraphQL: a private field is not on the type",
+      "graphql": "{ reviews { title moderatorNote } }"
+    },
+    {
+      "name": "GraphQL: a private relation is not on the type",
+      "graphql": "{ reviews { title flaggedBy { name } } }"
+    },
+    {
+      "name": "GraphQL: nor among the filters",
+      "graphql": "{ reviews(filters: { moderatorNote: { eq: \"looks fine\" } }) { title } }"
+    }
+  ],
+  "writes": [
+    {
+      "name": "create with the private fields answers without them",
+      "path": "/reviews",
+      "as": "reviews:Third",
+      "data": {
+        "title": "Third",
+        "moderatorNote": "spam?",
+        "flaggedBy": "#authors:Ann"
+      }
+    },
+    {
+      "name": "update a private field",
+      "method": "PUT",
+      "path": "/reviews/@reviews:Third",
+      "data": {
+        "moderatorNote": "not spam"
+      }
+    },
+    {
+      "name": "unlink the private relation",
+      "method": "PUT",
+      "path": "/reviews/@reviews:Third",
+      "query": "populate=*",
+      "data": {
+        "flaggedBy": null
+      }
+    },
+    {
+      "name": "GraphQL: create with the private fields, which the input takes",
+      "graphql": "mutation Make($author: ID) { createReview(data: { title: \"Fourth\", moderatorNote: \"via graphql\", flaggedBy: $author }) { title } }",
+      "variables": {
+        "author": "@authors:Ann"
+      }
+    }
+  ]
+}

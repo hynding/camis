@@ -194,3 +194,68 @@ describe("emitSerializer", () => {
     expect(php).toContain("'components' => ['picture']");
   });
 });
+
+describe("private fields", () => {
+  const privateDoc: IrDocument = normalize({
+    version: 1,
+    contentTypes: [
+      {
+        name: "Review",
+        kind: "collection",
+        fields: [
+          { type: "string", name: "title" },
+          { type: "text", name: "moderatorNote", private: true },
+          { type: "component", name: "score", component: "Score", repeatable: false },
+          { type: "component", name: "audits", component: "Score", repeatable: true },
+          {
+            type: "relation",
+            name: "flaggedBy",
+            relationKind: "manyToOne",
+            target: "Author",
+            private: true,
+          },
+        ],
+      },
+      { name: "Author", kind: "collection", fields: [{ type: "string", name: "name" }] },
+    ],
+    components: [
+      {
+        name: "Score",
+        fields: [
+          { type: "integer", name: "value" },
+          { type: "string", name: "reason", private: true },
+        ],
+      },
+    ],
+  });
+  const review = privateDoc.contentTypes.find((c) => c.name === "Review")!;
+  const php = emitSerializer(wireShape(privateDoc, review, []));
+
+  it("never answers with a private field, top level or inside a component", () => {
+    const toWire = php.slice(php.indexOf("function toWire"), php.indexOf("function fromWire"));
+    expect(toWire).toContain("'title' =>");
+    expect(toWire).toContain("'value' =>");
+    expect(toWire).not.toContain("moderator_note");
+    expect(toWire).not.toContain("'reason'");
+  });
+
+  it("still writes them", () => {
+    const fromWire = php.slice(php.indexOf("function fromWire"));
+    expect(fromWire).toContain("'moderator_note' => self::dig($data, ['moderatorNote'])");
+    expect(fromWire).toContain("'score_reason' => self::dig($data, ['score', 'reason'])");
+    expect(fromWire).toContain("'reason' => self::dig($row, ['reason'])");
+  });
+
+  it("marks them private where filters, sort, fields and populate look keys up", () => {
+    expect(php).toContain(
+      "'moderatorNote' => ['column' => 'moderator_note', 'type' => 'text', 'private' => true],",
+    );
+    expect(php).toContain(
+      "'score.reason' => ['column' => 'score_reason', 'type' => 'string', 'private' => true],",
+    );
+    expect(php).toContain(
+      "'reason' => ['column' => 'reason', 'type' => 'string', 'private' => true],",
+    );
+    expect(php).toMatch(/'flaggedBy' => \['relation' => 'flaggedBy', .*'private' => true\],/);
+  });
+});

@@ -203,6 +203,22 @@ jobs:
           F=../packages/adapter-filament/src/strapi-api/__fixtures__
           node ../packages/adapter-filament/scripts/strapi-populate-vectors.mjs http://127.0.0.1:8765/api \
             --token "$T" --vectors $F/user-relation-vectors.json --expected $F/user-relation-vectors.expected.json
+      - name: Strapi private fields, REST and GraphQL (recorded from strapi-php)
+        run: |
+          cd app
+          php artisan migrate:fresh --force
+          php artisan db:seed --class="Database\\Seeders\\RolePermissionSeeder" --force
+          T=$(curl -s -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' \
+            --data '{"username":"private","email":"private@example.test","password":"secret1"}' \
+            http://127.0.0.1:8765/api/auth/local/register | jq -r .jwt)
+          F=../packages/adapter-filament/src/strapi-api/__fixtures__
+          node ../packages/adapter-filament/scripts/strapi-populate-vectors.mjs http://127.0.0.1:8765/api \
+            --token "$T" --vectors $F/private-field-vectors.json --expected $F/private-field-vectors.expected.json
+          # Never answered, but written: the last writes leave these in the table.
+          note=$(php artisan tinker --execute="echo DB::table('reviews')->where('title', 'Third')->value('moderator_note');")
+          [ "$note" = "not spam" ] || { echo "moderatorNote was not written: '$note'"; exit 1; }
+          note=$(php artisan tinker --execute="echo DB::table('reviews')->where('title', 'Fourth')->value('moderator_note');")
+          [ "$note" = "via graphql" ] || { echo "moderatorNote was not written over GraphQL: '$note'"; exit 1; }
       - name: Strapi link order and connect positions (recorded from strapi-php)
         run: |
           cd app
