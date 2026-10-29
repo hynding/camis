@@ -24,7 +24,7 @@ export interface WireZoneMember {
   relation: string;
   model: string;
   scalars: WireScalar[];
-  /** Its own component keys, which populate inside the zone names. */
+  /** Its own component and media keys, which Strapi sends only when the zone's populate names them. */
   components: string[];
 }
 export interface WireZone {
@@ -145,7 +145,7 @@ export const wireShape = (
           type: s.field.type,
         })),
         components: m.component.fields
-          .filter((f) => f.type === "component")
+          .filter((f) => f.type === "component" || f.type === "media")
           .map((f) => fieldApiName(f)),
       };
     }),

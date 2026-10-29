@@ -400,13 +400,20 @@ final class StrapiPopulate
         return $wire;
     }
 
-    /** A populated component: null or [] when empty, as Strapi sends it, narrowed by its fields. */
+    /**
+     * A populated component: null or [] when empty, as Strapi sends it, without the nested
+     * components and media its own populate does not name, narrowed by its fields.
+     */
     private static function component(mixed $value, string $key, array $sub, string $serializer): ?array
     {
         $repeatable = isset($serializer::FIELDS[$key]['component']);
         if ($value === null) {
             return $repeatable ? [] : null;
         }
+        $own = self::nestedKeys($repeatable ? $serializer::FIELDS[$key]['fields'] : self::within($key, $serializer));
+        $value = $repeatable
+            ? array_map(fn (array $item) => self::inside($item, $sub['populate'] ?? null, $own), $value)
+            : self::inside($value, $sub['populate'] ?? null, $own);
         if (! array_key_exists('fields', $sub)) {
             return $value;
         }
@@ -448,7 +455,7 @@ final class StrapiPopulate
         return $zone;
     }
 
-    /** A zone item without the components of its own that $populate does not name. */
+    /** An item without the components and media of its own that $populate does not name. */
     private static function inside(array $item, mixed $populate, array $own): array
     {
         if ($populate === '*' || $populate === true || $populate === 'true') {
@@ -478,14 +485,34 @@ final class StrapiPopulate
     /** @return list<string> the scalar keys of an embedded component, relative to it */
     private static function embedded(string $key, string $serializer): array
     {
-        $keys = [];
-        foreach (array_keys($serializer::FIELDS) as $path) {
-            if (str_starts_with($path, "{$key}.")) {
-                $keys[] = explode('.', substr($path, strlen($key) + 1))[0];
+        return array_map(fn (string $path) => explode('.', $path)[0], array_keys(self::within($key, $serializer)));
+    }
+
+    /** An embedded component's entries in FIELDS, keyed by their paths relative to it. */
+    private static function within(string $key, string $serializer): array
+    {
+        $fields = [];
+        foreach ($serializer::FIELDS as $path => $field) {
+            if (str_starts_with((string) $path, "{$key}.")) {
+                $fields[substr((string) $path, strlen($key) + 1)] = $field;
             }
         }
 
-        return $keys;
+        return $fields;
+    }
+
+    /** @return list<string> the keys inside a component that only its populate sends: its components and media */
+    private static function nestedKeys(array $fields): array
+    {
+        $keys = [];
+        foreach ($fields as $path => $field) {
+            $segments = explode('.', (string) $path);
+            if (count($segments) > 1 || isset($field['component']) || ($field['type'] ?? null) === 'media') {
+                $keys[] = $segments[0];
+            }
+        }
+
+        return array_values(array_unique($keys));
     }
 }
 `;

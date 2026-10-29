@@ -76,6 +76,7 @@ const toWireBody = (shape: WireShape, indent: string, layout: StorageLayout): st
   for (const s of shape.scalars) insert(root, s.key, read(s, "$m", layout));
   for (const c of shape.children) {
     const inner = node();
+    insert(inner, ["id"], "$c->id");
     for (const s of c.scalars) insert(inner, s.key, read(s, "$c", layout));
     // The child's own row is rendered by `render` one branch level per path segment above
     // it (depth = c.key.length - 1), matching how it indents a nested `self::nested([`
@@ -84,11 +85,10 @@ const toWireBody = (shape: WireShape, indent: string, layout: StorageLayout): st
     const depth = c.key.length;
     const rowIndent = `${indent}${UNIT.repeat(depth)}`;
     const closeIndent = `${indent}${UNIT.repeat(depth - 1)}`;
-    // Drop an all-null row from the list (self::nested → null) rather than emit `[]` for it.
     insert(
       root,
       c.key,
-      `$m->${c.relation}->map(fn ($c) => self::nested([\n${render(inner, rowIndent)}\n${closeIndent}]))->filter(fn ($r) => $r !== null)->values()->all()`,
+      `$m->${c.relation}->map(fn ($c) => [\n${render(inner, rowIndent)}\n${closeIndent}])->all()`,
     );
   }
   if (layout === "laravel")

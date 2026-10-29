@@ -145,11 +145,9 @@ describe("emitSerializer", () => {
     expect(php).toContain("$children['quantities'] = array_map(");
   });
   // A component with no value is null; one with a value sends its own nulls.
-  it("uses self::nested for component/child branches so an all-null branch is null, not []", () => {
+  it("uses self::nested for an embedded component so an all-null one is null, not []", () => {
     const transaction = emitSerializer(shape("Transaction"));
     expect(transaction).toContain("self::nested(");
-    const activitySession = emitSerializer(shape("ActivitySession"));
-    expect(activitySession).toContain("->filter(fn ($r) => $r !== null)->values()->all()");
   });
   it("emits a clean empty $children array and an empty syncChildren body with no children", () => {
     const php = emitSerializer(shape("Transaction"));
