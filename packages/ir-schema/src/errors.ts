@@ -3,6 +3,7 @@ export type IrErrorCode =
   | "invalid_identifier"
   | "empty_enumeration"
   | "invalid_min_max"
+  | "invalid_pattern"
   | "enum_default_not_member"
   | "duplicate_field"
   | "empty_dynamic_zone"

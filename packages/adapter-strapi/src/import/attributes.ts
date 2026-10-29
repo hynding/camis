@@ -29,6 +29,19 @@ const SCALAR_CONSTRAINTS = [
   "multiple",
 ] as const;
 
+// Strapi keeps a private attribute out of every API answer; the IR field keeps it out too.
+const privacy = (attr: Record<string, unknown>): { private?: true } =>
+  attr.private === true ? { private: true } : {};
+
+const isPattern = (source: string): boolean => {
+  try {
+    new RegExp(source);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 const componentName = (uid: unknown): string => irName(String(uid).split(".").slice(1).join("-"));
 
 // A snake_case attribute keeps its name on the API: the IR field is camelCase and names it.
@@ -76,6 +89,7 @@ export const irField = (
       ...named(attribute),
       relationKind: attr.relation,
       target,
+      ...privacy(attr),
     };
     let gap: CapabilityGap | undefined;
     if (attr.inversedBy !== undefined) {
@@ -104,6 +118,7 @@ export const irField = (
         ...named(attribute),
         component: componentName(attr.component),
         repeatable: Boolean(attr.repeatable),
+        ...privacy(attr),
       } as Field,
     };
   }
@@ -114,6 +129,7 @@ export const irField = (
         type: "dynamicZone",
         ...named(attribute),
         components: components.map(componentName),
+        ...privacy(attr),
       } as Field,
     };
   }
@@ -134,12 +150,23 @@ export const irField = (
     };
   }
 
-  const field: Record<string, unknown> = { type: irType, ...named(attribute) };
+  const field: Record<string, unknown> = { type: irType, ...named(attribute), ...privacy(attr) };
   for (const k of SCALAR_CONSTRAINTS) if (attr[k] !== undefined) field[k] = attr[k];
+  let gap: CapabilityGap | undefined;
+  if (typeof attr.regex === "string" && attr.regex !== "") {
+    if (isPattern(attr.regex)) field.pattern = attr.regex;
+    else
+      gap = {
+        feature: "fieldPattern",
+        location: { ...location, field: name },
+        severity: "downgrade",
+        message: `the regex of "${attribute}" is not a regular expression camis can read; the field is imported without it.`,
+      };
+  }
   if (typeof attr.targetField === "string") field.targetField = fieldNameOf(attr.targetField);
   if (irType === "enumeration") field.values = attr.enum;
   if (irType === "media" && Array.isArray(attr.allowedTypes)) {
     field.allowedTypes = fromStrapiMediaKinds(attr.allowedTypes);
   }
-  return { field: field as Field };
+  return { field: field as Field, ...(gap === undefined ? {} : { gap }) };
 };
