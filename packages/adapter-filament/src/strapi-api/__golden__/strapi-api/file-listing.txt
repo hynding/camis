@@ -198,6 +198,7 @@ overwrite app/Models/Category.php
 overwrite app/Models/Concerns/EmitsStrapiEvents.php
 overwrite app/Models/Concerns/HasDocumentId.php
 overwrite app/Models/Concerns/HasDraftAndPublish.php
+overwrite app/Models/Concerns/HasLinkOrder.php
 overwrite app/Models/Concerns/HasLocale.php
 overwrite app/Models/Concerns/HasMedia.php
 overwrite app/Models/File.php
@@ -245,6 +246,7 @@ overwrite app/Support/StrapiError.php
 overwrite app/Support/StrapiExport.php
 overwrite app/Support/StrapiImport.php
 overwrite app/Support/StrapiLinkOrder.php
+overwrite app/Support/StrapiLinkPivot.php
 overwrite app/Support/StrapiLocales.php
 overwrite app/Support/StrapiOAuth.php
 overwrite app/Support/StrapiPopulate.php

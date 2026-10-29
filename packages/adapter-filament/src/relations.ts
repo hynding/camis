@@ -28,10 +28,19 @@ const push = <V>(m: Map<string, V[]>, k: string, v: V): void => {
   m.set(k, a);
 };
 
-const method = (rel: string, name: string, target: string, args: string): RelationMethod => ({
+const method = (
+  rel: string,
+  name: string,
+  target: string,
+  args: string,
+  chain = "",
+): RelationMethod => ({
   import: `${REL_NS}\\${rel}`,
-  php: `    public function ${name}(): ${rel}\n    {\n        return $this->${rel[0]!.toLowerCase() + rel.slice(1)}(${target}::class, ${args});\n    }`,
+  php: `    public function ${name}(): ${rel}\n    {\n        return $this->${rel[0]!.toLowerCase() + rel.slice(1)}(${target}::class, ${args})${chain};\n    }`,
 });
+
+// Links the admin's multi-select (or any attach) writes take the end of both sides' lists.
+const LINK_PIVOT = "->using(\\App\\Support\\StrapiLinkPivot::class)";
 
 type RelationField = Extract<Field, { type: "relation" }>;
 
@@ -63,11 +72,13 @@ const pickable = (
 /**
  * `versioned` names the draft-and-publish content types: their published versions come and go
  * (unpublish deletes one), so a nullable foreign key to such a row unlinks rather than blocks.
+ * `linkOrder` says the pivots keep Strapi's link order (the Strapi API style's `*_ord` columns).
  */
 export const resolveRelations = (
   doc: IrDocument,
   versioned: ReadonlySet<string> = new Set(),
   localized: ReadonlySet<string> = new Set(),
+  linkOrder = false,
 ): ResolvedRelations => {
   // A to-one or a pivot to a row whose version or locale can go away unlinks rather than blocks.
   const removable = (name: string): boolean => versioned.has(name) || localized.has(name);
@@ -144,10 +155,18 @@ export const resolveRelations = (
         const pivot = `${left}_${right}`;
         const ownerFk = `${a}_id`;
         const targetFk = `${b}_id`;
+        // A relation to its own type keeps no order (Strapi's link table names both sides alike).
+        const chain = linkOrder && a !== b ? LINK_PIVOT : "";
         push(
           out.methods,
           owner,
-          method("BelongsToMany", f.name, targetN.model, `'${pivot}', '${ownerFk}', '${targetFk}'`),
+          method(
+            "BelongsToMany",
+            f.name,
+            targetN.model,
+            `'${pivot}', '${ownerFk}', '${targetFk}'`,
+            chain,
+          ),
         );
         push(
           out.formFields,
@@ -163,6 +182,7 @@ export const resolveRelations = (
               f.inverse,
               ownerN.model,
               `'${pivot}', '${targetFk}', '${ownerFk}'`,
+              chain,
             ),
           );
           push(

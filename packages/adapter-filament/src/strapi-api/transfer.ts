@@ -141,6 +141,9 @@ const links = (shape: WireShape, ct: ContentType, userType: string | undefined) 
       relation: r.relation,
       target: r.uid,
       required: r.kind === "belongsTo" && required(ct, r.relation),
+      // Where the archive's link positions go: `left.pos` to order, `right.pos` to inverseOrder.
+      order: r.order?.column ?? null,
+      inverseOrder: r.inverseOrder?.column ?? null,
       ...declaration(declared(r.key, r.relation)),
     };
   }
@@ -152,6 +155,8 @@ const links = (shape: WireShape, ct: ContentType, userType: string | undefined) 
       relation: f.name,
       target: USER_UID,
       required: f.required === true,
+      order: null,
+      inverseOrder: null,
       ...declaration(f),
     };
   }

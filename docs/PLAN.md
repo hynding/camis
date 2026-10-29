@@ -1096,10 +1096,26 @@ migration. A `set` keeps the order given; a `connect` appends, or lands where it
 `App\Support\StrapiRelationsOrderer`, a port of strapi-php's relations orderer, with its strict
 error for a position next to a relation that is not linked. A populate `sort` replaces the order,
 and publishing copies the draft's order. Links made by the Filament admin or by a transfer import
-have no position yet, so they list after the ordered ones.
+have no position yet, so they list after the ordered ones (closed in Part 4).
 
 Part 3's exit: `link-order-vectors.json` (27 checks, recorded from strapi-php) passes in the
 `strapi-api` boot job on all three databases.
+
+**Part 4 — link order outside the API.** A link made anywhere but the REST and GraphQL writes
+joins the end of its list, as the Strapi admin's relation picker places a link it adds: a model
+saved with a new to-one target takes the end of the target's list (`HasLinkOrder`, which reads the
+model's `LINK_ORDERS`, foreign key → order column), and a pivot row a BelongsToMany attaches (the
+admin's multi-select syncs) takes the end of both sides' lists (`App\Support\StrapiLinkPivot`, the
+pivot class every ordered BelongsToMany uses). A write that sets the order itself keeps it.
+`strapi:import` writes each link's archived `pos` into its order column (`left.pos` to the
+declaring side's list, `right.pos` to the inverse side's), as Strapi's import does, and
+`strapi:export` writes positions in link order, numbered from 1 per list.
+
+Part 4's exit: `transfer/link-order-export.tar.gz`, strapi-php's export of links out of id order
+(`link-order-seed-vectors.json`), imports and reads back as strapi-php reads it
+(`link-order-read-vectors.json`) and exports with the same positions, and `LinkOrderAdminTest.php`
+picks genres and an author in the admin between API writes, in the `strapi-api` boot job on all
+three databases.
 
 ---
 

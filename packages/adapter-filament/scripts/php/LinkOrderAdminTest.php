@@ -43,7 +43,8 @@ class LinkOrderAdminTest extends TestCase
 
     private function inAdmin(): void
     {
-        $this->actingAs($this->admin);
+        // An API request leaves its guard the default; the admin signs in on the web guard.
+        $this->actingAs($this->admin, 'web');
         Filament::setCurrentPanel(Filament::getPanel('admin'));
     }
 

@@ -55,6 +55,9 @@ final class StrapiImport
     /** @var array<string, array<int|string, array<string, array{0: string, 1: int|string}>>> uid → archived id → foreign key → [target uid, archived id] */
     private array $foreign = [];
 
+    /** @var array<string, array<int|string, array<string, int|float|null>>> uid → archived id → order column → the link's archived position */
+    private array $orders = [];
+
     /** @var list<array{0: string, 1: string, 2: int, 3: string, 4: int|string, 5: string}> keys set once every row exists */
     private array $pending = [];
 
@@ -366,8 +369,15 @@ final class StrapiImport
             $relation = $model->{$descriptor['relation']}();
             if ($relation instanceof BelongsTo && $this->keeps($left['type'], $right['type'], $right['ref'])) {
                 $this->foreign[$left['type']][$left['ref']][$relation->getForeignKeyName()] = [$right['type'], $right['ref']];
+                // The row's place in the target's list, beside its foreign key.
+                if ($descriptor['inverseOrder'] !== null) {
+                    $this->orders[$left['type']][$left['ref']][$descriptor['inverseOrder']] = $right['pos'] ?? null;
+                }
             } elseif ($relation instanceof HasOneOrMany && $this->keeps($right['type'], $left['type'], $left['ref'])) {
                 $this->foreign[$right['type']][$right['ref']][$relation->getForeignKeyName()] = [$left['type'], $left['ref']];
+                if ($descriptor['order'] !== null) {
+                    $this->orders[$right['type']][$right['ref']][$descriptor['order']] = $left['pos'] ?? null;
+                }
             }
         }
     }
@@ -422,6 +432,7 @@ final class StrapiImport
                 $later[] = $column;
             }
         }
+        $row = [...$row, ...($this->orders[$uid][$ref] ?? [])];
         $id = (int) DB::table($table)->insertGetId($row);
         $this->rows[$uid][$ref] = $id;
         foreach ($later as $column) {
@@ -572,7 +583,15 @@ final class StrapiImport
             if ($descriptor['kind'] !== 'belongsToMany' || ! $this->keeps($left['type'], $right['type'], $right['ref'])) {
                 continue;
             }
-            $attach[] = [$left['type'], $left['ref'], $descriptor['relation'], $this->rows[$right['type']][$right['ref']] ?? null, [], $left['pos'] ?? 0, $index];
+            // Each side's place in the other's list, as the archive gives it; StrapiLinkPivot puts
+            // a link without one at the end.
+            $orders = [];
+            foreach (['order' => $left, 'inverseOrder' => $right] as $key => $side) {
+                if ($descriptor[$key] !== null && ($side['pos'] ?? null) !== null) {
+                    $orders[$descriptor[$key]] = $side['pos'];
+                }
+            }
+            $attach[] = [$left['type'], $left['ref'], $descriptor['relation'], $this->rows[$right['type']][$right['ref']] ?? null, $orders, $left['pos'] ?? 0, $index];
         }
         // In each list's order: by position, then as the archive lists them.
         usort($attach, fn (array $a, array $b): int => [$a[0], $a[1], $a[2], $a[5], $a[6]] <=> [$b[0], $b[1], $b[2], $b[5], $b[6]]);

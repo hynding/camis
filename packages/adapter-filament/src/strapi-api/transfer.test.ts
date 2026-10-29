@@ -74,8 +74,8 @@ describe("Strapi data import", () => {
   it("keeps each link's archived position in the list's order column", () => {
     // link-order-export.tar.gz: strapi-php lists these links out of id order.
     const map = content("app/Support/StrapiTransferMap.php");
-    expect(map).toContain("'order' => 'genre_ord', 'inverseOrder' => 'book_ord'");
-    expect(map).toContain("'order' => null, 'inverseOrder' => 'author_ord'");
+    expect(map).toMatch(/'order' => 'genre_ord',\s+'inverseOrder' => 'book_ord',/);
+    expect(map).toMatch(/'order' => null,\s+'inverseOrder' => 'author_ord',/);
   });
 
   it("is generated only on the Strapi API style over Laravel storage", () => {

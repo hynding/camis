@@ -7,7 +7,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PHP_MARKER } from "../hooks/names";
 import { filamentAdapter } from "../generate";
 import { strapiApiBundle } from "./__fixtures__/strapi-api";
-import { emitStrapiLinkOrder, emitStrapiRelationsOrderer } from "./link-order";
+import {
+  emitHasLinkOrder,
+  emitStrapiLinkOrder,
+  emitStrapiLinkPivot,
+  emitStrapiRelationsOrderer,
+} from "./link-order";
 import { emitStrapiPopulate, emitStrapiRelations } from "./populate-runtime";
 
 const hasPhp = (): boolean => {
@@ -37,6 +42,7 @@ const runtimes = [
   { path: "app/Support/StrapiRelations.php", emit: emitStrapiRelations },
   { path: "app/Support/StrapiLinkOrder.php", emit: emitStrapiLinkOrder },
   { path: "app/Support/StrapiRelationsOrderer.php", emit: emitStrapiRelationsOrderer },
+  { path: "app/Support/StrapiLinkPivot.php", emit: emitStrapiLinkPivot },
 ];
 
 describe("populate and relation runtime files", () => {
@@ -61,6 +67,14 @@ describe("populate and relation runtime files", () => {
     );
     await expect(emitStrapiRelationsOrderer()).toMatchFileSnapshot(
       "./__golden__/strapi-api/StrapiRelationsOrderer.php",
+    );
+  });
+  it("StrapiLinkPivot and HasLinkOrder golden", async () => {
+    await expect(emitStrapiLinkPivot()).toMatchFileSnapshot(
+      "./__golden__/strapi-api/StrapiLinkPivot.php",
+    );
+    await expect(emitHasLinkOrder()).toMatchFileSnapshot(
+      "./__golden__/strapi-api/HasLinkOrder.php",
     );
   });
 

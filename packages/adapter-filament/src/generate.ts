@@ -42,6 +42,7 @@ import { mediaFields, mediaPlan } from "./strapi-api/media";
 import { mediaRelationMethod } from "./strapi-api/media-runtime";
 import { contentManagerSorts, USER_DISPLAY_NAME } from "./strapi-api/admin-navigation";
 import { emitStrapiApi } from "./strapi-api/emit";
+import { linkOrdersConstant } from "./strapi-api/link-order";
 import { emitStrapiStorage } from "./strapi-api/storage/emit";
 import { zoneBuilder } from "./strapi-api/zones-admin";
 
@@ -64,7 +65,12 @@ export const filamentAdapter: GenerateAdapter = {
     const media = mediaPlan({ ...ir, document: doc }, apiStyle, storage);
     const fileModel = media.file === undefined ? undefined : filamentNames(media.file).model;
     const { guests, gaps: guestGaps } = guestsPlan(ir.roles, apiStyle, storage);
-    const rel = resolveRelations(doc, versioned, localized);
+    const rel = resolveRelations(
+      doc,
+      versioned,
+      localized,
+      apiStyle === "strapi" && storage !== "strapi",
+    );
     const hooks = emitHookFiles(doc);
     const files: GeneratedFile[] = [];
     const gaps: CapabilityGap[] = [
@@ -203,6 +209,7 @@ export const filamentAdapter: GenerateAdapter = {
           : [];
       zoneChildren.forEach((child) => children.push({ ct, child }));
       const names = filamentNames(ct);
+      const linkOrders = strapi?.linkOrders?.get(ct.name);
       // With a media library a media field is a link to its files, not a column; a dynamic zone
       // lives in its members' tables.
       const mediaOf = fileModel === undefined ? [] : mediaFields(ct);
@@ -235,8 +242,10 @@ export const filamentAdapter: GenerateAdapter = {
             ...(versioned.has(ct.name) ? ["App\\Models\\Concerns\\HasDraftAndPublish"] : []),
             ...(localized.has(ct.name) ? ["App\\Models\\Concerns\\HasLocale"] : []),
             ...(mediaOf.length > 0 ? ["App\\Models\\Concerns\\HasMedia"] : []),
+            ...(linkOrders === undefined ? [] : ["App\\Models\\Concerns\\HasLinkOrder"]),
           ],
           [
+            ...(linkOrders === undefined ? [] : [linkOrdersConstant(linkOrders)]),
             ...(localized.has(ct.name) ? [sharedAcrossLocalesMethod(ct)] : []),
             ...mediaOf.map((f) => mediaRelationMethod(f.name, f.name, fileModel)),
           ],
