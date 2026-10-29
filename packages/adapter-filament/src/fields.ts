@@ -37,6 +37,17 @@ const SUPPORTED = new Set<string>([
 ]);
 export const isSupportedField = (t: string): boolean => SUPPORTED.has(t);
 
+/** A pattern's source as a PCRE: delimited by `~`, with every unescaped `~` in it escaped. */
+const pcre = (source: string): string => {
+  let out = "";
+  let escaped = false;
+  for (const ch of source) {
+    out += ch === "~" && !escaped ? "\\~" : ch;
+    escaped = ch === "\\" && !escaped;
+  }
+  return `~${out}~`;
+};
+
 const phpDefault = (v: unknown): string =>
   typeof v === "boolean"
     ? v
@@ -80,9 +91,10 @@ const base = (field: Field, c: string): Base => {
     case "richText":
       return {
         migration: `$table->longText('${c}')`,
-        formComponent: `RichEditor::make('${c}')`,
+        // Strapi's richtext is Markdown: an HTML editor would rewrite it on the first save.
+        formComponent: `MarkdownEditor::make('${c}')`,
         tableColumn: `TextColumn::make('${c}')`,
-        formImport: "Filament\\Forms\\Components\\RichEditor",
+        formImport: "Filament\\Forms\\Components\\MarkdownEditor",
         tableImport: TEXT_COLUMN,
       };
     case "integer":
@@ -154,9 +166,9 @@ const base = (field: Field, c: string): Base => {
     case "json":
       return {
         migration: `$table->json('${c}')`,
-        formComponent: `KeyValue::make('${c}')`,
+        formComponent: `JsonEditor::make('${c}')`,
         tableColumn: `TextColumn::make('${c}')`,
-        formImport: "Filament\\Forms\\Components\\KeyValue",
+        formImport: "App\\Filament\\Forms\\JsonEditor",
         tableImport: TEXT_COLUMN,
         cast: "'array'",
       };
@@ -202,8 +214,10 @@ export const emitField = (field: Field, columnOverride?: string): FieldEmit => {
     (required ? "" : "->nullable()") +
     (unique ? "->unique()" : "") +
     (f.default !== undefined ? `->default(${phpDefault(f.default)})` : "");
+  const pattern =
+    typeof f.pattern === "string" ? `->regex(${phpSingleQuoted(pcre(f.pattern))})` : "";
   const formComponent =
-    b.formComponent + (required ? "->required()" : "") + (unique ? "->unique()" : "");
+    b.formComponent + (required ? "->required()" : "") + (unique ? "->unique()" : "") + pattern;
   return {
     column,
     migration,

@@ -21,6 +21,7 @@ import {
 } from "./components";
 import { apiCustomSeed, emitApiController, emitApiRoutes } from "./api";
 import { emitBlocksFiles, hasBlocksFields } from "./blocks";
+import { emitJsonEditorFiles, hasJsonFields } from "./json-editor";
 import { deployFile } from "./deploy";
 import { emitField, isSupportedField } from "./fields";
 import { emitHookFiles } from "./hooks/emit";
@@ -334,6 +335,7 @@ export const filamentAdapter: GenerateAdapter = {
     if (storage !== "strapi" && hasBlocksFields(doc)) {
       files.push(...emitBlocksFiles(fileModel !== undefined));
     }
+    if (storage !== "strapi" && hasJsonFields(doc)) files.push(...emitJsonEditorFiles());
 
     // Pivot and child tables are Strapi's `_lnk` and component tables on the Strapi layout, so
     // there is nothing here to migrate.
