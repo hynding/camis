@@ -141,6 +141,12 @@ type Query {
   review(documentId: ID!, status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): Review
   reviews_connection(filters: ReviewFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): ReviewEntityResponseCollection
   reviews(filters: ReviewFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [Review]!
+  storyboard(documentId: ID!, status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): Storyboard
+  storyboards_connection(filters: StoryboardFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): StoryboardEntityResponseCollection
+  storyboards(filters: StoryboardFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [Storyboard]!
+  submission(documentId: ID!, status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): Submission
+  submissions_connection(filters: SubmissionFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): SubmissionEntityResponseCollection
+  submissions(filters: SubmissionFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [Submission]!
   tag(documentId: ID!, status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): Tag
   tags_connection(filters: TagFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): TagEntityResponseCollection
   tags(filters: TagFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [Tag]!
@@ -256,6 +262,12 @@ type Mutation {
   createReview(status: PublicationStatus = PUBLISHED, data: ReviewInput!): Review
   updateReview(documentId: ID!, status: PublicationStatus = PUBLISHED, data: ReviewInput!): Review
   deleteReview(documentId: ID!): DeleteMutationResponse
+  createStoryboard(status: PublicationStatus = PUBLISHED, data: StoryboardInput!): Storyboard
+  updateStoryboard(documentId: ID!, status: PublicationStatus = PUBLISHED, data: StoryboardInput!): Storyboard
+  deleteStoryboard(documentId: ID!): DeleteMutationResponse
+  createSubmission(status: PublicationStatus = PUBLISHED, data: SubmissionInput!): Submission
+  updateSubmission(documentId: ID!, status: PublicationStatus = PUBLISHED, data: SubmissionInput!): Submission
+  deleteSubmission(documentId: ID!): DeleteMutationResponse
   createTag(status: PublicationStatus = PUBLISHED, data: TagInput!): Tag
   updateTag(documentId: ID!, status: PublicationStatus = PUBLISHED, data: TagInput!): Tag
   deleteTag(documentId: ID!): DeleteMutationResponse
@@ -1258,6 +1270,146 @@ type ReviewEntityResponseCollection {
   pageInfo: Pagination!
 }
 
+type ComponentSharedFrame {
+  id: ID!
+  caption: String
+  image: UploadFile
+}
+
+input ComponentSharedFrameFiltersInput {
+  caption: StringFilterInput
+  and: [ComponentSharedFrameFiltersInput]
+  or: [ComponentSharedFrameFiltersInput]
+  not: ComponentSharedFrameFiltersInput
+}
+
+input ComponentSharedFrameInput {
+  id: ID
+  caption: String
+  image: ID
+}
+
+type Storyboard {
+  documentId: ID!
+  title: String!
+  frames(filters: ComponentSharedFrameFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): [ComponentSharedFrame]
+  createdAt: DateTime
+  updatedAt: DateTime
+  publishedAt: DateTime
+}
+
+input StoryboardInput {
+  title: String
+  frames: [ComponentSharedFrameInput]
+  publishedAt: DateTime
+  locale: String
+}
+
+input StoryboardFiltersInput {
+  documentId: IDFilterInput
+  title: StringFilterInput
+  frames: ComponentSharedFrameFiltersInput
+  createdAt: DateTimeFilterInput
+  updatedAt: DateTimeFilterInput
+  publishedAt: DateTimeFilterInput
+  and: [StoryboardFiltersInput]
+  or: [StoryboardFiltersInput]
+  not: StoryboardFiltersInput
+}
+
+type StoryboardEntityResponseCollection {
+  nodes: [Storyboard!]!
+  pageInfo: Pagination!
+}
+
+enum ENUM_SUBMISSION_KIND {
+  alpha
+  beta
+}
+
+type ComponentSharedLine {
+  id: ID!
+  label: String!
+  quantity: Int
+}
+
+input ComponentSharedLineFiltersInput {
+  label: StringFilterInput
+  quantity: IntFilterInput
+  and: [ComponentSharedLineFiltersInput]
+  or: [ComponentSharedLineFiltersInput]
+  not: ComponentSharedLineFiltersInput
+}
+
+input ComponentSharedLineInput {
+  id: ID
+  label: String
+  quantity: Int
+}
+
+type Submission {
+  documentId: ID!
+  title: String!
+  code: String
+  contact: String
+  kind: ENUM_SUBMISSION_KIND
+  rating: Int
+  score: Float
+  notes: String
+  handle: String
+  active: Boolean
+  due: Date
+  lines(filters: ComponentSharedLineFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): [ComponentSharedLine]
+  total: ComponentSharedMoney
+  createdAt: DateTime
+  updatedAt: DateTime
+  publishedAt: DateTime
+}
+
+input SubmissionInput {
+  title: String
+  code: String
+  contact: String
+  kind: ENUM_SUBMISSION_KIND
+  rating: Int
+  score: Float
+  notes: String
+  handle: String
+  active: Boolean
+  due: Date
+  lines: [ComponentSharedLineInput]
+  total: ComponentSharedMoneyInput
+  publishedAt: DateTime
+  locale: String
+}
+
+input SubmissionFiltersInput {
+  documentId: IDFilterInput
+  title: StringFilterInput
+  code: StringFilterInput
+  contact: StringFilterInput
+  kind: StringFilterInput
+  rating: IntFilterInput
+  score: FloatFilterInput
+  notes: StringFilterInput
+  handle: StringFilterInput
+  active: BooleanFilterInput
+  due: DateFilterInput
+  lines: ComponentSharedLineFiltersInput
+  total: ComponentSharedMoneyFiltersInput
+  createdAt: DateTimeFilterInput
+  updatedAt: DateTimeFilterInput
+  publishedAt: DateTimeFilterInput
+  and: [SubmissionFiltersInput]
+  or: [SubmissionFiltersInput]
+  not: SubmissionFiltersInput
+}
+
+type SubmissionEntityResponseCollection {
+  nodes: [Submission!]!
+  pageInfo: Pagination!
+}
+
 type Tag {
   documentId: ID!
   label: String
@@ -1568,4 +1720,4 @@ type UsersPermissionsPasswordPayload {
   ok: Boolean!
 }
 
-union GenericMorph = ComponentSharedHero | ComponentSharedMoney | ComponentSharedPanel | ComponentSharedQuantity | UploadFile | I18NLocale | UsersPermissionsPermission | UsersPermissionsRole | UsersPermissionsUser | Activity | ActivitySession | Article | Author | Book | Category | Genre | Global | Homepage | Landing | Note | Page | Post | Review | Tag | Topic | Transaction
+union GenericMorph = ComponentSharedFrame | ComponentSharedHero | ComponentSharedLine | ComponentSharedMoney | ComponentSharedPanel | ComponentSharedQuantity | UploadFile | I18NLocale | UsersPermissionsPermission | UsersPermissionsRole | UsersPermissionsUser | Activity | ActivitySession | Article | Author | Book | Category | Genre | Global | Homepage | Landing | Note | Page | Post | Review | Storyboard | Submission | Tag | Topic | Transaction

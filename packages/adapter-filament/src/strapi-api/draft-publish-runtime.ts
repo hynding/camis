@@ -204,13 +204,19 @@ final class StrapiDocuments
         $to->save();
         foreach ($serializer::FIELDS as $field) {
             if (isset($field['component'])) {
-                $to->{$field['component']}()->delete();
+                // One by one, so an item's links to files go with it.
+                $to->{$field['component']}()->get()->each->delete();
                 foreach ($from->{$field['component']}()->orderBy('id')->get() as $child) {
-                    $to->{$field['component']}()->save($child->replicate());
+                    $copy = $child->replicate();
+                    $to->{$field['component']}()->save($copy);
+                    foreach ($field['fields'] as $inner) {
+                        if (in_array($inner['kind'] ?? null, ['mediaOne', 'mediaMany'], true)) {
+                            self::copyFiles($child, $copy, $inner['relation']);
+                        }
+                    }
                 }
             } elseif (in_array($field['kind'] ?? null, ['mediaOne', 'mediaMany'], true)) {
-                $media = $from->{$field['relation']}()->orderByPivot('order');
-                $to->{$field['relation']}()->sync(StrapiRelations::ordered($media->pluck($media->getRelated()->getQualifiedKeyName())->all()));
+                self::copyFiles($from, $to, $field['relation']);
             } elseif (($field['kind'] ?? null) === 'belongsToMany' && $field['holder'] === 'self') {
                 $relation = $from->{$field['relation']}();
                 if (($field['order'] ?? null) !== null) {
@@ -234,6 +240,13 @@ final class StrapiDocuments
         }
 
         return $to;
+    }
+
+    /** The files one row's media field links, linked from another row in the same order. */
+    private static function copyFiles(Model $from, Model $to, string $relation): void
+    {
+        $media = $from->{$relation}()->orderByPivot('order');
+        $to->{$relation}()->sync(StrapiRelations::ordered($media->pluck($media->getRelated()->getQualifiedKeyName())->all()));
     }
 
     /**

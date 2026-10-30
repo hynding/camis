@@ -5,7 +5,9 @@
 ## Commands
 
 - `camis new <dir>` — create a project, like `create-strapi-app`: writes `camis.json` (the IR),
-  `roles.json` (Strapi's `public` and `authenticated` roles, `authenticated` as the default),
+  `roles.json` (Strapi's `public` and `authenticated` roles, `authenticated` as the default, plus
+  `super-admin`, flagged `admin` with every action on every content type, since Strapi's own admin
+  roles are not in its export; `php artisan camis:admin <email>` gives it to the first admin),
   `camis.config.json`, an empty `protected/`, a `.gitignore` for `generated/`, and a README; then
   scaffolds the Laravel host app when a filament target is chosen and runs `camis build`. Refuses to
   run over a directory that already has `camis.json` or `camis.config.json`. Options:

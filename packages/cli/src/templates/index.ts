@@ -3,7 +3,7 @@ import type { ProjectTemplate } from "./project-template";
 import { vanillaTemplate } from "./vanilla";
 
 export type { ProjectTemplate } from "./project-template";
-export { strapiDefaultRoles } from "./project-template";
+export { strapiDefaultRoles, withMediaLibrary, withSuperAdmin } from "./project-template";
 
 const TEMPLATES = { vanilla: vanillaTemplate, example: exampleTemplate } as const;
 

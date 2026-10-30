@@ -256,8 +256,52 @@ export const strapiApiBundle: IrBundle = {
           { type: "media", name: "attachments", multiple: true },
         ],
       },
+      // Media inside a repeatable component (media-vectors.json): each frame links its file.
+      {
+        name: "Storyboard",
+        kind: "collection",
+        names: { plural: "Storyboards" },
+        fields: [
+          { type: "string", name: "title", required: true },
+          { type: "component", name: "frames", component: "Frame", repeatable: true },
+        ],
+      },
+      // Every constraint Strapi's entity validator checks on a write (validation-vectors.json).
+      {
+        name: "Submission",
+        kind: "collection",
+        names: { plural: "Submissions" },
+        fields: [
+          { type: "string", name: "title", required: true, minLength: 3, maxLength: 20 },
+          { type: "string", name: "code", pattern: "^[A-Z]{3}-\\d+$" },
+          { type: "email", name: "contact" },
+          { type: "enumeration", name: "kind", values: ["alpha", "beta"] },
+          { type: "integer", name: "rating", min: 1, max: 5 },
+          { type: "float", name: "score", min: 0, max: 1 },
+          { type: "text", name: "notes", maxLength: 10 },
+          { type: "uid", name: "handle" },
+          { type: "boolean", name: "active" },
+          { type: "date", name: "due" },
+          { type: "component", name: "lines", component: "Line", repeatable: true },
+          { type: "component", name: "total", component: "Money", repeatable: false },
+        ],
+      },
     ],
     components: [
+      {
+        name: "Line",
+        fields: [
+          { type: "string", name: "label", required: true },
+          { type: "integer", name: "quantity", min: 1 },
+        ],
+      },
+      {
+        name: "Frame",
+        fields: [
+          { type: "string", name: "caption" },
+          { type: "media", name: "image", allowedTypes: ["image"] },
+        ],
+      },
       // A dynamic zone's member (dynamic-zone-vectors.json), holding a nested component.
       {
         name: "Hero",
@@ -326,6 +370,8 @@ export const strapiApiBundle: IrBundle = {
         { contentType: "User", actions: ["read"] },
         { contentType: "File", actions: ["create", "read", "update", "delete"] },
         { contentType: "Book", actions: ["create", "read", "update", "delete"] },
+        { contentType: "Storyboard", actions: ["create", "read", "update", "delete"] },
+        { contentType: "Submission", actions: ["create", "read", "update", "delete"] },
         { contentType: "Author", actions: ["create", "read", "update", "delete"] },
         { contentType: "Genre", actions: ["create", "read", "update", "delete"] },
         { contentType: "Topic", actions: ["create", "read", "update", "delete", "publish"] },

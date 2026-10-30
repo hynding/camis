@@ -248,7 +248,7 @@ final class StrapiUpload
 }
 `;
 
-/** The model half of a type with media fields: its links go when it does. */
+/** The model half of a type with media fields, or with component items that link files: its links go when it does. */
 export const emitHasMedia = (): string =>
   header("App\\Models\\Concerns") +
   String.raw`
@@ -264,6 +264,11 @@ trait HasMedia
                 ->where('related_type', $row->getMorphClass())
                 ->where('related_id', $row->getKey())
                 ->delete();
+            // A repeatable component's items would go by the foreign key's cascade, past this hook.
+            $components = defined($row::class.'::MEDIA_COMPONENTS') ? constant($row::class.'::MEDIA_COMPONENTS') : [];
+            foreach ($components as $relation) {
+                $row->{$relation}()->get()->each->delete();
+            }
         });
     }
 }

@@ -127,6 +127,13 @@ export const emitStrapiStorage = (input: StrapiApiInput): StrapiApiEmission => {
     });
     gaps.push(...contentTypeGaps(ct));
   }
+  gaps.push({
+    feature: "entityValidation",
+    location: {},
+    severity: "downgrade",
+    message:
+      "the strapi storage layout writes a request's fields as sent; Strapi's entity validator (required, lengths, regex, enumerations, bounds) runs only on the laravel layout",
+  });
 
   // Strapi's users-permissions tables: the host Laravel app owns no `users` table here.
   files.push({ path: "app/Models/User.php", content: emitStorageUserModel() });

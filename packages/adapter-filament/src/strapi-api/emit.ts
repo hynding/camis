@@ -148,6 +148,8 @@ import { emitStrapiExport } from "./transfer-export-runtime";
 import { emitStrapiImport } from "./transfer-runtime";
 import { wireShape, type WireShape } from "./wire-shape";
 import { emitStrapiZones } from "./zones-runtime";
+import { emitStrapiValidator } from "./validation-runtime";
+import { rulesConstant, VALIDATOR_PATH } from "./validation";
 import {
   emitUserResourceFiles,
   emitUsersPermissionsSettingsPages,
@@ -239,6 +241,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
         assigns: perm.assigns.get(ct.name) ?? [],
         secured,
         scoped: secured,
+        rules: rulesConstant(ct.fields, doc),
       }),
     });
     files.push({
@@ -356,6 +359,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     path: "app/Support/StrapiRelationsOrderer.php",
     content: emitStrapiRelationsOrderer(),
   });
+  files.push({ path: VALIDATOR_PATH, content: emitStrapiValidator() });
   if (emitted.some((ct) => ct.fields.some((f) => f.type === "dynamicZone")))
     files.push({
       path: "app/Support/StrapiZones.php",
@@ -376,8 +380,9 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     if (scope?.gap) gaps.push(scope.gap);
     files.push(...mediaLibraryFiles(input.media, emitted, secured, scope?.php));
   }
+  // Every read asks it which version the status parameter names, with or without versioned types.
+  files.push({ path: "app/Support/StrapiDocuments.php", content: emitStrapiDocuments() });
   if (versioned.size > 0) {
-    files.push({ path: "app/Support/StrapiDocuments.php", content: emitStrapiDocuments() });
     files.push({
       path: "app/Models/Concerns/HasDraftAndPublish.php",
       content: emitHasDraftAndPublish(),

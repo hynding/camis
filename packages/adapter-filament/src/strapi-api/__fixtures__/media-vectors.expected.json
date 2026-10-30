@@ -676,5 +676,404 @@
       "name": "NotFoundError",
       "message": "file.notFound"
     }
+  },
+  "a component's media takes file ids": {
+    "status": 201,
+    "data": {
+      "frames": [
+        {
+          "caption": "Opening",
+          "image": {
+            "name": "wide.png"
+          }
+        },
+        {
+          "caption": "Blank",
+          "image": null
+        }
+      ],
+      "title": "Storyboarded"
+    }
+  },
+  "or documentIds, inside a component": {
+    "status": 201,
+    "data": {
+      "frames": [
+        {
+          "caption": "Only",
+          "image": {
+            "name": "wide.png"
+          }
+        }
+      ],
+      "title": "FramedByDocument"
+    }
+  },
+  "a missing file inside a component is rejected": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "1 relation(s) of type plugin::upload.file associated with this entity do not exist"
+    }
+  },
+  "a component's media stays off the wire unless its populate names it": {
+    "status": 200,
+    "data": {
+      "frames": [
+        {
+          "caption": "Opening"
+        },
+        {
+          "caption": "Blank"
+        }
+      ],
+      "title": "Storyboarded"
+    }
+  },
+  "populate=* reaches the component but not its media": {
+    "status": 200,
+    "data": {
+      "frames": [
+        {
+          "caption": "Opening"
+        },
+        {
+          "caption": "Blank"
+        }
+      ],
+      "title": "Storyboarded"
+    }
+  },
+  "a component's populate=* includes the whole file": {
+    "status": 200,
+    "data": {
+      "frames": [
+        {
+          "caption": "Opening",
+          "image": {
+            "alternativeText": "red",
+            "caption": "A red box",
+            "ext": ".png",
+            "focalPoint": null,
+            "formats": {
+              "large": {
+                "ext": ".png",
+                "hash": "large_wide_<hash>",
+                "height": 667,
+                "mime": "image/png",
+                "name": "large_wide.png",
+                "path": null,
+                "url": "/uploads/large_wide_<hash>.png",
+                "width": 1000
+              },
+              "medium": {
+                "ext": ".png",
+                "hash": "medium_wide_<hash>",
+                "height": 500,
+                "mime": "image/png",
+                "name": "medium_wide.png",
+                "path": null,
+                "url": "/uploads/medium_wide_<hash>.png",
+                "width": 750
+              },
+              "small": {
+                "ext": ".png",
+                "hash": "small_wide_<hash>",
+                "height": 333,
+                "mime": "image/png",
+                "name": "small_wide.png",
+                "path": null,
+                "url": "/uploads/small_wide_<hash>.png",
+                "width": 500
+              },
+              "thumbnail": {
+                "ext": ".png",
+                "hash": "thumbnail_wide_<hash>",
+                "height": 156,
+                "mime": "image/png",
+                "name": "thumbnail_wide.png",
+                "path": null,
+                "url": "/uploads/thumbnail_wide_<hash>.png",
+                "width": 234
+              }
+            },
+            "hash": "wide_<hash>",
+            "height": 800,
+            "mime": "image/png",
+            "name": "wide.png",
+            "previewUrl": null,
+            "provider": "local",
+            "provider_metadata": null,
+            "url": "/uploads/wide_<hash>.png",
+            "width": 1200
+          }
+        },
+        {
+          "caption": "Blank",
+          "image": null
+        }
+      ],
+      "title": "Storyboarded"
+    }
+  },
+  "a component's populate names its media": {
+    "status": 200,
+    "data": {
+      "frames": [
+        {
+          "caption": "Opening",
+          "image": {
+            "alternativeText": "red",
+            "caption": "A red box",
+            "ext": ".png",
+            "focalPoint": null,
+            "formats": {
+              "large": {
+                "ext": ".png",
+                "hash": "large_wide_<hash>",
+                "height": 667,
+                "mime": "image/png",
+                "name": "large_wide.png",
+                "path": null,
+                "url": "/uploads/large_wide_<hash>.png",
+                "width": 1000
+              },
+              "medium": {
+                "ext": ".png",
+                "hash": "medium_wide_<hash>",
+                "height": 500,
+                "mime": "image/png",
+                "name": "medium_wide.png",
+                "path": null,
+                "url": "/uploads/medium_wide_<hash>.png",
+                "width": 750
+              },
+              "small": {
+                "ext": ".png",
+                "hash": "small_wide_<hash>",
+                "height": 333,
+                "mime": "image/png",
+                "name": "small_wide.png",
+                "path": null,
+                "url": "/uploads/small_wide_<hash>.png",
+                "width": 500
+              },
+              "thumbnail": {
+                "ext": ".png",
+                "hash": "thumbnail_wide_<hash>",
+                "height": 156,
+                "mime": "image/png",
+                "name": "thumbnail_wide.png",
+                "path": null,
+                "url": "/uploads/thumbnail_wide_<hash>.png",
+                "width": 234
+              }
+            },
+            "hash": "wide_<hash>",
+            "height": 800,
+            "mime": "image/png",
+            "name": "wide.png",
+            "previewUrl": null,
+            "provider": "local",
+            "provider_metadata": null,
+            "url": "/uploads/wide_<hash>.png",
+            "width": 1200
+          }
+        },
+        {
+          "caption": "Blank",
+          "image": null
+        }
+      ],
+      "title": "Storyboarded"
+    }
+  },
+  "filters reach into a component's media": {
+    "status": 200,
+    "data": [
+      {
+        "title": "FramedByDocument"
+      },
+      {
+        "title": "Storyboarded"
+      }
+    ]
+  },
+  "replacing the frames replaces their media": {
+    "status": 200,
+    "data": {
+      "frames": [
+        {
+          "caption": "Closing",
+          "image": null
+        },
+        {
+          "caption": "Again",
+          "image": {
+            "name": "wide.png"
+          }
+        }
+      ],
+      "title": "Storyboarded"
+    }
+  },
+  "a file's related entries do not list components": {
+    "status": 200,
+    "data": {
+      "alternativeText": "red",
+      "caption": "A red box",
+      "ext": ".png",
+      "focalPoint": null,
+      "formats": {
+        "large": {
+          "ext": ".png",
+          "hash": "large_wide_<hash>",
+          "height": 667,
+          "mime": "image/png",
+          "name": "large_wide.png",
+          "path": null,
+          "url": "/uploads/large_wide_<hash>.png",
+          "width": 1000
+        },
+        "medium": {
+          "ext": ".png",
+          "hash": "medium_wide_<hash>",
+          "height": 500,
+          "mime": "image/png",
+          "name": "medium_wide.png",
+          "path": null,
+          "url": "/uploads/medium_wide_<hash>.png",
+          "width": 750
+        },
+        "small": {
+          "ext": ".png",
+          "hash": "small_wide_<hash>",
+          "height": 333,
+          "mime": "image/png",
+          "name": "small_wide.png",
+          "path": null,
+          "url": "/uploads/small_wide_<hash>.png",
+          "width": 500
+        },
+        "thumbnail": {
+          "ext": ".png",
+          "hash": "thumbnail_wide_<hash>",
+          "height": 156,
+          "mime": "image/png",
+          "name": "thumbnail_wide.png",
+          "path": null,
+          "url": "/uploads/thumbnail_wide_<hash>.png",
+          "width": 234
+        }
+      },
+      "hash": "wide_<hash>",
+      "height": 800,
+      "isUrlSigned": false,
+      "mime": "image/png",
+      "name": "wide.png",
+      "previewUrl": null,
+      "provider": "local",
+      "provider_metadata": null,
+      "related": [
+        {
+          "__type": "api::book.book",
+          "inStock": null,
+          "pages": null,
+          "publishedOn": null,
+          "rating": null,
+          "releasedAt": null,
+          "title": "Covered"
+        },
+        {
+          "__type": "api::post.post",
+          "title": "Pictured",
+          "views": null
+        },
+        {
+          "__type": "api::post.post",
+          "title": "Pictured",
+          "views": null
+        }
+      ],
+      "url": "/uploads/wide_<hash>.png",
+      "width": 1200
+    }
+  },
+  "deleting a file linked from a component": {
+    "status": 200,
+    "data": {
+      "alternativeText": "red",
+      "caption": "A red box",
+      "ext": ".png",
+      "focalPoint": null,
+      "formats": {
+        "large": {
+          "ext": ".png",
+          "hash": "large_wide_<hash>",
+          "height": 667,
+          "mime": "image/png",
+          "name": "large_wide.png",
+          "path": null,
+          "url": "/uploads/large_wide_<hash>.png",
+          "width": 1000
+        },
+        "medium": {
+          "ext": ".png",
+          "hash": "medium_wide_<hash>",
+          "height": 500,
+          "mime": "image/png",
+          "name": "medium_wide.png",
+          "path": null,
+          "url": "/uploads/medium_wide_<hash>.png",
+          "width": 750
+        },
+        "small": {
+          "ext": ".png",
+          "hash": "small_wide_<hash>",
+          "height": 333,
+          "mime": "image/png",
+          "name": "small_wide.png",
+          "path": null,
+          "url": "/uploads/small_wide_<hash>.png",
+          "width": 500
+        },
+        "thumbnail": {
+          "ext": ".png",
+          "hash": "thumbnail_wide_<hash>",
+          "height": 156,
+          "mime": "image/png",
+          "name": "thumbnail_wide.png",
+          "path": null,
+          "url": "/uploads/thumbnail_wide_<hash>.png",
+          "width": 234
+        }
+      },
+      "hash": "wide_<hash>",
+      "height": 800,
+      "isUrlSigned": false,
+      "mime": "image/png",
+      "name": "wide.png",
+      "previewUrl": null,
+      "provider": "local",
+      "provider_metadata": null,
+      "url": "/uploads/wide_<hash>.png",
+      "width": 1200
+    }
+  },
+  "unlinks it from the component": {
+    "status": 200,
+    "data": {
+      "frames": [
+        {
+          "caption": "Closing",
+          "image": null
+        },
+        {
+          "caption": "Again",
+          "image": null
+        }
+      ],
+      "title": "Storyboarded"
+    }
   }
 }

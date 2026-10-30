@@ -402,7 +402,7 @@ final class StrapiPopulate
         }
         $own = self::nestedKeys($repeatable ? $serializer::FIELDS[$key]['fields'] : self::within($key, $serializer));
         $value = $repeatable
-            ? array_map(fn (array $item) => self::inside($item, $sub['populate'] ?? null, $own), $value)
+            ? array_map(fn (array $item) => self::files(self::inside($item, $sub['populate'] ?? null, $own), $sub['populate'] ?? null, $serializer::FIELDS[$key]['fields']), $value)
             : self::inside($value, $sub['populate'] ?? null, $own);
         if (! array_key_exists('fields', $sub)) {
             return $value;
@@ -443,6 +443,24 @@ final class StrapiPopulate
         }
 
         return $zone;
+    }
+
+    /** An item's files narrowed by the fields their own populate names, as an entry's are. */
+    private static function files(array $item, mixed $populate, array $fields): array
+    {
+        if (! is_array($populate) || array_is_list($populate)) {
+            return $item;
+        }
+        foreach ($populate as $key => $sub) {
+            $field = $fields[$key] ?? null;
+            if (! isset($field['relation'], $item[$key]) || ! is_array($sub) || ! array_key_exists('fields', $sub)) {
+                continue;
+            }
+            $narrow = fn (array $file): array => StrapiQuery::select($file, ['fields' => $sub['fields']], $field['serializer']::FIELDS);
+            $item[$key] = $field['kind'] === 'mediaMany' ? array_map($narrow, $item[$key]) : $narrow($item[$key]);
+        }
+
+        return $item;
     }
 
     /** An item without the components and media of its own that $populate does not name. */
@@ -497,7 +515,7 @@ final class StrapiPopulate
         $keys = [];
         foreach ($fields as $path => $field) {
             $segments = explode('.', (string) $path);
-            if (count($segments) > 1 || isset($field['component']) || ($field['type'] ?? null) === 'media') {
+            if (count($segments) > 1 || isset($field['component']) || ($field['type'] ?? null) === 'media' || isset($field['relation'])) {
                 $keys[] = $segments[0];
             }
         }

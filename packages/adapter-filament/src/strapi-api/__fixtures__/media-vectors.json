@@ -1,5 +1,5 @@
 {
-  "about": "Strapi 5's Upload API and media fields over REST, checked against strapi-php. Run on an empty database, in order, with strapi-populate-vectors.mjs; files come from __fixtures__/media. Book has a single cover (images) and multiple attachments; Post, which has draft and publish, has a single image. A file's hash and url end in random hex, and an image's byte sizes depend on its encoder, so neither is compared.",
+  "about": "Strapi 5's Upload API and media fields over REST, checked against strapi-php. Run on an empty database, in order, with strapi-populate-vectors.mjs; files come from __fixtures__/media. Book has a single cover (images) and multiple attachments; a Storyboard's repeatable frames each hold an image; Post, which has draft and publish, has a single image. A file's hash and url end in random hex, and an image's byte sizes depend on its encoder, so neither is compared.",
   "seed": [],
   "reads": [],
   "writes": [
@@ -8,14 +8,27 @@
       "path": "/upload",
       "as": "files:Wide",
       "upload": [
-        { "file": "wide.png", "info": { "alternativeText": "red", "caption": "A red box" } }
+        {
+          "file": "wide.png",
+          "info": {
+            "alternativeText": "red",
+            "caption": "A red box"
+          }
+        }
       ]
     },
     {
       "name": "upload names a file from its info",
       "path": "/upload",
       "as": "files:Notes",
-      "upload": [{ "file": "notes.txt", "info": { "name": "my-notes.txt" } }]
+      "upload": [
+        {
+          "file": "notes.txt",
+          "info": {
+            "name": "my-notes.txt"
+          }
+        }
+      ]
     },
     {
       "name": "upload without files is rejected",
@@ -48,14 +61,18 @@
       "name": "upload with an id updates the file's info",
       "path": "/upload",
       "query": "id=#files:Notes",
-      "form": { "fileInfo": "{\"name\":\"renamed.txt\",\"caption\":\"cap\"}" },
+      "form": {
+        "fileInfo": "{\"name\":\"renamed.txt\",\"caption\":\"cap\"}"
+      },
       "upload": []
     },
     {
       "name": "updating a missing file",
       "path": "/upload",
       "query": "id=999999",
-      "form": { "fileInfo": "{\"name\":\"x\"}" },
+      "form": {
+        "fileInfo": "{\"name\":\"x\"}"
+      },
       "upload": []
     },
     {
@@ -76,13 +93,19 @@
       "path": "/books",
       "as": "books:ByDocument",
       "query": "fields[0]=title&populate[cover][fields][0]=name",
-      "data": { "title": "ByDocument", "cover": "@files:Wide" }
+      "data": {
+        "title": "ByDocument",
+        "cover": "@files:Wide"
+      }
     },
     {
       "name": "a missing file is rejected",
       "method": "POST",
       "path": "/books",
-      "data": { "title": "Missing", "cover": 999999 }
+      "data": {
+        "title": "Missing",
+        "cover": 999999
+      }
     },
     {
       "name": "media stays off the wire unless populated",
@@ -106,21 +129,35 @@
       "method": "PUT",
       "path": "/books/@books:Covered",
       "query": "fields[0]=title&populate[attachments][fields][0]=name",
-      "data": { "attachments": { "disconnect": ["#files:Wide"] } }
+      "data": {
+        "attachments": {
+          "disconnect": ["#files:Wide"]
+        }
+      }
     },
     {
       "name": "null clears a single file",
       "method": "PUT",
       "path": "/books/@books:ByDocument",
       "query": "fields[0]=title&populate[cover][fields][0]=name",
-      "data": { "cover": null }
+      "data": {
+        "cover": null
+      }
     },
     {
       "name": "upload with ref links the new file to an entry",
       "path": "/upload",
       "as": "files:Linked",
-      "upload": [{ "file": "notes.txt" }],
-      "form": { "ref": "api::book.book", "refId": "#books:ByDocument", "field": "attachments" }
+      "upload": [
+        {
+          "file": "notes.txt"
+        }
+      ],
+      "form": {
+        "ref": "api::book.book",
+        "refId": "#books:ByDocument",
+        "field": "attachments"
+      }
     },
     {
       "name": "which then lists it",
@@ -134,7 +171,10 @@
       "path": "/posts",
       "as": "posts:Pictured",
       "query": "status=draft&fields[0]=title&populate[image][fields][0]=name",
-      "data": { "title": "Pictured", "image": "#files:Wide" }
+      "data": {
+        "title": "Pictured",
+        "image": "#files:Wide"
+      }
     },
     {
       "name": "and publishing copies it",
@@ -175,6 +215,120 @@
       "name": "deleting it again",
       "method": "DELETE",
       "path": "/upload/files/#files:Notes"
+    },
+    {
+      "name": "a component's media takes file ids",
+      "method": "POST",
+      "path": "/storyboards",
+      "as": "storyboards:Storyboarded",
+      "query": "fields[0]=title&populate[frames][populate][image][fields][0]=name",
+      "data": {
+        "title": "Storyboarded",
+        "frames": [
+          {
+            "caption": "Opening",
+            "image": "#files:Wide"
+          },
+          {
+            "caption": "Blank"
+          }
+        ]
+      }
+    },
+    {
+      "name": "or documentIds, inside a component",
+      "method": "POST",
+      "path": "/storyboards",
+      "as": "storyboards:FramedByDocument",
+      "query": "fields[0]=title&populate[frames][populate][image][fields][0]=name",
+      "data": {
+        "title": "FramedByDocument",
+        "frames": [
+          {
+            "caption": "Only",
+            "image": "@files:Wide"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a missing file inside a component is rejected",
+      "method": "POST",
+      "path": "/storyboards",
+      "data": {
+        "title": "MissingFrame",
+        "frames": [
+          {
+            "caption": "Gone",
+            "image": 999999
+          }
+        ]
+      }
+    },
+    {
+      "name": "a component's media stays off the wire unless its populate names it",
+      "method": "GET",
+      "path": "/storyboards/@storyboards:Storyboarded",
+      "query": "fields[0]=title&populate=frames"
+    },
+    {
+      "name": "populate=* reaches the component but not its media",
+      "method": "GET",
+      "path": "/storyboards/@storyboards:Storyboarded",
+      "query": "fields[0]=title&populate=*"
+    },
+    {
+      "name": "a component's populate=* includes the whole file",
+      "method": "GET",
+      "path": "/storyboards/@storyboards:Storyboarded",
+      "query": "fields[0]=title&populate[frames][populate]=*"
+    },
+    {
+      "name": "a component's populate names its media",
+      "method": "GET",
+      "path": "/storyboards/@storyboards:Storyboarded",
+      "query": "fields[0]=title&populate[frames][populate][0]=image"
+    },
+    {
+      "name": "filters reach into a component's media",
+      "method": "GET",
+      "path": "/storyboards",
+      "query": "filters[frames][image][name][$eq]=wide.png&fields[0]=title&sort=title:asc"
+    },
+    {
+      "name": "replacing the frames replaces their media",
+      "method": "PUT",
+      "path": "/storyboards/@storyboards:Storyboarded",
+      "query": "fields[0]=title&populate[frames][populate][image][fields][0]=name",
+      "data": {
+        "frames": [
+          {
+            "caption": "Closing",
+            "image": null
+          },
+          {
+            "caption": "Again",
+            "image": "#files:Wide"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a file's related entries do not list components",
+      "method": "GET",
+      "path": "/upload/files/#files:Wide",
+      "query": "populate=related&fields[0]=name"
+    },
+    {
+      "name": "deleting a file linked from a component",
+      "method": "DELETE",
+      "path": "/upload/files/#files:Wide"
+    },
+    {
+      "name": "unlinks it from the component",
+      "method": "GET",
+      "path": "/storyboards/@storyboards:Storyboarded",
+      "query": "fields[0]=title&populate[frames][populate][image][fields][0]=name"
     }
   ]
 }

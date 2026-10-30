@@ -135,6 +135,12 @@ type Query {
   topics_connection(filters: TopicFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): TopicEntityResponseCollection
   topics(filters: TopicFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [Topic]!
   me: UsersPermissionsMe
+  storyboard(documentId: ID!, status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): Storyboard
+  storyboards_connection(filters: StoryboardFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): StoryboardEntityResponseCollection
+  storyboards(filters: StoryboardFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [Storyboard]!
+  submission(documentId: ID!, status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): Submission
+  submissions_connection(filters: SubmissionFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): SubmissionEntityResponseCollection
+  submissions(filters: SubmissionFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [Submission]!
 }
 
 enum PublicationStatus {
@@ -179,7 +185,7 @@ type UploadFile {
 "The `JSON` scalar type represents JSON values as specified by [ECMA-404](http://www.ecma-international.org/publications/files/ECMA-ST/ECMA-404.pdf)."
 scalar JSON
 
-union GenericMorph = ComponentSharedHero | ComponentSharedMoney | ComponentSharedPanel | ComponentSharedQuantity | UploadFile | I18NLocale | UsersPermissionsPermission | UsersPermissionsRole | UsersPermissionsUser | Article | Author | Book | Category | Genre | Global | Homepage | Landing | Page | Post | Review | Topic
+union GenericMorph = ComponentSharedFrame | ComponentSharedHero | ComponentSharedLine | ComponentSharedMoney | ComponentSharedPanel | ComponentSharedQuantity | UploadFile | I18NLocale | UsersPermissionsPermission | UsersPermissionsRole | UsersPermissionsUser | Article | Author | Book | Category | Genre | Global | Homepage | Landing | Page | Post | Review | Storyboard | Submission | Topic
 
 type ComponentSharedHero {
   id: ID!
@@ -1155,6 +1161,12 @@ type Mutation {
 
   "Confirm an email users email address"
   emailConfirmation(confirmation: String!): UsersPermissionsLoginPayload
+  createStoryboard(status: PublicationStatus = PUBLISHED, data: StoryboardInput!): Storyboard
+  updateStoryboard(documentId: ID!, status: PublicationStatus = PUBLISHED, data: StoryboardInput!): Storyboard
+  deleteStoryboard(documentId: ID!): DeleteMutationResponse
+  createSubmission(status: PublicationStatus = PUBLISHED, data: SubmissionInput!): Submission
+  updateSubmission(documentId: ID!, status: PublicationStatus = PUBLISHED, data: SubmissionInput!): Submission
+  deleteSubmission(documentId: ID!): DeleteMutationResponse
 }
 
 input ArticleInput {
@@ -1345,4 +1357,144 @@ input UsersPermissionsRegisterInput {
 
 type UsersPermissionsPasswordPayload {
   ok: Boolean!
+}
+
+type ComponentSharedFrame {
+  id: ID!
+  caption: String
+  image: UploadFile
+}
+
+type Storyboard {
+  documentId: ID!
+  title: String!
+  frames(filters: ComponentSharedFrameFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): [ComponentSharedFrame]
+  createdAt: DateTime
+  updatedAt: DateTime
+  publishedAt: DateTime
+}
+
+input ComponentSharedFrameFiltersInput {
+  caption: StringFilterInput
+  and: [ComponentSharedFrameFiltersInput]
+  or: [ComponentSharedFrameFiltersInput]
+  not: ComponentSharedFrameFiltersInput
+}
+
+input StoryboardFiltersInput {
+  documentId: IDFilterInput
+  title: StringFilterInput
+  frames: ComponentSharedFrameFiltersInput
+  createdAt: DateTimeFilterInput
+  updatedAt: DateTimeFilterInput
+  publishedAt: DateTimeFilterInput
+  and: [StoryboardFiltersInput]
+  or: [StoryboardFiltersInput]
+  not: StoryboardFiltersInput
+}
+
+type StoryboardEntityResponseCollection {
+  nodes: [Storyboard!]!
+  pageInfo: Pagination!
+}
+
+input StoryboardInput {
+  title: String
+  frames: [ComponentSharedFrameInput]
+  publishedAt: DateTime
+  locale: String
+}
+
+input ComponentSharedFrameInput {
+  id: ID
+  caption: String
+  image: ID
+}
+
+type ComponentSharedLine {
+  id: ID!
+  label: String!
+  quantity: Int
+}
+
+type Submission {
+  documentId: ID!
+  title: String!
+  code: String
+  contact: String
+  kind: ENUM_SUBMISSION_KIND
+  rating: Int
+  score: Float
+  notes: String
+  handle: String
+  active: Boolean
+  due: Date
+  lines(filters: ComponentSharedLineFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): [ComponentSharedLine]
+  total: ComponentSharedMoney
+  createdAt: DateTime
+  updatedAt: DateTime
+  publishedAt: DateTime
+}
+
+enum ENUM_SUBMISSION_KIND {
+  alpha
+  beta
+}
+
+input ComponentSharedLineFiltersInput {
+  label: StringFilterInput
+  quantity: IntFilterInput
+  and: [ComponentSharedLineFiltersInput]
+  or: [ComponentSharedLineFiltersInput]
+  not: ComponentSharedLineFiltersInput
+}
+
+input SubmissionFiltersInput {
+  documentId: IDFilterInput
+  title: StringFilterInput
+  code: StringFilterInput
+  contact: StringFilterInput
+  kind: StringFilterInput
+  rating: IntFilterInput
+  score: FloatFilterInput
+  notes: StringFilterInput
+  handle: StringFilterInput
+  active: BooleanFilterInput
+  due: DateFilterInput
+  lines: ComponentSharedLineFiltersInput
+  total: ComponentSharedMoneyFiltersInput
+  createdAt: DateTimeFilterInput
+  updatedAt: DateTimeFilterInput
+  publishedAt: DateTimeFilterInput
+  and: [SubmissionFiltersInput]
+  or: [SubmissionFiltersInput]
+  not: SubmissionFiltersInput
+}
+
+type SubmissionEntityResponseCollection {
+  nodes: [Submission!]!
+  pageInfo: Pagination!
+}
+
+input SubmissionInput {
+  title: String
+  code: String
+  contact: String
+  kind: ENUM_SUBMISSION_KIND
+  rating: Int
+  score: Float
+  notes: String
+  handle: String
+  active: Boolean
+  due: Date
+  lines: [ComponentSharedLineInput]
+  total: ComponentSharedMoneyInput
+  publishedAt: DateTime
+  locale: String
+}
+
+input ComponentSharedLineInput {
+  id: ID
+  label: String
+  quantity: Int
 }

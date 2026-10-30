@@ -173,6 +173,15 @@ describe("patchBootstrapMiddleware", () => {
     expect(patched).toContain(LINE);
     expect(patched).not.toContain("        //\n    })\n    ->withExceptions");
   });
+  // Strapi stores a string as sent: Laravel's global middleware would trim it and turn "" into null.
+  it("keeps Strapi's routes' strings as sent", () => {
+    const patched = patchBootstrapMiddleware(STOCK_BOOTSTRAP);
+    expect(patched).toContain(
+      "$strapiRoutes = fn (\\Illuminate\\Http\\Request $request): bool => $request->is('api', 'api/*', 'graphql');",
+    );
+    expect(patched).toContain("$middleware->trimStrings(except: [$strapiRoutes]);");
+    expect(patched).toContain("$middleware->convertEmptyStringsToNull(except: [$strapiRoutes]);");
+  });
   it("is idempotent", () => {
     const once = patchBootstrapMiddleware(STOCK_BOOTSTRAP);
     expect(patchBootstrapMiddleware(once)).toBe(once);

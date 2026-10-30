@@ -501,7 +501,8 @@ final class StrapiGraphql
                     $claims['children'][$key] = array_replace_recursive($claims['children'][$key], $innerClaims);
                 }
             } elseif (isset($meta['components'][$name]) || in_array($name, $meta['zones'] ?? [], true)) {
-                $populate[$name] = in_array($name, $meta['zones'] ?? [], true) ? ['populate' => '*'] : true;
+                // Everything inside, its files included: the selection picks what it shows.
+                $populate[$name] = ['populate' => '*'];
             }
         }
 

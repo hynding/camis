@@ -25,3 +25,54 @@ export const strapiDefaultRoles = (publicGrants: Grant[] = []): RolesFile => ({
     },
   ],
 });
+
+export const SUPER_ADMIN_ROLE = "super-admin";
+
+/**
+ * Strapi's Super Admin: signs in to the admin and may do everything. Its admin roles live
+ * outside the users-permissions export, so a new or migrated project gets this one; a project
+ * that already flags a role admin keeps its own.
+ */
+export const withSuperAdmin = (roles: RolesFile, document: IrDocument): RolesFile => {
+  if (roles.roles.some((r) => r.admin === true || r.name === SUPER_ADMIN_ROLE)) return roles;
+  const grants: Grant[] = document.contentTypes.map((ct) => ({
+    contentType: ct.name,
+    actions:
+      ct.options?.draftPublish === true
+        ? ["create", "read", "update", "delete", "publish"]
+        : ["create", "read", "update", "delete"],
+  }));
+  return {
+    ...roles,
+    roles: [
+      ...roles.roles,
+      {
+        name: SUPER_ADMIN_ROLE,
+        description: "Signs in to the admin and may do everything, as Strapi's Super Admin.",
+        admin: true,
+        grants,
+      },
+    ],
+  };
+};
+
+const usesMedia = (fields: readonly { type: string }[]): boolean =>
+  fields.some((f) => f.type === "media");
+
+/**
+ * A document whose media fields have a media library type to grant, as Strapi's upload plugin is
+ * always there; without one no role, the super-admin included, may manage the files.
+ */
+export const withMediaLibrary = (document: IrDocument): IrDocument => {
+  const media =
+    document.contentTypes.some((ct) => usesMedia(ct.fields)) ||
+    document.components.some((c) => usesMedia(c.fields));
+  if (!media || document.contentTypes.some((ct) => ct.builtin === "file")) return document;
+  return {
+    ...document,
+    contentTypes: [
+      ...document.contentTypes,
+      { name: "File", kind: "collection", builtin: "file", fields: [] },
+    ],
+  };
+};

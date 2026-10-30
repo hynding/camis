@@ -139,12 +139,13 @@ const normalize = (value) => {
   return value;
 };
 // An error compares by status, name and message; details only when they are about the query or
-// body key (the relation-not-found details echo the whole payload with server timestamps).
+// body key (the relation-not-found details echo the whole payload with server timestamps), or
+// when the vector file asks for them (`details`: a validation error's details name each failing field).
 const outcome = ({ status, body }) => {
   if (body?.error) {
     const { name, message, details } = body.error;
     const keyed = details && typeof details === "object" && "key" in details;
-    return { status, error: { name, message, ...(keyed ? { details } : {}) } };
+    return { status, error: { name, message, ...(keyed || vectors.details ? { details } : {}) } };
   }
   // Plugin routes (the i18n locales list, the upload API) answer with a bare array or object.
   return { status, data: normalize(bare(body) ? body : (body?.data ?? null)) };

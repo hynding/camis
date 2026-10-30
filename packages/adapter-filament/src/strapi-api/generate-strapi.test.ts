@@ -35,8 +35,13 @@ describe("filamentAdapter apiStyle strapi", () => {
       ),
     ).toBe(true);
     // The project-wide gaps: remote transfer needs a WebSocket server (transfer-tokens.test.ts),
-    // and a Strapi project's roles are API roles, none of them flagged for the admin.
-    expect(result.gaps.gaps.map((g) => g.feature)).toEqual(["remoteDataTransfer", "adminRole"]);
+    // a Strapi project's roles are API roles, none of them flagged for the admin, and an archive
+    // leaves out the files a storyboard's frames link.
+    expect(result.gaps.gaps.map((g) => g.feature)).toEqual([
+      "componentMediaTransfer",
+      "remoteDataTransfer",
+      "adminRole",
+    ]);
   });
   it("is idempotent", () => {
     expect(

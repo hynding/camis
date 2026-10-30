@@ -10,6 +10,8 @@ import {
   isProjectTemplateName,
   projectTemplate,
   strapiDefaultRoles,
+  withMediaLibrary,
+  withSuperAdmin,
   type ProjectTemplate,
 } from "../templates";
 import { generateCommand, printGaps } from "./generate";
@@ -116,7 +118,8 @@ A [camis](https://github.com/hynding/camis) project: one content model, generate
 ${targets.join(", ")}.
 
 - \`camis.json\` is the content model (the IR). Edit it, then run \`camis build\`.
-- \`roles.json\` holds the roles and their grants (\`public\` and \`authenticated\`, as in Strapi).
+- \`roles.json\` holds the roles and their grants: \`public\` and \`authenticated\`, as in Strapi, and
+  \`super-admin\`, the role that may sign in to the admin (\`php artisan camis:admin <email>\` makes one).
 - \`camis.config.json\` names the targets and where each one is generated.
 - \`protected/\` is copied into every target after generation; hand-written code lives there.
 - \`generated/\` is rebuilt by \`camis build\` and is not committed.
@@ -188,14 +191,19 @@ export const newCommand = async (dir: string, io: Io, options: NewOptions): Prom
         : "vanilla",
     );
   }
-  const validated = validate(content.document);
+  const validated = validate(withMediaLibrary(content.document));
   if (!validated.ok) {
     for (const e of validated.errors) io.out(`✗ [${e.code}] ${locStr(e.location)} — ${e.message}`);
     return 1;
   }
 
   const targets = plan.targets.map((t) => targetConfig(t, name, plan));
-  await writeProject(io, projectDir, { ...content, document: validated.value }, targets);
+  await writeProject(
+    io,
+    projectDir,
+    { document: validated.value, roles: withSuperAdmin(content.roles, validated.value) },
+    targets,
+  );
   io.out(`✓ wrote camis.json, roles.json and camis.config.json in ${dir}`);
 
   const pending: string[] = [];
@@ -218,5 +226,10 @@ export const newCommand = async (dir: string, io: Io, options: NewOptions): Prom
 
   io.out(`✓ created camis project ${name}`);
   io.out(`  next: cd ${dir}${pending.map((step) => ` && ${step}`).join("")}`);
+  if (plan.targets.includes("filament")) {
+    io.out(
+      "  then, in generated/filament: php artisan migrate && php artisan db:seed --class=RolePermissionSeeder && php artisan camis:admin <email>",
+    );
+  }
   return 0;
 };
