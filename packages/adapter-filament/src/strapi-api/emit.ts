@@ -376,8 +376,9 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     if (scope?.gap) gaps.push(scope.gap);
     files.push(...mediaLibraryFiles(input.media, emitted, secured, scope?.php));
   }
+  // Every read asks it which version the status parameter names, with or without versioned types.
+  files.push({ path: "app/Support/StrapiDocuments.php", content: emitStrapiDocuments() });
   if (versioned.size > 0) {
-    files.push({ path: "app/Support/StrapiDocuments.php", content: emitStrapiDocuments() });
     files.push({
       path: "app/Models/Concerns/HasDraftAndPublish.php",
       content: emitHasDraftAndPublish(),
