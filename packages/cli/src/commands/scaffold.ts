@@ -65,6 +65,10 @@ const STRAPI_ERRORS_FIRST = `->withMiddleware(function (Middleware $middleware):
         // camis: the Strapi error envelope must wrap every API route, ahead of auth and throttling.
         if (class_exists(\\App\\Http\\Middleware\\StrapiErrors::class)) {
             $middleware->prependToGroup('api', \\App\\Http\\Middleware\\StrapiErrors::class);
+            // Strapi stores a string as sent, spaces and empty ones included.
+            $strapiRoutes = fn (\\Illuminate\\Http\\Request $request): bool => $request->is('api', 'api/*', 'graphql');
+            $middleware->trimStrings(except: [$strapiRoutes]);
+            $middleware->convertEmptyStringsToNull(except: [$strapiRoutes]);
         }
     })`;
 
