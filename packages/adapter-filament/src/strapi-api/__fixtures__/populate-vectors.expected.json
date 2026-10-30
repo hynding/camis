@@ -900,5 +900,15 @@
       "pages": 7,
       "title": "Delta"
     }
+  },
+  "strings are stored as sent, spaces and empty ones included": {
+    "status": 201,
+    "data": {
+      "price": {
+        "currency": "",
+        "minor": "5"
+      },
+      "title": "  Spaced  "
+    }
   }
 }

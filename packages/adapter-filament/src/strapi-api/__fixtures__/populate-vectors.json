@@ -289,7 +289,15 @@
       "path": "/books/@books:Delta",
       "data": { "genres": { "connect": [{ "id": 999 }] } }
     },
-    { "name": "a failed write changed nothing", "method": "GET", "path": "/books/@books:Delta" }
+    { "name": "a failed write changed nothing", "method": "GET", "path": "/books/@books:Delta" },
+    {
+      "name": "strings are stored as sent, spaces and empty ones included",
+      "method": "POST",
+      "path": "/books",
+      "as": "books:Spaced",
+      "query": "fields[0]=title&populate[price]=true",
+      "data": { "title": "  Spaced  ", "price": { "currency": "", "minor": "5" } }
+    }
   ],
   "defaultQuery": "fields[0]=title&fields[1]=pages&populate[author][fields][0]=name&populate[genres][fields][0]=name"
 }
