@@ -96,6 +96,13 @@ const linkData = (assigns: string[]): string =>
     ? "(array) $request->input('data', [])"
     : `array_diff_key((array) $request->input('data', []), [${assigns.map((a) => `'${a}' => true`).join(", ")}])`;
 
+// A repeatable component's items link files: their references are resolved, or refused, with the
+// entry's own links, before anything is written.
+const itemLinks = (shape: WireShape, viewer: string): string =>
+  shape.children.some((c) => c.media.length > 0)
+    ? `\n${STMT}$wire['children'] = StrapiRelations::items($wire['children'], ${shape.model}Serializer::FIELDS, ${viewer});`
+    : "";
+
 const laravelParts = (spec: ControllerSpec): ControllerParts => {
   const { shape, secured, scoped } = spec;
   const M = shape.model;
@@ -112,7 +119,7 @@ ${indent}    $m->save();
 ${indent}    ${S}::syncChildren($m, $wire['children']);
 ${indent}    StrapiRelations::link($m, $links);
 ${indent}});`;
-  const readLinks = `${STMT}$links = StrapiRelations::read(${linkData(spec.assigns)}, ${S}::FIELDS, ${viewer});`;
+  const readLinks = `${STMT}$links = StrapiRelations::read(${linkData(spec.assigns)}, ${S}::FIELDS, ${viewer});${itemLinks(shape, viewer)}`;
   const auth = authLine(secured);
   const assign = spec.assigns
     .map((name) => `${STMT}$m->${snakeColumn(name)}_id = $request->user()?->id;`)
@@ -212,7 +219,7 @@ const documentParts = (
   const assignBlock = assign ? `${assign}\n` : "";
   const forWrite = "StrapiLocales::forWrite($request->query())";
   const readLinks = localized
-    ? `${STMT}$links = StrapiRelations::read(${linkData(spec.assigns)}, ${S}::FIELDS, ${viewer}, ${forWrite});`
+    ? `${STMT}$links = StrapiRelations::read(${linkData(spec.assigns)}, ${S}::FIELDS, ${viewer}, ${forWrite});${itemLinks(spec.shape, viewer)}`
     : plainReadLinks;
   const publish = versioned
     ? `${STMT}    if (! StrapiDocuments::draftOnly($request->query())) {

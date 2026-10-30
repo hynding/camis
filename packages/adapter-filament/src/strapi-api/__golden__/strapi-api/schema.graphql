@@ -141,6 +141,9 @@ type Query {
   review(documentId: ID!, status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): Review
   reviews_connection(filters: ReviewFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): ReviewEntityResponseCollection
   reviews(filters: ReviewFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [Review]!
+  storyboard(documentId: ID!, status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): Storyboard
+  storyboards_connection(filters: StoryboardFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): StoryboardEntityResponseCollection
+  storyboards(filters: StoryboardFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [Storyboard]!
   tag(documentId: ID!, status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): Tag
   tags_connection(filters: TagFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): TagEntityResponseCollection
   tags(filters: TagFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [Tag]!
@@ -256,6 +259,9 @@ type Mutation {
   createReview(status: PublicationStatus = PUBLISHED, data: ReviewInput!): Review
   updateReview(documentId: ID!, status: PublicationStatus = PUBLISHED, data: ReviewInput!): Review
   deleteReview(documentId: ID!): DeleteMutationResponse
+  createStoryboard(status: PublicationStatus = PUBLISHED, data: StoryboardInput!): Storyboard
+  updateStoryboard(documentId: ID!, status: PublicationStatus = PUBLISHED, data: StoryboardInput!): Storyboard
+  deleteStoryboard(documentId: ID!): DeleteMutationResponse
   createTag(status: PublicationStatus = PUBLISHED, data: TagInput!): Tag
   updateTag(documentId: ID!, status: PublicationStatus = PUBLISHED, data: TagInput!): Tag
   deleteTag(documentId: ID!): DeleteMutationResponse
@@ -1258,6 +1264,58 @@ type ReviewEntityResponseCollection {
   pageInfo: Pagination!
 }
 
+type ComponentSharedFrame {
+  id: ID!
+  caption: String
+  image: UploadFile
+}
+
+input ComponentSharedFrameFiltersInput {
+  caption: StringFilterInput
+  and: [ComponentSharedFrameFiltersInput]
+  or: [ComponentSharedFrameFiltersInput]
+  not: ComponentSharedFrameFiltersInput
+}
+
+input ComponentSharedFrameInput {
+  id: ID
+  caption: String
+  image: ID
+}
+
+type Storyboard {
+  documentId: ID!
+  title: String!
+  frames(filters: ComponentSharedFrameFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): [ComponentSharedFrame]
+  createdAt: DateTime
+  updatedAt: DateTime
+  publishedAt: DateTime
+}
+
+input StoryboardInput {
+  title: String
+  frames: [ComponentSharedFrameInput]
+  publishedAt: DateTime
+  locale: String
+}
+
+input StoryboardFiltersInput {
+  documentId: IDFilterInput
+  title: StringFilterInput
+  frames: ComponentSharedFrameFiltersInput
+  createdAt: DateTimeFilterInput
+  updatedAt: DateTimeFilterInput
+  publishedAt: DateTimeFilterInput
+  and: [StoryboardFiltersInput]
+  or: [StoryboardFiltersInput]
+  not: StoryboardFiltersInput
+}
+
+type StoryboardEntityResponseCollection {
+  nodes: [Storyboard!]!
+  pageInfo: Pagination!
+}
+
 type Tag {
   documentId: ID!
   label: String
@@ -1568,4 +1626,4 @@ type UsersPermissionsPasswordPayload {
   ok: Boolean!
 }
 
-union GenericMorph = ComponentSharedHero | ComponentSharedMoney | ComponentSharedPanel | ComponentSharedQuantity | UploadFile | I18NLocale | UsersPermissionsPermission | UsersPermissionsRole | UsersPermissionsUser | Activity | ActivitySession | Article | Author | Book | Category | Genre | Global | Homepage | Landing | Note | Page | Post | Review | Tag | Topic | Transaction
+union GenericMorph = ComponentSharedFrame | ComponentSharedHero | ComponentSharedMoney | ComponentSharedPanel | ComponentSharedQuantity | UploadFile | I18NLocale | UsersPermissionsPermission | UsersPermissionsRole | UsersPermissionsUser | Activity | ActivitySession | Article | Author | Book | Category | Genre | Global | Homepage | Landing | Note | Page | Post | Review | Storyboard | Tag | Topic | Transaction

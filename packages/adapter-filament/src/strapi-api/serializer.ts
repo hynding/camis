@@ -41,6 +41,12 @@ const read = (s: WireScalar, src: string, layout: StorageLayout): string => {
   return col;
 };
 
+// An item's files, whole: populate leaves them off, or narrows them, as it does an entry's.
+const mediaWire = (r: WireRelation): string =>
+  r.kind === "mediaMany"
+    ? `$c->${r.relation}()->orderByPivot('order')->get()->map(fn ($f) => ${r.model}Serializer::toWire($f))->all()`
+    : `$c->${r.relation}->first() === null ? null : ${r.model}Serializer::toWire($c->${r.relation}->first())`;
+
 // Build a nested PHP array literal from scalars whose keys are paths.
 interface Node {
   leaves: Map<string, string>;
@@ -81,6 +87,7 @@ const toWireBody = (shape: WireShape, indent: string, layout: StorageLayout): st
     const inner = node();
     insert(inner, ["id"], "$c->id");
     for (const s of answered(c.scalars)) insert(inner, s.key, read(s, "$c", layout));
+    for (const r of c.media) insert(inner, r.key.split("."), mediaWire(r));
     // The child's own row is rendered by `render` one branch level per path segment above
     // it (depth = c.key.length - 1), matching how it indents a nested `self::nested([`
     // branch body — so the map's rows sit a further level in, and its closing
@@ -139,12 +146,25 @@ const fromWireChildStatements = (children: WireChild[], indent: string): string 
     const path = c.key.map((k) => `'${k}'`).join(", ");
     return `${indent}if (self::has($data, [${path}])) {
 ${assignIndent}$children['${c.relation}'] = array_map(fn (array $row) => array_filter([
-${fromWireColumns(c.scalars, "$row", rowIndent)}
+${fromWireColumns(c.scalars, "$row", rowIndent)}${c.media.length === 0 ? "" : `\n${fromWireMedia(c.media, rowIndent)}`}
 ${assignIndent}], fn ($v) => $v !== null), is_array(self::dig($data, [${path}])) ? self::dig($data, [${path}]) : []);
 ${indent}}`;
   });
   return [`${indent}$children = [];`, ...blocks].join("\n");
 };
+
+// An item's file references, as sent: the controller resolves them to links before any write.
+// A new item links nothing, so a null reference and a missing one mean the same.
+const fromWireMedia = (media: WireRelation[], indent: string): string =>
+  `${indent}'__media' => array_filter([\n${media
+    .map(
+      (r) =>
+        `${indent}${UNIT}'${r.key}' => self::dig($row, [${r.key
+          .split(".")
+          .map((k) => `'${k}'`)
+          .join(", ")}]),`,
+    )
+    .join("\n")}\n${indent}], fn ($v) => $v !== null),`;
 
 // A zone's items, refused or dropped as Strapi does by `StrapiZones::items`, each member's columns
 // read from its item. Set only when the payload mentions the zone, like the children above.
@@ -192,12 +212,20 @@ const zoneHelper = `
         return array_column($items, 1);
     }`;
 
+// Items that link files are deleted one by one, so their links go with them, and linked once made.
 const syncBody = (children: WireChild[], indent: string): string =>
   children
-    .map(
-      (c) => `${indent}if (array_key_exists('${c.relation}', $children)) {
+    .map((c) =>
+      c.media.length === 0
+        ? `${indent}if (array_key_exists('${c.relation}', $children)) {
 ${indent}${UNIT}$m->${c.relation}()->delete();
 ${indent}${UNIT}$m->${c.relation}()->createMany($children['${c.relation}']);
+${indent}}`
+        : `${indent}if (array_key_exists('${c.relation}', $children)) {
+${indent}${UNIT}$m->${c.relation}()->get()->each->delete();
+${indent}${UNIT}foreach ($children['${c.relation}'] as $row) {
+${indent}${UNIT}${UNIT}StrapiRelations::link($m->${c.relation}()->create(array_diff_key($row, ['__media' => true])), $row['__media'] ?? []);
+${indent}${UNIT}}
 ${indent}}`,
     )
     .join("\n");
@@ -272,7 +300,7 @@ const fieldsConstant = (shape: WireShape): string => {
   ];
   const children = shape.children.map(
     (c) =>
-      `${l2}'${c.key.join(".")}' => ['component' => '${c.relation}', 'fields' => [\n${c.scalars.map((s) => fieldEntry(s, l3)).join("\n")}\n${l2}]${privateEntry(c)}],`,
+      `${l2}'${c.key.join(".")}' => ['component' => '${c.relation}', 'fields' => [\n${[...c.scalars.map((s) => fieldEntry(s, l3)), ...c.media.map((r) => relationEntry(r, l3))].join("\n")}\n${l2}]${privateEntry(c)}],`,
   );
   const rows = [
     ...[id, documentId, ...shape.scalars].map((s) => fieldEntry(s, l2)),
@@ -303,7 +331,12 @@ export const emitSerializer = (shape: WireShape, layout: StorageLayout = "larave
   const hasHelperBody = shape.children.length === 0 ? "" : hasHelper;
   const zoneHelperBody = zones.length === 0 ? "" : zoneHelper;
   const epochHelperBody = hasTimestamp(shape, zones) ? epochHelper : "";
-  const zoneImport = zones.length === 0 ? "" : "\nuse App\\Support\\StrapiZones;";
+  const zoneImport = [
+    ...(shape.children.some((c) => c.media.length > 0)
+      ? ["\nuse App\\Support\\StrapiRelations;"]
+      : []),
+    ...(zones.length === 0 ? [] : ["\nuse App\\Support\\StrapiZones;"]),
+  ].join("");
   return `<?php
 ${PHP_MARKER}
 

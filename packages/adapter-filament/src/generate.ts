@@ -43,7 +43,14 @@ import { emitResourceFiles } from "./resource";
 import { draftPublishPlan } from "./strapi-api/draft-publish";
 import { guestsPlan } from "./strapi-api/guests";
 import { localizationPlan, sharedAcrossLocalesMethod } from "./strapi-api/localization";
-import { mediaAllowedTypes, mediaFields, mediaPlan } from "./strapi-api/media";
+import {
+  columnMediaGaps,
+  itemMediaTransferGap,
+  mediaAllowedTypes,
+  mediaComponentsConstant,
+  mediaFields,
+  mediaPlan,
+} from "./strapi-api/media";
 import { mediaRelationMethod } from "./strapi-api/media-runtime";
 import { contentManagerSorts, USER_DISPLAY_NAME } from "./strapi-api/admin-navigation";
 import { emitStrapiApi } from "./strapi-api/emit";
@@ -207,7 +214,9 @@ export const filamentAdapter: GenerateAdapter = {
       const embeddedEmits = expansion.scalars.map((s) =>
         emitField(columnField(s), s.path.map(snakeColumn).join("_")),
       );
-      const ctChildren = expansion.tables.map((t) => childTableEmit(ct, t));
+      const ctChildren = expansion.tables.map((t) =>
+        childTableEmit(ct, t, fileModel !== undefined),
+      );
       ctChildren.forEach((child) => children.push({ ct, child }));
       const zoneChildren =
         apiStyle === "strapi"
@@ -221,6 +230,9 @@ export const filamentAdapter: GenerateAdapter = {
       // With a media library a media field is a link to its files, not a column; a dynamic zone
       // lives in its members' tables.
       const mediaOf = fileModel === undefined ? [] : mediaFields(ct);
+      const mediaItems = ctChildren.filter((c) => c.media.length > 0).map((c) => c.relationName);
+      if (fileModel !== undefined) gaps.push(...columnMediaGaps(ct, expansion));
+      if (mediaItems.length > 0) gaps.push(itemMediaTransferGap(ct, mediaItems));
       const columns = {
         ...ct,
         fields: ct.fields.filter(
@@ -249,13 +261,16 @@ export const filamentAdapter: GenerateAdapter = {
               : []),
             ...(versioned.has(ct.name) ? ["App\\Models\\Concerns\\HasDraftAndPublish"] : []),
             ...(localized.has(ct.name) ? ["App\\Models\\Concerns\\HasLocale"] : []),
-            ...(mediaOf.length > 0 ? ["App\\Models\\Concerns\\HasMedia"] : []),
+            ...(mediaOf.length > 0 || mediaItems.length > 0
+              ? ["App\\Models\\Concerns\\HasMedia"]
+              : []),
             ...(linkOrders === undefined ? [] : ["App\\Models\\Concerns\\HasLinkOrder"]),
           ],
           [
             ...(linkOrders === undefined ? [] : [linkOrdersConstant(linkOrders)]),
             ...(localized.has(ct.name) ? [sharedAcrossLocalesMethod(ct)] : []),
             ...mediaOf.map((f) => mediaRelationMethod(f.name, f.name, fileModel)),
+            ...(mediaItems.length > 0 ? [mediaComponentsConstant(mediaItems)] : []),
           ],
         ),
       });
@@ -305,7 +320,10 @@ export const filamentAdapter: GenerateAdapter = {
         ),
       );
       [...ctChildren, ...zoneChildren].forEach((child) => {
-        files.push({ path: `app/Models/${child.model}.php`, content: emitChildModel(child) });
+        files.push({
+          path: `app/Models/${child.model}.php`,
+          content: emitChildModel(child, fileModel),
+        });
       });
       if (apiStyle === "laravel") {
         files.push({

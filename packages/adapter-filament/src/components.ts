@@ -1,8 +1,10 @@
-import { columnField, type ExpandedTable } from "@camis/adapter-kernel";
+import { columnField, type ExpandedScalar, type ExpandedTable } from "@camis/adapter-kernel";
 import type { ContentType } from "@camis/ir-schema";
 import { emitField, type FieldEmit } from "./fields";
 import { filamentNames, snake, snakeColumn } from "./names";
 import type { RelationMethod } from "./relations";
+import { mediaAllowedTypes } from "./strapi-api/media";
+import { mediaRelationMethod } from "./strapi-api/media-runtime";
 
 const studlySegment = (segment: string): string =>
   segment.charAt(0).toUpperCase() + segment.slice(1);
@@ -18,17 +20,50 @@ export interface ChildTableEmit {
   emits: FieldEmit[];
   /** A dynamic zone member's rows: they keep the item's place in the zone. */
   ordered?: boolean;
+  /** Its media fields, when the project has a media library: links to its files, not columns. */
+  media: ChildMedia[];
 }
 
-export const childTableEmit = (ct: ContentType, table: ExpandedTable): ChildTableEmit => {
+/** A media field of a repeatable component's item, linked to the library through its own row. */
+export interface ChildMedia {
+  /** Its path within the item. */
+  path: string[];
+  /** The same path in the keys its fields go by on the API. */
+  apiPath: string[];
+  /** The item model's relation to its files. */
+  method: string;
+  multiple: boolean;
+  /** The kinds of file it takes, when not every kind. */
+  allowedTypes?: string[];
+}
+
+/**
+ * With `linksMedia` (the Strapi API style keeps a media library) an item's media fields become
+ * links from its own row, as Strapi links a component's; otherwise each is a path column.
+ */
+export const childTableEmit = (
+  ct: ContentType,
+  table: ExpandedTable,
+  linksMedia = false,
+): ChildTableEmit => {
   const parent = filamentNames(ct);
   const pathSnake = table.path.map(snakeColumn).join("_");
+  const isLink = (s: ExpandedScalar): boolean => linksMedia && s.field.type === "media";
   return {
     table: `${parent.table}_${pathSnake}`,
     model: `${parent.model}${table.path.map(studlySegment).join("")}`,
     fk: `${snake(ct.name)}_id`,
     relationName: camelPath(table.path),
-    emits: table.scalars.map((s) => emitField(columnField(s), s.path.map(snakeColumn).join("_"))),
+    emits: table.scalars
+      .filter((s) => !isLink(s))
+      .map((s) => emitField(columnField(s), s.path.map(snakeColumn).join("_"))),
+    media: table.scalars.filter(isLink).map((s) => ({
+      path: s.path,
+      apiPath: s.apiPath,
+      method: camelPath(s.path),
+      multiple: s.field.type === "media" && s.field.multiple === true,
+      ...mediaAllowedTypes(s.field),
+    })),
   };
 };
 
@@ -66,7 +101,8 @@ ${columns}
 `;
 };
 
-export const emitChildModel = (child: ChildTableEmit): string => {
+/** `fileModel` is the media library's model, which an item's media fields link to. */
+export const emitChildModel = (child: ChildTableEmit, fileModel = "File"): string => {
   const fillable = [
     ...(child.ordered === true ? ["position"] : []),
     ...child.emits.map((e) => e.column),
@@ -81,6 +117,10 @@ export const emitChildModel = (child: ChildTableEmit): string => {
     casts.length > 0
       ? `\n    protected function casts(): array\n    {\n        return [\n${casts}\n        ];\n    }\n`
       : "";
+  const media = child.media.map(
+    (m) => `\n${mediaRelationMethod(m.path.join("."), m.method, fileModel)}\n`,
+  );
+  const hasMedia = child.media.length > 0 ? "\n    use \\App\\Models\\Concerns\\HasMedia;\n" : "";
   return `<?php
 
 declare(strict_types=1);
@@ -90,13 +130,13 @@ namespace App\\Models;
 use Illuminate\\Database\\Eloquent\\Model;
 
 class ${child.model} extends Model
-{
+{${hasMedia}
     protected $table = '${child.table}';
 
     protected $fillable = [
 ${fillable}
     ];
-${castsMethod}}
+${castsMethod}${media.join("")}}
 `;
 };
 
@@ -111,9 +151,21 @@ export interface RepeaterEmit {
 }
 
 export const repeaterComponent = (child: ChildTableEmit): RepeaterEmit => {
-  const inner = child.emits.map((e) => `                ${e.formComponent},`).join("\n");
+  const inner = [
+    ...child.emits.map((e) => e.formComponent),
+    ...child.media.map(
+      (m) =>
+        `MediaPicker::make('${m.method}', multiple: ${m.multiple}${m.allowedTypes === undefined ? "" : `, allowedTypes: [${m.allowedTypes.map((t) => `'${t}'`).join(", ")}]`})`,
+    ),
+  ]
+    .map((c) => `                ${c},`)
+    .join("\n");
   return {
     component: `Repeater::make('${child.relationName}')->relationship()->schema([\n${inner}\n            ])`,
-    imports: ["Filament\\Forms\\Components\\Repeater", ...child.emits.map((e) => e.formImport)],
+    imports: [
+      "Filament\\Forms\\Components\\Repeater",
+      ...child.emits.map((e) => e.formImport),
+      ...(child.media.length > 0 ? ["App\\Filament\\Support\\MediaPicker"] : []),
+    ],
   };
 };

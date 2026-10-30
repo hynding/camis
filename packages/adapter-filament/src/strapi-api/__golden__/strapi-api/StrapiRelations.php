@@ -34,6 +34,29 @@ final class StrapiRelations
     }
 
     /**
+     * Each repeatable component item's file references as the links its row makes once saved; a
+     * missing file fails the whole request, as one an entry links itself does.
+     */
+    public static function items(array $children, array $fields, ?Authenticatable $viewer): array
+    {
+        foreach ($fields as $field) {
+            $relation = $field['component'] ?? null;
+            if ($relation === null || ! isset($children[$relation])) {
+                continue;
+            }
+            $media = array_filter($field['fields'], fn (array $f): bool => isset($f['relation']));
+            if ($media === []) {
+                continue;
+            }
+            foreach ($children[$relation] as $i => $row) {
+                $children[$relation][$i]['__media'] = self::read($row['__media'] ?? [], $media, $viewer);
+            }
+        }
+
+        return $children;
+    }
+
+    /**
      * To-one foreign keys on the row itself: set before it is saved, so a required one holds. A
      * row linked to a new target takes the end of the target's list, when the target lists it.
      */

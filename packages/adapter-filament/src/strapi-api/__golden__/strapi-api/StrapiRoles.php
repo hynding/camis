@@ -158,6 +158,16 @@ final class StrapiRoles
                 'delete' => ['review.delete'],
             ],
         ],
+        'api::storyboard.storyboard' => [
+            'label' => 'Storyboard',
+            'actions' => [
+                'find' => ['storyboard.read'],
+                'findOne' => ['storyboard.read'],
+                'create' => ['storyboard.create'],
+                'update' => ['storyboard.update'],
+                'delete' => ['storyboard.delete'],
+            ],
+        ],
         'api::tag.tag' => [
             'label' => 'Tag',
             'actions' => [

@@ -17,6 +17,8 @@ export interface WireChild {
   relation: string;
   model: string;
   scalars: WireScalar[];
+  /** Its items' media fields, each a link from the item's row; its key is relative to the item. */
+  media: WireRelation[];
   private?: true;
 }
 /** One component a dynamic zone holds: its uid on the wire and the child relation its items live in. */
@@ -129,17 +131,25 @@ export const wireShape = (
     ...privacy(s.field.private === true || within(s.apiPath)),
   }));
   const children: WireChild[] = expansion.tables.map((t) => {
-    const child = childTableEmit(ct, t);
+    const child = childTableEmit(ct, t, fileModel !== undefined);
     return {
       key: t.apiPath,
       relation: child.relationName,
       model: child.model,
-      scalars: t.scalars.map((s) => ({
-        key: s.apiPath,
-        column: s.path.map(snakeColumn).join("_"),
-        type: s.field.type,
-        ...privacy(s.field.private === true),
-      })),
+      media:
+        fileModel === undefined
+          ? []
+          : child.media.map((m) =>
+              mediaRelation(m.apiPath.join("."), m.method, m.multiple, fileModel),
+            ),
+      scalars: t.scalars
+        .filter((s) => fileModel === undefined || s.field.type !== "media")
+        .map((s) => ({
+          key: s.apiPath,
+          column: s.path.map(snakeColumn).join("_"),
+          type: s.field.type,
+          ...privacy(s.field.private === true),
+        })),
       ...privacy(within(t.apiPath)),
     };
   });
@@ -207,24 +217,29 @@ export const wireShape = (
 };
 
 /** A media field links files through Strapi's `files_related_mph`, in the order given. */
+const mediaRelation = (
+  key: string,
+  relation: string,
+  multiple: boolean,
+  fileModel: string,
+): WireRelation => ({
+  key,
+  relation,
+  kind: multiple ? "mediaMany" : "mediaOne",
+  model: fileModel,
+  foreignKey: null,
+  uid: FILE_UID,
+  holder: "self",
+  draftPublish: false,
+  localized: false,
+  order: null,
+  inverseOrder: null,
+});
+
 const mediaRelations = (ct: ContentType, fileModel: string): WireRelation[] =>
   ct.fields.flatMap((f) =>
     f.type === "media"
-      ? [
-          {
-            key: fieldApiName(f),
-            relation: f.name,
-            kind: f.multiple === true ? ("mediaMany" as const) : ("mediaOne" as const),
-            model: fileModel,
-            foreignKey: null,
-            uid: FILE_UID,
-            holder: "self" as const,
-            draftPublish: false,
-            localized: false,
-            order: null,
-            inverseOrder: null,
-          },
-        ]
+      ? [mediaRelation(fieldApiName(f), f.name, f.multiple === true, fileModel)]
       : [],
   );
 

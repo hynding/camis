@@ -17,6 +17,11 @@ trait HasMedia
                 ->where('related_type', $row->getMorphClass())
                 ->where('related_id', $row->getKey())
                 ->delete();
+            // A repeatable component's items would go by the foreign key's cascade, past this hook.
+            $components = defined($row::class.'::MEDIA_COMPONENTS') ? constant($row::class.'::MEDIA_COMPONENTS') : [];
+            foreach ($components as $relation) {
+                $row->{$relation}()->get()->each->delete();
+            }
         });
     }
 }

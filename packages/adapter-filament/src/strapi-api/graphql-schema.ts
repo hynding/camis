@@ -267,7 +267,7 @@ class SchemaBuilder implements DefinitionSink {
     return component;
   }
 
-  /** A component's type, with its id and its own components; relations and media stay off it. */
+  /** A component's type, with its id, its own components and its files; relations stay off it. */
   componentType(component: Component): string {
     const name = componentTypeName(component);
     return this.need(name, () => {
@@ -280,7 +280,10 @@ class SchemaBuilder implements DefinitionSink {
           const target = this.component(f.component);
           nested[key] = { type: componentTypeName(target), repeatable: f.repeatable };
           fields.push(this.componentField(key, target, f.repeatable));
-        } else if (f.type !== "relation" && f.type !== "media") {
+        } else if (f.type === "media") {
+          this.uploadFile();
+          fields.push({ name: key, type: f.multiple === true ? "[UploadFile]!" : "UploadFile" });
+        } else if (f.type !== "relation") {
           fields.push({
             name: key,
             type: `${this.scalarType(name, f)}${f.required === true ? "!" : ""}`,
@@ -338,7 +341,9 @@ class SchemaBuilder implements DefinitionSink {
             const input = this.componentInput(this.component(f.component));
             return [{ name: fieldApiName(f), type: f.repeatable ? `[${input}]` : input }];
           }
-          return f.type === "relation" || f.type === "media"
+          if (f.type === "media")
+            return [{ name: fieldApiName(f), type: f.multiple === true ? "[ID]" : "ID" }];
+          return f.type === "relation"
             ? []
             : [{ name: fieldApiName(f), type: this.scalarType(componentTypeName(component), f) }];
         }),
