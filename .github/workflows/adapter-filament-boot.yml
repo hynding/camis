@@ -321,6 +321,17 @@ jobs:
           F=../packages/adapter-filament/src/strapi-api/__fixtures__
           node ../packages/adapter-filament/scripts/strapi-populate-vectors.mjs http://127.0.0.1:8765/api \
             --token "$T" --vectors $F/dynamic-zone-vectors.json --expected $F/dynamic-zone-vectors.expected.json
+      - name: Strapi entity validation vectors (recorded from strapi-php)
+        run: |
+          cd app
+          php artisan migrate:fresh --force
+          php artisan db:seed --class="Database\\Seeders\\RolePermissionSeeder" --force
+          T=$(curl -s -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' \
+            --data '{"username":"validation","email":"validation@example.test","password":"secret1"}' \
+            http://127.0.0.1:8765/api/auth/local/register | jq -r .jwt)
+          F=../packages/adapter-filament/src/strapi-api/__fixtures__
+          node ../packages/adapter-filament/scripts/strapi-populate-vectors.mjs http://127.0.0.1:8765/api \
+            --token "$T" --vectors $F/validation-vectors.json --expected $F/validation-vectors.expected.json
       - name: Strapi GraphQL vectors (recorded from strapi-php, locales en and fr)
         run: |
           cd app

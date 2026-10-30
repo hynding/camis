@@ -1,0 +1,528 @@
+{
+  "a write meeting every constraint is stored": {
+    "status": 201,
+    "data": {
+      "active": true,
+      "code": "ABC-12",
+      "contact": "a@b.co",
+      "due": "2026-01-02",
+      "handle": "fine-1",
+      "kind": "alpha",
+      "notes": "short",
+      "rating": 3,
+      "score": 0.5,
+      "title": "Fine"
+    }
+  },
+  "a required field left out": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "title must be defined.",
+      "details": {
+        "errors": [
+          {
+            "path": ["title"],
+            "message": "title must be defined.",
+            "name": "ValidationError"
+          }
+        ]
+      }
+    }
+  },
+  "a required field sent as null": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "title must be a `string` type, but the final value was: `null`.",
+      "details": {
+        "errors": [
+          {
+            "path": ["title"],
+            "message": "title must be a `string` type, but the final value was: `null`.",
+            "name": "ValidationError",
+            "value": null
+          }
+        ]
+      }
+    }
+  },
+  "a required string sent empty": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "title must be at least 3 characters",
+      "details": {
+        "errors": [
+          {
+            "path": ["title"],
+            "message": "title must be at least 3 characters",
+            "name": "ValidationError",
+            "value": ""
+          }
+        ]
+      }
+    }
+  },
+  "a string shorter than its minLength": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "title must be at least 3 characters",
+      "details": {
+        "errors": [
+          {
+            "path": ["title"],
+            "message": "title must be at least 3 characters",
+            "name": "ValidationError",
+            "value": "ab"
+          }
+        ]
+      }
+    }
+  },
+  "a string longer than its maxLength": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "title must be at most 20 characters",
+      "details": {
+        "errors": [
+          {
+            "path": ["title"],
+            "message": "title must be at most 20 characters",
+            "name": "ValidationError",
+            "value": "xxxxxxxxxxxxxxxxxxxxx"
+          }
+        ]
+      }
+    }
+  },
+  "a string longer than the 255 a string column holds": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "code must be at most 255 characters",
+      "details": {
+        "errors": [
+          {
+            "path": ["code"],
+            "message": "code must be at most 255 characters",
+            "name": "ValidationError",
+            "value": "ABC-111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111"
+          }
+        ]
+      }
+    }
+  },
+  "a number where a string goes": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "title must be a `string` type, but the final value was: `123`.",
+      "details": {
+        "errors": [
+          {
+            "path": ["title"],
+            "message": "title must be a `string` type, but the final value was: `123`.",
+            "name": "ValidationError",
+            "value": 123
+          }
+        ]
+      }
+    }
+  },
+  "a string that misses its regex": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "code must match the following: \"/^[A-Z]{3}-\\d+$/\"",
+      "details": {
+        "errors": [
+          {
+            "path": ["code"],
+            "message": "code must match the following: \"/^[A-Z]{3}-\\d+$/\"",
+            "name": "ValidationError",
+            "value": "abc-12"
+          }
+        ]
+      }
+    }
+  },
+  "an empty string skips the regex of an optional field": {
+    "status": 201,
+    "data": {
+      "active": null,
+      "code": "",
+      "contact": null,
+      "due": null,
+      "handle": null,
+      "kind": null,
+      "notes": null,
+      "rating": null,
+      "score": null,
+      "title": "Empty code"
+    }
+  },
+  "an email that is not one": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "contact must be a valid email",
+      "details": {
+        "errors": [
+          {
+            "path": ["contact"],
+            "message": "contact must be a valid email",
+            "name": "ValidationError",
+            "value": "not-an-email"
+          }
+        ]
+      }
+    }
+  },
+  "a value outside the enumeration": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "kind must be one of the following values: alpha, beta, null",
+      "details": {
+        "errors": [
+          {
+            "path": ["kind"],
+            "message": "kind must be one of the following values: alpha, beta, null",
+            "name": "ValidationError",
+            "value": "gamma"
+          }
+        ]
+      }
+    }
+  },
+  "null is among an optional enumeration's values": {
+    "status": 201,
+    "data": {
+      "active": null,
+      "code": null,
+      "contact": null,
+      "due": null,
+      "handle": null,
+      "kind": null,
+      "notes": null,
+      "rating": null,
+      "score": null,
+      "title": "Null kind"
+    }
+  },
+  "an integer below its min": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "rating must be greater than or equal to 1",
+      "details": {
+        "errors": [
+          {
+            "path": ["rating"],
+            "message": "rating must be greater than or equal to 1",
+            "name": "ValidationError",
+            "value": 0
+          }
+        ]
+      }
+    }
+  },
+  "an integer above its max": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "rating must be less than or equal to 5",
+      "details": {
+        "errors": [
+          {
+            "path": ["rating"],
+            "message": "rating must be less than or equal to 5",
+            "name": "ValidationError",
+            "value": 6
+          }
+        ]
+      }
+    }
+  },
+  "a fraction where an integer goes": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "rating must be an integer",
+      "details": {
+        "errors": [
+          {
+            "path": ["rating"],
+            "message": "rating must be an integer",
+            "name": "ValidationError",
+            "value": 2.5
+          }
+        ]
+      }
+    }
+  },
+  "a numeric string where an integer goes": {
+    "status": 201,
+    "data": {
+      "active": null,
+      "code": null,
+      "contact": null,
+      "due": null,
+      "handle": null,
+      "kind": null,
+      "notes": null,
+      "rating": 3,
+      "score": null,
+      "title": "Numeric"
+    }
+  },
+  "a float above its max": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "score must be less than or equal to 1",
+      "details": {
+        "errors": [
+          {
+            "path": ["score"],
+            "message": "score must be less than or equal to 1",
+            "name": "ValidationError",
+            "value": 1.5
+          }
+        ]
+      }
+    }
+  },
+  "a text longer than its maxLength": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "notes must be at most 10 characters",
+      "details": {
+        "errors": [
+          {
+            "path": ["notes"],
+            "message": "notes must be at most 10 characters",
+            "name": "ValidationError",
+            "value": "xxxxxxxxxxx"
+          }
+        ]
+      }
+    }
+  },
+  "a uid with characters a uid may not hold": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "handle must match the following: \"/^[A-Za-z0-9-_.~]*$/\"",
+      "details": {
+        "errors": [
+          {
+            "path": ["handle"],
+            "message": "handle must match the following: \"/^[A-Za-z0-9-_.~]*$/\"",
+            "name": "ValidationError",
+            "value": "has space"
+          }
+        ]
+      }
+    }
+  },
+  "a word where a boolean goes": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "active must be a `boolean` type, but the final value was: `\"yes\"`.",
+      "details": {
+        "errors": [
+          {
+            "path": ["active"],
+            "message": "active must be a `boolean` type, but the final value was: `\"yes\"`.",
+            "name": "ValidationError",
+            "value": "yes"
+          }
+        ]
+      }
+    }
+  },
+  "a component item missing its required field and below a min": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "2 errors occurred",
+      "details": {
+        "errors": [
+          {
+            "path": ["lines", "0", "label"],
+            "message": "lines[0].label must be defined.",
+            "name": "ValidationError"
+          },
+          {
+            "path": ["lines", "0", "quantity"],
+            "message": "lines[0].quantity must be greater than or equal to 1",
+            "name": "ValidationError",
+            "value": 0
+          }
+        ]
+      }
+    }
+  },
+  "a component item's field is checked by its path": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "lines[1].quantity must be greater than or equal to 1",
+      "details": {
+        "errors": [
+          {
+            "path": ["lines", "1", "quantity"],
+            "message": "lines[1].quantity must be greater than or equal to 1",
+            "name": "ValidationError",
+            "value": -1
+          }
+        ]
+      }
+    }
+  },
+  "an embedded component's field is checked by its path": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "total.minor must be a valid integer",
+      "details": {
+        "errors": [
+          {
+            "path": ["total", "minor"],
+            "message": "total.minor must be a valid integer",
+            "name": "ValidationError",
+            "value": "lots"
+          }
+        ]
+      }
+    }
+  },
+  "every failing field is reported": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "4 errors occurred",
+      "details": {
+        "errors": [
+          {
+            "path": ["title"],
+            "message": "title must be defined.",
+            "name": "ValidationError"
+          },
+          {
+            "path": ["kind"],
+            "message": "kind must be one of the following values: alpha, beta, null",
+            "name": "ValidationError",
+            "value": "gamma"
+          },
+          {
+            "path": ["rating"],
+            "message": "rating must be less than or equal to 5",
+            "name": "ValidationError",
+            "value": 9
+          },
+          {
+            "path": ["notes"],
+            "message": "notes must be at most 10 characters",
+            "name": "ValidationError",
+            "value": "xxxxxxxxxxx"
+          }
+        ]
+      }
+    }
+  },
+  "an update may leave a required field out": {
+    "status": 200,
+    "data": {
+      "active": true,
+      "code": "ABC-12",
+      "contact": "a@b.co",
+      "due": "2026-01-02",
+      "handle": "fine-1",
+      "kind": "alpha",
+      "notes": "short",
+      "rating": 4,
+      "score": 0.5,
+      "title": "Fine"
+    }
+  },
+  "an update may not set a required field to null": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "title must be a `string` type, but the final value was: `null`.",
+      "details": {
+        "errors": [
+          {
+            "path": ["title"],
+            "message": "title must be a `string` type, but the final value was: `null`.",
+            "name": "ValidationError",
+            "value": null
+          }
+        ]
+      }
+    }
+  },
+  "an update checks the fields it sends": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "2 errors occurred",
+      "details": {
+        "errors": [
+          {
+            "path": ["title"],
+            "message": "title must be at least 3 characters",
+            "name": "ValidationError",
+            "value": "ab"
+          },
+          {
+            "path": ["rating"],
+            "message": "rating must be greater than or equal to 1",
+            "name": "ValidationError",
+            "value": 0
+          }
+        ]
+      }
+    }
+  },
+  "the stored submission after the failed updates": {
+    "status": 200,
+    "data": {
+      "active": true,
+      "code": "ABC-12",
+      "contact": "a@b.co",
+      "due": "2026-01-02",
+      "handle": "fine-1",
+      "kind": "alpha",
+      "lines": [
+        {
+          "label": "One",
+          "quantity": 2
+        }
+      ],
+      "notes": "short",
+      "rating": 4,
+      "score": 0.5,
+      "title": "Fine",
+      "total": {
+        "currency": "EUR",
+        "minor": "100"
+      }
+    }
+  },
+  "data that is not an object": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Missing \"data\" payload in the request body",
+      "details": {}
+    }
+  }
+}

@@ -1,0 +1,298 @@
+{
+  "about": "Strapi 5's entity validator on REST writes, checked against strapi-php: required, minLength and maxLength (a string's 255 by default), regex, email, enumeration, integer and float bounds and types, uid characters, booleans, and the fields of a component's items by their path. Run on an empty database, in order, with strapi-populate-vectors.mjs. An error's details are compared, as they name each failing field.",
+  "details": true,
+  "seed": [],
+  "reads": [],
+  "writes": [
+    {
+      "name": "a write meeting every constraint is stored",
+      "method": "POST",
+      "path": "/submissions",
+      "data": {
+        "title": "Fine",
+        "code": "ABC-12",
+        "contact": "a@b.co",
+        "kind": "alpha",
+        "rating": 3,
+        "score": 0.5,
+        "notes": "short",
+        "handle": "fine-1",
+        "active": true,
+        "due": "2026-01-02",
+        "lines": [
+          {
+            "label": "One",
+            "quantity": 2
+          }
+        ],
+        "total": {
+          "minor": "100",
+          "currency": "EUR"
+        }
+      },
+      "as": "submissions:Ok"
+    },
+    {
+      "name": "a required field left out",
+      "method": "POST",
+      "path": "/submissions",
+      "data": {
+        "notes": "none"
+      }
+    },
+    {
+      "name": "a required field sent as null",
+      "method": "POST",
+      "path": "/submissions",
+      "data": {
+        "title": null
+      }
+    },
+    {
+      "name": "a required string sent empty",
+      "method": "POST",
+      "path": "/submissions",
+      "data": {
+        "title": ""
+      }
+    },
+    {
+      "name": "a string shorter than its minLength",
+      "method": "POST",
+      "path": "/submissions",
+      "data": {
+        "title": "ab"
+      }
+    },
+    {
+      "name": "a string longer than its maxLength",
+      "method": "POST",
+      "path": "/submissions",
+      "data": {
+        "title": "xxxxxxxxxxxxxxxxxxxxx"
+      }
+    },
+    {
+      "name": "a string longer than the 255 a string column holds",
+      "method": "POST",
+      "path": "/submissions",
+      "data": {
+        "title": "Fine",
+        "code": "ABC-111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111"
+      }
+    },
+    {
+      "name": "a number where a string goes",
+      "method": "POST",
+      "path": "/submissions",
+      "data": {
+        "title": 123
+      }
+    },
+    {
+      "name": "a string that misses its regex",
+      "method": "POST",
+      "path": "/submissions",
+      "data": {
+        "title": "Fine",
+        "code": "abc-12"
+      }
+    },
+    {
+      "name": "an empty string skips the regex of an optional field",
+      "method": "POST",
+      "path": "/submissions",
+      "data": {
+        "title": "Empty code",
+        "code": ""
+      }
+    },
+    {
+      "name": "an email that is not one",
+      "method": "POST",
+      "path": "/submissions",
+      "data": {
+        "title": "Fine",
+        "contact": "not-an-email"
+      }
+    },
+    {
+      "name": "a value outside the enumeration",
+      "method": "POST",
+      "path": "/submissions",
+      "data": {
+        "title": "Fine",
+        "kind": "gamma"
+      }
+    },
+    {
+      "name": "null is among an optional enumeration's values",
+      "method": "POST",
+      "path": "/submissions",
+      "data": {
+        "title": "Null kind",
+        "kind": null
+      }
+    },
+    {
+      "name": "an integer below its min",
+      "method": "POST",
+      "path": "/submissions",
+      "data": {
+        "title": "Fine",
+        "rating": 0
+      }
+    },
+    {
+      "name": "an integer above its max",
+      "method": "POST",
+      "path": "/submissions",
+      "data": {
+        "title": "Fine",
+        "rating": 6
+      }
+    },
+    {
+      "name": "a fraction where an integer goes",
+      "method": "POST",
+      "path": "/submissions",
+      "data": {
+        "title": "Fine",
+        "rating": 2.5
+      }
+    },
+    {
+      "name": "a numeric string where an integer goes",
+      "method": "POST",
+      "path": "/submissions",
+      "data": {
+        "title": "Numeric",
+        "rating": "3"
+      }
+    },
+    {
+      "name": "a float above its max",
+      "method": "POST",
+      "path": "/submissions",
+      "data": {
+        "title": "Fine",
+        "score": 1.5
+      }
+    },
+    {
+      "name": "a text longer than its maxLength",
+      "method": "POST",
+      "path": "/submissions",
+      "data": {
+        "title": "Fine",
+        "notes": "xxxxxxxxxxx"
+      }
+    },
+    {
+      "name": "a uid with characters a uid may not hold",
+      "method": "POST",
+      "path": "/submissions",
+      "data": {
+        "title": "Fine",
+        "handle": "has space"
+      }
+    },
+    {
+      "name": "a word where a boolean goes",
+      "method": "POST",
+      "path": "/submissions",
+      "data": {
+        "title": "Fine",
+        "active": "yes"
+      }
+    },
+    {
+      "name": "a component item missing its required field and below a min",
+      "method": "POST",
+      "path": "/submissions",
+      "data": {
+        "title": "Fine",
+        "lines": [
+          {
+            "quantity": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "a component item's field is checked by its path",
+      "method": "POST",
+      "path": "/submissions",
+      "data": {
+        "title": "Fine",
+        "lines": [
+          {
+            "label": "One"
+          },
+          {
+            "label": "Two",
+            "quantity": -1
+          }
+        ]
+      }
+    },
+    {
+      "name": "an embedded component's field is checked by its path",
+      "method": "POST",
+      "path": "/submissions",
+      "data": {
+        "title": "Fine",
+        "total": {
+          "minor": "lots"
+        }
+      }
+    },
+    {
+      "name": "every failing field is reported",
+      "method": "POST",
+      "path": "/submissions",
+      "data": {
+        "rating": 9,
+        "kind": "gamma",
+        "notes": "xxxxxxxxxxx"
+      }
+    },
+    {
+      "name": "an update may leave a required field out",
+      "method": "PUT",
+      "path": "/submissions/@submissions:Ok",
+      "data": {
+        "rating": 4
+      }
+    },
+    {
+      "name": "an update may not set a required field to null",
+      "method": "PUT",
+      "path": "/submissions/@submissions:Ok",
+      "data": {
+        "title": null
+      }
+    },
+    {
+      "name": "an update checks the fields it sends",
+      "method": "PUT",
+      "path": "/submissions/@submissions:Ok",
+      "data": {
+        "title": "ab",
+        "rating": 0
+      }
+    },
+    {
+      "name": "the stored submission after the failed updates",
+      "method": "GET",
+      "path": "/submissions/@submissions:Ok",
+      "query": "populate=*"
+    },
+    {
+      "name": "data that is not an object",
+      "method": "POST",
+      "path": "/submissions",
+      "data": ["x"]
+    }
+  ]
+}

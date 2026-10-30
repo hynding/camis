@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\PageApiController;
 use App\Http\Controllers\Api\PostApiController;
 use App\Http\Controllers\Api\ReviewApiController;
 use App\Http\Controllers\Api\StoryboardApiController;
+use App\Http\Controllers\Api\SubmissionApiController;
 use App\Http\Controllers\Api\TagApiController;
 use App\Http\Controllers\Api\TopicApiController;
 use App\Http\Controllers\Api\TransactionApiController;
@@ -130,6 +131,12 @@ Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle):
         Route::get('/storyboards/{key}', [StoryboardApiController::class, 'show']);
         Route::put('/storyboards/{key}', [StoryboardApiController::class, 'update']);
         Route::delete('/storyboards/{key}', [StoryboardApiController::class, 'destroy']);
+
+        Route::get('/submissions', [SubmissionApiController::class, 'index']);
+        Route::post('/submissions', [SubmissionApiController::class, 'store']);
+        Route::get('/submissions/{key}', [SubmissionApiController::class, 'show']);
+        Route::put('/submissions/{key}', [SubmissionApiController::class, 'update']);
+        Route::delete('/submissions/{key}', [SubmissionApiController::class, 'destroy']);
 
         Route::get('/tags', [TagApiController::class, 'index']);
         Route::post('/tags', [TagApiController::class, 'store']);
