@@ -135,8 +135,16 @@ describe("filamentAdapter storageLayout strapi — file set", () => {
     expect(content("app/Models/Transaction.php")).not.toContain("'occurred_on' =>");
   });
 
-  it("reports the admin panel and the account routes it leaves to Strapi, and nothing else", () => {
+  it("reports the admin panel, the account routes and the validation it leaves to Strapi, and nothing else", () => {
     expect(result.gaps.gaps).toEqual([
+      {
+        feature: "entityValidation",
+        location: {},
+        severity: "downgrade",
+        message:
+          "the strapi storage layout writes a request's fields as sent; Strapi's entity validator " +
+          "(required, lengths, regex, enumerations, bounds) runs only on the laravel layout",
+      },
       {
         feature: "adminPanelNotEmitted",
         location: {},

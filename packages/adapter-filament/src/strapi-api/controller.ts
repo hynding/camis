@@ -1,7 +1,8 @@
 import type { StorageLayout } from "@camis/adapter-kernel";
-import type { ContentType } from "@camis/ir-schema";
+import { fieldApiName, type ContentType } from "@camis/ir-schema";
 import { PHP_MARKER } from "../hooks/names";
 import { snakeColumn } from "../names";
+import { phpSingleQuoted } from "../php-literal";
 import { authLine, createCheck, madeCheck, NESTED_STMT, STMT } from "./controller-shared";
 import { strapiControllerParts } from "./storage/controller-storage";
 import type { ControllerLink } from "./storage/names";
@@ -21,6 +22,8 @@ export interface ControllerSpec {
   layout?: StorageLayout;
   /** Strapi layout only: one entry per owning relation, in IR order. */
   links?: ControllerLink[];
+  /** Laravel layout only: the `RULES` constant StrapiValidator checks each write against. */
+  rules?: string;
 }
 
 /** The per-layout halves of the controller; everything else is the shared class scaffold. */
@@ -103,6 +106,28 @@ const itemLinks = (shape: WireShape, viewer: string): string =>
     ? `\n${STMT}$wire['children'] = StrapiRelations::items($wire['children'], ${shape.model}Serializer::FIELDS, ${viewer});`
     : "";
 
+/**
+ * Strapi's entity validator, before anything is written: a draft is checked as Strapi checks one,
+ * and an update that creates a locale the document lacks as a creation.
+ */
+const validate = (
+  spec: ControllerSpec,
+  creating: string,
+  indent: string = STMT,
+  given = "",
+): string =>
+  spec.rules === undefined
+    ? ""
+    : `${indent}StrapiValidator::validate($request->input('data'), self::RULES, creating: ${creating}${
+        spec.shape.draftPublish ? ", draft: StrapiDocuments::draftOnly($request->query())" : ""
+      }${given});\n`;
+
+/** A put that creates its row takes the upsert key from the route, as a field it need not send. */
+const routeKey = (ct: ContentType): string => {
+  const field = ct.fields.find((f) => f.name === ct.options?.upsertBy);
+  return field === undefined ? "" : `, given: [${phpSingleQuoted(fieldApiName(field))} => $key]`;
+};
+
 const laravelParts = (spec: ControllerSpec): ControllerParts => {
   const { shape, secured, scoped } = spec;
   const M = shape.model;
@@ -132,7 +157,7 @@ ${indent}});`;
         if (${M}::query()->where(self::KEY, $key)->exists()) {
             abort(404); // claimed by another scope: never reach across owners
         }
-${auth(`$this->authorize('create', ${M}::class);`)}        $m = new ${M}($wire['columns']);
+${auth(`$this->authorize('create', ${M}::class);`)}${validate(spec, "true", STMT, routeKey(spec.ct))}        $m = new ${M}($wire['columns']);
         $m->{self::KEY} = $key;
 ${assignBlock}${persist("")}
 
@@ -158,7 +183,7 @@ ${assignBlock}${persist("")}
     showBody: `${auth(`$this->authorize('viewAny', ${M}::class);`)}        $m = $this->find($request, $key);
 
         return response()->json(['data' => $this->wire($request, $m), 'meta' => new \\stdClass()]);`,
-    storeBody: `${createCheck(spec)}        $wire = ${S}::fromWire((array) $request->input('data', []));
+    storeBody: `${createCheck(spec)}${validate(spec, "true")}        $wire = ${S}::fromWire((array) $request->input('data', []));
 ${readLinks}
         $m = new ${M}($wire['columns']);
 ${madeCheck(spec)}${assignBlock}${persist("")}
@@ -168,7 +193,7 @@ ${madeCheck(spec)}${assignBlock}${persist("")}
 ${readLinks}
         $m = $this->scoped($request)->where(self::KEY, $key)->first();
         if ($m !== null${secured ? ` && Gate::allows('view', $m)` : ""}) {
-${auth(`$this->authorize('update', $m);`, NESTED_STMT)}${persist("$m->fill($wire['columns']);\n" + NESTED_STMT + "    ", NESTED_STMT)}
+${auth(`$this->authorize('update', $m);`, NESTED_STMT)}${validate(spec, "false", NESTED_STMT)}${persist("$m->fill($wire['columns']);\n" + NESTED_STMT + "    ", NESTED_STMT)}
 
             return response()->json(['data' => $this->wire($request, $m->fresh()), 'meta' => new \\stdClass()]);
         }
@@ -274,7 +299,7 @@ ${notFound}${auth(`$this->authorize('delete', $m);`)}        StrapiDocuments::de
     query: versioned
       ? "StrapiDocuments::version($this->documents($request), $request->query())"
       : "$this->documents($request)",
-    storeBody: `${createCheck(spec)}        $wire = ${S}::fromWire((array) $request->input('data', []));
+    storeBody: `${createCheck(spec)}${validate(spec, "true")}        $wire = ${S}::fromWire((array) $request->input('data', []));
 ${readLinks}
         $m = new ${M}($wire['columns']);
 ${localized ? `${STMT}$m->locale = ${forWrite};\n` : ""}${madeCheck(spec)}${assignBlock}${persist("")}
@@ -283,7 +308,7 @@ ${localized ? `${STMT}$m->locale = ${forWrite};\n` : ""}${madeCheck(spec)}${assi
     updateBody: `        $wire = ${S}::fromWire((array) $request->input('data', []));
 ${readLinks}
         $m = ${lookup}${missingLocale};
-${notFound}${auth(`$this->authorize('update', $m);`)}${persist(`${STMT}    $m->fill($wire['columns']);\n`)}
+${notFound}${auth(`$this->authorize('update', $m);`)}${validate(spec, localized ? "! $m->exists" : "false")}${persist(`${STMT}    $m->fill($wire['columns']);\n`)}
 
         return response()->json(['data' => $this->wire($request, $m->fresh()), 'meta' => new \\stdClass()]);`,
     destroyBody,
@@ -312,6 +337,7 @@ export const emitGeneratedController = (spec: ControllerSpec): string => {
   const M = shape.model;
   const parts = spec.layout === "strapi" ? strapiControllerParts(spec) : laravelParts(spec);
   const single = spec.ct.kind === "single";
+  const validated = spec.layout !== "strapi" && spec.rules !== undefined;
 
   const uses = [
     "App\\Http\\Controllers\\Controller",
@@ -319,6 +345,7 @@ export const emitGeneratedController = (spec: ControllerSpec): string => {
     `App\\Models\\${M}`,
     ...parts.uses,
     ...(single ? ["App\\Support\\StrapiError"] : []),
+    ...(validated ? ["App\\Support\\StrapiValidator"] : []),
     ...(secured ? ["Illuminate\\Foundation\\Auth\\Access\\AuthorizesRequests"] : []),
     "Illuminate\\Database\\Eloquent\\Builder",
     "Illuminate\\Http\\JsonResponse",
@@ -343,7 +370,7 @@ ${uses}
 class ${M}ApiController extends Controller
 {
 ${secured ? "    use AuthorizesRequests;\n\n" : ""}    private const KEY = '${shape.keyColumn}';
-
+${validated ? `\n${spec.rules}` : ""}
     protected function scoped(Request $request): Builder
     {
         return ${parts.query};

@@ -300,6 +300,7 @@ overwrite app/Support/StrapiTransferMap.php
 overwrite app/Support/StrapiTransferTokens.php
 overwrite app/Support/StrapiUpload.php
 overwrite app/Support/StrapiUsers.php
+overwrite app/Support/StrapiValidator.php
 overwrite app/Support/StrapiWebhooks.php
 overwrite app/Support/StrapiZones.php
 overwrite config/camis.php
