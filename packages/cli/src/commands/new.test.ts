@@ -222,6 +222,35 @@ describe("newCommand — from an existing Strapi project", () => {
     });
   });
 
+  it("declares the media library a media field uses, so the super-admin may manage its files", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "camis-new-from-strapi-media-"));
+    const ctDir = join(dir, "src/api/page/content-types/page");
+    await mkdir(ctDir, { recursive: true });
+    await writeFile(
+      join(ctDir, "schema.json"),
+      JSON.stringify({
+        kind: "collectionType",
+        info: { singularName: "page", pluralName: "pages", displayName: "Page" },
+        attributes: { cover: { type: "media", multiple: false } },
+      }),
+    );
+    const { io, files } = memoryIo();
+    await newCommand("migrated", io, { fromStrapi: dir, skipScaffold: true, skipBuild: true });
+    const ir = json(files, "/work/migrated/camis.json") as {
+      contentTypes: { name: string; builtin?: string }[];
+    };
+    expect(ir.contentTypes).toContainEqual({
+      name: "File",
+      kind: "collection",
+      builtin: "file",
+      fields: [],
+    });
+    const roles = json(files, "/work/migrated/roles.json") as {
+      roles: { name: string; grants: { contentType: string }[] }[];
+    };
+    expect(roles.roles[2]?.grants.map((g) => g.contentType)).toEqual(["Page", "File"]);
+  });
+
   it("gives the super-admin the archive's builtin types too, after the archive's roles", async () => {
     const source = await strapiProject();
     const archive = join(
