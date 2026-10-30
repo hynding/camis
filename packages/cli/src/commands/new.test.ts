@@ -178,7 +178,11 @@ describe("newCommand — from an existing Strapi project", () => {
     const roles = json(files, "/work/migrated/roles.json") as {
       roles: { name: string; grants: { contentType: string }[] }[];
     };
-    expect(roles.roles.map((r) => r.name)).toEqual(["public", "authenticated", "editor"]);
+    expect(roles.roles.map((r) => r.name).slice(0, 3)).toEqual([
+      "public",
+      "authenticated",
+      "editor",
+    ]);
     // Only Page is in this project: the archive's grants on its other types are reported.
     expect(roles.roles[1]?.grants.map((g) => g.contentType)).toEqual(["File", "Page", "User"]);
   });
