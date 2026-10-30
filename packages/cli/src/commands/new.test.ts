@@ -197,6 +197,78 @@ describe("newCommand — from an existing Strapi project", () => {
     expect(await newCommand("p", io, { fromStrapi: empty })).toBe(1);
     expect(lines.join("\n")).toContain("no Strapi content types or components");
   });
+
+  // Strapi's admin roles live outside its users-permissions export, so a migrated project would
+  // otherwise have no role that may sign in to the admin.
+  it("adds a super-admin role, flagged admin, with every action on every content type", async () => {
+    const source = await strapiProject();
+    const { io, files } = memoryIo();
+    expect(
+      await newCommand("migrated", io, { fromStrapi: source, skipScaffold: true, skipBuild: true }),
+    ).toBe(0);
+    const roles = json(files, "/work/migrated/roles.json") as {
+      defaultRole: string;
+      roles: { name: string; admin?: boolean; grants: unknown[] }[];
+    };
+    expect(roles.defaultRole).toBe("authenticated");
+    expect(roles.roles.map((r) => r.name)).toEqual(["public", "authenticated", "super-admin"]);
+    expect(roles.roles[2]).toMatchObject({
+      admin: true,
+      grants: [{ contentType: "Page", actions: ["create", "read", "update", "delete"] }],
+    });
+  });
+
+  it("gives the super-admin the archive's builtin types too, after the archive's roles", async () => {
+    const source = await strapiProject();
+    const archive = join(
+      dirname(fileURLToPath(import.meta.url)),
+      "../../../adapter-filament/src/strapi-api/__fixtures__/transfer/strapi-php-export.tar.gz",
+    );
+    const { io, files } = memoryIo();
+    await newCommand("migrated", io, {
+      fromStrapi: source,
+      strapiRoles: { archive },
+      skipScaffold: true,
+      skipBuild: true,
+    });
+    const roles = json(files, "/work/migrated/roles.json") as {
+      roles: { name: string; admin?: boolean; grants: { contentType: string }[] }[];
+    };
+    expect(roles.roles.map((r) => r.name)).toEqual([
+      "public",
+      "authenticated",
+      "editor",
+      "super-admin",
+    ]);
+    expect(roles.roles[3]?.grants.map((g) => g.contentType)).toEqual(["Page", "File", "User"]);
+  });
+});
+
+describe("newCommand — the admin role of a template", () => {
+  it("lets the super-admin publish the types with drafts", async () => {
+    const { io, files } = memoryIo();
+    await newCommand("blog", io, { template: "example", skipScaffold: true, skipBuild: true });
+    const roles = json(files, "/work/blog/roles.json") as {
+      roles: { name: string; grants: { contentType: string; actions: string[] }[] }[];
+    };
+    const superAdmin = roles.roles.find((r) => r.name === "super-admin");
+    expect(superAdmin?.grants.find((g) => g.contentType === "Article")?.actions).toEqual([
+      "create",
+      "read",
+      "update",
+      "delete",
+      "publish",
+    ]);
+    expect(superAdmin?.grants.find((g) => g.contentType === "Author")?.actions).not.toContain(
+      "publish",
+    );
+  });
+
+  it("names camis:admin among a filament project's next steps", async () => {
+    const { io, lines } = memoryIo();
+    await newCommand("p", io, { targets: ["filament"], skipScaffold: true, skipBuild: true });
+    expect(lines.join("\n")).toContain("php artisan camis:admin");
+  });
 });
 
 // Laravel 12's skeleton, the shape scaffold patches.
