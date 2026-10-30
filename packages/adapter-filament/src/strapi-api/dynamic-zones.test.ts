@@ -40,7 +40,7 @@ describe("dynamic zones", () => {
   it("refuses an item naming a component the project does not have, as Strapi words it", () => {
     const zones = content("app/Support/StrapiZones.php");
     expect(zones).toContain(
-      "private const COMPONENTS = ['shared.hero', 'shared.money', 'shared.panel', 'shared.quantity'];",
+      "private const COMPONENTS = ['shared.frame', 'shared.hero', 'shared.money', 'shared.panel', 'shared.quantity'];",
     );
     expect(zones).toContain("__component must be one of the following values: ");
   });

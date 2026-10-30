@@ -256,8 +256,25 @@ export const strapiApiBundle: IrBundle = {
           { type: "media", name: "attachments", multiple: true },
         ],
       },
+      // Media inside a repeatable component (media-vectors.json): each frame links its file.
+      {
+        name: "Storyboard",
+        kind: "collection",
+        names: { plural: "Storyboards" },
+        fields: [
+          { type: "string", name: "title", required: true },
+          { type: "component", name: "frames", component: "Frame", repeatable: true },
+        ],
+      },
     ],
     components: [
+      {
+        name: "Frame",
+        fields: [
+          { type: "string", name: "caption" },
+          { type: "media", name: "image", allowedTypes: ["image"] },
+        ],
+      },
       // A dynamic zone's member (dynamic-zone-vectors.json), holding a nested component.
       {
         name: "Hero",
@@ -326,6 +343,7 @@ export const strapiApiBundle: IrBundle = {
         { contentType: "User", actions: ["read"] },
         { contentType: "File", actions: ["create", "read", "update", "delete"] },
         { contentType: "Book", actions: ["create", "read", "update", "delete"] },
+        { contentType: "Storyboard", actions: ["create", "read", "update", "delete"] },
         { contentType: "Author", actions: ["create", "read", "update", "delete"] },
         { contentType: "Genre", actions: ["create", "read", "update", "delete"] },
         { contentType: "Topic", actions: ["create", "read", "update", "delete", "publish"] },
