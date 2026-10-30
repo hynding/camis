@@ -10,6 +10,7 @@ import {
   isProjectTemplateName,
   projectTemplate,
   strapiDefaultRoles,
+  withMediaLibrary,
   withSuperAdmin,
   type ProjectTemplate,
 } from "../templates";
@@ -190,7 +191,7 @@ export const newCommand = async (dir: string, io: Io, options: NewOptions): Prom
         : "vanilla",
     );
   }
-  const validated = validate(content.document);
+  const validated = validate(withMediaLibrary(content.document));
   if (!validated.ok) {
     for (const e of validated.errors) io.out(`✗ [${e.code}] ${locStr(e.location)} — ${e.message}`);
     return 1;

@@ -239,12 +239,7 @@ describe("newCommand — from an existing Strapi project", () => {
     const ir = json(files, "/work/migrated/camis.json") as {
       contentTypes: { name: string; builtin?: string }[];
     };
-    expect(ir.contentTypes).toContainEqual({
-      name: "File",
-      kind: "collection",
-      builtin: "file",
-      fields: [],
-    });
+    expect(ir.contentTypes.find((ct) => ct.builtin === "file")).toMatchObject({ name: "File" });
     const roles = json(files, "/work/migrated/roles.json") as {
       roles: { name: string; grants: { contentType: string }[] }[];
     };

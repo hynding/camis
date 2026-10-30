@@ -55,3 +55,24 @@ export const withSuperAdmin = (roles: RolesFile, document: IrDocument): RolesFil
     ],
   };
 };
+
+const usesMedia = (fields: readonly { type: string }[]): boolean =>
+  fields.some((f) => f.type === "media");
+
+/**
+ * A document whose media fields have a media library type to grant, as Strapi's upload plugin is
+ * always there; without one no role, the super-admin included, may manage the files.
+ */
+export const withMediaLibrary = (document: IrDocument): IrDocument => {
+  const media =
+    document.contentTypes.some((ct) => usesMedia(ct.fields)) ||
+    document.components.some((c) => usesMedia(c.fields));
+  if (!media || document.contentTypes.some((ct) => ct.builtin === "file")) return document;
+  return {
+    ...document,
+    contentTypes: [
+      ...document.contentTypes,
+      { name: "File", kind: "collection", builtin: "file", fields: [] },
+    ],
+  };
+};
