@@ -91,23 +91,14 @@ export const irField = (
       target,
       ...privacy(attr),
     };
-    let gap: CapabilityGap | undefined;
     if (attr.inversedBy !== undefined) {
       const inversedBy = String(attr.inversedBy);
       field.inverse = fieldNameOf(inversedBy);
-      // The inverse side is not a field of its own in the IR, so it has nowhere to keep its key.
-      if (field.inverse !== inversedBy) {
-        gap = {
-          feature: "inverseApiName",
-          location: { ...location, field: name },
-          severity: "downgrade",
-          message: `the inverse of "${attribute}", "${inversedBy}", goes by "${String(field.inverse)}" on the API.`,
-        };
-      }
+      // The inverse side is not a field of its own in the IR, so the relation keeps its API key.
+      if (field.inverse !== inversedBy) field.inverseNames = { api: inversedBy };
     }
     return {
       field: field as Field,
-      ...(gap === undefined ? {} : { gap }),
       ...(builtinUser ? { builtinUser: true as const } : {}),
     };
   }

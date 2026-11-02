@@ -1,4 +1,4 @@
-import { fieldApiName, type ContentType, type Field } from "@camis/ir-schema";
+import { fieldApiName, inverseApiName, type ContentType, type Field } from "@camis/ir-schema";
 import { PHP_MARKER } from "../hooks/names";
 import { filamentNames } from "../names";
 import { phpSingleQuoted } from "../php-literal";
@@ -124,7 +124,7 @@ const links = (shape: WireShape, ct: ContentType, userType: string | undefined) 
         f.type === "relation" && f.name === relation && fieldApiName(f) === key,
     );
   const declaration = (f: RelationField | undefined) =>
-    f === undefined ? {} : { declares: f.relationKind, inverse: f.inverse ?? null };
+    f === undefined ? {} : { declares: f.relationKind, inverse: inverseApiName(f) ?? null };
   for (const r of shape.relations) {
     if (r.kind === "localizations") continue;
     if (r.kind === "mediaOne" || r.kind === "mediaMany") {

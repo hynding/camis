@@ -1,4 +1,4 @@
-import { fieldApiName, type Field } from "@camis/ir-schema";
+import { fieldApiName, inverseApiName, type Field } from "@camis/ir-schema";
 import { toStrapiMediaKinds } from "./media-kinds";
 import { kebab } from "./names";
 
@@ -43,7 +43,7 @@ export const toAttribute = (
     attr.target = builtinUsers.has(field.target)
       ? PLUGIN_USER_UID
       : `api::${targetSingular}.${targetSingular}`;
-    put(attr, "inversedBy", field.inverse);
+    put(attr, "inversedBy", inverseApiName(field));
     return withPrivate(attr);
   }
 

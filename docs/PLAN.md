@@ -1211,6 +1211,24 @@ Part 3's exit: the boot job's admin access step (an Editor made by `camis:admin`
 and a user without a role do not) and the `strapi-api` job's (a user signed up through the API
 does not get in) pass.
 
+## Phase 33 — the inverse's API name (`ir-schema`, `ir-core`, `adapter-strapi`, `strapi-schema`, `adapter-filament`)
+
+The last six REST differences migrating strapi-php's `examples/getstarted` left (PR #34) were one
+gap: a relation's inverse goes by the key its declaring side's `inversedBy` names
+(`relation_locales`), while the IR's inverse is camelCase like every field name, so camis sent
+`relationLocales` and the importer reported an `inverseApiName` gap.
+
+A relation may name the key its inverse goes by on the API (`inverseNames.api`), as a field names
+its own (`names.api`); the target's fields may not already go by it. The importer keeps
+`inversedBy` there when camelCasing changes it, and reports no gap. The Strapi API style sends,
+reads, filters, populates, documents (OpenAPI), types (GraphQL) and transfers the inverse under
+that key, over the same Eloquent relation; the Strapi schemas it writes name it in `inversedBy`
+and key the synthesized inverse attribute by it, whose `mappedBy` now names the declaring field's
+API key too.
+
+Exit: unit tests in each package; getstarted imports with no `inverseApiName` gap and its
+`CategorySerializer` keys the inverse `relation_locales`.
+
 ---
 
 ## Sequencing rationale (quick reference)

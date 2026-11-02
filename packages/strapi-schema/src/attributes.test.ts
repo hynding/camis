@@ -55,6 +55,19 @@ describe("toAttribute — relations", () => {
     });
   });
 
+  it("names the inverse by its API name, as the imported project did", () => {
+    expect(
+      toAttribute({
+        type: "relation",
+        name: "author",
+        relationKind: "manyToOne",
+        target: "Author",
+        inverse: "blogPosts",
+        inverseNames: { api: "blog_posts" },
+      }),
+    ).toMatchObject({ inversedBy: "blog_posts" });
+  });
+
   it("omits inversedBy for a unidirectional relation", () => {
     expect(
       toAttribute({ type: "relation", name: "owner", relationKind: "oneToOne", target: "User" }),

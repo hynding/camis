@@ -1,4 +1,4 @@
-import type { IrDocument, RelationKind } from "@camis/ir-schema";
+import { fieldApiName, inverseApiName, type IrDocument, type RelationKind } from "@camis/ir-schema";
 import { kebab } from "./names";
 
 const DUAL: Record<RelationKind, RelationKind> = {
@@ -15,14 +15,15 @@ export const synthesizedInverses = (doc: IrDocument): Map<string, Record<string,
   const byTarget = new Map<string, Record<string, unknown>>();
   for (const ct of doc.contentTypes) {
     for (const f of ct.fields) {
-      if (f.type === "relation" && f.inverse !== undefined) {
+      const inverse = f.type === "relation" ? inverseApiName(f) : undefined;
+      if (f.type === "relation" && inverse !== undefined) {
         const ownerSingular = kebab(ct.name);
         const bucket = byTarget.get(f.target) ?? {};
-        bucket[f.inverse] = {
+        bucket[inverse] = {
           type: "relation",
           relation: DUAL[f.relationKind],
           target: `api::${ownerSingular}.${ownerSingular}`,
-          mappedBy: f.name,
+          mappedBy: fieldApiName(f),
         };
         byTarget.set(f.target, bucket);
       }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { field, componentField, fieldApiName } from "./fields";
+import { field, componentField, fieldApiName, inverseApiName } from "./fields";
 
 const parse = (v: unknown) => field.safeParse(v);
 
@@ -159,6 +159,24 @@ describe("a field's name on the API", () => {
     expect(fieldApiName({ type: "string", name: "heroTitle", names: { api: "hero_title" } })).toBe(
       "hero_title",
     );
+  });
+
+  it("names the key a relation's inverse goes by on the API, as an imported project sends it", () => {
+    const relation = {
+      type: "relation" as const,
+      name: "author",
+      relationKind: "manyToOne" as const,
+      target: "Author",
+      inverse: "blogPosts",
+    };
+    expect(field.safeParse({ ...relation, inverseNames: { api: "blog_posts" } }).success).toBe(
+      true,
+    );
+    expect(field.safeParse({ ...relation, inverseNames: { api: "blog posts" } }).success).toBe(
+      false,
+    );
+    expect(inverseApiName(relation)).toBe("blogPosts");
+    expect(inverseApiName({ ...relation, inverseNames: { api: "blog_posts" } })).toBe("blog_posts");
   });
 });
 

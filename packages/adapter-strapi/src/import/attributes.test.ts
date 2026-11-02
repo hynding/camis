@@ -158,7 +158,7 @@ describe("irField — what strapi-php projects carry", () => {
       targetField: "heroTitle",
     });
   });
-  it("camelCases a relation's inverse, reporting the inverse's API name it loses", () => {
+  it("camelCases a relation's inverse, keeping the key it goes by on the API", () => {
     const r = irField(
       "author",
       {
@@ -175,8 +175,9 @@ describe("irField — what strapi-php projects carry", () => {
       relationKind: "manyToOne",
       target: "Author",
       inverse: "blogPosts",
+      inverseNames: { api: "blog_posts" },
     });
-    expect(r.gap?.feature).toBe("inverseApiName");
+    expect(r.gap).toBeUndefined();
   });
   it("maps a dynamic zone to its IR components", () => {
     expect(

@@ -1,5 +1,11 @@
 import { expandComponents } from "@camis/adapter-kernel";
-import { fieldApiName, type ContentType, type FieldType, type IrDocument } from "@camis/ir-schema";
+import {
+  fieldApiName,
+  inverseApiName,
+  type ContentType,
+  type FieldType,
+  type IrDocument,
+} from "@camis/ir-schema";
 import { childTableEmit } from "../components";
 import { filamentNames, snake, snakeColumn } from "../names";
 import { FILE_UID } from "./media-runtime";
@@ -339,37 +345,31 @@ const wireRelations = (
     for (const other of doc.contentTypes.filter((c) => c.builtin === undefined)) {
       for (const g of other.fields) {
         if (g.type !== "relation" || g.target !== ct.name || g.inverse === undefined) continue;
+        // The Eloquent relation goes by the IR's name, the wire key by the one the API sends.
+        const key = inverseApiName(g) ?? g.inverse;
         if (g.relationKind === "manyToOne") {
           const base = snakeColumn(g.name);
           inverse.push(
-            entry(g.inverse, g.inverse, "hasMany", other, `${base}_id`, "target", {
+            entry(key, g.inverse, "hasMany", other, `${base}_id`, "target", {
               order: { table: table(other), column: `${base}_ord` },
               inverseOrder: null,
             }),
           );
         } else if (g.relationKind === "oneToOne") {
           inverse.push(
-            entry(g.inverse, g.inverse, "hasOne", other, `${snakeColumn(g.name)}_id`, "target"),
+            entry(key, g.inverse, "hasOne", other, `${snakeColumn(g.name)}_id`, "target"),
           );
         } else if (g.relationKind === "oneToMany") {
           const base = snakeColumn(g.inverse);
           inverse.push(
-            entry(g.inverse, g.inverse, "belongsTo", other, `${base}_id`, "self", {
+            entry(key, g.inverse, "belongsTo", other, `${base}_id`, "self", {
               order: null,
               inverseOrder: { table: table(ct), column: `${base}_ord` },
             }),
           );
         } else {
           inverse.push(
-            entry(
-              g.inverse,
-              g.inverse,
-              "belongsToMany",
-              other,
-              null,
-              "target",
-              pivotOrder(ct, other),
-            ),
+            entry(key, g.inverse, "belongsToMany", other, null, "target", pivotOrder(ct, other)),
           );
         }
       }
