@@ -187,6 +187,35 @@ describe("uniqueness, acyclic, inverse collision", () => {
     };
     expect(codes(doc)).toContain("inverse_field_collision");
   });
+
+  it("flags an inverse whose API name collides with a target field's API key", () => {
+    const doc: IrDocument = {
+      version: 1,
+      contentTypes: [
+        {
+          name: "Article",
+          kind: "collection",
+          fields: [
+            {
+              type: "relation",
+              name: "author",
+              relationKind: "manyToOne",
+              target: "User",
+              inverse: "articles",
+              inverseNames: { api: "full_name" },
+            },
+          ],
+        },
+        {
+          name: "User",
+          kind: "collection",
+          fields: [{ type: "string", name: "fullName", names: { api: "full_name" } }],
+        },
+      ],
+      components: [],
+    };
+    expect(codes(doc)).toContain("inverse_field_collision");
+  });
 });
 
 describe("ai invariants", () => {
