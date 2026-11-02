@@ -189,6 +189,8 @@ const relationField = z.object({
   relationKind: z.enum(RELATION_KINDS),
   target: typeName,
   inverse: fieldName.optional(),
+  /** The key the inverse goes by on the API when it is not its name: an imported project's own. */
+  inverseNames: z.object({ api: apiName }).optional(),
 });
 const componentRefField = z.object({
   type: z.literal("component"),
@@ -226,3 +228,9 @@ export const fieldApiName = <
 >(
   f: F,
 ): string => f.names?.api ?? f.name;
+
+/** The key a relation's inverse goes by on the target's API: the one it names, else its name. */
+export const inverseApiName = (f: {
+  inverse?: string | undefined;
+  inverseNames?: { api: string } | undefined;
+}): string | undefined => f.inverseNames?.api ?? f.inverse;

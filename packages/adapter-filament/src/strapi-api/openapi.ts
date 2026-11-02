@@ -1,5 +1,6 @@
 import {
   fieldApiName,
+  inverseApiName,
   type Component,
   type ComponentFieldT,
   type ContentType,
@@ -159,7 +160,7 @@ class DocumentBuilder {
         if (g.type !== "relation" || g.target !== ct.name || g.inverse === undefined) continue;
         const many = g.relationKind === "manyToOne" || g.relationKind === "manyToMany";
         out.push({
-          name: g.inverse,
+          name: inverseApiName(g) ?? g.inverse,
           type: "relation",
           target: this.uid(other),
           ...(many ? { many: true } : {}),

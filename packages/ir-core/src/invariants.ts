@@ -1,5 +1,5 @@
 import type { Component, ContentType, IrDocument, IrError } from "@camis/ir-schema";
-import { aiPlaceholders } from "@camis/ir-schema";
+import { aiPlaceholders, fieldApiName, inverseApiName } from "@camis/ir-schema";
 
 const findDuplicates = (names: string[]): string[] => {
   const seen = new Set<string>();
@@ -59,11 +59,13 @@ export const validateInvariants = (doc: IrDocument): IrError[] => {
           });
         } else if (
           f.inverse !== undefined &&
-          typeByName.get(f.target)!.fields.some((tf) => tf.name === f.inverse)
+          typeByName
+            .get(f.target)!
+            .fields.some((tf) => tf.name === f.inverse || fieldApiName(tf) === inverseApiName(f))
         ) {
           errors.push({
             code: "inverse_field_collision",
-            message: `inverse field "${f.inverse}" already exists on "${f.target}"`,
+            message: `inverse field "${f.inverse}" (API key "${inverseApiName(f)}") already exists on "${f.target}"`,
             location: { ...location, field: f.name },
             path: [],
           });
