@@ -1261,6 +1261,19 @@ Filament offers what a policy has no method for. Duplicating an entry is not bui
 
 Exit: unit tests; `ContentManagerListTest.php` in the `strapi-api` boot job, denied paths included.
 
+## Phase 36 — an embedded component's id (`adapter-filament`)
+
+Strapi sends every component with an id; camis sent none for an embedded one, and GraphQL, whose
+component types declare `id: ID!`, failed on asking for it. An embedded component is columns of the
+row holding it (the entry, or a repeatable or zone item), so its id is that row's: unique within the
+type, different per version and locale, as Strapi's component rows are. The id alone does not make
+an unset component a value (it stays null). Narrowing a component's fields in a populate keeps its
+id, repeatable items' included, since Strapi always selects it. A write that sends the id back is
+accepted, the id ignored. Ids are not compared against strapi-php: the vectors drop every id.
+
+Exit: unit tests; `ComponentIdTest.php` (REST, populate fields, a write back, GraphQL) in the
+`strapi-api` boot job.
+
 ---
 
 ## Sequencing rationale (quick reference)

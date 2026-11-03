@@ -75,6 +75,15 @@ const render = (n: Node, indent: string): string => {
   return rows.join("\n");
 };
 
+/**
+ * Strapi gives every component an id. An embedded one is columns of the row holding it (the entry,
+ * or a repeatable or zone item), so it goes by that row's id, set before its fields so it leads.
+ */
+const insertComponentIds = (n: Node, keys: readonly (readonly string[])[], id: string): void => {
+  for (const key of keys)
+    for (let depth = 1; depth < key.length; depth++) insert(n, [...key.slice(0, depth), "id"], id);
+};
+
 /** The scalars an answer carries: every one but the private, which are only written. */
 const answered = (scalars: WireScalar[]): WireScalar[] => scalars.filter((s) => s.private !== true);
 
@@ -82,10 +91,18 @@ const toWireBody = (shape: WireShape, indent: string, layout: StorageLayout): st
   const root = node();
   insert(root, ["id"], "$m->id");
   insert(root, ["documentId"], "$m->document_id");
-  for (const s of answered(shape.scalars)) insert(root, s.key, read(s, "$m", layout));
-  for (const c of shape.children.filter((c) => c.private !== true)) {
+  const own = answered(shape.scalars);
+  const children = shape.children.filter((c) => c.private !== true);
+  insertComponentIds(root, [...own.map((s) => s.key), ...children.map((c) => c.key)], "$m->id");
+  for (const s of own) insert(root, s.key, read(s, "$m", layout));
+  for (const c of children) {
     const inner = node();
     insert(inner, ["id"], "$c->id");
+    insertComponentIds(
+      inner,
+      [...answered(c.scalars).map((s) => s.key), ...c.media.map((r) => r.key.split("."))],
+      "$c->id",
+    );
     for (const s of answered(c.scalars)) insert(inner, s.key, read(s, "$c", layout));
     for (const r of c.media) insert(inner, r.key.split("."), mediaWire(r));
     // The child's own row is rendered by `render` one branch level per path segment above
@@ -117,6 +134,11 @@ const zoneMemberWire = (member: WireZoneMember, indent: string): string => {
   const item = node();
   insert(item, ["__component"], `'${member.uid}'`);
   insert(item, ["id"], "$c->id");
+  insertComponentIds(
+    item,
+    answered(member.scalars).map((s) => s.key),
+    "$c->id",
+  );
   for (const s of answered(member.scalars)) insert(item, s.key, read(s, "$c", "laravel"));
   return `${indent}...$m->${member.relation}->map(fn ($c) => [$c->position, [
 ${render(item, `${indent}${UNIT}`)}
@@ -371,10 +393,10 @@ ${fromWireChildStatements(shape.children, l2)}${zones.length === 0 ? "" : `\n${f
     {${syncChildrenBody}
     }
 
-    /** A component's fields, or null when none has a value. */
+    /** A component's fields, or null when none has a value (its id, the row's, is not one). */
     private static function nested(array $a): ?array
     {
-        return array_filter($a, fn ($v) => $v !== null) === [] ? null : $a;
+        return array_filter(array_diff_key($a, ['id' => true]), fn ($v) => $v !== null) === [] ? null : $a;
     }
 
     private static function dig(array $a, array $path): mixed

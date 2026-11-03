@@ -51,7 +51,9 @@ class DynamicZonesTest extends TestCase
             ->assertHasNoFormErrors();
         $landing = Landing::sole();
         $this->assertSame(['shared.quantity', 'shared.hero'], $this->components($landing));
-        $this->assertEquals(['currency' => 'EUR', 'minor' => '5'], LandingSerializer::toWire($landing->fresh())['blocks'][1]['price']);
+        // The item's embedded component goes by the item's id.
+        $hero = LandingSerializer::toWire($landing->fresh())['blocks'][1];
+        $this->assertEquals(['id' => $hero['id'], 'currency' => 'EUR', 'minor' => '5'], $hero['price']);
 
         $page = Livewire::test(EditLanding::class, ['record' => $landing->getRouteKey()]);
         $state = array_values($page->get('data')['blocks']);

@@ -79,10 +79,10 @@ final class ActivitySessionSerializer
         }
     }
 
-    /** A component's fields, or null when none has a value. */
+    /** A component's fields, or null when none has a value (its id, the row's, is not one). */
     private static function nested(array $a): ?array
     {
-        return array_filter($a, fn ($v) => $v !== null) === [] ? null : $a;
+        return array_filter(array_diff_key($a, ['id' => true]), fn ($v) => $v !== null) === [] ? null : $a;
     }
 
     private static function dig(array $a, array $path): mixed

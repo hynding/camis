@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
-use App\Models\Book;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Testing\TestResponse;
@@ -61,10 +60,11 @@ class ComponentIdTest extends TestCase
         // A client sends a component back with its id.
         $price = $books[0]['price'];
         $price['minor'] = 250;
-        $this->api('PUT', '/api/books/'.$made['documentId'], ['data' => ['price' => $price]])
+        $this->api('PUT', '/api/books/'.$made['documentId'], ['data' => ['price' => $price]])->assertOk();
+        $this->api('GET', '/api/books/'.$made['documentId'].'?populate=price')
             ->assertOk()
-            ->assertJsonPath('data.price.minor', '250');
-        $this->assertSame(1, Book::where('price_minor', 250)->count());
+            ->assertJsonPath('data.price.minor', '250')
+            ->assertJsonPath('data.price.id', $price['id']);
     }
 
     public function test_graphql_answers_an_embedded_components_id(): void

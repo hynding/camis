@@ -434,7 +434,8 @@ final class StrapiPopulate
                 throw StrapiError::invalidKey((string) $field, $key, 'fields');
             }
         }
-        $keep = array_flip($wanted);
+        // Strapi selects a component's id whichever fields are asked for.
+        $keep = array_flip(['id', ...$wanted]);
 
         return $repeatable
             ? array_map(fn (array $item) => array_intersect_key($item, $keep), $value)
