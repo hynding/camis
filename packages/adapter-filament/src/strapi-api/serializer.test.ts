@@ -149,6 +149,13 @@ describe("emitSerializer", () => {
     const transaction = emitSerializer(shape("Transaction"));
     expect(transaction).toContain("self::nested(");
   });
+  // Strapi gives every component an id. An embedded one is columns of the row holding it, so it
+  // goes by that row's id; the id alone does not make an unset component a value.
+  it("gives an embedded component the id of the row that holds it", () => {
+    const transaction = emitSerializer(shape("Transaction"));
+    expect(transaction).toMatch(/'amount' => self::nested\(\[\n\s+'id' => \$m->id,/);
+    expect(transaction).toContain("array_diff_key($a, ['id' => true])");
+  });
   it("emits a clean empty $children array and an empty syncChildren body with no children", () => {
     const php = emitSerializer(shape("Transaction"));
     expect(php).toContain("$children = [];\n");
