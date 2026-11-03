@@ -3,13 +3,13 @@
     "status": 200,
     "data": [
       {
-        "documentId": "bz1mdbv9yu4zks0f5n7egqmt",
+        "documentId": "hw0eb1p2gt8odndc6dthaykj",
         "frames": [
           {
             "caption": "Again",
             "image": {
               "alternativeText": "red",
-              "documentId": "jfkilf62b6ag104upejqlvwe",
+              "documentId": "m0lpmswr0yf9ulct1j7c4fg3",
               "name": "wide.png",
               "width": 1200
             }
@@ -18,13 +18,13 @@
         "title": "Closing"
       },
       {
-        "documentId": "yv8twig88u60jnb9mm6tte9x",
+        "documentId": "bgi8639scg8yfw73aczu2kmm",
         "frames": [
           {
             "caption": "Wide shot",
             "image": {
               "alternativeText": "red",
-              "documentId": "jfkilf62b6ag104upejqlvwe",
+              "documentId": "m0lpmswr0yf9ulct1j7c4fg3",
               "name": "wide.png",
               "width": 1200
             }
@@ -37,13 +37,52 @@
             "caption": "Close up",
             "image": {
               "alternativeText": "blue",
-              "documentId": "vratmklzkv19q0xa4ax4c1i8",
+              "documentId": "xukmldggzpnw1w0atr3azw9g",
               "name": "tall.png",
               "width": 40
             }
           }
         ],
         "title": "Opening"
+      },
+      {
+        "documentId": "dqmfmifuuoilic4rowpo5c52",
+        "frames": [],
+        "title": "Trailer"
+      }
+    ]
+  },
+  "storyboards with their seo's image": {
+    "status": 200,
+    "data": [
+      {
+        "documentId": "hw0eb1p2gt8odndc6dthaykj",
+        "seo": null,
+        "title": "Closing"
+      },
+      {
+        "documentId": "bgi8639scg8yfw73aczu2kmm",
+        "seo": {
+          "metaImage": {
+            "alternativeText": "blue",
+            "documentId": "xukmldggzpnw1w0atr3azw9g",
+            "name": "tall.png"
+          },
+          "metaTitle": "Opening"
+        },
+        "title": "Opening"
+      },
+      {
+        "documentId": "dqmfmifuuoilic4rowpo5c52",
+        "seo": {
+          "metaImage": {
+            "alternativeText": "red",
+            "documentId": "m0lpmswr0yf9ulct1j7c4fg3",
+            "name": "wide.png"
+          },
+          "metaTitle": null
+        },
+        "title": "Trailer"
       }
     ]
   },
@@ -52,10 +91,10 @@
     "data": [
       {
         "cover": {
-          "documentId": "jfkilf62b6ag104upejqlvwe",
+          "documentId": "m0lpmswr0yf9ulct1j7c4fg3",
           "name": "wide.png"
         },
-        "documentId": "lajfh3wgam18btbo9c0x3bsz",
+        "documentId": "f4ab9ysupx1ut09lrwoiz5jz",
         "title": "Covered"
       }
     ]
@@ -65,7 +104,7 @@
     "data": [
       {
         "alternativeText": "blue",
-        "documentId": "vratmklzkv19q0xa4ax4c1i8",
+        "documentId": "xukmldggzpnw1w0atr3azw9g",
         "height": 80,
         "isUrlSigned": false,
         "mime": "image/png",
@@ -74,7 +113,7 @@
       },
       {
         "alternativeText": "red",
-        "documentId": "jfkilf62b6ag104upejqlvwe",
+        "documentId": "m0lpmswr0yf9ulct1j7c4fg3",
         "height": 800,
         "isUrlSigned": false,
         "mime": "image/png",

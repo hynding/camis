@@ -427,7 +427,7 @@ jobs:
           php artisan db:seed --class="Database\\Seeders\\RolePermissionSeeder" --force
           F=../packages/adapter-filament/src/strapi-api/__fixtures__/transfer
           php artisan strapi:import --file=$F/component-media-export.tar.gz --force | tee $RUNNER_TEMP/component-media-import.log
-          if grep -q "Not imported: shared.frame" $RUNNER_TEMP/component-media-import.log; then echo "the frames' files were not imported"; exit 1; fi
+          if grep -q "Not imported: shared\.\(frame\|seo\)" $RUNNER_TEMP/component-media-import.log; then echo "the components' files were not imported"; exit 1; fi
           # Exported again, each frame links the file strapi-php's archive gave it.
           php artisan strapi:export --no-encrypt --file=$RUNNER_TEMP/camis-component-media
           node ../packages/adapter-filament/scripts/strapi-transfer-compare.mjs \

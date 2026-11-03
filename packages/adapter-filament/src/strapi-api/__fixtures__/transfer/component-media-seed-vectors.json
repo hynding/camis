@@ -1,5 +1,5 @@
 {
-  "about": "The data strapi-php's export of transfer/component-media-export.tar.gz holds: run on an empty strapi-php project (with the fixture's types), seeded with a full-access token, then `php bin/strapi export --no-encrypt -f component-media-export`. Files linked from the items of a repeatable component (Storyboard.frames, each frame's image): two storyboards share a file, one frame has none, and a book's own cover links the same file as a frame.",
+  "about": "The data strapi-php's export of transfer/component-media-export.tar.gz holds: run on an empty strapi-php project (with the fixture's types), seeded with a full-access token, then `php bin/strapi export --no-encrypt -f component-media-export`. Files linked from the items of a repeatable component (Storyboard.frames, each frame's image) and from an embedded one (Storyboard.seo.metaImage): two storyboards share a file, one frame has none, a book's own cover links the same file as a frame, one storyboard has no seo and one an seo holding only its file.",
   "seed": [],
   "reads": [],
   "writes": [
@@ -7,13 +7,27 @@
       "name": "a wide image",
       "path": "/upload",
       "as": "files:Wide",
-      "upload": [{ "file": "wide.png", "info": { "alternativeText": "red" } }]
+      "upload": [
+        {
+          "file": "wide.png",
+          "info": {
+            "alternativeText": "red"
+          }
+        }
+      ]
     },
     {
       "name": "a tall image",
       "path": "/upload",
       "as": "files:Tall",
-      "upload": [{ "file": "tall.png", "info": { "alternativeText": "blue" } }]
+      "upload": [
+        {
+          "file": "tall.png",
+          "info": {
+            "alternativeText": "blue"
+          }
+        }
+      ]
     },
     {
       "name": "a storyboard whose frames link files",
@@ -23,10 +37,22 @@
       "data": {
         "title": "Opening",
         "frames": [
-          { "caption": "Wide shot", "image": "#files:Wide" },
-          { "caption": "Blank" },
-          { "caption": "Close up", "image": "#files:Tall" }
-        ]
+          {
+            "caption": "Wide shot",
+            "image": "#files:Wide"
+          },
+          {
+            "caption": "Blank"
+          },
+          {
+            "caption": "Close up",
+            "image": "#files:Tall"
+          }
+        ],
+        "seo": {
+          "metaTitle": "Opening",
+          "metaImage": "#files:Tall"
+        }
       }
     },
     {
@@ -36,7 +62,12 @@
       "as": "storyboards:Closing",
       "data": {
         "title": "Closing",
-        "frames": [{ "caption": "Again", "image": "#files:Wide" }]
+        "frames": [
+          {
+            "caption": "Again",
+            "image": "#files:Wide"
+          }
+        ]
       }
     },
     {
@@ -44,7 +75,22 @@
       "method": "POST",
       "path": "/books",
       "as": "books:Covered",
-      "data": { "title": "Covered", "cover": "#files:Wide" }
+      "data": {
+        "title": "Covered",
+        "cover": "#files:Wide"
+      }
+    },
+    {
+      "name": "a storyboard whose embedded seo links a file and has no title",
+      "method": "POST",
+      "path": "/storyboards",
+      "as": "storyboards:Trailer",
+      "data": {
+        "title": "Trailer",
+        "seo": {
+          "metaImage": "#files:Wide"
+        }
+      }
     }
   ]
 }
