@@ -71,6 +71,30 @@ describe("importCommand", () => {
     expect(code).toBe(0);
     expect(Object.values(written)[0]).toContain('"Article"');
   });
+  // Strapi's upload plugin is always there: a project with media fields gets the media library's
+  // type, as `camis new --from-strapi` gives it, or no role could ever be granted its files.
+  it("declares the media library when a Strapi project uses media", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "camis-cli-strapi-media-"));
+    const ctDir = join(dir, "src/api/article/content-types/article");
+    await mkdir(ctDir, { recursive: true });
+    await writeFile(
+      join(ctDir, "schema.json"),
+      JSON.stringify({
+        kind: "collectionType",
+        info: { singularName: "article", pluralName: "articles", displayName: "Article" },
+        attributes: { cover: { type: "media", multiple: false } },
+      }),
+    );
+    const written: Record<string, string> = {};
+    const code = await importCommand("strapi", dir, join(dir, "ir.json"), memIo({}, [], written));
+    expect(code).toBe(0);
+    const document = JSON.parse(written[join(dir, "ir.json")]!) as {
+      contentTypes: { name: string; builtin?: string }[];
+    };
+    expect(document.contentTypes).toContainEqual(
+      expect.objectContaining({ name: "File", builtin: "file" }),
+    );
+  });
   // A dropped attribute must be visible: otherwise an import silently loses fields.
   it("prints the capability gaps of a Strapi import", async () => {
     const dir = await mkdtemp(join(tmpdir(), "camis-cli-strapi-gaps-"));
