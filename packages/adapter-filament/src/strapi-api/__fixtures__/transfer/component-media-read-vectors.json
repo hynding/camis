@@ -1,5 +1,5 @@
 {
-  "about": "What strapi-php answers after `php bin/strapi import -f component-media-export.tar.gz --force` into an empty project, and what camis must answer after `php artisan strapi:import --file=component-media-export.tar.gz --force` into an empty app: each frame of a storyboard, and its embedded seo, links the file the archive gave it, beside a book whose own cover is one of those files.",
+  "about": "What strapi-php answers after `php bin/strapi import -f component-media-export.tar.gz --force` into an empty project, and what camis must answer after `php artisan strapi:import --file=component-media-export.tar.gz --force` into an empty app: each frame of a storyboard, its embedded seo and each frame in a landing's zone links the file the archive gave it, beside a book whose own cover is one of those files.",
   "compare": ["documentId"],
   "seed": [],
   "reads": [
@@ -12,6 +12,11 @@
       "name": "storyboards with their seo's image",
       "path": "/storyboards",
       "query": "sort=title&fields[0]=title&populate[seo][populate][metaImage][fields][0]=name&populate[seo][populate][metaImage][fields][1]=alternativeText"
+    },
+    {
+      "name": "a landing's zone with its frames' images",
+      "path": "/landings",
+      "query": "sort=title&fields[0]=title&populate[blocks][on][shared.frame][populate][image][fields][0]=name&populate[blocks][on][shared.hero]=true"
     },
     {
       "name": "a book's cover beside them",

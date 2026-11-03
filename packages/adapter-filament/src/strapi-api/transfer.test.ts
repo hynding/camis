@@ -142,6 +142,11 @@ describe("Strapi data import", () => {
       /'frames' => \[\s+'repeatable' => 'frames',\s+'uid' => 'shared\.frame',[\s\S]*?'media' => \[\s+'image' => 'image',\s+\],/,
     );
     expect(content(IMPORT_ENGINE)).toContain("$this->items[$attribute['uid']][$item['id']]");
+    // A zone's items too, by their component's uid.
+    expect(map).toMatch(
+      /'shared\.frame' => \[\s+'relation' => 'blocksFrame',[\s\S]*?'media' => \[\s+'image' => 'image',\s+\],/,
+    );
+    expect(content(IMPORT_ENGINE)).toContain("$this->items[$item['__component']][$item['id']]");
     expect(result.gaps.gaps.filter((g) => g.feature === "componentMediaTransfer")).toEqual([]);
   });
 

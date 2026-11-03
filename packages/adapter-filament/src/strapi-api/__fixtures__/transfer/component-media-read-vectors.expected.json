@@ -3,13 +3,13 @@
     "status": 200,
     "data": [
       {
-        "documentId": "hw0eb1p2gt8odndc6dthaykj",
+        "documentId": "ja7gd7z5qug7n4mg10sxsuri",
         "frames": [
           {
             "caption": "Again",
             "image": {
               "alternativeText": "red",
-              "documentId": "m0lpmswr0yf9ulct1j7c4fg3",
+              "documentId": "p0zdw7c3zq3w4983ghbg1lsn",
               "name": "wide.png",
               "width": 1200
             }
@@ -18,13 +18,13 @@
         "title": "Closing"
       },
       {
-        "documentId": "bgi8639scg8yfw73aczu2kmm",
+        "documentId": "u54ihlbukabq14yqgnf817it",
         "frames": [
           {
             "caption": "Wide shot",
             "image": {
               "alternativeText": "red",
-              "documentId": "m0lpmswr0yf9ulct1j7c4fg3",
+              "documentId": "p0zdw7c3zq3w4983ghbg1lsn",
               "name": "wide.png",
               "width": 1200
             }
@@ -37,7 +37,7 @@
             "caption": "Close up",
             "image": {
               "alternativeText": "blue",
-              "documentId": "xukmldggzpnw1w0atr3azw9g",
+              "documentId": "j0xbbvy0450thqa0i5vh3v2q",
               "name": "tall.png",
               "width": 40
             }
@@ -46,7 +46,7 @@
         "title": "Opening"
       },
       {
-        "documentId": "dqmfmifuuoilic4rowpo5c52",
+        "documentId": "w2uzgdy3rrn7oeh6nvi0d9tn",
         "frames": [],
         "title": "Trailer"
       }
@@ -56,16 +56,16 @@
     "status": 200,
     "data": [
       {
-        "documentId": "hw0eb1p2gt8odndc6dthaykj",
+        "documentId": "ja7gd7z5qug7n4mg10sxsuri",
         "seo": null,
         "title": "Closing"
       },
       {
-        "documentId": "bgi8639scg8yfw73aczu2kmm",
+        "documentId": "u54ihlbukabq14yqgnf817it",
         "seo": {
           "metaImage": {
             "alternativeText": "blue",
-            "documentId": "xukmldggzpnw1w0atr3azw9g",
+            "documentId": "j0xbbvy0450thqa0i5vh3v2q",
             "name": "tall.png"
           },
           "metaTitle": "Opening"
@@ -73,11 +73,11 @@
         "title": "Opening"
       },
       {
-        "documentId": "dqmfmifuuoilic4rowpo5c52",
+        "documentId": "w2uzgdy3rrn7oeh6nvi0d9tn",
         "seo": {
           "metaImage": {
             "alternativeText": "red",
-            "documentId": "m0lpmswr0yf9ulct1j7c4fg3",
+            "documentId": "p0zdw7c3zq3w4983ghbg1lsn",
             "name": "wide.png"
           },
           "metaTitle": null
@@ -86,15 +86,44 @@
       }
     ]
   },
+  "a landing's zone with its frames' images": {
+    "status": 200,
+    "data": [
+      {
+        "blocks": [
+          {
+            "__component": "shared.frame",
+            "caption": "Zoned",
+            "image": {
+              "documentId": "j0xbbvy0450thqa0i5vh3v2q",
+              "name": "tall.png"
+            }
+          },
+          {
+            "__component": "shared.hero",
+            "heading": "Between",
+            "subheading": null
+          },
+          {
+            "__component": "shared.frame",
+            "caption": "Empty",
+            "image": null
+          }
+        ],
+        "documentId": "gt38vcz67ghlov6vwuy6cdy1",
+        "title": "Framed"
+      }
+    ]
+  },
   "a book's cover beside them": {
     "status": 200,
     "data": [
       {
         "cover": {
-          "documentId": "m0lpmswr0yf9ulct1j7c4fg3",
+          "documentId": "p0zdw7c3zq3w4983ghbg1lsn",
           "name": "wide.png"
         },
-        "documentId": "f4ab9ysupx1ut09lrwoiz5jz",
+        "documentId": "zg6oaj3y9t5kr9uyradx3mq6",
         "title": "Covered"
       }
     ]
@@ -104,7 +133,7 @@
     "data": [
       {
         "alternativeText": "blue",
-        "documentId": "xukmldggzpnw1w0atr3azw9g",
+        "documentId": "j0xbbvy0450thqa0i5vh3v2q",
         "height": 80,
         "isUrlSigned": false,
         "mime": "image/png",
@@ -113,7 +142,7 @@
       },
       {
         "alternativeText": "red",
-        "documentId": "m0lpmswr0yf9ulct1j7c4fg3",
+        "documentId": "p0zdw7c3zq3w4983ghbg1lsn",
         "height": 800,
         "isUrlSigned": false,
         "mime": "image/png",

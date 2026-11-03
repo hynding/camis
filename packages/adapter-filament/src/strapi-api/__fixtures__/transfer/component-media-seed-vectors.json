@@ -1,5 +1,5 @@
 {
-  "about": "The data strapi-php's export of transfer/component-media-export.tar.gz holds: run on an empty strapi-php project (with the fixture's types), seeded with a full-access token, then `php bin/strapi export --no-encrypt -f component-media-export`. Files linked from the items of a repeatable component (Storyboard.frames, each frame's image) and from an embedded one (Storyboard.seo.metaImage): two storyboards share a file, one frame has none, a book's own cover links the same file as a frame, one storyboard has no seo and one an seo holding only its file.",
+  "about": "The data strapi-php's export of transfer/component-media-export.tar.gz holds: run on an empty strapi-php project (with the fixture's types), seeded with a full-access token, then `php bin/strapi export --no-encrypt -f component-media-export`. Files linked from the items of a repeatable component (Storyboard.frames, each frame's image) and from an embedded one (Storyboard.seo.metaImage): two storyboards share a file, one frame has none, a book's own cover links the same file as a frame, one storyboard has no seo and one an seo holding only its file; a landing's zone holds frames, one linking a file and one none, beside a hero.",
   "seed": [],
   "reads": [],
   "writes": [
@@ -90,6 +90,30 @@
         "seo": {
           "metaImage": "#files:Wide"
         }
+      }
+    },
+    {
+      "name": "a landing whose zone's frames link files",
+      "method": "POST",
+      "path": "/landings",
+      "as": "landings:Framed",
+      "data": {
+        "title": "Framed",
+        "blocks": [
+          {
+            "__component": "shared.frame",
+            "caption": "Zoned",
+            "image": "#files:Tall"
+          },
+          {
+            "__component": "shared.hero",
+            "heading": "Between"
+          },
+          {
+            "__component": "shared.frame",
+            "caption": "Empty"
+          }
+        ]
       }
     }
   ]
