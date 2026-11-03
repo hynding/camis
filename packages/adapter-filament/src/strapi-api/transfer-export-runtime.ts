@@ -494,7 +494,10 @@ final class StrapiExport
     }
 
     /**
-     * @param array<string, array{relation: string, scalars: list<array<string, mixed>>}> $members
+     * A zone's items in order. An item with media fields is remembered by the id it goes by in
+     * the archive, as a repeatable component's is.
+     *
+     * @param array<string, array{relation: string, scalars: list<array<string, mixed>>, media?: array<string, string>}> $members
      * @return list<array<string, mixed>>
      */
     private function zone(Model $model, int $id, array $members): array
@@ -502,12 +505,21 @@ final class StrapiExport
         $items = [];
         foreach ($members as $component => $member) {
             foreach ($this->children($model, $id, $member['relation'], true) as $child) {
-                $items[] = [(int) ($child['position'] ?? 0), $component, $member['scalars'], $child];
+                $items[] = [(int) ($child['position'] ?? 0), $component, $member, $child];
             }
         }
         usort($items, fn (array $a, array $b): int => $a[0] <=> $b[0]);
+        $zone = [];
+        foreach ($items as [, $component, $member, $child]) {
+            $item = $this->item($member['scalars'], $child) + ['__component' => $component];
+            $morph = $model->{$member['relation']}()->getRelated()->getMorphClass();
+            foreach ($member['media'] ?? [] as $key => $relation) {
+                $this->items[$morph][(int) $child['id']][$relation] = [$component, (int) $item['id'], $key];
+            }
+            $zone[] = $item;
+        }
 
-        return array_map(fn (array $item): array => $this->item($item[2], $item[3]) + ['__component' => $item[1]], $items);
+        return $zone;
     }
 
     /**

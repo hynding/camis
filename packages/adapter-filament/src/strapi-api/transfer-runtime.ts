@@ -583,7 +583,10 @@ final class StrapiImport
                 if ($member === null) {
                     throw new \RuntimeException("{$uid}: this project's zone has no component " . ($item['__component'] ?? '?'));
                 }
-                $this->child($model->{$member['relation']}(), $member['scalars'], $item, $stamps + ['position' => $position]);
+                $id = $this->child($model->{$member['relation']}(), $member['scalars'], $item, $stamps + ['position' => $position]);
+                if (isset($member['media'], $item['id'])) {
+                    $this->items[$item['__component']][$item['id']] = [$model->{$member['relation']}()->getRelated()::class, $id, $member['media']];
+                }
                 $position++;
             }
         }

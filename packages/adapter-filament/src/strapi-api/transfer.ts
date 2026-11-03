@@ -117,10 +117,20 @@ const attributes = (shape: WireShape) => {
   for (const zone of shape.zones) {
     out[zone.key] = {
       zone: Object.fromEntries(
-        zone.members.map((m) => [
-          m.uid,
-          { relation: m.relation, scalars: m.scalars.map((s) => scalar(s, 0)) },
-        ]),
+        zone.members.map((m) => {
+          // Strapi links an item's files to the item, by its component's uid and its id.
+          const media = m.media.filter((r) => !r.key.includes("."));
+          return [
+            m.uid,
+            {
+              relation: m.relation,
+              scalars: m.scalars.map((s) => scalar(s, 0)),
+              ...(media.length > 0
+                ? { media: Object.fromEntries(media.map((r) => [r.key, r.relation])) }
+                : {}),
+            },
+          ];
+        }),
       ),
     };
   }

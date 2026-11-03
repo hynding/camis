@@ -420,7 +420,7 @@ jobs:
             http://127.0.0.1:8765/api/auth/local/register | jq -r .jwt)
           node ../packages/adapter-filament/scripts/strapi-populate-vectors.mjs http://127.0.0.1:8765/api \
             --token "$T" --vectors $F/link-order-read-vectors.json --expected $F/link-order-read-vectors.expected.json
-      - name: Strapi data import and export keep a repeatable component's files (a strapi-php archive whose frames link images)
+      - name: Strapi data import and export keep components' files (a strapi-php archive whose frames, seo and zone items link images)
         run: |
           cd app
           php artisan migrate:fresh --force
