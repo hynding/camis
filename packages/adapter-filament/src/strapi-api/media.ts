@@ -65,26 +65,20 @@ export const mediaPlan = (
 export const mediaComponentsConstant = (relations: readonly string[]): string =>
   `    public const MEDIA_COMPONENTS = [${relations.map((r) => `'${r}'`).join(", ")}];`;
 
-/**
- * Media fields that stay path columns although the project keeps a media library: those of an
- * embedded component (its fields are columns of the entry's own row) and of a dynamic zone's item.
- */
+/** Media fields that stay path columns although the project keeps a media library: a dynamic zone item's. */
 export const columnMediaGaps = (
   ct: ContentType,
   expansion: ReturnType<typeof expandComponents>,
 ): CapabilityGap[] =>
-  [
-    ...expansion.scalars.map((s) => ({ s, where: "an embedded component" })),
-    ...expansion.zones.flatMap((z) =>
-      z.members.flatMap((m) => m.table.scalars.map((s) => ({ s, where: "a dynamic zone's item" }))),
-    ),
-  ]
-    .filter(({ s }) => s.field.type === "media")
-    .map(({ s, where }) => ({
+  expansion.zones
+    .flatMap((z) => z.members.flatMap((m) => m.table.scalars))
+    .filter((s) => s.field.type === "media")
+    .map((s) => ({
       feature: "componentMedia",
       location: { contentType: ct.name, field: s.apiPath.join(".") },
       severity: "downgrade" as const,
-      message: `a media field inside ${where} is stored as a file path, not linked to the media library`,
+      message:
+        "a media field inside a dynamic zone's item is stored as a file path, not linked to the media library",
     }));
 
 /**

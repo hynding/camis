@@ -16,6 +16,7 @@ import {
   childRelationMethod,
   childTableEmit,
   emitChildMigration,
+  camelPath,
   emitChildModel,
   repeaterComponent,
   type ChildTableEmit,
@@ -211,9 +212,14 @@ export const filamentAdapter: GenerateAdapter = {
       if (storage === "strapi") return;
       // A shared embedded column is NOT NULL only when the component is always present;
       // `s.field.required` alone still speaks for validation, not for the column.
-      const embeddedEmits = expansion.scalars.map((s) =>
-        emitField(columnField(s), s.path.map(snakeColumn).join("_")),
+      // With a media library an embedded component's media field is a link from the entry, by its
+      // path, not a column.
+      const embeddedMedia = expansion.scalars.filter(
+        (s) => fileModel !== undefined && s.field.type === "media",
       );
+      const embeddedEmits = expansion.scalars
+        .filter((s) => !embeddedMedia.includes(s))
+        .map((s) => emitField(columnField(s), s.path.map(snakeColumn).join("_")));
       const ctChildren = expansion.tables.map((t) =>
         childTableEmit(ct, t, fileModel !== undefined),
       );
@@ -264,7 +270,7 @@ export const filamentAdapter: GenerateAdapter = {
               : []),
             ...(versioned.has(ct.name) ? ["App\\Models\\Concerns\\HasDraftAndPublish"] : []),
             ...(localized.has(ct.name) ? ["App\\Models\\Concerns\\HasLocale"] : []),
-            ...(mediaOf.length > 0 || mediaItems.length > 0
+            ...(mediaOf.length > 0 || mediaItems.length > 0 || embeddedMedia.length > 0
               ? ["App\\Models\\Concerns\\HasMedia"]
               : []),
             ...(linkOrders === undefined ? [] : ["App\\Models\\Concerns\\HasLinkOrder"]),
@@ -273,6 +279,9 @@ export const filamentAdapter: GenerateAdapter = {
             ...(linkOrders === undefined ? [] : [linkOrdersConstant(linkOrders)]),
             ...(localized.has(ct.name) ? [sharedAcrossLocalesMethod(ct)] : []),
             ...mediaOf.map((f) => mediaRelationMethod(f.name, f.name, fileModel)),
+            ...embeddedMedia.map((s) =>
+              mediaRelationMethod(s.path.join("."), camelPath(s.path), fileModel),
+            ),
             ...(mediaItems.length > 0 ? [mediaComponentsConstant(mediaItems)] : []),
           ],
         ),
@@ -305,11 +314,18 @@ export const filamentAdapter: GenerateAdapter = {
             versioned: versioned.has(ct.name),
             localized: localized.has(ct.name),
             secured: ir.roles.length > 0,
-            media: mediaOf.map((f) => ({
-              field: f.name,
-              multiple: f.multiple === true,
-              ...mediaAllowedTypes(f),
-            })),
+            media: [
+              ...mediaOf.map((f) => ({
+                field: f.name,
+                multiple: f.multiple === true,
+                ...mediaAllowedTypes(f),
+              })),
+              ...embeddedMedia.map((s) => ({
+                field: camelPath(s.path),
+                multiple: s.field.type === "media" && s.field.multiple === true,
+                ...mediaAllowedTypes(s.field),
+              })),
+            ],
             ...(contentManager === undefined
               ? {}
               : {

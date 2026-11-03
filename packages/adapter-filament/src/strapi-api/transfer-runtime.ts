@@ -515,6 +515,7 @@ final class StrapiImport
         $model = new ($type['model'])();
         $row = [];
         $children = [];
+        $files = [];
         foreach ($data as $key => $value) {
             if (! array_key_exists($key, $type['attributes'])) {
                 throw new \RuntimeException("{$uid}.{$key} has nowhere to go in this project");
@@ -531,6 +532,11 @@ final class StrapiImport
                 }
                 foreach ($attribute['children'] ?? [] as $child) {
                     $children[$key . '.' . implode('.', $child['key'])] = [$child, is_array($value) ? self::at($value, $child['key']) : null];
+                }
+                if (is_array($value)) {
+                    foreach ($attribute['files'] ?? [] as $file) {
+                        $files[] = [$file, self::at($value, [...array_slice($file['key'], 0, -1), 'id'])];
+                    }
                 }
             } else {
                 $children[$key] = [$attribute, $value];
@@ -554,6 +560,13 @@ final class StrapiImport
             $this->pending[] = [$table, $column, $id, $targetUid, $targetRef, $uid];
         }
         $model->setAttribute($model->getKeyName(), $id);
+        // An embedded component's files link the entry's row, by the id its component was archived with.
+        foreach ($files as [$file, $archived]) {
+            if ($archived !== null) {
+                $this->items[$file['uid']][$archived] ??= [$model::class, $id, []];
+                $this->items[$file['uid']][$archived][2][$file['key'][count($file['key']) - 1]] = $file['relation'];
+            }
+        }
         $stamps = ['created_at' => $row['created_at'] ?? null, 'updated_at' => $row['updated_at'] ?? null];
         foreach ($children as [$attribute, $items]) {
             $position = 0;

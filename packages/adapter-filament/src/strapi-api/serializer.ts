@@ -41,11 +41,12 @@ const read = (s: WireScalar, src: string, layout: StorageLayout): string => {
   return col;
 };
 
-// An item's files, whole: populate leaves them off, or narrows them, as it does an entry's.
-const mediaWire = (r: WireRelation): string =>
+// A component's files, whole: populate leaves them off, or narrows them, as it does an entry's.
+// `$src` is the row holding the component: an item's own, or the entry's for an embedded one.
+const mediaWire = (r: WireRelation, src = "$c"): string =>
   r.kind === "mediaMany"
-    ? `$c->${r.relation}()->orderByPivot('order')->get()->map(fn ($f) => ${r.model}Serializer::toWire($f))->all()`
-    : `$c->${r.relation}->first() === null ? null : ${r.model}Serializer::toWire($c->${r.relation}->first())`;
+    ? `${src}->${r.relation}()->orderByPivot('order')->get()->map(fn ($f) => ${r.model}Serializer::toWire($f))->all()`
+    : `${src}->${r.relation}->first() === null ? null : ${r.model}Serializer::toWire(${src}->${r.relation}->first())`;
 
 // Build a nested PHP array literal from scalars whose keys are paths.
 interface Node {
@@ -93,8 +94,18 @@ const toWireBody = (shape: WireShape, indent: string, layout: StorageLayout): st
   insert(root, ["documentId"], "$m->document_id");
   const own = answered(shape.scalars);
   const children = shape.children.filter((c) => c.private !== true);
-  insertComponentIds(root, [...own.map((s) => s.key), ...children.map((c) => c.key)], "$m->id");
+  const files = shape.embeddedMedia.filter((r) => r.private !== true);
+  insertComponentIds(
+    root,
+    [
+      ...own.map((s) => s.key),
+      ...children.map((c) => c.key),
+      ...files.map((r) => r.key.split(".")),
+    ],
+    "$m->id",
+  );
   for (const s of own) insert(root, s.key, read(s, "$m", layout));
+  for (const r of files) insert(root, r.key.split("."), mediaWire(r, "$m"));
   for (const c of children) {
     const inner = node();
     insert(inner, ["id"], "$c->id");
@@ -326,6 +337,7 @@ const fieldsConstant = (shape: WireShape): string => {
   );
   const rows = [
     ...[id, documentId, ...shape.scalars].map((s) => fieldEntry(s, l2)),
+    ...shape.embeddedMedia.map((r) => relationEntry(r, l2)),
     ...children,
     // A zone is a key Strapi knows but will not filter, sort or select by.
     ...shape.zones.map((z) => `${l2}'${z.key}' => ['zone' => true],`),

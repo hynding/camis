@@ -79,6 +79,19 @@ const attributes = (shape: WireShape) => {
       group.component.push(scalar(s, 1));
     }
   }
+  // Strapi links an embedded component's files to the component's own row, by its uid and id;
+  // here the entry holds them, under their path.
+  for (const r of shape.embeddedMedia) {
+    const [first, ...rest] = r.key.split(".");
+    if (first === undefined) continue;
+    const group = (out[first] ??= { component: [] }) as { files?: unknown[] };
+    (group.files ??= []).push({
+      key: rest,
+      uid: r.component,
+      field: r.field,
+      relation: r.relation,
+    });
+  }
   for (const child of shape.children) {
     const [first] = child.key;
     if (first === undefined) continue;

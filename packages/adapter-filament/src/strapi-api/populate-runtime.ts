@@ -81,7 +81,8 @@ final class StrapiPopulate
         if ($populate === '*') {
             $tree = array_fill_keys($serializer::COMPONENTS, []);
             foreach ($serializer::FIELDS as $key => $field) {
-                if (isset($field['relation']) && ! isset($field['private']) && StrapiQuery::readable($field, $viewer)) {
+                // An embedded component's files (a dotted key) go with its component's own populate.
+                if (isset($field['relation']) && ! isset($field['private']) && ! str_contains((string) $key, '.') && StrapiQuery::readable($field, $viewer)) {
                     $tree[$key] = [];
                 }
             }
@@ -420,10 +421,11 @@ final class StrapiPopulate
         if ($value === null) {
             return $repeatable ? [] : null;
         }
-        $own = self::nestedKeys($repeatable ? $serializer::FIELDS[$key]['fields'] : self::within($key, $serializer));
+        $fields = $repeatable ? $serializer::FIELDS[$key]['fields'] : self::within($key, $serializer);
+        $own = self::nestedKeys($fields);
         $value = $repeatable
-            ? array_map(fn (array $item) => self::files(self::inside($item, $sub['populate'] ?? null, $own), $sub['populate'] ?? null, $serializer::FIELDS[$key]['fields']), $value)
-            : self::inside($value, $sub['populate'] ?? null, $own);
+            ? array_map(fn (array $item) => self::files(self::inside($item, $sub['populate'] ?? null, $own), $sub['populate'] ?? null, $fields), $value)
+            : self::files(self::inside($value, $sub['populate'] ?? null, $own), $sub['populate'] ?? null, $fields);
         if (! array_key_exists('fields', $sub)) {
             return $value;
         }
@@ -576,7 +578,11 @@ final class StrapiRelations
     {
         $links = [];
         foreach ($fields as $key => $relation) {
-            if (! isset($relation['relation']) || $relation['kind'] === 'localizations' || ! array_key_exists($key, $data)) {
+            if (! isset($relation['relation']) || $relation['kind'] === 'localizations') {
+                continue;
+            }
+            $sent = self::sent($data, (string) $key);
+            if ($sent === null) {
                 continue;
             }
             if (! StrapiQuery::readable($relation, $viewer)) {
@@ -584,10 +590,35 @@ final class StrapiRelations
             }
             // A target that keeps locales is linked in the writer's locale, else in its default one.
             $relation['locale'] = $relation['localized'] ? ($locale ?? StrapiLocales::default()) : null;
-            $links[$key] = self::instruction($relation, $data[$key], $viewer);
+            $links[$key] = self::instruction($relation, $sent[0], $viewer);
         }
 
         return $links;
+    }
+
+    /**
+     * What a write sends for a key, as [value], or null when it leaves the key alone. An embedded
+     * component's file (a dotted key) is sent with its component, which a write replaces whole, as
+     * Strapi replaces a component sent without its id; one sent with its id keeps what it leaves out.
+     */
+    private static function sent(array $data, string $key): ?array
+    {
+        if (array_key_exists($key, $data)) {
+            return [$data[$key]];
+        }
+        $path = explode('.', $key);
+        if (count($path) === 1 || ! array_key_exists($path[0], $data)) {
+            return null;
+        }
+        $value = $data;
+        foreach ($path as $i => $segment) {
+            if (! is_array($value) || ! array_key_exists($segment, $value)) {
+                return is_array($value) && $i > 0 && array_key_exists('id', $value) ? null : [null];
+            }
+            $value = $value[$segment];
+        }
+
+        return [$value];
     }
 
     /**

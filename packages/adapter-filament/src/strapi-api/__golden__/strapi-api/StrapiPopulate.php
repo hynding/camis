@@ -61,7 +61,8 @@ final class StrapiPopulate
         if ($populate === '*') {
             $tree = array_fill_keys($serializer::COMPONENTS, []);
             foreach ($serializer::FIELDS as $key => $field) {
-                if (isset($field['relation']) && ! isset($field['private']) && StrapiQuery::readable($field, $viewer)) {
+                // An embedded component's files (a dotted key) go with its component's own populate.
+                if (isset($field['relation']) && ! isset($field['private']) && ! str_contains((string) $key, '.') && StrapiQuery::readable($field, $viewer)) {
                     $tree[$key] = [];
                 }
             }
@@ -400,10 +401,11 @@ final class StrapiPopulate
         if ($value === null) {
             return $repeatable ? [] : null;
         }
-        $own = self::nestedKeys($repeatable ? $serializer::FIELDS[$key]['fields'] : self::within($key, $serializer));
+        $fields = $repeatable ? $serializer::FIELDS[$key]['fields'] : self::within($key, $serializer);
+        $own = self::nestedKeys($fields);
         $value = $repeatable
-            ? array_map(fn (array $item) => self::files(self::inside($item, $sub['populate'] ?? null, $own), $sub['populate'] ?? null, $serializer::FIELDS[$key]['fields']), $value)
-            : self::inside($value, $sub['populate'] ?? null, $own);
+            ? array_map(fn (array $item) => self::files(self::inside($item, $sub['populate'] ?? null, $own), $sub['populate'] ?? null, $fields), $value)
+            : self::files(self::inside($value, $sub['populate'] ?? null, $own), $sub['populate'] ?? null, $fields);
         if (! array_key_exists('fields', $sub)) {
             return $value;
         }

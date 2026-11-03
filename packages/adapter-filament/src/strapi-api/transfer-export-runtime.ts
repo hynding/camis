@@ -87,7 +87,7 @@ final class StrapiExport
 
     private int $components = 0;
 
-    /** @var array<string, array<int, array{0: string, 1: int, 2: array<string, string>}>> item model's morph class → row id → [component uid, archived id, pivot field → key] */
+    /** @var array<string, array<int, array<string, array{0: string, 1: int, 2: string}>>> morph class → row id → link field → [component uid, archived component id, its field there] */
     private array $items = [];
 
     /**
@@ -433,9 +433,9 @@ final class StrapiExport
         foreach ($rows as $row) {
             $uid = $owners[$row->related_type] ?? null;
             [$ref, $field] = [(int) $row->related_id, (string) $row->field];
-            $item = $this->items[$row->related_type][$ref] ?? null;
-            if ($item !== null && isset($item[2][$field])) {
-                [$uid, $ref, $field] = [$item[0], $item[1], $item[2][$field]];
+            $component = $this->items[$row->related_type][$ref][$field] ?? null;
+            if ($component !== null) {
+                [$uid, $ref, $field] = $component;
             } elseif ($uid === null) {
                 continue;
             }
@@ -461,7 +461,8 @@ final class StrapiExport
                 if (isset($attribute['column'])) {
                     $data[$key] = self::value($row[$attribute['column']] ?? null, $attribute['type']);
                 } elseif (isset($attribute['component'])) {
-                    $components[$key] = $this->component($attribute['component'], $row, $this->repeatables($model, $id, $attribute['children'] ?? []));
+                    $components[$key] = $this->component($attribute['component'], $row, $this->repeatables($model, $id, $attribute['children'] ?? []), $this->linkedFiles($model, $id, $attribute['files'] ?? []));
+                    $this->embeddedFiles($model, $id, $attribute['files'] ?? [], $components[$key]);
                 } elseif (isset($attribute['repeatable'])) {
                     $components[$key] = $this->repeatableItems($model, $id, $attribute);
                 } else {
@@ -549,12 +550,59 @@ final class StrapiExport
             $item = $this->item($attribute['scalars'], $row);
             if (isset($attribute['uid'], $attribute['media'])) {
                 $morph = $model->{$attribute['repeatable']}()->getRelated()->getMorphClass();
-                $this->items[$morph][(int) $row['id']] = [$attribute['uid'], (int) $item['id'], array_flip($attribute['media'])];
+                foreach ($attribute['media'] as $key => $relation) {
+                    // An item's link rows name the field by its path in the item, as its relation does.
+                    $this->items[$morph][(int) $row['id']][$relation] = [$attribute['uid'], (int) $item['id'], $key];
+                }
             }
             $items[] = $item;
         }
 
         return $items;
+    }
+
+    private static function at(array $data, array $path): mixed
+    {
+        foreach ($path as $key) {
+            if (! is_array($data) || ! array_key_exists($key, $data)) {
+                return null;
+            }
+            $data = $data[$key];
+        }
+
+        return $data;
+    }
+
+    /**
+     * The paths, within an embedded component, of the file fields that link a file on this row.
+     *
+     * @param list<array{key: list<string>, relation: string}> $files
+     * @return list<list<string>>
+     */
+    private function linkedFiles(Model $model, int $id, array $files): array
+    {
+        $model->setAttribute($model->getKeyName(), $id);
+
+        return array_values(array_map(
+            fn (array $file): array => $file['key'],
+            array_filter($files, fn (array $file): bool => $model->{$file['relation']}()->exists()),
+        ));
+    }
+
+    /**
+     * An embedded component's files go by the id the component was given in this archive, as
+     * Strapi links them to the component's own row.
+     *
+     * @param list<array{key: list<string>, uid: string, field: string}> $files
+     */
+    private function embeddedFiles(Model $model, int $id, array $files, ?array $component): void
+    {
+        foreach ($files as $file) {
+            $archived = $component === null ? null : self::at($component, [...array_slice($file['key'], 0, -1), 'id']);
+            if ($archived !== null) {
+                $this->items[$model->getMorphClass()][$id][$file['field']] = [$file['uid'], (int) $archived, $file['key'][count($file['key']) - 1]];
+            }
+        }
     }
 
     /**
@@ -567,10 +615,19 @@ final class StrapiExport
      * @param list<array{key: list<string>, items: list<array<string, mixed>>}> $repeatables
      * @return array<string, mixed>|null
      */
-    private function component(array $scalars, array $row, array $repeatables = []): ?array
+    private function component(array $scalars, array $row, array $repeatables = [], array $files = []): ?array
     {
         $values = [];
         $nested = [];
+        // A component holding only a file is still there: Strapi keeps its row, with its id.
+        $linked = false;
+        foreach ($files as $key) {
+            if (count($key) === 1) {
+                $linked = true;
+            } else {
+                $nested[$key[0]]['files'][] = array_slice($key, 1);
+            }
+        }
         foreach ($scalars as $scalar) {
             $key = $scalar['key'];
             if (count($key) === 1) {
@@ -587,8 +644,8 @@ final class StrapiExport
                 $nested[$key[0]]['repeatables'][] = ['key' => array_slice($key, 1), 'items' => $repeatable['items']];
             }
         }
-        $nested = array_map(fn (array $inner): ?array => $this->component($inner['scalars'] ?? [], $row, $inner['repeatables'] ?? []), $nested);
-        if (array_filter([...$values, ...$nested], fn ($v) => $v !== null && $v !== []) === []) {
+        $nested = array_map(fn (array $inner): ?array => $this->component($inner['scalars'] ?? [], $row, $inner['repeatables'] ?? [], $inner['files'] ?? []), $nested);
+        if (! $linked && array_filter([...$values, ...$nested], fn ($v) => $v !== null && $v !== []) === []) {
             return null;
         }
 

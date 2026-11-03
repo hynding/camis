@@ -1274,6 +1274,23 @@ accepted, the id ignored. Ids are not compared against strapi-php: the vectors d
 Exit: unit tests; `ComponentIdTest.php` (REST, populate fields, a write back, GraphQL) in the
 `strapi-api` boot job.
 
+## Phase 37 — an embedded component's files (`adapter-filament`)
+
+A media field inside an embedded component was a path column (the `componentMedia` gap), though
+Strapi starters put one in nearly every project (`shared.seo`'s `metaImage`). Strapi links such a
+file to the component's own row; here the component is columns of the entry's row, so the entry
+links it, with the field's path as the link row's `field` (`seo.metaImage`) and a relation named
+after the path (`seoMetaImage`). It is sent inside its component only when the component's own
+populate names it (narrowed by its `fields`), written with the component (a component sent
+without its id replaces the file too; one sent with its id keeps what it leaves out), filtered
+through (`filters[seo][metaImage][name]`), copied on publish, picked in the admin's form, typed
+as `UploadFile` in GraphQL, and carried by `strapi:import`/`strapi:export` as Strapi archives it:
+a morph link to the component's uid and the id the entry's data gives the component. A media
+field in a dynamic zone's item is still a path column (`componentMedia`).
+
+Exit: media vectors and `component-media-export.tar.gz` re-recorded from strapi-php with the
+fixture's `Storyboard.seo`; MediaAdminTest picks an seo image.
+
 ---
 
 ## Sequencing rationale (quick reference)
