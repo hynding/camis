@@ -147,10 +147,11 @@ const zoneMemberWire = (member: WireZoneMember, indent: string): string => {
   insert(item, ["id"], "$c->id");
   insertComponentIds(
     item,
-    answered(member.scalars).map((s) => s.key),
+    [...answered(member.scalars).map((s) => s.key), ...member.media.map((r) => r.key.split("."))],
     "$c->id",
   );
   for (const s of answered(member.scalars)) insert(item, s.key, read(s, "$c", "laravel"));
+  for (const r of member.media) insert(item, r.key.split("."), mediaWire(r));
   return `${indent}...$m->${member.relation}->map(fn ($c) => [$c->position, [
 ${render(item, `${indent}${UNIT}`)}
 ${indent}]])->all(),`;
@@ -208,7 +209,10 @@ const fromWireZoneStatements = (zones: WireZone[], indent: string): string =>
       const l2 = `${l1}${UNIT}`;
       const l3 = `${l2}${UNIT}`;
       const arms = z.members
-        .map((m) => `${l2}'${m.uid}' => [\n${fromWireColumns(m.scalars, "$item", l3)}\n${l2}],`)
+        .map(
+          (m) =>
+            `${l2}'${m.uid}' => [\n${fromWireColumns(m.scalars, "$item", l3)}${m.media.length === 0 ? "" : `\n${zoneItemMedia(m.media, l3)}`}\n${l2}],`,
+        )
         .join("\n");
       return `${indent}if (array_key_exists('${z.key}', $data)) {
 ${l1}$children['${z.key}'] = StrapiZones::items($data['${z.key}'], '${z.key}', self::ZONES['${z.key}'], fn (string $uid, array $item) => match ($uid) {
@@ -217,6 +221,11 @@ ${l1}});
 ${indent}}`;
     })
     .join("\n");
+
+// An item's file references as sent, null included: an item kept by its id keeps what it leaves out.
+// The controller resolves them to links before anything is written.
+const zoneItemMedia = (media: WireRelation[], indent: string): string =>
+  `${indent}'__media' => array_intersect_key($item, [${[...new Set(media.map((r) => r.key.split(".")[0]))].map((k) => `'${k}' => true`).join(", ")}]),`;
 
 const zoneSyncBody = (zones: WireZone[], indent: string): string =>
   zones
@@ -229,10 +238,12 @@ ${indent}}`,
 
 const zoneEntry = (zone: WireZone, indent: string): string =>
   `${indent}'${zone.key}' => [\n${zone.members
-    .map(
-      (m) =>
-        `${indent}${UNIT}'${m.uid}' => ['relation' => '${m.relation}', 'components' => [${m.components.map((c) => `'${c}'`).join(", ")}]],`,
-    )
+    .map((m) => {
+      const head = `${indent}${UNIT}'${m.uid}' => ['relation' => '${m.relation}', 'components' => [${m.components.map((c) => `'${c}'`).join(", ")}]`;
+      return m.media.length === 0
+        ? `${head}],`
+        : `${head}, 'fields' => [\n${m.media.map((r) => relationEntry(r, `${indent}${UNIT}${UNIT}`)).join("\n")}\n${indent}${UNIT}]],`;
+    })
     .join("\n")}\n${indent}],`;
 
 const zoneHelper = `
@@ -349,7 +360,7 @@ const fieldsConstant = (shape: WireShape): string => {
     shape.zones.length === 0
       ? "[]"
       : `[\n${shape.zones.map((z) => zoneEntry(z, l2)).join("\n")}\n    ]`;
-  return `\n    /** Wire path → column, for StrapiQuery's filters, sort and fields. */\n    public const FIELDS = [\n${rows.join("\n")}\n    ];\n\n    /** Component keys, which Strapi leaves off the wire unless populate names them. */\n    public const COMPONENTS = [${components}];\n\n    /** Each dynamic zone's member components by uid: the child relation its items live in, and its own component keys. */\n    public const ZONES = ${zones};\n\n    /** Whether each document has a draft and, once published, a published version. */\n    public const DRAFT_PUBLISH = ${shape.draftPublish};\n\n    /** Whether each document keeps one row per locale. */\n    public const LOCALIZED = ${shape.localized};\n`;
+  return `\n    /** Wire path → column, for StrapiQuery's filters, sort and fields. */\n    public const FIELDS = [\n${rows.join("\n")}\n    ];\n\n    /** Component keys, which Strapi leaves off the wire unless populate names them. */\n    public const COMPONENTS = [${components}];\n\n    /** Each dynamic zone's member components by uid: the child relation its items live in, its own component keys, and its media fields. */\n    public const ZONES = ${zones};\n\n    /** Whether each document has a draft and, once published, a published version. */\n    public const DRAFT_PUBLISH = ${shape.draftPublish};\n\n    /** Whether each document keeps one row per locale. */\n    public const LOCALIZED = ${shape.localized};\n`;
 };
 
 export const emitSerializer = (shape: WireShape, layout: StorageLayout = "laravel"): string => {

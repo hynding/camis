@@ -1,21 +1,29 @@
 import type { ExpandedZone } from "@camis/adapter-kernel";
 import type { ContentType } from "@camis/ir-schema";
-import { childTableEmit, type RepeaterEmit } from "../components";
+import { childTableEmit, type ChildTableEmit, type RepeaterEmit } from "../components";
 import { filamentNames } from "../names";
 import { componentUid } from "./names";
 
 /**
  * A dynamic zone in the admin: a Builder with one block per member component, read from and
- * written to the zone's rows through `StrapiZones`, as the REST API reads and writes them.
+ * written to the zone's rows through `StrapiZones`, as the REST API reads and writes them. With
+ * a media library an item's media fields pick files by id, which `StrapiZones` links.
  */
-export const zoneBuilder = (ct: ContentType, zone: ExpandedZone): RepeaterEmit => {
+export const zoneBuilder = (
+  ct: ContentType,
+  zone: ExpandedZone,
+  linksMedia: boolean,
+): RepeaterEmit => {
   const key = zone.apiName;
   const members = `${filamentNames(ct).model}Serializer::ZONES['${key}']`;
-  const children = zone.members.map((m) => ({ member: m, child: childTableEmit(ct, m.table) }));
+  const children = zone.members.map((m) => ({
+    member: m,
+    child: childTableEmit(ct, m.table, linksMedia),
+  }));
   const blocks = children
     .map(({ member, child }) => {
-      const schema = child.emits
-        .map((e) => `                        ${e.formComponent},`)
+      const schema = [...child.emits.map((e) => e.formComponent), ...child.media.map(mediaIds)]
+        .map((c) => `                        ${c},`)
         .join("\n");
       return `                    Block::make('${componentUid(member.component)}')->label('${member.component.name}')->schema([\n${schema}\n                    ]),`;
     })
@@ -35,6 +43,12 @@ ${blocks}
       "Filament\\Forms\\Components\\Builder\\Block",
       "Illuminate\\Database\\Eloquent\\Model",
       ...children.flatMap(({ child }) => child.emits.map((e) => e.formImport)),
+      ...(children.some(({ child }) => child.media.length > 0)
+        ? ["App\\Filament\\Support\\MediaPicker"]
+        : []),
     ],
   };
 };
+
+const mediaIds = (m: ChildTableEmit["media"][number]): string =>
+  `MediaPicker::ids('${m.method}', multiple: ${m.multiple}${m.allowedTypes === undefined ? "" : `, allowedTypes: [${m.allowedTypes.map((t) => `'${t}'`).join(", ")}]`})`;

@@ -99,12 +99,15 @@ const linkData = (assigns: string[]): string =>
     ? "(array) $request->input('data', [])"
     : `array_diff_key((array) $request->input('data', []), [${assigns.map((a) => `'${a}' => true`).join(", ")}])`;
 
-// A repeatable component's items link files: their references are resolved, or refused, with the
-// entry's own links, before anything is written.
+// A repeatable component's or a dynamic zone's items link files: their references are resolved,
+// or refused, with the entry's own links, before anything is written.
 const itemLinks = (shape: WireShape, viewer: string): string =>
-  shape.children.some((c) => c.media.length > 0)
+  (shape.children.some((c) => c.media.length > 0)
     ? `\n${STMT}$wire['children'] = StrapiRelations::items($wire['children'], ${shape.model}Serializer::FIELDS, ${viewer});`
-    : "";
+    : "") +
+  (shape.zones.some((z) => z.members.some((m) => m.media.length > 0))
+    ? `\n${STMT}$wire['children'] = StrapiRelations::zones($wire['children'], ${shape.model}Serializer::ZONES, ${viewer});`
+    : "");
 
 /**
  * Strapi's entity validator, before anything is written: a draft is checked as Strapi checks one,

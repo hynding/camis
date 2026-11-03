@@ -437,11 +437,12 @@ final class StrapiPopulate
         foreach ($items as $item) {
             $uid = $item['__component'];
             $own = $members[$uid]['components'] ?? [];
+            $files = $members[$uid]['fields'] ?? [];
             if ($on === null) {
-                $zone[] = self::inside($item, $sub['populate'] ?? null, $own);
+                $zone[] = self::files(self::inside($item, $sub['populate'] ?? null, $own), $sub['populate'] ?? null, $files);
             } elseif (array_key_exists($uid, $on) && ! in_array($on[$uid], [false, 'false'], true)) {
                 $fragment = is_array($on[$uid]) ? $on[$uid] : [];
-                $zone[] = self::inside(self::fields($item, $fragment['fields'] ?? null, $own), $fragment['populate'] ?? null, $own);
+                $zone[] = self::files(self::inside(self::fields($item, $fragment['fields'] ?? null, $own), $fragment['populate'] ?? null, $own), $fragment['populate'] ?? null, $files);
             }
         }
 

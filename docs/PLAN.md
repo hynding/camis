@@ -1286,10 +1286,28 @@ without its id replaces the file too; one sent with its id keeps what it leaves 
 through (`filters[seo][metaImage][name]`), copied on publish, picked in the admin's form, typed
 as `UploadFile` in GraphQL, and carried by `strapi:import`/`strapi:export` as Strapi archives it:
 a morph link to the component's uid and the id the entry's data gives the component. A media
-field in a dynamic zone's item is still a path column (`componentMedia`).
+field in a dynamic zone's item is still a path column (`componentMedia`, Phase 38).
 
 Exit: media vectors and `component-media-export.tar.gz` re-recorded from strapi-php with the
 fixture's `Storyboard.seo`; MediaAdminTest picks an seo image.
+
+---
+
+## Phase 38 — a dynamic zone item's files (`adapter-filament`)
+
+The last media field kept as a path column (`componentMedia`): one inside a dynamic zone's item.
+Each member component's items are rows of their own table, so an item links its files from its
+own row, as a repeatable component's item does. Its media fields are listed in the serializer's
+`ZONES` beside its relation, so a write resolves an item's file references with the entry's links
+(a missing file refuses the whole write), an item kept by its id keeps a file it leaves out, and
+populate narrows a file by its `fields` whether the zone is populated whole or through `on`. The
+items are deleted one by one, so their links go with them, and publishing copies each item's
+files. In the admin the zone's Builder picks a file by id (`MediaPicker::ids`), which
+`StrapiZones` links once the item is written. `strapi:import`/`strapi:export` carry the files as
+Strapi archives them: a morph link to the member's uid and the item's id.
+
+Exit: media vectors (Landing's zone now holds `shared.frame`) and `component-media-export.tar.gz`
+re-recorded from strapi-php; DynamicZonesTest picks, keeps and publishes an item's image.
 
 ---
 

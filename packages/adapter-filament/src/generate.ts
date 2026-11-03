@@ -45,7 +45,6 @@ import { draftPublishPlan } from "./strapi-api/draft-publish";
 import { guestsPlan } from "./strapi-api/guests";
 import { localizationPlan, sharedAcrossLocalesMethod } from "./strapi-api/localization";
 import {
-  columnMediaGaps,
   itemMediaTransferGap,
   mediaAllowedTypes,
   mediaComponentsConstant,
@@ -227,7 +226,10 @@ export const filamentAdapter: GenerateAdapter = {
       const zoneChildren =
         apiStyle === "strapi"
           ? expansion.zones.flatMap((z) =>
-              z.members.map((m) => ({ ...childTableEmit(ct, m.table), ordered: true })),
+              z.members.map((m) => ({
+                ...childTableEmit(ct, m.table, fileModel !== undefined),
+                ordered: true,
+              })),
             )
           : [];
       zoneChildren.forEach((child) => children.push({ ct, child }));
@@ -236,9 +238,10 @@ export const filamentAdapter: GenerateAdapter = {
       // With a media library a media field is a link to its files, not a column; a dynamic zone
       // lives in its members' tables.
       const mediaOf = fileModel === undefined ? [] : mediaFields(ct);
-      const mediaItems = ctChildren.filter((c) => c.media.length > 0).map((c) => c.relationName);
-      if (fileModel !== undefined) gaps.push(...columnMediaGaps(ct, expansion));
-      const nestedMediaItems = ctChildren
+      const mediaItems = [...ctChildren, ...zoneChildren]
+        .filter((c) => c.media.length > 0)
+        .map((c) => c.relationName);
+      const nestedMediaItems = [...ctChildren, ...zoneChildren]
         .filter((c) => c.media.some((m) => m.path.length > 1))
         .map((c) => c.relationName);
       if (nestedMediaItems.length > 0) gaps.push(itemMediaTransferGap(ct, nestedMediaItems));
@@ -308,7 +311,9 @@ export const filamentAdapter: GenerateAdapter = {
           embeddedEmits,
           [
             ...ctChildren.map(repeaterComponent),
-            ...(apiStyle === "strapi" ? expansion.zones.map((z) => zoneBuilder(ct, z)) : []),
+            ...(apiStyle === "strapi"
+              ? expansion.zones.map((z) => zoneBuilder(ct, z, fileModel !== undefined))
+              : []),
           ],
           {
             versioned: versioned.has(ct.name),

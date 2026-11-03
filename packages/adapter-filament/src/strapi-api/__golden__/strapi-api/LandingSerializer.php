@@ -24,11 +24,14 @@ final class LandingSerializer
     /** Component keys, which Strapi leaves off the wire unless populate names them. */
     public const COMPONENTS = ['blocks'];
 
-    /** Each dynamic zone's member components by uid: the child relation its items live in, and its own component keys. */
+    /** Each dynamic zone's member components by uid: the child relation its items live in, its own component keys, and its media fields. */
     public const ZONES = [
         'blocks' => [
             'shared.hero' => ['relation' => 'blocksHero', 'components' => ['price']],
             'shared.quantity' => ['relation' => 'blocksQuantity', 'components' => []],
+            'shared.frame' => ['relation' => 'blocksFrame', 'components' => ['image'], 'fields' => [
+                'image' => ['relation' => 'image', 'kind' => 'mediaOne', 'model' => \App\Models\File::class, 'serializer' => FileSerializer::class, 'foreignKey' => null, 'uid' => 'plugin::upload.file', 'holder' => 'self', 'draftPublish' => false, 'localized' => false, 'order' => null, 'inverseOrder' => null],
+            ]],
         ],
     ];
 
@@ -63,6 +66,12 @@ final class LandingSerializer
                     'amount' => $c->amount === null ? null : (float) $c->amount,
                     'unit' => $c->unit,
                 ]])->all(),
+                ...$m->blocksFrame->map(fn ($c) => [$c->position, [
+                    '__component' => 'shared.frame',
+                    'id' => $c->id,
+                    'caption' => $c->caption,
+                    'image' => $c->image->first() === null ? null : FileSerializer::toWire($c->image->first()),
+                ]])->all(),
             ]),
             'createdAt' => $m->created_at?->toIso8601ZuluString('millisecond'),
             'updatedAt' => $m->updated_at?->toIso8601ZuluString('millisecond'),
@@ -89,6 +98,10 @@ final class LandingSerializer
                 'shared.quantity' => [
                     'amount' => self::dig($item, ['amount']),
                     'unit' => self::dig($item, ['unit']),
+                ],
+                'shared.frame' => [
+                    'caption' => self::dig($item, ['caption']),
+                    '__media' => array_intersect_key($item, ['image' => true]),
                 ],
             });
         }

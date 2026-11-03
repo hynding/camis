@@ -86,6 +86,44 @@ final class StrapiRelations
     }
 
     /**
+     * Each dynamic zone item's file references as the links its row makes once written, as an
+     * item of a repeatable component's are. $zones is a serializer's ZONES.
+     */
+    public static function zones(array $children, array $zones, ?Authenticatable $viewer): array
+    {
+        foreach ($zones as $zone => $members) {
+            foreach ($members as $member) {
+                $relation = $member['relation'];
+                if (! isset($member['fields'], $children[$zone][$relation])) {
+                    continue;
+                }
+                foreach ($children[$zone][$relation] as $i => $row) {
+                    $children[$zone][$relation][$i]['__media'] = self::read($row['__media'] ?? [], $member['fields'], $viewer);
+                }
+            }
+        }
+
+        return $children;
+    }
+
+    /**
+     * Links that make a row's file fields hold exactly the given files: the admin's pickers.
+     *
+     * @param array<string, mixed> $ids each media field's relation method → its picked file ids
+     */
+    public static function picked(array $fields, array $ids): array
+    {
+        $links = [];
+        foreach ($fields as $key => $field) {
+            if (array_key_exists($field['relation'], $ids)) {
+                $links[$key] = ['relation' => $field, 'set' => array_values(array_map('intval', array_filter((array) $ids[$field['relation']]))), 'connect' => [], 'disconnect' => []];
+            }
+        }
+
+        return $links;
+    }
+
+    /**
      * To-one foreign keys on the row itself: set before it is saved, so a required one holds. A
      * row linked to a new target takes the end of the target's list, when the target lists it.
      */

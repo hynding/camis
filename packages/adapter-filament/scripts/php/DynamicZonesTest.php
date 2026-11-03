@@ -74,7 +74,8 @@ class DynamicZonesTest extends TestCase
     public function test_an_items_image_is_picked_kept_and_published_with_it(): void
     {
         $this->login(['landing.create', 'landing.read', 'landing.update', 'landing.publish', 'file.read']);
-        $image = StrapiUpload::storePath(UploadedFile::fake()->image('wide.png', 10, 10)->getRealPath(), 'wide.png', []);
+        $upload = UploadedFile::fake()->image('wide.png', 10, 10);
+        $image = StrapiUpload::storePath($upload->getRealPath(), 'wide.png', []);
         Livewire::test(CreateLanding::class)
             ->fillForm(['title' => 'Framed', 'blocks' => [
                 'a' => ['type' => 'shared.frame', 'data' => ['caption' => 'Opening', 'image' => [$image->getKey()]]],

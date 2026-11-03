@@ -45,6 +45,8 @@ export interface WireZoneMember {
   relation: string;
   model: string;
   scalars: WireScalar[];
+  /** Its items' media fields, each a link from the item's row. */
+  media: WireRelation[];
   /** Its own component and media keys, which Strapi sends only when the zone's populate names them. */
   components: string[];
 }
@@ -200,18 +202,26 @@ export const wireShape = (
   const zones: WireZone[] = expansion.zones.map((z) => ({
     key: z.apiName,
     members: z.members.map((m) => {
-      const child = childTableEmit(ct, m.table);
+      const child = childTableEmit(ct, m.table, fileModel !== undefined);
       return {
         uid: componentUid(m.component),
         label: m.component.name,
         relation: child.relationName,
         model: child.model,
-        scalars: m.table.scalars.map((s) => ({
-          key: s.apiPath,
-          column: s.path.map(snakeColumn).join("_"),
-          type: s.field.type,
-          ...privacy(s.field.private === true),
-        })),
+        media:
+          fileModel === undefined
+            ? []
+            : child.media.map((f) =>
+                mediaRelation(f.apiPath.join("."), f.method, f.multiple, fileModel),
+              ),
+        scalars: m.table.scalars
+          .filter((s) => fileModel === undefined || s.field.type !== "media")
+          .map((s) => ({
+            key: s.apiPath,
+            column: s.path.map(snakeColumn).join("_"),
+            type: s.field.type,
+            ...privacy(s.field.private === true),
+          })),
         components: m.component.fields
           .filter((f) => f.type === "component" || f.type === "media")
           .map((f) => fieldApiName(f)),

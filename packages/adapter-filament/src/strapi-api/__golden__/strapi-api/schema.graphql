@@ -1037,7 +1037,13 @@ type ComponentSharedHero {
   price: ComponentSharedMoney
 }
 
-union LandingBlocksDynamicZone = ComponentSharedHero | ComponentSharedQuantity | Error
+type ComponentSharedFrame {
+  id: ID!
+  caption: String
+  image: UploadFile
+}
+
+union LandingBlocksDynamicZone = ComponentSharedHero | ComponentSharedQuantity | ComponentSharedFrame | Error
 
 type Error {
   code: String!
@@ -1268,12 +1274,6 @@ input ReviewFiltersInput {
 type ReviewEntityResponseCollection {
   nodes: [Review!]!
   pageInfo: Pagination!
-}
-
-type ComponentSharedFrame {
-  id: ID!
-  caption: String
-  image: UploadFile
 }
 
 input ComponentSharedFrameFiltersInput {

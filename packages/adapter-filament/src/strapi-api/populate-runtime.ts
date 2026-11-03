@@ -457,11 +457,12 @@ final class StrapiPopulate
         foreach ($items as $item) {
             $uid = $item['__component'];
             $own = $members[$uid]['components'] ?? [];
+            $files = $members[$uid]['fields'] ?? [];
             if ($on === null) {
-                $zone[] = self::inside($item, $sub['populate'] ?? null, $own);
+                $zone[] = self::files(self::inside($item, $sub['populate'] ?? null, $own), $sub['populate'] ?? null, $files);
             } elseif (array_key_exists($uid, $on) && ! in_array($on[$uid], [false, 'false'], true)) {
                 $fragment = is_array($on[$uid]) ? $on[$uid] : [];
-                $zone[] = self::inside(self::fields($item, $fragment['fields'] ?? null, $own), $fragment['populate'] ?? null, $own);
+                $zone[] = self::files(self::inside(self::fields($item, $fragment['fields'] ?? null, $own), $fragment['populate'] ?? null, $own), $fragment['populate'] ?? null, $files);
             }
         }
 
@@ -642,6 +643,44 @@ final class StrapiRelations
         }
 
         return $children;
+    }
+
+    /**
+     * Each dynamic zone item's file references as the links its row makes once written, as an
+     * item of a repeatable component's are. $zones is a serializer's ZONES.
+     */
+    public static function zones(array $children, array $zones, ?Authenticatable $viewer): array
+    {
+        foreach ($zones as $zone => $members) {
+            foreach ($members as $member) {
+                $relation = $member['relation'];
+                if (! isset($member['fields'], $children[$zone][$relation])) {
+                    continue;
+                }
+                foreach ($children[$zone][$relation] as $i => $row) {
+                    $children[$zone][$relation][$i]['__media'] = self::read($row['__media'] ?? [], $member['fields'], $viewer);
+                }
+            }
+        }
+
+        return $children;
+    }
+
+    /**
+     * Links that make a row's file fields hold exactly the given files: the admin's pickers.
+     *
+     * @param array<string, mixed> $ids each media field's relation method → its picked file ids
+     */
+    public static function picked(array $fields, array $ids): array
+    {
+        $links = [];
+        foreach ($fields as $key => $field) {
+            if (array_key_exists($field['relation'], $ids)) {
+                $links[$key] = ['relation' => $field, 'set' => array_values(array_map('intval', array_filter((array) $ids[$field['relation']]))), 'connect' => [], 'disconnect' => []];
+            }
+        }
+
+        return $links;
     }
 
     /**

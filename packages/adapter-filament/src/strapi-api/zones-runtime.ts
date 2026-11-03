@@ -10,7 +10,8 @@ const header = `<?php\n${PHP_MARKER}\n\ndeclare(strict_types=1);\n\nnamespace Ap
  * it; any other id is refused (`dynamic-zone-vectors.json`, recorded from strapi-php). The admin's
  * Builder reads and writes the same rows.
  *
- * $members is a serializer's `ZONES[zone]`: uid → ['relation' => ..., 'components' => [...]].
+ * $members is a serializer's `ZONES[zone]`: uid → ['relation' => ..., 'components' => [...]], and
+ * 'fields' => its media fields, which an item's row links through `StrapiRelations` once written.
  */
 export const emitStrapiZones = (componentUids: readonly string[]): string =>
   header +
@@ -82,8 +83,10 @@ final class StrapiZones
             }
             foreach ($items as $row) {
                 $id = $row['id'] ?? null;
-                unset($row['id']);
-                $id === null ? $m->{$relation}()->create($row) : $held[$relation][(string) $id]->fill($row)->save();
+                $links = $row['__media'] ?? [];
+                unset($row['id'], $row['__media']);
+                $item = $id === null ? $m->{$relation}()->create($row) : tap($held[$relation][(string) $id]->fill($row))->save();
+                StrapiRelations::link($item, $links);
             }
             $m->unsetRelation($relation);
         }
@@ -99,6 +102,10 @@ final class StrapiZones
         foreach ($members as $uid => $member) {
             foreach ($m->{$member['relation']}()->get() as $item) {
                 $columns = Arr::except(Arr::only($item->getAttributes(), $item->getFillable()), ['position']);
+                foreach ($member['fields'] ?? [] as $field) {
+                    $files = $item->{$field['relation']}()->orderByPivot('order');
+                    $columns[$field['relation']] = $files->pluck($files->getRelated()->getQualifiedKeyName())->all();
+                }
                 $items[] = [$item->getAttribute('position'), ['type' => $uid, 'data' => $columns]];
             }
         }
@@ -122,7 +129,11 @@ final class StrapiZones
         foreach (array_values($state ?? []) as $position => $item) {
             $member = $members[$item['type'] ?? ''] ?? null;
             if ($member !== null) {
-                $rows[$member['relation']][] = ['position' => $position] + array_filter((array) ($item['data'] ?? []), fn ($v) => $v !== null);
+                $data = (array) ($item['data'] ?? []);
+                $files = array_column($member['fields'] ?? [], 'relation');
+                $rows[$member['relation']][] = ['position' => $position]
+                    + array_filter(array_diff_key($data, array_flip($files)), fn ($v) => $v !== null)
+                    + ($files === [] ? [] : ['__media' => StrapiRelations::picked($member['fields'], $data)]);
             }
         }
 
