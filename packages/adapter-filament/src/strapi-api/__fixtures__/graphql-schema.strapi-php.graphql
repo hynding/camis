@@ -806,7 +806,7 @@ type Landing {
   publishedAt: DateTime
 }
 
-union LandingBlocksDynamicZone = ComponentSharedHero | ComponentSharedQuantity | Error
+union LandingBlocksDynamicZone = ComponentSharedHero | ComponentSharedQuantity | ComponentSharedFrame | Error
 
 type Error {
   code: String!

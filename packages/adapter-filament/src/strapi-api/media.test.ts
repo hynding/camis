@@ -267,6 +267,29 @@ describe("media fields", () => {
     );
     expect(result.gaps.gaps.filter((g) => g.feature === "componentMedia")).toEqual([]);
   });
+  it("inside a dynamic zone's item are links from the item", () => {
+    expect(content("_create_landings_blocks_frame_table.php")).not.toContain("'image'");
+    const frame = content("app/Models/LandingBlocksFrame.php");
+    expect(frame).toContain("use \\App\\Models\\Concerns\\HasMedia;");
+    expect(frame).toContain("->withPivotValue('field', 'image')");
+    // The entry's items go one by one, so their links go with them.
+    const landing = content("app/Models/Landing.php");
+    expect(landing).toContain("use HasMedia;");
+    expect(landing).toContain("public const MEDIA_COMPONENTS = ['blocksFrame'];");
+    const serializer = content("app/Http/Serializers/LandingSerializer.php");
+    expect(serializer).toMatch(
+      /'shared\.frame' => \['relation' => 'blocksFrame', 'components' => \['image'\], 'fields' => \[\n\s+'image' => \['relation' => 'image', 'kind' => 'mediaOne',/,
+    );
+    expect(serializer).toContain("'image' => $c->image->first() === null ? null");
+    expect(serializer).toContain("'__media' => array_intersect_key($item, ['image' => true]),");
+    expect(content("app/Http/Controllers/Api/Generated/LandingApiController.php")).toContain(
+      "StrapiRelations::zones($wire['children'], LandingSerializer::ZONES, ",
+    );
+    expect(content("app/Filament/Resources/Landings/Schemas/LandingForm.php")).toContain(
+      "MediaPicker::ids('image', multiple: false, allowedTypes: ['image']),",
+    );
+    expect(result.gaps.gaps.filter((g) => g.feature === "componentMedia")).toEqual([]);
+  });
   it("stay path columns on the Laravel API style", () => {
     const laravel = filamentAdapter.generate(strapiApiBundle, { projectName: "oyl" });
     const migration = laravel.files.find((f) => f.path.endsWith("_create_books_table.php"))!;

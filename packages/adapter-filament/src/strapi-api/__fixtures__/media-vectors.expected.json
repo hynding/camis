@@ -1143,6 +1143,220 @@
       "title": "SeoImageOnly"
     }
   },
+  "a zone item's media takes a file id": {
+    "status": 201,
+    "data": {
+      "blocks": [
+        {
+          "__component": "shared.frame",
+          "caption": "Opening",
+          "image": {
+            "name": "wide.png"
+          }
+        },
+        {
+          "__component": "shared.hero",
+          "heading": "Hi",
+          "subheading": null
+        },
+        {
+          "__component": "shared.frame",
+          "caption": "Blank",
+          "image": null
+        }
+      ],
+      "title": "Framed"
+    }
+  },
+  "or a documentId, in a zone's item": {
+    "status": 201,
+    "data": {
+      "blocks": [
+        {
+          "__component": "shared.frame",
+          "caption": "Only",
+          "image": {
+            "name": "wide.png"
+          }
+        }
+      ],
+      "title": "FramedByDocument"
+    }
+  },
+  "a missing file in a zone's item is rejected": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "1 relation(s) of type plugin::upload.file associated with this entity do not exist"
+    }
+  },
+  "a zone item's media stays off the wire unless its populate names it": {
+    "status": 200,
+    "data": {
+      "blocks": [
+        {
+          "__component": "shared.frame",
+          "caption": "Opening"
+        },
+        {
+          "__component": "shared.hero",
+          "heading": "Hi",
+          "subheading": null
+        },
+        {
+          "__component": "shared.frame",
+          "caption": "Blank"
+        }
+      ],
+      "title": "Framed"
+    }
+  },
+  "populate=* reaches the zone but not its items' media": {
+    "status": 200,
+    "data": {
+      "blocks": [
+        {
+          "__component": "shared.frame",
+          "caption": "Opening"
+        },
+        {
+          "__component": "shared.hero",
+          "heading": "Hi",
+          "subheading": null
+        },
+        {
+          "__component": "shared.frame",
+          "caption": "Blank"
+        }
+      ],
+      "title": "Framed"
+    }
+  },
+  "a zone's populate=* includes its items' whole files": {
+    "status": 200,
+    "data": {
+      "blocks": [
+        {
+          "__component": "shared.frame",
+          "caption": "Opening",
+          "image": {
+            "alternativeText": "red",
+            "caption": "A red box",
+            "ext": ".png",
+            "focalPoint": null,
+            "formats": {
+              "large": {
+                "ext": ".png",
+                "hash": "large_wide_<hash>",
+                "height": 667,
+                "mime": "image/png",
+                "name": "large_wide.png",
+                "path": null,
+                "url": "/uploads/large_wide_<hash>.png",
+                "width": 1000
+              },
+              "medium": {
+                "ext": ".png",
+                "hash": "medium_wide_<hash>",
+                "height": 500,
+                "mime": "image/png",
+                "name": "medium_wide.png",
+                "path": null,
+                "url": "/uploads/medium_wide_<hash>.png",
+                "width": 750
+              },
+              "small": {
+                "ext": ".png",
+                "hash": "small_wide_<hash>",
+                "height": 333,
+                "mime": "image/png",
+                "name": "small_wide.png",
+                "path": null,
+                "url": "/uploads/small_wide_<hash>.png",
+                "width": 500
+              },
+              "thumbnail": {
+                "ext": ".png",
+                "hash": "thumbnail_wide_<hash>",
+                "height": 156,
+                "mime": "image/png",
+                "name": "thumbnail_wide.png",
+                "path": null,
+                "url": "/uploads/thumbnail_wide_<hash>.png",
+                "width": 234
+              }
+            },
+            "hash": "wide_<hash>",
+            "height": 800,
+            "mime": "image/png",
+            "name": "wide.png",
+            "previewUrl": null,
+            "provider": "local",
+            "provider_metadata": null,
+            "url": "/uploads/wide_<hash>.png",
+            "width": 1200
+          }
+        },
+        {
+          "__component": "shared.hero",
+          "heading": "Hi",
+          "price": null,
+          "subheading": null
+        },
+        {
+          "__component": "shared.frame",
+          "caption": "Blank",
+          "image": null
+        }
+      ],
+      "title": "Framed"
+    }
+  },
+  "the draft links the file too": {
+    "status": 200,
+    "data": {
+      "blocks": [
+        {
+          "__component": "shared.frame",
+          "caption": "Opening",
+          "image": {
+            "name": "wide.png"
+          }
+        },
+        {
+          "__component": "shared.hero",
+          "heading": "Hi",
+          "subheading": null
+        },
+        {
+          "__component": "shared.frame",
+          "caption": "Blank",
+          "image": null
+        }
+      ],
+      "title": "Framed"
+    }
+  },
+  "replacing the zone replaces its items' media": {
+    "status": 200,
+    "data": {
+      "blocks": [
+        {
+          "__component": "shared.frame",
+          "caption": "Closing",
+          "image": null
+        },
+        {
+          "__component": "shared.frame",
+          "caption": "Again",
+          "image": {
+            "name": "wide.png"
+          }
+        }
+      ],
+      "title": "FramedByDocument"
+    }
+  },
   "a file's related entries do not list components": {
     "status": 200,
     "data": {
@@ -1310,6 +1524,29 @@
         "metaTitle": "Meta"
       },
       "title": "Seo"
+    }
+  },
+  "unlinks it from the zone's item": {
+    "status": 200,
+    "data": {
+      "blocks": [
+        {
+          "__component": "shared.frame",
+          "caption": "Opening",
+          "image": null
+        },
+        {
+          "__component": "shared.hero",
+          "heading": "Hi",
+          "subheading": null
+        },
+        {
+          "__component": "shared.frame",
+          "caption": "Blank",
+          "image": null
+        }
+      ],
+      "title": "Framed"
     }
   }
 }

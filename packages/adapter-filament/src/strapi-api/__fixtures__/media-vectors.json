@@ -416,6 +416,107 @@
       }
     },
     {
+      "name": "a zone item's media takes a file id",
+      "method": "POST",
+      "path": "/landings",
+      "as": "landings:Framed",
+      "query": "populate[blocks][on][shared.frame][populate][image][fields][0]=name&populate[blocks][on][shared.hero]=true",
+      "data": {
+        "title": "Framed",
+        "blocks": [
+          {
+            "__component": "shared.frame",
+            "caption": "Opening",
+            "image": "#files:Wide"
+          },
+          {
+            "__component": "shared.hero",
+            "heading": "Hi"
+          },
+          {
+            "__component": "shared.frame",
+            "caption": "Blank"
+          }
+        ]
+      }
+    },
+    {
+      "name": "or a documentId, in a zone's item",
+      "method": "POST",
+      "path": "/landings",
+      "as": "landings:FramedByDocument",
+      "query": "populate[blocks][on][shared.frame][populate][image][fields][0]=name&populate[blocks][on][shared.hero]=true",
+      "data": {
+        "title": "FramedByDocument",
+        "blocks": [
+          {
+            "__component": "shared.frame",
+            "caption": "Only",
+            "image": "@files:Wide"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a missing file in a zone's item is rejected",
+      "method": "POST",
+      "path": "/landings",
+      "data": {
+        "title": "MissingZoneFile",
+        "blocks": [
+          {
+            "__component": "shared.frame",
+            "caption": "Gone",
+            "image": 999999
+          }
+        ]
+      }
+    },
+    {
+      "name": "a zone item's media stays off the wire unless its populate names it",
+      "method": "GET",
+      "path": "/landings/@landings:Framed",
+      "query": "fields[0]=title&populate=blocks"
+    },
+    {
+      "name": "populate=* reaches the zone but not its items' media",
+      "method": "GET",
+      "path": "/landings/@landings:Framed",
+      "query": "fields[0]=title&populate=*"
+    },
+    {
+      "name": "a zone's populate=* includes its items' whole files",
+      "method": "GET",
+      "path": "/landings/@landings:Framed",
+      "query": "fields[0]=title&populate[blocks][populate]=*"
+    },
+    {
+      "name": "the draft links the file too",
+      "method": "GET",
+      "path": "/landings/@landings:Framed",
+      "query": "status=draft&fields[0]=title&populate[blocks][on][shared.frame][populate][image][fields][0]=name&populate[blocks][on][shared.hero]=true"
+    },
+    {
+      "name": "replacing the zone replaces its items' media",
+      "method": "PUT",
+      "path": "/landings/@landings:FramedByDocument",
+      "query": "populate[blocks][on][shared.frame][populate][image][fields][0]=name&populate[blocks][on][shared.hero]=true",
+      "data": {
+        "blocks": [
+          {
+            "__component": "shared.frame",
+            "caption": "Closing",
+            "image": null
+          },
+          {
+            "__component": "shared.frame",
+            "caption": "Again",
+            "image": "#files:Wide"
+          }
+        ]
+      }
+    },
+    {
       "name": "a file's related entries do not list components",
       "method": "GET",
       "path": "/upload/files/#files:Wide",
@@ -437,6 +538,12 @@
       "method": "GET",
       "path": "/storyboards/@storyboards:Seo",
       "query": "fields[0]=title&populate[seo][populate][metaImage][fields][0]=name"
+    },
+    {
+      "name": "unlinks it from the zone's item",
+      "method": "GET",
+      "path": "/landings/@landings:Framed",
+      "query": "populate[blocks][on][shared.frame][populate][image][fields][0]=name&populate[blocks][on][shared.hero]=true"
     }
   ]
 }

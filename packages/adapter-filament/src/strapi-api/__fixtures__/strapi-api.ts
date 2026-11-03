@@ -153,8 +153,9 @@ export const strapiApiBundle: IrBundle = {
           { type: "component", name: "panel", component: "Panel", repeatable: false },
         ],
       },
-      // Dynamic zones (dynamic-zone-vectors.json): Landing's blocks hold Hero and Quantity items,
-      // with draft and publish so publishing copies them.
+      // Dynamic zones (dynamic-zone-vectors.json): Landing's blocks hold Hero, Quantity and Frame
+      // items, with draft and publish so publishing copies them; a Frame links its file
+      // (media-vectors.json).
       {
         name: "Landing",
         kind: "collection",
@@ -162,7 +163,7 @@ export const strapiApiBundle: IrBundle = {
         options: { draftPublish: true },
         fields: [
           { type: "string", name: "title", required: true },
-          { type: "dynamicZone", name: "blocks", components: ["Hero", "Quantity"] },
+          { type: "dynamicZone", name: "blocks", components: ["Hero", "Quantity", "Frame"] },
         ],
       },
       // Single types (single-type-vectors.json): Homepage has draft and publish, a relation and a
