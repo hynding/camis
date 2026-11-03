@@ -130,6 +130,58 @@ describe("the Strapi-like admin", () => {
     );
   });
 
+  // Strapi's Content Manager list searches text and number fields (_q), sorts by any sortable
+  // field, starts sorted by the main field (the first string one), and deletes, one or in bulk.
+  it("searches, sorts and deletes on a list as Strapi's Content Manager does", () => {
+    const table = content("app/Filament/Resources/Posts/Schemas/PostsTable.php");
+    expect(table).toContain("TextColumn::make('title')->searchable()->sortable(),");
+    expect(table).toContain(
+      "TextColumn::make('views')->searchable(query: fn (Builder $query, string $search): Builder => is_numeric($search) ? $query->where('views', $search) : $query->whereRaw('0 = 1'))->sortable(),",
+    );
+    expect(table).toContain("->defaultSort('title')");
+    // A draft-and-publish entry is deleted with every version of it.
+    expect(table).toContain(
+      "DeleteAction::make()->using(fn (Post $record) => PostResource::deleteEntry($record)),",
+    );
+    expect(table).toContain(
+      "DeleteBulkAction::make()->using(fn (Collection $records) => $records->each(fn (Post $record) => PostResource::deleteEntry($record))),",
+    );
+    expect(table).toContain("BulkAction::make('publish')");
+    expect(table).toContain("BulkAction::make('unpublish')");
+    expect(content("app/Filament/Resources/Posts/PostResource.php")).toContain(
+      "public static function deleteEntry(Post $record): void",
+    );
+    expect(content("app/Filament/Resources/Posts/Pages/EditPost.php")).toContain(
+      "DeleteAction::make()->using(fn (Post $record) => PostResource::deleteEntry($record))",
+    );
+    // A localized draft-and-publish entry is deleted in its locale only.
+    expect(content("app/Filament/Resources/Pages/PageResource.php")).toContain(
+      "->where('locale', $record->locale)",
+    );
+    // A type without draft and publish deletes its row; with no string field it sorts by id.
+    const plain = content("app/Filament/Resources/Tags/Schemas/TagsTable.php");
+    expect(plain).toContain("DeleteAction::make(),");
+    expect(plain).toContain("DeleteBulkAction::make(),");
+    expect(plain).not.toContain("BulkAction::make('publish')");
+    expect(content("app/Filament/Resources/Tags/Pages/EditTag.php")).toContain(
+      "DeleteAction::make(),",
+    );
+    expect(content("app/Filament/Resources/Notes/Schemas/NotesTable.php")).toContain(
+      "->defaultSort('record_id')",
+    );
+    // json is neither searched nor sorted.
+    expect(content("app/Filament/Resources/Notes/Schemas/NotesTable.php")).toContain(
+      "TextColumn::make('tags'),",
+    );
+  });
+
+  // Bulk delete is offered only to a role that may delete: a policy without deleteAny would let
+  // Filament offer it to everyone.
+  it("gives each policy a deleteAny held by the delete grant", () => {
+    const policy = content("app/Policies/PostPolicy.php");
+    expect(policy).toMatch(/public function deleteAny\(\??User \$user\): bool/);
+  });
+
   it("leaves the Laravel API style's admin as it was", () => {
     const laravel = filamentAdapter.generate(strapiApiBundle, { projectName: "oyl" });
     expect(laravel.files.some((f) => f.path === "app/Filament/StrapiNavigation.php")).toBe(false);
