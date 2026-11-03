@@ -1247,6 +1247,20 @@ images (`component-media-seed-vectors.json`), imports, exports the same archive,
 strapi-php reads it after importing it (`component-media-read-vectors.json`), in the `strapi-api`
 boot job on all three databases.
 
+## Phase 35 — the Content Manager list (`adapter-filament`)
+
+The audit's P1 found the Strapi-like admin's lists bare: no search, no sort, and no way to delete
+an entry at all. A collection type's list now does what Strapi's Content Manager list does: `_q`
+searches text fields as substrings and number fields when the search is a number; every field
+Strapi sorts (not json, media, richText or blocks) sorts; it starts sorted by the main field (the
+first string field, else id). An entry is deleted from its row or its edit page, a draft-and-publish
+one with every version of it in its locale (`deleteEntry`), as Strapi deletes a document; selected
+entries are deleted, published and unpublished in bulk. Each action is behind its grant, checked
+per record: policies gain `deleteAny` and `publishAny`, held by the delete and publish grants, since
+Filament offers what a policy has no method for. Duplicating an entry is not built yet.
+
+Exit: unit tests; `ContentManagerListTest.php` in the `strapi-api` boot job, denied paths included.
+
 ---
 
 ## Sequencing rationale (quick reference)

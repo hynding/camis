@@ -15,6 +15,11 @@ class NotePolicy
         return in_array($user->roleType(), ['authenticated'], true);
     }
 
+    public function deleteAny(User $user): bool
+    {
+        return in_array($user->roleType(), ['authenticated'], true);
+    }
+
     public function delete(User $user, Note $record): bool
     {
         if (! in_array($user->roleType(), ['authenticated'], true)) {

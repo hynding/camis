@@ -144,7 +144,7 @@ describe("the Strapi-like admin", () => {
       "DeleteAction::make()->using(fn (Post $record) => PostResource::deleteEntry($record)),",
     );
     expect(table).toContain(
-      "DeleteBulkAction::make()->using(fn (Collection $records) => $records->each(fn (Post $record) => PostResource::deleteEntry($record))),",
+      "DeleteBulkAction::make()->authorizeIndividualRecords()->using(fn (Collection $records) => $records->each(fn (Post $record) => PostResource::deleteEntry($record))),",
     );
     expect(table).toContain("BulkAction::make('publish')");
     expect(table).toContain("BulkAction::make('unpublish')");
@@ -161,7 +161,7 @@ describe("the Strapi-like admin", () => {
     // A type without draft and publish deletes its row; with no string field it sorts by id.
     const plain = content("app/Filament/Resources/Tags/Schemas/TagsTable.php");
     expect(plain).toContain("DeleteAction::make(),");
-    expect(plain).toContain("DeleteBulkAction::make(),");
+    expect(plain).toContain("DeleteBulkAction::make()->authorizeIndividualRecords(),");
     expect(plain).not.toContain("BulkAction::make('publish')");
     expect(content("app/Filament/Resources/Tags/Pages/EditTag.php")).toContain(
       "DeleteAction::make(),",

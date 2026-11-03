@@ -15,6 +15,11 @@ class ArticlePolicy
         return false;
     }
 
+    public function deleteAny(User $user): bool
+    {
+        return false;
+    }
+
     public function delete(User $user, Article $record): bool
     {
         return false;

@@ -41,6 +41,7 @@ describe("projectFilamentPermissions", () => {
     // refuses what no role grants as the API does.
     expect(article.methods.map((m) => m.method)).toEqual([
       "create",
+      "deleteAny",
       "delete",
       "viewAny",
       "view",
@@ -49,6 +50,7 @@ describe("projectFilamentPermissions", () => {
     // Every method carries the roles whose grants hold its key, so a layout without a
     // permission table can gate on role membership instead; none holds create or delete.
     expect(article.methods.map((m) => m.roles)).toEqual([
+      [],
       [],
       [],
       ["Editor"],
@@ -71,6 +73,7 @@ describe("projectFilamentPermissions", () => {
     )!;
     expect(note.methods.map((m) => m.method)).toEqual([
       "create",
+      "deleteAny",
       "delete",
       "viewAny",
       "view",

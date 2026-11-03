@@ -18,6 +18,14 @@ export const POLICY_METHODS: Record<Action, PolicyMethod[]> = {
   ],
   create: [{ method: "create", record: false }],
   update: [{ method: "update", record: true }],
-  delete: [{ method: "delete", record: true }],
-  publish: [{ method: "publish", record: true }],
+  // Bulk actions are offered on the record-less methods; Filament allows what a policy has no
+  // method for, so each needs one.
+  delete: [
+    { method: "deleteAny", record: false },
+    { method: "delete", record: true },
+  ],
+  publish: [
+    { method: "publishAny", record: false },
+    { method: "publish", record: true },
+  ],
 };
