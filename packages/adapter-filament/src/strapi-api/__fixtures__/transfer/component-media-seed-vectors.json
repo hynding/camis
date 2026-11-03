@@ -1,0 +1,50 @@
+{
+  "about": "The data strapi-php's export of transfer/component-media-export.tar.gz holds: run on an empty strapi-php project (with the fixture's types), seeded with a full-access token, then `php bin/strapi export --no-encrypt -f component-media-export`. Files linked from the items of a repeatable component (Storyboard.frames, each frame's image): two storyboards share a file, one frame has none, and a book's own cover links the same file as a frame.",
+  "seed": [],
+  "reads": [],
+  "writes": [
+    {
+      "name": "a wide image",
+      "path": "/upload",
+      "as": "files:Wide",
+      "upload": [{ "file": "wide.png", "info": { "alternativeText": "red" } }]
+    },
+    {
+      "name": "a tall image",
+      "path": "/upload",
+      "as": "files:Tall",
+      "upload": [{ "file": "tall.png", "info": { "alternativeText": "blue" } }]
+    },
+    {
+      "name": "a storyboard whose frames link files",
+      "method": "POST",
+      "path": "/storyboards",
+      "as": "storyboards:Opening",
+      "data": {
+        "title": "Opening",
+        "frames": [
+          { "caption": "Wide shot", "image": "#files:Wide" },
+          { "caption": "Blank" },
+          { "caption": "Close up", "image": "#files:Tall" }
+        ]
+      }
+    },
+    {
+      "name": "another storyboard sharing a file",
+      "method": "POST",
+      "path": "/storyboards",
+      "as": "storyboards:Closing",
+      "data": {
+        "title": "Closing",
+        "frames": [{ "caption": "Again", "image": "#files:Wide" }]
+      }
+    },
+    {
+      "name": "a book whose cover is a frame's file too",
+      "method": "POST",
+      "path": "/books",
+      "as": "books:Covered",
+      "data": { "title": "Covered", "cover": "#files:Wide" }
+    }
+  ]
+}

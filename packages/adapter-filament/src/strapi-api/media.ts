@@ -87,7 +87,11 @@ export const columnMediaGaps = (
       message: `a media field inside ${where} is stored as a file path, not linked to the media library`,
     }));
 
-/** strapi:export and strapi:import carry an entry's own files, not those its components' items link. */
+/**
+ * strapi:export and strapi:import carry the files an item of a repeatable component links, but not
+ * those of a component inside the item: Strapi links them to that component's own row, which this
+ * app folds into the item's.
+ */
 export const itemMediaTransferGap = (
   ct: ContentType,
   relations: readonly string[],
@@ -95,5 +99,5 @@ export const itemMediaTransferGap = (
   feature: "componentMediaTransfer",
   location: { contentType: ct.name },
   severity: "downgrade",
-  message: `strapi:export and strapi:import leave out the files linked from the items of ${relations.join(", ")}; relink them after an import`,
+  message: `strapi:export and strapi:import leave out the files linked from a component inside the items of ${relations.join(", ")}; relink them after an import`,
 });

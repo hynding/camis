@@ -121,6 +121,30 @@ describe("Strapi data import", () => {
     expect(result.gaps.gaps.filter((g) => g.feature === "dataTransfer")).toEqual([]);
   });
 
+  // component-media-export.tar.gz (strapi-php): Strapi links a repeatable component's files to
+  // the item's own row, under the component's uid, which the item's archived id names.
+  it("links the files of a repeatable component's items, by the component's uid", () => {
+    const media = untar(
+      gunzipSync(
+        readFileSync(join(__dirname, "__fixtures__/transfer/component-media-export.tar.gz")),
+      ),
+    );
+    const morphs = [...media]
+      .filter(([path]) => path.startsWith("links/"))
+      .flatMap(([, data]) => data.toString("utf8").split("\n"))
+      .filter((line) => line.includes("relation.morph"))
+      .map((line) => (JSON.parse(line) as { right: { type: string; field: string } }).right);
+    expect(morphs).toContainEqual(
+      expect.objectContaining({ type: "shared.frame", field: "image" }),
+    );
+    const map = content("app/Support/StrapiTransferMap.php");
+    expect(map).toMatch(
+      /'frames' => \[\s+'repeatable' => 'frames',\s+'uid' => 'shared\.frame',[\s\S]*?'media' => \[\s+'image' => 'image',\s+\],/,
+    );
+    expect(content(IMPORT_ENGINE)).toContain("$this->items[$attribute['uid']][$item['id']]");
+    expect(result.gaps.gaps.filter((g) => g.feature === "componentMediaTransfer")).toEqual([]);
+  });
+
   it("names a role whose permissions differ from the archive's, as the IR's roles are kept", () => {
     expect(content(IMPORT_ENGINE)).toContain("roles are the IR's");
   });

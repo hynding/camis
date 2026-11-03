@@ -420,6 +420,23 @@ jobs:
             http://127.0.0.1:8765/api/auth/local/register | jq -r .jwt)
           node ../packages/adapter-filament/scripts/strapi-populate-vectors.mjs http://127.0.0.1:8765/api \
             --token "$T" --vectors $F/link-order-read-vectors.json --expected $F/link-order-read-vectors.expected.json
+      - name: Strapi data import and export keep a repeatable component's files (a strapi-php archive whose frames link images)
+        run: |
+          cd app
+          php artisan migrate:fresh --force
+          php artisan db:seed --class="Database\\Seeders\\RolePermissionSeeder" --force
+          F=../packages/adapter-filament/src/strapi-api/__fixtures__/transfer
+          php artisan strapi:import --file=$F/component-media-export.tar.gz --force | tee $RUNNER_TEMP/component-media-import.log
+          if grep -q "Not imported: shared.frame" $RUNNER_TEMP/component-media-import.log; then echo "the frames' files were not imported"; exit 1; fi
+          # Exported again, each frame links the file strapi-php's archive gave it.
+          php artisan strapi:export --no-encrypt --file=$RUNNER_TEMP/camis-component-media
+          node ../packages/adapter-filament/scripts/strapi-transfer-compare.mjs \
+            $F/component-media-export.tar.gz $RUNNER_TEMP/camis-component-media.tar.gz
+          T=$(curl -s -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' \
+            --data '{"username":"reader","email":"reader@example.test","password":"secret1"}' \
+            http://127.0.0.1:8765/api/auth/local/register | jq -r .jwt)
+          node ../packages/adapter-filament/scripts/strapi-populate-vectors.mjs http://127.0.0.1:8765/api \
+            --token "$T" --vectors $F/component-media-read-vectors.json --expected $F/component-media-read-vectors.expected.json
       - name: Strapi GraphQL plugin vectors (sign-in, users, roles, locales, files, API tokens; recorded from strapi-php)
         run: |
           cd app

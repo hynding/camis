@@ -1,0 +1,86 @@
+{
+  "storyboards with their frames' images": {
+    "status": 200,
+    "data": [
+      {
+        "documentId": "bz1mdbv9yu4zks0f5n7egqmt",
+        "frames": [
+          {
+            "caption": "Again",
+            "image": {
+              "alternativeText": "red",
+              "documentId": "jfkilf62b6ag104upejqlvwe",
+              "name": "wide.png",
+              "width": 1200
+            }
+          }
+        ],
+        "title": "Closing"
+      },
+      {
+        "documentId": "yv8twig88u60jnb9mm6tte9x",
+        "frames": [
+          {
+            "caption": "Wide shot",
+            "image": {
+              "alternativeText": "red",
+              "documentId": "jfkilf62b6ag104upejqlvwe",
+              "name": "wide.png",
+              "width": 1200
+            }
+          },
+          {
+            "caption": "Blank",
+            "image": null
+          },
+          {
+            "caption": "Close up",
+            "image": {
+              "alternativeText": "blue",
+              "documentId": "vratmklzkv19q0xa4ax4c1i8",
+              "name": "tall.png",
+              "width": 40
+            }
+          }
+        ],
+        "title": "Opening"
+      }
+    ]
+  },
+  "a book's cover beside them": {
+    "status": 200,
+    "data": [
+      {
+        "cover": {
+          "documentId": "jfkilf62b6ag104upejqlvwe",
+          "name": "wide.png"
+        },
+        "documentId": "lajfh3wgam18btbo9c0x3bsz",
+        "title": "Covered"
+      }
+    ]
+  },
+  "the files": {
+    "status": 200,
+    "data": [
+      {
+        "alternativeText": "blue",
+        "documentId": "vratmklzkv19q0xa4ax4c1i8",
+        "height": 80,
+        "isUrlSigned": false,
+        "mime": "image/png",
+        "name": "tall.png",
+        "width": 40
+      },
+      {
+        "alternativeText": "red",
+        "documentId": "jfkilf62b6ag104upejqlvwe",
+        "height": 800,
+        "isUrlSigned": false,
+        "mime": "image/png",
+        "name": "wide.png",
+        "width": 1200
+      }
+    ]
+  }
+}

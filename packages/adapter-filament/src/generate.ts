@@ -232,7 +232,10 @@ export const filamentAdapter: GenerateAdapter = {
       const mediaOf = fileModel === undefined ? [] : mediaFields(ct);
       const mediaItems = ctChildren.filter((c) => c.media.length > 0).map((c) => c.relationName);
       if (fileModel !== undefined) gaps.push(...columnMediaGaps(ct, expansion));
-      if (mediaItems.length > 0) gaps.push(itemMediaTransferGap(ct, mediaItems));
+      const nestedMediaItems = ctChildren
+        .filter((c) => c.media.some((m) => m.path.length > 1))
+        .map((c) => c.relationName);
+      if (nestedMediaItems.length > 0) gaps.push(itemMediaTransferGap(ct, nestedMediaItems));
       const columns = {
         ...ct,
         fields: ct.fields.filter(

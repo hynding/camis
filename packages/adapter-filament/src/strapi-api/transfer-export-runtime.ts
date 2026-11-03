@@ -87,6 +87,9 @@ final class StrapiExport
 
     private int $components = 0;
 
+    /** @var array<string, array<int, array{0: string, 1: int, 2: array<string, string>}>> item model's morph class → row id → [component uid, archived id, pivot field → key] */
+    private array $items = [];
+
     /**
      * Strapi's --only and --exclude, over its three data types.
      *
@@ -157,6 +160,10 @@ final class StrapiExport
                 if (isset($type['attributes'])) {
                     $this->relationLinks($uid, $type);
                 }
+            }
+            // After the entries: an item's files go by the id the item was given there.
+            if (isset(StrapiTransferMap::TYPES[self::FILE]['model'])) {
+                $this->mediaLinks();
             }
         }
         if (in_array('config', $stages, true)) {
@@ -366,7 +373,6 @@ final class StrapiExport
             }
         }
         if ($entries) {
-            $this->mediaLinks();
             $this->folders((new $model())->getTable());
         }
     }
@@ -426,12 +432,16 @@ final class StrapiExport
         $positions = [];
         foreach ($rows as $row) {
             $uid = $owners[$row->related_type] ?? null;
-            if ($uid === null) {
+            [$ref, $field] = [(int) $row->related_id, (string) $row->field];
+            $item = $this->items[$row->related_type][$ref] ?? null;
+            if ($item !== null && isset($item[2][$field])) {
+                [$uid, $ref, $field] = [$item[0], $item[1], $item[2][$field]];
+            } elseif ($uid === null) {
                 continue;
             }
-            $list = "{$uid}|{$row->related_id}|{$row->field}";
+            $list = "{$uid}|{$ref}|{$field}";
             $positions[$list] = ($positions[$list] ?? 0) + 1;
-            $this->link('relation.morph', 'morphToMany', ['type' => self::FILE, 'field' => 'related', 'ref' => (int) $row->file_id], ['type' => $uid, 'ref' => (int) $row->related_id, 'field' => (string) $row->field, 'pos' => $positions[$list]]);
+            $this->link('relation.morph', 'morphToMany', ['type' => self::FILE, 'field' => 'related', 'ref' => (int) $row->file_id], ['type' => $uid, 'ref' => $ref, 'field' => $field, 'pos' => $positions[$list]]);
         }
     }
 
@@ -453,7 +463,7 @@ final class StrapiExport
                 } elseif (isset($attribute['component'])) {
                     $components[$key] = $this->component($attribute['component'], $row, $this->repeatables($model, $id, $attribute['children'] ?? []));
                 } elseif (isset($attribute['repeatable'])) {
-                    $components[$key] = array_map(fn (array $child): array => $this->item($attribute['scalars'], $child), $this->children($model, $id, $attribute['repeatable']));
+                    $components[$key] = $this->repeatableItems($model, $id, $attribute);
                 } else {
                     $components[$key] = $this->zone($model, $id, $attribute['zone']);
                 }
@@ -521,8 +531,30 @@ final class StrapiExport
     {
         return array_map(fn (array $child): array => [
             'key' => $child['key'],
-            'items' => array_map(fn (array $row): array => $this->item($child['scalars'], $row), $this->children($model, $id, $child['repeatable'])),
+            'items' => $this->repeatableItems($model, $id, $child),
         ], $children);
+    }
+
+    /**
+     * A repeatable component's items. Strapi links an item's files to the item, so an item with
+     * media fields is remembered by the id it goes by in the archive.
+     *
+     * @param array{repeatable: string, scalars: list<array<string, mixed>>, uid?: string, media?: array<string, string>} $attribute
+     * @return list<array<string, mixed>>
+     */
+    private function repeatableItems(Model $model, int $id, array $attribute): array
+    {
+        $items = [];
+        foreach ($this->children($model, $id, $attribute['repeatable']) as $row) {
+            $item = $this->item($attribute['scalars'], $row);
+            if (isset($attribute['uid'], $attribute['media'])) {
+                $morph = $model->{$attribute['repeatable']}()->getRelated()->getMorphClass();
+                $this->items[$morph][(int) $row['id']] = [$attribute['uid'], (int) $item['id'], array_flip($attribute['media'])];
+            }
+            $items[] = $item;
+        }
+
+        return $items;
     }
 
     /**

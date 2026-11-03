@@ -66,6 +66,9 @@ final class StrapiImport
     /** @var list<array{0: string, 1: string, 2: int, 3: string, 4: int|string, 5: string}> keys set once every row exists */
     private array $pending = [];
 
+    /** @var array<string, array<int|string, array{0: class-string<Model>, 1: int, 2: array<string, string>}>> component uid → archived id → [item model, row id, field → media relation] */
+    private array $items = [];
+
     /** @var array<int|string, string> archived role id → role type */
     private array $roles = [];
 
@@ -556,7 +559,10 @@ final class StrapiImport
             $position = 0;
             foreach (is_array($items) ? array_values($items) : [] as $item) {
                 if (isset($attribute['repeatable'])) {
-                    $this->child($model->{$attribute['repeatable']}(), $attribute['scalars'], $item, $stamps);
+                    $id = $this->child($model->{$attribute['repeatable']}(), $attribute['scalars'], $item, $stamps);
+                    if (isset($attribute['media'], $item['id'])) {
+                        $this->items[$attribute['uid']][$item['id']] = [$model->{$attribute['repeatable']}()->getRelated()::class, $id, $attribute['media']];
+                    }
 
                     continue;
                 }
@@ -575,13 +581,14 @@ final class StrapiImport
      * @param array<string, mixed> $item
      * @param array<string, mixed> $extra
      */
-    private function child(HasOneOrMany $relation, array $scalars, array $item, array $extra): void
+    private function child(HasOneOrMany $relation, array $scalars, array $item, array $extra): int
     {
         $row = [$relation->getForeignKeyName() => $relation->getParentKey()] + $extra;
         foreach ($scalars as $scalar) {
             $row[$scalar['column']] = self::value(self::at($item, $scalar['key']), $scalar['type']);
         }
-        DB::table($relation->getRelated()->getTable())->insert($row);
+
+        return (int) DB::table($relation->getRelated()->getTable())->insertGetId($row);
     }
 
     /** @param array<string, mixed> $data */
@@ -704,6 +711,11 @@ final class StrapiImport
         $attach = [];
         foreach ($links as $index => $link) {
             [$left, $right] = [$link['left'], $link['right']];
+            if (($link['kind'] ?? '') === 'relation.morph' && isset($this->items[$right['type']])) {
+                $this->itemFile($left, $right);
+
+                continue;
+            }
             if (($link['kind'] ?? '') === 'relation.morph') {
                 $owner = StrapiTransferMap::TYPES[$right['type']] ?? null;
                 $descriptor = $owner['links'][$right['field']] ?? null;
@@ -764,6 +776,28 @@ final class StrapiImport
             $relation->attach($target, $pivot);
             $this->counts['links'] = ($this->counts['links'] ?? 0) + 1;
         }
+    }
+
+    /**
+     * A file a repeatable component's item links, which Strapi keeps on the item's own row.
+     *
+     * @param array<string, mixed> $left
+     * @param array<string, mixed> $right
+     */
+    private function itemFile(array $left, array $right): void
+    {
+        $item = $this->items[$right['type']][$right['ref']] ?? null;
+        $relation = $item[2][$right['field']] ?? null;
+        $file = $this->rows['plugin::upload.file'][$left['ref']] ?? null;
+        if ($item === null || $relation === null || $file === null) {
+            $this->skipped["{$right['type']}.{$right['field']}"] = 'this project keeps no media there';
+
+            return;
+        }
+        $model = new ($item[0])();
+        $model->setAttribute($model->getKeyName(), $item[1]);
+        $model->{$relation}()->attach($file, ['order' => $right['pos'] ?? 0]);
+        $this->counts['links'] = ($this->counts['links'] ?? 0) + 1;
     }
 
     private function role(int|string $userRef, string $type): void
