@@ -2,7 +2,7 @@
 // Compares two Strapi export archives (.tar.gz) for what an import restores from them: every
 // entity of the expected archive is in the actual one with the same data, and every link joins
 // the same entries in the same positions. Ids differ between databases, so entries are named by
-// type, documentId, locale and version; timestamps are compared to the second, which is what a
+// type, documentId, locale and version, and component instances by their place in their entry; timestamps are compared to the second, which is what a
 // Laravel timestamp column keeps. What camis does not keep is left out: users-permissions
 // permissions (the IR's grants), a role's documentId and timestamps, a plain type's publishedAt,
 // and a role only the expected archive has: roles are the IR's, so `strapi:import` reports one
@@ -52,7 +52,23 @@ const read = (path) => {
       .filter((s) => s.options?.draftAndPublish === true)
       .map((s) => s.uid),
   );
+  const attributes = new Map(stage("schemas").map((s) => [s.uid, s.attributes ?? {}]));
   const names = new Map(); // "type|id" → entry name
+  // A component instance is named by where it sits in its entry, as a link to it (a repeatable
+  // component's files) names it by its uid and id.
+  const nameComponents = (uid, data, at) => {
+    for (const [key, attribute] of Object.entries(attributes.get(uid) ?? {})) {
+      if (attribute.type !== "component" && attribute.type !== "dynamiczone") continue;
+      const value = data?.[key];
+      const items = Array.isArray(value) ? value : value == null ? [] : [value];
+      items.forEach((item, index) => {
+        const component = attribute.type === "component" ? attribute.component : item.__component;
+        const name = `${at}|${key}[${index}]`;
+        names.set(`${component}|${item.id}`, name);
+        nameComponents(component, item, name);
+      });
+    }
+  };
   const entities = new Map();
   for (const { type, id, data } of stage("entities")) {
     if (SKIPPED.has(type)) continue;
@@ -62,6 +78,7 @@ const read = (path) => {
         ? `${type}|${data.type}`
         : `${type}|${data.documentId}|${data.locale ?? ""}|${version}`;
     names.set(`${type}|${id}`, name);
+    nameComponents(type, data, name);
     // A role is the IR's, made anew by every build: its name and type are what carry over.
     const kept =
       type === "plugin::users-permissions.role"

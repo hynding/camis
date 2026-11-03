@@ -1,0 +1,23 @@
+{
+  "about": "What strapi-php answers after `php bin/strapi import -f component-media-export.tar.gz --force` into an empty project, and what camis must answer after `php artisan strapi:import --file=component-media-export.tar.gz --force` into an empty app: each frame of a storyboard links the file the archive gave it, beside a book whose own cover is one of those files.",
+  "compare": ["documentId"],
+  "seed": [],
+  "reads": [
+    {
+      "name": "storyboards with their frames' images",
+      "path": "/storyboards",
+      "query": "sort=title&fields[0]=title&populate[frames][populate][image][fields][0]=name&populate[frames][populate][image][fields][1]=alternativeText&populate[frames][populate][image][fields][2]=width"
+    },
+    {
+      "name": "a book's cover beside them",
+      "path": "/books",
+      "query": "fields[0]=title&populate[cover][fields][0]=name"
+    },
+    {
+      "name": "the files",
+      "path": "/upload/files",
+      "query": "sort=name&fields[0]=name&fields[1]=alternativeText&fields[2]=width&fields[3]=height&fields[4]=mime"
+    }
+  ],
+  "writes": []
+}
