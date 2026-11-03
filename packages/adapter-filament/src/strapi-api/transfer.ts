@@ -82,7 +82,16 @@ const attributes = (shape: WireShape) => {
   for (const child of shape.children) {
     const [first] = child.key;
     if (first === undefined) continue;
-    const rows = { repeatable: child.relation, scalars: child.scalars.map((s) => scalar(s, 0)) };
+    // Strapi links an item's files to the item's own row, by its component's uid and its id.
+    const media = child.media.filter((m) => !m.key.includes("."));
+    const rows = {
+      repeatable: child.relation,
+      ...(media.length > 0 ? { uid: child.uid } : {}),
+      scalars: child.scalars.map((s) => scalar(s, 0)),
+      ...(media.length > 0
+        ? { media: Object.fromEntries(media.map((m) => [m.key, m.relation])) }
+        : {}),
+    };
     if (child.key.length === 1) {
       out[first] = rows;
     } else {

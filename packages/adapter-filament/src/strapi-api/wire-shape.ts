@@ -2,6 +2,7 @@ import { expandComponents } from "@camis/adapter-kernel";
 import {
   fieldApiName,
   inverseApiName,
+  type Component,
   type ContentType,
   type FieldType,
   type IrDocument,
@@ -20,6 +21,8 @@ export interface WireScalar {
 }
 export interface WireChild {
   key: string[];
+  /** Its component's Strapi uid, which an archive's links to an item go by. */
+  uid: string;
   relation: string;
   model: string;
   scalars: WireScalar[];
@@ -140,6 +143,7 @@ export const wireShape = (
     const child = childTableEmit(ct, t, fileModel !== undefined);
     return {
       key: t.apiPath,
+      uid: componentUid(tableComponent(doc, ct, t.path)),
       relation: child.relationName,
       model: child.model,
       media:
@@ -220,6 +224,23 @@ export const wireShape = (
     draftPublish: versioned.has(ct.name),
     localized: localized.has(ct.name),
   };
+};
+
+/** The component a repeatable child table holds, found down its path of component fields. */
+const tableComponent = (doc: IrDocument, ct: ContentType, path: string[]): Component => {
+  let fields = ct.fields;
+  let found: Component | undefined;
+  for (const name of path) {
+    const field = fields.find((f) => f.name === name);
+    found =
+      field?.type === "component"
+        ? doc.components.find((c) => c.name === field.component)
+        : undefined;
+    if (found === undefined) throw new Error(`${ct.name}.${path.join(".")}: no component there`);
+    fields = found.fields;
+  }
+  if (found === undefined) throw new Error(`${ct.name}: a child table needs a path`);
+  return found;
 };
 
 /** A media field links files through Strapi's `files_related_mph`, in the order given. */

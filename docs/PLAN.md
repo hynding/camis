@@ -1229,6 +1229,24 @@ API key too.
 Exit: unit tests in each package; getstarted imports with no `inverseApiName` gap and its
 `CategorySerializer` keys the inverse `relation_locales`.
 
+## Phase 34 — a repeatable component's files in a transfer (`adapter-filament`)
+
+Since Phase 31's media work a repeatable component's item links its files (a storyboard's frames),
+but `strapi:export` and `strapi:import` left them out (the `componentMediaTransfer` gap), so a
+migrated project lost them. Strapi links an item's files to the item's own row: the archive's morph
+link names the component's uid (`shared.frame`) and the item's archived id, which the entry's data
+gives each item. The transfer map names a repeatable's component uid and its media fields;
+`strapi:import` remembers each item's row by that id and attaches its files, and `strapi:export`
+writes them from the ids it gives the items. Files of a component nested inside an item still
+report the gap: Strapi links them to that component's own row, which camis folds into the item's.
+`strapi-transfer-compare.mjs` names a component instance by its place in its entry, so links to
+one are compared.
+
+Exit: `transfer/component-media-export.tar.gz`, strapi-php's export of storyboards whose frames link
+images (`component-media-seed-vectors.json`), imports, exports the same archive, and reads back as
+strapi-php reads it after importing it (`component-media-read-vectors.json`), in the `strapi-api`
+boot job on all three databases.
+
 ---
 
 ## Sequencing rationale (quick reference)
