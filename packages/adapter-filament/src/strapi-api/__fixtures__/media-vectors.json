@@ -1,5 +1,5 @@
 {
-  "about": "Strapi 5's Upload API and media fields over REST, checked against strapi-php. Run on an empty database, in order, with strapi-populate-vectors.mjs; files come from __fixtures__/media. Book has a single cover (images) and multiple attachments; a Storyboard's repeatable frames each hold an image; Post, which has draft and publish, has a single image. A file's hash and url end in random hex, and an image's byte sizes depend on its encoder, so neither is compared.",
+  "about": "Strapi 5's Upload API and media fields over REST, checked against strapi-php. Run on an empty database, in order, with strapi-populate-vectors.mjs; files come from __fixtures__/media. Book has a single cover (images) and multiple attachments; a Storyboard's repeatable frames each hold an image, and its embedded seo one; Post, which has draft and publish, has a single image. A file's hash and url end in random hex, and an image's byte sizes depend on its encoder, so neither is compared.",
   "seed": [],
   "reads": [],
   "writes": [
@@ -314,6 +314,108 @@
       }
     },
     {
+      "name": "an embedded component's media takes a file id",
+      "method": "POST",
+      "path": "/storyboards",
+      "as": "storyboards:Seo",
+      "query": "fields[0]=title&populate[seo][populate][metaImage][fields][0]=name",
+      "data": {
+        "title": "Seo",
+        "seo": {
+          "metaTitle": "Meta",
+          "metaImage": "#files:Wide"
+        }
+      }
+    },
+    {
+      "name": "or a documentId, inside an embedded component",
+      "method": "POST",
+      "path": "/storyboards",
+      "as": "storyboards:SeoByDocument",
+      "query": "fields[0]=title&populate[seo][populate][metaImage][fields][0]=name",
+      "data": {
+        "title": "SeoByDocument",
+        "seo": {
+          "metaTitle": "Meta",
+          "metaImage": "@files:Wide"
+        }
+      }
+    },
+    {
+      "name": "a missing file inside an embedded component is rejected",
+      "method": "POST",
+      "path": "/storyboards",
+      "data": {
+        "title": "MissingSeo",
+        "seo": {
+          "metaImage": 999999
+        }
+      }
+    },
+    {
+      "name": "an embedded component's media stays off the wire unless its populate names it",
+      "method": "GET",
+      "path": "/storyboards/@storyboards:Seo",
+      "query": "fields[0]=title&populate=seo"
+    },
+    {
+      "name": "populate=* reaches the embedded component but not its media",
+      "method": "GET",
+      "path": "/storyboards/@storyboards:Seo",
+      "query": "fields[0]=title&populate=*"
+    },
+    {
+      "name": "an embedded component's populate=* includes the whole file",
+      "method": "GET",
+      "path": "/storyboards/@storyboards:Seo",
+      "query": "fields[0]=title&populate[seo][populate]=*"
+    },
+    {
+      "name": "an embedded component's populate names its media",
+      "method": "GET",
+      "path": "/storyboards/@storyboards:Seo",
+      "query": "fields[0]=title&populate[seo][populate][0]=metaImage"
+    },
+    {
+      "name": "an embedded component with only its media set",
+      "method": "POST",
+      "path": "/storyboards",
+      "as": "storyboards:SeoImageOnly",
+      "query": "fields[0]=title&populate[seo][populate][metaImage][fields][0]=name",
+      "data": {
+        "title": "SeoImageOnly",
+        "seo": {
+          "metaImage": "#files:Wide"
+        }
+      }
+    },
+    {
+      "name": "filters reach into an embedded component's media",
+      "method": "GET",
+      "path": "/storyboards",
+      "query": "filters[seo][metaImage][name][$eq]=wide.png&fields[0]=title&sort=title:asc"
+    },
+    {
+      "name": "replacing an embedded component without its media drops the file",
+      "method": "PUT",
+      "path": "/storyboards/@storyboards:SeoByDocument",
+      "query": "fields[0]=title&populate[seo][populate][metaImage][fields][0]=name",
+      "data": {
+        "seo": {
+          "metaTitle": "Again"
+        }
+      }
+    },
+    {
+      "name": "null clears an embedded component, its file included",
+      "method": "PUT",
+      "path": "/storyboards/@storyboards:SeoImageOnly",
+      "query": "fields[0]=title&populate[seo][populate][metaImage][fields][0]=name",
+      "data": {
+        "seo": null
+      }
+    },
+    {
       "name": "a file's related entries do not list components",
       "method": "GET",
       "path": "/upload/files/#files:Wide",
@@ -329,6 +431,12 @@
       "method": "GET",
       "path": "/storyboards/@storyboards:Storyboarded",
       "query": "fields[0]=title&populate[frames][populate][image][fields][0]=name"
+    },
+    {
+      "name": "unlinks it from the embedded component",
+      "method": "GET",
+      "path": "/storyboards/@storyboards:Seo",
+      "query": "fields[0]=title&populate[seo][populate][metaImage][fields][0]=name"
     }
   ]
 }

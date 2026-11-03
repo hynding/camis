@@ -857,6 +857,21 @@
         },
         "additionalProperties": false
       },
+      "SharedSeoEntry": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "metaTitle": {
+            "description": "A string field",
+            "type": "string"
+          },
+          "metaImage": {
+            "description": "A media field",
+            "$ref": "#/components/schemas/PluginUploadFileDocument"
+          }
+        },
+        "additionalProperties": false
+      },
       "SharedLineEntry": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -16344,13 +16359,13 @@
                   "readOnly": true,
                   "description": "Populate a single relation, component, file, or dynamic zone",
                   "type": "string",
-                  "enum": ["frames"]
+                  "enum": ["frames", "seo"]
                 },
                 {
                   "type": "array",
                   "items": {
                     "type": "string",
-                    "enum": ["frames"]
+                    "enum": ["frames", "seo"]
                   },
                   "description": "Populate a selection of multiple relations, components, files, or dynamic zones"
                 }
@@ -16411,6 +16426,10 @@
                             "items": {
                               "$ref": "#/components/schemas/SharedFrameEntry"
                             }
+                          },
+                          "seo": {
+                            "description": "A component field",
+                            "$ref": "#/components/schemas/SharedSeoEntry"
                           }
                         },
                         "required": ["documentId", "id", "title", "publishedAt"],
@@ -16478,13 +16497,13 @@
                   "readOnly": true,
                   "description": "Populate a single relation, component, file, or dynamic zone",
                   "type": "string",
-                  "enum": ["frames"]
+                  "enum": ["frames", "seo"]
                 },
                 {
                   "type": "array",
                   "items": {
                     "type": "string",
-                    "enum": ["frames"]
+                    "enum": ["frames", "seo"]
                   },
                   "description": "Populate a selection of multiple relations, components, files, or dynamic zones"
                 }
@@ -16543,6 +16562,10 @@
                           "items": {
                             "$ref": "#/components/schemas/SharedFrameEntry"
                           }
+                        },
+                        "seo": {
+                          "description": "A component field",
+                          "$ref": "#/components/schemas/SharedSeoEntry"
                         }
                       },
                       "required": ["documentId", "id", "title", "publishedAt"],
@@ -16594,6 +16617,9 @@
                         "description": "A component field",
                         "type": "array",
                         "items": {}
+                      },
+                      "seo": {
+                        "description": "A component field"
                       }
                     },
                     "required": ["title", "publishedAt"],
@@ -16657,13 +16683,13 @@
                   "readOnly": true,
                   "description": "Populate a single relation, component, file, or dynamic zone",
                   "type": "string",
-                  "enum": ["frames"]
+                  "enum": ["frames", "seo"]
                 },
                 {
                   "type": "array",
                   "items": {
                     "type": "string",
-                    "enum": ["frames"]
+                    "enum": ["frames", "seo"]
                   },
                   "description": "Populate a selection of multiple relations, components, files, or dynamic zones"
                 }
@@ -16788,6 +16814,10 @@
                           "items": {
                             "$ref": "#/components/schemas/SharedFrameEntry"
                           }
+                        },
+                        "seo": {
+                          "description": "A component field",
+                          "$ref": "#/components/schemas/SharedSeoEntry"
                         }
                       },
                       "required": ["documentId", "id", "title", "publishedAt"],
@@ -16866,13 +16896,13 @@
                   "readOnly": true,
                   "description": "Populate a single relation, component, file, or dynamic zone",
                   "type": "string",
-                  "enum": ["frames"]
+                  "enum": ["frames", "seo"]
                 },
                 {
                   "type": "array",
                   "items": {
                     "type": "string",
-                    "enum": ["frames"]
+                    "enum": ["frames", "seo"]
                   },
                   "description": "Populate a selection of multiple relations, components, files, or dynamic zones"
                 }
@@ -16931,6 +16961,10 @@
                           "items": {
                             "$ref": "#/components/schemas/SharedFrameEntry"
                           }
+                        },
+                        "seo": {
+                          "description": "A component field",
+                          "$ref": "#/components/schemas/SharedSeoEntry"
                         }
                       },
                       "required": ["documentId", "id", "title", "publishedAt"],
@@ -16982,6 +17016,9 @@
                         "description": "A component field",
                         "type": "array",
                         "items": {}
+                      },
+                      "seo": {
+                        "description": "A component field"
                       }
                     },
                     "additionalProperties": false
@@ -17042,13 +17079,13 @@
                   "readOnly": true,
                   "description": "Populate a single relation, component, file, or dynamic zone",
                   "type": "string",
-                  "enum": ["frames"]
+                  "enum": ["frames", "seo"]
                 },
                 {
                   "type": "array",
                   "items": {
                     "type": "string",
-                    "enum": ["frames"]
+                    "enum": ["frames", "seo"]
                   },
                   "description": "Populate a selection of multiple relations, components, files, or dynamic zones"
                 }
@@ -17125,6 +17162,10 @@
                           "items": {
                             "$ref": "#/components/schemas/SharedFrameEntry"
                           }
+                        },
+                        "seo": {
+                          "description": "A component field",
+                          "$ref": "#/components/schemas/SharedSeoEntry"
                         }
                       },
                       "required": ["documentId", "id", "title", "publishedAt"],

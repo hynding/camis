@@ -247,6 +247,26 @@ describe("media fields", () => {
         .gaps.gaps.filter((g) => g.feature === "media"),
     ).toEqual([]);
   });
+  // Strapi links an embedded component's files to the component; here the component is columns of
+  // the entry's row, so the entry links them, under the field's path within it.
+  it("inside an embedded component are links from the entry, by their path", () => {
+    expect(content("_create_storyboards_table.php")).not.toContain("seo_meta_image");
+    const storyboard = content("app/Models/Storyboard.php");
+    expect(storyboard).toContain("use HasMedia;");
+    expect(storyboard).toContain(
+      "public function seoMetaImage(): \\Illuminate\\Database\\Eloquent\\Relations\\MorphToMany",
+    );
+    expect(storyboard).toContain("->withPivotValue('field', 'seo.metaImage')");
+    const serializer = content("app/Http/Serializers/StoryboardSerializer.php");
+    expect(serializer).toMatch(
+      /'seo\.metaImage' => \['relation' => 'seoMetaImage', 'kind' => 'mediaOne',/,
+    );
+    expect(serializer).toContain("$m->seoMetaImage->first()");
+    expect(content("app/Filament/Resources/Storyboards/Schemas/StoryboardForm.php")).toContain(
+      "MediaPicker::make('seoMetaImage', multiple: false, allowedTypes: ['image']),",
+    );
+    expect(result.gaps.gaps.filter((g) => g.feature === "componentMedia")).toEqual([]);
+  });
   it("stay path columns on the Laravel API style", () => {
     const laravel = filamentAdapter.generate(strapiApiBundle, { projectName: "oyl" });
     const migration = laravel.files.find((f) => f.path.endsWith("_create_books_table.php"))!;

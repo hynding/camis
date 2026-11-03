@@ -264,6 +264,7 @@ export const strapiApiBundle: IrBundle = {
         fields: [
           { type: "string", name: "title", required: true },
           { type: "component", name: "frames", component: "Frame", repeatable: true },
+          { type: "component", name: "seo", component: "Seo", repeatable: false },
         ],
       },
       // Every constraint Strapi's entity validator checks on a write (validation-vectors.json).
@@ -300,6 +301,14 @@ export const strapiApiBundle: IrBundle = {
         fields: [
           { type: "string", name: "caption" },
           { type: "media", name: "image", allowedTypes: ["image"] },
+        ],
+      },
+      // An embedded component whose media links the media library (media-vectors.json).
+      {
+        name: "Seo",
+        fields: [
+          { type: "string", name: "metaTitle" },
+          { type: "media", name: "metaImage", allowedTypes: ["image"] },
         ],
       },
       // A dynamic zone's member (dynamic-zone-vectors.json), holding a nested component.
