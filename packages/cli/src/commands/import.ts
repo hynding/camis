@@ -5,6 +5,7 @@ import { readStrapiProject } from "@camis/adapter-strapi";
 import { validate } from "@camis/ir-core";
 import type { CapabilityGap, IrDocument, Result } from "@camis/ir-schema";
 import type { Io } from "../io";
+import { withMediaLibrary } from "../templates";
 import { printGaps } from "./generate";
 import { strapiRoles, type StrapiRolesSource } from "./strapi-roles";
 import { locStr } from "./validate";
@@ -53,7 +54,10 @@ export const importCommand = async (
     for (const e of imported.errors) io.out(`✗ [${e.code}] ${locStr(e.location)} — ${e.message}`);
     return 1;
   }
-  const revalidated = validate(imported.value);
+  // Strapi's upload plugin is always there, so its media library comes with the project.
+  const revalidated = validate(
+    target === "strapi" ? withMediaLibrary(imported.value) : imported.value,
+  );
   if (!revalidated.ok) {
     for (const e of revalidated.errors)
       io.out(`✗ [${e.code}] ${locStr(e.location)} — ${e.message}`);

@@ -232,9 +232,15 @@ final class StrapiDocuments
         }
         foreach ($serializer::ZONES as $members) {
             foreach ($members as $member) {
-                $to->{$member['relation']}()->delete();
+                $fields = $member['fields'] ?? [];
+                // One by one when its items link files, so their links go with them.
+                $fields === [] ? $to->{$member['relation']}()->delete() : $to->{$member['relation']}()->get()->each->delete();
                 foreach ($from->{$member['relation']}()->orderBy('position')->get() as $item) {
-                    $to->{$member['relation']}()->save($item->replicate());
+                    $copy = $item->replicate();
+                    $to->{$member['relation']}()->save($copy);
+                    foreach ($fields as $field) {
+                        self::copyFiles($item, $copy, $field['relation']);
+                    }
                 }
             }
         }

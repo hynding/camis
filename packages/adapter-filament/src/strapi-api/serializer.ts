@@ -41,11 +41,12 @@ const read = (s: WireScalar, src: string, layout: StorageLayout): string => {
   return col;
 };
 
-// An item's files, whole: populate leaves them off, or narrows them, as it does an entry's.
-const mediaWire = (r: WireRelation): string =>
+// A component's files, whole: populate leaves them off, or narrows them, as it does an entry's.
+// `$src` is the row holding the component: an item's own, or the entry's for an embedded one.
+const mediaWire = (r: WireRelation, src = "$c"): string =>
   r.kind === "mediaMany"
-    ? `$c->${r.relation}()->orderByPivot('order')->get()->map(fn ($f) => ${r.model}Serializer::toWire($f))->all()`
-    : `$c->${r.relation}->first() === null ? null : ${r.model}Serializer::toWire($c->${r.relation}->first())`;
+    ? `${src}->${r.relation}()->orderByPivot('order')->get()->map(fn ($f) => ${r.model}Serializer::toWire($f))->all()`
+    : `${src}->${r.relation}->first() === null ? null : ${r.model}Serializer::toWire(${src}->${r.relation}->first())`;
 
 // Build a nested PHP array literal from scalars whose keys are paths.
 interface Node {
@@ -75,6 +76,15 @@ const render = (n: Node, indent: string): string => {
   return rows.join("\n");
 };
 
+/**
+ * Strapi gives every component an id. An embedded one is columns of the row holding it (the entry,
+ * or a repeatable or zone item), so it goes by that row's id, set before its fields so it leads.
+ */
+const insertComponentIds = (n: Node, keys: readonly (readonly string[])[], id: string): void => {
+  for (const key of keys)
+    for (let depth = 1; depth < key.length; depth++) insert(n, [...key.slice(0, depth), "id"], id);
+};
+
 /** The scalars an answer carries: every one but the private, which are only written. */
 const answered = (scalars: WireScalar[]): WireScalar[] => scalars.filter((s) => s.private !== true);
 
@@ -82,10 +92,28 @@ const toWireBody = (shape: WireShape, indent: string, layout: StorageLayout): st
   const root = node();
   insert(root, ["id"], "$m->id");
   insert(root, ["documentId"], "$m->document_id");
-  for (const s of answered(shape.scalars)) insert(root, s.key, read(s, "$m", layout));
-  for (const c of shape.children.filter((c) => c.private !== true)) {
+  const own = answered(shape.scalars);
+  const children = shape.children.filter((c) => c.private !== true);
+  const files = shape.embeddedMedia.filter((r) => r.private !== true);
+  insertComponentIds(
+    root,
+    [
+      ...own.map((s) => s.key),
+      ...children.map((c) => c.key),
+      ...files.map((r) => r.key.split(".")),
+    ],
+    "$m->id",
+  );
+  for (const s of own) insert(root, s.key, read(s, "$m", layout));
+  for (const r of files) insert(root, r.key.split("."), mediaWire(r, "$m"));
+  for (const c of children) {
     const inner = node();
     insert(inner, ["id"], "$c->id");
+    insertComponentIds(
+      inner,
+      [...answered(c.scalars).map((s) => s.key), ...c.media.map((r) => r.key.split("."))],
+      "$c->id",
+    );
     for (const s of answered(c.scalars)) insert(inner, s.key, read(s, "$c", layout));
     for (const r of c.media) insert(inner, r.key.split("."), mediaWire(r));
     // The child's own row is rendered by `render` one branch level per path segment above
@@ -117,7 +145,13 @@ const zoneMemberWire = (member: WireZoneMember, indent: string): string => {
   const item = node();
   insert(item, ["__component"], `'${member.uid}'`);
   insert(item, ["id"], "$c->id");
+  insertComponentIds(
+    item,
+    [...answered(member.scalars).map((s) => s.key), ...member.media.map((r) => r.key.split("."))],
+    "$c->id",
+  );
   for (const s of answered(member.scalars)) insert(item, s.key, read(s, "$c", "laravel"));
+  for (const r of member.media) insert(item, r.key.split("."), mediaWire(r));
   return `${indent}...$m->${member.relation}->map(fn ($c) => [$c->position, [
 ${render(item, `${indent}${UNIT}`)}
 ${indent}]])->all(),`;
@@ -175,7 +209,10 @@ const fromWireZoneStatements = (zones: WireZone[], indent: string): string =>
       const l2 = `${l1}${UNIT}`;
       const l3 = `${l2}${UNIT}`;
       const arms = z.members
-        .map((m) => `${l2}'${m.uid}' => [\n${fromWireColumns(m.scalars, "$item", l3)}\n${l2}],`)
+        .map(
+          (m) =>
+            `${l2}'${m.uid}' => [\n${fromWireColumns(m.scalars, "$item", l3)}${m.media.length === 0 ? "" : `\n${zoneItemMedia(m.media, l3)}`}\n${l2}],`,
+        )
         .join("\n");
       return `${indent}if (array_key_exists('${z.key}', $data)) {
 ${l1}$children['${z.key}'] = StrapiZones::items($data['${z.key}'], '${z.key}', self::ZONES['${z.key}'], fn (string $uid, array $item) => match ($uid) {
@@ -184,6 +221,11 @@ ${l1}});
 ${indent}}`;
     })
     .join("\n");
+
+// An item's file references as sent, null included: an item kept by its id keeps what it leaves out.
+// The controller resolves them to links before anything is written.
+const zoneItemMedia = (media: WireRelation[], indent: string): string =>
+  `${indent}'__media' => array_intersect_key($item, [${[...new Set(media.map((r) => r.key.split(".")[0]))].map((k) => `'${k}' => true`).join(", ")}]),`;
 
 const zoneSyncBody = (zones: WireZone[], indent: string): string =>
   zones
@@ -196,10 +238,12 @@ ${indent}}`,
 
 const zoneEntry = (zone: WireZone, indent: string): string =>
   `${indent}'${zone.key}' => [\n${zone.members
-    .map(
-      (m) =>
-        `${indent}${UNIT}'${m.uid}' => ['relation' => '${m.relation}', 'components' => [${m.components.map((c) => `'${c}'`).join(", ")}]],`,
-    )
+    .map((m) => {
+      const head = `${indent}${UNIT}'${m.uid}' => ['relation' => '${m.relation}', 'components' => [${m.components.map((c) => `'${c}'`).join(", ")}]`;
+      return m.media.length === 0
+        ? `${head}],`
+        : `${head}, 'fields' => [\n${m.media.map((r) => relationEntry(r, `${indent}${UNIT}${UNIT}`)).join("\n")}\n${indent}${UNIT}]],`;
+    })
     .join("\n")}\n${indent}],`;
 
 const zoneHelper = `
@@ -304,6 +348,7 @@ const fieldsConstant = (shape: WireShape): string => {
   );
   const rows = [
     ...[id, documentId, ...shape.scalars].map((s) => fieldEntry(s, l2)),
+    ...shape.embeddedMedia.map((r) => relationEntry(r, l2)),
     ...children,
     // A zone is a key Strapi knows but will not filter, sort or select by.
     ...shape.zones.map((z) => `${l2}'${z.key}' => ['zone' => true],`),
@@ -315,7 +360,7 @@ const fieldsConstant = (shape: WireShape): string => {
     shape.zones.length === 0
       ? "[]"
       : `[\n${shape.zones.map((z) => zoneEntry(z, l2)).join("\n")}\n    ]`;
-  return `\n    /** Wire path → column, for StrapiQuery's filters, sort and fields. */\n    public const FIELDS = [\n${rows.join("\n")}\n    ];\n\n    /** Component keys, which Strapi leaves off the wire unless populate names them. */\n    public const COMPONENTS = [${components}];\n\n    /** Each dynamic zone's member components by uid: the child relation its items live in, and its own component keys. */\n    public const ZONES = ${zones};\n\n    /** Whether each document has a draft and, once published, a published version. */\n    public const DRAFT_PUBLISH = ${shape.draftPublish};\n\n    /** Whether each document keeps one row per locale. */\n    public const LOCALIZED = ${shape.localized};\n`;
+  return `\n    /** Wire path → column, for StrapiQuery's filters, sort and fields. */\n    public const FIELDS = [\n${rows.join("\n")}\n    ];\n\n    /** Component keys, which Strapi leaves off the wire unless populate names them. */\n    public const COMPONENTS = [${components}];\n\n    /** Each dynamic zone's member components by uid: the child relation its items live in, its own component keys, and its media fields. */\n    public const ZONES = ${zones};\n\n    /** Whether each document has a draft and, once published, a published version. */\n    public const DRAFT_PUBLISH = ${shape.draftPublish};\n\n    /** Whether each document keeps one row per locale. */\n    public const LOCALIZED = ${shape.localized};\n`;
 };
 
 export const emitSerializer = (shape: WireShape, layout: StorageLayout = "laravel"): string => {
@@ -371,10 +416,10 @@ ${fromWireChildStatements(shape.children, l2)}${zones.length === 0 ? "" : `\n${f
     {${syncChildrenBody}
     }
 
-    /** A component's fields, or null when none has a value. */
+    /** A component's fields, or null when none has a value (its id, the row's, is not one). */
     private static function nested(array $a): ?array
     {
-        return array_filter($a, fn ($v) => $v !== null) === [] ? null : $a;
+        return array_filter(array_diff_key($a, ['id' => true]), fn ($v) => $v !== null) === [] ? null : $a;
     }
 
     private static function dig(array $a, array $path): mixed

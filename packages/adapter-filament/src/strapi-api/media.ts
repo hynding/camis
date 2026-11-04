@@ -1,4 +1,4 @@
-import { expandComponents, type ApiStyle, type StorageLayout } from "@camis/adapter-kernel";
+import type { ApiStyle, StorageLayout } from "@camis/adapter-kernel";
 import type { CapabilityGap, ContentType, Field, IrDocument } from "@camis/ir-schema";
 import type { IrBundle } from "@camis/permissions";
 
@@ -64,28 +64,6 @@ export const mediaPlan = (
 /** The repeatable components whose items link files, which go with the entry, links and all. */
 export const mediaComponentsConstant = (relations: readonly string[]): string =>
   `    public const MEDIA_COMPONENTS = [${relations.map((r) => `'${r}'`).join(", ")}];`;
-
-/**
- * Media fields that stay path columns although the project keeps a media library: those of an
- * embedded component (its fields are columns of the entry's own row) and of a dynamic zone's item.
- */
-export const columnMediaGaps = (
-  ct: ContentType,
-  expansion: ReturnType<typeof expandComponents>,
-): CapabilityGap[] =>
-  [
-    ...expansion.scalars.map((s) => ({ s, where: "an embedded component" })),
-    ...expansion.zones.flatMap((z) =>
-      z.members.flatMap((m) => m.table.scalars.map((s) => ({ s, where: "a dynamic zone's item" }))),
-    ),
-  ]
-    .filter(({ s }) => s.field.type === "media")
-    .map(({ s, where }) => ({
-      feature: "componentMedia",
-      location: { contentType: ct.name, field: s.apiPath.join(".") },
-      severity: "downgrade" as const,
-      message: `a media field inside ${where} is stored as a file path, not linked to the media library`,
-    }));
 
 /**
  * strapi:export and strapi:import carry the files an item of a repeatable component links, but not

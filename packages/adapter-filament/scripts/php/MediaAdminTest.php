@@ -7,8 +7,11 @@ namespace Tests\Feature;
 use App\Filament\Resources\Books\Pages\CreateBook;
 use App\Filament\Resources\Files\Pages\CreateFile;
 use App\Filament\Resources\Files\Pages\ListFiles;
+use App\Filament\Resources\Storyboards\Pages\CreateStoryboard;
+use App\Http\Serializers\StoryboardSerializer;
 use App\Models\Book;
 use App\Models\File;
+use App\Models\Storyboard;
 use App\Models\User;
 use App\Support\StrapiUpload;
 use Filament\Facades\Filament;
@@ -85,6 +88,25 @@ class MediaAdminTest extends TestCase
         $book->delete();
         $this->assertDatabaseCount('files_related_mph', 0);
         $this->assertDatabaseCount('files', 3);
+    }
+
+    public function test_an_embedded_components_image_is_picked_and_goes_by_its_path(): void
+    {
+        $this->login(['storyboard.read', 'storyboard.create', 'file.read']);
+        $image = UploadedFile::fake()->image('meta.png', 10, 10);
+        $meta = StrapiUpload::storePath($image->getRealPath(), 'meta.png', []);
+
+        Livewire::test(CreateStoryboard::class)
+            ->fillForm(['title' => 'Pilot', 'seo_meta_title' => 'Meta', 'seoMetaImage' => [$meta->getKey()]])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $storyboard = Storyboard::sole();
+        $this->assertDatabaseHas('files_related_mph', ['file_id' => $meta->getKey(), 'related_id' => $storyboard->getKey(), 'field' => 'seo.metaImage']);
+        $this->assertSame('meta.png', StoryboardSerializer::toWire($storyboard)['seo']['metaImage']['name']);
+
+        $storyboard->delete();
+        $this->assertDatabaseCount('files_related_mph', 0);
     }
 
     public function test_the_library_is_denied_without_the_file_grants(): void

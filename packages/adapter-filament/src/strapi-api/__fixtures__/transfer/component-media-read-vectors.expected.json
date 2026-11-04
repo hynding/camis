@@ -3,13 +3,13 @@
     "status": 200,
     "data": [
       {
-        "documentId": "bz1mdbv9yu4zks0f5n7egqmt",
+        "documentId": "ja7gd7z5qug7n4mg10sxsuri",
         "frames": [
           {
             "caption": "Again",
             "image": {
               "alternativeText": "red",
-              "documentId": "jfkilf62b6ag104upejqlvwe",
+              "documentId": "p0zdw7c3zq3w4983ghbg1lsn",
               "name": "wide.png",
               "width": 1200
             }
@@ -18,13 +18,13 @@
         "title": "Closing"
       },
       {
-        "documentId": "yv8twig88u60jnb9mm6tte9x",
+        "documentId": "u54ihlbukabq14yqgnf817it",
         "frames": [
           {
             "caption": "Wide shot",
             "image": {
               "alternativeText": "red",
-              "documentId": "jfkilf62b6ag104upejqlvwe",
+              "documentId": "p0zdw7c3zq3w4983ghbg1lsn",
               "name": "wide.png",
               "width": 1200
             }
@@ -37,13 +37,81 @@
             "caption": "Close up",
             "image": {
               "alternativeText": "blue",
-              "documentId": "vratmklzkv19q0xa4ax4c1i8",
+              "documentId": "j0xbbvy0450thqa0i5vh3v2q",
               "name": "tall.png",
               "width": 40
             }
           }
         ],
         "title": "Opening"
+      },
+      {
+        "documentId": "w2uzgdy3rrn7oeh6nvi0d9tn",
+        "frames": [],
+        "title": "Trailer"
+      }
+    ]
+  },
+  "storyboards with their seo's image": {
+    "status": 200,
+    "data": [
+      {
+        "documentId": "ja7gd7z5qug7n4mg10sxsuri",
+        "seo": null,
+        "title": "Closing"
+      },
+      {
+        "documentId": "u54ihlbukabq14yqgnf817it",
+        "seo": {
+          "metaImage": {
+            "alternativeText": "blue",
+            "documentId": "j0xbbvy0450thqa0i5vh3v2q",
+            "name": "tall.png"
+          },
+          "metaTitle": "Opening"
+        },
+        "title": "Opening"
+      },
+      {
+        "documentId": "w2uzgdy3rrn7oeh6nvi0d9tn",
+        "seo": {
+          "metaImage": {
+            "alternativeText": "red",
+            "documentId": "p0zdw7c3zq3w4983ghbg1lsn",
+            "name": "wide.png"
+          },
+          "metaTitle": null
+        },
+        "title": "Trailer"
+      }
+    ]
+  },
+  "a landing's zone with its frames' images": {
+    "status": 200,
+    "data": [
+      {
+        "blocks": [
+          {
+            "__component": "shared.frame",
+            "caption": "Zoned",
+            "image": {
+              "documentId": "j0xbbvy0450thqa0i5vh3v2q",
+              "name": "tall.png"
+            }
+          },
+          {
+            "__component": "shared.hero",
+            "heading": "Between",
+            "subheading": null
+          },
+          {
+            "__component": "shared.frame",
+            "caption": "Empty",
+            "image": null
+          }
+        ],
+        "documentId": "gt38vcz67ghlov6vwuy6cdy1",
+        "title": "Framed"
       }
     ]
   },
@@ -52,10 +120,10 @@
     "data": [
       {
         "cover": {
-          "documentId": "jfkilf62b6ag104upejqlvwe",
+          "documentId": "p0zdw7c3zq3w4983ghbg1lsn",
           "name": "wide.png"
         },
-        "documentId": "lajfh3wgam18btbo9c0x3bsz",
+        "documentId": "zg6oaj3y9t5kr9uyradx3mq6",
         "title": "Covered"
       }
     ]
@@ -65,7 +133,7 @@
     "data": [
       {
         "alternativeText": "blue",
-        "documentId": "vratmklzkv19q0xa4ax4c1i8",
+        "documentId": "j0xbbvy0450thqa0i5vh3v2q",
         "height": 80,
         "isUrlSigned": false,
         "mime": "image/png",
@@ -74,7 +142,7 @@
       },
       {
         "alternativeText": "red",
-        "documentId": "jfkilf62b6ag104upejqlvwe",
+        "documentId": "p0zdw7c3zq3w4983ghbg1lsn",
         "height": 800,
         "isUrlSigned": false,
         "mime": "image/png",

@@ -7,7 +7,7 @@ import {
   type FieldType,
   type IrDocument,
 } from "@camis/ir-schema";
-import { childTableEmit } from "../components";
+import { camelPath, childTableEmit } from "../components";
 import { filamentNames, snake, snakeColumn } from "../names";
 import { FILE_UID } from "./media-runtime";
 import { componentUid, kebab } from "./names";
@@ -30,6 +30,13 @@ export interface WireChild {
   media: WireRelation[];
   private?: true;
 }
+/** A file field of an embedded component, linked from the entry's row. */
+export interface WireEmbeddedMedia extends WireRelation {
+  /** The Strapi uid of the component holding it, which an archive's link to it goes by. */
+  component: string;
+  /** Its path in the link rows' `field` (`seo.metaImage`). */
+  field: string;
+}
 /** One component a dynamic zone holds: its uid on the wire and the child relation its items live in. */
 export interface WireZoneMember {
   uid: string;
@@ -38,6 +45,8 @@ export interface WireZoneMember {
   relation: string;
   model: string;
   scalars: WireScalar[];
+  /** Its items' media fields, each a link from the item's row. */
+  media: WireRelation[];
   /** Its own component and media keys, which Strapi sends only when the zone's populate names them. */
   components: string[];
 }
@@ -90,6 +99,11 @@ export interface WireShape {
   upsert: boolean;
   scalars: WireScalar[];
   children: WireChild[];
+  /**
+   * Media fields of embedded components: links from the entry's own row, keyed by their dotted
+   * path on the wire (`seo.metaImage`), since the component is columns of that row.
+   */
+  embeddedMedia: WireEmbeddedMedia[];
   /** The top-level component keys, embedded or repeatable, and the zones, in IR order: what populate can name. */
   components: string[];
   zones: WireZone[];
@@ -133,12 +147,30 @@ export const wireShape = (
       type: f.type,
       ...privacy(f.private === true),
     }));
-  const embedded: WireScalar[] = expansion.scalars.map((s) => ({
-    key: s.apiPath,
-    column: s.path.map(snakeColumn).join("_"),
-    type: s.field.type,
-    ...privacy(s.field.private === true || within(s.apiPath)),
-  }));
+  const linked = (s: { field: { type: string } }): boolean =>
+    fileModel !== undefined && s.field.type === "media";
+  const embedded: WireScalar[] = expansion.scalars
+    .filter((s) => !linked(s))
+    .map((s) => ({
+      key: s.apiPath,
+      column: s.path.map(snakeColumn).join("_"),
+      type: s.field.type,
+      ...privacy(s.field.private === true || within(s.apiPath)),
+    }));
+  const embeddedMedia: WireEmbeddedMedia[] =
+    fileModel === undefined
+      ? []
+      : expansion.scalars.filter(linked).map((s) => ({
+          ...mediaRelation(
+            s.apiPath.join("."),
+            camelPath(s.path),
+            s.field.type === "media" && s.field.multiple === true,
+            fileModel,
+          ),
+          component: componentUid(tableComponent(doc, ct, s.path.slice(0, -1))),
+          field: s.path.join("."),
+          ...privacy(s.field.private === true || within(s.apiPath)),
+        }));
   const children: WireChild[] = expansion.tables.map((t) => {
     const child = childTableEmit(ct, t, fileModel !== undefined);
     return {
@@ -170,18 +202,26 @@ export const wireShape = (
   const zones: WireZone[] = expansion.zones.map((z) => ({
     key: z.apiName,
     members: z.members.map((m) => {
-      const child = childTableEmit(ct, m.table);
+      const child = childTableEmit(ct, m.table, fileModel !== undefined);
       return {
         uid: componentUid(m.component),
         label: m.component.name,
         relation: child.relationName,
         model: child.model,
-        scalars: m.table.scalars.map((s) => ({
-          key: s.apiPath,
-          column: s.path.map(snakeColumn).join("_"),
-          type: s.field.type,
-          ...privacy(s.field.private === true),
-        })),
+        media:
+          fileModel === undefined
+            ? []
+            : child.media.map((f) =>
+                mediaRelation(f.apiPath.join("."), f.method, f.multiple, fileModel),
+              ),
+        scalars: m.table.scalars
+          .filter((s) => fileModel === undefined || s.field.type !== "media")
+          .map((s) => ({
+            key: s.apiPath,
+            column: s.path.map(snakeColumn).join("_"),
+            type: s.field.type,
+            ...privacy(s.field.private === true),
+          })),
         components: m.component.fields
           .filter((f) => f.type === "component" || f.type === "media")
           .map((f) => fieldApiName(f)),
@@ -195,6 +235,7 @@ export const wireShape = (
     upsert: upsertBy !== undefined,
     scalars: [...top, ...embedded],
     children,
+    embeddedMedia,
     components,
     zones,
     relations: [
@@ -226,7 +267,7 @@ export const wireShape = (
   };
 };
 
-/** The component a repeatable child table holds, found down its path of component fields. */
+/** The component at a path of component fields (a repeatable child table's, or an embedded one's). */
 const tableComponent = (doc: IrDocument, ct: ContentType, path: string[]): Component => {
   let fields = ct.fields;
   let found: Component | undefined;

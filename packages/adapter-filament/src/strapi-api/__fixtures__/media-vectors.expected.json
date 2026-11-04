@@ -741,6 +741,7 @@
           "caption": "Blank"
         }
       ],
+      "seo": null,
       "title": "Storyboarded"
     }
   },
@@ -917,6 +918,445 @@
       "title": "Storyboarded"
     }
   },
+  "an embedded component's media takes a file id": {
+    "status": 201,
+    "data": {
+      "seo": {
+        "metaImage": {
+          "name": "wide.png"
+        },
+        "metaTitle": "Meta"
+      },
+      "title": "Seo"
+    }
+  },
+  "or a documentId, inside an embedded component": {
+    "status": 201,
+    "data": {
+      "seo": {
+        "metaImage": {
+          "name": "wide.png"
+        },
+        "metaTitle": "Meta"
+      },
+      "title": "SeoByDocument"
+    }
+  },
+  "a missing file inside an embedded component is rejected": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "1 relation(s) of type plugin::upload.file associated with this entity do not exist"
+    }
+  },
+  "an embedded component's media stays off the wire unless its populate names it": {
+    "status": 200,
+    "data": {
+      "seo": {
+        "metaTitle": "Meta"
+      },
+      "title": "Seo"
+    }
+  },
+  "populate=* reaches the embedded component but not its media": {
+    "status": 200,
+    "data": {
+      "frames": [],
+      "seo": {
+        "metaTitle": "Meta"
+      },
+      "title": "Seo"
+    }
+  },
+  "an embedded component's populate=* includes the whole file": {
+    "status": 200,
+    "data": {
+      "seo": {
+        "metaImage": {
+          "alternativeText": "red",
+          "caption": "A red box",
+          "ext": ".png",
+          "focalPoint": null,
+          "formats": {
+            "large": {
+              "ext": ".png",
+              "hash": "large_wide_<hash>",
+              "height": 667,
+              "mime": "image/png",
+              "name": "large_wide.png",
+              "path": null,
+              "url": "/uploads/large_wide_<hash>.png",
+              "width": 1000
+            },
+            "medium": {
+              "ext": ".png",
+              "hash": "medium_wide_<hash>",
+              "height": 500,
+              "mime": "image/png",
+              "name": "medium_wide.png",
+              "path": null,
+              "url": "/uploads/medium_wide_<hash>.png",
+              "width": 750
+            },
+            "small": {
+              "ext": ".png",
+              "hash": "small_wide_<hash>",
+              "height": 333,
+              "mime": "image/png",
+              "name": "small_wide.png",
+              "path": null,
+              "url": "/uploads/small_wide_<hash>.png",
+              "width": 500
+            },
+            "thumbnail": {
+              "ext": ".png",
+              "hash": "thumbnail_wide_<hash>",
+              "height": 156,
+              "mime": "image/png",
+              "name": "thumbnail_wide.png",
+              "path": null,
+              "url": "/uploads/thumbnail_wide_<hash>.png",
+              "width": 234
+            }
+          },
+          "hash": "wide_<hash>",
+          "height": 800,
+          "mime": "image/png",
+          "name": "wide.png",
+          "previewUrl": null,
+          "provider": "local",
+          "provider_metadata": null,
+          "url": "/uploads/wide_<hash>.png",
+          "width": 1200
+        },
+        "metaTitle": "Meta"
+      },
+      "title": "Seo"
+    }
+  },
+  "an embedded component's populate names its media": {
+    "status": 200,
+    "data": {
+      "seo": {
+        "metaImage": {
+          "alternativeText": "red",
+          "caption": "A red box",
+          "ext": ".png",
+          "focalPoint": null,
+          "formats": {
+            "large": {
+              "ext": ".png",
+              "hash": "large_wide_<hash>",
+              "height": 667,
+              "mime": "image/png",
+              "name": "large_wide.png",
+              "path": null,
+              "url": "/uploads/large_wide_<hash>.png",
+              "width": 1000
+            },
+            "medium": {
+              "ext": ".png",
+              "hash": "medium_wide_<hash>",
+              "height": 500,
+              "mime": "image/png",
+              "name": "medium_wide.png",
+              "path": null,
+              "url": "/uploads/medium_wide_<hash>.png",
+              "width": 750
+            },
+            "small": {
+              "ext": ".png",
+              "hash": "small_wide_<hash>",
+              "height": 333,
+              "mime": "image/png",
+              "name": "small_wide.png",
+              "path": null,
+              "url": "/uploads/small_wide_<hash>.png",
+              "width": 500
+            },
+            "thumbnail": {
+              "ext": ".png",
+              "hash": "thumbnail_wide_<hash>",
+              "height": 156,
+              "mime": "image/png",
+              "name": "thumbnail_wide.png",
+              "path": null,
+              "url": "/uploads/thumbnail_wide_<hash>.png",
+              "width": 234
+            }
+          },
+          "hash": "wide_<hash>",
+          "height": 800,
+          "mime": "image/png",
+          "name": "wide.png",
+          "previewUrl": null,
+          "provider": "local",
+          "provider_metadata": null,
+          "url": "/uploads/wide_<hash>.png",
+          "width": 1200
+        },
+        "metaTitle": "Meta"
+      },
+      "title": "Seo"
+    }
+  },
+  "an embedded component with only its media set": {
+    "status": 201,
+    "data": {
+      "seo": {
+        "metaImage": {
+          "name": "wide.png"
+        },
+        "metaTitle": null
+      },
+      "title": "SeoImageOnly"
+    }
+  },
+  "filters reach into an embedded component's media": {
+    "status": 200,
+    "data": [
+      {
+        "title": "Seo"
+      },
+      {
+        "title": "SeoByDocument"
+      },
+      {
+        "title": "SeoImageOnly"
+      }
+    ]
+  },
+  "replacing an embedded component without its media drops the file": {
+    "status": 200,
+    "data": {
+      "seo": {
+        "metaImage": null,
+        "metaTitle": "Again"
+      },
+      "title": "SeoByDocument"
+    }
+  },
+  "null clears an embedded component, its file included": {
+    "status": 200,
+    "data": {
+      "seo": null,
+      "title": "SeoImageOnly"
+    }
+  },
+  "a zone item's media takes a file id": {
+    "status": 201,
+    "data": {
+      "blocks": [
+        {
+          "__component": "shared.frame",
+          "caption": "Opening",
+          "image": {
+            "name": "wide.png"
+          }
+        },
+        {
+          "__component": "shared.hero",
+          "heading": "Hi",
+          "subheading": null
+        },
+        {
+          "__component": "shared.frame",
+          "caption": "Blank",
+          "image": null
+        }
+      ],
+      "title": "Framed"
+    }
+  },
+  "or a documentId, in a zone's item": {
+    "status": 201,
+    "data": {
+      "blocks": [
+        {
+          "__component": "shared.frame",
+          "caption": "Only",
+          "image": {
+            "name": "wide.png"
+          }
+        }
+      ],
+      "title": "FramedByDocument"
+    }
+  },
+  "a missing file in a zone's item is rejected": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "1 relation(s) of type plugin::upload.file associated with this entity do not exist"
+    }
+  },
+  "a zone item's media stays off the wire unless its populate names it": {
+    "status": 200,
+    "data": {
+      "blocks": [
+        {
+          "__component": "shared.frame",
+          "caption": "Opening"
+        },
+        {
+          "__component": "shared.hero",
+          "heading": "Hi",
+          "subheading": null
+        },
+        {
+          "__component": "shared.frame",
+          "caption": "Blank"
+        }
+      ],
+      "title": "Framed"
+    }
+  },
+  "populate=* reaches the zone but not its items' media": {
+    "status": 200,
+    "data": {
+      "blocks": [
+        {
+          "__component": "shared.frame",
+          "caption": "Opening"
+        },
+        {
+          "__component": "shared.hero",
+          "heading": "Hi",
+          "subheading": null
+        },
+        {
+          "__component": "shared.frame",
+          "caption": "Blank"
+        }
+      ],
+      "title": "Framed"
+    }
+  },
+  "a zone's populate=* includes its items' whole files": {
+    "status": 200,
+    "data": {
+      "blocks": [
+        {
+          "__component": "shared.frame",
+          "caption": "Opening",
+          "image": {
+            "alternativeText": "red",
+            "caption": "A red box",
+            "ext": ".png",
+            "focalPoint": null,
+            "formats": {
+              "large": {
+                "ext": ".png",
+                "hash": "large_wide_<hash>",
+                "height": 667,
+                "mime": "image/png",
+                "name": "large_wide.png",
+                "path": null,
+                "url": "/uploads/large_wide_<hash>.png",
+                "width": 1000
+              },
+              "medium": {
+                "ext": ".png",
+                "hash": "medium_wide_<hash>",
+                "height": 500,
+                "mime": "image/png",
+                "name": "medium_wide.png",
+                "path": null,
+                "url": "/uploads/medium_wide_<hash>.png",
+                "width": 750
+              },
+              "small": {
+                "ext": ".png",
+                "hash": "small_wide_<hash>",
+                "height": 333,
+                "mime": "image/png",
+                "name": "small_wide.png",
+                "path": null,
+                "url": "/uploads/small_wide_<hash>.png",
+                "width": 500
+              },
+              "thumbnail": {
+                "ext": ".png",
+                "hash": "thumbnail_wide_<hash>",
+                "height": 156,
+                "mime": "image/png",
+                "name": "thumbnail_wide.png",
+                "path": null,
+                "url": "/uploads/thumbnail_wide_<hash>.png",
+                "width": 234
+              }
+            },
+            "hash": "wide_<hash>",
+            "height": 800,
+            "mime": "image/png",
+            "name": "wide.png",
+            "previewUrl": null,
+            "provider": "local",
+            "provider_metadata": null,
+            "url": "/uploads/wide_<hash>.png",
+            "width": 1200
+          }
+        },
+        {
+          "__component": "shared.hero",
+          "heading": "Hi",
+          "price": null,
+          "subheading": null
+        },
+        {
+          "__component": "shared.frame",
+          "caption": "Blank",
+          "image": null
+        }
+      ],
+      "title": "Framed"
+    }
+  },
+  "the draft links the file too": {
+    "status": 200,
+    "data": {
+      "blocks": [
+        {
+          "__component": "shared.frame",
+          "caption": "Opening",
+          "image": {
+            "name": "wide.png"
+          }
+        },
+        {
+          "__component": "shared.hero",
+          "heading": "Hi",
+          "subheading": null
+        },
+        {
+          "__component": "shared.frame",
+          "caption": "Blank",
+          "image": null
+        }
+      ],
+      "title": "Framed"
+    }
+  },
+  "replacing the zone replaces its items' media": {
+    "status": 200,
+    "data": {
+      "blocks": [
+        {
+          "__component": "shared.frame",
+          "caption": "Closing",
+          "image": null
+        },
+        {
+          "__component": "shared.frame",
+          "caption": "Again",
+          "image": {
+            "name": "wide.png"
+          }
+        }
+      ],
+      "title": "FramedByDocument"
+    }
+  },
   "a file's related entries do not list components": {
     "status": 200,
     "data": {
@@ -1074,6 +1514,39 @@
         }
       ],
       "title": "Storyboarded"
+    }
+  },
+  "unlinks it from the embedded component": {
+    "status": 200,
+    "data": {
+      "seo": {
+        "metaImage": null,
+        "metaTitle": "Meta"
+      },
+      "title": "Seo"
+    }
+  },
+  "unlinks it from the zone's item": {
+    "status": 200,
+    "data": {
+      "blocks": [
+        {
+          "__component": "shared.frame",
+          "caption": "Opening",
+          "image": null
+        },
+        {
+          "__component": "shared.hero",
+          "heading": "Hi",
+          "subheading": null
+        },
+        {
+          "__component": "shared.frame",
+          "caption": "Blank",
+          "image": null
+        }
+      ],
+      "title": "Framed"
     }
   }
 }

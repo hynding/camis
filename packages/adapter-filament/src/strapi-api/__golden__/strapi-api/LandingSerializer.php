@@ -24,11 +24,14 @@ final class LandingSerializer
     /** Component keys, which Strapi leaves off the wire unless populate names them. */
     public const COMPONENTS = ['blocks'];
 
-    /** Each dynamic zone's member components by uid: the child relation its items live in, and its own component keys. */
+    /** Each dynamic zone's member components by uid: the child relation its items live in, its own component keys, and its media fields. */
     public const ZONES = [
         'blocks' => [
             'shared.hero' => ['relation' => 'blocksHero', 'components' => ['price']],
             'shared.quantity' => ['relation' => 'blocksQuantity', 'components' => []],
+            'shared.frame' => ['relation' => 'blocksFrame', 'components' => ['image'], 'fields' => [
+                'image' => ['relation' => 'image', 'kind' => 'mediaOne', 'model' => \App\Models\File::class, 'serializer' => FileSerializer::class, 'foreignKey' => null, 'uid' => 'plugin::upload.file', 'holder' => 'self', 'draftPublish' => false, 'localized' => false, 'order' => null, 'inverseOrder' => null],
+            ]],
         ],
     ];
 
@@ -52,6 +55,7 @@ final class LandingSerializer
                     'heading' => $c->heading,
                     'subheading' => $c->subheading,
                     'price' => self::nested([
+                        'id' => $c->id,
                         'minor' => $c->price_minor === null ? null : (string) $c->price_minor,
                         'currency' => $c->price_currency,
                     ]),
@@ -61,6 +65,12 @@ final class LandingSerializer
                     'id' => $c->id,
                     'amount' => $c->amount === null ? null : (float) $c->amount,
                     'unit' => $c->unit,
+                ]])->all(),
+                ...$m->blocksFrame->map(fn ($c) => [$c->position, [
+                    '__component' => 'shared.frame',
+                    'id' => $c->id,
+                    'caption' => $c->caption,
+                    'image' => $c->image->first() === null ? null : FileSerializer::toWire($c->image->first()),
                 ]])->all(),
             ]),
             'createdAt' => $m->created_at?->toIso8601ZuluString('millisecond'),
@@ -89,6 +99,10 @@ final class LandingSerializer
                     'amount' => self::dig($item, ['amount']),
                     'unit' => self::dig($item, ['unit']),
                 ],
+                'shared.frame' => [
+                    'caption' => self::dig($item, ['caption']),
+                    '__media' => array_intersect_key($item, ['image' => true]),
+                ],
             });
         }
 
@@ -102,10 +116,10 @@ final class LandingSerializer
         }
     }
 
-    /** A component's fields, or null when none has a value. */
+    /** A component's fields, or null when none has a value (its id, the row's, is not one). */
     private static function nested(array $a): ?array
     {
-        return array_filter($a, fn ($v) => $v !== null) === [] ? null : $a;
+        return array_filter(array_diff_key($a, ['id' => true]), fn ($v) => $v !== null) === [] ? null : $a;
     }
 
     private static function dig(array $a, array $path): mixed

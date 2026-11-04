@@ -10,6 +10,7 @@ import {
   STRAPI_NAVIGATION_CLASS,
   type Navigation,
 } from "./strapi-api/admin-navigation";
+import { listedColumn, mainFieldName, searchesNumbers } from "./strapi-api/content-manager-list";
 
 const useBlock = (imports: string[]): string =>
   [...new Set(imports)]
@@ -41,12 +42,9 @@ export const emitResourceFiles = (
   const n = filamentNames(ct);
   const dir = `app/Filament/Resources/${n.resourceDir}`;
   const ns = `App\\Filament\\Resources\\${n.resourceDir}`;
-  const emits = [
-    ...ct.fields
-      .filter((f) => f.type !== "relation" && f.type !== "component")
-      .map((f) => emitField(f)),
-    ...extraEmits,
-  ];
+  const ownFields = ct.fields.filter((f) => f.type !== "relation" && f.type !== "component");
+  const ownEmits = ownFields.map((f) => emitField(f));
+  const emits = [...ownEmits, ...extraEmits];
 
   // Page class names follow v5's make:filament-resource convention: List<plural>, Create<singular>, Edit<singular>.
   const listPage = `List${n.resourceDir}`;
@@ -54,6 +52,10 @@ export const emitResourceFiles = (
   const editPage = `Edit${n.subject}`;
   // On a Strapi-like admin a single type opens its one entry, as Strapi's Content Manager does.
   const single = navigation !== undefined && ct.kind === "single";
+  // A Strapi-like collection type lists as the Content Manager does.
+  const contentManagerList = navigation !== undefined && !single;
+  // A draft-and-publish entry is deleted with every version of it, as Strapi deletes a document.
+  const deletesDocument = navigation !== undefined && versioned;
   const secured = options.secured === true;
 
   // One row per document: its draft, which every edit goes through, with its published version.
@@ -79,7 +81,7 @@ use ${ns}\\Schemas\\${n.tableClass};${navigation === undefined ? "" : `\nuse ${S
 use App\\Models\\${n.model};
 use Filament\\Resources\\Resource;
 use Filament\\Schemas\\Schema;
-use Filament\\Tables\\Table;${versioned ? "\nuse Illuminate\\Database\\Eloquent\\Builder;" : ""}${single && secured ? "\nuse Illuminate\\Support\\Facades\\Gate;" : ""}${single && localized ? "\nuse App\\Support\\StrapiLocales;" : ""}${navigation === undefined ? "" : "\nuse UnitEnum;"}
+use Filament\\Tables\\Table;${versioned ? "\nuse Illuminate\\Database\\Eloquent\\Builder;" : ""}${deletesDocument ? "\nuse Illuminate\\Support\\Facades\\DB;" : ""}${single && secured ? "\nuse Illuminate\\Support\\Facades\\Gate;" : ""}${single && localized ? "\nuse App\\Support\\StrapiLocales;" : ""}${navigation === undefined ? "" : "\nuse UnitEnum;"}
 
 class ${n.resourceClass} extends Resource
 {
@@ -104,7 +106,7 @@ ${navigation === undefined ? "" : navigationProperties(navigation)}
             'create' => ${createPage}::route('/create'),
             'edit' => ${editPage}::route('/{record}/edit'),
         ];
-    }${versioned ? draftQuery : ""}${single ? singleEntry(n.model, localized, secured) : ""}
+    }${versioned ? draftQuery : ""}${single ? singleEntry(n.model, localized, secured) : ""}${deletesDocument ? deleteEntry(n.model, localized) : ""}
 }
 `;
 
@@ -154,8 +156,37 @@ ${formBody}
 `;
 
   const TEXT_COLUMN = "Filament\\Tables\\Columns\\TextColumn";
+  const bulkPublishing = contentManagerList && versioned;
+  const main = mainFieldName(ct);
+  const mainColumn =
+    main === undefined ? "id" : ownEmits[ownFields.findIndex((f) => f.name === main)]!.column;
   const tableImports = useBlock([
     ...emits.map((e) => e.tableImport),
+    ...(contentManagerList
+      ? [
+          "Filament\\Actions\\BulkActionGroup",
+          "Filament\\Actions\\DeleteAction",
+          "Filament\\Actions\\DeleteBulkAction",
+        ]
+      : []),
+    ...(contentManagerList && searchesNumbers(ownFields)
+      ? ["Illuminate\\Database\\Eloquent\\Builder"]
+      : []),
+    ...(deletesDocument && contentManagerList
+      ? [
+          `${ns}\\${n.resourceClass}`,
+          `App\\Models\\${n.model}`,
+          "Illuminate\\Database\\Eloquent\\Collection",
+        ]
+      : []),
+    ...(bulkPublishing
+      ? [
+          "Filament\\Actions\\BulkAction",
+          `App\\Http\\Serializers\\${n.model}Serializer`,
+          "App\\Support\\StrapiDocuments",
+        ]
+      : []),
+    ...(bulkPublishing && secured ? ["Illuminate\\Support\\Facades\\Gate"] : []),
     ...(versioned ? [TEXT_COLUMN, "App\\Support\\StrapiDocuments"] : []),
     ...(localized
       ? [
@@ -168,7 +199,11 @@ ${formBody}
     "Filament\\Tables\\Table",
   ]);
   const tableBody = [
-    ...emits.map((e) => `            ${e.tableColumn},`),
+    ...ownEmits.map(
+      (e, i) =>
+        `            ${contentManagerList ? listedColumn(ownFields[i]!, e.column, e.tableColumn) : e.tableColumn},`,
+    ),
+    ...extraEmits.map((e) => `            ${e.tableColumn},`),
     ...(versioned
       ? [
           "            TextColumn::make('status')->state(fn ($record) => StrapiDocuments::status($record))->badge(),",
@@ -196,7 +231,7 @@ class ${n.tableClass}
     {
         return $table->columns([
 ${tableBody}
-        ])${tableFilters};
+        ])${tableFilters}${contentManagerList ? contentManagerActions(n, mainColumn, { versioned, secured }) : ""};
     }
 }
 `;
@@ -268,16 +303,73 @@ class ${cls} extends ${base}
     {
       path: `${dir}/Pages/${editPage}.php`,
       content:
-        versioned || localized
+        versioned || localized || navigation !== undefined
           ? editPageWithActions(ns, n.resourceClass, editPage, n.model, {
               secured: options.secured === true,
               versioned,
               localized,
+              deletable: navigation !== undefined,
             })
           : page(editPage, "EditRecord", "Filament\\Resources\\Pages\\EditRecord"),
     },
   ];
 };
+
+type Names = ReturnType<typeof filamentNames>;
+
+/** How a document is deleted: with every version of it where it has several, else its own row. */
+const deleteUsing = (n: Names, versioned: boolean): string =>
+  versioned ? `->using(fn (${n.model} $record) => ${n.resourceClass}::deleteEntry($record))` : "";
+
+/**
+ * The Content Manager list's sort and actions: it starts sorted by the main field, deletes an entry
+ * from its row, and deletes, publishes and unpublishes the selected ones, each behind its grant.
+ */
+const contentManagerActions = (
+  n: Names,
+  mainColumn: string,
+  options: { versioned: boolean; secured: boolean },
+): string => {
+  const { versioned, secured } = options;
+  // Filament checks only deleteAny for a bulk delete unless told to check each record too.
+  const bulkDelete = `${secured ? "->authorizeIndividualRecords()" : ""}${
+    versioned
+      ? `->using(fn (Collection $records) => $records->each(fn (${n.model} $record) => ${n.resourceClass}::deleteEntry($record)))`
+      : ""
+  }`;
+  const guarded = (ability: string): string =>
+    secured
+      ? `
+                        ->visible(fn (): bool => Gate::allows('${ability}Any', ${n.model}::class))
+                        ->authorizeIndividualRecords('${ability}')`
+      : "";
+  const publishing = versioned
+    ? `
+                    BulkAction::make('publish')${guarded("publish")}
+                        ->action(fn (Collection $records) => $records->each(fn (${n.model} $record) => StrapiDocuments::publish($record, ${n.model}Serializer::class))),
+                    BulkAction::make('unpublish')${guarded("publish")}
+                        ->requiresConfirmation()
+                        ->action(fn (Collection $records) => $records->each(fn (${n.model} $record) => StrapiDocuments::unpublish($record))),`
+    : "";
+  return `
+            ->defaultSort('${mainColumn}')
+            ->recordActions([
+                DeleteAction::make()${deleteUsing(n, versioned)},
+            ])
+            ->toolbarActions([
+                BulkActionGroup::make([
+                    DeleteBulkAction::make()${bulkDelete},${publishing}
+                ]),
+            ])`;
+};
+
+/** Deletes the entry with every version of it, in its locale only, as Strapi deletes a document. */
+const deleteEntry = (model: string, localized: boolean): string => `
+
+    public static function deleteEntry(${model} $record): void
+    {
+        DB::transaction(fn () => ${model}::query()->where('document_id', $record->document_id)${localized ? "->where('locale', $record->locale)" : ""}->get()->each->delete());
+    }`;
 
 /**
  * A single type's one entry, as its list and create pages find it: the row the resource lists (a
@@ -311,22 +403,23 @@ const editPageWithActions = (
   resourceClass: string,
   cls: string,
   model: string,
-  options: { secured: boolean; versioned: boolean; localized: boolean },
+  options: { secured: boolean; versioned: boolean; localized: boolean; deletable: boolean },
 ): string => {
-  const { secured, versioned, localized } = options;
+  const { secured, versioned, localized, deletable } = options;
   const allowed = (ability: string, subject = "$this->record"): string =>
     secured ? `Gate::allows('${ability}', ${subject})` : "true";
   const published = "$this->record->publishedVersion()->exists()";
   const imports = useBlock([
     `${ns}\\${resourceClass}`,
-    "Filament\\Actions\\Action",
+    ...(versioned || localized ? ["Filament\\Actions\\Action"] : []),
     "Filament\\Resources\\Pages\\EditRecord",
     ...(versioned
       ? [`App\\Http\\Serializers\\${model}Serializer`, "App\\Support\\StrapiDocuments"]
       : []),
     ...(localized ? ["App\\Models\\Locale", "Filament\\Forms\\Components\\Select"] : []),
-    ...(localized && secured ? [`App\\Models\\${model}`] : []),
-    ...(secured ? ["Illuminate\\Support\\Facades\\Gate"] : []),
+    ...((localized && secured) || (deletable && versioned) ? [`App\\Models\\${model}`] : []),
+    ...(deletable ? ["Filament\\Actions\\DeleteAction"] : []),
+    ...(secured && (versioned || localized) ? ["Illuminate\\Support\\Facades\\Gate"] : []),
   ]);
   const publishing = versioned
     ? `
@@ -365,6 +458,11 @@ const editPageWithActions = (
                     $this->redirect(${resourceClass}::getUrl('edit', ['record' => $copy]));
                 }),`
     : "";
+  // Strapi's edit page deletes the entry (in its locale), behind the delete grant.
+  const deleting = deletable
+    ? `
+            DeleteAction::make()${versioned ? `->using(fn (${model} $record) => ${resourceClass}::deleteEntry($record))` : ""},`
+    : "";
   return `<?php
 
 declare(strict_types=1);
@@ -379,7 +477,7 @@ class ${cls} extends EditRecord
 
     protected function getHeaderActions(): array
     {
-        return [${publishing}${translating}
+        return [${publishing}${translating}${deleting}
         ];
     }
 }

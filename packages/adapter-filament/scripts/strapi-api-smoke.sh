@@ -54,7 +54,8 @@ S=$(req POST '/activity-sessions?populate=*' "$TA" '{"data":{"recordId":"s1","qu
 
 # Embedded component, and a field with no value sent as null, as Strapi sends it
 T=$(req POST '/transactions?populate=amount' "$TA" '{"data":{"recordId":"t1","amount":{"minor":1999,"currency":"USD"},"occurredOn":"2026-09-08"}}')
-[[ "$(echo "$T" | body | jq -c '.data.amount')" == '{"minor":"1999","currency":"USD"}' ]] || fail "embedded: $T"
+# Strapi gives the component an id of its own.
+[[ "$(echo "$T" | body | jq -c '.data.amount | [(.id|type), del(.id)]')" == '["number",{"minor":"1999","currency":"USD"}]' ]] || fail "embedded: $T"
 [[ "$(echo "$T" | body | jq -c '[(.data|has("fee")), .data.fee]')" == '[true,null]' ]] || fail "null sent: $T"
 # A `date` field round trips as YYYY-MM-DD, never as a full ISO datetime.
 [[ "$(echo "$T" | body | jq -r '.data.occurredOn')" == "2026-09-08" ]] || fail "date round trip: $T"

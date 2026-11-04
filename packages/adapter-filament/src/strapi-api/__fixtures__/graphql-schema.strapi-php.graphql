@@ -185,7 +185,7 @@ type UploadFile {
 "The `JSON` scalar type represents JSON values as specified by [ECMA-404](http://www.ecma-international.org/publications/files/ECMA-ST/ECMA-404.pdf)."
 scalar JSON
 
-union GenericMorph = ComponentSharedFrame | ComponentSharedHero | ComponentSharedLine | ComponentSharedMoney | ComponentSharedPanel | ComponentSharedQuantity | UploadFile | I18NLocale | UsersPermissionsPermission | UsersPermissionsRole | UsersPermissionsUser | Article | Author | Book | Category | Genre | Global | Homepage | Landing | Page | Post | Review | Storyboard | Submission | Topic
+union GenericMorph = ComponentSharedFrame | ComponentSharedHero | ComponentSharedLine | ComponentSharedMoney | ComponentSharedPanel | ComponentSharedQuantity | ComponentSharedSeo | UploadFile | I18NLocale | UsersPermissionsPermission | UsersPermissionsRole | UsersPermissionsUser | Article | Author | Book | Category | Genre | Global | Homepage | Landing | Page | Post | Review | Storyboard | Submission | Topic
 
 type ComponentSharedHero {
   id: ID!
@@ -806,7 +806,7 @@ type Landing {
   publishedAt: DateTime
 }
 
-union LandingBlocksDynamicZone = ComponentSharedHero | ComponentSharedQuantity | Error
+union LandingBlocksDynamicZone = ComponentSharedHero | ComponentSharedQuantity | ComponentSharedFrame | Error
 
 type Error {
   code: String!
@@ -1365,13 +1365,33 @@ type ComponentSharedFrame {
   image: UploadFile
 }
 
+type ComponentSharedSeo {
+  id: ID!
+  metaImage: UploadFile
+  metaTitle: String
+}
+
+input ComponentSharedSeoFiltersInput {
+  metaTitle: StringFilterInput
+  and: [ComponentSharedSeoFiltersInput]
+  or: [ComponentSharedSeoFiltersInput]
+  not: ComponentSharedSeoFiltersInput
+}
+
+input ComponentSharedSeoInput {
+  id: ID
+  metaTitle: String
+  metaImage: ID
+}
+
 type Storyboard {
-  documentId: ID!
-  title: String!
-  frames(filters: ComponentSharedFrameFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): [ComponentSharedFrame]
   createdAt: DateTime
-  updatedAt: DateTime
+  documentId: ID!
+  frames(filters: ComponentSharedFrameFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): [ComponentSharedFrame]
   publishedAt: DateTime
+  seo: ComponentSharedSeo
+  title: String!
+  updatedAt: DateTime
 }
 
 input ComponentSharedFrameFiltersInput {
@@ -1385,6 +1405,7 @@ input StoryboardFiltersInput {
   documentId: IDFilterInput
   title: StringFilterInput
   frames: ComponentSharedFrameFiltersInput
+  seo: ComponentSharedSeoFiltersInput
   createdAt: DateTimeFilterInput
   updatedAt: DateTimeFilterInput
   publishedAt: DateTimeFilterInput
@@ -1401,6 +1422,7 @@ type StoryboardEntityResponseCollection {
 input StoryboardInput {
   title: String
   frames: [ComponentSharedFrameInput]
+  seo: ComponentSharedSeoInput
   publishedAt: DateTime
   locale: String
 }

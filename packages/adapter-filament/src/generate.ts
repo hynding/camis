@@ -16,6 +16,7 @@ import {
   childRelationMethod,
   childTableEmit,
   emitChildMigration,
+  camelPath,
   emitChildModel,
   repeaterComponent,
   type ChildTableEmit,
@@ -44,7 +45,6 @@ import { draftPublishPlan } from "./strapi-api/draft-publish";
 import { guestsPlan } from "./strapi-api/guests";
 import { localizationPlan, sharedAcrossLocalesMethod } from "./strapi-api/localization";
 import {
-  columnMediaGaps,
   itemMediaTransferGap,
   mediaAllowedTypes,
   mediaComponentsConstant,
@@ -211,9 +211,14 @@ export const filamentAdapter: GenerateAdapter = {
       if (storage === "strapi") return;
       // A shared embedded column is NOT NULL only when the component is always present;
       // `s.field.required` alone still speaks for validation, not for the column.
-      const embeddedEmits = expansion.scalars.map((s) =>
-        emitField(columnField(s), s.path.map(snakeColumn).join("_")),
+      // With a media library an embedded component's media field is a link from the entry, by its
+      // path, not a column.
+      const embeddedMedia = expansion.scalars.filter(
+        (s) => fileModel !== undefined && s.field.type === "media",
       );
+      const embeddedEmits = expansion.scalars
+        .filter((s) => !embeddedMedia.includes(s))
+        .map((s) => emitField(columnField(s), s.path.map(snakeColumn).join("_")));
       const ctChildren = expansion.tables.map((t) =>
         childTableEmit(ct, t, fileModel !== undefined),
       );
@@ -221,7 +226,10 @@ export const filamentAdapter: GenerateAdapter = {
       const zoneChildren =
         apiStyle === "strapi"
           ? expansion.zones.flatMap((z) =>
-              z.members.map((m) => ({ ...childTableEmit(ct, m.table), ordered: true })),
+              z.members.map((m) => ({
+                ...childTableEmit(ct, m.table, fileModel !== undefined),
+                ordered: true,
+              })),
             )
           : [];
       zoneChildren.forEach((child) => children.push({ ct, child }));
@@ -230,9 +238,10 @@ export const filamentAdapter: GenerateAdapter = {
       // With a media library a media field is a link to its files, not a column; a dynamic zone
       // lives in its members' tables.
       const mediaOf = fileModel === undefined ? [] : mediaFields(ct);
-      const mediaItems = ctChildren.filter((c) => c.media.length > 0).map((c) => c.relationName);
-      if (fileModel !== undefined) gaps.push(...columnMediaGaps(ct, expansion));
-      const nestedMediaItems = ctChildren
+      const mediaItems = [...ctChildren, ...zoneChildren]
+        .filter((c) => c.media.length > 0)
+        .map((c) => c.relationName);
+      const nestedMediaItems = [...ctChildren, ...zoneChildren]
         .filter((c) => c.media.some((m) => m.path.length > 1))
         .map((c) => c.relationName);
       if (nestedMediaItems.length > 0) gaps.push(itemMediaTransferGap(ct, nestedMediaItems));
@@ -264,7 +273,7 @@ export const filamentAdapter: GenerateAdapter = {
               : []),
             ...(versioned.has(ct.name) ? ["App\\Models\\Concerns\\HasDraftAndPublish"] : []),
             ...(localized.has(ct.name) ? ["App\\Models\\Concerns\\HasLocale"] : []),
-            ...(mediaOf.length > 0 || mediaItems.length > 0
+            ...(mediaOf.length > 0 || mediaItems.length > 0 || embeddedMedia.length > 0
               ? ["App\\Models\\Concerns\\HasMedia"]
               : []),
             ...(linkOrders === undefined ? [] : ["App\\Models\\Concerns\\HasLinkOrder"]),
@@ -273,6 +282,9 @@ export const filamentAdapter: GenerateAdapter = {
             ...(linkOrders === undefined ? [] : [linkOrdersConstant(linkOrders)]),
             ...(localized.has(ct.name) ? [sharedAcrossLocalesMethod(ct)] : []),
             ...mediaOf.map((f) => mediaRelationMethod(f.name, f.name, fileModel)),
+            ...embeddedMedia.map((s) =>
+              mediaRelationMethod(s.path.join("."), camelPath(s.path), fileModel),
+            ),
             ...(mediaItems.length > 0 ? [mediaComponentsConstant(mediaItems)] : []),
           ],
         ),
@@ -299,17 +311,26 @@ export const filamentAdapter: GenerateAdapter = {
           embeddedEmits,
           [
             ...ctChildren.map(repeaterComponent),
-            ...(apiStyle === "strapi" ? expansion.zones.map((z) => zoneBuilder(ct, z)) : []),
+            ...(apiStyle === "strapi"
+              ? expansion.zones.map((z) => zoneBuilder(ct, z, fileModel !== undefined))
+              : []),
           ],
           {
             versioned: versioned.has(ct.name),
             localized: localized.has(ct.name),
             secured: ir.roles.length > 0,
-            media: mediaOf.map((f) => ({
-              field: f.name,
-              multiple: f.multiple === true,
-              ...mediaAllowedTypes(f),
-            })),
+            media: [
+              ...mediaOf.map((f) => ({
+                field: f.name,
+                multiple: f.multiple === true,
+                ...mediaAllowedTypes(f),
+              })),
+              ...embeddedMedia.map((s) => ({
+                field: camelPath(s.path),
+                multiple: s.field.type === "media" && s.field.multiple === true,
+                ...mediaAllowedTypes(s.field),
+              })),
+            ],
             ...(contentManager === undefined
               ? {}
               : {

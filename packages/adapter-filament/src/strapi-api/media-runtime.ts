@@ -733,8 +733,26 @@ final class MediaPicker
     /** @param list<string>|null $allowedTypes */
     public static function make(string $field, bool $multiple, ?array $allowedTypes = null): Select
     {
-        return Select::make($field)
-            ->relationship(name: $field, titleAttribute: 'name', modifyQueryUsing: fn (Builder $query): Builder => self::only($query, $allowedTypes))
+        return self::picker(Select::make($field)
+            ->relationship(name: $field, titleAttribute: 'name', modifyQueryUsing: fn (Builder $query): Builder => self::only($query, $allowedTypes)), $multiple, $allowedTypes);
+    }
+
+    /**
+     * The same field holding the picked files' ids, for a row the form does not save itself: a
+     * dynamic zone's item, which StrapiZones links once it is written.
+     *
+     * @param list<string>|null $allowedTypes
+     */
+    public static function ids(string $field, bool $multiple, ?array $allowedTypes = null): Select
+    {
+        return self::picker(Select::make($field)
+            ->options(fn (): array => self::only(${model}::query(), $allowedTypes)->orderBy('name')->pluck('name', 'id')->all()), $multiple, $allowedTypes);
+    }
+
+    /** @param list<string>|null $allowedTypes */
+    private static function picker(Select $select, bool $multiple, ?array $allowedTypes): Select
+    {
+        return $select
             ->multiple()
             ->maxItems($multiple ? null : 1)
             ->preload()

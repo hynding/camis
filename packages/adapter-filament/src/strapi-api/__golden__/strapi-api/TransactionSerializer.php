@@ -27,7 +27,7 @@ final class TransactionSerializer
     /** Component keys, which Strapi leaves off the wire unless populate names them. */
     public const COMPONENTS = ['amount'];
 
-    /** Each dynamic zone's member components by uid: the child relation its items live in, and its own component keys. */
+    /** Each dynamic zone's member components by uid: the child relation its items live in, its own component keys, and its media fields. */
     public const ZONES = [];
 
     /** Whether each document has a draft and, once published, a published version. */
@@ -49,6 +49,7 @@ final class TransactionSerializer
             'updatedAt' => $m->updated_at?->toIso8601ZuluString('millisecond'),
             'publishedAt' => $m->updated_at?->toIso8601ZuluString('millisecond'),
             'amount' => self::nested([
+                'id' => $m->id,
                 'minor' => $m->amount_minor === null ? null : (string) $m->amount_minor,
                 'currency' => $m->amount_currency,
             ]),
@@ -74,10 +75,10 @@ final class TransactionSerializer
     {
     }
 
-    /** A component's fields, or null when none has a value. */
+    /** A component's fields, or null when none has a value (its id, the row's, is not one). */
     private static function nested(array $a): ?array
     {
-        return array_filter($a, fn ($v) => $v !== null) === [] ? null : $a;
+        return array_filter(array_diff_key($a, ['id' => true]), fn ($v) => $v !== null) === [] ? null : $a;
     }
 
     private static function dig(array $a, array $path): mixed

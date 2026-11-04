@@ -81,7 +81,8 @@ final class StrapiPopulate
         if ($populate === '*') {
             $tree = array_fill_keys($serializer::COMPONENTS, []);
             foreach ($serializer::FIELDS as $key => $field) {
-                if (isset($field['relation']) && ! isset($field['private']) && StrapiQuery::readable($field, $viewer)) {
+                // An embedded component's files (a dotted key) go with its component's own populate.
+                if (isset($field['relation']) && ! isset($field['private']) && ! str_contains((string) $key, '.') && StrapiQuery::readable($field, $viewer)) {
                     $tree[$key] = [];
                 }
             }
@@ -420,10 +421,11 @@ final class StrapiPopulate
         if ($value === null) {
             return $repeatable ? [] : null;
         }
-        $own = self::nestedKeys($repeatable ? $serializer::FIELDS[$key]['fields'] : self::within($key, $serializer));
+        $fields = $repeatable ? $serializer::FIELDS[$key]['fields'] : self::within($key, $serializer);
+        $own = self::nestedKeys($fields);
         $value = $repeatable
-            ? array_map(fn (array $item) => self::files(self::inside($item, $sub['populate'] ?? null, $own), $sub['populate'] ?? null, $serializer::FIELDS[$key]['fields']), $value)
-            : self::inside($value, $sub['populate'] ?? null, $own);
+            ? array_map(fn (array $item) => self::files(self::inside($item, $sub['populate'] ?? null, $own), $sub['populate'] ?? null, $fields), $value)
+            : self::files(self::inside($value, $sub['populate'] ?? null, $own), $sub['populate'] ?? null, $fields);
         if (! array_key_exists('fields', $sub)) {
             return $value;
         }
@@ -434,7 +436,8 @@ final class StrapiPopulate
                 throw StrapiError::invalidKey((string) $field, $key, 'fields');
             }
         }
-        $keep = array_flip($wanted);
+        // Strapi selects a component's id whichever fields are asked for.
+        $keep = array_flip(['id', ...$wanted]);
 
         return $repeatable
             ? array_map(fn (array $item) => array_intersect_key($item, $keep), $value)
@@ -454,11 +457,12 @@ final class StrapiPopulate
         foreach ($items as $item) {
             $uid = $item['__component'];
             $own = $members[$uid]['components'] ?? [];
+            $files = $members[$uid]['fields'] ?? [];
             if ($on === null) {
-                $zone[] = self::inside($item, $sub['populate'] ?? null, $own);
+                $zone[] = self::files(self::inside($item, $sub['populate'] ?? null, $own), $sub['populate'] ?? null, $files);
             } elseif (array_key_exists($uid, $on) && ! in_array($on[$uid], [false, 'false'], true)) {
                 $fragment = is_array($on[$uid]) ? $on[$uid] : [];
-                $zone[] = self::inside(self::fields($item, $fragment['fields'] ?? null, $own), $fragment['populate'] ?? null, $own);
+                $zone[] = self::files(self::inside(self::fields($item, $fragment['fields'] ?? null, $own), $fragment['populate'] ?? null, $own), $fragment['populate'] ?? null, $files);
             }
         }
 
@@ -575,7 +579,11 @@ final class StrapiRelations
     {
         $links = [];
         foreach ($fields as $key => $relation) {
-            if (! isset($relation['relation']) || $relation['kind'] === 'localizations' || ! array_key_exists($key, $data)) {
+            if (! isset($relation['relation']) || $relation['kind'] === 'localizations') {
+                continue;
+            }
+            $sent = self::sent($data, (string) $key);
+            if ($sent === null) {
                 continue;
             }
             if (! StrapiQuery::readable($relation, $viewer)) {
@@ -583,10 +591,35 @@ final class StrapiRelations
             }
             // A target that keeps locales is linked in the writer's locale, else in its default one.
             $relation['locale'] = $relation['localized'] ? ($locale ?? StrapiLocales::default()) : null;
-            $links[$key] = self::instruction($relation, $data[$key], $viewer);
+            $links[$key] = self::instruction($relation, $sent[0], $viewer);
         }
 
         return $links;
+    }
+
+    /**
+     * What a write sends for a key, as [value], or null when it leaves the key alone. An embedded
+     * component's file (a dotted key) is sent with its component, which a write replaces whole, as
+     * Strapi replaces a component sent without its id; one sent with its id keeps what it leaves out.
+     */
+    private static function sent(array $data, string $key): ?array
+    {
+        if (array_key_exists($key, $data)) {
+            return [$data[$key]];
+        }
+        $path = explode('.', $key);
+        if (count($path) === 1 || ! array_key_exists($path[0], $data)) {
+            return null;
+        }
+        $value = $data;
+        foreach ($path as $i => $segment) {
+            if (! is_array($value) || ! array_key_exists($segment, $value)) {
+                return is_array($value) && $i > 0 && array_key_exists('id', $value) ? null : [null];
+            }
+            $value = $value[$segment];
+        }
+
+        return [$value];
     }
 
     /**
@@ -610,6 +643,44 @@ final class StrapiRelations
         }
 
         return $children;
+    }
+
+    /**
+     * Each dynamic zone item's file references as the links its row makes once written, as an
+     * item of a repeatable component's are. $zones is a serializer's ZONES.
+     */
+    public static function zones(array $children, array $zones, ?Authenticatable $viewer): array
+    {
+        foreach ($zones as $zone => $members) {
+            foreach ($members as $member) {
+                $relation = $member['relation'];
+                if (! isset($member['fields'], $children[$zone][$relation])) {
+                    continue;
+                }
+                foreach ($children[$zone][$relation] as $i => $row) {
+                    $children[$zone][$relation][$i]['__media'] = self::read($row['__media'] ?? [], $member['fields'], $viewer);
+                }
+            }
+        }
+
+        return $children;
+    }
+
+    /**
+     * Links that make a row's file fields hold exactly the given files: the admin's pickers.
+     *
+     * @param array<string, mixed> $ids each media field's relation method → its picked file ids
+     */
+    public static function picked(array $fields, array $ids): array
+    {
+        $links = [];
+        foreach ($fields as $key => $field) {
+            if (array_key_exists($field['relation'], $ids)) {
+                $links[$key] = ['relation' => $field, 'set' => array_values(array_map('intval', array_filter((array) $ids[$field['relation']]))), 'connect' => [], 'disconnect' => []];
+            }
+        }
+
+        return $links;
     }
 
     /**

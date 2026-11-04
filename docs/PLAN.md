@@ -1247,6 +1247,68 @@ images (`component-media-seed-vectors.json`), imports, exports the same archive,
 strapi-php reads it after importing it (`component-media-read-vectors.json`), in the `strapi-api`
 boot job on all three databases.
 
+## Phase 35 — the Content Manager list (`adapter-filament`)
+
+The audit's P1 found the Strapi-like admin's lists bare: no search, no sort, and no way to delete
+an entry at all. A collection type's list now does what Strapi's Content Manager list does: `_q`
+searches text fields as substrings and number fields when the search is a number; every field
+Strapi sorts (not json, media, richText or blocks) sorts; it starts sorted by the main field (the
+first string field, else id). An entry is deleted from its row or its edit page, a draft-and-publish
+one with every version of it in its locale (`deleteEntry`), as Strapi deletes a document; selected
+entries are deleted, published and unpublished in bulk. Each action is behind its grant, checked
+per record: policies gain `deleteAny` and `publishAny`, held by the delete and publish grants, since
+Filament offers what a policy has no method for. Duplicating an entry is not built yet.
+
+Exit: unit tests; `ContentManagerListTest.php` in the `strapi-api` boot job, denied paths included.
+
+## Phase 36 — an embedded component's id (`adapter-filament`)
+
+Strapi sends every component with an id; camis sent none for an embedded one, and GraphQL, whose
+component types declare `id: ID!`, failed on asking for it. An embedded component is columns of the
+row holding it (the entry, or a repeatable or zone item), so its id is that row's: unique within the
+type, different per version and locale, as Strapi's component rows are. The id alone does not make
+an unset component a value (it stays null). Narrowing a component's fields in a populate keeps its
+id, repeatable items' included, since Strapi always selects it. A write that sends the id back is
+accepted, the id ignored. Ids are not compared against strapi-php: the vectors drop every id.
+
+Exit: unit tests; `ComponentIdTest.php` (REST, populate fields, a write back, GraphQL) in the
+`strapi-api` boot job.
+
+## Phase 37 — an embedded component's files (`adapter-filament`)
+
+A media field inside an embedded component was a path column (the `componentMedia` gap), though
+Strapi starters put one in nearly every project (`shared.seo`'s `metaImage`). Strapi links such a
+file to the component's own row; here the component is columns of the entry's row, so the entry
+links it, with the field's path as the link row's `field` (`seo.metaImage`) and a relation named
+after the path (`seoMetaImage`). It is sent inside its component only when the component's own
+populate names it (narrowed by its `fields`), written with the component (a component sent
+without its id replaces the file too; one sent with its id keeps what it leaves out), filtered
+through (`filters[seo][metaImage][name]`), copied on publish, picked in the admin's form, typed
+as `UploadFile` in GraphQL, and carried by `strapi:import`/`strapi:export` as Strapi archives it:
+a morph link to the component's uid and the id the entry's data gives the component. A media
+field in a dynamic zone's item is still a path column (`componentMedia`, Phase 38).
+
+Exit: media vectors and `component-media-export.tar.gz` re-recorded from strapi-php with the
+fixture's `Storyboard.seo`; MediaAdminTest picks an seo image.
+
+---
+
+## Phase 38 — a dynamic zone item's files (`adapter-filament`)
+
+The last media field kept as a path column (`componentMedia`): one inside a dynamic zone's item.
+Each member component's items are rows of their own table, so an item links its files from its
+own row, as a repeatable component's item does. Its media fields are listed in the serializer's
+`ZONES` beside its relation, so a write resolves an item's file references with the entry's links
+(a missing file refuses the whole write), an item kept by its id keeps a file it leaves out, and
+populate narrows a file by its `fields` whether the zone is populated whole or through `on`. The
+items are deleted one by one, so their links go with them, and publishing copies each item's
+files. In the admin the zone's Builder picks a file by id (`MediaPicker::ids`), which
+`StrapiZones` links once the item is written. `strapi:import`/`strapi:export` carry the files as
+Strapi archives them: a morph link to the member's uid and the item's id.
+
+Exit: media vectors (Landing's zone now holds `shared.frame`) and `component-media-export.tar.gz`
+re-recorded from strapi-php; DynamicZonesTest picks, keeps and publishes an item's image.
+
 ---
 
 ## Sequencing rationale (quick reference)
