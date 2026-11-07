@@ -1,0 +1,882 @@
+{
+  "components stay off the wire unless populated": {
+    "status": 200,
+    "data": {
+      "publishedAt": "present",
+      "title": "Main"
+    }
+  },
+  "populate=* sends components without their relations or nested components": {
+    "status": 200,
+    "data": [
+      {
+        "cta": null,
+        "items": [],
+        "publishedAt": "present",
+        "sections": [],
+        "title": "Empty"
+      },
+      {
+        "cta": {
+          "label": "Contact"
+        },
+        "items": [
+          {
+            "label": "Legal"
+          }
+        ],
+        "publishedAt": "present",
+        "sections": [],
+        "title": "Footer"
+      },
+      {
+        "cta": {
+          "label": "Start"
+        },
+        "items": [
+          {
+            "label": "Home"
+          },
+          {
+            "label": "About"
+          },
+          {
+            "label": "Blog"
+          }
+        ],
+        "publishedAt": "present",
+        "sections": [
+          {
+            "__component": "shared.link",
+            "label": "Section link"
+          },
+          {
+            "__component": "shared.menu-item",
+            "label": "Section item"
+          }
+        ],
+        "title": "Main"
+      }
+    ]
+  },
+  "an embedded component's relations, populated": {
+    "status": 200,
+    "data": [
+      {
+        "cta": null,
+        "title": "Empty"
+      },
+      {
+        "cta": {
+          "author": {
+            "name": "Bob",
+            "publishedAt": "present"
+          },
+          "label": "Contact",
+          "topics": []
+        },
+        "title": "Footer"
+      },
+      {
+        "cta": {
+          "author": {
+            "name": "Ann",
+            "publishedAt": "present"
+          },
+          "label": "Start",
+          "topics": [
+            {
+              "name": "Sport",
+              "publishedAt": "present"
+            },
+            {
+              "name": "News",
+              "publishedAt": "present"
+            }
+          ]
+        },
+        "title": "Main"
+      }
+    ]
+  },
+  "an embedded component's relation named by populate, narrowed by fields": {
+    "status": 200,
+    "data": [
+      {
+        "cta": null,
+        "title": "Empty"
+      },
+      {
+        "cta": {
+          "author": {
+            "name": "Bob"
+          },
+          "label": "Contact"
+        },
+        "title": "Footer"
+      },
+      {
+        "cta": {
+          "author": {
+            "name": "Ann"
+          },
+          "label": "Start"
+        },
+        "title": "Main"
+      }
+    ]
+  },
+  "an embedded component's to-many relation, sorted": {
+    "status": 200,
+    "data": {
+      "cta": {
+        "label": "Start",
+        "topics": [
+          {
+            "name": "Sport"
+          },
+          {
+            "name": "News"
+          }
+        ]
+      },
+      "title": "Main"
+    }
+  },
+  "an embedded component's to-many relation, filtered and counted": {
+    "status": 200,
+    "data": {
+      "cta": {
+        "author": {
+          "count": 1
+        },
+        "label": "Start",
+        "topics": [
+          {
+            "name": "News",
+            "publishedAt": "present"
+          }
+        ]
+      },
+      "title": "Main"
+    }
+  },
+  "populated without its relations, a component leaves them out": {
+    "status": 200,
+    "data": {
+      "cta": {
+        "label": "Start"
+      },
+      "title": "Main"
+    }
+  },
+  "the draft links the topics' drafts, a draft-only one included": {
+    "status": 200,
+    "data": {
+      "cta": {
+        "label": "Start",
+        "topics": [
+          {
+            "name": "Sport",
+            "publishedAt": "absent"
+          },
+          {
+            "name": "News",
+            "publishedAt": "absent"
+          },
+          {
+            "name": "Hidden",
+            "publishedAt": "absent"
+          }
+        ]
+      },
+      "title": "Main"
+    }
+  },
+  "the published version links the published topics": {
+    "status": 200,
+    "data": {
+      "cta": {
+        "label": "Start",
+        "topics": [
+          {
+            "name": "Sport",
+            "publishedAt": "present"
+          },
+          {
+            "name": "News",
+            "publishedAt": "present"
+          }
+        ]
+      },
+      "title": "Main"
+    }
+  },
+  "relations of a repeatable's items": {
+    "status": 200,
+    "data": [
+      {
+        "items": [],
+        "title": "Empty"
+      },
+      {
+        "items": [
+          {
+            "label": "Legal",
+            "link": null
+          }
+        ],
+        "title": "Footer"
+      },
+      {
+        "items": [
+          {
+            "label": "Home",
+            "link": {
+              "author": {
+                "name": "Bob"
+              },
+              "label": "Home link",
+              "topics": [
+                {
+                  "name": "News"
+                }
+              ]
+            }
+          },
+          {
+            "label": "About",
+            "link": null
+          },
+          {
+            "label": "Blog",
+            "link": {
+              "author": null,
+              "label": "Blog link",
+              "topics": [
+                {
+                  "name": "Sport"
+                }
+              ]
+            }
+          }
+        ],
+        "title": "Main"
+      }
+    ]
+  },
+  "a repeatable inside a repeatable's items, not populated": {
+    "status": 200,
+    "data": {
+      "items": [
+        {
+          "label": "Home"
+        },
+        {
+          "label": "About"
+        },
+        {
+          "label": "Blog"
+        }
+      ],
+      "title": "Main"
+    }
+  },
+  "a repeatable inside a repeatable's items, populated": {
+    "status": 200,
+    "data": [
+      {
+        "items": [],
+        "title": "Empty"
+      },
+      {
+        "items": [
+          {
+            "children": [
+              {
+                "label": "Terms"
+              }
+            ],
+            "label": "Legal"
+          }
+        ],
+        "title": "Footer"
+      },
+      {
+        "items": [
+          {
+            "children": [
+              {
+                "label": "First"
+              },
+              {
+                "label": "Second"
+              }
+            ],
+            "label": "Home"
+          },
+          {
+            "children": [],
+            "label": "About"
+          },
+          {
+            "children": [
+              {
+                "label": "Only"
+              }
+            ],
+            "label": "Blog"
+          }
+        ],
+        "title": "Main"
+      }
+    ]
+  },
+  "a repeatable inside a repeatable's items, with its relations": {
+    "status": 200,
+    "data": [
+      {
+        "items": [],
+        "title": "Empty"
+      },
+      {
+        "items": [
+          {
+            "children": [
+              {
+                "author": null,
+                "label": "Terms",
+                "topics": []
+              }
+            ],
+            "label": "Legal"
+          }
+        ],
+        "title": "Footer"
+      },
+      {
+        "items": [
+          {
+            "children": [
+              {
+                "author": {
+                  "name": "Ann"
+                },
+                "label": "First",
+                "topics": [
+                  {
+                    "name": "News"
+                  },
+                  {
+                    "name": "Sport"
+                  }
+                ]
+              },
+              {
+                "author": null,
+                "label": "Second",
+                "topics": []
+              }
+            ],
+            "label": "Home"
+          },
+          {
+            "children": [],
+            "label": "About"
+          },
+          {
+            "children": [
+              {
+                "author": {
+                  "name": "Bob"
+                },
+                "label": "Only",
+                "topics": []
+              }
+            ],
+            "label": "Blog"
+          }
+        ],
+        "title": "Main"
+      }
+    ]
+  },
+  "a repeatable inside a repeatable's items, narrowed by fields": {
+    "status": 200,
+    "data": {
+      "items": [
+        {
+          "children": [
+            {
+              "label": "First"
+            },
+            {
+              "label": "Second"
+            }
+          ],
+          "label": "Home"
+        },
+        {
+          "children": [],
+          "label": "About"
+        },
+        {
+          "children": [
+            {
+              "label": "Only"
+            }
+          ],
+          "label": "Blog"
+        }
+      ],
+      "title": "Main"
+    }
+  },
+  "populate=* inside the items": {
+    "status": 200,
+    "data": {
+      "items": [
+        {
+          "children": [
+            {
+              "label": "First"
+            },
+            {
+              "label": "Second"
+            }
+          ],
+          "icon": null,
+          "label": "Home",
+          "link": {
+            "label": "Home link"
+          }
+        },
+        {
+          "children": [],
+          "icon": null,
+          "label": "About",
+          "link": null
+        },
+        {
+          "children": [
+            {
+              "label": "Only"
+            }
+          ],
+          "icon": null,
+          "label": "Blog",
+          "link": {
+            "label": "Blog link"
+          }
+        }
+      ],
+      "title": "Main"
+    }
+  },
+  "a zone's items, with their relations and nested repeatables": {
+    "status": 200,
+    "data": {
+      "sections": [
+        {
+          "__component": "shared.link",
+          "author": {
+            "name": "Bob",
+            "publishedAt": "present"
+          },
+          "label": "Section link",
+          "topics": [
+            {
+              "name": "Sport",
+              "publishedAt": "present"
+            }
+          ]
+        },
+        {
+          "__component": "shared.menu-item",
+          "children": [
+            {
+              "label": "Zoned"
+            },
+            {
+              "label": "Zoned too"
+            }
+          ],
+          "icon": null,
+          "label": "Section item",
+          "link": {
+            "label": "Inner"
+          }
+        }
+      ],
+      "title": "Main"
+    }
+  },
+  "a zone's items through on, with relations two levels down": {
+    "status": 200,
+    "data": {
+      "sections": [
+        {
+          "__component": "shared.link",
+          "author": {
+            "name": "Bob"
+          },
+          "label": "Section link"
+        },
+        {
+          "__component": "shared.menu-item",
+          "children": [
+            {
+              "author": {
+                "name": "Ann"
+              },
+              "label": "Zoned"
+            },
+            {
+              "author": null,
+              "label": "Zoned too"
+            }
+          ],
+          "label": "Section item",
+          "link": {
+            "author": {
+              "name": "Ann"
+            },
+            "label": "Inner"
+          }
+        }
+      ],
+      "title": "Main"
+    }
+  },
+  "populate in dotted form reaches an embedded component's relation": {
+    "status": 200,
+    "data": {
+      "cta": {
+        "author": {
+          "name": "Ann",
+          "publishedAt": "present"
+        },
+        "label": "Start"
+      },
+      "title": "Main"
+    }
+  },
+  "filter by an embedded component's relation": {
+    "status": 200,
+    "data": [
+      {
+        "title": "Footer"
+      }
+    ]
+  },
+  "filter by an embedded component's to-many relation": {
+    "status": 200,
+    "data": [
+      {
+        "title": "Main"
+      }
+    ]
+  },
+  "filter by a repeatable's items' relation": {
+    "status": 200,
+    "data": [
+      {
+        "title": "Main"
+      }
+    ]
+  },
+  "filter by a repeatable inside a repeatable": {
+    "status": 200,
+    "data": [
+      {
+        "title": "Footer"
+      }
+    ]
+  },
+  "filter by a relation in a repeatable inside a repeatable": {
+    "status": 200,
+    "data": [
+      {
+        "title": "Main"
+      }
+    ]
+  },
+  "populate an unknown key inside a component": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid key nope at cta",
+      "details": {
+        "key": "nope",
+        "path": "cta",
+        "source": "query",
+        "param": "populate"
+      }
+    }
+  },
+  "an update keeps the components it does not send": {
+    "status": 200,
+    "data": {
+      "cta": {
+        "author": {
+          "name": "Bob"
+        },
+        "label": "Contact"
+      },
+      "items": [
+        {
+          "children": [
+            {
+              "label": "Terms",
+              "topics": []
+            }
+          ],
+          "label": "Legal"
+        }
+      ],
+      "title": "Footer, again"
+    }
+  },
+  "an embedded component sent without its id replaces its links": {
+    "status": 200,
+    "data": {
+      "cta": {
+        "author": null,
+        "label": "Write",
+        "topics": [
+          {
+            "name": "News"
+          }
+        ]
+      },
+      "title": "Footer, again"
+    }
+  },
+  "connect and disconnect inside an embedded component": {
+    "status": 200,
+    "data": {
+      "cta": {
+        "author": {
+          "name": "Bob"
+        },
+        "label": "Start",
+        "topics": [
+          {
+            "name": "Sport"
+          }
+        ]
+      },
+      "title": "Main"
+    }
+  },
+  "the items and their nested items replaced": {
+    "status": 200,
+    "data": {
+      "items": [
+        {
+          "children": [
+            {
+              "author": {
+                "name": "Ann"
+              },
+              "label": "FAQ"
+            },
+            {
+              "author": null,
+              "label": "Chat"
+            }
+          ],
+          "label": "Help",
+          "link": {
+            "label": "Help link",
+            "topics": [
+              {
+                "name": "Sport"
+              },
+              {
+                "name": "News"
+              }
+            ]
+          }
+        },
+        {
+          "children": [],
+          "label": "Legal",
+          "link": null
+        }
+      ],
+      "title": "Footer, again"
+    }
+  },
+  "a zone's items with relations and nested items, replaced": {
+    "status": 200,
+    "data": {
+      "sections": [
+        {
+          "__component": "shared.menu-item",
+          "children": [
+            {
+              "author": {
+                "name": "Bob"
+              },
+              "label": "Deep"
+            }
+          ],
+          "label": "Zone item"
+        },
+        {
+          "__component": "shared.link",
+          "author": {
+            "name": "Ann"
+          },
+          "label": "Zone link"
+        }
+      ],
+      "title": "Empty"
+    }
+  },
+  "a component's relation to a missing document is refused": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Document with id \"nosuchdocumentidxxxxxxxx\", locale \"\" not found"
+    }
+  },
+  "a nested item's relation to a missing document is refused": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Document with id \"nosuchdocumentidxxxxxxxx\", locale \"\" not found"
+    }
+  },
+  "the refused writes changed nothing": {
+    "status": 200,
+    "data": {
+      "cta": null,
+      "items": [],
+      "title": "Empty"
+    }
+  },
+  "a menu made as a draft, then published": {
+    "status": 201,
+    "data": {
+      "publishedAt": "absent",
+      "title": "Later"
+    }
+  },
+  "the draft's links": {
+    "status": 200,
+    "data": {
+      "cta": {
+        "label": "Soon",
+        "topics": [
+          {
+            "name": "News"
+          },
+          {
+            "name": "Hidden"
+          }
+        ]
+      },
+      "items": [
+        {
+          "children": [
+            {
+              "label": "Nested",
+              "topics": [
+                {
+                  "name": "Sport"
+                }
+              ]
+            }
+          ],
+          "label": "One"
+        }
+      ],
+      "title": "Later"
+    }
+  },
+  "publishing copies every link onto the published topics": {
+    "status": 200,
+    "data": {
+      "cta": {
+        "label": "Soon",
+        "topics": [
+          {
+            "name": "News",
+            "publishedAt": "present"
+          }
+        ]
+      },
+      "items": [
+        {
+          "children": [
+            {
+              "label": "Nested",
+              "topics": [
+                {
+                  "name": "Sport"
+                }
+              ]
+            }
+          ],
+          "label": "One"
+        }
+      ],
+      "title": "Later"
+    }
+  },
+  "deleting a linked author unlinks it from every component": {
+    "status": 204,
+    "data": null
+  },
+  "after the author is gone": {
+    "status": 200,
+    "data": {
+      "cta": {
+        "author": null,
+        "label": "Start"
+      },
+      "items": [
+        {
+          "children": [
+            {
+              "author": {
+                "name": "Ann"
+              },
+              "label": "First"
+            },
+            {
+              "author": null,
+              "label": "Second"
+            }
+          ],
+          "label": "Home",
+          "link": {
+            "author": null,
+            "label": "Home link"
+          }
+        },
+        {
+          "children": [],
+          "label": "About",
+          "link": null
+        },
+        {
+          "children": [
+            {
+              "author": null,
+              "label": "Only"
+            }
+          ],
+          "label": "Blog",
+          "link": {
+            "author": null,
+            "label": "Blog link"
+          }
+        }
+      ],
+      "title": "Main"
+    }
+  }
+}

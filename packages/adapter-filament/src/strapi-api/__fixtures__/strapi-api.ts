@@ -268,6 +268,23 @@ export const strapiApiBundle: IrBundle = {
           { type: "component", name: "seo", component: "Seo", repeatable: false },
         ],
       },
+      // Components all the way down (component-vectors.json, transfer/nested-components-export):
+      // relations inside an embedded component (cta), inside items (items[].link) and inside a
+      // zone's items; a repeatable inside a repeatable's items (items[].children) and inside a
+      // zone's; files of a component inside an item (items[].icon.image). With draft and publish,
+      // so publishing copies every link, Topic's onto its published versions.
+      {
+        name: "Menu",
+        kind: "collection",
+        names: { plural: "Menus" },
+        options: { draftPublish: true },
+        fields: [
+          { type: "string", name: "title", required: true },
+          { type: "component", name: "cta", component: "Link", repeatable: false },
+          { type: "component", name: "items", component: "MenuItem", repeatable: true },
+          { type: "dynamicZone", name: "sections", components: ["Link", "MenuItem"] },
+        ],
+      },
       // Every constraint Strapi's entity validator checks on a write (validation-vectors.json).
       {
         name: "Submission",
@@ -302,6 +319,24 @@ export const strapiApiBundle: IrBundle = {
         fields: [
           { type: "string", name: "caption" },
           { type: "media", name: "image", allowedTypes: ["image"] },
+        ],
+      },
+      // A link to an author and to topics, as Strapi's component relations go: one way.
+      {
+        name: "Link",
+        fields: [
+          { type: "string", name: "label" },
+          { type: "relation", name: "author", relationKind: "oneToOne", target: "Author" },
+          { type: "relation", name: "topics", relationKind: "oneToMany", target: "Topic" },
+        ],
+      },
+      {
+        name: "MenuItem",
+        fields: [
+          { type: "string", name: "label", required: true },
+          { type: "component", name: "link", component: "Link", repeatable: false },
+          { type: "component", name: "icon", component: "Frame", repeatable: false },
+          { type: "component", name: "children", component: "Link", repeatable: true },
         ],
       },
       // An embedded component whose media links the media library (media-vectors.json).
@@ -390,6 +425,7 @@ export const strapiApiBundle: IrBundle = {
         { contentType: "Article", actions: ["create", "read", "update", "delete"] },
         { contentType: "Page", actions: ["create", "read", "update", "delete", "publish"] },
         { contentType: "Landing", actions: ["create", "read", "update", "delete", "publish"] },
+        { contentType: "Menu", actions: ["create", "read", "update", "delete", "publish"] },
         // A single type's create is Strapi's update: its one entry is made by the first put.
         { contentType: "Homepage", actions: ["read", "update", "delete", "publish"] },
         { contentType: "Global", actions: ["read", "update", "delete"] },

@@ -139,14 +139,53 @@ describe("Strapi data import", () => {
     );
     const map = content("app/Support/StrapiTransferMap.php");
     expect(map).toMatch(
-      /'frames' => \[\s+'repeatable' => 'frames',\s+'uid' => 'shared\.frame',[\s\S]*?'media' => \[\s+'image' => 'image',\s+\],/,
+      /'frames' => \[\s+'repeatable' => 'frames',[\s\S]*?'files' => \[\s+\[\s+'key' => \['image'\],\s+'uid' => 'shared\.frame',\s+'field' => 'image',\s+'relation' => 'image',/,
     );
-    expect(content(IMPORT_ENGINE)).toContain("$this->items[$attribute['uid']][$item['id']]");
+    expect(content(IMPORT_ENGINE)).toContain(
+      "$this->holds($uid, $model::class, $id, $item, $node)",
+    );
     // A zone's items too, by their component's uid.
     expect(map).toMatch(
-      /'shared\.frame' => \[\s+'relation' => 'blocksFrame',[\s\S]*?'media' => \[\s+'image' => 'image',\s+\],/,
+      /'shared\.frame' => \[\s+'relation' => 'blocksFrame',[\s\S]*?'files' => \[\s+\[\s+'key' => \['image'\],\s+'uid' => 'shared\.frame',/,
     );
-    expect(content(IMPORT_ENGINE)).toContain("$this->items[$item['__component']][$item['id']]");
+    expect(result.gaps.gaps.filter((g) => g.feature === "componentMediaTransfer")).toEqual([]);
+  });
+
+  // nested-components-export.tar.gz (strapi-php): a component's relations are links from the
+  // component's uid and archived id; an item's own repeatables are nested in it; a component
+  // inside an item links its files from its own uid.
+  it("carries relations inside components, repeatables inside items and their files", () => {
+    const archive = untar(
+      gunzipSync(
+        readFileSync(join(__dirname, "__fixtures__/transfer/nested-components-export.tar.gz")),
+      ),
+    );
+    const links = [...archive]
+      .filter(([path]) => path.startsWith("links/"))
+      .flatMap(([, data]) => data.toString("utf8").split("\n"))
+      .filter((line) => line.trim() !== "")
+      .map((line) => JSON.parse(line) as { left: { type: string; field: string } });
+    expect(links.map((l) => l.left)).toContainEqual(
+      expect.objectContaining({ type: "shared.link", field: "topics" }),
+    );
+    const map = content("app/Support/StrapiTransferMap.php");
+    // The entry's embedded component links from its own uid: to-one by key, to-many with its order.
+    expect(map).toMatch(
+      /'cta' => \[[\s\S]*?'links' => \[\s+\[\s+'key' => \['author'\],\s+'uid' => 'shared\.link',\s+'declares' => 'oneToOne',\s+'kind' => 'belongsTo',\s+'relation' => 'ctaAuthor',/,
+    );
+    expect(map).toMatch(
+      /'relation' => 'ctaTopics',\s+'target' => 'api::topic\.topic',\s+'order' => 'topic_ord',/,
+    );
+    // An item's component inside it links its files from that component's uid.
+    expect(map).toMatch(
+      /'key' => \['icon', 'image'\],\s+'uid' => 'shared\.frame',\s+'field' => 'icon\.image',\s+'relation' => 'iconImage',/,
+    );
+    // An item's repeatable is nested in it, with its own links.
+    expect(map).toMatch(
+      /'children' => \[\s+\[\s+'key' => \['children'\],\s+'repeatable' => 'children',[\s\S]*?'relation' => 'topics',/,
+    );
+    expect(content(IMPORT_ENGINE)).toContain("private function componentLink(");
+    expect(content("app/Support/StrapiExport.php")).toContain("private function componentLinks(");
     expect(result.gaps.gaps.filter((g) => g.feature === "componentMediaTransfer")).toEqual([]);
   });
 
