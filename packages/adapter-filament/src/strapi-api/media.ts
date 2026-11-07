@@ -64,18 +64,3 @@ export const mediaPlan = (
 /** The repeatable components whose items link files, which go with the entry, links and all. */
 export const mediaComponentsConstant = (relations: readonly string[]): string =>
   `    public const MEDIA_COMPONENTS = [${relations.map((r) => `'${r}'`).join(", ")}];`;
-
-/**
- * strapi:export and strapi:import carry the files an item of a repeatable component links, but not
- * those of a component inside the item: Strapi links them to that component's own row, which this
- * app folds into the item's.
- */
-export const itemMediaTransferGap = (
-  ct: ContentType,
-  relations: readonly string[],
-): CapabilityGap => ({
-  feature: "componentMediaTransfer",
-  location: { contentType: ct.name },
-  severity: "downgrade",
-  message: `strapi:export and strapi:import leave out the files linked from a component inside the items of ${relations.join(", ")}; relink them after an import`,
-});

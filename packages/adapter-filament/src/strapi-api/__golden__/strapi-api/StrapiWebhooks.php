@@ -37,6 +37,7 @@ final class StrapiWebhooks
         \App\Models\GlobalModel::class => ['api::global.global', 'global', \App\Http\Serializers\GlobalModelSerializer::class],
         \App\Models\Homepage::class => ['api::homepage.homepage', 'homepage', \App\Http\Serializers\HomepageSerializer::class],
         \App\Models\Landing::class => ['api::landing.landing', 'landing', \App\Http\Serializers\LandingSerializer::class],
+        \App\Models\Menu::class => ['api::menu.menu', 'menu', \App\Http\Serializers\MenuSerializer::class],
         \App\Models\Note::class => ['api::note.note', 'note', \App\Http\Serializers\NoteSerializer::class],
         \App\Models\Page::class => ['api::page.page', 'page', \App\Http\Serializers\PageSerializer::class],
         \App\Models\Post::class => ['api::post.post', 'post', \App\Http\Serializers\PostSerializer::class],

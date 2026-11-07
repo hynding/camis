@@ -148,6 +148,7 @@ import { emitStrapiExport } from "./transfer-export-runtime";
 import { emitStrapiImport } from "./transfer-runtime";
 import { wireShape, type WireShape } from "./wire-shape";
 import { emitStrapiZones } from "./zones-runtime";
+import { emitStrapiItems, ITEMS_PATH, writesItems } from "./items-runtime";
 import { emitStrapiValidator } from "./validation-runtime";
 import { rulesConstant, VALIDATOR_PATH } from "./validation";
 import {
@@ -353,6 +354,8 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
   files.push({ path: "app/Support/StrapiQuery.php", content: emitStrapiQuery(secured) });
   files.push({ path: "app/Support/StrapiPopulate.php", content: emitStrapiPopulate() });
   files.push({ path: "app/Support/StrapiRelations.php", content: emitStrapiRelations() });
+  if ([...shapes.values()].some(writesItems))
+    files.push({ path: ITEMS_PATH, content: emitStrapiItems() });
   files.push({ path: "app/Support/StrapiLinkOrder.php", content: emitStrapiLinkOrder() });
   files.push({ path: "app/Support/StrapiLinkPivot.php", content: emitStrapiLinkPivot() });
   files.push({

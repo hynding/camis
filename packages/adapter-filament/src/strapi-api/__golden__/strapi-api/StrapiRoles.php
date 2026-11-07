@@ -116,6 +116,17 @@ final class StrapiRoles
                 'publish' => ['landing.publish'],
             ],
         ],
+        'api::menu.menu' => [
+            'label' => 'Menu',
+            'actions' => [
+                'find' => ['menu.read'],
+                'findOne' => ['menu.read'],
+                'create' => ['menu.create'],
+                'update' => ['menu.update'],
+                'delete' => ['menu.delete'],
+                'publish' => ['menu.publish'],
+            ],
+        ],
         'api::note.note' => [
             'label' => 'Note',
             'actions' => [

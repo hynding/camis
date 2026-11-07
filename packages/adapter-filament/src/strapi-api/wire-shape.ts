@@ -1,13 +1,15 @@
-import { expandComponents } from "@camis/adapter-kernel";
+import { expandComponents, type ExpandedTable } from "@camis/adapter-kernel";
 import {
   fieldApiName,
   inverseApiName,
   type Component,
   type ContentType,
+  type Field,
   type FieldType,
   type IrDocument,
 } from "@camis/ir-schema";
-import { camelPath, childTableEmit } from "../components";
+import { camelPath, childTableEmit, type ChildMedia, type ChildTableEmit } from "../components";
+import { componentRelations, type ComponentRelation } from "../component-relations";
 import { filamentNames, snake, snakeColumn } from "../names";
 import { FILE_UID } from "./media-runtime";
 import { componentUid, kebab } from "./names";
@@ -27,14 +29,30 @@ export interface WireChild {
   model: string;
   scalars: WireScalar[];
   /** Its items' media fields, each a link from the item's row; its key is relative to the item. */
-  media: WireRelation[];
+  media: WireEmbeddedMedia[];
+  /** Relations inside its items, each held by the item's row; its key is relative to the item. */
+  relations: WireComponentRelation[];
+  /** Repeatables inside its items, each a table of their own; keyed relative to the item. */
+  children: WireChild[];
   private?: true;
+}
+/**
+ * A relation inside a component, held by the row the component lives on (the entry's, or an
+ * item's) and keyed by its dotted path from that row (`cta.author`, `link.author`, `author`).
+ */
+export interface WireComponentRelation extends WireRelation {
+  /** The Strapi uid of the component declaring it, which an archive's links from it go by. */
+  component: string;
+  /** Its name in that component, the archive's link field. */
+  field: string;
+  /** How that component declares it (`oneToOne`, `oneToMany`, …), as an archive's link says. */
+  declares: string;
 }
 /** A file field of an embedded component, linked from the entry's row. */
 export interface WireEmbeddedMedia extends WireRelation {
   /** The Strapi uid of the component holding it, which an archive's link to it goes by. */
   component: string;
-  /** Its path in the link rows' `field` (`seo.metaImage`). */
+  /** Its path in the link rows' `field` (`seo.metaImage`, `icon.image` in an item). */
   field: string;
 }
 /** One component a dynamic zone holds: its uid on the wire and the child relation its items live in. */
@@ -46,8 +64,12 @@ export interface WireZoneMember {
   model: string;
   scalars: WireScalar[];
   /** Its items' media fields, each a link from the item's row. */
-  media: WireRelation[];
-  /** Its own component and media keys, which Strapi sends only when the zone's populate names them. */
+  media: WireEmbeddedMedia[];
+  /** Relations inside its items, each held by the item's row. */
+  relations: WireComponentRelation[];
+  /** Repeatables inside its items. */
+  children: WireChild[];
+  /** Its own component, media and relation keys, which Strapi sends only when the zone's populate names them. */
   components: string[];
 }
 export interface WireZone {
@@ -104,6 +126,8 @@ export interface WireShape {
    * path on the wire (`seo.metaImage`), since the component is columns of that row.
    */
   embeddedMedia: WireEmbeddedMedia[];
+  /** Relations inside embedded components, held by the entry's own row, keyed by their dotted path. */
+  embeddedRelations: WireComponentRelation[];
   /** The top-level component keys, embedded or repeatable, and the zones, in IR order: what populate can name. */
   components: string[];
   zones: WireZone[];
@@ -126,9 +150,19 @@ export const wireShape = (
   versioned: ReadonlySet<string> = new Set(),
   localized: ReadonlySet<string> = new Set(),
   fileModel?: string,
+  deep = true,
 ): WireShape => {
   const names = filamentNames(ct);
-  const expansion = expandComponents(doc, ct);
+  // Relations and nested repeatables inside components are stored on Laravel's layout only
+  // (`fileModel` names that layout's media library; the Strapi layout passes `deep: false`).
+  const expansion = expandComponents(
+    doc,
+    ct,
+    deep ? { componentRelations: true, nestedTables: true } : {},
+  );
+  const context = deep ? { doc } : undefined;
+  const asWireRelation = (r: ComponentRelation): WireComponentRelation =>
+    componentWireRelation(r, versioned, localized);
   // A private component keeps every field inside it private too: Strapi never reaches into it.
   const privateKeys = new Set(ct.fields.filter((f) => f.private === true).map(fieldApiName));
   const privacy = (isPrivate: boolean): { private?: true } => (isPrivate ? { private: true } : {});
@@ -171,30 +205,43 @@ export const wireShape = (
           field: s.path.join("."),
           ...privacy(s.field.private === true || within(s.apiPath)),
         }));
-  const children: WireChild[] = expansion.tables.map((t) => {
-    const child = childTableEmit(ct, t, fileModel !== undefined);
-    return {
-      key: t.apiPath,
-      uid: componentUid(tableComponent(doc, ct, t.path)),
-      relation: child.relationName,
-      model: child.model,
-      media:
-        fileModel === undefined
-          ? []
-          : child.media.map((m) =>
-              mediaRelation(m.apiPath.join("."), m.method, m.multiple, fileModel),
-            ),
-      scalars: t.scalars
-        .filter((s) => fileModel === undefined || s.field.type !== "media")
-        .map((s) => ({
-          key: s.apiPath,
-          column: s.path.map(snakeColumn).join("_"),
-          type: s.field.type,
-          ...privacy(s.field.private === true),
-        })),
-      ...privacy(within(t.apiPath)),
-    };
+  // An item's file, linked from the item's row: Strapi links it from the component holding it.
+  const itemMedia = (m: ChildMedia, item: Component, model: string): WireEmbeddedMedia => ({
+    ...mediaRelation(m.apiPath.join("."), m.method, m.multiple, model),
+    component: componentUid(componentAlong(doc, item.fields, m.path.slice(0, -1)) ?? item),
+    field: m.path.join("."),
   });
+  const wireChild = (t: ExpandedTable, child: ChildTableEmit, isPrivate: boolean): WireChild => ({
+    key: t.apiPath,
+    uid: componentUid(t.component),
+    relation: child.relationName,
+    model: child.model,
+    media:
+      fileModel === undefined ? [] : child.media.map((m) => itemMedia(m, t.component, fileModel)),
+    relations: child.relations.map((r) => asWireRelation(r)),
+    children: t.tables.map((nested, i) => wireChild(nested, child.children[i]!, false)),
+    scalars: t.scalars
+      .filter((s) => fileModel === undefined || s.field.type !== "media")
+      .map((s) => ({
+        key: s.apiPath,
+        column: s.path.map(snakeColumn).join("_"),
+        type: s.field.type,
+        ...privacy(s.field.private === true),
+      })),
+    ...privacy(isPrivate),
+  });
+  const children: WireChild[] = expansion.tables.map((t) =>
+    wireChild(t, childTableEmit(ct, t, fileModel !== undefined, context), within(t.apiPath)),
+  );
+  const embeddedRelations = componentRelations(
+    doc,
+    names.table,
+    `${snake(ct.name)}_id`,
+    expansion.relations,
+  ).map((r) => ({
+    ...asWireRelation(r),
+    ...privacy(within(r.apiPath)),
+  }));
   // What populate can name: a private component is not among them, so naming it is refused.
   const components = ct.fields
     .filter((f) => (f.type === "component" || f.type === "dynamicZone") && f.private !== true)
@@ -202,7 +249,7 @@ export const wireShape = (
   const zones: WireZone[] = expansion.zones.map((z) => ({
     key: z.apiName,
     members: z.members.map((m) => {
-      const child = childTableEmit(ct, m.table, fileModel !== undefined);
+      const child = childTableEmit(ct, m.table, fileModel !== undefined, context);
       return {
         uid: componentUid(m.component),
         label: m.component.name,
@@ -211,9 +258,9 @@ export const wireShape = (
         media:
           fileModel === undefined
             ? []
-            : child.media.map((f) =>
-                mediaRelation(f.apiPath.join("."), f.method, f.multiple, fileModel),
-              ),
+            : child.media.map((f) => itemMedia(f, m.component, fileModel)),
+        relations: child.relations.map((r) => asWireRelation(r)),
+        children: m.table.tables.map((nested, i) => wireChild(nested, child.children[i]!, false)),
         scalars: m.table.scalars
           .filter((s) => fileModel === undefined || s.field.type !== "media")
           .map((s) => ({
@@ -223,7 +270,9 @@ export const wireShape = (
             ...privacy(s.field.private === true),
           })),
         components: m.component.fields
-          .filter((f) => f.type === "component" || f.type === "media")
+          .filter(
+            (f) => f.type === "component" || f.type === "media" || (deep && f.type === "relation"),
+          )
           .map((f) => fieldApiName(f)),
       };
     }),
@@ -236,6 +285,7 @@ export const wireShape = (
     scalars: [...top, ...embedded],
     children,
     embeddedMedia,
+    embeddedRelations,
     components,
     zones,
     relations: [
@@ -267,20 +317,53 @@ export const wireShape = (
   };
 };
 
+/**
+ * A relation inside a component as the API reaches it: like a relation the type declares, from
+ * the holding row's own key or link table, and with no inverse (Strapi's go one way).
+ */
+const componentWireRelation = (
+  r: ComponentRelation,
+  versioned: ReadonlySet<string>,
+  localized: ReadonlySet<string>,
+): WireComponentRelation => ({
+  key: r.apiPath.join("."),
+  relation: r.method,
+  kind: r.many ? "belongsToMany" : "belongsTo",
+  model: filamentNames(r.target).model,
+  foreignKey: r.foreignKey?.column ?? null,
+  uid: strapiUid(r.target),
+  holder: "self",
+  draftPublish: versioned.has(r.target.name),
+  localized: localized.has(r.target.name),
+  order: r.pivot === null ? null : { table: r.pivot.table, column: r.pivot.order },
+  inverseOrder: null,
+  component: componentUid(r.component),
+  field: r.path[r.path.length - 1]!,
+  declares: r.relationKind,
+});
+
 /** The component at a path of component fields (a repeatable child table's, or an embedded one's). */
 const tableComponent = (doc: IrDocument, ct: ContentType, path: string[]): Component => {
-  let fields = ct.fields;
+  const found = componentAlong(doc, ct.fields, path);
+  if (found === undefined) throw new Error(`${ct.name}.${path.join(".")}: no component there`);
+  return found;
+};
+
+/** The component a path of component fields leads to from $fields; undefined for an empty path. */
+const componentAlong = (
+  doc: IrDocument,
+  fields: readonly Field[],
+  path: readonly string[],
+): Component | undefined => {
   let found: Component | undefined;
   for (const name of path) {
-    const field = fields.find((f) => f.name === name);
+    const field = (found?.fields ?? fields).find((f) => f.name === name);
     found =
       field?.type === "component"
         ? doc.components.find((c) => c.name === field.component)
         : undefined;
-    if (found === undefined) throw new Error(`${ct.name}.${path.join(".")}: no component there`);
-    fields = found.fields;
+    if (found === undefined) throw new Error(`${path.join(".")}: no component there`);
   }
-  if (found === undefined) throw new Error(`${ct.name}: a child table needs a path`);
   return found;
 };
 

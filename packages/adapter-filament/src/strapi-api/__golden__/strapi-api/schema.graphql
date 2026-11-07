@@ -101,6 +101,9 @@ type Query {
   landing(documentId: ID!, status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): Landing
   landings_connection(filters: LandingFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): LandingEntityResponseCollection
   landings(filters: LandingFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [Landing]!
+  menu(documentId: ID!, status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): Menu
+  menus_connection(filters: MenuFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): MenuEntityResponseCollection
+  menus(filters: MenuFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [Menu]!
   note(documentId: ID!, status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): Note
   notes_connection(filters: NoteFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): NoteEntityResponseCollection
   notes(filters: NoteFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [Note]!
@@ -232,6 +235,9 @@ type Mutation {
   createLanding(status: PublicationStatus = PUBLISHED, data: LandingInput!): Landing
   updateLanding(documentId: ID!, status: PublicationStatus = PUBLISHED, data: LandingInput!): Landing
   deleteLanding(documentId: ID!): DeleteMutationResponse
+  createMenu(status: PublicationStatus = PUBLISHED, data: MenuInput!): Menu
+  updateMenu(documentId: ID!, status: PublicationStatus = PUBLISHED, data: MenuInput!): Menu
+  deleteMenu(documentId: ID!): DeleteMutationResponse
   createNote(status: PublicationStatus = PUBLISHED, data: NoteInput!): Note
   updateNote(documentId: ID!, status: PublicationStatus = PUBLISHED, data: NoteInput!): Note
   deleteNote(documentId: ID!): DeleteMutationResponse
@@ -1084,6 +1090,104 @@ type LandingEntityResponseCollection {
   pageInfo: Pagination!
 }
 
+type ComponentSharedLink {
+  id: ID!
+  label: String
+}
+
+input ComponentSharedLinkFiltersInput {
+  label: StringFilterInput
+  and: [ComponentSharedLinkFiltersInput]
+  or: [ComponentSharedLinkFiltersInput]
+  not: ComponentSharedLinkFiltersInput
+}
+
+input ComponentSharedLinkInput {
+  id: ID
+  label: String
+}
+
+type ComponentSharedMenuItem {
+  id: ID!
+  label: String!
+  link: ComponentSharedLink
+  icon: ComponentSharedFrame
+  children(filters: ComponentSharedLinkFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): [ComponentSharedLink]
+}
+
+input ComponentSharedMenuItemFiltersInput {
+  label: StringFilterInput
+  link: ComponentSharedLinkFiltersInput
+  icon: ComponentSharedFrameFiltersInput
+  children: ComponentSharedLinkFiltersInput
+  and: [ComponentSharedMenuItemFiltersInput]
+  or: [ComponentSharedMenuItemFiltersInput]
+  not: ComponentSharedMenuItemFiltersInput
+}
+
+input ComponentSharedFrameFiltersInput {
+  caption: StringFilterInput
+  and: [ComponentSharedFrameFiltersInput]
+  or: [ComponentSharedFrameFiltersInput]
+  not: ComponentSharedFrameFiltersInput
+}
+
+input ComponentSharedMenuItemInput {
+  id: ID
+  label: String
+  link: ComponentSharedLinkInput
+  icon: ComponentSharedFrameInput
+  children: [ComponentSharedLinkInput]
+}
+
+input ComponentSharedFrameInput {
+  id: ID
+  caption: String
+  image: ID
+}
+
+union MenuSectionsDynamicZone = ComponentSharedLink | ComponentSharedMenuItem | Error
+
+scalar MenuSectionsDynamicZoneInput
+
+type Menu {
+  documentId: ID!
+  title: String!
+  cta: ComponentSharedLink
+  items(filters: ComponentSharedMenuItemFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): [ComponentSharedMenuItem]
+  sections: [MenuSectionsDynamicZone]
+  createdAt: DateTime
+  updatedAt: DateTime
+  publishedAt: DateTime
+}
+
+input MenuInput {
+  title: String
+  cta: ComponentSharedLinkInput
+  items: [ComponentSharedMenuItemInput]
+  sections: [MenuSectionsDynamicZoneInput!]
+  publishedAt: DateTime
+  locale: String
+}
+
+input MenuFiltersInput {
+  documentId: IDFilterInput
+  title: StringFilterInput
+  cta: ComponentSharedLinkFiltersInput
+  items: ComponentSharedMenuItemFiltersInput
+  createdAt: DateTimeFilterInput
+  updatedAt: DateTimeFilterInput
+  publishedAt: DateTimeFilterInput
+  and: [MenuFiltersInput]
+  or: [MenuFiltersInput]
+  not: MenuFiltersInput
+}
+
+type MenuEntityResponseCollection {
+  nodes: [Menu!]!
+  pageInfo: Pagination!
+}
+
 type Note {
   documentId: ID!
   recordId: String!
@@ -1274,19 +1378,6 @@ input ReviewFiltersInput {
 type ReviewEntityResponseCollection {
   nodes: [Review!]!
   pageInfo: Pagination!
-}
-
-input ComponentSharedFrameFiltersInput {
-  caption: StringFilterInput
-  and: [ComponentSharedFrameFiltersInput]
-  or: [ComponentSharedFrameFiltersInput]
-  not: ComponentSharedFrameFiltersInput
-}
-
-input ComponentSharedFrameInput {
-  id: ID
-  caption: String
-  image: ID
 }
 
 type ComponentSharedSeo {
@@ -1742,4 +1833,4 @@ type UsersPermissionsPasswordPayload {
   ok: Boolean!
 }
 
-union GenericMorph = ComponentSharedFrame | ComponentSharedHero | ComponentSharedLine | ComponentSharedMoney | ComponentSharedPanel | ComponentSharedQuantity | ComponentSharedSeo | UploadFile | I18NLocale | UsersPermissionsPermission | UsersPermissionsRole | UsersPermissionsUser | Activity | ActivitySession | Article | Author | Book | Category | Genre | Global | Homepage | Landing | Note | Page | Post | Review | Storyboard | Submission | Tag | Topic | Transaction
+union GenericMorph = ComponentSharedFrame | ComponentSharedHero | ComponentSharedLine | ComponentSharedLink | ComponentSharedMenuItem | ComponentSharedMoney | ComponentSharedPanel | ComponentSharedQuantity | ComponentSharedSeo | UploadFile | I18NLocale | UsersPermissionsPermission | UsersPermissionsRole | UsersPermissionsUser | Activity | ActivitySession | Article | Author | Book | Category | Genre | Global | Homepage | Landing | Menu | Note | Page | Post | Review | Storyboard | Submission | Tag | Topic | Transaction

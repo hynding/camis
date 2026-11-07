@@ -1,5 +1,11 @@
 import { columnField, type ExpandedScalar, type ExpandedTable } from "@camis/adapter-kernel";
-import type { ContentType } from "@camis/ir-schema";
+import type { ContentType, IrDocument } from "@camis/ir-schema";
+import {
+  componentRelationMethod,
+  componentRelationPicker,
+  componentRelations,
+  type ComponentRelation,
+} from "./component-relations";
 import { emitField, type FieldEmit } from "./fields";
 import { filamentNames, snake, snakeColumn } from "./names";
 import type { RelationMethod } from "./relations";
@@ -16,12 +22,25 @@ export interface ChildTableEmit {
   table: string;
   model: string;
   fk: string;
+  /** The table the foreign key points at: the entry's, or the item's this one is nested in. */
+  parentTable: string;
   relationName: string;
   emits: FieldEmit[];
   /** A dynamic zone member's rows: they keep the item's place in the zone. */
   ordered?: boolean;
   /** Its media fields, when the project has a media library: links to its files, not columns. */
   media: ChildMedia[];
+  /** Relations inside the item, held by its row. */
+  relations: ComponentRelation[];
+  /** Repeatables inside the item: tables of their own, keyed by the item's id. */
+  children: ChildTableEmit[];
+}
+
+/** What a child table needs beyond its own expansion: relation targets, and the row holding it. */
+export interface ChildContext {
+  doc: IrDocument;
+  /** The item table this one is nested in; the entry's when absent. */
+  parent?: ChildTableEmit;
 }
 
 /** A media field of a repeatable component's item, linked to the library through its own row. */
@@ -45,14 +64,19 @@ export const childTableEmit = (
   ct: ContentType,
   table: ExpandedTable,
   linksMedia = false,
+  context?: ChildContext,
 ): ChildTableEmit => {
-  const parent = filamentNames(ct);
+  const owner = filamentNames(ct);
+  const parent = context?.parent;
   const pathSnake = table.path.map(snakeColumn).join("_");
   const isLink = (s: ExpandedScalar): boolean => linksMedia && s.field.type === "media";
-  return {
-    table: `${parent.table}_${pathSnake}`,
-    model: `${parent.model}${table.path.map(studlySegment).join("")}`,
-    fk: `${snake(ct.name)}_id`,
+  const name = parent?.table ?? owner.table;
+  const model = `${parent?.model ?? owner.model}${table.path.map(studlySegment).join("")}`;
+  const self = {
+    table: `${name}_${pathSnake}`,
+    model,
+    fk: parent === undefined ? `${snake(ct.name)}_id` : `${snake(parent.model)}_id`,
+    parentTable: name,
     relationName: camelPath(table.path),
     emits: table.scalars
       .filter((s) => !isLink(s))
@@ -65,14 +89,47 @@ export const childTableEmit = (
       ...mediaAllowedTypes(s.field),
     })),
   };
+  const holderKey = `${snake(model)}_id`;
+  const relations =
+    context === undefined
+      ? []
+      : componentRelations(context.doc, self.table, holderKey, table.relations);
+  const emit: ChildTableEmit = { ...self, relations, children: [] };
+  emit.children =
+    context === undefined
+      ? []
+      : table.tables.map((t) =>
+          childTableEmit(ct, t, linksMedia, { doc: context.doc, parent: emit }),
+        );
+  return emit;
 };
+
+/** The table and every table nested in its items, parents first. */
+export const childTablesWithin = (child: ChildTableEmit): ChildTableEmit[] => [
+  child,
+  ...child.children.flatMap(childTablesWithin),
+];
+
+/** Whether deleting an item must go one row at a time: it, or an item nested in it, links files. */
+export const linksFilesWithin = (child: ChildTableEmit): boolean =>
+  child.media.length > 0 || child.children.some(linksFilesWithin);
 
 export const childMigrationFilename = (child: ChildTableEmit, ordinal: number): string =>
   `database/migrations/0001_01_02_${String(ordinal).padStart(6, "0")}_create_${child.table}_table.php`;
 
-export const emitChildMigration = (ct: ContentType, child: ChildTableEmit): string => {
-  const parent = filamentNames(ct);
-  const columns = child.emits.map((e) => `            ${e.migration};`).join("\n");
+export const emitChildMigration = (child: ChildTableEmit): string => {
+  const columns = [
+    ...child.emits.map((e) => e.migration),
+    ...child.relations.flatMap((r) =>
+      r.foreignKey === null
+        ? []
+        : [
+            `${r.foreignKey.definition}->constrained('${r.foreignKey.table}')${r.foreignKey.onDelete}`,
+          ],
+    ),
+  ]
+    .map((line) => `            ${line};`)
+    .join("\n");
   return `<?php
 
 declare(strict_types=1);
@@ -87,7 +144,7 @@ return new class extends Migration
     {
         Schema::create('${child.table}', function (Blueprint $table): void {
             $table->id();
-            $table->foreignId('${child.fk}')->constrained('${parent.table}')->cascadeOnDelete();${child.ordered === true ? "\n            $table->unsignedInteger('position');" : ""}
+            $table->foreignId('${child.fk}')->constrained('${child.parentTable}')->cascadeOnDelete();${child.ordered === true ? "\n            $table->unsignedInteger('position');" : ""}
 ${columns}
             $table->timestamps();
         });
@@ -106,6 +163,7 @@ export const emitChildModel = (child: ChildTableEmit, fileModel = "File"): strin
   const fillable = [
     ...(child.ordered === true ? ["position"] : []),
     ...child.emits.map((e) => e.column),
+    ...child.relations.flatMap((r) => (r.foreignKey === null ? [] : [r.foreignKey.column])),
   ]
     .map((column) => `        '${column}',`)
     .join("\n");
@@ -120,14 +178,32 @@ export const emitChildModel = (child: ChildTableEmit, fileModel = "File"): strin
   const media = child.media.map(
     (m) => `\n${mediaRelationMethod(m.path.join("."), m.method, fileModel)}\n`,
   );
-  const hasMedia = child.media.length > 0 ? "\n    use \\App\\Models\\Concerns\\HasMedia;\n" : "";
+  const methods = [
+    ...child.children.map(childRelationMethod),
+    ...child.relations.map(componentRelationMethod),
+  ];
+  const links = methods.map((m) => `\n${m.php}\n`);
+  const imports = [...new Set(methods.map((m) => m.import))]
+    .sort()
+    .map((i) => `\nuse ${i};`)
+    .join("");
+  // Its nested items go one by one when any of them links files, so their links go too.
+  const nestedFiles = child.children.filter(linksFilesWithin).map((c) => c.relationName);
+  const hasMedia =
+    child.media.length > 0 || nestedFiles.length > 0
+      ? "\n    use \\App\\Models\\Concerns\\HasMedia;\n"
+      : "";
+  const mediaComponents =
+    nestedFiles.length > 0
+      ? `\n    public const MEDIA_COMPONENTS = [${nestedFiles.map((r) => `'${r}'`).join(", ")}];\n`
+      : "";
   return `<?php
 
 declare(strict_types=1);
 
 namespace App\\Models;
 
-use Illuminate\\Database\\Eloquent\\Model;
+use Illuminate\\Database\\Eloquent\\Model;${imports}
 
 class ${child.model} extends Model
 {${hasMedia}
@@ -136,7 +212,7 @@ class ${child.model} extends Model
     protected $fillable = [
 ${fillable}
     ];
-${castsMethod}${media.join("")}}
+${mediaComponents}${castsMethod}${media.join("")}${links.join("")}}
 `;
 };
 
@@ -150,22 +226,63 @@ export interface RepeaterEmit {
   imports: string[];
 }
 
-export const repeaterComponent = (child: ChildTableEmit): RepeaterEmit => {
+/**
+ * `depth` is how many repeaters the item sits in (1 for an entry's own): a picker reaches the
+ * record's locale that many items up. `pickers` says how a relation inside the item is picked.
+ */
+export const repeaterComponent = (
+  child: ChildTableEmit,
+  pickers: RelationPickers = NO_PICKERS,
+  depth = 1,
+): RepeaterEmit => {
+  const nested = child.children.map((c) => repeaterComponent(c, pickers, depth + 1));
+  const pad = "    ".repeat(depth - 1);
   const inner = [
     ...child.emits.map((e) => e.formComponent),
     ...child.media.map(
       (m) =>
         `MediaPicker::make('${m.method}', multiple: ${m.multiple}${m.allowedTypes === undefined ? "" : `, allowedTypes: [${m.allowedTypes.map((t) => `'${t}'`).join(", ")}]`})`,
     ),
+    ...child.relations.map((r) =>
+      componentRelationPicker(r, pickers.versioned, pickers.localized, pickers.locale(depth)),
+    ),
+    ...nested.map((n) => n.component),
   ]
-    .map((c) => `                ${c},`)
+    .map((c) => `${pad}                ${c},`)
     .join("\n");
   return {
-    component: `Repeater::make('${child.relationName}')->relationship()->schema([\n${inner}\n            ])`,
+    component: `Repeater::make('${child.relationName}')->relationship()->schema([\n${inner}\n${pad}            ])`,
     imports: [
       "Filament\\Forms\\Components\\Repeater",
       ...child.emits.map((e) => e.formImport),
       ...(child.media.length > 0 ? ["App\\Filament\\Support\\MediaPicker"] : []),
+      ...(child.relations.length > 0 ? ["Filament\\Forms\\Components\\Select"] : []),
+      ...nested.flatMap((n) => n.imports),
     ],
   };
 };
+
+/** How the admin picks a relation inside a component: what the record's draft and locale narrow. */
+export interface RelationPickers {
+  versioned: ReadonlySet<string>;
+  localized: ReadonlySet<string>;
+  /** The record's locale field seen from `depth` repeaters down, or null when it keeps none. */
+  locale: (depth: number) => string | null;
+}
+
+export const NO_PICKERS: RelationPickers = {
+  versioned: new Set(),
+  localized: new Set(),
+  locale: () => null,
+};
+
+/** Pickers for a record of `ct`: its locale field is two levels up per repeater it sits in. */
+export const relationPickers = (
+  ct: ContentType,
+  versioned: ReadonlySet<string>,
+  localized: ReadonlySet<string>,
+): RelationPickers => ({
+  versioned,
+  localized,
+  locale: (depth) => (localized.has(ct.name) ? `${"../".repeat(2 * depth)}locale` : null),
+});
