@@ -395,8 +395,9 @@ describe("component fields — repeatable child tables", () => {
 
     const parentModel = result.files.find((f) => f.path === "app/Models/ActivitySession.php")!;
     expect(parentModel.content).toContain("public function quantities(): HasMany");
+    // Items keep the order they were written in: PostgreSQL returns rows an update moved last.
     expect(parentModel.content).toContain(
-      "return $this->hasMany(ActivitySessionQuantities::class, 'activity_session_id');",
+      "return $this->hasMany(ActivitySessionQuantities::class, 'activity_session_id')->orderBy('id');",
     );
 
     const form = result.files.find((f) => f.path.endsWith("Schemas/ActivitySessionForm.php"))!;
