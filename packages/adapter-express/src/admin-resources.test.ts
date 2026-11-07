@@ -51,3 +51,18 @@ describe("adminResourceFiles", () => {
     expect(articles).not.toContain("seo");
   });
 });
+
+describe("adminResourceFiles — color", () => {
+  it("lists a color as text and edits it in a text input", () => {
+    const files = adminResourceFiles({
+      version: 1,
+      contentTypes: [
+        { name: "Swatch", kind: "collection", fields: [{ type: "color", name: "accent" }] },
+      ],
+      components: [],
+    } as IrDocument);
+    const all = files.map((f) => f.content).join("\n");
+    expect(all).toContain('<TextField source="accent" />');
+    expect(all).toContain('<TextInput source="accent" />');
+  });
+});

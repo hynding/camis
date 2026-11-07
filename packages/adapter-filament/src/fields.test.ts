@@ -33,6 +33,15 @@ describe("emitField", () => {
     );
     expect(isSupportedField("blocks")).toBe(true);
   });
+  it("maps a color to a string column, Filament's color picker and a color column", () => {
+    const f = emitField({ type: "color", name: "accentColor" } as Field);
+    expect(f.migration).toBe("$table->string('accent_color')->nullable()");
+    expect(f.formComponent).toBe("ColorPicker::make('accent_color')");
+    expect(f.formImport).toBe("Filament\\Forms\\Components\\ColorPicker");
+    expect(f.tableColumn).toBe("ColorColumn::make('accent_color')");
+    expect(f.tableImport).toBe("Filament\\Tables\\Columns\\ColorColumn");
+    expect(isSupportedField("color")).toBe(true);
+  });
   it("isSupportedField gates the supported subset", () => {
     expect(isSupportedField("string")).toBe(true);
     expect(isSupportedField("relation")).toBe(false);
