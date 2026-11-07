@@ -1311,7 +1311,7 @@ re-recorded from strapi-php; DynamicZonesTest picks, keeps and publishes an item
 
 ---
 
-## Phase 39 — the color picker (`ir-schema`, `strapi-schema`, `adapter-strapi`, `adapter-filament`, `adapter-express`)
+## Phase 40 — the color picker (`ir-schema`, `strapi-schema`, `adapter-strapi`, `adapter-filament`, `adapter-express`)
 
 Strapi ships the color-picker plugin, whose custom field (`plugin::color-picker.color`) holds a
 color as a string; strapi-php's getstarted kitchensink uses two. The importer reported every

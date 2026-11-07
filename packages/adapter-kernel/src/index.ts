@@ -22,3 +22,13 @@ export { stableJson } from "./stable-json";
 export { TS_MARKER, withMarker } from "./marker";
 export { buildManifest, MANIFEST_PATH, sha256 } from "./manifest";
 export { materialize } from "./materialize";
+export { isEnvReference } from "./provider-settings";
+export type {
+  EmailSettings,
+  EnvReference,
+  FileStorage,
+  MailTransport,
+  ProviderSettings,
+  Setting,
+  UploadSettings,
+} from "./provider-settings";
