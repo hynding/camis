@@ -73,6 +73,23 @@ describe("toAttribute — relations", () => {
       toAttribute({ type: "relation", name: "owner", relationKind: "oneToOne", target: "User" }),
     ).toEqual({ type: "relation", relation: "oneToOne", target: "api::user.user" });
   });
+
+  it("keeps a required relation required, which strictRelations enforces", () => {
+    expect(
+      toAttribute({
+        type: "relation",
+        name: "venue",
+        relationKind: "manyToOne",
+        target: "Genre",
+        required: true,
+      }),
+    ).toEqual({
+      type: "relation",
+      relation: "manyToOne",
+      target: "api::genre.genre",
+      required: true,
+    });
+  });
 });
 
 describe("toAttribute — uid targetField", () => {
