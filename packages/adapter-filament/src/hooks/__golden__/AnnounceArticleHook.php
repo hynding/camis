@@ -8,7 +8,7 @@ namespace App\Hooks\Contracts;
 interface AnnounceArticleHook
 {
     /**
-     * Runs afterCreate. Throwing stops the request; the record is already written.
+     * Runs after the record is created. Throwing stops the request; the record is already written.
      *
      * @param array{title: string} $input
      */
