@@ -7,7 +7,8 @@ export interface ProjectFile {
   content: string;
 }
 
-const CODE = /\.(?:[cm]?js|jsx|ts|tsx)$/;
+// Strapi's JavaScript and TypeScript, and strapi-php's PHP, which keeps Strapi's layout file for file.
+const CODE = /\.(?:[cm]?js|jsx|ts|tsx|php)$/;
 
 // What each kind of custom code is, and where its behavior goes in camis.
 const MESSAGES = {
@@ -26,51 +27,62 @@ const MESSAGES = {
   lifecycles:
     "lifecycle code is not imported; declare each lifecycle as an IR hook (beforeCreate, afterCreate, beforeUpdate, afterUpdate, beforeDelete or afterDelete) and port its code into the seeded hook class",
   cronTasks:
-    "cron tasks are not imported; declare each as an IR schedule with its rule and port its code into the seeded task class",
+    "cron tasks are not imported; declare each as an IR schedule with its rule (five fields: drop a leading seconds field) and port its code into the seeded task class",
   bootstrap:
     "register() and bootstrap() code is not imported; port it by hand (Filament: a service provider)",
   pluginExtension: "a plugin extension is not imported; port it by hand",
   localPlugin: "a local plugin is not imported; port it by hand",
   adminCustomization: "admin panel customizations are not imported; camis's admin is its own",
+  customCode: "hand-written code is not imported; port it by hand",
 } as const;
 type Feature = keyof typeof MESSAGES;
 
 const stripComments = (source: string): string =>
   source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
 
-// What is left of a module once its imports, requires and strict-mode pragma are gone.
+// What is left of a module once its imports, requires, PHP preamble and strict-mode pragma are gone.
 const body = (source: string): string =>
   stripComments(source)
+    .replace(/<\?php/, "")
+    .replace(/declare\s*\(\s*strict_types\s*=\s*1\s*\)\s*;/, "")
+    .replace(/^\s*use\s+[\w\\]+(?:\s+as\s+\w+)?\s*;/gm, "")
     .replace(/(["'])use strict\1;?/g, "")
     .replace(/import\s[^;]*?from\s*(["'])[^"']+\1;?/g, "")
     .replace(/const\s*\{[^}]*\}\s*=\s*require\([^)]*\)(?:\.\w+)*;?/g, "");
 
 // The one-line factory a new Strapi API is generated with: the core controller, service or router.
 const DEFAULT_FACTORY =
-  /^(?:export\s+default|module\.exports\s*=)\s*(?:factories\.)?createCore(?:Controller|Service|Router)\(\s*(["'`])[^"'`]+\1\s*\)\s*;?$/;
+  /^(?:export\s+default|module\.exports\s*=|return)\s*(?:factories\.|Factories::)?createCore(?:Controller|Service|Router)\(\s*(["'`])[^"'`]+\1\s*\)\s*;?$/;
 const isDefaultFactory = (source: string): boolean => DEFAULT_FACTORY.test(body(source).trim());
 
-// A new project's src/index: empty register() and bootstrap().
+// A new project's src/index: empty register() and bootstrap(), as methods or (PHP) closures.
+const EMPTY_LIFECYCLE =
+  /(?:(["'])(?:register|bootstrap)\1\s*=>\s*(?:static\s+)?function|(?:async\s+)?(?:register|bootstrap))\s*\([^)]*\)\s*(?::\s*\??\w+\s*)?\{\s*\}/g;
 const isDefaultIndex = (source: string): boolean =>
   body(source)
-    .replace(/(?:async\s+)?(?:register|bootstrap)\s*\([^)]*\)\s*\{\s*\}/g, "")
-    .replace(/export\s+default|module\.exports\s*=|[\s{},;]/g, "") === "";
+    .replace(EMPTY_LIFECYCLE, "")
+    .replace(/export\s+default|module\.exports\s*=|return|[\s{}[\],;]/g, "") === "";
 
 const classify = (path: string, content: string): Feature | undefined => {
-  if (/^config\/cron-tasks\.\w+$/.test(path)) return "cronTasks";
+  if (/^config\/(?:.+\/)?cron-tasks\.\w+$/.test(path)) return "cronTasks";
   if (/^config\/server\.\w+$/.test(path))
-    return /cron\s*:\s*\{[\s\S]*tasks\s*:\s*\{/.test(stripComments(content))
+    return /cron["']?\s*(?::|=>)\s*[[{][\s\S]*tasks["']?\s*(?::|=>)\s*[[{]/.test(
+      stripComments(content),
+    )
       ? "cronTasks"
       : undefined;
   if (path.startsWith("config/")) return undefined;
-  if (/^src\/index\.\w+$/.test(path)) return isDefaultIndex(content) ? undefined : "bootstrap";
+  if (/^src\/(?:api\/[^/]+\/)?index\.\w+$/.test(path))
+    return isDefaultIndex(content) ? undefined : "bootstrap";
   if (path.startsWith("src/extensions/")) return "pluginExtension";
-  if (/^src\/admin\/app\.\w+$/.test(path)) return "adminCustomization";
+  if (path.startsWith("src/admin/"))
+    return /\.example\.\w+$/.test(path) ? undefined : "adminCustomization";
   if (/^src\/(?:api\/[^/]+\/)?policies\//.test(path)) return "customPolicy";
   if (/^src\/(?:api\/[^/]+\/)?middlewares\//.test(path)) return "customMiddleware";
   if (/^src\/api\/[^/]+\/content-types\/[^/]+\/lifecycles\.\w+$/.test(path)) return "lifecycles";
   const api = /^src\/api\/[^/]+\/(controllers|services|routes)\//.exec(path);
-  if (api === null || isDefaultFactory(content)) return undefined;
+  if (api === null) return "customCode";
+  if (isDefaultFactory(content)) return undefined;
   if (api[1] === "controllers") return "customController";
   if (api[1] === "services") return "customService";
   return /createCoreRouter\s*\(/.test(content) ? "routeConfig" : "customRoutes";

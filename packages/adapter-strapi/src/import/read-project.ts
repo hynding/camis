@@ -7,8 +7,8 @@ import { importDocument } from "./import-document";
 
 const SCHEMAS = ["src/api/*/content-types/*/schema.json", "src/components/*/*.json"];
 const CODE = [
-  "src/**/*.{js,cjs,mjs,jsx,ts,tsx}",
-  "config/*.{js,cjs,mjs,ts}",
+  "src/**/*.{js,cjs,mjs,jsx,ts,tsx,php}",
+  "config/**/*.{js,cjs,mjs,ts,php}",
   "src/plugins/*/package.json",
 ];
 
