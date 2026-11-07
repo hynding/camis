@@ -44,6 +44,7 @@ export const toAttribute = (
       ? PLUGIN_USER_UID
       : `api::${targetSingular}.${targetSingular}`;
     put(attr, "inversedBy", inverseApiName(field));
+    put(attr, "required", f.required);
     return withPrivate(attr);
   }
 

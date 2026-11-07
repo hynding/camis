@@ -141,6 +141,9 @@ type Query {
   submission(documentId: ID!, status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): Submission
   submissions_connection(filters: SubmissionFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): SubmissionEntityResponseCollection
   submissions(filters: SubmissionFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [Submission]!
+  ticket(documentId: ID!, status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): Ticket
+  tickets_connection(filters: TicketFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): TicketEntityResponseCollection
+  tickets(filters: TicketFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [Ticket]!
 }
 
 enum PublicationStatus {
@@ -185,7 +188,7 @@ type UploadFile {
 "The `JSON` scalar type represents JSON values as specified by [ECMA-404](http://www.ecma-international.org/publications/files/ECMA-ST/ECMA-404.pdf)."
 scalar JSON
 
-union GenericMorph = ComponentSharedFrame | ComponentSharedHero | ComponentSharedLine | ComponentSharedMoney | ComponentSharedPanel | ComponentSharedQuantity | ComponentSharedSeo | UploadFile | I18NLocale | UsersPermissionsPermission | UsersPermissionsRole | UsersPermissionsUser | Article | Author | Book | Category | Genre | Global | Homepage | Landing | Page | Post | Review | Storyboard | Submission | Topic
+union GenericMorph = ComponentSharedCode | ComponentSharedFrame | ComponentSharedHero | ComponentSharedLine | ComponentSharedMoney | ComponentSharedPanel | ComponentSharedQuantity | ComponentSharedSeo | UploadFile | I18NLocale | UsersPermissionsPermission | UsersPermissionsRole | UsersPermissionsUser | Article | Author | Book | Category | Genre | Global | Homepage | Landing | Page | Post | Review | Storyboard | Submission | Ticket | Topic
 
 type ComponentSharedHero {
   id: ID!
@@ -1167,6 +1170,9 @@ type Mutation {
   createSubmission(status: PublicationStatus = PUBLISHED, data: SubmissionInput!): Submission
   updateSubmission(documentId: ID!, status: PublicationStatus = PUBLISHED, data: SubmissionInput!): Submission
   deleteSubmission(documentId: ID!): DeleteMutationResponse
+  createTicket(status: PublicationStatus = PUBLISHED, data: TicketInput!): Ticket
+  updateTicket(documentId: ID!, status: PublicationStatus = PUBLISHED, data: TicketInput!): Ticket
+  deleteTicket(documentId: ID!): DeleteMutationResponse
 }
 
 input ArticleInput {
@@ -1519,4 +1525,68 @@ input ComponentSharedLineInput {
   id: ID
   label: String
   quantity: Int
+}
+
+type ComponentSharedCode {
+  id: ID!
+  value: String
+}
+
+input ComponentSharedCodeFiltersInput {
+  value: StringFilterInput
+  and: [ComponentSharedCodeFiltersInput]
+  or: [ComponentSharedCodeFiltersInput]
+  not: ComponentSharedCodeFiltersInput
+}
+
+input ComponentSharedCodeInput {
+  id: ID
+  value: String
+}
+
+type Ticket {
+  badge: UploadFile!
+  body: JSON
+  codes(filters: ComponentSharedCodeFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): [ComponentSharedCode]
+  createdAt: DateTime
+  documentId: ID!
+  publishedAt: DateTime
+  seat: Int
+  serial: String
+  slug: String
+  updatedAt: DateTime
+  venue: Genre!
+}
+
+input TicketFiltersInput {
+  documentId: IDFilterInput
+  serial: StringFilterInput
+  slug: StringFilterInput
+  seat: IntFilterInput
+  venue: GenreFiltersInput
+  body: JSONFilterInput
+  codes: ComponentSharedCodeFiltersInput
+  createdAt: DateTimeFilterInput
+  updatedAt: DateTimeFilterInput
+  publishedAt: DateTimeFilterInput
+  and: [TicketFiltersInput]
+  or: [TicketFiltersInput]
+  not: TicketFiltersInput
+}
+
+type TicketEntityResponseCollection {
+  nodes: [Ticket!]!
+  pageInfo: Pagination!
+}
+
+input TicketInput {
+  serial: String
+  slug: String
+  seat: Int
+  venue: ID
+  badge: ID
+  body: JSON
+  codes: [ComponentSharedCodeInput]
+  publishedAt: DateTime
+  locale: String
 }
