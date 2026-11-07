@@ -1,0 +1,741 @@
+import { PHP_MARKER } from "../hooks/names";
+
+const header = (namespace: string): string =>
+  `<?php\n${PHP_MARKER}\n\ndeclare(strict_types=1);\n\nnamespace ${namespace};\n`;
+
+export const STRAPI_CONTENT_MANAGER_PATH = "app/Support/StrapiContentManager.php";
+export const CONFIGURE_VIEW_PATH = "app/Filament/Support/ConfigureView.php";
+
+/**
+ * Strapi's Content Manager view configuration ("Configure the view"): a type's settings, each
+ * attribute's metadatas and its list and edit layouts, kept as Strapi's core store keeps them
+ * (`plugin_content_manager_configuration_content_types::<uid>`) so an imported configuration
+ * applies unchanged. Defaults and the sync after a schema change follow strapi-php's
+ * `services/utils/configuration`. A resource's list and form are laid out through it.
+ */
+export const emitStrapiContentManager = (): string =>
+  header("App\\Support") +
+  String.raw`
+use Filament\Forms\Components\Repeater;
+use Filament\Schemas\Components\Component;
+use Filament\Schemas\Components\Fieldset;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Schema;
+use Filament\Tables\Columns\Column;
+use Filament\Tables\Filters\QueryBuilder;
+use Filament\Tables\Table;
+use Filament\Infolists\Components\TextEntry;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
+
+/**
+ * $view is a resource's CONTENT_MANAGER: the type's uid, and for each attribute in schema order
+ * its Strapi type, whether the list shows it (list), sorts by it (sort), the edit view shows it
+ * (edit), and its default size in a row of 12 (size, resizable).
+ */
+final class StrapiContentManager
+{
+    public const PAGE_SIZES = [10, 20, 50, 100];
+
+    public const SIZES = [4, 6, 8, 12];
+
+    private const DEFAULT_LIST_LENGTH = 4;
+
+    private const MAX_ROW_SIZE = 12;
+
+    private const SETTINGS = ['searchable', 'filterable', 'bulkable', 'pageSize', 'mainField', 'defaultSortBy', 'defaultSortOrder'];
+
+    /** The setting the configuration is kept under. */
+    public static function key(array $view): string
+    {
+        return 'content-manager.configuration.' . $view['uid'];
+    }
+
+    /** The configuration as saved, synced with the type as it is now. */
+    public static function configuration(array $view): array
+    {
+        return self::sync($view, StrapiSettings::get(self::key($view)));
+    }
+
+    public static function save(array $view, array $configuration): void
+    {
+        $synced = self::sync($view, $configuration);
+        StrapiSettings::merge(self::key($view), ['settings' => $synced['settings'], 'metadatas' => $synced['metadatas'], 'layouts' => $synced['layouts']]);
+    }
+
+    /**
+     * The list as configured: its columns in the configured order (the others left to toggle on),
+     * labelled and sorted as configured, searched and filtered only where enabled, paged by the
+     * configured size and sorted by the configured attribute.
+     *
+     * @param array<string, Column> $columns each listable attribute's column
+     * @param array<string, mixed> $constraints each filterable attribute's QueryBuilder constraint
+     * @param list<Column> $after columns every list ends with (status, locale)
+     */
+    public static function table(Table $table, array $view, array $columns, array $constraints = [], array $after = [], array $filters = []): Table
+    {
+        ['settings' => $settings, 'metadatas' => $metadatas, 'layouts' => $layouts] = self::configuration($view);
+        $shown = array_values(array_filter($layouts['list'], fn (string $name): bool => isset($columns[$name])));
+        $ordered = [];
+        foreach ([...$shown, ...array_diff(array_keys($columns), $shown)] as $name) {
+            $column = $columns[$name];
+            $list = $metadatas[$name]['list'] ?? [];
+            $column->label(self::label($name, $list['label'] ?? $name))
+                ->toggleable(isToggledHiddenByDefault: ! in_array($name, $shown, true));
+            if (($list['sortable'] ?? true) === false) {
+                $column->sortable(false);
+            }
+            $ordered[] = $column;
+        }
+        if ($settings['filterable'] && $constraints !== []) {
+            $filters[] = QueryBuilder::make()->constraints(array_values($constraints));
+        }
+        $sortBy = $settings['defaultSortBy'];
+
+        if (! $settings['searchable']) {
+            $table->searchable(false);
+        }
+
+        return $table->columns([...$ordered, ...$after])
+            ->filters($filters)
+            ->paginated(self::PAGE_SIZES)
+            ->defaultPaginationPageOption((int) $settings['pageSize'])
+            ->defaultSort(isset($columns[$sortBy]) ? $columns[$sortBy]->getName() : 'id', strtolower((string) $settings['defaultSortOrder']));
+    }
+
+    /** The list's bulk actions, unless the view turns them off. */
+    public static function bulkActions(array $view, array $actions): array
+    {
+        return self::configuration($view)['settings']['bulkable'] ? $actions : [];
+    }
+
+    /**
+     * The edit form as configured: each row of the edit layout a grid of 12, each attribute's
+     * components sized, labelled, described and locked as configured. Components the layout leaves
+     * out are hidden, so they are neither shown nor written. An entry's form ends with when and by
+     * whom it was made and last changed, as Strapi's edit view does.
+     *
+     * @param array<string, list<Component>> $components each editable attribute's components
+     * @param list<Component> $before components every form starts with (the locale)
+     */
+    public static function form(Schema $schema, array $view, array $components, array $before = []): Schema
+    {
+        ['metadatas' => $metadatas, 'layouts' => $layouts] = self::configuration($view);
+        $rows = [];
+        $placed = [];
+        foreach ($layouts['edit'] as $row) {
+            $cells = [];
+            foreach ($row as $cell) {
+                $name = $cell['name'];
+                if (! isset($components[$name])) {
+                    continue;
+                }
+                $placed[$name] = true;
+                $cells[] = self::field($name, $components[$name], $metadatas[$name]['edit'] ?? [], (int) $cell['size']);
+            }
+            if ($cells !== []) {
+                $rows[] = Grid::make(self::MAX_ROW_SIZE)->schema($cells)->columnSpanFull();
+            }
+        }
+        $hidden = [];
+        foreach ($components as $name => $list) {
+            if (! isset($placed[$name])) {
+                foreach ($list as $component) {
+                    $hidden[] = $component->hidden();
+                }
+            }
+        }
+
+        return $schema->columns(1)->components([...$before, ...$rows, ...$hidden, self::information()]);
+    }
+
+    /**
+     * Fills a create form with an entry's content, its relations and components included, so
+     * saving it makes a new entry: the repeaters forget the entry's items, which become new ones.
+     *
+     * @param class-string<Model> $model
+     */
+    public static function fillWith(Schema $form, Model $source, string $model): void
+    {
+        $form->model($source)->fill($source->attributesToArray());
+        foreach ($form->getFlatComponents(withHidden: true) as $component) {
+            if ($component instanceof Repeater) {
+                $component->clearCachedExistingRecords();
+            }
+        }
+        $form->model($model);
+    }
+
+    /** Strapi's Information panel: when the entry was made and last changed, and by whom. */
+    private static function information(): Section
+    {
+        $by = fn (string $relation) => fn (?Model $record): string => $record?->{$relation}?->getAttribute('name') ?? '-';
+
+        return Section::make('Information')
+            ->schema([
+                TextEntry::make('information_created')->label('Created')->state(fn (?Model $record) => $record?->getAttribute('created_at'))->dateTime(),
+                TextEntry::make('information_created_by')->label('By')->state($by('createdBy')),
+                TextEntry::make('information_updated')->label('Last update')->state(fn (?Model $record) => $record?->getAttribute('updated_at'))->dateTime(),
+                TextEntry::make('information_updated_by')->label('By')->state($by('updatedBy')),
+            ])
+            ->columns(4)
+            ->columnSpanFull()
+            ->visibleOn('edit');
+    }
+
+    /** @param list<Component> $components */
+    private static function field(string $name, array $components, array $edit, int $size): Component
+    {
+        $label = $edit['label'] ?? $name;
+        $description = (string) ($edit['description'] ?? '');
+        $placeholder = (string) ($edit['placeholder'] ?? '');
+        $locked = ($edit['editable'] ?? true) === false;
+        foreach ($components as $component) {
+            if ($locked) {
+                $component->disabled();
+            }
+        }
+        if (count($components) > 1) {
+            // An embedded component's fields, boxed under its name as Strapi shows a component.
+            return Fieldset::make(self::label($name, $label))->schema($components)->columnSpan($size);
+        }
+        $component = $components[0];
+        if ($label !== $name) {
+            $component->label($label);
+        }
+        if ($description !== '' && method_exists($component, 'helperText')) {
+            $component->helperText($description);
+        }
+        if ($placeholder !== '' && method_exists($component, 'placeholder')) {
+            $component->placeholder($placeholder);
+        }
+
+        return $component->columnSpan($size);
+    }
+
+    /** A label as configured, or the attribute's name made readable while it is left as Strapi's default. */
+    public static function label(string $name, string $label): string
+    {
+        if ($label !== $name) {
+            return $label;
+        }
+
+        return $name === 'id' ? 'ID' : Str::headline($name);
+    }
+
+    /** Strapi's main field by default: the first string attribute, else id. */
+    private static function mainField(array $view): string
+    {
+        foreach ($view['attributes'] as $name => $attribute) {
+            if ($attribute['type'] === 'string') {
+                return $name;
+            }
+        }
+
+        return 'id';
+    }
+
+    /** @return list<string> */
+    public static function listable(array $view): array
+    {
+        return array_keys(array_filter($view['attributes'], fn (array $a): bool => $a['list']));
+    }
+
+    /** @return list<string> */
+    public static function sortable(array $view): array
+    {
+        return array_keys(array_filter($view['attributes'], fn (array $a): bool => $a['sort']));
+    }
+
+    /** @return list<string> */
+    public static function editable(array $view): array
+    {
+        return array_keys(array_filter($view['attributes'], fn (array $a): bool => $a['edit']));
+    }
+
+    /** The configuration Strapi makes for a type no one has configured. */
+    public static function defaults(array $view): array
+    {
+        $main = self::mainField($view);
+        $metadatas = [];
+        foreach ($view['attributes'] as $name => $attribute) {
+            $metadatas[$name] = [
+                'edit' => $attribute['edit'] ? ['label' => $name, 'description' => '', 'placeholder' => '', 'visible' => true, 'editable' => true] : [],
+                'list' => ['label' => $name, 'searchable' => $attribute['sort'], 'sortable' => $attribute['sort']],
+            ];
+        }
+
+        return [
+            'settings' => [
+                'bulkable' => true,
+                'filterable' => true,
+                'searchable' => true,
+                'pageSize' => 10,
+                'mainField' => $main,
+                'defaultSortBy' => $main,
+                'defaultSortOrder' => 'ASC',
+            ],
+            'metadatas' => $metadatas,
+            'layouts' => [
+                'list' => array_slice(self::listable($view), 0, self::DEFAULT_LIST_LENGTH),
+                'edit' => self::appendToEditLayout($view, [], self::editable($view)),
+            ],
+        ];
+    }
+
+    /**
+     * A saved configuration against the type as it is now (strapi-php's syncSettings,
+     * syncMetadatas and syncLayouts): what no longer exists is dropped, a size the attribute no
+     * longer allows sends it to the end, and attributes added since are appended.
+     */
+    public static function sync(array $view, array $stored): array
+    {
+        $defaults = self::defaults($view);
+        if (($stored['settings'] ?? []) === [] && ($stored['layouts'] ?? []) === []) {
+            return $defaults;
+        }
+        $attributes = $view['attributes'];
+        $settings = array_replace($defaults['settings'], array_intersect_key((array) ($stored['settings'] ?? []), array_flip(self::SETTINGS)));
+        foreach (['mainField', 'defaultSortBy'] as $key) {
+            if (! in_array($settings[$key], self::sortable($view), true)) {
+                $settings[$key] = $defaults['settings'][$key];
+            }
+        }
+        $settings['defaultSortOrder'] = strtoupper((string) $settings['defaultSortOrder']) === 'DESC' ? 'DESC' : 'ASC';
+        if (! in_array((int) $settings['pageSize'], self::PAGE_SIZES, true)) {
+            $settings['pageSize'] = 10;
+        }
+
+        $storedMetadatas = (array) ($stored['metadatas'] ?? []);
+        $metadatas = [];
+        foreach ($defaults['metadatas'] as $name => $metadata) {
+            $saved = (array) ($storedMetadatas[$name] ?? []);
+            $metadatas[$name] = [
+                'edit' => $metadata['edit'] === [] ? [] : array_replace($metadata['edit'], array_intersect_key((array) ($saved['edit'] ?? []), $metadata['edit'])),
+                'list' => array_replace($metadata['list'], array_intersect_key((array) ($saved['list'] ?? []), $metadata['list'])),
+            ];
+        }
+        $added = array_values(array_diff(array_keys($attributes), array_keys($storedMetadatas)));
+
+        $listable = self::listable($view);
+        $list = array_values(array_unique(array_filter((array) ($stored['layouts']['list'] ?? []), fn (mixed $name): bool => in_array($name, $listable, true))));
+        if (count($list) < self::DEFAULT_LIST_LENGTH) {
+            $list = array_slice(array_values(array_unique([...$list, ...array_intersect($added, $listable)])), 0, self::DEFAULT_LIST_LENGTH);
+        }
+
+        $editable = self::editable($view);
+        $edit = [];
+        $reappend = [];
+        $seen = [];
+        foreach ((array) ($stored['layouts']['edit'] ?? []) as $row) {
+            $kept = [];
+            foreach ((array) $row as $cell) {
+                $name = $cell['name'] ?? null;
+                if (! in_array($name, $editable, true) || isset($seen[$name])) {
+                    continue;
+                }
+                $seen[$name] = true;
+                if (! self::allowsSize($attributes[$name], $cell['size'] ?? null)) {
+                    $reappend[] = $name;
+
+                    continue;
+                }
+                $kept[] = ['name' => $name, 'size' => (int) $cell['size']];
+            }
+            if ($kept !== []) {
+                $edit[] = $kept;
+            }
+        }
+        $edit = self::appendToEditLayout($view, $edit, $reappend);
+        $edit = self::appendToEditLayout($view, $edit, array_values(array_filter($added, fn (string $name): bool => in_array($name, $editable, true) && ! isset($seen[$name]))));
+
+        return [
+            'settings' => $settings,
+            'metadatas' => $metadatas,
+            'layouts' => [
+                'list' => $list !== [] ? $list : $defaults['layouts']['list'],
+                'edit' => $edit !== [] ? $edit : $defaults['layouts']['edit'],
+            ],
+        ];
+    }
+
+    private static function allowsSize(array $attribute, mixed $size): bool
+    {
+        if (! is_int($size)) {
+            return false;
+        }
+        if (! $attribute['resizable'] && $size !== $attribute['size']) {
+            return false;
+        }
+
+        return $size <= self::MAX_ROW_SIZE;
+    }
+
+    /**
+     * Fields appended to the edit layout as Strapi appends them: to the last row while it has
+     * room, each at its default size (or the one given), then on a new row.
+     *
+     * @param list<list<array{name: string, size: int}>> $layout
+     * @param list<string> $names
+     * @param array<string, int> $sizes
+     */
+    public static function appendToEditLayout(array $view, array $layout, array $names, array $sizes = []): array
+    {
+        if ($names === []) {
+            return $layout;
+        }
+        $row = max(count($layout) - 1, 0);
+        $layout[$row] ??= [];
+        foreach ($names as $name) {
+            $size = $sizes[$name] ?? $view['attributes'][$name]['size'];
+            if (array_sum(array_column($layout[$row], 'size')) + $size > self::MAX_ROW_SIZE) {
+                $layout[++$row] = [];
+            }
+            $layout[$row][] = ['name' => $name, 'size' => $size];
+        }
+
+        return array_values(array_filter($layout, fn (array $cells): bool => $cells !== []));
+    }
+
+    /** The configuration as the "Configure the view" form edits it. */
+    public static function formState(array $view): array
+    {
+        ['settings' => $settings, 'metadatas' => $metadatas, 'layouts' => $layouts] = self::configuration($view);
+        $list = array_map(fn (string $name): array => [
+            'name' => $name,
+            'label' => $metadatas[$name]['list']['label'],
+            'sortable' => (bool) $metadatas[$name]['list']['sortable'],
+        ], $layouts['list']);
+        $edit = [];
+        foreach (array_merge(...$layouts['edit']) as $cell) {
+            $edit[] = self::editState($metadatas[$cell['name']]['edit'], $cell['name'], $cell['size'], true);
+        }
+        $placed = array_column($edit, 'name');
+        foreach (self::editable($view) as $name) {
+            if (! in_array($name, $placed, true)) {
+                $edit[] = self::editState($metadatas[$name]['edit'], $name, $view['attributes'][$name]['size'], false);
+            }
+        }
+
+        return ['settings' => $settings, 'list' => $list, 'edit' => $edit];
+    }
+
+    private static function editState(array $metadata, string $name, int $size, bool $shown): array
+    {
+        return [
+            'name' => $name,
+            'shown' => $shown,
+            'size' => $size,
+            'label' => $metadata['label'],
+            'description' => $metadata['description'],
+            'placeholder' => $metadata['placeholder'],
+            'editable' => (bool) $metadata['editable'],
+        ];
+    }
+
+    /** The configuration the "Configure the view" form describes. */
+    public static function fromFormState(array $view, array $state): array
+    {
+        $configuration = self::configuration($view);
+        $metadatas = $configuration['metadatas'];
+        $list = [];
+        foreach ($state['list'] ?? [] as $column) {
+            $name = (string) $column['name'];
+            $metadatas[$name]['list'] = array_replace($metadatas[$name]['list'], ['label' => (string) $column['label'], 'sortable' => (bool) $column['sortable']]);
+            $list[] = $name;
+        }
+        $shown = [];
+        $sizes = [];
+        foreach ($state['edit'] ?? [] as $field) {
+            $name = (string) $field['name'];
+            $metadatas[$name]['edit'] = array_replace($metadatas[$name]['edit'], [
+                'label' => (string) $field['label'],
+                'description' => (string) ($field['description'] ?? ''),
+                'placeholder' => (string) ($field['placeholder'] ?? ''),
+                'editable' => (bool) $field['editable'],
+            ]);
+            if ((bool) $field['shown']) {
+                $shown[] = $name;
+                $sizes[$name] = (int) $field['size'];
+            }
+        }
+
+        return [
+            'settings' => array_replace($configuration['settings'], array_intersect_key($state['settings'] ?? [], array_flip(self::SETTINGS))),
+            'metadatas' => $metadatas,
+            'layouts' => ['list' => $list, 'edit' => self::appendToEditLayout($view, [], $shown, $sizes)],
+        ];
+    }
+
+    /** The sizes an attribute may take in the edit layout. */
+    public static function sizes(array $attribute): array
+    {
+        $sizes = $attribute['resizable'] ? self::SIZES : [$attribute['size']];
+
+        return array_combine($sizes, array_map(fn (int $size): string => match ($size) {
+            4 => 'Small (1/3)',
+            6 => 'Half',
+            8 => 'Large (2/3)',
+            default => 'Full width',
+        }, $sizes));
+    }
+}
+`;
+
+/**
+ * Strapi's "Configure the view" page, one per content type: the list's settings and columns, and
+ * the edit view's fields, each with its label, description, placeholder, size and whether it may
+ * be edited. Saved as Strapi's view configuration; the list and form follow it on the next load.
+ */
+export const emitConfigureView = (): string =>
+  header("App\\Filament\\Support") +
+  String.raw`
+use App\Support\StrapiContentManager;
+use Filament\Actions\Action;
+use Filament\Forms\Components\Hidden;
+use Filament\Forms\Components\Repeater;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
+use Filament\Notifications\Notification;
+use Filament\Resources\Pages\Page;
+use Filament\Schemas\Components\Actions;
+use Filament\Schemas\Components\EmbeddedSchema;
+use Filament\Schemas\Components\Form;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Schema;
+
+abstract class ConfigureView extends Page
+{
+    protected static ?string $title = 'Configure the view';
+
+    public ?array $data = [];
+
+    public static function canAccess(array $parameters = []): bool
+    {
+        return static::getResource()::canConfigureView();
+    }
+
+    protected static function view(): array
+    {
+        return static::getResource()::CONTENT_MANAGER;
+    }
+
+    public function mount(): void
+    {
+        abort_unless(static::canAccess(), 403);
+        $this->form->fill(StrapiContentManager::formState(static::view()));
+    }
+
+    public function form(Schema $schema): Schema
+    {
+        $view = static::view();
+        $sortable = array_combine(StrapiContentManager::sortable($view), StrapiContentManager::sortable($view));
+        $listable = array_combine(StrapiContentManager::listable($view), StrapiContentManager::listable($view));
+
+        return $schema->components([
+            Section::make('Settings')->statePath('settings')->columns(2)->schema([
+                Toggle::make('searchable')->label('Enable search'),
+                Toggle::make('filterable')->label('Enable filters'),
+                Toggle::make('bulkable')->label('Enable bulk actions'),
+                Select::make('pageSize')->label('Entries per page')->options(array_combine(StrapiContentManager::PAGE_SIZES, StrapiContentManager::PAGE_SIZES))->required(),
+                Select::make('mainField')->label('Entry title')->options($sortable)->required(),
+                Select::make('defaultSortBy')->label('Default sort attribute')->options($sortable)->required(),
+                Select::make('defaultSortOrder')->label('Default sort order')->options(['ASC' => 'Ascending', 'DESC' => 'Descending'])->required(),
+            ]),
+            Section::make('List view')->schema([
+                Repeater::make('list')->hiddenLabel()->reorderable()->addActionLabel('Add a field')->columns(3)->schema([
+                    Select::make('name')->label('Field')->options($listable)->distinct()->required(),
+                    TextInput::make('label')->required(),
+                    Toggle::make('sortable')->label('Enable sort on this field'),
+                ]),
+            ]),
+            Section::make('Edit view')->schema([
+                Repeater::make('edit')->hiddenLabel()->reorderable()->addable(false)->deletable(false)->columns(3)
+                    ->itemLabel(fn (array $state): string => (string) ($state['name'] ?? ''))
+                    ->schema([
+                        Hidden::make('name'),
+                        Toggle::make('shown')->label('Show in the edit view'),
+                        Toggle::make('editable')->label('Editable field'),
+                        Select::make('size')->options(fn (Get $get): array => StrapiContentManager::sizes($view['attributes'][$get('name')] ?? ['resizable' => true, 'size' => 6]))->required(),
+                        TextInput::make('label')->required(),
+                        TextInput::make('description'),
+                        TextInput::make('placeholder'),
+                    ]),
+            ]),
+        ])->statePath('data');
+    }
+
+    public function content(Schema $schema): Schema
+    {
+        return $schema->components([
+            Form::make([EmbeddedSchema::make('form')])
+                ->id('form')
+                ->livewireSubmitHandler('save')
+                ->footer([Actions::make([Action::make('save')->submit('save')])]),
+        ]);
+    }
+
+    public function save(): void
+    {
+        abort_unless(static::canAccess(), 403);
+        $view = static::view();
+        StrapiContentManager::save($view, StrapiContentManager::fromFormState($view, $this->form->getState()));
+        // The list remembers its shown columns per session; the saved layout replaces this user's.
+        // (Filament's session key for a list's columns: its page class hashed.)
+        $list = hash('sha256', static::getResource()::getPages()['index']->getPage());
+        session()->forget(["filament.tables.{$list}.columns", "filament.tables.{$list}.has_reordered_columns"]);
+        Notification::make()->success()->title('Saved')->send();
+        $this->redirect(static::getResource()::getUrl());
+    }
+}
+`;
+
+export const STRAPI_UID_PATH = "app/Support/StrapiUid.php";
+export const HAS_CREATOR_FIELDS_PATH = "app/Models/Concerns/HasCreatorFields.php";
+
+/**
+ * Strapi's uid field in the Content Manager (strapi-php's content-manager `services/uid`): a value
+ * made from the target field (or the type's name) by Strapi's slugify, suffixed `-1`, `-2`, … until
+ * no draft in the locale has it, and whether a value is free for this document.
+ */
+export const emitStrapiUid = (): string =>
+  header("App\\Support") +
+  String.raw`
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
+
+final class StrapiUid
+{
+    /** strapi-php's slugify: transliterated, decamelized, non-alphanumerics to one dash, lowercased. */
+    public static function slugify(string $value): string
+    {
+        $value = Str::ascii($value);
+        $value = (string) preg_replace('/([a-z\d])([A-Z])/', '$1 $2', $value);
+        $value = (string) preg_replace('/[^a-zA-Z\d]+/', '-', $value);
+        $value = (string) preg_replace('/^-|-$/', '', (string) preg_replace('/-{2,}/', '-', $value));
+
+        return strtolower($value);
+    }
+
+    /** @param class-string<Model> $model */
+    public static function generate(string $model, string $column, mixed $target, ?string $locale, string $fallback): string
+    {
+        $source = is_scalar($target) && (string) $target !== '' ? (string) $target : $fallback;
+
+        return self::unique($model, $column, self::slugify($source), $locale);
+    }
+
+    /** @param class-string<Model> $model */
+    public static function unique(string $model, string $column, string $value, ?string $locale): string
+    {
+        $taken = self::drafts($model, $locale)
+            ->where($column, 'like', addcslashes($value, '%_\\') . '%')
+            ->pluck($column)
+            ->all();
+        if (! in_array($value, $taken, true)) {
+            return $value;
+        }
+        $i = 1;
+        while (in_array("{$value}-{$i}", $taken, true)) {
+            $i++;
+        }
+
+        return "{$value}-{$i}";
+    }
+
+    /** Whether no other document's draft in the locale has the value. */
+    public static function available(string $model, string $column, ?string $value, ?string $locale, ?Model $record): bool
+    {
+        if ($value === null || $value === '') {
+            return true;
+        }
+        $query = self::drafts($model, $locale)->where($column, $value);
+        if ($record !== null) {
+            $query->where('document_id', '!=', $record->getAttribute('document_id'));
+        }
+
+        return $query->doesntExist();
+    }
+
+    /** A validation rule refusing a value another document's draft in the locale has. */
+    public static function rule(string $model, string $column, ?string $locale, ?Model $record): \Closure
+    {
+        return function (string $attribute, mixed $value, \Closure $fail) use ($model, $column, $locale, $record): void {
+            if (! self::available($model, $column, is_scalar($value) ? (string) $value : null, $locale, $record)) {
+                $fail('This value is already taken.');
+            }
+        };
+    }
+
+    /** @param class-string<Model> $model */
+    private static function drafts(string $model, ?string $locale): Builder
+    {
+        $query = $model::query();
+        if (method_exists($model, 'publishedVersion')) {
+            $query->whereNull('published_at');
+        }
+        if ($locale !== null && method_exists($model, 'localizations')) {
+            $query->where('locale', $locale);
+        }
+
+        return $query;
+    }
+}
+`;
+
+/**
+ * Strapi's createdBy and updatedBy: the admin user who made an entry and who last changed it,
+ * recorded on writes made in the admin only (an API write records nobody, as in Strapi).
+ */
+export const emitHasCreatorFields = (): string =>
+  header("App\\Models\\Concerns") +
+  String.raw`
+use App\Models\User;
+use Filament\Facades\Filament;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+trait HasCreatorFields
+{
+    protected static function bootHasCreatorFields(): void
+    {
+        static::creating(function ($model): void {
+            $user = self::adminUser();
+            if ($user !== null) {
+                $model->created_by_id ??= $user;
+                $model->updated_by_id = $user;
+            }
+        });
+        static::updating(function ($model): void {
+            $user = self::adminUser();
+            if ($user !== null) {
+                $model->updated_by_id = $user;
+            }
+        });
+    }
+
+    /** The signed-in admin's id, while the admin panel serves the write. */
+    private static function adminUser(): ?int
+    {
+        if (Filament::getCurrentPanel() === null) {
+            return null;
+        }
+        $id = Filament::auth()->id();
+
+        return $id === null ? null : (int) $id;
+    }
+
+    public function createdBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by_id');
+    }
+
+    public function updatedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'updated_by_id');
+    }
+}
+`;

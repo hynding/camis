@@ -11,6 +11,20 @@ import {
   type Navigation,
 } from "./strapi-api/admin-navigation";
 import { listedColumn, mainFieldName, searchesNumbers } from "./strapi-api/content-manager-list";
+import {
+  configureViewAction,
+  configureViewPage,
+  CONTENT_MANAGER_TABLE_IMPORTS,
+  contentManagerForm,
+  contentManagerFormBody,
+  contentManagerResourceMembers,
+  contentManagerTableBody,
+  DUPLICATE_CREATE_IMPORTS,
+  DUPLICATE_IMPORTS,
+  duplicateAction,
+  duplicateCreateBody,
+  type ContentManagerInput,
+} from "./strapi-api/content-manager-resource";
 
 const useBlock = (imports: string[]): string =>
   [...new Set(imports)]
@@ -28,9 +42,17 @@ export const emitResourceFiles = (
     localized?: boolean;
     secured?: boolean;
     /** Media fields, picked from the media library. */
-    media?: { field: string; multiple: boolean; allowedTypes?: readonly string[] }[];
+    media?: {
+      field: string;
+      multiple: boolean;
+      allowedTypes?: readonly string[];
+      /** The attribute it belongs to: the field, or the embedded component holding it. */
+      attribute?: string;
+    }[];
     /** Its place in a Strapi-like menu, which also words the list's create button as Strapi's. */
     navigation?: Navigation;
+    /** A Content Manager type's attributes, laid out as Strapi's "Configure the view" says. */
+    contentManager?: ContentManagerInput;
   } = {},
 ): GeneratedFile[] => {
   const versioned = options.versioned === true;
@@ -57,6 +79,33 @@ export const emitResourceFiles = (
   // A draft-and-publish entry is deleted with every version of it, as Strapi deletes a document.
   const deletesDocument = navigation !== undefined && versioned;
   const secured = options.secured === true;
+  // A Content Manager type (not a Settings one) lays its list and form out as its view configures.
+  const cm =
+    navigation !== undefined && navigation.group !== "Settings"
+      ? options.contentManager
+      : undefined;
+  const cmCollection = cm !== undefined && !single;
+  const formComponentOf = (e: FieldEmit): string =>
+    manyRows ? e.formComponent.replace("->unique()", "") : e.formComponent;
+  const mediaComponent = (m: NonNullable<typeof options.media>[number]): string =>
+    `MediaPicker::make('${m.field}', multiple: ${m.multiple}${m.allowedTypes === undefined ? "" : `, allowedTypes: [${m.allowedTypes.map((t) => `'${t}'`).join(", ")}]`})`;
+  const cmForm =
+    cm === undefined
+      ? undefined
+      : contentManagerForm(
+          ct,
+          cm,
+          { fields: ownFields, emits: ownEmits },
+          extraEmits,
+          relationFields,
+          (options.media ?? []).map((m) => ({
+            component: mediaComponent(m),
+            attribute: m.attribute ?? m.field,
+          })),
+          repeaters.map((r) => r.component),
+          { localized, formComponent: formComponentOf },
+        );
+  const configure = cm === undefined ? undefined : configureViewPage(ns, n);
 
   // One row per document: its draft, which every edit goes through, with its published version.
   const draftQuery = `
@@ -75,10 +124,10 @@ namespace ${ns};
 use BackedEnum;
 use ${ns}\\Pages\\${createPage};
 use ${ns}\\Pages\\${editPage};
-use ${ns}\\Pages\\${listPage};
+use ${ns}\\Pages\\${listPage};${configure === undefined ? "" : `\nuse ${ns}\\Pages\\${configure.cls};`}
 use ${ns}\\Schemas\\${n.formClass};
 use ${ns}\\Schemas\\${n.tableClass};${navigation === undefined ? "" : `\nuse ${STRAPI_NAVIGATION_CLASS};`}
-use App\\Models\\${n.model};
+use App\\Models\\${n.model};${cmCollection ? `\nuse App\\Http\\Serializers\\${n.model}Serializer;\nuse App\\Support\\StrapiDocuments;` : ""}
 use Filament\\Resources\\Resource;
 use Filament\\Schemas\\Schema;
 use Filament\\Tables\\Table;${versioned ? "\nuse Illuminate\\Database\\Eloquent\\Builder;" : ""}${deletesDocument ? "\nuse Illuminate\\Support\\Facades\\DB;" : ""}${single && secured ? "\nuse Illuminate\\Support\\Facades\\Gate;" : ""}${single && localized ? "\nuse App\\Support\\StrapiLocales;" : ""}${navigation === undefined ? "" : "\nuse UnitEnum;"}
@@ -104,9 +153,17 @@ ${navigation === undefined ? "" : navigationProperties(navigation)}
         return [
             'index' => ${listPage}::route('/'),
             'create' => ${createPage}::route('/create'),
-            'edit' => ${editPage}::route('/{record}/edit'),
+            'edit' => ${editPage}::route('/{record}/edit'),${configure === undefined ? "" : `\n            'configure' => ${configure.cls}::route('/configure-the-view'),`}
         ];
-    }${versioned ? draftQuery : ""}${single ? singleEntry(n.model, localized, secured) : ""}${deletesDocument ? deleteEntry(n.model, localized) : ""}
+    }${versioned ? draftQuery : ""}${single ? singleEntry(n.model, localized, secured) : ""}${deletesDocument ? deleteEntry(n.model, localized) : ""}${
+      cmForm === undefined
+        ? ""
+        : contentManagerResourceMembers(ct, cmForm.attributes, n, {
+            secured,
+            collection: cmCollection,
+            prohibited: cm?.prohibited ?? [],
+          })
+    }
 }
 `;
 
@@ -117,25 +174,25 @@ ${navigation === undefined ? "" : navigationProperties(navigation)}
     ...(localized ? ["App\\Models\\Locale", "App\\Support\\StrapiLocales"] : []),
     ...((options.media ?? []).length > 0 ? ["App\\Filament\\Support\\MediaPicker"] : []),
     ...repeaters.flatMap((r) => r.imports),
+    ...(cmForm === undefined
+      ? []
+      : [`${ns}\\${n.resourceClass}`, "App\\Support\\StrapiContentManager", ...cmForm.imports]),
     "Filament\\Schemas\\Schema",
   ]);
+  const localeSelect = `Select::make('locale')->options(${LOCALE_OPTIONS})->default(fn (): string => StrapiLocales::default())->required()->disabledOn('edit')`;
   const formBody = [
-    ...(localized
-      ? [
-          `            Select::make('locale')->options(${LOCALE_OPTIONS})->default(fn (): string => StrapiLocales::default())->required()->disabledOn('edit'),`,
-        ]
-      : []),
-    ...emits.map(
-      (e) =>
-        `            ${manyRows ? e.formComponent.replace("->unique()", "") : e.formComponent},`,
-    ),
+    ...(localized ? [`            ${localeSelect},`] : []),
+    ...emits.map((e) => `            ${formComponentOf(e)},`),
     ...relationFields.map((s) => `            ${s},`),
-    ...(options.media ?? []).map(
-      (m) =>
-        `            MediaPicker::make('${m.field}', multiple: ${m.multiple}${m.allowedTypes === undefined ? "" : `, allowedTypes: [${m.allowedTypes.map((t) => `'${t}'`).join(", ")}]`}),`,
-    ),
+    ...(options.media ?? []).map((m) => `            ${mediaComponent(m)},`),
     ...repeaters.map((r) => `            ${r.component},`),
   ].join("\n");
+  const formReturn =
+    cmForm === undefined
+      ? `        return $schema->components([
+${formBody}
+        ]);`
+      : contentManagerFormBody(cmForm, n.resourceClass, localized ? [localeSelect] : []);
   const form = `<?php
 
 declare(strict_types=1);
@@ -148,9 +205,7 @@ class ${n.formClass}
 {
     public static function configure(Schema $schema): Schema
     {
-        return $schema->components([
-${formBody}
-        ]);
+${formReturn}
     }
 }
 `;
@@ -160,8 +215,33 @@ ${formBody}
   const main = mainFieldName(ct);
   const mainColumn =
     main === undefined ? "id" : ownEmits[ownFields.findIndex((f) => f.name === main)]!.column;
+  const statusColumn =
+    "TextColumn::make('status')->state(fn ($record) => StrapiDocuments::status($record))->badge()";
+  const localeColumn = "TextColumn::make('locale')->badge()";
+  const localeFilter = `SelectFilter::make('locale')->options(${LOCALE_OPTIONS})->default(StrapiLocales::default())`;
+  const cmTable =
+    cmForm === undefined || !cmCollection
+      ? undefined
+      : contentManagerTableBody(
+          cmForm.attributes,
+          n.resourceClass,
+          [...(versioned ? [statusColumn] : []), ...(localized ? [localeColumn] : [])],
+          localized ? [localeFilter] : [],
+        );
+  const usedIn = (body: string, imports: readonly string[]): string[] =>
+    imports.filter((i) => body.includes(`${i.split("\\").pop()!}::`));
   const tableImports = useBlock([
-    ...emits.map((e) => e.tableImport),
+    ...(cmTable === undefined
+      ? emits.map((e) => e.tableImport)
+      : [
+          ...usedIn(cmTable, [
+            ...CONTENT_MANAGER_TABLE_IMPORTS,
+            ...emits.map((e) => e.tableImport),
+          ]),
+          `${ns}\\${n.resourceClass}`,
+          `App\\Models\\${n.model}`,
+          ...DUPLICATE_IMPORTS,
+        ]),
     ...(contentManagerList
       ? [
           "Filament\\Actions\\BulkActionGroup",
@@ -198,25 +278,34 @@ ${formBody}
       : []),
     "Filament\\Tables\\Table",
   ]);
-  const tableBody = [
+  const tableColumns = [
     ...ownEmits.map(
       (e, i) =>
         `            ${contentManagerList ? listedColumn(ownFields[i]!, e.column, e.tableColumn) : e.tableColumn},`,
     ),
     ...extraEmits.map((e) => `            ${e.tableColumn},`),
-    ...(versioned
-      ? [
-          "            TextColumn::make('status')->state(fn ($record) => StrapiDocuments::status($record))->badge(),",
-        ]
-      : []),
-    ...(localized ? ["            TextColumn::make('locale')->badge(),"] : []),
+    ...(versioned ? [`            ${statusColumn},`] : []),
+    ...(localized ? [`            ${localeColumn},`] : []),
   ].join("\n");
   // One locale at a time, the default one first, as Strapi's content manager lists them.
   const tableFilters = localized
     ? `->filters([
-            SelectFilter::make('locale')->options(${LOCALE_OPTIONS})->default(StrapiLocales::default()),
+            ${localeFilter},
         ])`
     : "";
+  const actions = contentManagerList
+    ? contentManagerActions(n, mainColumn, {
+        versioned,
+        secured,
+        ...(cmTable === undefined ? {} : { prohibited: cm?.prohibited ?? [] }),
+      })
+    : "";
+  const tableReturn =
+    cmTable === undefined
+      ? `        return $table->columns([
+${tableColumns}
+        ])${tableFilters}${actions};`
+      : `        return ${cmTable}${actions};`;
   const table = `<?php
 
 declare(strict_types=1);
@@ -229,20 +318,24 @@ class ${n.tableClass}
 {
     public static function configure(Table $table): Table
     {
-        return $table->columns([
-${tableBody}
-        ])${tableFilters}${contentManagerList ? contentManagerActions(n, mainColumn, { versioned, secured }) : ""};
+${tableReturn}
     }
 }
 `;
 
-  const page = (cls: string, base: string, baseImport: string, body = ""): string => `<?php
+  const page = (
+    cls: string,
+    base: string,
+    baseImport: string,
+    body = "",
+    imports: readonly string[] = [],
+  ): string => `<?php
 
 declare(strict_types=1);
 
 namespace ${ns}\\Pages;
 
-${useBlock([`${ns}\\${n.resourceClass}`, baseImport, ...(body === createNewEntryActions ? [CREATE_ACTION_IMPORT] : [])])}
+${useBlock([`${ns}\\${n.resourceClass}`, baseImport, ...(body === createNewEntryActions ? [CREATE_ACTION_IMPORT] : []), ...imports])}
 
 class ${cls} extends ${base}
 {
@@ -264,9 +357,20 @@ class ${cls} extends ${base}
             $this->redirect(${n.resourceClass}::getUrl('create'));
         }
     }`
-    : navigation !== undefined
-      ? createNewEntryActions
-      : "";
+    : cmCollection
+      ? `
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            ${configureViewAction(n)},
+            CreateAction::make()->label('Create new entry'),
+        ];
+    }`
+      : navigation !== undefined
+        ? createNewEntryActions
+        : "";
+  const listImports = cmCollection ? [CREATE_ACTION_IMPORT, "Filament\\Actions\\Action"] : [];
   const createBody = single
     ? `
 
@@ -281,7 +385,9 @@ class ${cls} extends ${base}
         }
         parent::mount();
     }`
-    : "";
+    : cmCollection
+      ? duplicateCreateBody(n)
+      : "";
 
   return [
     { path: `${dir}/${n.resourceClass}.php`, content: resource },
@@ -289,7 +395,13 @@ class ${cls} extends ${base}
     { path: `${dir}/Schemas/${n.tableClass}.php`, content: table },
     {
       path: `${dir}/Pages/${listPage}.php`,
-      content: page(listPage, "ListRecords", "Filament\\Resources\\Pages\\ListRecords", listBody),
+      content: page(
+        listPage,
+        "ListRecords",
+        "Filament\\Resources\\Pages\\ListRecords",
+        listBody,
+        listImports,
+      ),
     },
     {
       path: `${dir}/Pages/${createPage}.php`,
@@ -298,8 +410,12 @@ class ${cls} extends ${base}
         "CreateRecord",
         "Filament\\Resources\\Pages\\CreateRecord",
         createBody,
+        cmCollection ? DUPLICATE_CREATE_IMPORTS : [],
       ),
     },
+    ...(configure === undefined
+      ? []
+      : [{ path: `${dir}/Pages/${configure.cls}.php`, content: configure.content }]),
     {
       path: `${dir}/Pages/${editPage}.php`,
       content:
@@ -309,6 +425,9 @@ class ${cls} extends ${base}
               versioned,
               localized,
               deletable: navigation !== undefined,
+              ...(cm === undefined
+                ? {}
+                : { contentManager: { names: n, single, prohibited: cm.prohibited } }),
             })
           : page(editPage, "EditRecord", "Filament\\Resources\\Pages\\EditRecord"),
     },
@@ -328,9 +447,11 @@ const deleteUsing = (n: Names, versioned: boolean): string =>
 const contentManagerActions = (
   n: Names,
   mainColumn: string,
-  options: { versioned: boolean; secured: boolean },
+  options: { versioned: boolean; secured: boolean; prohibited?: readonly string[] },
 ): string => {
-  const { versioned, secured } = options;
+  const { versioned, secured, prohibited } = options;
+  // A Content Manager type sorts, and offers bulk actions, as its view configures; it duplicates.
+  const cm = prohibited !== undefined;
   // Filament checks only deleteAny for a bulk delete unless told to check each record too.
   const bulkDelete = `${secured ? "->authorizeIndividualRecords()" : ""}${
     versioned
@@ -351,15 +472,25 @@ const contentManagerActions = (
                         ->requiresConfirmation()
                         ->action(fn (Collection $records) => $records->each(fn (${n.model} $record) => StrapiDocuments::unpublish($record))),`
     : "";
-  return `
+  const bulk = `BulkActionGroup::make([
+                    DeleteBulkAction::make()${bulkDelete},${publishing}
+                ])`;
+  return cm
+    ? `
+            ->recordActions([
+                ${duplicateAction(n, prohibited, "$record")},
+                DeleteAction::make()${deleteUsing(n, versioned)},
+            ])
+            ->toolbarActions(StrapiContentManager::bulkActions(${n.resourceClass}::CONTENT_MANAGER, [
+                ${bulk},
+            ]))`
+    : `
             ->defaultSort('${mainColumn}')
             ->recordActions([
                 DeleteAction::make()${deleteUsing(n, versioned)},
             ])
             ->toolbarActions([
-                BulkActionGroup::make([
-                    DeleteBulkAction::make()${bulkDelete},${publishing}
-                ]),
+                ${bulk},
             ])`;
 };
 
@@ -403,9 +534,16 @@ const editPageWithActions = (
   resourceClass: string,
   cls: string,
   model: string,
-  options: { secured: boolean; versioned: boolean; localized: boolean; deletable: boolean },
+  options: {
+    secured: boolean;
+    versioned: boolean;
+    localized: boolean;
+    deletable: boolean;
+    /** A Content Manager type duplicates (a collection type) or configures its view (a single one). */
+    contentManager?: { names: Names; single: boolean; prohibited: readonly string[] };
+  },
 ): string => {
-  const { secured, versioned, localized, deletable } = options;
+  const { secured, versioned, localized, deletable, contentManager } = options;
   const allowed = (ability: string, subject = "$this->record"): string =>
     secured ? `Gate::allows('${ability}', ${subject})` : "true";
   const published = "$this->record->publishedVersion()->exists()";
@@ -419,6 +557,11 @@ const editPageWithActions = (
     ...(localized ? ["App\\Models\\Locale", "Filament\\Forms\\Components\\Select"] : []),
     ...((localized && secured) || (deletable && versioned) ? [`App\\Models\\${model}`] : []),
     ...(deletable ? ["Filament\\Actions\\DeleteAction"] : []),
+    ...(contentManager === undefined
+      ? []
+      : contentManager.single
+        ? ["Filament\\Actions\\Action"]
+        : [...DUPLICATE_IMPORTS, `App\\Models\\${model}`]),
     ...(secured && (versioned || localized) ? ["Illuminate\\Support\\Facades\\Gate"] : []),
   ]);
   const publishing = versioned
@@ -463,6 +606,19 @@ const editPageWithActions = (
     ? `
             DeleteAction::make()${versioned ? `->using(fn (${model} $record) => ${resourceClass}::deleteEntry($record))` : ""},`
     : "";
+  const cmActions =
+    contentManager === undefined
+      ? ""
+      : `
+            ${
+              contentManager.single
+                ? configureViewAction(contentManager.names)
+                : duplicateAction(
+                    contentManager.names,
+                    contentManager.prohibited,
+                    "$record",
+                  ).replace(/\n {20}/g, "\n                ")
+            },`;
   return `<?php
 
 declare(strict_types=1);
@@ -477,7 +633,7 @@ class ${cls} extends EditRecord
 
     protected function getHeaderActions(): array
     {
-        return [${publishing}${translating}${deleting}
+        return [${publishing}${translating}${cmActions}${deleting}
         ];
     }
 }
