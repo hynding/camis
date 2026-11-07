@@ -26,6 +26,8 @@ export type IrErrorCode =
   | "inverse_field_collision"
   | "unknown_hook_content_type"
   | "duplicate_hook"
+  | "unknown_hook_field"
+  | "hook_output_not_written"
   | "unknown_ai_source"
   | "ai_computed_conflict"
   | "builtin_file_fields"
@@ -37,6 +39,8 @@ export interface IrErrorLocation {
   component?: string;
   field?: string;
   rule?: string;
+  /** A project file, for what is reported about a file rather than the model. */
+  file?: string;
 }
 
 export interface IrError {
