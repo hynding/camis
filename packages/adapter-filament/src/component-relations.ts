@@ -1,5 +1,6 @@
 import type { ExpandedRelation } from "@camis/adapter-kernel";
 import type { Component, ContentType, IrDocument } from "@camis/ir-schema";
+import { constrainedTo, uniqueOn } from "./identifiers";
 import { filamentNames, snake, snakeColumn } from "./names";
 import type { ForeignKeyColumn, RelationMethod } from "./relations";
 
@@ -129,11 +130,11 @@ return new class extends Migration
     {
         Schema::create('${pivot.table}', function (Blueprint $table): void {
             $table->id();
-            $table->foreignId('${pivot.holderKey}')->constrained('${pivot.holderTable}')->cascadeOnDelete();
-            $table->foreignId('${pivot.targetKey}')->constrained('${pivot.targetTable}')->cascadeOnDelete();
+            $table->foreignId('${pivot.holderKey}')${constrainedTo(pivot.table, pivot.holderKey, pivot.holderTable)}->cascadeOnDelete();
+            $table->foreignId('${pivot.targetKey}')${constrainedTo(pivot.table, pivot.targetKey, pivot.targetTable)}->cascadeOnDelete();
             $table->double('${pivot.order}')->nullable();
             $table->double('${pivot.holderOrder}')->nullable();
-            $table->unique(['${pivot.holderKey}', '${pivot.targetKey}']);
+            ${uniqueOn(pivot.table, [pivot.holderKey, pivot.targetKey])};
         });
     }
 

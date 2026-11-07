@@ -7,6 +7,7 @@ import {
   type ComponentRelation,
 } from "./component-relations";
 import { emitField, type FieldEmit } from "./fields";
+import { constrainedTo } from "./identifiers";
 import { filamentNames, snake, snakeColumn } from "./names";
 import type { RelationMethod } from "./relations";
 import { mediaAllowedTypes } from "./strapi-api/media";
@@ -124,7 +125,7 @@ export const emitChildMigration = (child: ChildTableEmit): string => {
       r.foreignKey === null
         ? []
         : [
-            `${r.foreignKey.definition}->constrained('${r.foreignKey.table}')${r.foreignKey.onDelete}`,
+            `${r.foreignKey.definition}${constrainedTo(child.table, r.foreignKey.column, r.foreignKey.table)}${r.foreignKey.onDelete}`,
           ],
     ),
   ]
@@ -144,7 +145,7 @@ return new class extends Migration
     {
         Schema::create('${child.table}', function (Blueprint $table): void {
             $table->id();
-            $table->foreignId('${child.fk}')->constrained('${child.parentTable}')->cascadeOnDelete();${child.ordered === true ? "\n            $table->unsignedInteger('position');" : ""}
+            $table->foreignId('${child.fk}')${constrainedTo(child.table, child.fk, child.parentTable)}->cascadeOnDelete();${child.ordered === true ? "\n            $table->unsignedInteger('position');" : ""}
 ${columns}
             $table->timestamps();
         });
