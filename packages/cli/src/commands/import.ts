@@ -8,7 +8,7 @@ import type { CapabilityGap, IrDocument, Result } from "@camis/ir-schema";
 import type { Io } from "../io";
 import { withMediaLibrary } from "../templates";
 import { printGaps } from "./generate";
-import { readStrapiPluginsConfig } from "./strapi-config";
+import { readStrapiConfig } from "./strapi-config";
 import { strapiRoles, type StrapiRolesSource } from "./strapi-roles";
 import { locStr } from "./validate";
 
@@ -23,7 +23,7 @@ export const importCommand = async (
     upsertBy?: string;
     /** A Strapi export whose roles become the IR's, and where to write them. */
     roles?: StrapiRolesSource & { out: string };
-    /** Where the Laravel env a Strapi project's providers map to goes (default: beside the IR). */
+    /** Where the Laravel env a Strapi project's config maps to goes (default: beside the IR). */
     envOut?: string;
   } = {},
 ): Promise<number> => {
@@ -80,33 +80,39 @@ export const importCommand = async (
   io.out(`✓ imported → ${outPath}`);
   if (target === "strapi") {
     const envOut = opts.envOut ?? join(dirname(outPath), "deployment.env");
-    gaps = [...gaps, ...(await writeProviderEnv(io, dir, abs(io, envOut), envOut))];
+    gaps = [...gaps, ...(await writeDeploymentEnv(io, dir, abs(io, envOut), envOut))];
   }
   printGaps(io, gaps);
   return 0;
 };
 
 /**
- * The Laravel .env lines for a Strapi project's upload and email providers (config/plugins),
- * written for the Filament app; the gaps are the options that have no counterpart there.
+ * The Laravel .env lines for how a Strapi project is run (config/plugins and config/api: its
+ * upload and email providers, API page sizes and sessions), written for the Filament app; the
+ * gaps are the options that have no counterpart there.
  */
-const writeProviderEnv = async (
+const writeDeploymentEnv = async (
   io: Io,
   dir: string,
   path: string,
   shown: string,
 ): Promise<CapabilityGap[]> => {
-  const read = await readStrapiPluginsConfig(dir, io.capture?.bind(io));
-  if (!read.ok) {
-    io.out(`  ⚠ ${read.message}; deployment.env not written`);
-    return [];
-  }
-  if (read.config === undefined) return [];
-  const { settings, gaps } = deploymentSettings(read.config);
+  const capture = io.capture?.bind(io);
+  const plugins = await readStrapiConfig(dir, "plugins", capture);
+  const api = await readStrapiConfig(dir, "api", capture);
+  for (const read of [plugins, api])
+    if (!read.ok) {
+      io.out(`  ⚠ ${read.message}; ${shown} not written`);
+      return [];
+    }
+  const pluginsConfig = plugins.ok ? plugins.config : undefined;
+  const apiConfig = api.ok ? api.config : undefined;
+  if (pluginsConfig === undefined && apiConfig === undefined) return [];
+  const { settings, gaps } = deploymentSettings(pluginsConfig ?? {}, apiConfig);
   const { env, packages } = deploymentEnv(settings);
   if (env !== "") {
     await io.writeFile(path, env);
-    io.out(`✓ providers → ${shown}`);
+    io.out(`✓ deployment settings → ${shown}`);
     if (packages.length > 0)
       io.out(`  the Laravel app needs: composer require ${packages.join(" ")}`);
   }

@@ -36,7 +36,7 @@ describe("deploymentEnv", () => {
         defaultReplyTo: { env: "REPLY_TO" },
       },
     });
-    expect(env).toBe(`# From the Strapi project's config/plugins.
+    expect(env).toBe(`# From the Strapi project's config/plugins and config/api.
 # \${NAME} reads the variable the Strapi project read: copy it from that project's .env.
 
 # Upload: aws-s3
@@ -90,7 +90,12 @@ CAMIS_EMAIL_DEFAULT_REPLY_TO=\${REPLY_TO}
     const ses = deploymentEnv({
       email: {
         provider: "amazon-ses",
-        transport: { kind: "ses", accessKeyId: "AK", secretAccessKey: { env: "S" }, region: "us-east-1" },
+        transport: {
+          kind: "ses",
+          accessKeyId: "AK",
+          secretAccessKey: { env: "S" },
+          region: "us-east-1",
+        },
       },
     });
     expect(ses.env).toContain(
@@ -101,7 +106,11 @@ CAMIS_EMAIL_DEFAULT_REPLY_TO=\${REPLY_TO}
 
   it("does not split a default sender it can only read from a variable", () => {
     const { env } = deploymentEnv({
-      email: { provider: "sendmail", transport: { kind: "sendmail" }, defaultFrom: { env: "FROM" } },
+      email: {
+        provider: "sendmail",
+        transport: { kind: "sendmail" },
+        defaultFrom: { env: "FROM" },
+      },
     });
     expect(env).toContain("CAMIS_EMAIL_DEFAULT_FROM=${FROM}\n");
     expect(env).not.toContain("MAIL_FROM_ADDRESS");
@@ -109,7 +118,8 @@ CAMIS_EMAIL_DEFAULT_REPLY_TO=\${REPLY_TO}
 
   it("keeps local storage on the default disk, writing only the size limit", () => {
     expect(
-      deploymentEnv({ upload: { provider: "local", storage: { kind: "local" }, sizeLimit: 5 } }).env,
+      deploymentEnv({ upload: { provider: "local", storage: { kind: "local" }, sizeLimit: 5 } })
+        .env,
     ).toContain("# Upload: local\nCAMIS_UPLOAD_SIZE_LIMIT=5\n");
   });
 });

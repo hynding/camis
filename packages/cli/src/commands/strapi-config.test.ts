@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Io } from "../io";
-import { readStrapiConfig, readStrapiPluginsConfig } from "./strapi-config";
+import { readStrapiConfig } from "./strapi-config";
 
 const hasPhp = (() => {
   try {
@@ -48,13 +48,21 @@ const EXPECTED = {
       },
     },
   },
-  email: { config: { provider: "nodemailer", providerOptions: { port: { env: "SMTP_PORT", default: 587 } } } },
+  email: {
+    config: {
+      provider: "nodemailer",
+      providerOptions: { port: { env: "SMTP_PORT", default: 587 } },
+    },
+  },
 };
 
-describe("readStrapiPluginsConfig", () => {
+describe("readStrapiConfig — config/plugins", () => {
   it("reads nothing from a project with no config/plugins", async () => {
     const dir = await mkdtemp(join(tmpdir(), "camis-strapi-config-"));
-    expect(await readStrapiPluginsConfig(dir, capture)).toEqual({ ok: true, config: undefined });
+    expect(await readStrapiConfig(dir, "plugins", capture)).toEqual({
+      ok: true,
+      config: undefined,
+    });
   });
 
   it.skipIf(!hasPhp)("reads a strapi-php project's config/plugins.php", async () => {
@@ -80,7 +88,7 @@ return static fn (EnvHelper $env): array => [
 ];
 `,
     );
-    expect(await readStrapiPluginsConfig(dir, capture)).toEqual({ ok: true, config: EXPECTED });
+    expect(await readStrapiConfig(dir, "plugins", capture)).toEqual({ ok: true, config: EXPECTED });
   });
 
   it("reads a Strapi project's config/plugins.ts", async () => {
@@ -103,7 +111,7 @@ return static fn (EnvHelper $env): array => [
 });
 `,
     );
-    expect(await readStrapiPluginsConfig(dir, capture)).toEqual({ ok: true, config: EXPECTED });
+    expect(await readStrapiConfig(dir, "plugins", capture)).toEqual({ ok: true, config: EXPECTED });
   });
 
   it("reads a CommonJS config/plugins.js", async () => {
@@ -111,15 +119,20 @@ return static fn (EnvHelper $env): array => [
       "plugins.js",
       `module.exports = ({ env }) => ({ email: { config: { provider: "sendmail", settings: { defaultFrom: env("FROM") } } } });\n`,
     );
-    expect(await readStrapiPluginsConfig(dir, capture)).toEqual({
+    expect(await readStrapiConfig(dir, "plugins", capture)).toEqual({
       ok: true,
-      config: { email: { config: { provider: "sendmail", settings: { defaultFrom: { env: "FROM" } } } } },
+      config: {
+        email: { config: { provider: "sendmail", settings: { defaultFrom: { env: "FROM" } } } },
+      },
     });
   });
 
   it("reports a config it cannot run, naming the file", async () => {
-    const dir = await project("plugins.js", "module.exports = () => { throw new Error('boom'); };\n");
-    const read = await readStrapiPluginsConfig(dir, capture);
+    const dir = await project(
+      "plugins.js",
+      "module.exports = () => { throw new Error('boom'); };\n",
+    );
+    const read = await readStrapiConfig(dir, "plugins", capture);
     expect(read.ok).toBe(false);
     expect(read.ok ? "" : read.message).toContain("config/plugins.js");
   });

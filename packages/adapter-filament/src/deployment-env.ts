@@ -1,5 +1,8 @@
 import {
   isEnvReference,
+  type AccountSettings,
+  type PageSizes,
+  type RestSettings,
   type EmailSettings,
   type DeploymentSettings,
   type Setting,
@@ -13,14 +16,19 @@ import {
  * which Laravel's .env expands), so no secret is copied. `packages` are the Composer packages
  * Laravel needs for the chosen disk or mailer.
  */
-export const deploymentEnv = (settings: DeploymentSettings): { env: string; packages: string[] } => {
+export const deploymentEnv = (
+  settings: DeploymentSettings,
+): { env: string; packages: string[] } => {
   const sections: string[][] = [];
   const packages = new Set<string>();
   if (settings.upload !== undefined) sections.push(uploadLines(settings.upload, packages));
   if (settings.email !== undefined) sections.push(emailLines(settings.email, packages));
+  if (settings.rest !== undefined) sections.push(restLines(settings.rest));
+  if (settings.graphql !== undefined) sections.push(graphqlLines(settings.graphql));
+  if (settings.accounts !== undefined) sections.push(accountLines(settings.accounts));
   if (sections.length === 0) return { env: "", packages: [] };
   const header = [
-    "# From the Strapi project's config/plugins.",
+    "# From the Strapi project's config/plugins and config/api.",
     "# ${NAME} reads the variable the Strapi project read: copy it from that project's .env.",
   ];
   return {
@@ -32,7 +40,7 @@ export const deploymentEnv = (settings: DeploymentSettings): { env: string; pack
 /** A .env value: quoted when it holds what an unquoted value cannot. */
 const literal = (value: string | number | boolean): string => {
   const text = String(value);
-  return /^[A-Za-z0-9_./:@${}-]*$/.test(text)
+  return /^[A-Za-z0-9_.,/:@${}-]*$/.test(text)
     ? text
     : `"${text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 };
@@ -127,4 +135,36 @@ const emailLines = (email: EmailSettings, packages: Set<string>): string[] => {
   }
   lines.push(...line("CAMIS_EMAIL_DEFAULT_REPLY_TO", email.defaultReplyTo));
   return lines;
+};
+
+const restLines = (rest: RestSettings): string[] => [
+  "# REST API",
+  ...line("CAMIS_REST_DEFAULT_LIMIT", rest.defaultLimit),
+  ...line("CAMIS_REST_MAX_LIMIT", rest.maxLimit),
+  ...line("CAMIS_REST_WITH_COUNT", rest.withCount),
+];
+
+const graphqlLines = (graphql: PageSizes): string[] => [
+  "# GraphQL",
+  ...line("CAMIS_GRAPHQL_DEFAULT_LIMIT", graphql.defaultLimit),
+  ...line("CAMIS_GRAPHQL_MAX_LIMIT", graphql.maxLimit),
+];
+
+const accountLines = (accounts: AccountSettings): string[] => {
+  const allowed = accounts.registerAllowedFields;
+  return [
+    "# Users & Permissions",
+    ...line("CAMIS_JWT_MANAGEMENT", accounts.jwtManagement),
+    ...line("CAMIS_ACCESS_TOKEN_LIFESPAN", accounts.accessTokenLifespan),
+    ...line("CAMIS_MAX_REFRESH_TOKEN_LIFESPAN", accounts.maxRefreshTokenLifespan),
+    ...line("CAMIS_IDLE_REFRESH_TOKEN_LIFESPAN", accounts.idleRefreshTokenLifespan),
+    ...line("CAMIS_SESSIONS_HTTP_ONLY", accounts.httpOnly),
+    ...line("CAMIS_SESSIONS_COOKIE_NAME", accounts.cookie?.name),
+    ...line("CAMIS_SESSIONS_COOKIE_SAME_SITE", accounts.cookie?.sameSite),
+    ...line("CAMIS_SESSIONS_COOKIE_PATH", accounts.cookie?.path),
+    ...line("CAMIS_SESSIONS_COOKIE_DOMAIN", accounts.cookie?.domain),
+    ...line("CAMIS_SESSIONS_COOKIE_SECURE", accounts.cookie?.secure),
+    // config/camis.php splits the list on commas.
+    ...line("CAMIS_REGISTER_ALLOWED_FIELDS", Array.isArray(allowed) ? allowed.join(",") : allowed),
+  ];
 };

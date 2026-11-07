@@ -1332,23 +1332,25 @@ attribute, GraphQL type, list column and form field.
 
 ---
 
-## Phase 41 — a Strapi project's upload and email providers (`adapter-kernel`, `adapter-strapi`, `adapter-filament`, `cli`)
+## Phase 41 — a Strapi project's config (`adapter-kernel`, `adapter-strapi`, `adapter-filament`, `cli`)
 
-A Strapi project picks where its files go and how it sends mail in `config/plugins`
-(`upload.config.provider`, `email.config.provider` with their `providerOptions`, and the email
-plugin's `defaultFrom`/`defaultReplyTo`); a migration lost all of it. The config is code, not a
-declarative schema, so it is never parsed: `camis import strapi` runs it (strapi-php's PHP under
-`php`, Strapi's JS/TS under `node`) with an `env` that answers every variable with a reference to
-it, and reads back the settings as written, no secret included.
+A Strapi project says how it is run in `config/plugins` (the upload and email providers with their
+`providerOptions`, the email plugin's `defaultFrom`/`defaultReplyTo`, graphql's page sizes,
+users-permissions' sessions and register fields) and `config/api` (REST page sizes and counts);
+a migration lost all of it. The config is code, not a declarative schema, so it is never parsed:
+`camis import strapi` runs it (strapi-php's PHP under `php`, Strapi's JS/TS under `node`) with an
+`env` that answers every variable with a reference to it, and reads back the settings as written,
+no secret included.
 
-`adapter-kernel` names the neutral shape (`DeploymentSettings`: an upload's provider, storage and
-size limit; an email provider's transport and default addresses). `adapter-strapi` reads it from
-the plugins config (`deploymentSettings`): `local` and `aws-s3` (Strapi 4's and 5's option shapes),
-and `sendmail`, `nodemailer`, `sendgrid` (its SMTP relay), `mailgun` and `amazon-ses`. Anything
-else is a gap: `uploadProvider` (Cloudinary), `uploadRootPath`, `emailProvider`,
-`emailProviderOption` (a nodemailer `service`). `adapter-filament` turns it into the Laravel
-`.env` lines Laravel's s3 disk and mailers read, plus `CAMIS_UPLOAD_*` and `CAMIS_EMAIL_*`
-(`deploymentEnv`), naming the Composer packages they need. The CLI writes `deployment.env`.
+`adapter-kernel` names the neutral shape (`DeploymentSettings`: upload storage, mail transport and
+default addresses, REST and GraphQL page sizes, account sessions). `adapter-strapi` reads it from
+the config (`deploymentSettings`): uploads `local` and `aws-s3` (Strapi 4's and 5's option
+shapes), email `sendmail`, `nodemailer`, `sendgrid` (its SMTP relay), `mailgun` and `amazon-ses`.
+Anything else is a gap: `uploadProvider` (Cloudinary), `uploadRootPath`, `emailProvider`,
+`emailProviderOption` (a nodemailer `service`). `adapter-filament` turns it into the `.env` lines
+Laravel's s3 disk and mailers read, plus the `CAMIS_*` keys config/camis.php reads
+(`deploymentEnv`), naming the Composer packages a disk or mailer needs. The CLI writes
+`deployment.env` (`--env-out`).
 
 Exit: unit tests for each mapping; the CLI reads a `.php`, a `.ts` and a CommonJS `.js` config.
 

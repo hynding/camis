@@ -3,16 +3,16 @@ import { join } from "node:path";
 import type { Io } from "../io";
 
 /**
- * A Strapi project's config/plugins, run with an `env` that hands back a reference to each
+ * A Strapi project's config, run with an `env` that hands back a reference to each
  * variable it is asked for (`{ env, default }`, or `${NAME}` when spliced into text) instead of
  * its value: the settings come back as the project wrote them, and no secret is read.
  * A strapi-php project's PHP config runs under `php`, a Strapi project's JS or TS under `node`.
  */
-export type PluginsConfigRead =
+export type StrapiConfigRead =
   | { ok: true; config: Record<string, unknown> | undefined }
   | { ok: false; message: string };
 
-const FILES = ["plugins.php", "plugins.ts", "plugins.js", "plugins.mjs", "plugins.cjs"] as const;
+const EXTENSIONS = ["php", "ts", "js", "mjs", "cjs"] as const;
 
 // strapi-php's config closures take a Strapi\Utils\EnvHelper; this stands in for it, since the
 // project's own autoloader is never loaded.
@@ -77,14 +77,16 @@ const exists = async (path: string): Promise<boolean> => {
   }
 };
 
-export const readStrapiPluginsConfig = async (
+/** One of a Strapi project's config files (`config/<name>.php|ts|js|…`). */
+export const readStrapiConfig = async (
   projectDir: string,
+  name: string,
   capture: Io["capture"],
-): Promise<PluginsConfigRead> => {
+): Promise<StrapiConfigRead> => {
   let file: string | undefined;
-  for (const name of FILES) {
-    if (await exists(join(projectDir, "config", name))) {
-      file = name;
+  for (const extension of EXTENSIONS) {
+    if (await exists(join(projectDir, "config", `${name}.${extension}`))) {
+      file = `${name}.${extension}`;
       break;
     }
   }

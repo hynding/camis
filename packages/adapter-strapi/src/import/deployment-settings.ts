@@ -1,5 +1,8 @@
 import {
   isEnvReference,
+  type AccountSettings,
+  type PageSizes,
+  type RestSettings,
   type EmailSettings,
   type FileStorage,
   type MailTransport,
@@ -173,23 +176,79 @@ const email = (config: Options, gaps: CapabilityGap[]): EmailSettings | undefine
   };
 };
 
+// Strapi serves REST lists with no largest page when config/api names none (0 here).
+const rest = (api: Options): RestSettings => ({
+  maxLimit: 0,
+  ...settings([
+    ["defaultLimit", api.defaultLimit],
+    ["maxLimit", api.maxLimit],
+    ["withCount", api.withCount],
+  ]),
+});
+
+const graphql = (config: Options): PageSizes =>
+  settings([
+    ["defaultLimit", config.defaultLimit],
+    ["maxLimit", config.maxLimit],
+  ]);
+
+const accounts = (config: Options): AccountSettings => {
+  const sessions = object(config.sessions);
+  const cookie = object(sessions.cookie);
+  const allowed = object(config.register).allowedFields;
+  const cookieSettings = settings([
+    ["name", cookie.name],
+    ["sameSite", cookie.sameSite],
+    ["path", cookie.path],
+    ["domain", cookie.domain],
+    ["secure", cookie.secure],
+  ]);
+  const registerAllowedFields = Array.isArray(allowed)
+    ? allowed.filter((f): f is string => typeof f === "string")
+    : setting(allowed);
+  return {
+    ...settings([
+      ["jwtManagement", config.jwtManagement],
+      ["accessTokenLifespan", sessions.accessTokenLifespan],
+      ["maxRefreshTokenLifespan", sessions.maxRefreshTokenLifespan],
+      ["idleRefreshTokenLifespan", sessions.idleRefreshTokenLifespan],
+      ["httpOnly", sessions.httpOnly],
+    ]),
+    ...(Object.keys(cookieSettings).length > 0 ? { cookie: cookieSettings } : {}),
+    ...(registerAllowedFields === undefined ? {} : { registerAllowedFields }),
+  };
+};
+
 /**
- * A Strapi project's upload and email providers, from its config/plugins (each `env()` read kept
- * as a reference to the variable, never its value). Options with no counterpart are gaps.
+ * How a Strapi project is run, from its config/plugins (the upload, email, graphql and
+ * users-permissions plugins) and config/api, each `env()` read kept as a reference to the
+ * variable, never its value. Options with no counterpart are gaps.
  */
 export const deploymentSettings = (
   plugins: unknown,
+  api?: unknown,
 ): { settings: DeploymentSettings; gaps: CapabilityGap[] } => {
   const gaps: CapabilityGap[] = [];
   const config = object(plugins);
   const out: DeploymentSettings = {};
+  const pluginConfig = (name: string): Options => object(object(config[name]).config);
   if (config.upload !== undefined) {
-    const read = upload(object(object(config.upload).config), gaps);
+    const read = upload(pluginConfig("upload"), gaps);
     if (read !== undefined) out.upload = read;
   }
   if (config.email !== undefined) {
-    const read = email(object(object(config.email).config), gaps);
+    const read = email(pluginConfig("email"), gaps);
     if (read !== undefined) out.email = read;
+  }
+  const restConfig = object(api).rest;
+  if (restConfig !== undefined) out.rest = rest(object(restConfig));
+  if (config.graphql !== undefined) {
+    const read = graphql(pluginConfig("graphql"));
+    if (Object.keys(read).length > 0) out.graphql = read;
+  }
+  if (config["users-permissions"] !== undefined) {
+    const read = accounts(pluginConfig("users-permissions"));
+    if (Object.keys(read).length > 0) out.accounts = read;
   }
   return { settings: out, gaps };
 };
