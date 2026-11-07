@@ -46,6 +46,51 @@ describe("entity validation", () => {
     expect(post).toContain("draft: StrapiDocuments::draftOnly($request->query())");
   });
 
+  it("checks a unique field (a uid always is) against its column, a repeatable's against its items' table", () => {
+    const ticket = content("app/Http/Controllers/Api/Generated/TicketApiController.php");
+    expect(ticket).toContain(
+      "'serial' => ['type' => 'string', 'unique' => ['column' => 'serial']],",
+    );
+    expect(ticket).toContain("'slug' => ['type' => 'uid', 'unique' => ['column' => 'slug']],");
+    expect(ticket).toContain("'seat' => ['type' => 'integer', 'unique' => ['column' => 'seat']],");
+    expect(ticket).toMatch(
+      /'codes' => \[\n\s+'type' => 'component',\n\s+'repeatable' => true,\n\s+'fields' => \[\n\s+'value' => \['type' => 'string', 'unique' => \['relation' => '\w+', 'column' => 'value'\]\],/,
+    );
+    // A field without a unique constraint carries none.
+    expect(controller).not.toContain("'unique'");
+  });
+
+  it("checks a unique value among the other documents' published rows, the written one left out", () => {
+    const ticket = content("app/Http/Controllers/Api/Generated/TicketApiController.php");
+    const store = ticket.slice(ticket.indexOf("public function store("));
+    expect(store).toContain("unique: fn (): Builder => $this->others($request, null)");
+    const update = ticket.slice(ticket.indexOf("public function update("));
+    expect(update).toContain("unique: fn (): Builder => $this->others($request, $key)");
+    expect(ticket).toContain(
+      "return Ticket::query()->when($key !== null, fn (Builder $q) => $q->where(self::KEY, '!=', $key));",
+    );
+    // A type without a unique field needs no others().
+    expect(controller).not.toContain("function others(");
+  });
+
+  it("checks a required relation and file by whether the write keeps one, as strictRelations does", () => {
+    const ticket = content("app/Http/Controllers/Api/Generated/TicketApiController.php");
+    expect(ticket).toContain(
+      "'venue' => ['type' => 'relation', 'required' => true, 'toOne' => true],",
+    );
+    expect(ticket).toContain(
+      "'badge' => ['type' => 'media', 'required' => true, 'toOne' => true],",
+    );
+    expect(content("config/camis.php")).toContain(
+      "'strict_relations' => (bool) env('CAMIS_STRICT_RELATIONS', true),",
+    );
+  });
+
+  it("checks a blocks field's document tree", () => {
+    const ticket = content("app/Http/Controllers/Api/Generated/TicketApiController.php");
+    expect(ticket).toContain("'body' => ['type' => 'blocks'],");
+  });
+
   it("ships the validator", async () => {
     expect(content("app/Support/StrapiValidator.php")).toContain("final class StrapiValidator");
     await expect(content("app/Support/StrapiValidator.php")).toMatchFileSnapshot(
