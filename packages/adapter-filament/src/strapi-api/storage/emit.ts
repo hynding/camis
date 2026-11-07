@@ -150,7 +150,16 @@ export const emitStrapiStorage = (input: StrapiApiInput): StrapiApiEmission => {
 
   files.push({
     path: "routes/api.php",
-    content: emitStrapiRoutes(emitted, secured, "strapi-jwt"),
+    content: emitStrapiRoutes(
+      emitted,
+      secured,
+      "strapi-jwt",
+      false,
+      false,
+      false,
+      false,
+      input.routeHooked,
+    ),
   });
   files.push({ path: "config/camis.php", content: emitApiConfig("strapi") });
   files.push({

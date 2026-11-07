@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { componentField, field, fieldApiName } from "./fields";
-import { hook } from "./hooks";
+import { hook, routeHook, schedule } from "./hooks";
 import { collectionName, fieldName, typeName } from "./identifiers";
 
 const RESERVED_FIELD_NAMES = new Set(["id"]);
@@ -10,6 +10,12 @@ type RefinedField = {
   type: string;
   targetField?: string;
   names?: { api?: string | undefined } | undefined;
+};
+
+const SINGULAR: Record<string, string> = {
+  hooks: "hook",
+  policies: "policy",
+  middlewares: "middleware",
 };
 
 const nodeRefine = (fields: RefinedField[], ctx: z.RefinementCtx) => {
@@ -128,29 +134,58 @@ export const irDocument = z
     contentTypes: z.array(contentType),
     components: z.array(component),
     hooks: z.array(hook).optional(),
+    policies: z.array(routeHook).optional(),
+    middlewares: z.array(routeHook).optional(),
+    schedules: z.array(schedule).optional(),
   })
   .superRefine((doc, ctx) => {
-    const names = new Set(doc.contentTypes.map((ct) => ct.name));
+    const byName = new Map(doc.contentTypes.map((ct) => [ct.name, ct]));
+    const unknownType = (list: string, i: number, name: string, contentType: string): void => {
+      if (byName.has(contentType)) return;
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `${SINGULAR[list]} "${name}" references unknown content type "${contentType}"`,
+        params: { irCode: "unknown_hook_content_type" },
+        path: [list, i, "contentType"],
+      });
+    };
+    // Each becomes a class of its own name in the target, so the names share one namespace.
     const seen = new Set<string>();
-    (doc.hooks ?? []).forEach((h, i) => {
-      if (!names.has(h.contentType)) {
+    const unique = (list: string, i: number, name: string): void => {
+      if (seen.has(name)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: `hook "${h.name}" references unknown content type "${h.contentType}"`,
-          params: { irCode: "unknown_hook_content_type" },
-          path: ["hooks", i, "contentType"],
-        });
-      }
-      if (seen.has(h.name)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `duplicate hook name "${h.name}"`,
+          message: `duplicate hook name "${name}"`,
           params: { irCode: "duplicate_hook" },
-          path: ["hooks", i, "name"],
+          path: [list, i, "name"],
         });
       }
-      seen.add(h.name);
+      seen.add(name);
+    };
+    (doc.hooks ?? []).forEach((h, i) => {
+      unknownType("hooks", i, h.name, h.contentType);
+      unique("hooks", i, h.name);
+      const fields = new Set(byName.get(h.contentType)?.fields.map((f) => f.name) ?? []);
+      if (!byName.has(h.contentType)) return;
+      (["input", "output"] as const).forEach((shape) =>
+        h[shape].forEach((f, j) => {
+          if (fields.has(f.name)) return;
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `hook "${h.name}" ${shape} names "${f.name}", which "${h.contentType}" has no field of`,
+            params: { irCode: "unknown_hook_field" },
+            path: ["hooks", i, shape, j, "name"],
+          });
+        }),
+      );
     });
+    for (const list of ["policies", "middlewares"] as const) {
+      (doc[list] ?? []).forEach((r, i) => {
+        unknownType(list, i, r.name, r.contentType);
+        unique(list, i, r.name);
+      });
+    }
+    (doc.schedules ?? []).forEach((s, i) => unique("schedules", i, s.name));
   });
 
 export type ContentType = z.infer<typeof contentType>;

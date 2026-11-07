@@ -4,6 +4,8 @@ import { filamentNames, snake, snakeColumn } from "./names";
 
 export interface ApiOptions {
   secured: boolean;
+  /** Content types whose routes run the IR's route policies and middlewares. */
+  hooked?: ReadonlySet<string>;
 }
 
 // Laravel's apiResource wildcard: singular snake of the resource name, so the
@@ -87,13 +89,16 @@ export const emitApiRoutes = (cts: ContentType[], options: ApiOptions): string =
     .sort((a, b) => filamentNames(a).table.localeCompare(filamentNames(b).table))
     .map((ct) => {
       const n = filamentNames(ct);
-      return `    Route::apiResource('${n.table}', ${n.model}ApiController::class);`;
+      const hooks =
+        options.hooked?.has(ct.name) === true ? "->middleware(CamisRouteHooks::class)" : "";
+      return `    Route::apiResource('${n.table}', ${n.model}ApiController::class)${hooks};`;
     })
     .join("\n");
   const uses = [...cts]
     .map((ct) => filamentNames(ct).model)
     .sort()
     .map((m) => `use App\\Http\\Controllers\\Api\\${m}ApiController;`)
+    .concat((options.hooked?.size ?? 0) > 0 ? ["use App\\Http\\Middleware\\CamisRouteHooks;"] : [])
     .join("\n");
   const group = options.secured
     ? `Route::middleware('auth')->group(function (): void {\n${rows}\n});`

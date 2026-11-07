@@ -11,19 +11,21 @@ export interface HookEmission {
 }
 
 export const emitHookFiles = (doc: IrDocument): HookEmission => {
-  const byName = new Map(doc.contentTypes.map((ct) => [ct.name, ct]));
+  const hooks = doc.hooks ?? [];
   const files: GeneratedFile[] = [];
   const observedModels = new Set<string>();
-  for (const h of doc.hooks ?? []) {
-    const ct = byName.get(h.contentType);
-    if (!ct) continue;
+  for (const h of hooks) {
     files.push({ path: `app/Hooks/Contracts/${h.name}Hook.php`, content: emitHookContract(h) });
     files.push({ path: `app/Hooks/${h.name}.php`, content: emitHookStub(h), mode: "seed" });
+  }
+  for (const ct of doc.contentTypes) {
+    const own = hooks.filter((h) => h.contentType === ct.name);
+    if (own.length === 0) continue;
     files.push({
       path: `app/Observers/${filamentNames(ct).model}Observer.php`,
-      content: emitHookObserver(h, ct),
+      content: emitHookObserver(own, ct),
     });
-    observedModels.add(h.contentType);
+    observedModels.add(ct.name);
   }
   return { files, observedModels };
 };

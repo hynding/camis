@@ -8,6 +8,8 @@ namespace App\Hooks\Contracts;
 interface TransformTitleHook
 {
     /**
+     * Runs when the record is published; what it returns is written to the record.
+     *
      * @param array{title: string} $input
      * @return array{title: string}
      */

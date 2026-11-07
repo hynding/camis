@@ -10,8 +10,7 @@ export const emitHookStub = (h: Hook): string =>
 // Ring 2 hook — hand-written. camis seeds this once and never overwrites it.
 export const ${lower(h.name)}: ${h.name}Hook = {
   run(input) {
-    // TODO: implement the behavior for "${h.name}".
-    return input;
+    // TODO: implement the behavior for "${h.name}" (runs ${h.trigger}).${h.output.length > 0 ? "\n    return input;" : ""}
   },
 };
 `;

@@ -114,6 +114,8 @@ export const emitStrapiRoutes = (
   upload = false,
   usersPermissions = false,
   guests = false,
+  /** Content types whose routes run the IR's route policies and middlewares. */
+  hooked: ReadonlySet<string> = new Set(),
 ): string => {
   const jwt = secured && guard === "strapi-jwt";
   const tokens = usersPermissions && secured;
@@ -135,6 +137,7 @@ export const emitStrapiRoutes = (
     ...(tokens ? ["App\\Http\\Middleware\\StrapiApiToken"] : []),
     ...sorted.map((ct) => `App\\Http\\Controllers\\Api\\${filamentNames(ct).model}ApiController`),
     "App\\Http\\Middleware\\StrapiErrors",
+    ...(hooked.size > 0 ? ["App\\Http\\Middleware\\CamisRouteHooks"] : []),
     ...(usersPermissions
       ? [
           "Illuminate\\Cookie\\Middleware\\AddQueuedCookiesToResponse",
@@ -152,15 +155,16 @@ export const emitStrapiRoutes = (
     .map((ct) => {
       const p = routePath(ct);
       const c = `${filamentNames(ct).model}ApiController::class`;
+      const h = hooked.has(ct.name) ? "->middleware(CamisRouteHooks::class)" : "";
       if (ct.kind === "single")
-        return `        Route::get('/${p}', [${c}, 'single']);
-        Route::put('/${p}', [${c}, 'putSingle']);
-        Route::delete('/${p}', [${c}, 'destroySingle']);`;
-      return `        Route::get('/${p}', [${c}, 'index']);
-        Route::post('/${p}', [${c}, 'store']);
-        Route::get('/${p}/{key}', [${c}, 'show']);
-        Route::put('/${p}/{key}', [${c}, 'update']);
-        Route::delete('/${p}/{key}', [${c}, 'destroy']);`;
+        return `        Route::get('/${p}', [${c}, 'single'])${h};
+        Route::put('/${p}', [${c}, 'putSingle'])${h};
+        Route::delete('/${p}', [${c}, 'destroySingle'])${h};`;
+      return `        Route::get('/${p}', [${c}, 'index'])${h};
+        Route::post('/${p}', [${c}, 'store'])${h};
+        Route::get('/${p}/{key}', [${c}, 'show'])${h};
+        Route::put('/${p}/{key}', [${c}, 'update'])${h};
+        Route::delete('/${p}/{key}', [${c}, 'destroy'])${h};`;
     })
     .join("\n\n");
   const uploads = upload

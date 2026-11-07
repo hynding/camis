@@ -134,7 +134,9 @@ Filament/Spatie ship as Composer packages.
 - **Permissions** — see §4.
 - **Expressions (Ring 1)** — attached to fields/types as validation, visibility,
   computed values, or permission predicates.
-- **Hooks (Ring 2)** — named, typed extension points with declared input/output shapes.
+- **Hooks (Ring 2)** — named, typed extension points with declared input/output shapes: record
+  lifecycle and publish hooks, route policies and middlewares on the content API, and cron
+  schedules. The IR declares where hand-written code runs; the code lives in protected files.
 - **AI features** — neutral primitives (see §6).
 
 ### 3.2 We borrow Strapi's *taxonomy*, not its *serialization*

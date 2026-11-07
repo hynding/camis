@@ -11,7 +11,7 @@ final class TransformTitle implements TransformTitleHook
 {
     public function run(array $input): array
     {
-        // TODO: implement the behavior for "TransformTitle".
+        // TODO: implement the behavior for "TransformTitle" (runs onPublish).
         return $input;
     }
 }

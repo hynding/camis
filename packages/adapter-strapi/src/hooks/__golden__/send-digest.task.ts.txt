@@ -1,0 +1,7 @@
+import type { Core } from "@strapi/strapi";
+
+// Ring 2 scheduled task — hand-written. camis seeds this once and never overwrites it.
+// Strapi runs it on the cron schedule "0 7 * * 1-5" (config/cron-tasks.ts).
+export default async ({ strapi }: { strapi: Core.Strapi }): Promise<void> => {
+  // TODO: implement the task "SendDigest".
+};
