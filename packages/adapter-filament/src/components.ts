@@ -217,9 +217,11 @@ ${mediaComponents}${castsMethod}${media.join("")}${links.join("")}}
 `;
 };
 
+// Ordered by the column that keeps the items' order, as PostgreSQL returns a row an update moved
+// (a link a deleted target nulled) after the others.
 export const childRelationMethod = (child: ChildTableEmit): RelationMethod => ({
   import: "Illuminate\\Database\\Eloquent\\Relations\\HasMany",
-  php: `    public function ${child.relationName}(): HasMany\n    {\n        return $this->hasMany(${child.model}::class, '${child.fk}');\n    }`,
+  php: `    public function ${child.relationName}(): HasMany\n    {\n        return $this->hasMany(${child.model}::class, '${child.fk}')->orderBy('${child.ordered === true ? "position" : "id"}');\n    }`,
 });
 
 export interface RepeaterEmit {
