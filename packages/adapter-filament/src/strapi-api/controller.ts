@@ -6,6 +6,7 @@ import { phpSingleQuoted } from "../php-literal";
 import { authLine, createCheck, madeCheck, NESTED_STMT, STMT } from "./controller-shared";
 import { strapiControllerParts } from "./storage/controller-storage";
 import type { ControllerLink } from "./storage/names";
+import { itemsLinkAnything } from "./items-runtime";
 import type { WireShape } from "./wire-shape";
 
 // The link shape is named by `storage/names.ts` (alongside `ownerLinks`, which builds it);
@@ -99,14 +100,17 @@ const linkData = (assigns: string[]): string =>
     ? "(array) $request->input('data', [])"
     : `array_diff_key((array) $request->input('data', []), [${assigns.map((a) => `'${a}' => true`).join(", ")}])`;
 
-// A repeatable component's or a dynamic zone's items link files: their references are resolved,
-// or refused, with the entry's own links, before anything is written.
-const itemLinks = (shape: WireShape, viewer: string): string =>
-  (shape.children.some((c) => c.media.length > 0)
-    ? `\n${STMT}$wire['children'] = StrapiRelations::items($wire['children'], ${shape.model}Serializer::FIELDS, ${viewer});`
+// A repeatable component's or a dynamic zone's items link files or other entries, or hold items
+// that do: their references are resolved, or refused, with the entry's own links, before anything
+// is written. `locale` is the writer's, which a localized target is linked in.
+const itemLinks = (shape: WireShape, viewer: string, locale = ""): string =>
+  (shape.children.some(itemsLinkAnything)
+    ? `\n${STMT}$wire['children'] = StrapiRelations::items($wire['children'], ${shape.model}Serializer::FIELDS, ${viewer}${locale});`
     : "") +
-  (shape.zones.some((z) => z.members.some((m) => m.media.length > 0))
-    ? `\n${STMT}$wire['children'] = StrapiRelations::zones($wire['children'], ${shape.model}Serializer::ZONES, ${viewer});`
+  (shape.zones.some((z) =>
+    z.members.some((m) => m.media.length + m.relations.length + m.children.length > 0),
+  )
+    ? `\n${STMT}$wire['children'] = StrapiRelations::zones($wire['children'], ${shape.model}Serializer::ZONES, ${viewer}${locale});`
     : "");
 
 /**
@@ -247,7 +251,7 @@ const documentParts = (
   const assignBlock = assign ? `${assign}\n` : "";
   const forWrite = "StrapiLocales::forWrite($request->query())";
   const readLinks = localized
-    ? `${STMT}$links = StrapiRelations::read(${linkData(spec.assigns)}, ${S}::FIELDS, ${viewer}, ${forWrite});${itemLinks(spec.shape, viewer)}`
+    ? `${STMT}$links = StrapiRelations::read(${linkData(spec.assigns)}, ${S}::FIELDS, ${viewer}, ${forWrite});${itemLinks(spec.shape, viewer, `, ${forWrite}`)}`
     : plainReadLinks;
   const publish = versioned
     ? `${STMT}    if (! StrapiDocuments::draftOnly($request->query())) {

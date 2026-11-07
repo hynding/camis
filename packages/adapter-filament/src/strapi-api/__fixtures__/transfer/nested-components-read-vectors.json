@@ -1,0 +1,34 @@
+{
+  "about": "What strapi-php answers after `php bin/strapi import -f nested-components-export.tar.gz --force` into an empty project, and what camis must answer after `php artisan strapi:import --file=nested-components-export.tar.gz --force` into an empty app: every link inside the menus' components, their items' own items and their items' icons' files, in both versions.",
+  "compare": ["documentId"],
+  "publishedAt": "presence",
+  "seed": [],
+  "reads": [
+    {
+      "name": "the embedded cta's links, published",
+      "path": "/menus",
+      "query": "sort=title&fields[0]=title&populate[cta][populate][author][fields][0]=name&populate[cta][populate][topics][fields][0]=name"
+    },
+    {
+      "name": "the embedded cta's links, drafts",
+      "path": "/menus",
+      "query": "status=draft&sort=title&fields[0]=title&populate[cta][populate][author][fields][0]=name&populate[cta][populate][topics][fields][0]=name&populate[cta][populate][topics][fields][1]=publishedAt"
+    },
+    {
+      "name": "the items' links, icons and children",
+      "path": "/menus",
+      "query": "status=draft&sort=title&fields[0]=title&populate[items][populate][link][populate][author][fields][0]=name&populate[items][populate][link][populate][topics][fields][0]=name&populate[items][populate][icon][populate][image][fields][0]=name&populate[items][populate][icon][populate][image][fields][1]=alternativeText&populate[items][populate][children][populate][author][fields][0]=name&populate[items][populate][children][populate][topics][fields][0]=name"
+    },
+    {
+      "name": "the published items",
+      "path": "/menus",
+      "query": "sort=title&fields[0]=title&populate[items][populate][icon][populate][image][fields][0]=name&populate[items][populate][children][populate][topics][fields][0]=name"
+    },
+    {
+      "name": "the zone's items, links, icons and children",
+      "path": "/menus",
+      "query": "sort=title&fields[0]=title&populate[sections][on][shared.link][populate][author][fields][0]=name&populate[sections][on][shared.link][populate][topics][fields][0]=name&populate[sections][on][shared.menu-item][populate][link][populate][author][fields][0]=name&populate[sections][on][shared.menu-item][populate][icon][populate][image][fields][0]=name&populate[sections][on][shared.menu-item][populate][children][populate][author][fields][0]=name&populate[sections][on][shared.menu-item][populate][children][populate][topics][fields][0]=name"
+    }
+  ],
+  "writes": []
+}

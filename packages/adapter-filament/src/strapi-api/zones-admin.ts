@@ -1,30 +1,40 @@
 import type { ExpandedZone } from "@camis/adapter-kernel";
 import type { ContentType } from "@camis/ir-schema";
-import { childTableEmit, type ChildTableEmit, type RepeaterEmit } from "../components";
+import { componentRelationOptions } from "../component-relations";
+import {
+  childTableEmit,
+  NO_PICKERS,
+  type ChildContext,
+  type ChildTableEmit,
+  type RelationPickers,
+  type RepeaterEmit,
+} from "../components";
 import { filamentNames } from "../names";
 import { componentUid } from "./names";
 
 /**
  * A dynamic zone in the admin: a Builder with one block per member component, read from and
  * written to the zone's rows through `StrapiZones`, as the REST API reads and writes them. With
- * a media library an item's media fields pick files by id, which `StrapiZones` links.
+ * a media library an item's media fields pick files by id, which `StrapiZones` links; an
+ * item's relations pick targets by id, and the repeatables inside it are plain repeaters, all
+ * written with the item.
  */
 export const zoneBuilder = (
   ct: ContentType,
   zone: ExpandedZone,
   linksMedia: boolean,
+  context?: ChildContext,
+  pickers: RelationPickers = NO_PICKERS,
 ): RepeaterEmit => {
   const key = zone.apiName;
   const members = `${filamentNames(ct).model}Serializer::ZONES['${key}']`;
   const children = zone.members.map((m) => ({
     member: m,
-    child: childTableEmit(ct, m.table, linksMedia),
+    child: childTableEmit(ct, m.table, linksMedia, context),
   }));
   const blocks = children
     .map(({ member, child }) => {
-      const schema = [...child.emits.map((e) => e.formComponent), ...child.media.map(mediaIds)]
-        .map((c) => `                        ${c},`)
-        .join("\n");
+      const schema = blockFields(child, pickers, "                        ");
       return `                    Block::make('${componentUid(member.component)}')->label('${member.component.name}')->schema([\n${schema}\n                    ]),`;
     })
     .join("\n");
@@ -42,13 +52,32 @@ ${blocks}
       "Filament\\Forms\\Components\\Builder",
       "Filament\\Forms\\Components\\Builder\\Block",
       "Illuminate\\Database\\Eloquent\\Model",
-      ...children.flatMap(({ child }) => child.emits.map((e) => e.formImport)),
-      ...(children.some(({ child }) => child.media.length > 0)
-        ? ["App\\Filament\\Support\\MediaPicker"]
-        : []),
+      ...children.flatMap(({ child }) => blockImports(child)),
     ],
   };
 };
+
+/** A block's (or a repeater's in it) fields, one per line at $pad: nested repeaters hold theirs. */
+const blockFields = (child: ChildTableEmit, pickers: RelationPickers, pad: string): string =>
+  [
+    ...child.emits.map((e) => `${pad}${e.formComponent},`),
+    ...child.media.map((m) => `${pad}${mediaIds(m)},`),
+    ...child.relations.map(
+      (r) => `${pad}${componentRelationOptions(r, pickers.versioned, pickers.localized)},`,
+    ),
+    ...child.children.map(
+      (n) =>
+        `${pad}Repeater::make('${n.relationName}')->schema([\n${blockFields(n, pickers, `${pad}    `)}\n${pad}]),`,
+    ),
+  ].join("\n");
+
+const blockImports = (child: ChildTableEmit): string[] => [
+  ...child.emits.map((e) => e.formImport),
+  ...(child.media.length > 0 ? ["App\\Filament\\Support\\MediaPicker"] : []),
+  ...(child.relations.length > 0 ? ["Filament\\Forms\\Components\\Select"] : []),
+  ...(child.children.length > 0 ? ["Filament\\Forms\\Components\\Repeater"] : []),
+  ...child.children.flatMap(blockImports),
+];
 
 const mediaIds = (m: ChildTableEmit["media"][number]): string =>
   `MediaPicker::ids('${m.method}', multiple: ${m.multiple}${m.allowedTypes === undefined ? "" : `, allowedTypes: [${m.allowedTypes.map((t) => `'${t}'`).join(", ")}]`})`;

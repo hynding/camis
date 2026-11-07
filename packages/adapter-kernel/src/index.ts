@@ -14,6 +14,8 @@ export type {
   ExpandedContentType,
   ExpandedScalar,
   ExpandedTable,
+  ExpandedRelation,
+  ExpandOptions,
   ExpandedZone,
   ExpandedZoneMember,
 } from "./expand";

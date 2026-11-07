@@ -331,6 +331,106 @@ describe("expandComponents", () => {
     expect(r.gaps.map((g) => g.feature)).toEqual(["nestedRepeatable"]);
   });
 
+  describe("with componentRelations and nestedTables (the Strapi API style)", () => {
+    const menu: IrDocument = {
+      version: 1,
+      contentTypes: [
+        { name: "Author", kind: "collection", fields: [{ type: "string", name: "name" }] },
+        {
+          name: "Menu",
+          kind: "collection",
+          fields: [
+            { type: "component", name: "cta", component: "Link", repeatable: false },
+            { type: "component", name: "items", component: "MenuItem", repeatable: true },
+            { type: "dynamicZone", name: "sections", components: ["MenuItem"] },
+          ],
+        },
+      ],
+      components: [
+        {
+          name: "Link",
+          fields: [
+            { type: "string", name: "label" },
+            { type: "relation", name: "author", relationKind: "oneToOne", target: "Author" },
+          ],
+        },
+        {
+          name: "MenuItem",
+          fields: [
+            { type: "string", name: "label" },
+            { type: "component", name: "link", component: "Link", repeatable: false },
+            { type: "component", name: "children", component: "Link", repeatable: true },
+          ],
+        },
+      ],
+    };
+    const options = { componentRelations: true, nestedTables: true };
+
+    it("keeps an embedded component's relation, by its path on the entry", () => {
+      const r = expandComponents(menu, menu.contentTypes[1]!, options);
+      expect(r.gaps).toEqual([]);
+      expect(r.relations.map((x) => [x.path, x.apiPath, x.field.target])).toEqual([
+        [["cta", "author"], ["cta", "author"], "Author"],
+      ]);
+    });
+
+    it("keeps an item's relations and its own repeatables, relative to the item", () => {
+      const r = expandComponents(menu, menu.contentTypes[1]!, options);
+      const items = r.tables[0]!;
+      expect(items.relations.map((x) => x.path)).toEqual([["link", "author"]]);
+      expect(items.tables.map((t) => t.path)).toEqual([["children"]]);
+      expect(items.tables[0]!.scalars.map((s) => s.path)).toEqual([["label"]]);
+      expect(items.tables[0]!.relations.map((x) => x.path)).toEqual([["author"]]);
+      expect(items.tables[0]!.tables).toEqual([]);
+    });
+
+    it("keeps a zone item's relations and its own repeatables", () => {
+      const r = expandComponents(menu, menu.contentTypes[1]!, options);
+      const member = r.zones[0]!.members[0]!.table;
+      expect(member.relations.map((x) => x.path)).toEqual([["link", "author"]]);
+      expect(member.tables.map((t) => t.path)).toEqual([["children"]]);
+    });
+
+    it("drops a component relation's inverse, which Strapi does not allow, with a gap", () => {
+      const inverse: IrDocument = {
+        ...menu,
+        components: menu.components.map((c) =>
+          c.name === "Link"
+            ? {
+                ...c,
+                fields: [
+                  {
+                    type: "relation",
+                    name: "author",
+                    relationKind: "manyToOne",
+                    target: "Author",
+                    inverse: "links",
+                  },
+                ],
+              }
+            : c,
+        ),
+      };
+      const r = expandComponents(inverse, inverse.contentTypes[1]!, options);
+      expect(r.relations[0]!.field).toEqual({
+        type: "relation",
+        name: "author",
+        relationKind: "manyToOne",
+        target: "Author",
+      });
+      expect([...new Set(r.gaps.map((g) => g.feature))]).toEqual(["componentRelationInverse"]);
+    });
+
+    it("still reports both as gaps without the options", () => {
+      const r = expandComponents(menu, menu.contentTypes[1]!);
+      expect(r.relations).toEqual([]);
+      expect([...new Set(r.gaps.map((g) => g.feature))].sort()).toEqual([
+        "componentRelation",
+        "nestedRepeatable",
+      ]);
+    });
+  });
+
   it("strips ai from component scalars and reports a downgrade gap", () => {
     const withAi: IrDocument = {
       version: 1,

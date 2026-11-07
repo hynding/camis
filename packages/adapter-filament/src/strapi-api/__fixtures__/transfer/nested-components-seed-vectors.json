@@ -1,0 +1,99 @@
+{
+  "about": "The data strapi-php's export of transfer/nested-components-export.tar.gz holds: run on an empty strapi-php project (with the fixture's types), seeded with a full-access token, then `php bin/strapi export --no-encrypt -f nested-components-export`. Menus whose components link authors and topics (an embedded cta, each item's link, a zone's items), whose items hold items of their own (children, in the items and in a zone's item), and whose items' icons link files (a component inside an item). Topic has draft and publish, one topic only as a draft; Menu has draft and publish, one menu only as a draft.",
+  "seed": [],
+  "reads": [],
+  "writes": [
+    {
+      "name": "a wide image",
+      "path": "/upload",
+      "as": "files:Wide",
+      "upload": [{ "file": "wide.png", "info": { "alternativeText": "red" } }]
+    },
+    {
+      "name": "a tall image",
+      "path": "/upload",
+      "as": "files:Tall",
+      "upload": [{ "file": "tall.png", "info": { "alternativeText": "blue" } }]
+    },
+    { "name": "Ann", "path": "/authors", "as": "authors:Ann", "data": { "name": "Ann" } },
+    { "name": "Bob", "path": "/authors", "as": "authors:Bob", "data": { "name": "Bob" } },
+    { "name": "News", "path": "/topics", "as": "topics:News", "data": { "name": "News" } },
+    { "name": "Sport", "path": "/topics", "as": "topics:Sport", "data": { "name": "Sport" } },
+    {
+      "name": "Hidden",
+      "path": "/topics",
+      "query": "status=draft",
+      "as": "topics:Hidden",
+      "data": { "name": "Hidden" }
+    },
+    {
+      "name": "a menu whose components link, nest and hold files",
+      "path": "/menus",
+      "as": "menus:Main",
+      "data": {
+        "title": "Main",
+        "cta": {
+          "label": "Start",
+          "author": "@authors:Ann",
+          "topics": ["@topics:Sport", "@topics:News", "@topics:Hidden"]
+        },
+        "items": [
+          {
+            "label": "Home",
+            "link": { "label": "Home link", "author": "@authors:Bob", "topics": ["@topics:News"] },
+            "icon": { "caption": "House", "image": "#files:Wide" },
+            "children": [
+              {
+                "label": "First",
+                "author": "@authors:Ann",
+                "topics": ["@topics:News", "@topics:Sport"]
+              },
+              { "label": "Second" }
+            ]
+          },
+          { "label": "About", "icon": { "image": "#files:Tall" } },
+          {
+            "label": "Blog",
+            "link": { "label": "Blog link", "topics": ["@topics:Sport"] },
+            "children": [{ "label": "Only", "author": "@authors:Bob" }]
+          }
+        ],
+        "sections": [
+          {
+            "__component": "shared.link",
+            "label": "Section link",
+            "author": "@authors:Bob",
+            "topics": ["@topics:Sport"]
+          },
+          {
+            "__component": "shared.menu-item",
+            "label": "Section item",
+            "link": { "label": "Inner", "author": "@authors:Ann" },
+            "icon": { "caption": "Zoned icon", "image": "#files:Tall" },
+            "children": [
+              { "label": "Zoned", "author": "@authors:Ann", "topics": ["@topics:News"] },
+              { "label": "Zoned too" }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a draft menu",
+      "path": "/menus",
+      "query": "status=draft",
+      "as": "menus:Draft",
+      "data": {
+        "title": "Draft",
+        "cta": { "label": "Later", "topics": ["@topics:Hidden", "@topics:News"] },
+        "items": [
+          {
+            "label": "Legal",
+            "icon": { "caption": "Scales", "image": "#files:Wide" },
+            "children": [{ "label": "Terms", "topics": ["@topics:Hidden"] }]
+          }
+        ]
+      }
+    }
+  ]
+}

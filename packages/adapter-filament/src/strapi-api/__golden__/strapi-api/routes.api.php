@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\GenreApiController;
 use App\Http\Controllers\Api\GlobalModelApiController;
 use App\Http\Controllers\Api\HomepageApiController;
 use App\Http\Controllers\Api\LandingApiController;
+use App\Http\Controllers\Api\MenuApiController;
 use App\Http\Controllers\Api\NoteApiController;
 use App\Http\Controllers\Api\PageApiController;
 use App\Http\Controllers\Api\PostApiController;
@@ -101,6 +102,12 @@ Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle):
         Route::get('/landings/{key}', [LandingApiController::class, 'show']);
         Route::put('/landings/{key}', [LandingApiController::class, 'update']);
         Route::delete('/landings/{key}', [LandingApiController::class, 'destroy']);
+
+        Route::get('/menus', [MenuApiController::class, 'index']);
+        Route::post('/menus', [MenuApiController::class, 'store']);
+        Route::get('/menus/{key}', [MenuApiController::class, 'show']);
+        Route::put('/menus/{key}', [MenuApiController::class, 'update']);
+        Route::delete('/menus/{key}', [MenuApiController::class, 'destroy']);
 
         Route::get('/notes', [NoteApiController::class, 'index']);
         Route::post('/notes', [NoteApiController::class, 'store']);

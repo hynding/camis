@@ -24,7 +24,7 @@ final class LandingSerializer
     /** Component keys, which Strapi leaves off the wire unless populate names them. */
     public const COMPONENTS = ['blocks'];
 
-    /** Each dynamic zone's member components by uid: the child relation its items live in, its own component keys, and its media fields. */
+    /** Each dynamic zone's member components by uid: the child relation its items live in, its own component keys, its media fields, its relations and its repeatables. */
     public const ZONES = [
         'blocks' => [
             'shared.hero' => ['relation' => 'blocksHero', 'components' => ['price']],
@@ -101,7 +101,7 @@ final class LandingSerializer
                 ],
                 'shared.frame' => [
                     'caption' => self::dig($item, ['caption']),
-                    '__media' => array_intersect_key($item, ['image' => true]),
+                    '__links' => array_intersect_key($item, ['image' => true]),
                 ],
             });
         }

@@ -195,26 +195,36 @@ final class StrapiDocuments
         unset($attributes[$from->getKeyName()]);
         $to->forceFill($attributes);
         $to->setAttribute('published_at', $published ? now() : null);
-        foreach ($serializer::FIELDS as $field) {
+        self::copyToOne($from, $to, $serializer::FIELDS, $published);
+        $to->save();
+        self::copyLinks($from, $to, $serializer::FIELDS, $published);
+        foreach ($serializer::ZONES as $members) {
+            foreach ($members as $member) {
+                $fields = [...$member['fields'] ?? [], ...$member['links'] ?? [], ...$member['children'] ?? []];
+                self::copyItems($from, $to, $member['relation'], $fields, $published, 'position');
+            }
+        }
+
+        return $to;
+    }
+
+    /** The to-one links a row holds in its own columns, as the version written should hold them. */
+    private static function copyToOne(Model $from, Model $to, array $fields, bool $published): void
+    {
+        foreach ($fields as $field) {
             if (($field['kind'] ?? null) === 'belongsTo') {
                 $fk = $field['foreignKey'];
                 $to->setAttribute($fk, self::counterparts($field, array_filter([$from->getAttribute($fk)]), $published)[0] ?? null);
             }
         }
-        $to->save();
-        foreach ($serializer::FIELDS as $field) {
+    }
+
+    /** A row's repeatables, files and to-many links over another row's, once that one is saved. */
+    private static function copyLinks(Model $from, Model $to, array $fields, bool $published): void
+    {
+        foreach ($fields as $field) {
             if (isset($field['component'])) {
-                // One by one, so an item's links to files go with it.
-                $to->{$field['component']}()->get()->each->delete();
-                foreach ($from->{$field['component']}()->orderBy('id')->get() as $child) {
-                    $copy = $child->replicate();
-                    $to->{$field['component']}()->save($copy);
-                    foreach ($field['fields'] as $inner) {
-                        if (in_array($inner['kind'] ?? null, ['mediaOne', 'mediaMany'], true)) {
-                            self::copyFiles($child, $copy, $inner['relation']);
-                        }
-                    }
-                }
+                self::copyItems($from, $to, $field['component'], $field['fields'], $published, 'id');
             } elseif (in_array($field['kind'] ?? null, ['mediaOne', 'mediaMany'], true)) {
                 self::copyFiles($from, $to, $field['relation']);
             } elseif (($field['kind'] ?? null) === 'belongsToMany' && $field['holder'] === 'self') {
@@ -230,22 +240,21 @@ final class StrapiDocuments
                     : $to->{$field['relation']}()->sync($targets);
             }
         }
-        foreach ($serializer::ZONES as $members) {
-            foreach ($members as $member) {
-                $fields = $member['fields'] ?? [];
-                // One by one when its items link files, so their links go with them.
-                $fields === [] ? $to->{$member['relation']}()->delete() : $to->{$member['relation']}()->get()->each->delete();
-                foreach ($from->{$member['relation']}()->orderBy('position')->get() as $item) {
-                    $copy = $item->replicate();
-                    $to->{$member['relation']}()->save($copy);
-                    foreach ($fields as $field) {
-                        self::copyFiles($item, $copy, $field['relation']);
-                    }
-                }
-            }
-        }
+    }
 
-        return $to;
+    /**
+     * One row's items over another's: deleted one by one when they link anything (so their links
+     * go with them), then each copied with its links and the items inside it.
+     */
+    private static function copyItems(Model $from, Model $to, string $relation, array $fields, bool $published, string $order): void
+    {
+        $fields === [] ? $to->{$relation}()->delete() : $to->{$relation}()->get()->each->delete();
+        foreach ($from->{$relation}()->orderBy($order)->get() as $item) {
+            $copy = $item->replicate();
+            self::copyToOne($item, $copy, $fields, $published);
+            $to->{$relation}()->save($copy);
+            self::copyLinks($item, $copy, $fields, $published);
+        }
     }
 
     /** The files one row's media field links, linked from another row in the same order. */

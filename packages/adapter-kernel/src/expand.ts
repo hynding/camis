@@ -25,12 +25,43 @@ export interface ExpandedScalar {
   alwaysPresent: boolean;
 }
 
-/** A repeatable component reference, realized as a child table of the content type. */
+type RelationField = Extract<Field, { type: "relation" }>;
+
+/**
+ * A relation inside a component, held by the row the component's columns live on (the entry's,
+ * or an item's); `path` is field-name segments from that row. Strapi's component relations go one
+ * way, so it has no inverse.
+ */
+export interface ExpandedRelation {
+  path: string[];
+  /** The same path in the keys its fields go by on the API. */
+  apiPath: string[];
+  field: RelationField;
+  /** The component declaring it. */
+  component: Component;
+}
+
+/** A repeatable component reference, realized as a child table of the row holding it. */
 export interface ExpandedTable {
   path: string[];
   /** The same path in the keys its fields go by on the API. */
   apiPath: string[];
   scalars: ExpandedScalar[];
+  /** The component each of its rows is an item of. */
+  component: Component;
+  /** Relations inside the item, held by the item's row (with `componentRelations`). */
+  relations: ExpandedRelation[];
+  /** Repeatables inside the item: child tables of the item's table (with `nestedTables`). */
+  tables: ExpandedTable[];
+}
+
+/**
+ * What a target can store beyond flattened scalars and one level of child tables. Without them,
+ * relations inside components and repeatables inside items are reported as gaps and skipped.
+ */
+export interface ExpandOptions {
+  componentRelations?: boolean;
+  nestedTables?: boolean;
 }
 
 /** One component a dynamic zone may hold, realized as its own child table of the content type. */
@@ -49,6 +80,8 @@ export interface ExpandedZone {
 
 export interface ExpandedContentType {
   scalars: ExpandedScalar[];
+  /** Relations inside embedded components, held by the entry's row (with `componentRelations`). */
+  relations: ExpandedRelation[];
   tables: ExpandedTable[];
   zones: ExpandedZone[];
   gaps: CapabilityGap[];
@@ -83,44 +116,75 @@ export const columnField = (scalar: ExpandedScalar): Field => {
   return rest;
 };
 
+/** Where a walk puts what it finds: the entry's own row, or an item's. */
+interface Holder {
+  scalars: ExpandedScalar[];
+  relations: ExpandedRelation[];
+  tables: ExpandedTable[];
+}
+
+const newTable = (path: string[], apiPath: string[], component: Component): ExpandedTable => ({
+  path,
+  apiPath,
+  scalars: [],
+  component,
+  relations: [],
+  tables: [],
+});
+
 /**
  * Expand a content type's component fields against the document's component definitions.
- * Non-repeatable components flatten (recursively) into prefixed embedded scalars; repeatable
- * components become child tables, and each component a dynamic zone holds becomes one more, keyed
- * by the zone. Relations and AI attachments inside components, and
- * repeatables nested inside repeatables, are bounded out as downgrade gaps. A flattened scalar
- * keeps its `required` verbatim and reports, via `alwaysPresent`, whether every component
- * reference above it is required.
+ * Non-repeatable components flatten (recursively) into prefixed embedded scalars of the row
+ * holding them; repeatable components become child tables of that row, and each component a
+ * dynamic zone holds becomes one more, keyed by the zone. Relations inside components (with
+ * `componentRelations`) are held by the row the component lives on, and repeatables inside an
+ * item (with `nestedTables`) are child tables of the item's table; without the options they, and
+ * AI attachments inside components, are bounded out as downgrade gaps. A flattened scalar keeps
+ * its `required` verbatim and reports, via `alwaysPresent`, whether every component reference
+ * above it is required.
  */
-export const expandComponents = (doc: IrDocument, ct: ContentType): ExpandedContentType => {
+export const expandComponents = (
+  doc: IrDocument,
+  ct: ContentType,
+  options: ExpandOptions = {},
+): ExpandedContentType => {
   const byName = new Map<string, Component>(doc.components.map((c) => [c.name, c]));
-  const out: ExpandedContentType = { scalars: [], tables: [], zones: [], gaps: [] };
+  const out: ExpandedContentType = { scalars: [], relations: [], tables: [], zones: [], gaps: [] };
 
   const walk = (
     component: Component,
     path: string[],
     apiPath: string[],
-    sink: ExpandedScalar[],
+    holder: Holder,
     insideRepeatable: boolean,
     alwaysPresent: boolean,
   ): void => {
     for (const field of component.fields) {
       const location = { contentType: ct.name, component: component.name, field: field.name };
       if (field.type === "relation") {
-        out.gaps.push(
-          gapAt(
-            "componentRelation",
-            location,
-            `relation "${field.name}" inside component "${component.name}" is not supported on relational targets; skipped.`,
-          ),
-        );
+        if (options.componentRelations !== true) {
+          out.gaps.push(
+            gapAt(
+              "componentRelation",
+              location,
+              `relation "${field.name}" inside component "${component.name}" is not supported on relational targets; skipped.`,
+            ),
+          );
+          continue;
+        }
+        holder.relations.push({
+          path: [...path, field.name],
+          apiPath: [...apiPath, fieldApiName(field)],
+          field: oneWay(field, location),
+          component,
+        });
         continue;
       }
       if (field.type === "component") {
         const child = byName.get(field.component);
         if (!child) continue; // unreachable on validated IR (unknown_component_ref)
         if (field.repeatable) {
-          if (insideRepeatable) {
+          if (insideRepeatable && options.nestedTables !== true) {
             out.gaps.push(
               gapAt(
                 "nestedRepeatable",
@@ -130,20 +194,16 @@ export const expandComponents = (doc: IrDocument, ct: ContentType): ExpandedCont
             );
             continue;
           }
-          const table: ExpandedTable = {
-            path: [...path, field.name],
-            apiPath: [...apiPath, fieldApiName(field)],
-            scalars: [],
-          };
-          out.tables.push(table);
+          const table = newTable([...path, field.name], [...apiPath, fieldApiName(field)], child);
+          holder.tables.push(table);
           // A child-table row exists only when the item does, so required-ness inside it holds.
-          walk(child, [], [], table.scalars, true, true);
+          walk(child, [], [], table, true, true);
         } else {
           walk(
             child,
             [...path, field.name],
             [...apiPath, fieldApiName(field)],
-            sink,
+            holder,
             insideRepeatable,
             alwaysPresent && field.required === true,
           );
@@ -160,13 +220,29 @@ export const expandComponents = (doc: IrDocument, ct: ContentType): ExpandedCont
           ),
         );
       }
-      sink.push({
+      holder.scalars.push({
         path: [...path, field.name],
         apiPath: [...apiPath, fieldApiName(field)],
         field: stripAi(field),
         alwaysPresent,
       });
     }
+  };
+
+  // Strapi's component relations go one way; an inverse would have no field to live on.
+  const oneWay = (field: RelationField, location: CapabilityGap["location"]): RelationField => {
+    if (field.inverse === undefined) return field;
+    out.gaps.push(
+      gapAt(
+        "componentRelationInverse",
+        location,
+        `relation "${field.name}" inside a component goes one way, as Strapi's do; its inverse "${field.inverse}" is not generated.`,
+      ),
+    );
+    const rest = { ...field };
+    delete rest.inverse;
+    delete (rest as { inverseNames?: unknown }).inverseNames;
+    return rest;
   };
 
   for (const field of ct.fields) {
@@ -176,12 +252,12 @@ export const expandComponents = (doc: IrDocument, ct: ContentType): ExpandedCont
         const component = byName.get(name);
         if (!component) continue; // unreachable on validated IR
         // A member's table is keyed by the zone and the component: its rows exist only as items.
-        const table: ExpandedTable = {
-          path: [field.name, component.name],
-          apiPath: [fieldApiName(field), component.name],
-          scalars: [],
-        };
-        walk(component, [], [], table.scalars, true, true);
+        const table = newTable(
+          [field.name, component.name],
+          [fieldApiName(field), component.name],
+          component,
+        );
+        walk(component, [], [], table, true, true);
         zone.members.push({ component, table });
       }
       out.zones.push(zone);
@@ -191,22 +267,11 @@ export const expandComponents = (doc: IrDocument, ct: ContentType): ExpandedCont
     const component = byName.get(field.component);
     if (!component) continue; // unreachable on validated IR
     if (field.repeatable) {
-      const table: ExpandedTable = {
-        path: [field.name],
-        apiPath: [fieldApiName(field)],
-        scalars: [],
-      };
+      const table = newTable([field.name], [fieldApiName(field)], component);
       out.tables.push(table);
-      walk(component, [], [], table.scalars, true, true);
+      walk(component, [], [], table, true, true);
     } else {
-      walk(
-        component,
-        [field.name],
-        [fieldApiName(field)],
-        out.scalars,
-        false,
-        field.required === true,
-      );
+      walk(component, [field.name], [fieldApiName(field)], out, false, field.required === true);
     }
   }
   return out;

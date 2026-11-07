@@ -32,53 +32,67 @@ final class StrapiRelations
             // A target that keeps locales is linked in the writer's locale, else in its default one.
             $relation['locale'] = $relation['localized'] ? ($locale ?? StrapiLocales::default()) : null;
             $links[$key] = self::instruction($relation, $sent[0], $viewer);
+            // A component sent without its id is a new one, as Strapi replaces it: its links
+            // start from none, so a connect or disconnect applies to nothing it held before.
+            if ($sent[1] ?? false) {
+                $links[$key]['fresh'] = true;
+            }
         }
 
         return $links;
     }
 
     /**
-     * What a write sends for a key, as [value], or null when it leaves the key alone. An embedded
-     * component's file (a dotted key) is sent with its component, which a write replaces whole, as
-     * Strapi replaces a component sent without its id; one sent with its id keeps what it leaves out.
+     * What a write sends for a key, as [value, fresh], or null when it leaves the key alone. An
+     * embedded component's file or relation (a dotted key) is sent with its component, which a
+     * write replaces whole, as Strapi replaces a component sent without its id (fresh: its links
+     * start from none); one sent with its id keeps what it leaves out.
      */
     private static function sent(array $data, string $key): ?array
     {
         if (array_key_exists($key, $data)) {
-            return [$data[$key]];
+            return [$data[$key], false];
         }
         $path = explode('.', $key);
         if (count($path) === 1 || ! array_key_exists($path[0], $data)) {
             return null;
         }
         $value = $data;
+        $fresh = false;
         foreach ($path as $i => $segment) {
             if (! is_array($value) || ! array_key_exists($segment, $value)) {
-                return is_array($value) && $i > 0 && array_key_exists('id', $value) ? null : [null];
+                return is_array($value) && $i > 0 && array_key_exists('id', $value) ? null : [null, true];
+            }
+            if ($i > 0 && is_array($value) && ! array_key_exists('id', $value)) {
+                $fresh = true;
             }
             $value = $value[$segment];
         }
 
-        return [$value];
+        return [$value, $fresh];
     }
 
     /**
-     * Each repeatable component item's file references as the links its row makes once saved; a
-     * missing file fails the whole request, as one an entry links itself does.
+     * Each repeatable component item's links (its files and relations, as sent) as the links its
+     * row makes once saved, and the same for the items nested in it; a missing target fails the
+     * whole request, as one an entry links itself does. $fields is the map holding the
+     * repeatables (a serializer's FIELDS, or an item's own).
      */
-    public static function items(array $children, array $fields, ?Authenticatable $viewer): array
+    public static function items(array $children, array $fields, ?Authenticatable $viewer, ?string $locale = null): array
     {
         foreach ($fields as $field) {
             $relation = $field['component'] ?? null;
             if ($relation === null || ! isset($children[$relation])) {
                 continue;
             }
-            $media = array_filter($field['fields'], fn (array $f): bool => isset($f['relation']));
-            if ($media === []) {
-                continue;
-            }
+            $links = array_filter($field['fields'], fn (array $f): bool => isset($f['relation']));
             foreach ($children[$relation] as $i => $row) {
-                $children[$relation][$i]['__media'] = self::read($row['__media'] ?? [], $media, $viewer);
+                if ($links !== []) {
+                    $children[$relation][$i]['__links'] = self::read($row['__links'] ?? [], $links, $viewer, $locale);
+                }
+                if (isset($row['__children'])) {
+                    $children[$relation][$i]['__children'] = self::items($row['__children'], $field['fields'], $viewer, $locale);
+                }
             }
         }
 
@@ -86,19 +100,23 @@ final class StrapiRelations
     }
 
     /**
-     * Each dynamic zone item's file references as the links its row makes once written, as an
-     * item of a repeatable component's are. $zones is a serializer's ZONES.
+     * Each dynamic zone item's links (its files and relations) as the links its row makes once
+     * written, and its nested items', as an item of a repeatable component's are. $zones is a
+     * serializer's ZONES.
      */
-    public static function zones(array $children, array $zones, ?Authenticatable $viewer): array
+    public static function zones(array $children, array $zones, ?Authenticatable $viewer, ?string $locale = null): array
     {
         foreach ($zones as $zone => $members) {
             foreach ($members as $member) {
                 $relation = $member['relation'];
-                if (! isset($member['fields'], $children[$zone][$relation])) {
-                    continue;
-                }
-                foreach ($children[$zone][$relation] as $i => $row) {
-                    $children[$zone][$relation][$i]['__media'] = self::read($row['__media'] ?? [], $member['fields'], $viewer);
+                $links = [...$member['fields'] ?? [], ...$member['links'] ?? []];
+                foreach ($children[$zone][$relation] ?? [] as $i => $row) {
+                    if ($links !== []) {
+                        $children[$zone][$relation][$i]['__links'] = self::read($row['__links'] ?? [], $links, $viewer, $locale);
+                    }
+                    if (isset($row['__children'])) {
+                        $children[$zone][$relation][$i]['__children'] = self::items($row['__children'], $member['children'] ?? [], $viewer, $locale);
+                    }
                 }
             }
         }
@@ -134,7 +152,7 @@ final class StrapiRelations
                 continue;
             }
             $column = $link['relation']['foreignKey'];
-            $target = self::single($row->getAttribute($column), $link);
+            $target = self::single(($link['fresh'] ?? false) ? null : $row->getAttribute($column), $link);
             $order = $link['relation']['inverseOrder'] ?? null;
             if ($order !== null && ($target === null || (string) $target !== (string) $row->getAttribute($column))) {
                 $row->setAttribute($order, StrapiLinkOrder::next($row, $column, $order, $target));
@@ -159,6 +177,9 @@ final class StrapiRelations
             $media = in_array($relation['kind'], ['mediaOne', 'mediaMany'], true);
             if ($media) {
                 $eloquent->orderByPivot('order');
+            }
+            if (($link['fresh'] ?? false) && $link['set'] === null) {
+                $link['set'] = self::many([], $link);
             }
             if (($relation['order'] ?? null) !== null) {
                 StrapiLinkOrder::write($row, $eloquent, $link);
