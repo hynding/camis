@@ -71,7 +71,8 @@ describe("importCommand", () => {
     expect(code).toBe(0);
     expect(Object.values(written)[0]).toContain('"Article"');
   });
-  // A Strapi project's upload and email providers become the Laravel app's disk and mailer.
+  // A Strapi project's config (upload and email providers, API page sizes, sessions) becomes the
+  // Laravel app's env.
   it("writes the env a Strapi project's config/plugins maps to, beside the IR", async () => {
     const dir = await mkdtemp(join(tmpdir(), "camis-cli-strapi-providers-"));
     const ctDir = join(dir, "src/api/article/content-types/article");
@@ -107,10 +108,10 @@ describe("importCommand", () => {
     };
     const code = await importCommand("strapi", dir, join(dir, "ir.json"), io);
     expect(code).toBe(0);
-    const env = written[join(dir, "providers.env")];
+    const env = written[join(dir, "deployment.env")];
     expect(env).toContain("MAIL_MAILER=sendmail\n");
     expect(env).toContain("CAMIS_EMAIL_DEFAULT_FROM=${FROM}\n");
-    expect(lines.join("\n")).toMatch(/✓ providers → .*providers\.env/);
+    expect(lines.join("\n")).toMatch(/✓ deployment settings → .*deployment\.env/);
     expect(lines.join("\n")).toContain("uploadProvider");
   });
   // Strapi's upload plugin is always there: a project with media fields gets the media library's

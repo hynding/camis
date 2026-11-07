@@ -16,7 +16,7 @@ Usage:
   camis validate <ir.json>
   camis import <strapi|express> <projectDir> [--out ir.json] [--upsert-by <field>]
                [--roles-from <strapiExport.tar.gz[.enc]> [--key <key>] [--roles-out roles.json]]
-               [--env-out providers.env]  (Strapi: the Laravel env for its upload/email providers)
+               [--env-out deployment.env]  (Strapi: the Laravel env for its upload/email providers)
   camis scaffold filament <dir> [--storage laravel|strapi] [--graphql]
                                                  (create the Laravel host app for the overlay)
   camis generate [--config camis.config.json]   (dry-run: lists files + gaps)

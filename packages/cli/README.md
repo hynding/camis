@@ -142,7 +142,7 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
   roles; `camis new --from-strapi <dir> --roles-from …` does the same for a new project. A role
   holding only part of a camis grant's Strapi actions is reported, not granted.
 - `camis import strapi <dir>` also reads the project's `config/plugins` (`.php` under `php`,
-  `.ts`/`.js` under `node`) and writes `providers.env` beside the IR (`--env-out` to move it): the
+  `.ts`/`.js` under `node`) and writes `deployment.env` beside the IR (`--env-out` to move it): the
   Laravel `.env` lines that give the Filament app the project's upload provider (`aws-s3` → the
   `s3` disk via `CAMIS_UPLOAD_DISK`) and email provider (`sendmail`, `nodemailer` and `sendgrid` →
   SMTP, `mailgun`, `amazon-ses` → `ses`), plus its default sender and reply-to. Each `env()` the

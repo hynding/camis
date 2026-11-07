@@ -1,2 +1,2 @@
 export { filamentAdapter } from "./generate";
-export { providerEnv } from "./provider-env";
+export { deploymentEnv } from "./deployment-env";

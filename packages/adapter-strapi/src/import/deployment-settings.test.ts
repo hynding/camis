@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { providerSettings } from "./providers";
+import { deploymentSettings } from "./deployment-settings";
 
 // A Strapi project's config/plugins, as the CLI reads it: env('X', d) kept as { env, default }.
 const env = (name: string, fallback?: string | number | boolean) =>
   fallback === undefined ? { env: name } : { env: name, default: fallback };
 
-describe("providerSettings — upload", () => {
+describe("deploymentSettings — upload", () => {
   it("keeps files locally when the project names no provider, or the local one", () => {
-    expect(providerSettings({}).settings.upload).toBeUndefined();
+    expect(deploymentSettings({}).settings.upload).toBeUndefined();
     expect(
-      providerSettings({ upload: { config: { provider: "local", sizeLimit: 1048576 } } }),
+      deploymentSettings({ upload: { config: { provider: "local", sizeLimit: 1048576 } } }),
     ).toEqual({
       settings: { upload: { provider: "local", storage: { kind: "local" }, sizeLimit: 1048576 } },
       gaps: [],
@@ -17,7 +17,7 @@ describe("providerSettings — upload", () => {
   });
 
   it("reads the aws-s3 provider's bucket, credentials, region, endpoint and CDN address", () => {
-    const { settings, gaps } = providerSettings({
+    const { settings, gaps } = deploymentSettings({
       upload: {
         config: {
           provider: "aws-s3",
@@ -54,7 +54,7 @@ describe("providerSettings — upload", () => {
   });
 
   it("reads Strapi 4's flat aws-s3 options too", () => {
-    const { settings } = providerSettings({
+    const { settings } = deploymentSettings({
       upload: {
         config: {
           provider: "aws-s3",
@@ -77,7 +77,7 @@ describe("providerSettings — upload", () => {
   });
 
   it("reports what it cannot carry: a root path, and a provider with no counterpart", () => {
-    const rooted = providerSettings({
+    const rooted = deploymentSettings({
       upload: {
         config: {
           provider: "aws-s3",
@@ -86,7 +86,7 @@ describe("providerSettings — upload", () => {
       },
     });
     expect(rooted.gaps.map((g) => g.feature)).toEqual(["uploadRootPath"]);
-    const cloudinary = providerSettings({
+    const cloudinary = deploymentSettings({
       upload: { config: { provider: "cloudinary", providerOptions: { cloud_name: "x" } } },
     });
     expect(cloudinary.settings.upload).toBeUndefined();
@@ -102,17 +102,17 @@ describe("providerSettings — upload", () => {
   });
 });
 
-describe("providerSettings — email", () => {
+describe("deploymentSettings — email", () => {
   it("sends through sendmail when the project names no provider, as Strapi does", () => {
     expect(
-      providerSettings({ email: { config: { settings: { defaultFrom: "a@b.co" } } } }).settings
+      deploymentSettings({ email: { config: { settings: { defaultFrom: "a@b.co" } } } }).settings
         .email,
     ).toEqual({ provider: "sendmail", transport: { kind: "sendmail" }, defaultFrom: "a@b.co" });
   });
 
   it("reads nodemailer's SMTP host, port, security and account, and the default addresses", () => {
     expect(
-      providerSettings({
+      deploymentSettings({
         email: {
           config: {
             provider: "nodemailer",
@@ -150,7 +150,7 @@ describe("providerSettings — email", () => {
   });
 
   it("reports a nodemailer service preset, which names no host", () => {
-    const { gaps } = providerSettings({
+    const { gaps } = deploymentSettings({
       email: { config: { provider: "nodemailer", providerOptions: { service: "gmail" } } },
     });
     expect(gaps.map((g) => g.feature)).toEqual(["emailProviderOption"]);
@@ -158,7 +158,7 @@ describe("providerSettings — email", () => {
 
   it("sends SendGrid mail through its SMTP relay, with the API key as the password", () => {
     expect(
-      providerSettings({
+      deploymentSettings({
         email: { config: { provider: "sendgrid", providerOptions: { apiKey: env("SG_KEY") } } },
       }).settings.email?.transport,
     ).toEqual({
@@ -172,7 +172,7 @@ describe("providerSettings — email", () => {
 
   it("reads mailgun's key, domain and regional address", () => {
     expect(
-      providerSettings({
+      deploymentSettings({
         email: {
           config: {
             provider: "mailgun",
@@ -194,7 +194,7 @@ describe("providerSettings — email", () => {
 
   it("reads amazon-ses's credentials and region, from either of its option shapes", () => {
     const transport = (providerOptions: Record<string, unknown>) =>
-      providerSettings({ email: { config: { provider: "amazon-ses", providerOptions } } })
+      deploymentSettings({ email: { config: { provider: "amazon-ses", providerOptions } } })
         .settings.email?.transport;
     expect(
       transport({
@@ -222,10 +222,63 @@ describe("providerSettings — email", () => {
   });
 
   it("reports a provider with no counterpart and leaves mail as it is", () => {
-    const { settings, gaps } = providerSettings({
+    const { settings, gaps } = deploymentSettings({
       email: { config: { provider: "postmark", providerOptions: {} } },
     });
     expect(settings.email).toBeUndefined();
     expect(gaps.map((g) => g.feature)).toEqual(["emailProvider"]);
+  });
+});
+
+describe("deploymentSettings — the API and accounts", () => {
+  it("reads config/api's REST page sizes and count", () => {
+    expect(
+      deploymentSettings({}, { rest: { defaultLimit: 10, maxLimit: env("MAX", 50), withCount: false } })
+        .settings,
+    ).toEqual({ rest: { defaultLimit: 10, maxLimit: env("MAX", 50), withCount: false } });
+  });
+
+  it("reads REST with no maximum as uncapped, as Strapi serves it", () => {
+    expect(deploymentSettings({}, { rest: { defaultLimit: 10 } }).settings.rest).toEqual({
+      defaultLimit: 10,
+      maxLimit: 0,
+    });
+  });
+
+  it("reads the graphql plugin's page sizes", () => {
+    expect(
+      deploymentSettings({ graphql: { config: { defaultLimit: 20, maxLimit: 200, depthLimit: 7 } } })
+        .settings,
+    ).toEqual({ graphql: { defaultLimit: 20, maxLimit: 200 } });
+  });
+
+  it("reads users-permissions' session management, lifespans, cookie and register fields", () => {
+    expect(
+      deploymentSettings({
+        "users-permissions": {
+          config: {
+            jwtManagement: "refresh",
+            sessions: {
+              accessTokenLifespan: 1800,
+              maxRefreshTokenLifespan: env("MAX_REFRESH"),
+              idleRefreshTokenLifespan: 86400,
+              httpOnly: true,
+              cookie: { name: "rt", sameSite: "strict", path: "/api", domain: "example.com", secure: true },
+            },
+            register: { allowedFields: ["nickname", "picture"] },
+          },
+        },
+      }).settings,
+    ).toEqual({
+      accounts: {
+        jwtManagement: "refresh",
+        accessTokenLifespan: 1800,
+        maxRefreshTokenLifespan: env("MAX_REFRESH"),
+        idleRefreshTokenLifespan: 86400,
+        httpOnly: true,
+        cookie: { name: "rt", sameSite: "strict", path: "/api", domain: "example.com", secure: true },
+        registerAllowedFields: ["nickname", "picture"],
+      },
+    });
   });
 });

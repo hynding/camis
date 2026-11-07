@@ -1,8 +1,8 @@
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { stableJson } from "@camis/adapter-kernel";
 import { importExpressProject } from "@camis/adapter-express";
-import { providerEnv } from "@camis/adapter-filament";
-import { providerSettings, readStrapiProject } from "@camis/adapter-strapi";
+import { deploymentEnv } from "@camis/adapter-filament";
+import { deploymentSettings, readStrapiProject } from "@camis/adapter-strapi";
 import { validate } from "@camis/ir-core";
 import type { CapabilityGap, IrDocument, Result } from "@camis/ir-schema";
 import type { Io } from "../io";
@@ -79,7 +79,7 @@ export const importCommand = async (
   await io.writeFile(out, stableJson(document));
   io.out(`✓ imported → ${outPath}`);
   if (target === "strapi") {
-    const envOut = opts.envOut ?? join(dirname(outPath), "providers.env");
+    const envOut = opts.envOut ?? join(dirname(outPath), "deployment.env");
     gaps = [...gaps, ...(await writeProviderEnv(io, dir, abs(io, envOut), envOut))];
   }
   printGaps(io, gaps);
@@ -98,12 +98,12 @@ const writeProviderEnv = async (
 ): Promise<CapabilityGap[]> => {
   const read = await readStrapiPluginsConfig(dir, io.capture?.bind(io));
   if (!read.ok) {
-    io.out(`  ⚠ ${read.message}; providers.env not written`);
+    io.out(`  ⚠ ${read.message}; deployment.env not written`);
     return [];
   }
   if (read.config === undefined) return [];
-  const { settings, gaps } = providerSettings(read.config);
-  const { env, packages } = providerEnv(settings);
+  const { settings, gaps } = deploymentSettings(read.config);
+  const { env, packages } = deploymentEnv(settings);
   if (env !== "") {
     await io.writeFile(path, env);
     io.out(`✓ providers → ${shown}`);

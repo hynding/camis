@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Io } from "../io";
-import { readStrapiPluginsConfig } from "./strapi-config";
+import { readStrapiConfig, readStrapiPluginsConfig } from "./strapi-config";
 
 const hasPhp = (() => {
   try {
@@ -122,5 +122,15 @@ return static fn (EnvHelper $env): array => [
     const read = await readStrapiPluginsConfig(dir, capture);
     expect(read.ok).toBe(false);
     expect(read.ok ? "" : read.message).toContain("config/plugins.js");
+  });
+});
+
+describe("readStrapiConfig", () => {
+  it("reads any config file by name, config/api among them", async () => {
+    const dir = await project("api.js", "module.exports = { rest: { defaultLimit: 10 } };\n");
+    expect(await readStrapiConfig(dir, "api", capture)).toEqual({
+      ok: true,
+      config: { rest: { defaultLimit: 10 } },
+    });
   });
 });

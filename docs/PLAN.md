@@ -1341,14 +1341,14 @@ declarative schema, so it is never parsed: `camis import strapi` runs it (strapi
 `php`, Strapi's JS/TS under `node`) with an `env` that answers every variable with a reference to
 it, and reads back the settings as written, no secret included.
 
-`adapter-kernel` names the neutral shape (`ProviderSettings`: an upload's provider, storage and
+`adapter-kernel` names the neutral shape (`DeploymentSettings`: an upload's provider, storage and
 size limit; an email provider's transport and default addresses). `adapter-strapi` reads it from
-the plugins config (`providerSettings`): `local` and `aws-s3` (Strapi 4's and 5's option shapes),
+the plugins config (`deploymentSettings`): `local` and `aws-s3` (Strapi 4's and 5's option shapes),
 and `sendmail`, `nodemailer`, `sendgrid` (its SMTP relay), `mailgun` and `amazon-ses`. Anything
 else is a gap: `uploadProvider` (Cloudinary), `uploadRootPath`, `emailProvider`,
 `emailProviderOption` (a nodemailer `service`). `adapter-filament` turns it into the Laravel
 `.env` lines Laravel's s3 disk and mailers read, plus `CAMIS_UPLOAD_*` and `CAMIS_EMAIL_*`
-(`providerEnv`), naming the Composer packages they need. The CLI writes `providers.env`.
+(`deploymentEnv`), naming the Composer packages they need. The CLI writes `deployment.env`.
 
 Exit: unit tests for each mapping; the CLI reads a `.php`, a `.ts` and a CommonJS `.js` config.
 

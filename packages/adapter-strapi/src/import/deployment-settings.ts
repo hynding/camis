@@ -3,7 +3,7 @@ import {
   type EmailSettings,
   type FileStorage,
   type MailTransport,
-  type ProviderSettings,
+  type DeploymentSettings,
   type Setting,
   type UploadSettings,
 } from "@camis/adapter-kernel";
@@ -177,12 +177,12 @@ const email = (config: Options, gaps: CapabilityGap[]): EmailSettings | undefine
  * A Strapi project's upload and email providers, from its config/plugins (each `env()` read kept
  * as a reference to the variable, never its value). Options with no counterpart are gaps.
  */
-export const providerSettings = (
+export const deploymentSettings = (
   plugins: unknown,
-): { settings: ProviderSettings; gaps: CapabilityGap[] } => {
+): { settings: DeploymentSettings; gaps: CapabilityGap[] } => {
   const gaps: CapabilityGap[] = [];
   const config = object(plugins);
-  const out: ProviderSettings = {};
+  const out: DeploymentSettings = {};
   if (config.upload !== undefined) {
     const read = upload(object(object(config.upload).config), gaps);
     if (read !== undefined) out.upload = read;

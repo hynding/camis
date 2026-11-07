@@ -1,7 +1,7 @@
 import {
   isEnvReference,
   type EmailSettings,
-  type ProviderSettings,
+  type DeploymentSettings,
   type Setting,
   type UploadSettings,
 } from "@camis/adapter-kernel";
@@ -13,7 +13,7 @@ import {
  * which Laravel's .env expands), so no secret is copied. `packages` are the Composer packages
  * Laravel needs for the chosen disk or mailer.
  */
-export const providerEnv = (settings: ProviderSettings): { env: string; packages: string[] } => {
+export const deploymentEnv = (settings: DeploymentSettings): { env: string; packages: string[] } => {
   const sections: string[][] = [];
   const packages = new Set<string>();
   if (settings.upload !== undefined) sections.push(uploadLines(settings.upload, packages));

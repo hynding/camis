@@ -57,7 +57,7 @@ export interface EmailSettings {
   defaultReplyTo?: Setting;
 }
 
-export interface ProviderSettings {
+export interface DeploymentSettings {
   upload?: UploadSettings;
   email?: EmailSettings;
 }
