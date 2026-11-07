@@ -1,5 +1,5 @@
 import { FIELD_TYPES, type CapabilityGap, type Field } from "@camis/ir-schema";
-import { fromStrapiMediaKinds } from "@camis/strapi-schema";
+import { COLOR_PICKER_UID, fromStrapiMediaKinds } from "@camis/strapi-schema";
 import { fieldNameOf, irName } from "./names";
 
 export interface IrFieldResult {
@@ -56,8 +56,18 @@ export const irField = (
   location: CapabilityGap["location"],
 ): IrFieldResult => {
   const strapiType = String(attr.type);
-  const irType = REVERSE_TYPE[strapiType] ?? strapiType;
   const { name } = named(attribute);
+  if (strapiType === "customField" && attr.customField !== COLOR_PICKER_UID) {
+    return {
+      gap: {
+        feature: "customField",
+        location: { ...location, field: name },
+        severity: "downgrade",
+        message: `custom field "${attribute}" (${String(attr.customField)}) is not representable; skipped.`,
+      },
+    };
+  }
+  const irType = strapiType === "customField" ? "color" : (REVERSE_TYPE[strapiType] ?? strapiType);
 
   if (strapiType === "relation") {
     if (attr.mappedBy !== undefined) return { skip: true };

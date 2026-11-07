@@ -17,6 +17,8 @@ const put = (attr: Attribute, key: string, value: unknown): void => {
 };
 
 const PLUGIN_USER_UID = "plugin::users-permissions.user";
+/** The custom field Strapi's color-picker plugin registers; it stores a string. */
+export const COLOR_PICKER_UID = "plugin::color-picker.color";
 
 export const toAttribute = (
   field: Field,
@@ -58,6 +60,10 @@ export const toAttribute = (
     return withPrivate(attr);
   }
 
+  if (field.type === "color") {
+    attr.type = "customField";
+    attr.customField = COLOR_PICKER_UID;
+  }
   put(attr, "required", f.required);
   put(attr, "unique", f.unique);
   put(attr, "minLength", f.minLength);

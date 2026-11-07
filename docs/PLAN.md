@@ -1311,6 +1311,27 @@ re-recorded from strapi-php; DynamicZonesTest picks, keeps and publishes an item
 
 ---
 
+## Phase 39 — the color picker (`ir-schema`, `strapi-schema`, `adapter-strapi`, `adapter-filament`, `adapter-express`)
+
+Strapi ships the color-picker plugin, whose custom field (`plugin::color-picker.color`) holds a
+color as a string; strapi-php's getstarted kitchensink uses two. The importer reported every
+custom field as a `customField` gap and dropped it.
+
+A field may be a `color`: text holding a color, with an optional `pattern` and `default`. The
+importer reads the color-picker's custom field as one (its `regex` as the pattern); any other
+plugin's custom field is still a `customField` gap, now naming the field's uid. The Strapi target
+writes it back as that custom field and adds `@strapi/plugin-color-picker` to the project's
+dependencies when a content type or component uses one. A running Strapi holds the field as a
+string (`convertCustomFieldType`), so the runtime schemas a transfer archive carries do too, and
+the Strapi API style validates, documents (OpenAPI), types (GraphQL `String`), filters, searches
+and sorts it as a string. Filament edits it with its color picker and lists it as a swatch; Express
+keeps it as text.
+
+Exit: unit tests in each package; `color.test.ts` checks the generated validator rule, OpenAPI
+attribute, GraphQL type, list column and form field.
+
+---
+
 ## Sequencing rationale (quick reference)
 
 1. **Strapi first** — mature schema validates the IR fastest, with the thinnest adapter.

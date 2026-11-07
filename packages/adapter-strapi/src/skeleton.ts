@@ -11,8 +11,11 @@ import {
   packageJson,
 } from "./skeleton/templates";
 
-export const skeletonFiles = (projectName: string): GeneratedFile[] => [
-  { path: "package.json", content: packageJson(projectName) },
+export const skeletonFiles = (
+  projectName: string,
+  plugins: readonly string[] = [],
+): GeneratedFile[] => [
+  { path: "package.json", content: packageJson(projectName, plugins) },
   { path: "tsconfig.json", content: TSCONFIG_JSON },
   { path: "config/server.ts", content: SERVER_TS },
   { path: "config/admin.ts", content: ADMIN_TS },
