@@ -30,9 +30,26 @@ export interface ForeignKeyColumn {
 export const constrainedColumn = (key: ForeignKeyColumn): string =>
   `${key.definition}->constrained('${key.table}')${key.onDelete}`;
 
+/** A relation attribute as the admin shows it on the type that holds it (its own or an inverse). */
+export interface AdminRelation {
+  /** The attribute's name on this type, as Strapi's schema names it. */
+  attribute: string;
+  /** The model's relation method. */
+  relation: string;
+  /** The form component's state path: the foreign key, or the relation for a to-many. */
+  component: string;
+  /** The target's main field, which the admin labels a linked entry by. */
+  titleAttribute: string;
+  multiple: boolean;
+  /** The target keeps drafts, which links go through, so a filter offers its drafts only. */
+  drafts: boolean;
+}
+
 export interface ResolvedRelations {
   methods: Map<string, RelationMethod[]>;
   formFields: Map<string, string[]>;
+  /** Each type's relation attributes in the admin, in the order of formFields. */
+  adminRelations: Map<string, AdminRelation[]>;
   fkColumns: Map<string, ForeignKeyColumn[]>;
   fkNames: Map<string, string[]>; // plain FK column names (for $fillable)
   pivots: PivotTable[];
@@ -103,6 +120,7 @@ export const resolveRelations = (
   const out: ResolvedRelations = {
     methods: new Map(),
     formFields: new Map(),
+    adminRelations: new Map(),
     fkColumns: new Map(),
     fkNames: new Map(),
     pivots: [],
@@ -146,6 +164,14 @@ export const resolveRelations = (
           owner,
           `Select::make('${fk}')->relationship(name: '${f.name}', titleAttribute: '${label(target)}'${picker(target, owner)})`,
         );
+        push(out.adminRelations, owner, {
+          attribute: f.name,
+          relation: f.name,
+          component: fk,
+          titleAttribute: label(target),
+          multiple: false,
+          drafts: versioned.has(target),
+        });
         if (f.inverse !== undefined) {
           push(
             out.methods,
@@ -172,6 +198,14 @@ export const resolveRelations = (
             target,
             `Select::make('${fk}')->relationship(name: '${f.inverse}', titleAttribute: '${label(owner)}'${picker(owner, target)})`,
           );
+          push(out.adminRelations, target, {
+            attribute: f.inverse,
+            relation: f.inverse,
+            component: fk,
+            titleAttribute: label(owner),
+            multiple: false,
+            drafts: versioned.has(owner),
+          });
         }
       } else {
         // manyToMany
@@ -199,6 +233,14 @@ export const resolveRelations = (
           owner,
           `Select::make('${f.name}')->multiple()->relationship(name: '${f.name}', titleAttribute: '${label(target)}'${picker(target, owner)})`,
         );
+        push(out.adminRelations, owner, {
+          attribute: f.name,
+          relation: f.name,
+          component: f.name,
+          titleAttribute: label(target),
+          multiple: true,
+          drafts: versioned.has(target),
+        });
         if (f.inverse !== undefined) {
           push(
             out.methods,
@@ -216,6 +258,14 @@ export const resolveRelations = (
             target,
             `Select::make('${f.inverse}')->multiple()->relationship(name: '${f.inverse}', titleAttribute: '${label(owner)}'${picker(owner, target)})`,
           );
+          push(out.adminRelations, target, {
+            attribute: f.inverse,
+            relation: f.inverse,
+            component: f.inverse,
+            titleAttribute: label(owner),
+            multiple: true,
+            drafts: versioned.has(owner),
+          });
         }
         if (!seenPivot.has(pivot)) {
           seenPivot.add(pivot);
