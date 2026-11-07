@@ -1332,6 +1332,28 @@ attribute, GraphQL type, list column and form field.
 
 ---
 
+## Phase 41 — a Strapi project's upload and email providers (`adapter-kernel`, `adapter-strapi`, `adapter-filament`, `cli`)
+
+A Strapi project picks where its files go and how it sends mail in `config/plugins`
+(`upload.config.provider`, `email.config.provider` with their `providerOptions`, and the email
+plugin's `defaultFrom`/`defaultReplyTo`); a migration lost all of it. The config is code, not a
+declarative schema, so it is never parsed: `camis import strapi` runs it (strapi-php's PHP under
+`php`, Strapi's JS/TS under `node`) with an `env` that answers every variable with a reference to
+it, and reads back the settings as written, no secret included.
+
+`adapter-kernel` names the neutral shape (`ProviderSettings`: an upload's provider, storage and
+size limit; an email provider's transport and default addresses). `adapter-strapi` reads it from
+the plugins config (`providerSettings`): `local` and `aws-s3` (Strapi 4's and 5's option shapes),
+and `sendmail`, `nodemailer`, `sendgrid` (its SMTP relay), `mailgun` and `amazon-ses`. Anything
+else is a gap: `uploadProvider` (Cloudinary), `uploadRootPath`, `emailProvider`,
+`emailProviderOption` (a nodemailer `service`). `adapter-filament` turns it into the Laravel
+`.env` lines Laravel's s3 disk and mailers read, plus `CAMIS_UPLOAD_*` and `CAMIS_EMAIL_*`
+(`providerEnv`), naming the Composer packages they need. The CLI writes `providers.env`.
+
+Exit: unit tests for each mapping; the CLI reads a `.php`, a `.ts` and a CommonJS `.js` config.
+
+---
+
 ## Sequencing rationale (quick reference)
 
 1. **Strapi first** — mature schema validates the IR fastest, with the thinnest adapter.

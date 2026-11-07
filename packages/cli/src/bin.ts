@@ -22,6 +22,14 @@ const io: Io = {
       child.on("error", rejectPromise);
       child.on("close", (code) => resolvePromise(code ?? 1));
     }),
+  capture: (cmd, args, cwd) =>
+    new Promise((resolvePromise, rejectPromise) => {
+      const child = spawn(cmd, args, { cwd, stdio: ["ignore", "pipe", "inherit"] });
+      let stdout = "";
+      child.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
+      child.on("error", rejectPromise);
+      child.on("close", (code) => resolvePromise({ code: code ?? 1, stdout }));
+    }),
   out: (l) => process.stdout.write(`${l}\n`),
   cwd: process.cwd(),
 };
