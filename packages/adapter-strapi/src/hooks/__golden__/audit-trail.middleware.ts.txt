@@ -1,0 +1,9 @@
+import type { Core } from "@strapi/strapi";
+
+// Ring 2 middleware — hand-written. camis seeds this once and never overwrites it.
+// Strapi runs it around the route's action (Article: create, update, delete), after its policies.
+export default (config, { strapi }: { strapi: Core.Strapi }) =>
+  async (ctx, next) => {
+    // TODO: wrap the request.
+    await next();
+  };

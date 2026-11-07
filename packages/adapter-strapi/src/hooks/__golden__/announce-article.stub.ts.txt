@@ -1,0 +1,8 @@
+import type { AnnounceArticleHook } from "./contracts/announce-article.contract";
+
+// Ring 2 hook — hand-written. camis seeds this once and never overwrites it.
+export const announceArticle: AnnounceArticleHook = {
+  run(input) {
+    // TODO: implement the behavior for "AnnounceArticle" (runs afterCreate).
+  },
+};
