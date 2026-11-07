@@ -1311,6 +1311,51 @@ re-recorded from strapi-php; DynamicZonesTest picks, keeps and publishes an item
 
 ---
 
+## Phase 40 — the color picker (`ir-schema`, `strapi-schema`, `adapter-strapi`, `adapter-filament`, `adapter-express`)
+
+Strapi ships the color-picker plugin, whose custom field (`plugin::color-picker.color`) holds a
+color as a string; strapi-php's getstarted kitchensink uses two. The importer reported every
+custom field as a `customField` gap and dropped it.
+
+A field may be a `color`: text holding a color, with an optional `pattern` and `default`. The
+importer reads the color-picker's custom field as one (its `regex` as the pattern); any other
+plugin's custom field is still a `customField` gap, now naming the field's uid. The Strapi target
+writes it back as that custom field and adds `@strapi/plugin-color-picker` to the project's
+dependencies when a content type or component uses one. A running Strapi holds the field as a
+string (`convertCustomFieldType`), so the runtime schemas a transfer archive carries do too, and
+the Strapi API style validates, documents (OpenAPI), types (GraphQL `String`), filters, searches
+and sorts it as a string. Filament edits it with its color picker and lists it as a swatch; Express
+keeps it as text.
+
+Exit: unit tests in each package; `color.test.ts` checks the generated validator rule, OpenAPI
+attribute, GraphQL type, list column and form field.
+
+---
+
+## Phase 41 — a Strapi project's config (`adapter-kernel`, `adapter-strapi`, `adapter-filament`, `cli`)
+
+A Strapi project says how it is run in `config/plugins` (the upload and email providers with their
+`providerOptions`, the email plugin's `defaultFrom`/`defaultReplyTo`, graphql's page sizes,
+users-permissions' sessions and register fields) and `config/api` (REST page sizes and counts);
+a migration lost all of it. The config is code, not a declarative schema, so it is never parsed:
+`camis import strapi` runs it (strapi-php's PHP under `php`, Strapi's JS/TS under `node`) with an
+`env` that answers every variable with a reference to it, and reads back the settings as written,
+no secret included.
+
+`adapter-kernel` names the neutral shape (`DeploymentSettings`: upload storage, mail transport and
+default addresses, REST and GraphQL page sizes, account sessions). `adapter-strapi` reads it from
+the config (`deploymentSettings`): uploads `local` and `aws-s3` (Strapi 4's and 5's option
+shapes), email `sendmail`, `nodemailer`, `sendgrid` (its SMTP relay), `mailgun` and `amazon-ses`.
+Anything else is a gap: `uploadProvider` (Cloudinary), `uploadRootPath`, `emailProvider`,
+`emailProviderOption` (a nodemailer `service`). `adapter-filament` turns it into the `.env` lines
+Laravel's s3 disk and mailers read, plus the `CAMIS_*` keys config/camis.php reads
+(`deploymentEnv`), naming the Composer packages a disk or mailer needs. The CLI writes
+`deployment.env` (`--env-out`).
+
+Exit: unit tests for each mapping; the CLI reads a `.php`, a `.ts` and a CommonJS `.js` config.
+
+---
+
 ## Sequencing rationale (quick reference)
 
 1. **Strapi first** — mature schema validates the IR fastest, with the thinnest adapter.

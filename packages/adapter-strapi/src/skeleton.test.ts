@@ -34,6 +34,14 @@ describe("skeletonFiles", () => {
     expect(pkg.dependencies["@strapi/strapi"]).toMatch(/^5\.\d+\.\d+$/);
   });
 
+  it("depends on the color-picker plugin only when a field is a color", () => {
+    const deps = (plugins?: readonly string[]) =>
+      JSON.parse(skeletonFiles("blog", plugins).find((f) => f.path === "package.json")!.content)
+        .dependencies as Record<string, string>;
+    expect(deps()["@strapi/plugin-color-picker"]).toBeUndefined();
+    expect(deps(["color-picker"])["@strapi/plugin-color-picker"]).toBe(deps()["@strapi/strapi"]);
+  });
+
   it("marks .env as seed mode with deterministic placeholder secrets", () => {
     const env = skeletonFiles("blog").find((f) => f.path === ".env")!;
     expect(env.mode).toBe("seed");

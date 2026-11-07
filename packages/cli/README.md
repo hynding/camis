@@ -141,6 +141,15 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
   file (`--roles-out`, default `roles.json`) from a `strapi export` archive's users-permissions
   roles; `camis new --from-strapi <dir> --roles-from …` does the same for a new project. A role
   holding only part of a camis grant's Strapi actions is reported, not granted.
+- `camis import strapi <dir>` also reads the project's `config/plugins` and `config/api` (`.php`
+  under `php`, `.ts`/`.js` under `node`) and writes `deployment.env` beside the IR (`--env-out` to
+  move it): the Laravel `.env` lines that give the Filament app the REST and GraphQL page sizes,
+  users-permissions' session settings and register fields, the project's upload provider (`aws-s3` → the
+  `s3` disk via `CAMIS_UPLOAD_DISK`) and email provider (`sendmail`, `nodemailer` and `sendgrid` →
+  SMTP, `mailgun`, `amazon-ses` → `ses`), plus its default sender and reply-to. Each `env()` the
+  config reads stays a `${NAME}` reference, so no secret is copied; the Composer packages the
+  chosen disk or mailer needs are printed. A provider or option with no counterpart (Cloudinary,
+  an S3 `rootPath`, a nodemailer `service`) is listed as a gap.
 
 The Filament target also generates a JSON API: `routes/api.php` +
 `app/Http/Controllers/Api/*ApiController.php` per content type (index/show/store/update/

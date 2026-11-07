@@ -179,3 +179,27 @@ describe("runtimeSchemas", () => {
     });
   });
 });
+
+describe("runtimeSchemas — custom fields", () => {
+  it("holds a color as the string its custom field stores, keeping the custom field's uid", () => {
+    const schemas = runtimeSchemas({
+      version: 1,
+      contentTypes: [
+        {
+          name: "Swatch",
+          kind: "collection",
+          fields: [{ type: "color", name: "accent", required: true }],
+        },
+      ],
+      components: [{ name: "Theme", fields: [{ type: "color", name: "background" }] }],
+    } as IrDocument);
+    const byUid = new Map(schemas.map((s) => [s.uid, s]));
+    expect((byUid.get("api::swatch.swatch")!.attributes as Record<string, unknown>).accent).toEqual(
+      { type: "string", customField: "plugin::color-picker.color", required: true },
+    );
+    expect((byUid.get("shared.theme")!.attributes as Record<string, unknown>).background).toEqual({
+      type: "string",
+      customField: "plugin::color-picker.color",
+    });
+  });
+});

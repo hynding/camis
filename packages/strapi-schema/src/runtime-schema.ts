@@ -1,5 +1,6 @@
 import { normalize } from "@camis/ir-core";
 import type { ContentType, IrDocument } from "@camis/ir-schema";
+import { COLOR_PICKER_UID } from "./attributes";
 import { componentSchema } from "./component-schema";
 import { componentCategory, componentUids, kebab, strapiNames } from "./names";
 import PLUGIN_SCHEMAS from "./plugin-schemas.json";
@@ -29,6 +30,18 @@ const adminRelation = {
   useJoinTable: false,
   private: true,
 };
+
+/**
+ * Strapi's `convertCustomFieldType`: a running Strapi holds a custom field as the type its plugin
+ * stores, keeping the field's uid beside it.
+ */
+const storedTypes = (attributes: Record<string, unknown>): Record<string, unknown> =>
+  Object.fromEntries(
+    Object.entries(attributes).map(([name, attribute]) => {
+      const a = attribute as Record<string, unknown>;
+      return [name, a.customField === COLOR_PICKER_UID ? { ...a, type: "string" } : a];
+    }),
+  );
 
 /** What Strapi's loader adds to every content type: timestamps, publication, authors, locale. */
 const systemAttributes = (uid: string, table: string, localized: boolean) => ({
@@ -71,7 +84,7 @@ const contentTypeRuntime = (
     options: { ...(file.options as object), draftAndPublish: ct.options?.draftPublish === true },
     pluginOptions: file.pluginOptions,
     attributes: {
-      ...(file.attributes as object),
+      ...storedTypes(file.attributes as Record<string, unknown>),
       ...systemAttributes(names.uid, names.collectionName, ct.options?.localized === true),
     },
     kind: file.kind,
@@ -115,7 +128,7 @@ export const runtimeSchemas = (input: IrDocument): RuntimeSchema[] => {
         info: file.info,
         options: file.options,
         pluginOptions: {},
-        attributes: file.attributes,
+        attributes: storedTypes(file.attributes as Record<string, unknown>),
         modelType: "component",
         modelName: kebab(component.name),
         uid,

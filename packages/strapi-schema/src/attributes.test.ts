@@ -198,3 +198,23 @@ describe("toAttribute — private and regex", () => {
     });
   });
 });
+
+describe("toAttribute — color", () => {
+  it("writes a color as the color-picker plugin's custom field, with its regex and default", () => {
+    expect(
+      toAttribute({
+        type: "color",
+        name: "accent",
+        required: true,
+        pattern: "^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$",
+        default: "#ff0000",
+      }),
+    ).toEqual({
+      type: "customField",
+      customField: "plugin::color-picker.color",
+      required: true,
+      default: "#ff0000",
+      regex: "^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$",
+    });
+  });
+});

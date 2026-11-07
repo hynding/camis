@@ -99,6 +99,8 @@ const STRAPI_TYPES: Record<string, string> = {
   bigInteger: "biginteger",
   dateTime: "datetime",
   dynamicZone: "dynamiczone",
+  // The color-picker plugin's custom field is a string to a running Strapi.
+  color: "string",
 };
 
 class DocumentBuilder {
