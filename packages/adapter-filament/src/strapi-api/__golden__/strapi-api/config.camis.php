@@ -19,4 +19,10 @@ return [
         // always, as camis did before, for clients written against that.
         'always_populate_components' => (bool) env('CAMIS_REST_ALWAYS_POPULATE_COMPONENTS', false),
     ],
+
+    // Strapi's api.documents.strictRelations, on as a new Strapi project ships it: a write must
+    // keep a required relation or file. false skips that check, as Strapi did before.
+    'documents' => [
+        'strict_relations' => (bool) env('CAMIS_STRICT_RELATIONS', true),
+    ],
 ];

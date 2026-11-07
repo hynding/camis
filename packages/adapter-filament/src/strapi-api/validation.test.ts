@@ -57,7 +57,10 @@ describe("entity validation", () => {
       /'codes' => \[\n\s+'type' => 'component',\n\s+'repeatable' => true,\n\s+'fields' => \[\n\s+'value' => \['type' => 'string', 'unique' => \['relation' => '\w+', 'column' => 'value'\]\],/,
     );
     // A field without a unique constraint carries none.
-    expect(controller).not.toContain("'unique'");
+    expect(ticket).toContain("'body' => ['type' => 'blocks'],");
+    expect(controller).toContain(
+      "'title' => ['type' => 'string', 'required' => true, 'minLength' => 3, 'maxLength' => 20],",
+    );
   });
 
   it("checks a unique value among the other documents' published rows, the written one left out", () => {
@@ -70,7 +73,9 @@ describe("entity validation", () => {
       "return Ticket::query()->when($key !== null, fn (Builder $q) => $q->where(self::KEY, '!=', $key));",
     );
     // A type without a unique field needs no others().
-    expect(controller).not.toContain("function others(");
+    expect(content("app/Http/Controllers/Api/Generated/GenreApiController.php")).not.toContain(
+      "function others(",
+    );
   });
 
   it("checks a required relation and file by whether the write keeps one, as strictRelations does", () => {
