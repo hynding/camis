@@ -42,7 +42,7 @@ final class CamisRouteHooks
         \App\Http\Controllers\Api\HomepageApiController::class => [
             'policies' => [],
             'middlewares' => [
-                \App\Hooks\CacheHomepage::class => ['read', 'update', 'delete'],
+                \App\Hooks\CacheHomepage::class => ['list', 'read', 'create', 'update', 'delete'],
             ],
         ],
     ];

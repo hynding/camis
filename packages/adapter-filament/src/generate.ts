@@ -27,6 +27,7 @@ import { emitJsonEditorFiles, hasJsonFields } from "./json-editor";
 import { deployFile } from "./deploy";
 import { emitField, isSupportedField } from "./fields";
 import { emitHookFiles } from "./hooks/emit";
+import { emitRouteHookFiles } from "./hooks/route-hooks";
 import { emitPermissions } from "./permissions/emit";
 import {
   emitForeignKeysMigration,
@@ -85,6 +86,7 @@ export const filamentAdapter: GenerateAdapter = {
       apiStyle === "strapi" && storage !== "strapi",
     );
     const hooks = emitHookFiles(doc);
+    const routeHooks = emitRouteHookFiles(doc, apiStyle === "strapi");
     const files: GeneratedFile[] = [];
     const gaps: CapabilityGap[] = [
       ...draftPublish.gaps,
@@ -164,6 +166,7 @@ export const filamentAdapter: GenerateAdapter = {
       projectName: options.projectName,
       guests,
       observedModels: new Set([...hooks.observedModels, ...aiObservedModels]),
+      routeHooked: routeHooks.hooked,
     };
     if (options.graphql === true && (apiStyle !== "strapi" || storage === "strapi")) {
       gaps.push({
@@ -373,7 +376,10 @@ export const filamentAdapter: GenerateAdapter = {
     } else {
       files.push({
         path: "routes/api.php",
-        content: emitApiRoutes(emitted, { secured: ir.roles.length > 0 }),
+        content: emitApiRoutes(emitted, {
+          secured: ir.roles.length > 0,
+          hooked: routeHooks.hooked,
+        }),
       });
     }
     files.push(apiCustomSeed());
@@ -428,6 +434,7 @@ export const filamentAdapter: GenerateAdapter = {
     const allFiles = [
       ...files,
       ...hooks.files,
+      ...routeHooks.files,
       ...perm.files,
       ...aiGenFiles,
       deployFile(storage, {
