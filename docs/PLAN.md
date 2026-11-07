@@ -1311,6 +1311,34 @@ re-recorded from strapi-php; DynamicZonesTest picks, keeps and publishes an item
 
 ---
 
+## Phase 39 — Strapi's Home and settings pages (`adapter-filament`)
+
+The audit's P1 found three Settings pages and the Home Strapi's admin has missing. Filament's
+dashboard now carries Strapi's homepage widgets: Entries (each document the user may read counted
+once as draft, modified or published, by Strapi's own SQL), Project statistics (assets,
+content-types, component categories, locales, admins, webhooks, API tokens, as Strapi counts them),
+and Last edited and Last published entries (four each, newest first, with their status and a link to
+the draft). They read only the types whose read grant the user holds (`StrapiHomepage`). Settings
+gains Overview (the application's Laravel, Filament and PHP versions, database and environment,
+where Strapi shows its own and Node's), Media Library and Email, in Strapi's places.
+
+Media Library edits Strapi's upload settings in the store (`upload.settings`, Strapi's defaults):
+with responsive formats off an upload keeps only its thumbnail; size optimization re-encodes an
+image (quality 80) and auto orientation turns a JPEG upright by its EXIF tag (where PHP has exif),
+each kept only when no larger, as Strapi does. `strapi:export` and `strapi:import` carry them as
+the core store's `plugin_upload_settings`. Email shows the provider, default sender and reply-to
+(`camis.email.*`, else Laravel's mailer and `mail.from`/`mail.reply_to`) and sends Strapi's test
+email through `StrapiEmail`, which anything sending as Strapi's email service shares.
+
+Known gaps: Overview's logo customization (the menu and sign-in logos) is not built, as the panel's
+brand logo is set in the host's panel provider; the homepage layout is Filament's, not editable per
+user; Email's verify-connection button is not offered.
+
+Exit: unit tests (`settings-pages.test.ts`); `SettingsPagesTest.php` in the `strapi-api` boot job,
+denied paths included.
+
+---
+
 ## Sequencing rationale (quick reference)
 
 1. **Strapi first** — mature schema validates the IR fastest, with the thinnest adapter.
