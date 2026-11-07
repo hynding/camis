@@ -24,7 +24,7 @@ describe("filament hook stub + observer", () => {
     expect(s).toContain("return $input;");
   });
   it("observer is marked, fires on publish transition, applies output", () => {
-    const o = emitHookObserver(h, article);
+    const o = emitHookObserver([h], article);
     expect(o).toContain("@camis:generated");
     expect(o).toContain("class ArticleObserver");
     expect(o).toContain(
