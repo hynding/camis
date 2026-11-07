@@ -40,6 +40,9 @@ class SettingsPagesTest extends TestCase
     private function login(array $permissions): void
     {
         $this->seed(\Database\Seeders\RolePermissionSeeder::class);
+        foreach ($permissions as $permission) {
+            \Spatie\Permission\Models\Permission::findOrCreate($permission);
+        }
         $user = User::factory()->create(['username' => 'admin']);
         $user->givePermissionTo($permissions);
         $this->actingAs($user);
