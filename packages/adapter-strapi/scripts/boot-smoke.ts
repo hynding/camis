@@ -2,13 +2,13 @@
 // route is registered (200 or 403 — both prove it's exposed; 404/500 fail).
 // Runs in the gated CI job (Node 20). Cannot run in the restricted dev sandbox (npm denied).
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { once } from "node:events";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { materialize } from "@camis/adapter-kernel";
 import { strapiAdapter } from "../src/generate";
 import { blog } from "../src/__fixtures__/blog";
+import { stopProcessGroup } from "./stop-process-group";
 
 const pollUntilRegistered = async (url: string, timeoutMs: number): Promise<boolean> => {
   const start = Date.now();
@@ -44,14 +44,20 @@ try {
     console.error(`npm install failed with exit code ${install.status}`);
     process.exit(1);
   }
+  // Its own process group, so teardown reaches Strapi's forked worker and Vite: they
+  // outlive a SIGTERM to npm and would keep writing node_modules while it is deleted.
   const proc: ChildProcess = spawn("npm", ["run", "develop"], {
     cwd: dir,
     stdio: "inherit",
+    detached: true,
     env: { ...process.env, BROWSER: "none" },
   });
-  const ok = await pollUntilRegistered("http://127.0.0.1:1337/api/articles", 180_000);
-  proc.kill("SIGTERM");
-  await once(proc, "close"); // let Strapi release its working dir before cleanup
+  let ok = false;
+  try {
+    ok = await pollUntilRegistered("http://127.0.0.1:1337/api/articles", 180_000);
+  } finally {
+    await stopProcessGroup(proc);
+  }
   if (!ok) {
     console.error("Article route not registered");
     process.exit(1);
