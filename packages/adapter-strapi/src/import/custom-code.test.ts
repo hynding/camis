@@ -135,6 +135,85 @@ export default factories.createCoreController('api::article.article', ({ strapi 
     );
   });
 
+  it("reads a strapi-php project's PHP files the same way", () => {
+    const php = (body: string) =>
+      `<?php\n\ndeclare(strict_types=1);\n\n/**\n * doc\n */\n\nuse Strapi\\Core\\Factories;\n\n${body}\n`;
+    expect(
+      features([
+        {
+          path: "src/api/category/controllers/category.php",
+          content: php("return Factories::createCoreController('api::category.category');"),
+        },
+        {
+          path: "src/api/category/services/category.php",
+          content: php("return Factories::createCoreService('api::category.category');"),
+        },
+        {
+          path: "src/api/category/routes/category.php",
+          content: php("return Factories::createCoreRouter('api::category.category');"),
+        },
+        {
+          path: "src/index.php",
+          content: php(`return [
+    'register' => static function (Strapi $strapi): void {
+        // $strapi->log()->info('register');
+    },
+    'bootstrap' => static function (Strapi $strapi): void {
+    },
+];`),
+        },
+      ]),
+    ).toEqual([]);
+    expect(
+      features([
+        {
+          path: "src/api/address/routes/address.php",
+          content: php(
+            "return Factories::createCoreRouter('api::address.address', ['only' => ['find']]);",
+          ),
+        },
+        {
+          path: "src/api/address/index.php",
+          content: php(
+            "return ['register' => static function (Strapi $strapi): void { $strapi->log()->info('x'); }];",
+          ),
+        },
+        {
+          path: "src/api/address/policies/address.php",
+          content: php("return static fn (): bool => true;"),
+        },
+        {
+          path: "src/custom/middleware.php",
+          content: php("return static fn (): callable => $next;"),
+        },
+        { path: "config/src/cron-tasks.php", content: php("return [];") },
+        {
+          path: "config/server.php",
+          content: php(
+            "return static fn ($env): array => ['cron' => ['enabled' => true, 'tasks' => $cronTasks]];",
+          ),
+        },
+      ]),
+    ).toEqual(
+      [
+        ["bootstrap", "src/api/address/index.php"],
+        ["customPolicy", "src/api/address/policies/address.php"],
+        ["routeConfig", "src/api/address/routes/address.php"],
+        ["customCode", "src/custom/middleware.php"],
+        ["cronTasks", "config/src/cron-tasks.php"],
+      ].sort((a, b) => (a[1]! < b[1]! ? -1 : 1)),
+    );
+  });
+
+  it("counts every admin file but the examples a new project ships", () => {
+    expect(
+      features([
+        { path: "src/admin/extensions/logo.tsx", content: "export default 1;" },
+        { path: "src/admin/webpack.config.example.js", content: "module.exports = {};" },
+      ]),
+    ).toEqual([["adminCustomization", "src/admin/extensions/logo.tsx"]]);
+  });
+
   it("passes over what camis itself generated", () => {
     expect(
       features([
