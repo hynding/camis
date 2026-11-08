@@ -281,7 +281,7 @@ export const strapiApiBundle: IrBundle = {
           { type: "integer", name: "rating", min: 1, max: 5 },
           { type: "float", name: "score", min: 0, max: 1 },
           { type: "text", name: "notes", maxLength: 10 },
-          { type: "uid", name: "handle" },
+          { type: "uid", name: "handle", targetField: "title" },
           { type: "boolean", name: "active" },
           { type: "date", name: "due" },
           { type: "component", name: "lines", component: "Line", repeatable: true },

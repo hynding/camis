@@ -22,6 +22,16 @@ import { emitAuthController, emitUsernameMigration, USERNAME_MIGRATION_PATH } fr
 import { emitGeneratedController, emitProtectedController } from "./controller";
 import { emitHasDraftAndPublish, emitStrapiDocuments } from "./draft-publish-runtime";
 import {
+  CONFIGURE_VIEW_PATH,
+  emitConfigureView,
+  emitHasCreatorFields,
+  emitStrapiContentManager,
+  emitStrapiUid,
+  HAS_CREATOR_FIELDS_PATH,
+  STRAPI_CONTENT_MANAGER_PATH,
+  STRAPI_UID_PATH,
+} from "./content-manager-runtime";
+import {
   emitHasLocale,
   emitLocaleController,
   emitLocaleModel,
@@ -405,6 +415,14 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
   }
   // Every read asks it which version the status parameter names, with or without versioned types.
   files.push({ path: "app/Support/StrapiDocuments.php", content: emitStrapiDocuments() });
+  if (input.contentManager !== undefined) {
+    files.push(
+      { path: STRAPI_CONTENT_MANAGER_PATH, content: emitStrapiContentManager() },
+      { path: CONFIGURE_VIEW_PATH, content: emitConfigureView() },
+      { path: STRAPI_UID_PATH, content: emitStrapiUid() },
+      { path: HAS_CREATOR_FIELDS_PATH, content: emitHasCreatorFields() },
+    );
+  }
   if (versioned.size > 0) {
     files.push({
       path: "app/Models/Concerns/HasDraftAndPublish.php",
