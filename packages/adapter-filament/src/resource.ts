@@ -81,7 +81,7 @@ use ${ns}\\Schemas\\${n.tableClass};${navigation === undefined ? "" : `\nuse ${S
 use App\\Models\\${n.model};
 use Filament\\Resources\\Resource;
 use Filament\\Schemas\\Schema;
-use Filament\\Tables\\Table;${versioned ? "\nuse Illuminate\\Database\\Eloquent\\Builder;" : ""}${deletesDocument ? "\nuse Illuminate\\Support\\Facades\\DB;" : ""}${single && secured ? "\nuse Illuminate\\Support\\Facades\\Gate;" : ""}${single && localized ? "\nuse App\\Support\\StrapiLocales;" : ""}${navigation === undefined ? "" : "\nuse UnitEnum;"}
+use Filament\\Tables\\Table;${single && secured ? "\nuse Illuminate\\Auth\\Access\\Response;" : ""}${versioned ? "\nuse Illuminate\\Database\\Eloquent\\Builder;" : ""}${deletesDocument ? "\nuse Illuminate\\Support\\Facades\\DB;" : ""}${single && secured ? "\nuse Illuminate\\Support\\Facades\\Gate;" : ""}${single && localized ? "\nuse App\\Support\\StrapiLocales;" : ""}${navigation === undefined ? "" : "\nuse UnitEnum;"}
 
 class ${n.resourceClass} extends Resource
 {
@@ -385,9 +385,9 @@ const singleEntry = (model: string, localized: boolean, secured: boolean): strin
       secured
         ? `
 
-    public static function canCreate(): bool
+    public static function getCreateAuthorizationResponse(): Response
     {
-        return Gate::allows('update', new ${model}());
+        return Gate::inspect('update', new ${model}());
     }`
         : ""
     }`;

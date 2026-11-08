@@ -109,7 +109,7 @@ describe("the Strapi-like admin", () => {
       "protected static string | UnitEnum | null $navigationGroup = StrapiNavigation::SingleTypes;",
     );
     // Its update grant makes the entry, as on the API.
-    expect(resource).toContain("return Gate::allows('update', new Homepage());");
+    expect(resource).toContain("return Gate::inspect('update', new Homepage());");
     const list = content("app/Filament/Resources/Homepages/Pages/ListHomepages.php");
     expect(list).toContain("public function mount(): void");
     expect(list).toContain(
