@@ -1382,6 +1382,20 @@ Laravel's s3 disk and mailers read, plus the `CAMIS_*` keys config/camis.php rea
 
 Exit: unit tests for each mapping; the CLI reads a `.php`, a `.ts` and a CommonJS `.js` config.
 
+## Phase 43 — Strapi's email send route (`adapter-filament`)
+
+Strapi's email plugin serves `POST /api/email` (`plugin::email.email.send`): to, cc, bcc, from,
+replyTo, subject, text and html, answered with `{}`. Phase 39 gave the project Strapi's email
+service (`StrapiEmail`); the route sends through it, filling the sender and reply-to from the
+settings. No role Strapi ships holds the action and camis's roles come from the IR, so the public
+and authenticated roles are refused (403 `ForbiddenError`) and an API token holding the action
+(full access, or custom with `plugin::email.email.send`) sends. A mailer error is a 500, and a
+provider's 400 an `ApplicationError`, as in Strapi. Without roles nothing would guard the route,
+so it is not served; the OpenAPI document lists it where it is.
+
+Exit: unit tests for the route, the token action and the controller; a feature test sending with
+full-access and custom tokens, refusing the shipped roles and a read-only token.
+
 ---
 
 ## Sequencing rationale (quick reference)

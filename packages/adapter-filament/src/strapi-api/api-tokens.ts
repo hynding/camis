@@ -145,6 +145,7 @@ const pluginRoutes = (input: ApiTokensInput): [string, [string, string][]][] => 
       ["destroy", `${USERS_PERMISSIONS}.user.destroy`],
     ],
   ],
+  ["EmailController", [["send", "plugin::email.email.send"]]],
   ...(input.fileModel === undefined
     ? []
     : ([

@@ -78,6 +78,8 @@ export interface OpenApiInput {
   versioned: ReadonlySet<string>;
   localized: ReadonlySet<string>;
   media: boolean;
+  /** POST /email, served where roles guard it. */
+  email: boolean;
   projectName: string;
 }
 
@@ -322,6 +324,7 @@ class DocumentBuilder {
     for (const [path, item] of Object.entries(plugins.paths as Record<string, unknown>)) {
       if (path.startsWith("/upload") && !this.input.media) continue;
       if (path.startsWith("/i18n/") && this.input.localized.size === 0) continue;
+      if (path === "/email" && !this.input.email) continue;
       paths[path] = item;
     }
     return {
