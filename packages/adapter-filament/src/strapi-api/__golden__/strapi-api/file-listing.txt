@@ -5,6 +5,9 @@ overwrite app/Console/Commands/StrapiImport.php
 overwrite app/Console/Commands/StrapiImportTokens.php
 overwrite app/Filament/Forms/JsonEditor.php
 overwrite app/Filament/Pages/DataTransfer.php
+overwrite app/Filament/Pages/EmailSettings.php
+overwrite app/Filament/Pages/MediaLibrarySettings.php
+overwrite app/Filament/Pages/SettingsOverview.php
 overwrite app/Filament/Pages/UsersPermissionsAdvancedSettings.php
 overwrite app/Filament/Pages/UsersPermissionsEmailTemplates.php
 overwrite app/Filament/Pages/UsersPermissionsProviders.php
@@ -157,6 +160,10 @@ overwrite app/Filament/Resources/Webhooks/Pages/ListWebhooks.php
 overwrite app/Filament/Resources/Webhooks/WebhookResource.php
 overwrite app/Filament/StrapiNavigation.php
 overwrite app/Filament/Support/MediaPicker.php
+overwrite app/Filament/Widgets/StrapiEntries.php
+overwrite app/Filament/Widgets/StrapiLastEditedEntries.php
+overwrite app/Filament/Widgets/StrapiLastPublishedEntries.php
+overwrite app/Filament/Widgets/StrapiProjectStatistics.php
 overwrite app/Http/Controllers/Admin/StrapiTransferDownload.php
 overwrite app/Http/Controllers/Admin/StrapiTransferRunner.php
 overwrite app/Http/Controllers/Api/AuthController.php
@@ -278,9 +285,11 @@ overwrite app/Support/PublicRole.php
 overwrite app/Support/Ring1.php
 overwrite app/Support/StrapiApiTokens.php
 overwrite app/Support/StrapiDocuments.php
+overwrite app/Support/StrapiEmail.php
 overwrite app/Support/StrapiError.php
 overwrite app/Support/StrapiExport.php
 overwrite app/Support/StrapiFolders.php
+overwrite app/Support/StrapiHomepage.php
 overwrite app/Support/StrapiImport.php
 overwrite app/Support/StrapiLinkOrder.php
 overwrite app/Support/StrapiLinkPivot.php
