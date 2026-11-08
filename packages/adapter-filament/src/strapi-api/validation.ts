@@ -19,6 +19,8 @@ const STRAPI_TYPE: Record<string, string> = {
   bigInteger: "biginteger",
   dateTime: "datetime",
   dynamicZone: "dynamiczone",
+  // The color-picker plugin's custom field is a string to a running Strapi.
+  color: "string",
 };
 
 /** Strapi checks a uid's uniqueness whether or not its attribute says unique. */

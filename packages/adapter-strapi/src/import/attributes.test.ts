@@ -59,9 +59,39 @@ describe("irField — scalars", () => {
     });
   });
   it("returns a gap for an unknown type", () => {
-    const r = irField("weird", { type: "customField" }, loc);
+    const r = irField("weird", { type: "something" }, loc);
+    expect(r.field).toBeUndefined();
+    expect(r.gap?.feature).toBe("something");
+  });
+  it("maps the color-picker plugin's custom field to a color, keeping its regex", () => {
+    expect(
+      irField(
+        "custom_field_with_default_options",
+        {
+          type: "customField",
+          regex: "^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$",
+          customField: "plugin::color-picker.color",
+          required: true,
+          private: true,
+        },
+        loc,
+      ),
+    ).toEqual({
+      field: {
+        type: "color",
+        name: "customFieldWithDefaultOptions",
+        names: { api: "custom_field_with_default_options" },
+        required: true,
+        private: true,
+        pattern: "^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$",
+      },
+    });
+  });
+  it("reports another plugin's custom field as a customField gap naming it", () => {
+    const r = irField("rating", { type: "customField", customField: "plugin::stars.rating" }, loc);
     expect(r.field).toBeUndefined();
     expect(r.gap?.feature).toBe("customField");
+    expect(r.gap?.message).toContain("plugin::stars.rating");
   });
 });
 

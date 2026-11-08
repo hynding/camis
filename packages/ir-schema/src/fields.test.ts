@@ -4,6 +4,19 @@ import { field, componentField, fieldApiName, inverseApiName } from "./fields";
 const parse = (v: unknown) => field.safeParse(v);
 
 describe("scalar fields", () => {
+  it("accepts a color field (a hex color held as text), with a pattern and a default, also in a component", () => {
+    expect(
+      parse({
+        type: "color",
+        name: "accent",
+        required: true,
+        pattern: "^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$",
+        default: "#ff0000",
+      }).success,
+    ).toBe(true);
+    expect(componentField.safeParse({ type: "color", name: "background" }).success).toBe(true);
+    expect(parse({ type: "color", name: "accent", pattern: "(" }).success).toBe(false);
+  });
   it("accepts a blocks field (a rich-text document as a tree of blocks), also in a component", () => {
     expect(parse({ type: "blocks", name: "body", required: true }).success).toBe(true);
     expect(componentField.safeParse({ type: "blocks", name: "bio" }).success).toBe(true);

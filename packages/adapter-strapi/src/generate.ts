@@ -60,6 +60,14 @@ const softDeleteGaps = (doc: IrDocument): CapabilityGap[] =>
       }),
     );
 
+/** The Strapi plugins whose custom fields the project uses: a color is the color picker's. */
+const fieldPlugins = (doc: IrDocument): string[] =>
+  [...doc.contentTypes, ...doc.components].some((holder) =>
+    holder.fields.some((f) => f.type === "color"),
+  )
+    ? ["color-picker"]
+    : [];
+
 export const strapiAdapter: GenerateAdapter = {
   target: "strapi",
   generate: (ir, options): GenerationResult => {
@@ -75,7 +83,7 @@ export const strapiAdapter: GenerateAdapter = {
       {},
     );
     const files: GeneratedFile[] = [
-      ...skeletonFiles(options.projectName),
+      ...skeletonFiles(options.projectName, fieldPlugins(doc)),
       ...doc.contentTypes
         .filter((ct) => ct.builtin === undefined)
         .flatMap((ct) => typeFiles(ct, inverses.get(ct.name) ?? {}, builtinUsers, uids)),

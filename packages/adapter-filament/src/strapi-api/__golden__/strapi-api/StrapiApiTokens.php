@@ -88,6 +88,9 @@ final class StrapiApiTokens
             'update' => 'plugin::users-permissions.user.update',
             'destroy' => 'plugin::users-permissions.user.destroy',
         ],
+        'App\Http\Controllers\Api\EmailController' => [
+            'send' => 'plugin::email.email.send',
+        ],
         'App\Http\Controllers\Api\UploadController' => [
             'upload' => 'plugin::upload.content-api.upload',
             'find' => 'plugin::upload.content-api.find',

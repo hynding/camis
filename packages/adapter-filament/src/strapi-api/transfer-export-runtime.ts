@@ -807,6 +807,9 @@ final class StrapiExport
         if (isset(StrapiTransferMap::TYPES[self::FOLDER]['model']) && is_int($folder)) {
             $store('plugin_upload_api-folder', ['id' => $folder]);
         }
+        if (isset(StrapiTransferMap::TYPES['plugin::upload.file']['model'])) {
+            $store('plugin_upload_settings', \App\Support\StrapiUpload::settings());
+        }
         $locale = StrapiTransferMap::TYPES['plugin::i18n.locale']['model'] ?? null;
         if ($locale !== null) {
             $default = DB::table((new $locale())->getTable())->where('is_default', true)->value('code');
