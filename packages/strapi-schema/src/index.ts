@@ -1,4 +1,4 @@
-export { toAttribute, toAttributes } from "./attributes";
+export { COLOR_PICKER_UID, toAttribute, toAttributes } from "./attributes";
 export { componentSchema } from "./component-schema";
 export { fromStrapiMediaKinds, toStrapiMediaKinds } from "./media-kinds";
 export {

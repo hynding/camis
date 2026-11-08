@@ -104,6 +104,52 @@ final class StrapiEmail
 }
 `;
 
+export const EMAIL_CONTROLLER_PATH = "app/Http/Controllers/Api/EmailController.php";
+
+/**
+ * Strapi's email plugin's content API send (POST /api/email, plugin::email.email.send). Roles come
+ * from the IR and none Strapi ships holds the action, so only an API token the StrapiApiToken
+ * middleware has checked for it reaches the send.
+ */
+export const emitEmailController = (): string => `<?php
+${PHP_MARKER}
+
+declare(strict_types=1);
+
+namespace App\\Http\\Controllers\\Api;
+
+use App\\Http\\Controllers\\Controller;
+use App\\Support\\StrapiApiTokens;
+use App\\Support\\StrapiEmail;
+use App\\Support\\StrapiError;
+use Illuminate\\Http\\JsonResponse;
+use Illuminate\\Http\\Request;
+use RuntimeException;
+use Throwable;
+
+final class EmailController extends Controller
+{
+    public function send(Request $request): JsonResponse
+    {
+        if (! StrapiApiTokens::active()) {
+            throw new StrapiError(403, 'ForbiddenError', 'Forbidden');
+        }
+        $options = $request->json()->all();
+        try {
+            StrapiEmail::send($options);
+        } catch (Throwable $error) {
+            // Strapi passes a provider's 400 on as an ApplicationError; anything else is a 500.
+            if ((int) ($error->statusCode ?? $error->getCode()) === 400) {
+                throw new StrapiError(400, 'ApplicationError', $error->getMessage());
+            }
+            throw new RuntimeException("Couldn't send email: {$error->getMessage()}.", 0, $error);
+        }
+
+        return response()->json(new \\stdClass());
+    }
+}
+`;
+
 /** Strapi's Settings › Email › Configuration: the settings, read only, and a test email. */
 export const emitEmailSettingsPage = (secured: boolean): string => `<?php
 

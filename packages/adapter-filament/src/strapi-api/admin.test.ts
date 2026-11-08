@@ -98,7 +98,7 @@ describe("the Strapi-like admin", () => {
     expect(roles).toContain("'authenticated' => 'Default role given to authenticated user.',");
     await expect(roles).toMatchFileSnapshot("./__golden__/strapi-api/StrapiRoles.php");
     const resource = content("app/Filament/Resources/Roles/RoleResource.php");
-    expect(resource).toContain("public static function canCreate(): bool");
+    expect(resource).toContain("public static function getCreateAuthorizationResponse(): Response");
     expect(resource).toContain("CheckboxList::make(");
   });
 
@@ -109,7 +109,7 @@ describe("the Strapi-like admin", () => {
       "protected static string | UnitEnum | null $navigationGroup = StrapiNavigation::SingleTypes;",
     );
     // Its update grant makes the entry, as on the API.
-    expect(resource).toContain("return Gate::allows('update', new Homepage());");
+    expect(resource).toContain("return Gate::inspect('update', new Homepage());");
     const list = content("app/Filament/Resources/Homepages/Pages/ListHomepages.php");
     expect(list).toContain("public function mount(): void");
     expect(list).toContain(

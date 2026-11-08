@@ -40,6 +40,7 @@ const STRINGY = new Set<FieldType>([
   "richText",
   "email",
   "uid",
+  "color",
   "enumeration",
   "date",
   "time",

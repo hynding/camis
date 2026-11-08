@@ -340,6 +340,7 @@ use Filament\\Resources\\Resource;
 use Filament\\Schemas\\Schema;
 use Filament\\Tables\\Columns\\TextColumn;
 use Filament\\Tables\\Table;
+use Illuminate\\Auth\\Access\\Response;
 use Illuminate\\Database\\Eloquent\\Model;
 use UnitEnum;
 
@@ -379,24 +380,24 @@ ${navigationProperties(SETTINGS.transferTokens)}
         ])->defaultSort('name');
     }
 
-    public static function canViewAny(): bool
+    public static function getViewAnyAuthorizationResponse(): Response
     {
-        return auth()->user()?->can('user.update') ?? false;
+        return (auth()->user()?->can('user.update') ?? false) ? Response::allow() : Response::deny();
     }
 
-    public static function canCreate(): bool
+    public static function getCreateAuthorizationResponse(): Response
     {
-        return static::canViewAny();
+        return static::getViewAnyAuthorizationResponse();
     }
 
-    public static function canEdit(Model $record): bool
+    public static function getEditAuthorizationResponse(Model $record): Response
     {
-        return static::canViewAny();
+        return static::getViewAnyAuthorizationResponse();
     }
 
-    public static function canDelete(Model $record): bool
+    public static function getDeleteAuthorizationResponse(Model $record): Response
     {
-        return static::canViewAny();
+        return static::getViewAnyAuthorizationResponse();
     }
 
     public static function getPages(): array

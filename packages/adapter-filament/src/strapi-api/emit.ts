@@ -146,7 +146,9 @@ import { runtimeSchemas, strapiNames } from "@camis/strapi-schema";
 import {
   EMAIL_SETTINGS_PAGE_PATH,
   emitEmailSettingsPage,
+  emitEmailController,
   emitStrapiEmail,
+  EMAIL_CONTROLLER_PATH,
   STRAPI_EMAIL_PATH,
 } from "./email";
 import {
@@ -437,6 +439,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
           versioned,
           localized,
           media: input.media !== undefined,
+          email: secured,
           projectName,
         }),
       },
@@ -475,6 +478,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
   files.push(
     ...homeFiles(input, secured),
     { path: STRAPI_EMAIL_PATH, content: emitStrapiEmail() },
+    ...(secured ? [{ path: EMAIL_CONTROLLER_PATH, content: emitEmailController() }] : []),
     { path: EMAIL_SETTINGS_PAGE_PATH, content: emitEmailSettingsPage(secured) },
   );
   if (input.media !== undefined)

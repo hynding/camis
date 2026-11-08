@@ -1,7 +1,15 @@
 import type { ContentType, Field } from "@camis/ir-schema";
 
 // Strapi's `_q` search: text fields match as a substring, number fields when the search is one.
-const TEXT_SEARCHED = new Set(["string", "text", "richText", "uid", "email", "enumeration"]);
+const TEXT_SEARCHED = new Set([
+  "string",
+  "text",
+  "richText",
+  "uid",
+  "email",
+  "enumeration",
+  "color",
+]);
 const NUMBER_SEARCHED = new Set(["integer", "bigInteger", "float", "decimal"]);
 // The Content Manager's NON_SORTABLES (components and relations are not columns here).
 const NOT_SORTED = new Set(["json", "media", "richText", "blocks"]);

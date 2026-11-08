@@ -20,6 +20,7 @@ const listField = (f: Field, doc: IrDocument): Emit | null => {
     case "richText":
     case "email":
     case "uid":
+    case "color":
     case "enumeration":
     case "media":
     case "json":
@@ -56,6 +57,7 @@ const input = (f: Field, doc: IrDocument): Emit | null => {
     case "text":
     case "email":
     case "uid":
+    case "color":
     case "media":
     case "json":
       return { jsx: `<TextInput source="${c}" />`, comp: "TextInput" };

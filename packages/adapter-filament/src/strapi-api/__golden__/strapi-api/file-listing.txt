@@ -168,6 +168,7 @@ overwrite app/Http/Controllers/Admin/StrapiTransferDownload.php
 overwrite app/Http/Controllers/Admin/StrapiTransferRunner.php
 overwrite app/Http/Controllers/Api/AuthController.php
 overwrite app/Http/Controllers/Api/ConnectController.php
+overwrite app/Http/Controllers/Api/EmailController.php
 overwrite app/Http/Controllers/Api/Generated/ActivityApiController.php
 overwrite app/Http/Controllers/Api/Generated/ActivitySessionApiController.php
 overwrite app/Http/Controllers/Api/Generated/ArticleApiController.php

@@ -133,7 +133,9 @@ export const emitStrapiRoutes = (
           "App\\Http\\Middleware\\StrapiCredentials",
         ]
       : []),
-    ...(tokens ? ["App\\Http\\Middleware\\StrapiApiToken"] : []),
+    ...(tokens
+      ? ["App\\Http\\Controllers\\Api\\EmailController", "App\\Http\\Middleware\\StrapiApiToken"]
+      : []),
     ...sorted.map((ct) => `App\\Http\\Controllers\\Api\\${filamentNames(ct).model}ApiController`),
     "App\\Http\\Middleware\\StrapiErrors",
     ...(usersPermissions
@@ -274,6 +276,13 @@ ${
 
     // Strapi's i18n plugin lists the locales to anyone: they name no content.
     Route::get('i18n/locales', [LocaleController::class, 'index']);`
+        : ""
+    }${
+      tokens
+        ? `
+
+    // Strapi's email plugin's send: no role it ships holds the action, so a token that does sends.
+    Route::post('/email', [EmailController::class, 'send']);`
         : ""
     }
 
