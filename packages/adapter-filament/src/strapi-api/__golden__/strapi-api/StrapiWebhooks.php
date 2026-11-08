@@ -44,6 +44,7 @@ final class StrapiWebhooks
         \App\Models\Storyboard::class => ['api::storyboard.storyboard', 'storyboard', \App\Http\Serializers\StoryboardSerializer::class],
         \App\Models\Submission::class => ['api::submission.submission', 'submission', \App\Http\Serializers\SubmissionSerializer::class],
         \App\Models\Tag::class => ['api::tag.tag', 'tag', \App\Http\Serializers\TagSerializer::class],
+        \App\Models\Ticket::class => ['api::ticket.ticket', 'ticket', \App\Http\Serializers\TicketSerializer::class],
         \App\Models\Topic::class => ['api::topic.topic', 'topic', \App\Http\Serializers\TopicSerializer::class],
         \App\Models\Transaction::class => ['api::transaction.transaction', 'transaction', \App\Http\Serializers\TransactionSerializer::class],
     ];

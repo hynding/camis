@@ -332,6 +332,17 @@ jobs:
           F=../packages/adapter-filament/src/strapi-api/__fixtures__
           node ../packages/adapter-filament/scripts/strapi-populate-vectors.mjs http://127.0.0.1:8765/api \
             --token "$T" --vectors $F/validation-vectors.json --expected $F/validation-vectors.expected.json
+      - name: Strapi entity constraints, unique, strict relations and blocks (recorded from strapi-php)
+        run: |
+          cd app
+          php artisan migrate:fresh --force
+          php artisan db:seed --class="Database\\Seeders\\RolePermissionSeeder" --force
+          T=$(curl -s -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' \
+            --data '{"username":"constraints","email":"constraints@example.test","password":"secret1"}' \
+            http://127.0.0.1:8765/api/auth/local/register | jq -r .jwt)
+          F=../packages/adapter-filament/src/strapi-api/__fixtures__
+          node ../packages/adapter-filament/scripts/strapi-populate-vectors.mjs http://127.0.0.1:8765/api \
+            --token "$T" --vectors $F/constraint-vectors.json --expected $F/constraint-vectors.expected.json
       - name: Strapi GraphQL vectors (recorded from strapi-php, locales en and fr)
         run: |
           cd app
@@ -547,14 +558,14 @@ jobs:
             --vectors $F/session-vectors.json --expected $F/session-vectors.expected.json
       - name: Strapi's OpenAPI document at /documentation lists only routes the app serves
         run: node packages/adapter-filament/scripts/strapi-openapi-routes.mjs app http://127.0.0.1:8765
-      - name: Filament admin publishes drafts, translates, keeps the media library and its folders, manages users, API and transfer tokens, exports and imports Strapi archives, builds dynamic zones, keeps link order, imports Strapi's tokens, searches, sorts, filters, deletes, duplicates and bulk-publishes lists, makes uids, records creators and lays views out as configured; GraphQL refuses what REST refuses
+      - name: Filament admin publishes drafts, translates, keeps the media library and its folders, manages users, API and transfer tokens, exports and imports Strapi archives, builds dynamic zones, keeps link order, imports Strapi's tokens, searches, sorts, filters, deletes, duplicates and bulk-publishes lists, makes uids, records creators and lays views out as configured, sends email for a token holding the action; GraphQL refuses what REST refuses
         run: |
           cd app
           # The cached config would point the tests at the served database instead of :memory:.
           php artisan config:clear
           S=../packages/adapter-filament/scripts/php
-          cp $S/DraftAdminTest.php $S/LocaleAdminTest.php $S/MediaAdminTest.php $S/FoldersTest.php $S/UsersAdminTest.php $S/ProvidersTest.php $S/ApiTokensTest.php $S/TransferTokensTest.php $S/DataTransferTest.php $S/StrapiAdminTest.php $S/WebhooksTest.php $S/DynamicZonesTest.php $S/GraphqlTest.php $S/LinkOrderAdminTest.php $S/TokenImportTest.php $S/ContentManagerListTest.php $S/ComponentIdTest.php $S/ContentManagerViewTest.php tests/Feature/
-          php artisan test tests/Feature/DraftAdminTest.php tests/Feature/LocaleAdminTest.php tests/Feature/MediaAdminTest.php tests/Feature/FoldersTest.php tests/Feature/UsersAdminTest.php tests/Feature/ProvidersTest.php tests/Feature/ApiTokensTest.php tests/Feature/TransferTokensTest.php tests/Feature/DataTransferTest.php tests/Feature/StrapiAdminTest.php tests/Feature/WebhooksTest.php tests/Feature/DynamicZonesTest.php tests/Feature/GraphqlTest.php tests/Feature/LinkOrderAdminTest.php tests/Feature/TokenImportTest.php tests/Feature/ContentManagerListTest.php tests/Feature/ComponentIdTest.php tests/Feature/ContentManagerViewTest.php
+          cp $S/DraftAdminTest.php $S/LocaleAdminTest.php $S/MediaAdminTest.php $S/FoldersTest.php $S/UsersAdminTest.php $S/ProvidersTest.php $S/ApiTokensTest.php $S/TransferTokensTest.php $S/DataTransferTest.php $S/StrapiAdminTest.php $S/WebhooksTest.php $S/DynamicZonesTest.php $S/GraphqlTest.php $S/LinkOrderAdminTest.php $S/TokenImportTest.php $S/ContentManagerListTest.php $S/ComponentIdTest.php $S/ContentManagerViewTest.php $S/SettingsPagesTest.php $S/EmailApiTest.php tests/Feature/
+          php artisan test tests/Feature/DraftAdminTest.php tests/Feature/LocaleAdminTest.php tests/Feature/MediaAdminTest.php tests/Feature/FoldersTest.php tests/Feature/UsersAdminTest.php tests/Feature/ProvidersTest.php tests/Feature/ApiTokensTest.php tests/Feature/TransferTokensTest.php tests/Feature/DataTransferTest.php tests/Feature/StrapiAdminTest.php tests/Feature/WebhooksTest.php tests/Feature/DynamicZonesTest.php tests/Feature/GraphqlTest.php tests/Feature/LinkOrderAdminTest.php tests/Feature/TokenImportTest.php tests/Feature/ContentManagerListTest.php tests/Feature/ComponentIdTest.php tests/Feature/ContentManagerViewTest.php tests/Feature/SettingsPagesTest.php tests/Feature/EmailApiTest.php
       - name: Server log on failure
         if: failure()
         run: cat app/serve.log app/storage/logs/laravel.log "$RUNNER_TEMP/oauth/serve.log" || true

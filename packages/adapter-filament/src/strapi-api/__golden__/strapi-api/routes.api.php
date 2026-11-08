@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\ReviewApiController;
 use App\Http\Controllers\Api\StoryboardApiController;
 use App\Http\Controllers\Api\SubmissionApiController;
 use App\Http\Controllers\Api\TagApiController;
+use App\Http\Controllers\Api\TicketApiController;
 use App\Http\Controllers\Api\TopicApiController;
 use App\Http\Controllers\Api\TransactionApiController;
 use App\Http\Middleware\StrapiErrors;
@@ -143,6 +144,12 @@ Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle):
         Route::get('/tags/{key}', [TagApiController::class, 'show']);
         Route::put('/tags/{key}', [TagApiController::class, 'update']);
         Route::delete('/tags/{key}', [TagApiController::class, 'destroy']);
+
+        Route::get('/tickets', [TicketApiController::class, 'index']);
+        Route::post('/tickets', [TicketApiController::class, 'store']);
+        Route::get('/tickets/{key}', [TicketApiController::class, 'show']);
+        Route::put('/tickets/{key}', [TicketApiController::class, 'update']);
+        Route::delete('/tickets/{key}', [TicketApiController::class, 'destroy']);
 
         Route::get('/topics', [TopicApiController::class, 'index']);
         Route::post('/topics', [TopicApiController::class, 'store']);

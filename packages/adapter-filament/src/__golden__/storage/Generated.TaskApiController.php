@@ -10,6 +10,7 @@ use App\Http\Serializers\TaskSerializer;
 use App\Models\Task;
 use App\Support\StrapiComponents;
 use App\Support\StrapiRows;
+use App\Support\StrapiValidator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
@@ -22,6 +23,12 @@ class TaskApiController extends Controller
     use AuthorizesRequests;
 
     private const KEY = 'document_id';
+
+    /** Each written field's Strapi attribute, for StrapiValidator. */
+    private const RULES = [
+        'recordId' => ['type' => 'string', 'required' => true, 'unique' => ['column' => 'record_id']],
+        'title' => ['type' => 'string', 'required' => true],
+    ];
 
     protected function scoped(Request $request): Builder
     {
@@ -37,6 +44,12 @@ class TaskApiController extends Controller
         }
 
         return $m;
+    }
+
+    /** The other entries' rows, among which a unique field's value must not already be. */
+    protected function others(Request $request, ?string $key): Builder
+    {
+        return Task::query()->whereNotNull('published_at')->when($key !== null, fn (Builder $q) => $q->where(self::KEY, '!=', $key));
     }
 
     public function index(Request $request): JsonResponse
@@ -61,6 +74,7 @@ class TaskApiController extends Controller
     {
         $wire = TaskSerializer::fromWire((array) $request->input('data', []));
         $this->authorize('create', Task::class);
+        StrapiValidator::validate($request->input('data'), self::RULES, creating: true, unique: fn (): Builder => $this->others($request, null));
         $m = new Task();
         DB::transaction(function () use ($m, $wire, $request): void {
             $m->fill(StrapiComponents::columnsOf($wire, Task::COMPONENT_MAP));
@@ -81,6 +95,7 @@ class TaskApiController extends Controller
         $m = $this->scoped($request)->where(self::KEY, $key)->first();
         if ($m !== null && Gate::allows('view', $m)) {
             $this->authorize('update', $m);
+            StrapiValidator::validate($request->input('data'), self::RULES, creating: false, unique: fn (): Builder => $this->others($request, $key));
             DB::transaction(function () use ($m, $wire): void {
                 $m->fill(StrapiComponents::columnsOf($wire, Task::COMPONENT_MAP))->save();
                 StrapiComponents::apply($m, Task::COMPONENT_MAP, $wire);

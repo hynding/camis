@@ -23,6 +23,21 @@ final class StrapiUpload
     /** The images GD can resize; any other file keeps no formats. */
     private const RESIZABLE = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
+    /** The images Strapi optimizes (GIF is not one). */
+    private const OPTIMIZABLE = ['image/jpeg', 'image/png', 'image/webp'];
+
+    /** Where the store keeps the Media Library settings. */
+    public const SETTINGS_KEY = 'upload.settings';
+
+    /** A new Strapi project's upload settings. */
+    public const DEFAULT_SETTINGS = ['sizeOptimization' => true, 'responsiveDimensions' => true, 'autoOrientation' => false, 'aiMetadata' => true];
+
+    /** @return array{sizeOptimization: bool, responsiveDimensions: bool, autoOrientation: bool, aiMetadata: bool} */
+    public static function settings(): array
+    {
+        return StrapiSettings::get(self::SETTINGS_KEY, self::DEFAULT_SETTINGS);
+    }
+
     /**
      * Stores an uploaded file with its info (name, alternativeText, caption, and the folder it goes
      * in, by id) and formats.
@@ -117,19 +132,85 @@ final class StrapiUpload
         $hash = self::hash($ext !== '' && str_ends_with(strtolower($name), $ext) ? substr($name, 0, -strlen($ext)) : $name);
         $mime = $upload->getMimeType() ?: ($upload->getClientMimeType() ?: 'application/octet-stream');
         $disk = self::disk();
-        $disk->putFileAs('', $upload, $hash.$ext);
-        [$width, $height] = str_starts_with($mime, 'image/') ? self::dimensions($upload->getRealPath()) : [null, null];
+        $settings = self::settings();
+        // Only an image is read whole: a large video or archive is streamed to the disk.
+        $bytes = str_starts_with($mime, 'image/') && $upload->getRealPath() !== false ? file_get_contents($upload->getRealPath()) : false;
+        $optimized = is_string($bytes) ? self::optimize($bytes, $mime, $settings) : null;
+        if ($optimized === null) {
+            $disk->putFileAs('', $upload, $hash.$ext);
+        } else {
+            $disk->put($hash.$ext, $optimized);
+            $bytes = $optimized;
+        }
+        [$width, $height] = is_string($bytes) ? self::dimensions($bytes) : [null, null];
         $file->forceFill([
             'hash' => $hash,
             'ext' => $ext,
             'mime' => $mime,
-            'size' => self::kilobytes((int) $upload->getSize()),
+            'size' => self::kilobytes($optimized === null ? (int) $upload->getSize() : strlen($optimized)),
             'url' => $disk->url($hash.$ext),
             'provider' => (string) (config('camis.upload.provider') ?? (config('camis.upload.disk') ?? 'local')),
             'width' => $width,
             'height' => $height,
-            'formats' => $width === null ? null : self::formats($upload->getRealPath(), $mime, $width, $height, $hash, $ext, (string) $file->name, $disk),
+            'formats' => $width === null || ! is_string($bytes) ? null : self::formats($bytes, $mime, $width, $height, $hash, $ext, (string) $file->name, $disk, $settings['responsiveDimensions']),
         ]);
+    }
+
+    /**
+     * The image re-encoded as the settings ask (smaller, upright), or null to keep the upload as it
+     * came: nothing asked, GD cannot read it, or the result is larger.
+     *
+     * @param array{sizeOptimization: bool, autoOrientation: bool} $settings
+     */
+    private static function optimize(string $bytes, string $mime, array $settings): ?string
+    {
+        if ((! $settings['sizeOptimization'] && ! $settings['autoOrientation']) || ! in_array($mime, self::OPTIMIZABLE, true) || ! function_exists('imagecreatefromstring')) {
+            return null;
+        }
+        try {
+            $image = @imagecreatefromstring($bytes);
+            if ($image === false) {
+                return null;
+            }
+            if ($settings['autoOrientation'] && $mime === 'image/jpeg') {
+                $image = self::orient($image, $bytes);
+            }
+            $quality = $settings['sizeOptimization'] ? 80 : 100;
+            ob_start();
+            match ($mime) {
+                'image/jpeg' => imagejpeg($image, null, $quality),
+                'image/png' => imagesavealpha($image, true) && imagepng($image, null, 9),
+                default => imagesavealpha($image, true) && imagewebp($image, null, $quality),
+            };
+            $optimized = (string) ob_get_clean();
+        } catch (Throwable) {
+            return null;
+        }
+
+        return $optimized === '' || strlen($optimized) > strlen($bytes) ? null : $optimized;
+    }
+
+    /** A JPEG turned upright by its EXIF orientation, where PHP has the exif extension. */
+    private static function orient(\GdImage $image, string $bytes): \GdImage
+    {
+        $exif = function_exists('exif_read_data') ? @exif_read_data('data://image/jpeg;base64,'.base64_encode($bytes)) : false;
+        $orientation = is_array($exif) ? (int) ($exif['Orientation'] ?? 1) : 1;
+        // imagerotate turns counter-clockwise.
+        $angle = match ($orientation) {
+            3, 4 => 180,
+            5, 6 => 270,
+            7, 8 => 90,
+            default => 0,
+        };
+        if ($angle !== 0) {
+            $rotated = imagerotate($image, $angle, 0);
+            $image = $rotated === false ? $image : $rotated;
+        }
+        if (in_array($orientation, [2, 4, 5, 7], true)) {
+            imageflip($image, IMG_FLIP_HORIZONTAL);
+        }
+
+        return $image;
     }
 
     /** name, alternativeText and caption, each kept when the info leaves it out. */
@@ -157,21 +238,21 @@ final class StrapiUpload
     }
 
     /** @return array{0: ?int, 1: ?int} */
-    private static function dimensions(string|false $path): array
+    private static function dimensions(string $bytes): array
     {
-        $size = $path === false ? false : @getimagesize($path);
+        $size = @getimagesizefromstring($bytes);
 
         return $size === false ? [null, null] : [(int) $size[0], (int) $size[1]];
     }
 
     /** @return array<string, array>|null */
-    private static function formats(string|false $path, string $mime, int $width, int $height, string $hash, string $ext, string $name, Filesystem $disk): ?array
+    private static function formats(string $bytes, string $mime, int $width, int $height, string $hash, string $ext, string $name, Filesystem $disk, bool $responsive): ?array
     {
-        if ($path === false || ! in_array($mime, self::RESIZABLE, true) || ! function_exists('imagecreatefromstring')) {
+        if (! in_array($mime, self::RESIZABLE, true) || ! function_exists('imagecreatefromstring')) {
             return null;
         }
         try {
-            $source = imagecreatefromstring((string) file_get_contents($path));
+            $source = imagecreatefromstring($bytes);
             if ($source === false) {
                 return null;
             }
@@ -180,7 +261,7 @@ final class StrapiUpload
             if ($width > $thumbWidth || $height > $thumbHeight) {
                 $formats['thumbnail'] = self::format('thumbnail', $source, $thumbWidth, $thumbHeight, $mime, $hash, $ext, $name, $disk);
             }
-            foreach (self::BREAKPOINTS as $key => $breakpoint) {
+            foreach ($responsive ? self::BREAKPOINTS : [] as $key => $breakpoint) {
                 if ($width > $breakpoint || $height > $breakpoint) {
                     $formats[$key] = self::format($key, $source, $breakpoint, $breakpoint, $mime, $hash, $ext, $name, $disk);
                 }

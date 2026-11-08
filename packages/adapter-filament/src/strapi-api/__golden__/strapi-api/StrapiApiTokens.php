@@ -47,6 +47,7 @@ final class StrapiApiTokens
         'App\Http\Controllers\Api\StoryboardApiController' => 'api::storyboard.storyboard',
         'App\Http\Controllers\Api\SubmissionApiController' => 'api::submission.submission',
         'App\Http\Controllers\Api\TagApiController' => 'api::tag.tag',
+        'App\Http\Controllers\Api\TicketApiController' => 'api::ticket.ticket',
         'App\Http\Controllers\Api\TopicApiController' => 'api::topic.topic',
         'App\Http\Controllers\Api\TransactionApiController' => 'api::transaction.transaction',
     ];
@@ -87,6 +88,9 @@ final class StrapiApiTokens
             'update' => 'plugin::users-permissions.user.update',
             'destroy' => 'plugin::users-permissions.user.destroy',
         ],
+        'App\Http\Controllers\Api\EmailController' => [
+            'send' => 'plugin::email.email.send',
+        ],
         'App\Http\Controllers\Api\UploadController' => [
             'upload' => 'plugin::upload.content-api.upload',
             'find' => 'plugin::upload.content-api.find',
@@ -118,6 +122,7 @@ final class StrapiApiTokens
         \App\Models\Storyboard::class => 'api::storyboard.storyboard',
         \App\Models\Submission::class => 'api::submission.submission',
         \App\Models\Tag::class => 'api::tag.tag',
+        \App\Models\Ticket::class => 'api::ticket.ticket',
         \App\Models\Topic::class => 'api::topic.topic',
         \App\Models\Transaction::class => 'api::transaction.transaction',
         \App\Models\User::class => 'plugin::users-permissions.user',

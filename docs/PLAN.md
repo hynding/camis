@@ -1311,7 +1311,127 @@ re-recorded from strapi-php; DynamicZonesTest picks, keeps and publishes an item
 
 ---
 
-## Phase 39 — the rest of the Content Manager (`adapter-filament`)
+## Phase 39 — Strapi's Home and settings pages (`adapter-filament`)
+
+The audit's P1 found three Settings pages and the Home Strapi's admin has missing. Filament's
+dashboard now carries Strapi's homepage widgets: Entries (each document the user may read counted
+once as draft, modified or published, by Strapi's own SQL), Project statistics (assets,
+content-types, component categories, locales, admins, webhooks, API tokens, as Strapi counts them),
+and Last edited and Last published entries (four each, newest first, with their status and a link to
+the draft). They read only the types whose read grant the user holds (`StrapiHomepage`). Settings
+gains Overview (the application's Laravel, Filament and PHP versions, database and environment,
+where Strapi shows its own and Node's), Media Library and Email, in Strapi's places.
+
+Media Library edits Strapi's upload settings in the store (`upload.settings`, Strapi's defaults):
+with responsive formats off an upload keeps only its thumbnail; size optimization re-encodes an
+image (quality 80) and auto orientation turns a JPEG upright by its EXIF tag (where PHP has exif),
+each kept only when no larger, as Strapi does. `strapi:export` and `strapi:import` carry them as
+the core store's `plugin_upload_settings`. Email shows the provider, default sender and reply-to
+(`camis.email.*`, else Laravel's mailer and `mail.from`/`mail.reply_to`) and sends Strapi's test
+email through `StrapiEmail`, which anything sending as Strapi's email service shares.
+
+Known gaps: Overview's logo customization (the menu and sign-in logos) is not built, as the panel's
+brand logo is set in the host's panel provider; the homepage layout is Filament's, not editable per
+user; Email's verify-connection button is not offered.
+
+Exit: unit tests (`settings-pages.test.ts`); `SettingsPagesTest.php` in the `strapi-api` boot job,
+denied paths included.
+
+---
+
+## Phase 40 — the color picker (`ir-schema`, `strapi-schema`, `adapter-strapi`, `adapter-filament`, `adapter-express`)
+
+Strapi ships the color-picker plugin, whose custom field (`plugin::color-picker.color`) holds a
+color as a string; strapi-php's getstarted kitchensink uses two. The importer reported every
+custom field as a `customField` gap and dropped it.
+
+A field may be a `color`: text holding a color, with an optional `pattern` and `default`. The
+importer reads the color-picker's custom field as one (its `regex` as the pattern); any other
+plugin's custom field is still a `customField` gap, now naming the field's uid. The Strapi target
+writes it back as that custom field and adds `@strapi/plugin-color-picker` to the project's
+dependencies when a content type or component uses one. A running Strapi holds the field as a
+string (`convertCustomFieldType`), so the runtime schemas a transfer archive carries do too, and
+the Strapi API style validates, documents (OpenAPI), types (GraphQL `String`), filters, searches
+and sorts it as a string. Filament edits it with its color picker and lists it as a swatch; Express
+keeps it as text.
+
+Exit: unit tests in each package; `color.test.ts` checks the generated validator rule, OpenAPI
+attribute, GraphQL type, list column and form field.
+
+---
+
+## Phase 41 — a Strapi project's config (`adapter-kernel`, `adapter-strapi`, `adapter-filament`, `cli`)
+
+A Strapi project says how it is run in `config/plugins` (the upload and email providers with their
+`providerOptions`, the email plugin's `defaultFrom`/`defaultReplyTo`, graphql's page sizes,
+users-permissions' sessions and register fields) and `config/api` (REST page sizes and counts);
+a migration lost all of it. The config is code, not a declarative schema, so it is never parsed:
+`camis import strapi` runs it (strapi-php's PHP under `php`, Strapi's JS/TS under `node`) with an
+`env` that answers every variable with a reference to it, and reads back the settings as written,
+no secret included.
+
+`adapter-kernel` names the neutral shape (`DeploymentSettings`: upload storage, mail transport and
+default addresses, REST and GraphQL page sizes, account sessions). `adapter-strapi` reads it from
+the config (`deploymentSettings`): uploads `local` and `aws-s3` (Strapi 4's and 5's option
+shapes), email `sendmail`, `nodemailer`, `sendgrid` (its SMTP relay), `mailgun` and `amazon-ses`.
+Anything else is a gap: `uploadProvider` (Cloudinary), `uploadRootPath`, `emailProvider`,
+`emailProviderOption` (a nodemailer `service`). `adapter-filament` turns it into the `.env` lines
+Laravel's s3 disk and mailers read, plus the `CAMIS_*` keys config/camis.php reads
+(`deploymentEnv`), naming the Composer packages a disk or mailer needs. The CLI writes
+`deployment.env` (`--env-out`).
+
+Exit: unit tests for each mapping; the CLI reads a `.php`, a `.ts` and a CommonJS `.js` config.
+
+---
+
+## Phase 42 — what the entity validator checks beyond a value (`strapi-schema`, `adapter-strapi`, `adapter-filament`, `cli`)
+
+The validation holes the 2026-11-07 review listed. `StrapiValidator` now checks, as Strapi 5's
+entity validator does:
+
+- **unique** (a uid always is): among the other entries' published rows in the locale written,
+  the entry written left out; an empty or null value, a draft, and a number its type refuses are
+  not looked up. A repeatable component's items may not repeat a unique value, nor hold one another
+  entry's item holds. Each rule names where the value is stored (a column, and the child relation
+  of a repeatable's items); the controller hands the validator `others()`. A unique field deeper
+  in components, or in a dynamic zone, is reported (`uniqueInComponent`).
+- **a required relation or file** under `api.documents.strictRelations`
+  (`camis.documents.strict_relations`, on by default as a new Strapi project ships it): a creation
+  must connect one, an update may leave it out or send an empty connect, a to-one link may not be
+  emptied by a disconnect alone. Errors carry the value as Strapi transforms it (`[]` → `{set: []}`).
+  A relation's `required` now survives `camis import` and the Strapi export.
+- **blocks**: each node of the document tree against Strapi's blocks schema, with its messages.
+
+The **strapi storage layout** validates every write too (the `entityValidation` gap is gone): its
+controllers carry the same `RULES` and check uniqueness against Strapi's own `published_at` rows;
+its components' unique fields are reported. Its upsert key's duplicate guard (a Laravel
+`ValidationException`) is replaced by the validator's Strapi error. GraphQL marks a required
+to-one link non-null and OpenAPI a blocks field required, as Strapi's do.
+
+Exit: `constraint-vectors.json` (26 checks, a `Ticket` type and `Code` component added to the
+fixture) recorded from strapi-php with strictRelations on; the dynamic zone vectors, OpenAPI and
+GraphQL oracles re-recorded for the new types; the storage crosscheck sends the same refused writes
+to Strapi and to the PHP app and compares the answers.
+
+---
+
+## Phase 43 — Strapi's email send route (`adapter-filament`)
+
+Strapi's email plugin serves `POST /api/email` (`plugin::email.email.send`): to, cc, bcc, from,
+replyTo, subject, text and html, answered with `{}`. Phase 39 gave the project Strapi's email
+service (`StrapiEmail`); the route sends through it, filling the sender and reply-to from the
+settings. No role Strapi ships holds the action and camis's roles come from the IR, so the public
+and authenticated roles are refused (403 `ForbiddenError`) and an API token holding the action
+(full access, or custom with `plugin::email.email.send`) sends. A mailer error is a 500, and a
+provider's 400 an `ApplicationError`, as in Strapi. Without roles nothing would guard the route,
+so it is not served; the OpenAPI document lists it where it is.
+
+Exit: unit tests for the route, the token action and the controller; a feature test sending with
+full-access and custom tokens, refusing the shipped roles and a read-only token.
+
+---
+
+## Phase 44 — the rest of the Content Manager (`adapter-filament`)
 
 The audit's P1 left the Strapi-like admin without what Strapi's Content Manager has beyond a list:
 filters, Duplicate, the uid field's generator, createdBy/updatedBy and "Configure the view". Each

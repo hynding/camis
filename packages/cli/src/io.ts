@@ -11,6 +11,8 @@ export interface Io {
   makeDir(path: string): Promise<void>;
   /** Run a child process (stdio inherited); resolves with its exit code. */
   exec(cmd: string, args: string[], cwd: string): Promise<number>;
+  /** Run a child process and keep its standard output; absent where nothing may be run. */
+  capture?(cmd: string, args: string[], cwd: string): Promise<{ code: number; stdout: string }>;
   out(line: string): void;
   cwd: string;
 }

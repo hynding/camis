@@ -6,6 +6,7 @@ import { apiTokensConfigKeys } from "./api-tokens";
 import { transferTokensConfigKeys } from "./transfer-tokens";
 import { webhooksConfigKeys } from "./webhooks";
 import { usersPermissionsConfigKeys } from "./users-permissions";
+import { emailConfigKeys } from "./email";
 
 /** Default requests per minute allowed on the unauthenticated credential endpoints. */
 const AUTH_THROTTLE_PER_MINUTE = 10;
@@ -83,6 +84,12 @@ export const emitApiConfig = (
         // Strapi 5 sends components only when populate names them; true keeps sending them
         // always, as camis did before, for clients written against that.
         'always_populate_components' => (bool) env('CAMIS_REST_ALWAYS_POPULATE_COMPONENTS', ${alwaysPopulateComponents}),
+    ],
+
+    // Strapi's api.documents.strictRelations, on as a new Strapi project ships it: a write must
+    // keep a required relation or file. false skips that check, as Strapi did before.
+    'documents' => [
+        'strict_relations' => (bool) env('CAMIS_STRICT_RELATIONS', true),
     ],`;
 
   return `<?php
@@ -94,7 +101,7 @@ declare(strict_types=1);
 return [
     // Requests per minute allowed on the unauthenticated credential endpoints
     // (POST /auth/local and /auth/local/register), keyed by client address.
-    'auth_throttle_per_minute' => max(1, (int) env('CAMIS_AUTH_THROTTLE_PER_MINUTE', ${AUTH_THROTTLE_PER_MINUTE})),${strapiKeys}${i18nKeys}${uploadKeys}${usersPermissions ? usersPermissionsConfigKeys() : ""}${apiTokens ? apiTokensConfigKeys() + transferTokensConfigKeys() : ""}${webhooks ? webhooksConfigKeys() : ""}${graphqlKeys}
+    'auth_throttle_per_minute' => max(1, (int) env('CAMIS_AUTH_THROTTLE_PER_MINUTE', ${AUTH_THROTTLE_PER_MINUTE})),${strapiKeys}${i18nKeys}${uploadKeys}${usersPermissions ? usersPermissionsConfigKeys() + emailConfigKeys() : ""}${apiTokens ? apiTokensConfigKeys() + transferTokensConfigKeys() : ""}${webhooks ? webhooksConfigKeys() : ""}${graphqlKeys}
 ];
 `;
 };
@@ -132,7 +139,9 @@ export const emitStrapiRoutes = (
           "App\\Http\\Middleware\\StrapiCredentials",
         ]
       : []),
-    ...(tokens ? ["App\\Http\\Middleware\\StrapiApiToken"] : []),
+    ...(tokens
+      ? ["App\\Http\\Controllers\\Api\\EmailController", "App\\Http\\Middleware\\StrapiApiToken"]
+      : []),
     ...sorted.map((ct) => `App\\Http\\Controllers\\Api\\${filamentNames(ct).model}ApiController`),
     "App\\Http\\Middleware\\StrapiErrors",
     ...(usersPermissions
@@ -273,6 +282,13 @@ ${
 
     // Strapi's i18n plugin lists the locales to anyone: they name no content.
     Route::get('i18n/locales', [LocaleController::class, 'index']);`
+        : ""
+    }${
+      tokens
+        ? `
+
+    // Strapi's email plugin's send: no role it ships holds the action, so a token that does sends.
+    Route::post('/email', [EmailController::class, 'send']);`
         : ""
     }
 

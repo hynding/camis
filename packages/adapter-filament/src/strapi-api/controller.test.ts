@@ -11,6 +11,7 @@ import { emitGeneratedController, emitProtectedController } from "./controller";
 import { emitApiConfig, emitStrapiRoutes } from "./routes";
 import { ownerLinks } from "./storage/names";
 import { storageBundle } from "./storage/__fixtures__/storage";
+import { entityRules } from "./validation";
 import { wireShape } from "./wire-shape";
 
 const doc = normalize(strapiApiBundle.document);
@@ -32,15 +33,21 @@ const storageCt = (n: string): ContentType => {
   return found;
 };
 
-const storageSpec = (name: string, assigns: string[]) => ({
-  shape: wireShape(storageDoc, storageCt(name), []),
-  ct: storageCt(name),
-  assigns,
-  secured: true,
-  scoped: true,
-  layout: "strapi" as const,
-  links: ownerLinks(storageCt(name)),
-});
+const storageSpec = (name: string, assigns: string[]) => {
+  const shape = wireShape(storageDoc, storageCt(name), []);
+  const entity = entityRules(storageCt(name), storageDoc, shape, "strapi");
+  return {
+    shape,
+    ct: storageCt(name),
+    assigns,
+    secured: true,
+    scoped: true,
+    layout: "strapi" as const,
+    links: ownerLinks(storageCt(name)),
+    rules: entity.constant,
+    unique: entity.unique,
+  };
+};
 
 describe("strapi-api controllers", () => {
   it("Note generated controller golden (upsert by record_id, owner assign)", async () => {
@@ -255,24 +262,25 @@ describe("strapi storage layout controllers", () => {
 
   // Strapi's own validator rejects a duplicate uid with a 400 ValidationError before it ever
   // reaches the database; a bare insert would surface a driver-specific unique-constraint error.
-  it("rejects a duplicate upsert key with a ValidationException in store()", () => {
+  it("answers a taken upsert key with Strapi's unique error, through the validator", () => {
     const php = emitGeneratedController(storageSpec("Note", ["owner"]));
-    expect(php).toContain("use Illuminate\\Validation\\ValidationException;");
+    expect(php).not.toContain("ValidationException");
+    expect(php).toContain(
+      "'recordId' => ['type' => 'string', 'required' => true, 'unique' => ['column' => 'record_id']],",
+    );
     const store = php.slice(
       php.indexOf("public function store"),
       php.indexOf("public function update"),
     );
-    expect(store).toContain(
-      "if (Note::query()->where(self::KEY, $wire['columns'][self::KEY] ?? null)->exists()) {",
-    );
-    expect(store).toContain(
-      "throw ValidationException::withMessages([self::KEY => 'This attribute must be unique']);",
-    );
+    expect(store).toContain("unique: fn (): Builder => $this->others($request, null));");
   });
 
-  it("omits the duplicate-key guard (and its import) when the key is documentId", () => {
+  it("leaves the entry written out of the others on an update", () => {
     const php = emitGeneratedController(storageSpec("Task", ["assignee"]));
-    expect(php).not.toContain("ValidationException");
+    const update = php.slice(php.indexOf("public function update"));
+    expect(update).toContain(
+      "creating: false, unique: fn (): Builder => $this->others($request, $key));",
+    );
     expect(php).toContain("private const KEY = 'document_id';");
   });
 

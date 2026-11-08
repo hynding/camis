@@ -18,13 +18,19 @@ export interface Navigation {
 
 const settings = (label: string, sort: number): Navigation => ({ group: "Settings", label, sort });
 
-/** Strapi's Settings, in its order; the Users & Permissions plugin's entries come last. */
+/**
+ * Strapi's Settings, in its order: Overview, then the global settings alphabetically, then the
+ * plugins' (Email, then Users & Permissions).
+ */
 export const SETTINGS = {
+  overview: settings("Overview", 5),
   apiTokens: settings("API Tokens", 10),
   internationalization: settings("Internationalization", 20),
+  mediaLibrary: settings("Media Library", 25),
   transferTokens: settings("Transfer Tokens", 30),
   webhooks: settings("Webhooks", 40),
   dataTransfer: settings("Data transfer", 50),
+  email: settings("Email", 55),
   roles: settings("Roles", 60),
   providers: settings("Providers", 70),
   emailTemplates: settings("Email templates", 80),
