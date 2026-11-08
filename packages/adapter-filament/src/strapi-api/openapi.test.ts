@@ -33,13 +33,12 @@ const oracle = JSON.parse(
 ) as OpenApiDocument;
 
 // Routes strapi-php documents that camis does not serve: the content-type builder's read API,
-// the email plugin's send route, and the media library's admin-style page of files.
+// and the media library's admin-style page of files.
 const UNSERVED = [
   "/content-type-builder/content-types",
   "/content-type-builder/content-types/{uid}",
   "/content-type-builder/components",
   "/content-type-builder/components/{uid}",
-  "/email",
   "/upload/files/page",
 ];
 

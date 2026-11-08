@@ -14,7 +14,25 @@ export type { Component, ContentType, IrDocument } from "./document";
 export { parseDocument } from "./parse";
 export type { CapabilityDescriptor, CapabilityGap, CapabilityGapReport } from "./capability";
 export { apiName, collectionName, fieldName, typeName } from "./identifiers";
-export { HOOK_SCALARS, hook, shapeField } from "./hooks";
-export type { Hook, HookScalar, ShapeField } from "./hooks";
+export {
+  HOOK_SCALARS,
+  HOOK_TRIGGERS,
+  LIFECYCLE_TRIGGERS,
+  ROUTE_ACTIONS,
+  WRITING_TRIGGERS,
+  hook,
+  routeHook,
+  schedule,
+  shapeField,
+} from "./hooks";
+export type {
+  Hook,
+  HookScalar,
+  HookTrigger,
+  RouteAction,
+  RouteHook,
+  Schedule,
+  ShapeField,
+} from "./hooks";
 export { ai, aiPlaceholders, AI_TRIGGERS } from "./ai";
 export type { Ai, AiTrigger } from "./ai";

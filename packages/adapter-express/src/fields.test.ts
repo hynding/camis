@@ -42,3 +42,15 @@ describe("column (pg / mysql breadth)", () => {
     expect(isSupportedField("component")).toBe(false);
   });
 });
+
+describe("column — color", () => {
+  it("keeps a color as text, as a string is kept", () => {
+    expect(isSupportedField("color")).toBe(true);
+    expect(column("sqlite", { type: "color", name: "accent" } as Field).drizzle).toBe(
+      "text('accent')",
+    );
+    expect(column("pgsql", { type: "color", name: "accent" } as Field).drizzle).toBe(
+      "varchar('accent', { length: 255 })",
+    );
+  });
+});

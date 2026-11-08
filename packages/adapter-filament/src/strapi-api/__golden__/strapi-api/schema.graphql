@@ -153,6 +153,9 @@ type Query {
   tag(documentId: ID!, status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): Tag
   tags_connection(filters: TagFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): TagEntityResponseCollection
   tags(filters: TagFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [Tag]!
+  ticket(documentId: ID!, status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): Ticket
+  tickets_connection(filters: TicketFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): TicketEntityResponseCollection
+  tickets(filters: TicketFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [Ticket]!
   topic(documentId: ID!, status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): Topic
   topics_connection(filters: TopicFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): TopicEntityResponseCollection
   topics(filters: TopicFiltersInput, pagination: PaginationArg = {  }, sort: [String] = [], status: PublicationStatus = PUBLISHED, hasPublishedVersion: Boolean, publicationFilter: PublicationFilter): [Topic]!
@@ -277,6 +280,9 @@ type Mutation {
   createTag(status: PublicationStatus = PUBLISHED, data: TagInput!): Tag
   updateTag(documentId: ID!, status: PublicationStatus = PUBLISHED, data: TagInput!): Tag
   deleteTag(documentId: ID!): DeleteMutationResponse
+  createTicket(status: PublicationStatus = PUBLISHED, data: TicketInput!): Ticket
+  updateTicket(documentId: ID!, status: PublicationStatus = PUBLISHED, data: TicketInput!): Ticket
+  deleteTicket(documentId: ID!): DeleteMutationResponse
   createTopic(status: PublicationStatus = PUBLISHED, data: TopicInput!): Topic
   updateTopic(documentId: ID!, status: PublicationStatus = PUBLISHED, data: TopicInput!): Topic
   deleteTopic(documentId: ID!): DeleteMutationResponse
@@ -1553,6 +1559,70 @@ type TagEntityResponseCollection {
   pageInfo: Pagination!
 }
 
+type ComponentSharedCode {
+  id: ID!
+  value: String
+}
+
+input ComponentSharedCodeFiltersInput {
+  value: StringFilterInput
+  and: [ComponentSharedCodeFiltersInput]
+  or: [ComponentSharedCodeFiltersInput]
+  not: ComponentSharedCodeFiltersInput
+}
+
+input ComponentSharedCodeInput {
+  id: ID
+  value: String
+}
+
+type Ticket {
+  documentId: ID!
+  serial: String
+  slug: String
+  seat: Int
+  venue: Genre!
+  badge: UploadFile!
+  body: JSON
+  codes(filters: ComponentSharedCodeFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): [ComponentSharedCode]
+  createdAt: DateTime
+  updatedAt: DateTime
+  publishedAt: DateTime
+}
+
+input TicketInput {
+  serial: String
+  slug: String
+  seat: Int
+  venue: ID
+  badge: ID
+  body: JSON
+  codes: [ComponentSharedCodeInput]
+  publishedAt: DateTime
+  locale: String
+}
+
+input TicketFiltersInput {
+  documentId: IDFilterInput
+  serial: StringFilterInput
+  slug: StringFilterInput
+  seat: IntFilterInput
+  venue: GenreFiltersInput
+  body: JSONFilterInput
+  codes: ComponentSharedCodeFiltersInput
+  createdAt: DateTimeFilterInput
+  updatedAt: DateTimeFilterInput
+  publishedAt: DateTimeFilterInput
+  and: [TicketFiltersInput]
+  or: [TicketFiltersInput]
+  not: TicketFiltersInput
+}
+
+type TicketEntityResponseCollection {
+  nodes: [Ticket!]!
+  pageInfo: Pagination!
+}
+
 type Topic {
   documentId: ID!
   name: String!
@@ -1833,4 +1903,4 @@ type UsersPermissionsPasswordPayload {
   ok: Boolean!
 }
 
-union GenericMorph = ComponentSharedFrame | ComponentSharedHero | ComponentSharedLine | ComponentSharedLink | ComponentSharedMenuItem | ComponentSharedMoney | ComponentSharedPanel | ComponentSharedQuantity | ComponentSharedSeo | UploadFile | I18NLocale | UsersPermissionsPermission | UsersPermissionsRole | UsersPermissionsUser | Activity | ActivitySession | Article | Author | Book | Category | Genre | Global | Homepage | Landing | Menu | Note | Page | Post | Review | Storyboard | Submission | Tag | Topic | Transaction
+union GenericMorph = ComponentSharedCode | ComponentSharedFrame | ComponentSharedHero | ComponentSharedLine | ComponentSharedLink | ComponentSharedMenuItem | ComponentSharedMoney | ComponentSharedPanel | ComponentSharedQuantity | ComponentSharedSeo | UploadFile | I18NLocale | UsersPermissionsPermission | UsersPermissionsRole | UsersPermissionsUser | Activity | ActivitySession | Article | Author | Book | Category | Genre | Global | Homepage | Landing | Menu | Note | Page | Post | Review | Storyboard | Submission | Tag | Ticket | Topic | Transaction

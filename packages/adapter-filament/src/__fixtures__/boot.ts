@@ -3,7 +3,7 @@ import { catalog } from "./catalog";
 
 // Gated-CI-only bundle: catalog's content/relations PLUS an Editor role with a record-level
 // condition, so the boot job exercises migrations, relations, the Spatie seeder, and Policy
-// enforcement in one app; Editor is the admin role and Reader is not, for the admin access check.
+// enforcement in one app, with a hook on each kind of Ring 2 seam; Editor is the admin role and Reader is not, for the admin access check.
 // Not golden-tested (it is free to combine).
 export const bootBundle: IrBundle = {
   document: {
@@ -16,7 +16,24 @@ export const bootBundle: IrBundle = {
         input: [{ name: "title", type: "string" }],
         output: [{ name: "title", type: "string" }],
       },
+      {
+        name: "DefaultStatus",
+        trigger: "beforeCreate",
+        contentType: "Article",
+        input: [{ name: "title", type: "string" }],
+        output: [{ name: "status", type: "string" }],
+      },
+      {
+        name: "ForgetArticle",
+        trigger: "afterDelete",
+        contentType: "Article",
+        input: [{ name: "title", type: "string" }],
+        output: [],
+      },
     ],
+    policies: [{ name: "NoDeletes", contentType: "Article", actions: ["delete"] }],
+    middlewares: [{ name: "TagResponse", contentType: "Article", actions: ["list"] }],
+    schedules: [{ name: "Heartbeat", cron: "* * * * *" }],
   },
   roles: [
     {

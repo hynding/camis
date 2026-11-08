@@ -516,7 +516,8 @@ export const buildGraphqlSchema = (input: GraphqlSchemaInput): GraphqlSchema => 
             { name: key, args, type: `[${target}]!` },
           );
         } else {
-          typeFields.push({ name: key, type: target });
+          // A required to-one link is never empty on Strapi's type.
+          typeFields.push({ name: key, type: `${target}${field?.required === true ? "!" : ""}` });
         }
         if (!media) filter(key, () => `${target}FiltersInput`);
         inputFields.push({ name: key, type: many ? "[ID]" : "ID" });

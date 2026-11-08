@@ -222,7 +222,7 @@ describe("onPublish hooks on a draft-and-publish type", () => {
       input: [{ type: "string" as const, name: "title" }],
       output: [{ type: "string" as const, name: "title" }],
     };
-    expect(emitHookObserver(hook, ct)).toContain("public function created(Page $record): void");
+    expect(emitHookObserver([hook], ct)).toContain("public function created(Page $record): void");
   });
 });
 

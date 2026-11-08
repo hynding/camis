@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Hook } from "@camis/ir-schema";
 import { emitHookStub } from "./stub";
-import { emitHookLifecycle } from "./lifecycles";
+import { emitHookLifecycles } from "./lifecycles";
 
 const h: Hook = {
   name: "TransformTitle",
@@ -21,7 +21,7 @@ describe("strapi hook stub + lifecycle", () => {
     expect(s).toContain("export const transformTitle: TransformTitleHook = {");
   });
   it("lifecycle is marked, invokes the hook on publish and applies output", () => {
-    const l = emitHookLifecycle(h);
+    const l = emitHookLifecycles([h], "api::article.article");
     expect(l).toContain("@camis:generated");
     expect(l).toContain('import { transformTitle } from "../../../../hooks/transform-title";');
     expect(l).toContain("if (data && data.publishedAt) {");

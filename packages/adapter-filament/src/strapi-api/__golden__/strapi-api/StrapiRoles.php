@@ -199,6 +199,16 @@ final class StrapiRoles
                 'delete' => ['tag.delete'],
             ],
         ],
+        'api::ticket.ticket' => [
+            'label' => 'Ticket',
+            'actions' => [
+                'find' => ['ticket.read'],
+                'findOne' => ['ticket.read'],
+                'create' => ['ticket.create'],
+                'update' => ['ticket.update'],
+                'delete' => ['ticket.delete'],
+            ],
+        ],
         'api::topic.topic' => [
             'label' => 'Topic',
             'actions' => [

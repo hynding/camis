@@ -38,3 +38,22 @@ describe("readStrapiProject", () => {
     expect(document.value.contentTypes.map((c) => c.name)).toEqual(["Article"]);
   });
 });
+
+describe("readStrapiProject custom code", () => {
+  it("reports the project's custom code beside its schemas", async () => {
+    await materialize(
+      strapiAdapter.generate({ document: blog, roles: [] }, { projectName: "blog" }),
+      dir,
+    );
+    const { writeFile, mkdir } = await import("node:fs/promises");
+    await mkdir(join(dir, "src/api/article/content-types/article"), { recursive: true });
+    await writeFile(
+      join(dir, "src/api/article/content-types/article/lifecycles.js"),
+      "module.exports = { afterCreate() {} };",
+    );
+    const { gaps } = await readStrapiProject(dir);
+    expect(gaps.gaps.map((g) => [g.feature, g.location.file])).toEqual([
+      ["lifecycles", "src/api/article/content-types/article/lifecycles.js"],
+    ]);
+  });
+});

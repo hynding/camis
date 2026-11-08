@@ -290,6 +290,18 @@ const rowPayloads = (userId: number): Record<string, Record<string, unknown>> =>
 // Components need explicit populate; relations deliberately do not — the Strapi-style wire shape
 // carries a row's own scalars and components only, so populating `owner` would add a key the PHP
 // serializer never emits.
+// Writes Strapi's entity validator refuses. The PHP app, on the same rows, must answer each with
+// the same status and error body: the required fields a note leaves out, and a recordId (unique)
+// that the note Strapi wrote already holds.
+const REFUSED_WRITES: Record<string, Record<string, unknown>> = {
+  "a note missing its required fields": {},
+  "a note taking another note's unique recordId": notePayload(
+    "n1",
+    "a second n1",
+    "2026-09-10T09:00:00.000Z",
+  ),
+};
+
 const READ_QUERY: Record<string, string> = {
   notes: "",
   transactions: "?populate[amount]=true",
@@ -452,6 +464,18 @@ const main = async (): Promise<void> => {
     ).id;
     assertEqual("note owner link written by strapi", userId, ownerId);
 
+    step("Strapi refuses the invalid writes");
+    const strapiRefusals: Record<string, { status: number; body: unknown }> = {};
+    for (const [name, data] of Object.entries(REFUSED_WRITES)) {
+      const refused = await request(STRAPI_URL, "POST", "/api/notes", {
+        token: strapiJwt,
+        body: { data },
+      });
+      assertEqual(`strapi refuses ${name}`, 400, refused.status);
+      strapiRefusals[name] = { status: refused.status, body: refused.body };
+      note(`strapi ${name}: ${show(refused.body)}`);
+    }
+
     await stop(strapi);
     strapi = undefined;
     note("strapi stopped");
@@ -579,6 +603,18 @@ const main = async (): Promise<void> => {
       "php /api/users/me with a JWT signed by another secret",
     );
     note("php rejects a foreign-signed JWT ✓");
+
+    step("PHP refuses the writes Strapi refused, with Strapi's errors");
+    for (const [name, data] of Object.entries(REFUSED_WRITES)) {
+      const refused = await request(PHP_URL, "POST", "/api/notes", {
+        token: strapiJwt,
+        body: { data },
+      });
+      assertEqual(`php refuses ${name} as strapi does`, strapiRefusals[name], {
+        status: refused.status,
+        body: refused.body,
+      });
+    }
 
     step("PHP writes rows of every shape and issues its own JWT");
     const phpWrites: Record<string, unknown> = {};

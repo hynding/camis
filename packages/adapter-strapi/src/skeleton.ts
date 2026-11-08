@@ -5,16 +5,19 @@ import {
   DATABASE_TS,
   ENV,
   MIDDLEWARES_TS,
-  SERVER_TS,
+  serverTs,
   SRC_INDEX_TS,
   TSCONFIG_JSON,
   packageJson,
 } from "./skeleton/templates";
 
-export const skeletonFiles = (projectName: string): GeneratedFile[] => [
-  { path: "package.json", content: packageJson(projectName) },
+export const skeletonFiles = (
+  projectName: string,
+  { cron = false, plugins = [] }: { cron?: boolean; plugins?: readonly string[] } = {},
+): GeneratedFile[] => [
+  { path: "package.json", content: packageJson(projectName, plugins) },
   { path: "tsconfig.json", content: TSCONFIG_JSON },
-  { path: "config/server.ts", content: SERVER_TS },
+  { path: "config/server.ts", content: serverTs(cron) },
   { path: "config/admin.ts", content: ADMIN_TS },
   { path: "config/api.ts", content: API_TS },
   { path: "config/middlewares.ts", content: MIDDLEWARES_TS },

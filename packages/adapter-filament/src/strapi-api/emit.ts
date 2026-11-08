@@ -22,6 +22,16 @@ import { emitAuthController, emitUsernameMigration, USERNAME_MIGRATION_PATH } fr
 import { emitGeneratedController, emitProtectedController } from "./controller";
 import { emitHasDraftAndPublish, emitStrapiDocuments } from "./draft-publish-runtime";
 import {
+  CONFIGURE_VIEW_PATH,
+  emitConfigureView,
+  emitHasCreatorFields,
+  emitStrapiContentManager,
+  emitStrapiUid,
+  HAS_CREATOR_FIELDS_PATH,
+  STRAPI_CONTENT_MANAGER_PATH,
+  STRAPI_UID_PATH,
+} from "./content-manager-runtime";
+import {
   emitHasLocale,
   emitLocaleController,
   emitLocaleModel,
@@ -142,7 +152,27 @@ import {
   TRANSFER_ARCHIVES_PATH,
   TRANSFER_DOWNLOAD_PATH,
 } from "./transfer-page";
-import { runtimeSchemas } from "@camis/strapi-schema";
+import { runtimeSchemas, strapiNames } from "@camis/strapi-schema";
+import {
+  EMAIL_SETTINGS_PAGE_PATH,
+  emitEmailSettingsPage,
+  emitEmailController,
+  emitStrapiEmail,
+  EMAIL_CONTROLLER_PATH,
+  STRAPI_EMAIL_PATH,
+} from "./email";
+import {
+  emitHomepageWidgets,
+  emitSettingsOverviewPage,
+  emitStrapiHomepage,
+  SETTINGS_OVERVIEW_PAGE_PATH,
+  STRAPI_HOMEPAGE_PATH,
+  type HomepageType,
+} from "./homepage";
+import { emitMediaLibrarySettingsPage, MEDIA_LIBRARY_SETTINGS_PAGE_PATH } from "./upload-settings";
+import { mainFieldName } from "./content-manager-list";
+import { snakeColumn } from "../names";
+import { permissionKey } from "../permissions/keys";
 import { emitStrapiTransferCipher, TRANSFER_CIPHER_PATH } from "./transfer-cipher";
 import { emitStrapiExport } from "./transfer-export-runtime";
 import { emitStrapiImport } from "./transfer-runtime";
@@ -150,7 +180,7 @@ import { wireShape, type WireShape } from "./wire-shape";
 import { emitStrapiZones } from "./zones-runtime";
 import { emitStrapiItems, ITEMS_PATH, writesItems } from "./items-runtime";
 import { emitStrapiValidator } from "./validation-runtime";
-import { rulesConstant, VALIDATOR_PATH } from "./validation";
+import { entityRules, VALIDATOR_PATH } from "./validation";
 import {
   emitUserResourceFiles,
   emitUsersPermissionsSettingsPages,
@@ -198,6 +228,8 @@ export interface StrapiApiInput {
   observedModels?: ReadonlySet<string>;
   /** Each Content Manager entry's place in the admin's menu, by display name (`contentManagerSorts`). */
   contentManager?: ReadonlyMap<string, number> | undefined;
+  /** Content types whose routes run the IR's route policies and middlewares (`emitRouteHookFiles`). */
+  routeHooked?: ReadonlySet<string>;
 }
 export interface StrapiApiEmission {
   files: GeneratedFile[];
@@ -230,6 +262,8 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     const names = filamentNames(ct);
     const shape = wireShape(doc, ct, fkNames.get(ct.name) ?? [], versioned, localized, fileModel);
     shapes.set(ct.name, shape);
+    const entity = entityRules(ct, doc, shape, "laravel");
+    gaps.push(...entity.gaps);
     files.push({
       path: `app/Http/Serializers/${names.model}Serializer.php`,
       content: emitSerializer(shape),
@@ -242,7 +276,8 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
         assigns: perm.assigns.get(ct.name) ?? [],
         secured,
         scoped: secured,
-        rules: rulesConstant(ct.fields, doc),
+        rules: entity.constant,
+        unique: entity.unique,
       }),
     });
     files.push({
@@ -277,6 +312,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
       input.media !== undefined,
       true,
       guests,
+      input.routeHooked,
     ),
   });
   files.push({
@@ -385,6 +421,14 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
   }
   // Every read asks it which version the status parameter names, with or without versioned types.
   files.push({ path: "app/Support/StrapiDocuments.php", content: emitStrapiDocuments() });
+  if (input.contentManager !== undefined) {
+    files.push(
+      { path: STRAPI_CONTENT_MANAGER_PATH, content: emitStrapiContentManager() },
+      { path: CONFIGURE_VIEW_PATH, content: emitConfigureView() },
+      { path: STRAPI_UID_PATH, content: emitStrapiUid() },
+      { path: HAS_CREATOR_FIELDS_PATH, content: emitHasCreatorFields() },
+    );
+  }
   if (versioned.size > 0) {
     files.push({
       path: "app/Models/Concerns/HasDraftAndPublish.php",
@@ -422,6 +466,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
           versioned,
           localized,
           media: input.media !== undefined,
+          email: secured,
           projectName,
         }),
       },
@@ -457,6 +502,17 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     { path: TRANSFER_DOWNLOAD_PATH, content: emitStrapiTransferDownload() },
     { path: DATA_TRANSFER_PAGE_PATH, content: emitDataTransferPage(secured) },
   );
+  files.push(
+    ...homeFiles(input, secured),
+    { path: STRAPI_EMAIL_PATH, content: emitStrapiEmail() },
+    ...(secured ? [{ path: EMAIL_CONTROLLER_PATH, content: emitEmailController() }] : []),
+    { path: EMAIL_SETTINGS_PAGE_PATH, content: emitEmailSettingsPage(secured) },
+  );
+  if (input.media !== undefined)
+    files.push({
+      path: MEDIA_LIBRARY_SETTINGS_PAGE_PATH,
+      content: emitMediaLibrarySettingsPage(secured),
+    });
   gaps.push(remoteTransferGap);
   return { files, gaps, scopeMethods, linkOrders };
 };
@@ -605,3 +661,52 @@ const localeFiles = (): GeneratedFile[] => [
   { path: LOCALES_MIGRATION_PATH, content: emitLocalesMigration() },
   ...emitResourceFiles(LOCALE, [], [], [], { navigation: SETTINGS.internationalization }),
 ];
+
+/** Strapi's Home (the homepage widgets) and Settings › Overview. */
+const homeFiles = (input: StrapiApiInput, secured: boolean): GeneratedFile[] => {
+  const { doc, emitted } = input;
+  const versioned = input.versioned ?? new Set<string>();
+  const localized = input.localized ?? new Set<string>();
+  const userType = doc.contentTypes.find((ct) => ct.builtin === "user");
+  const types: HomepageType[] = [
+    ...emitted.map((ct) => {
+      const names = filamentNames(ct);
+      const main = mainFieldName(ct);
+      return {
+        uid: `api::${kebab(ct.name)}.${kebab(ct.name)}`,
+        model: `App\\Models\\${names.model}`,
+        resource: `App\\Filament\\Resources\\${names.resourceDir}\\${names.resourceClass}`,
+        displayName: strapiNames(ct).displayName,
+        mainField: main === undefined ? "id" : snakeColumn(main),
+        read: permissionKey(ct.name, "read"),
+        draftAndPublish: versioned.has(ct.name),
+        localized: localized.has(ct.name),
+      };
+    }),
+    {
+      uid: "plugin::users-permissions.user",
+      model: "App\\Models\\User",
+      resource: "App\\Filament\\Resources\\Users\\UserResource",
+      displayName: USER_DISPLAY_NAME,
+      mainField: "username",
+      read: permissionKey(userType?.name ?? "User", "read"),
+      draftAndPublish: false,
+      localized: false,
+    },
+  ].sort((a, b) => a.displayName.localeCompare(b.displayName, "en") || a.uid.localeCompare(b.uid));
+  return [
+    {
+      path: STRAPI_HOMEPAGE_PATH,
+      content: emitStrapiHomepage({
+        types,
+        secured,
+        adminRoles: input.bundle.roles.filter((r) => r.admin === true).map((r) => r.name),
+        componentCategories: new Set(doc.components.map((c) => componentUid(c).split(".")[0])).size,
+        fileModel: input.media === undefined ? undefined : filamentNames(input.media).model,
+        localized: localized.size > 0,
+      }),
+    },
+    ...emitHomepageWidgets(),
+    { path: SETTINGS_OVERVIEW_PAGE_PATH, content: emitSettingsOverviewPage(secured) },
+  ];
+};

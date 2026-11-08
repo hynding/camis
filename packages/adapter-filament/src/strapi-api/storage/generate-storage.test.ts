@@ -135,16 +135,35 @@ describe("filamentAdapter storageLayout strapi — file set", () => {
     expect(content("app/Models/Transaction.php")).not.toContain("'occurred_on' =>");
   });
 
-  it("reports the admin panel, the account routes and the validation it leaves to Strapi, and nothing else", () => {
+  it("validates a write as Strapi's entity validator does, before it is stored", () => {
+    const note = content("app/Http/Controllers/Api/Generated/NoteApiController.php");
+    expect(note).toContain("use App\\Support\\StrapiValidator;");
+    expect(note).toContain(
+      "'recordId' => ['type' => 'string', 'required' => true, 'unique' => ['column' => 'record_id']],",
+    );
+    const store = note.slice(
+      note.indexOf("public function store("),
+      note.indexOf("public function update("),
+    );
+    expect(store).toContain(
+      "StrapiValidator::validate($request->input('data'), self::RULES, creating: true, unique: fn (): Builder => $this->others($request, null));",
+    );
+    expect(store.indexOf("StrapiValidator::validate(")).toBeLessThan(
+      store.indexOf("DB::transaction"),
+    );
+    const update = note.slice(note.indexOf("public function update("));
+    expect(update).toContain(
+      "creating: false, unique: fn (): Builder => $this->others($request, $key));",
+    );
+    // Strapi's own tables keep a published_at on every row; its unique check reads only those.
+    expect(note).toContain("return Note::query()->whereNotNull('published_at')->when(");
+    // The validator answers a taken key with Strapi's error, not Laravel's.
+    expect(note).not.toContain("ValidationException");
+    expect(content("app/Support/StrapiValidator.php")).toContain("final class StrapiValidator");
+  });
+
+  it("reports the admin panel, the account routes and what it leaves to Strapi, and nothing else", () => {
     expect(result.gaps.gaps).toEqual([
-      {
-        feature: "entityValidation",
-        location: {},
-        severity: "downgrade",
-        message:
-          "the strapi storage layout writes a request's fields as sent; Strapi's entity validator " +
-          "(required, lengths, regex, enumerations, bounds) runs only on the laravel layout",
-      },
       {
         feature: "adminPanelNotEmitted",
         location: {},

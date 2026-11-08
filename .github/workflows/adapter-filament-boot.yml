@@ -72,6 +72,74 @@ jobs:
               public function run(array $input): array { return ['title' => strtoupper($input['title'])]; }
           }
           PHP
+      - name: Lifecycle, policy, middleware and schedule reference impls
+        run: |
+          H="$GITHUB_WORKSPACE/app/app/Hooks"
+          cat > "$H/DefaultStatus.php" <<'PHP'
+          <?php
+          declare(strict_types=1);
+          namespace App\Hooks;
+          use App\Hooks\Contracts\DefaultStatusHook;
+          final class DefaultStatus implements DefaultStatusHook
+          {
+              public function run(array $input): array { return ['status' => 'draft']; }
+          }
+          PHP
+          cat > "$H/ForgetArticle.php" <<'PHP'
+          <?php
+          declare(strict_types=1);
+          namespace App\Hooks;
+          use App\Hooks\Contracts\ForgetArticleHook;
+          final class ForgetArticle implements ForgetArticleHook
+          {
+              public function run(array $input): void { cache()->forever('forgotten', $input['title']); }
+          }
+          PHP
+          cat > "$H/NoDeletes.php" <<'PHP'
+          <?php
+          declare(strict_types=1);
+          namespace App\Hooks;
+          use App\Hooks\Contracts\NoDeletesPolicy;
+          use Illuminate\Http\Request;
+          final class NoDeletes implements NoDeletesPolicy
+          {
+              public function allows(Request $request, string $action): bool { return false; }
+          }
+          PHP
+          cat > "$H/TagResponse.php" <<'PHP'
+          <?php
+          declare(strict_types=1);
+          namespace App\Hooks;
+          use App\Hooks\Contracts\TagResponseMiddleware;
+          use Closure;
+          use Illuminate\Http\Request;
+          use Symfony\Component\HttpFoundation\Response;
+          final class TagResponse implements TagResponseMiddleware
+          {
+              public function handle(Request $request, Closure $next): Response
+              {
+                  $response = $next($request);
+                  $response->headers->set('X-Camis-Hook', 'TagResponse');
+                  return $response;
+              }
+          }
+          PHP
+          cat > "$H/Heartbeat.php" <<'PHP'
+          <?php
+          declare(strict_types=1);
+          namespace App\Hooks;
+          use App\Hooks\Contracts\HeartbeatTask;
+          final class Heartbeat implements HeartbeatTask
+          {
+              public function run(): void { cache()->forever('heartbeat', 'beat'); }
+          }
+          PHP
+      - name: Load the IR's schedules from routes/console.php as camis scaffold does
+        run: >-
+          pnpm --filter @camis/cli exec tsx -e "import { readFileSync, writeFileSync } from 'node:fs';
+          import { patchConsoleRoutes } from './src/commands/scaffold';
+          const f = process.env.GITHUB_WORKSPACE + '/app/routes/console.php';
+          writeFileSync(f, patchConsoleRoutes(readFileSync(f, 'utf8')));"
       - name: Configure DB env (${{ matrix.db }})
         run: |
           cd app
@@ -99,7 +167,26 @@ jobs:
             $art->published_at = now(); $art->save();
             if ($art->fresh()->title !== "HELLO") { fwrite(STDERR, "HOOK MISMATCH title=".$art->fresh()->title."\n"); exit(1); }
             echo "HOOK OK\n";
+            $fresh = \App\Models\Article::create(["title" => "lifecycle"]);
+            if ($fresh->fresh()->status !== "draft") { fwrite(STDERR, "BEFORE CREATE MISMATCH status=".$fresh->fresh()->status."\n"); exit(1); }
+            $fresh->delete();
+            if (cache("forgotten") !== "lifecycle") { fwrite(STDERR, "AFTER DELETE MISMATCH\n"); exit(1); }
+            echo "LIFECYCLE OK\n";
+            $kernel = app(\Illuminate\Contracts\Http\Kernel::class);
+            auth()->login($u);
+            $list = $kernel->handle(\Illuminate\Http\Request::create("/api/articles", "GET", server: ["HTTP_ACCEPT" => "application/json"]));
+            $delete = $kernel->handle(\Illuminate\Http\Request::create("/api/articles/".$art->id, "DELETE", server: ["HTTP_ACCEPT" => "application/json"]));
+            $seen = [$list->getStatusCode(), $list->headers->get("X-Camis-Hook"), $delete->getStatusCode(), json_decode((string) $delete->getContent(), true)["message"] ?? null, \App\Models\Article::whereKey($art->id)->exists()];
+            if ($seen !== [200, "TagResponse", 403, "Policy Failed", true]) { fwrite(STDERR, "ROUTE HOOKS MISMATCH ".json_encode($seen)."\n"); exit(1); }
+            echo "ROUTE HOOKS OK\n";
           '
+      - name: Schedules run through Laravel's scheduler
+        run: |
+          cd app
+          php artisan schedule:list | tee $RUNNER_TEMP/schedule.txt
+          grep -q "Heartbeat" $RUNNER_TEMP/schedule.txt
+          php artisan schedule:run
+          [ "$(php artisan tinker --execute='echo cache("heartbeat");')" = "beat" ] || { echo "the Heartbeat schedule did not run"; exit 1; }
       - name: Admin access (only an admin role signs in; camis:admin makes the first admin)
         run: |
           cd app
@@ -343,6 +430,17 @@ jobs:
           F=../packages/adapter-filament/src/strapi-api/__fixtures__
           node ../packages/adapter-filament/scripts/strapi-populate-vectors.mjs http://127.0.0.1:8765/api \
             --token "$T" --vectors $F/validation-vectors.json --expected $F/validation-vectors.expected.json
+      - name: Strapi entity constraints, unique, strict relations and blocks (recorded from strapi-php)
+        run: |
+          cd app
+          php artisan migrate:fresh --force
+          php artisan db:seed --class="Database\\Seeders\\RolePermissionSeeder" --force
+          T=$(curl -s -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' \
+            --data '{"username":"constraints","email":"constraints@example.test","password":"secret1"}' \
+            http://127.0.0.1:8765/api/auth/local/register | jq -r .jwt)
+          F=../packages/adapter-filament/src/strapi-api/__fixtures__
+          node ../packages/adapter-filament/scripts/strapi-populate-vectors.mjs http://127.0.0.1:8765/api \
+            --token "$T" --vectors $F/constraint-vectors.json --expected $F/constraint-vectors.expected.json
       - name: Strapi GraphQL vectors (recorded from strapi-php, locales en and fr)
         run: |
           cd app
@@ -576,14 +674,14 @@ jobs:
             --vectors $F/session-vectors.json --expected $F/session-vectors.expected.json
       - name: Strapi's OpenAPI document at /documentation lists only routes the app serves
         run: node packages/adapter-filament/scripts/strapi-openapi-routes.mjs app http://127.0.0.1:8765
-      - name: Filament admin publishes drafts, translates, keeps the media library and its folders, manages users, API and transfer tokens, exports and imports Strapi archives, builds dynamic zones, links inside components and nested repeatables, keeps link order, imports Strapi's tokens, searches, sorts, deletes and bulk-publishes lists; GraphQL refuses what REST refuses
+      - name: Filament admin publishes drafts, translates, keeps the media library and its folders, manages users, API and transfer tokens, exports and imports Strapi archives, builds dynamic zones, links inside components and nested repeatables, keeps link order, imports Strapi's tokens, searches, sorts, filters, deletes, duplicates and bulk-publishes lists, makes uids, records creators and lays views out as configured, sends email for a token holding the action; GraphQL refuses what REST refuses
         run: |
           cd app
           # The cached config would point the tests at the served database instead of :memory:.
           php artisan config:clear
           S=../packages/adapter-filament/scripts/php
-          cp $S/DraftAdminTest.php $S/LocaleAdminTest.php $S/MediaAdminTest.php $S/FoldersTest.php $S/UsersAdminTest.php $S/ProvidersTest.php $S/ApiTokensTest.php $S/TransferTokensTest.php $S/DataTransferTest.php $S/StrapiAdminTest.php $S/WebhooksTest.php $S/DynamicZonesTest.php $S/GraphqlTest.php $S/LinkOrderAdminTest.php $S/TokenImportTest.php $S/ContentManagerListTest.php $S/ComponentIdTest.php $S/ComponentRelationsAdminTest.php tests/Feature/
-          php artisan test tests/Feature/DraftAdminTest.php tests/Feature/LocaleAdminTest.php tests/Feature/MediaAdminTest.php tests/Feature/FoldersTest.php tests/Feature/UsersAdminTest.php tests/Feature/ProvidersTest.php tests/Feature/ApiTokensTest.php tests/Feature/TransferTokensTest.php tests/Feature/DataTransferTest.php tests/Feature/StrapiAdminTest.php tests/Feature/WebhooksTest.php tests/Feature/DynamicZonesTest.php tests/Feature/GraphqlTest.php tests/Feature/LinkOrderAdminTest.php tests/Feature/TokenImportTest.php tests/Feature/ContentManagerListTest.php tests/Feature/ComponentIdTest.php tests/Feature/ComponentRelationsAdminTest.php
+          cp $S/DraftAdminTest.php $S/LocaleAdminTest.php $S/MediaAdminTest.php $S/FoldersTest.php $S/UsersAdminTest.php $S/ProvidersTest.php $S/ApiTokensTest.php $S/TransferTokensTest.php $S/DataTransferTest.php $S/StrapiAdminTest.php $S/WebhooksTest.php $S/DynamicZonesTest.php $S/GraphqlTest.php $S/LinkOrderAdminTest.php $S/TokenImportTest.php $S/ContentManagerListTest.php $S/ComponentIdTest.php $S/ComponentRelationsAdminTest.php $S/ContentManagerViewTest.php $S/SettingsPagesTest.php $S/EmailApiTest.php tests/Feature/
+          php artisan test tests/Feature/DraftAdminTest.php tests/Feature/LocaleAdminTest.php tests/Feature/MediaAdminTest.php tests/Feature/FoldersTest.php tests/Feature/UsersAdminTest.php tests/Feature/ProvidersTest.php tests/Feature/ApiTokensTest.php tests/Feature/TransferTokensTest.php tests/Feature/DataTransferTest.php tests/Feature/StrapiAdminTest.php tests/Feature/WebhooksTest.php tests/Feature/DynamicZonesTest.php tests/Feature/GraphqlTest.php tests/Feature/LinkOrderAdminTest.php tests/Feature/TokenImportTest.php tests/Feature/ContentManagerListTest.php tests/Feature/ComponentIdTest.php tests/Feature/ComponentRelationsAdminTest.php tests/Feature/ContentManagerViewTest.php tests/Feature/SettingsPagesTest.php tests/Feature/EmailApiTest.php
       - name: Server log on failure
         if: failure()
         run: cat app/serve.log app/storage/logs/laravel.log "$RUNNER_TEMP/oauth/serve.log" || true

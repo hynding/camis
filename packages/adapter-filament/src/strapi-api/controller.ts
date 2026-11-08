@@ -1,9 +1,16 @@
 import type { StorageLayout } from "@camis/adapter-kernel";
-import { fieldApiName, type ContentType } from "@camis/ir-schema";
+import type { ContentType } from "@camis/ir-schema";
 import { PHP_MARKER } from "../hooks/names";
 import { snakeColumn } from "../names";
-import { phpSingleQuoted } from "../php-literal";
-import { authLine, createCheck, madeCheck, NESTED_STMT, STMT } from "./controller-shared";
+import {
+  authLine,
+  createCheck,
+  madeCheck,
+  NESTED_STMT,
+  routeKey,
+  STMT,
+  validate,
+} from "./controller-shared";
 import { strapiControllerParts } from "./storage/controller-storage";
 import type { ControllerLink } from "./storage/names";
 import { itemsLinkAnything } from "./items-runtime";
@@ -23,8 +30,10 @@ export interface ControllerSpec {
   layout?: StorageLayout;
   /** Strapi layout only: one entry per owning relation, in IR order. */
   links?: ControllerLink[];
-  /** Laravel layout only: the `RULES` constant StrapiValidator checks each write against. */
+  /** The `RULES` constant StrapiValidator checks each write against. */
   rules?: string;
+  /** Whether a rule is unique, so the validator is handed the other entries' rows. */
+  unique?: boolean;
 }
 
 /** The per-layout halves of the controller; everything else is the shared class scaffold. */
@@ -113,28 +122,6 @@ const itemLinks = (shape: WireShape, viewer: string, locale = ""): string =>
     ? `\n${STMT}$wire['children'] = StrapiRelations::zones($wire['children'], ${shape.model}Serializer::ZONES, ${viewer}${locale});`
     : "");
 
-/**
- * Strapi's entity validator, before anything is written: a draft is checked as Strapi checks one,
- * and an update that creates a locale the document lacks as a creation.
- */
-const validate = (
-  spec: ControllerSpec,
-  creating: string,
-  indent: string = STMT,
-  given = "",
-): string =>
-  spec.rules === undefined
-    ? ""
-    : `${indent}StrapiValidator::validate($request->input('data'), self::RULES, creating: ${creating}${
-        spec.shape.draftPublish ? ", draft: StrapiDocuments::draftOnly($request->query())" : ""
-      }${given});\n`;
-
-/** A put that creates its row takes the upsert key from the route, as a field it need not send. */
-const routeKey = (ct: ContentType): string => {
-  const field = ct.fields.find((f) => f.name === ct.options?.upsertBy);
-  return field === undefined ? "" : `, given: [${phpSingleQuoted(fieldApiName(field))} => $key]`;
-};
-
 const laravelParts = (spec: ControllerSpec): ControllerParts => {
   const { shape, secured, scoped } = spec;
   const M = shape.model;
@@ -164,7 +151,7 @@ ${indent}});`;
         if (${M}::query()->where(self::KEY, $key)->exists()) {
             abort(404); // claimed by another scope: never reach across owners
         }
-${auth(`$this->authorize('create', ${M}::class);`)}${validate(spec, "true", STMT, routeKey(spec.ct))}        $m = new ${M}($wire['columns']);
+${auth(`$this->authorize('create', ${M}::class);`)}${validate(spec, "true", STMT, routeKey(spec.ct), "$key")}        $m = new ${M}($wire['columns']);
         $m->{self::KEY} = $key;
 ${assignBlock}${persist("")}
 
@@ -200,7 +187,7 @@ ${madeCheck(spec)}${assignBlock}${persist("")}
 ${readLinks}
         $m = $this->scoped($request)->where(self::KEY, $key)->first();
         if ($m !== null${secured ? ` && Gate::allows('view', $m)` : ""}) {
-${auth(`$this->authorize('update', $m);`, NESTED_STMT)}${validate(spec, "false", NESTED_STMT)}${persist("$m->fill($wire['columns']);\n" + NESTED_STMT + "    ", NESTED_STMT)}
+${auth(`$this->authorize('update', $m);`, NESTED_STMT)}${validate(spec, "false", NESTED_STMT, "", "$key")}${persist("$m->fill($wire['columns']);\n" + NESTED_STMT + "    ", NESTED_STMT)}
 
             return response()->json(['data' => $this->wire($request, $m->fresh()), 'meta' => new \\stdClass()]);
         }
@@ -315,7 +302,7 @@ ${localized ? `${STMT}$m->locale = ${forWrite};\n` : ""}${madeCheck(spec)}${assi
     updateBody: `        $wire = ${S}::fromWire((array) $request->input('data', []));
 ${readLinks}
         $m = ${lookup}${missingLocale};
-${notFound}${auth(`$this->authorize('update', $m);`)}${validate(spec, localized ? "! $m->exists" : "false")}${persist(`${STMT}    $m->fill($wire['columns']);\n`)}
+${notFound}${auth(`$this->authorize('update', $m);`)}${validate(spec, localized ? "! $m->exists" : "false", STMT, "", "$key")}${persist(`${STMT}    $m->fill($wire['columns']);\n`)}
 
         return response()->json(['data' => $this->wire($request, $m->fresh()), 'meta' => new \\stdClass()]);`,
     destroyBody,
@@ -339,12 +326,36 @@ ${notFound}${auth(`$this->authorize('update', $m);`)}${validate(spec, localized 
   };
 };
 
+/**
+ * The rows a unique value must not be among: Strapi's published ones, in the locale written,
+ * of every document but the one written. Unscoped: a value is taken whoever may see its entry.
+ */
+const others = (spec: ControllerSpec): string => {
+  const { shape } = spec;
+  const published = spec.layout === "strapi" || shape.draftPublish;
+  const query = [
+    `${shape.model}::query()`,
+    ...(published ? ["->whereNotNull('published_at')"] : []),
+    ...(shape.localized && spec.layout !== "strapi"
+      ? ["->where('locale', StrapiLocales::forWrite($request->query()))"]
+      : []),
+    "->when($key !== null, fn (Builder $q) => $q->where(self::KEY, '!=', $key))",
+  ].join("");
+  return `
+    /** The other entries' rows, among which a unique field's value must not already be. */
+    protected function others(Request $request, ?string $key): Builder
+    {
+        return ${query};
+    }
+`;
+};
+
 export const emitGeneratedController = (spec: ControllerSpec): string => {
   const { shape, secured } = spec;
   const M = shape.model;
   const parts = spec.layout === "strapi" ? strapiControllerParts(spec) : laravelParts(spec);
   const single = spec.ct.kind === "single";
-  const validated = spec.layout !== "strapi" && spec.rules !== undefined;
+  const validated = spec.rules !== undefined;
 
   const uses = [
     "App\\Http\\Controllers\\Controller",
@@ -393,7 +404,7 @@ ${validated ? `\n${spec.rules}` : ""}
 
         return $m;
     }
-${parts.helpers ?? ""}
+${parts.helpers ?? ""}${spec.unique === true ? others(spec) : ""}
     public function index(Request $request): JsonResponse
     {
 ${parts.indexBody}

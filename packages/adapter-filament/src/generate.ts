@@ -38,6 +38,8 @@ import { emitJsonEditorFiles, hasJsonFields } from "./json-editor";
 import { deployFile } from "./deploy";
 import { emitField, isSupportedField } from "./fields";
 import { emitHookFiles } from "./hooks/emit";
+import { emitRouteHookFiles } from "./hooks/route-hooks";
+import { emitScheduleFiles } from "./hooks/schedules";
 import { emitPermissions } from "./permissions/emit";
 import {
   emitForeignKeysMigration,
@@ -68,6 +70,7 @@ import { linkOrdersConstant } from "./strapi-api/link-order";
 import { emitStrapiStorage } from "./strapi-api/storage/emit";
 import { emitAdminAccessFiles } from "./admin-access";
 import { zoneBuilder } from "./strapi-api/zones-admin";
+import { prohibitedCloningFields } from "./strapi-api/content-manager";
 
 export const filamentAdapter: GenerateAdapter = {
   target: "filament",
@@ -95,6 +98,7 @@ export const filamentAdapter: GenerateAdapter = {
       apiStyle === "strapi" && storage !== "strapi",
     );
     const hooks = emitHookFiles(doc);
+    const routeHooks = emitRouteHookFiles(doc, apiStyle === "strapi");
     const files: GeneratedFile[] = [];
     const gaps: CapabilityGap[] = [
       ...draftPublish.gaps,
@@ -174,6 +178,7 @@ export const filamentAdapter: GenerateAdapter = {
       projectName: options.projectName,
       guests,
       observedModels: new Set([...hooks.observedModels, ...aiObservedModels]),
+      routeHooked: routeHooks.hooked,
     };
     if (options.graphql === true && (apiStyle !== "strapi" || storage === "strapi")) {
       gaps.push({
@@ -300,7 +305,11 @@ export const filamentAdapter: GenerateAdapter = {
             : [],
           [
             ...(apiStyle === "strapi"
-              ? ["App\\Models\\Concerns\\EmitsStrapiEvents", "App\\Models\\Concerns\\HasDocumentId"]
+              ? [
+                  "App\\Models\\Concerns\\EmitsStrapiEvents",
+                  "App\\Models\\Concerns\\HasDocumentId",
+                  "App\\Models\\Concerns\\HasCreatorFields",
+                ]
               : []),
             ...(versioned.has(ct.name) ? ["App\\Models\\Concerns\\HasDraftAndPublish"] : []),
             ...(localized.has(ct.name) ? ["App\\Models\\Concerns\\HasLocale"] : []),
@@ -336,6 +345,7 @@ export const filamentAdapter: GenerateAdapter = {
             documentId: apiStyle === "strapi",
             draftPublish: versioned.has(ct.name),
             localized: localized.has(ct.name),
+            creatorFields: apiStyle === "strapi",
           },
         ),
       });
@@ -371,8 +381,26 @@ export const filamentAdapter: GenerateAdapter = {
                 field: camelPath(s.path),
                 multiple: s.field.type === "media" && s.field.multiple === true,
                 ...mediaAllowedTypes(s.field),
+                attribute: s.path[0]!,
               })),
             ],
+            ...(contentManager === undefined
+              ? {}
+              : {
+                  contentManager: {
+                    fields: ct.fields,
+                    relations: rel.adminRelations.get(ct.name) ?? [],
+                    componentRelationAttributes: ownRelations.map((r) => r.path[0]!),
+                    extraAttributes: expansion.scalars
+                      .filter((s) => !embeddedMedia.includes(s))
+                      .map((s) => s.path[0]!),
+                    repeaterAttributes: [
+                      ...expansion.tables.map((t) => t.path[0]!),
+                      ...(apiStyle === "strapi" ? expansion.zones.map((z) => z.name) : []),
+                    ],
+                    prohibited: prohibitedCloningFields(doc, ct),
+                  },
+                }),
             ...(contentManager === undefined
               ? {}
               : {
@@ -415,7 +443,10 @@ export const filamentAdapter: GenerateAdapter = {
     } else {
       files.push({
         path: "routes/api.php",
-        content: emitApiRoutes(emitted, { secured: ir.roles.length > 0 }),
+        content: emitApiRoutes(emitted, {
+          secured: ir.roles.length > 0,
+          hooked: routeHooks.hooked,
+        }),
       });
     }
     files.push(apiCustomSeed());
@@ -484,6 +515,8 @@ export const filamentAdapter: GenerateAdapter = {
     const allFiles = [
       ...files,
       ...hooks.files,
+      ...routeHooks.files,
+      ...emitScheduleFiles(doc),
       ...perm.files,
       ...aiGenFiles,
       deployFile(storage, {
@@ -491,6 +524,7 @@ export const filamentAdapter: GenerateAdapter = {
         documentation:
           options.documentation === true && apiStyle === "strapi" && storage !== "strapi",
         transfer: apiStyle === "strapi" && storage !== "strapi",
+        schedules: (doc.schedules ?? []).length > 0,
       }),
     ];
     return {

@@ -73,6 +73,23 @@ describe("toAttribute — relations", () => {
       toAttribute({ type: "relation", name: "owner", relationKind: "oneToOne", target: "User" }),
     ).toEqual({ type: "relation", relation: "oneToOne", target: "api::user.user" });
   });
+
+  it("keeps a required relation required, which strictRelations enforces", () => {
+    expect(
+      toAttribute({
+        type: "relation",
+        name: "venue",
+        relationKind: "manyToOne",
+        target: "Genre",
+        required: true,
+      }),
+    ).toEqual({
+      type: "relation",
+      relation: "manyToOne",
+      target: "api::genre.genre",
+      required: true,
+    });
+  });
 });
 
 describe("toAttribute — uid targetField", () => {
@@ -195,6 +212,26 @@ describe("toAttribute — private and regex", () => {
     expect(toAttribute({ type: "string", name: "code", pattern: "^[A-Z]{3}$" })).toEqual({
       type: "string",
       regex: "^[A-Z]{3}$",
+    });
+  });
+});
+
+describe("toAttribute — color", () => {
+  it("writes a color as the color-picker plugin's custom field, with its regex and default", () => {
+    expect(
+      toAttribute({
+        type: "color",
+        name: "accent",
+        required: true,
+        pattern: "^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$",
+        default: "#ff0000",
+      }),
+    ).toEqual({
+      type: "customField",
+      customField: "plugin::color-picker.color",
+      required: true,
+      default: "#ff0000",
+      regex: "^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$",
     });
   });
 });

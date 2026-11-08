@@ -208,12 +208,36 @@ export interface DeployExtras {
   documentation?: boolean;
   /** \`strapi:import\` and \`strapi:export\`: the Strapi API style over Laravel storage. */
   transfer?: boolean;
+  /** The IR declares schedules (routes/schedule.php). */
+  schedules?: boolean;
 }
+
+const schedulesSection = `
+
+## Scheduled tasks
+
+The IR's schedules (Strapi's cron tasks) are in \`routes/schedule.php\`, each running a
+hand-written class in \`app/Hooks\`. They run only where something calls Laravel's scheduler
+every minute; on a host with cron, add
+
+\`\`\`cron
+* * * * * cd /path/to/app && php artisan schedule:run >> /dev/null 2>&1
+\`\`\`
+
+Without it nothing else breaks: the tasks just do not run. \`php artisan schedule:list\` shows
+them, and \`php artisan schedule:test\` runs one now. \`camis scaffold\` loads the file from
+\`routes/console.php\`; on an app scaffolded before it did, add
+\`if (is_file(__DIR__.'/schedule.php')) { require __DIR__.'/schedule.php'; }\` there.`;
 
 // Generator-owned deployment guide for the overlaid Laravel app. Regenerated on every run.
 export const deployFile = (
   layout: StorageLayout = "laravel",
-  { graphql = false, documentation = false, transfer = false }: DeployExtras = {},
+  {
+    graphql = false,
+    documentation = false,
+    transfer = false,
+    schedules = false,
+  }: DeployExtras = {},
 ): GeneratedFile => ({
   path: "DEPLOY.md",
   content: `<!-- @camis:generated — do not edit -->
@@ -252,7 +276,7 @@ DB_PASSWORD=secret
 
 ${firstDeploy(layout)}
 
-${layout === "strapi" ? "" : adminSection}${graphql ? graphqlSection.slice(2) + "\n\n" : ""}${documentation ? documentationSection.slice(2) + "\n\n" : ""}${transfer ? transferSection.slice(2) + "\n\n" : ""}## Shared hosting (no shell)
+${layout === "strapi" ? "" : adminSection}${graphql ? graphqlSection.slice(2) + "\n\n" : ""}${documentation ? documentationSection.slice(2) + "\n\n" : ""}${transfer ? transferSection.slice(2) + "\n\n" : ""}${schedules ? schedulesSection.slice(2) + "\n\n" : ""}## Shared hosting (no shell)
 
 Build locally (scaffold + \`camis build\` + \`composer install\`), upload the whole app
 directory, and point the document root at \`public/\`. Laravel's \`.htaccess\` ships in

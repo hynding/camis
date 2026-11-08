@@ -36,6 +36,22 @@ describe("strapiAdapter.generate", () => {
     expect(result.manifest.files.length).toBeGreaterThan(0);
   });
 
+  it("installs the color-picker plugin for a color field, in a content type or a component", () => {
+    const pkg = (d: IrDocument) =>
+      JSON.parse(
+        strapiAdapter
+          .generate({ document: d, roles: [] }, { projectName: "blog" })
+          .files.find((f) => f.path === "package.json")!.content,
+      ).dependencies as Record<string, string>;
+    expect(pkg(doc)["@strapi/plugin-color-picker"]).toBeUndefined();
+    expect(
+      pkg({
+        ...doc,
+        components: [{ name: "Theme", fields: [{ type: "color", name: "background" }] }],
+      })["@strapi/plugin-color-picker"],
+    ).toBeDefined();
+  });
+
   it("derives names even if the input is not pre-normalized (generate normalizes)", () => {
     const result = strapiAdapter.generate({ document: doc, roles: [] }, { projectName: "blog" });
     const schemaFile = result.files.find((f) => f.path.endsWith("article/schema.json"))!;

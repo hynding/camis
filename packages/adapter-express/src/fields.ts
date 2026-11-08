@@ -8,6 +8,7 @@ const SUPPORTED = new Set<string>([
   "richText",
   "email",
   "uid",
+  "color",
   "integer",
   "bigInteger",
   "float",
@@ -46,6 +47,7 @@ const base = (dialect: Dialect, field: Field, c: string): { expr: string; import
     case "string":
     case "email":
     case "uid":
+    case "color":
       return dialect === "sqlite"
         ? { expr: `text('${c}')`, import: "text" }
         : { expr: `varchar('${c}', { length: 255 })`, import: "varchar" };

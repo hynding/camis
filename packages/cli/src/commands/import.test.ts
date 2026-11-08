@@ -71,6 +71,49 @@ describe("importCommand", () => {
     expect(code).toBe(0);
     expect(Object.values(written)[0]).toContain('"Article"');
   });
+  // A Strapi project's config (upload and email providers, API page sizes, sessions) becomes the
+  // Laravel app's env.
+  it("writes the env a Strapi project's config/plugins maps to, beside the IR", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "camis-cli-strapi-providers-"));
+    const ctDir = join(dir, "src/api/article/content-types/article");
+    await mkdir(ctDir, { recursive: true });
+    await writeFile(
+      join(ctDir, "schema.json"),
+      JSON.stringify({
+        kind: "collectionType",
+        info: { singularName: "article", pluralName: "articles", displayName: "Article" },
+        attributes: { title: { type: "string" } },
+      }),
+    );
+    await mkdir(join(dir, "config"));
+    await writeFile(
+      join(dir, "config/plugins.js"),
+      `module.exports = ({ env }) => ({
+  upload: { config: { provider: "cloudinary" } },
+  email: { config: { provider: "sendmail", settings: { defaultFrom: env("FROM") } } },
+});\n`,
+    );
+    const lines: string[] = [];
+    const written: Record<string, string> = {};
+    const io: Io = {
+      ...memIo({}, lines, written),
+      capture: () =>
+        Promise.resolve({
+          code: 0,
+          stdout: JSON.stringify({
+            upload: { config: { provider: "cloudinary" } },
+            email: { config: { provider: "sendmail", settings: { defaultFrom: { env: "FROM" } } } },
+          }),
+        }),
+    };
+    const code = await importCommand("strapi", dir, join(dir, "ir.json"), io);
+    expect(code).toBe(0);
+    const env = written[join(dir, "deployment.env")];
+    expect(env).toContain("MAIL_MAILER=sendmail\n");
+    expect(env).toContain("CAMIS_EMAIL_DEFAULT_FROM=${FROM}\n");
+    expect(lines.join("\n")).toMatch(/✓ deployment settings → .*deployment\.env/);
+    expect(lines.join("\n")).toContain("uploadProvider");
+  });
   // Strapi's upload plugin is always there: a project with media fields gets the media library's
   // type, as `camis new --from-strapi` gives it, or no role could ever be granted its files.
   it("declares the media library when a Strapi project uses media", async () => {
@@ -115,6 +158,27 @@ describe("importCommand", () => {
     const code = await importCommand("strapi", dir, join(dir, "ir.json"), memIo({}, lines, {}));
     expect(code).toBe(0);
     expect(lines.join("\n")).toMatch(/⚠ morphRelation @ Page\.related/);
+  });
+  it("names each file of custom code a Strapi project would leave behind", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "camis-cli-strapi-code-"));
+    const ctDir = join(dir, "src/api/page/content-types/page");
+    await mkdir(ctDir, { recursive: true });
+    await writeFile(
+      join(ctDir, "schema.json"),
+      JSON.stringify({
+        kind: "collectionType",
+        info: { singularName: "page", pluralName: "pages", displayName: "Page" },
+        attributes: { title: { type: "string" } },
+      }),
+    );
+    await mkdir(join(dir, "src/policies"), { recursive: true });
+    await writeFile(join(dir, "src/policies/is-owner.ts"), "export default () => true;");
+    const lines: string[] = [];
+    const code = await importCommand("strapi", dir, join(dir, "ir.json"), memIo({}, lines, {}));
+    expect(code).toBe(0);
+    expect(lines.join("\n")).toMatch(
+      /⚠ customPolicy @ src\/policies\/is-owner\.ts — policy code is not imported; declare it in the IR's policies/,
+    );
   });
   it("passes --upsert-by through to the Strapi importer", async () => {
     const dir = await mkdtemp(join(tmpdir(), "camis-import-"));

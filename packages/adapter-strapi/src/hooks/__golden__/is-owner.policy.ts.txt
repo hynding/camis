@@ -1,0 +1,8 @@
+import type { Core } from "@strapi/strapi";
+
+// Ring 2 policy — hand-written. camis seeds this once and never overwrites it.
+// Strapi runs it before the route's action (Article: update, delete); false answers 403 "Policy Failed".
+export default (policyContext, config, { strapi }: { strapi: Core.Strapi }): boolean => {
+  // TODO: decide whether the request may go on.
+  return true;
+};

@@ -9,6 +9,8 @@ import { emitStrapiError } from "../rest-runtime";
 import { emitApiConfig, emitStrapiRoutes } from "../routes";
 import { emitScopeMethod } from "../scope";
 import { emitSerializer } from "../serializer";
+import { emitStrapiValidator } from "../validation-runtime";
+import { entityRules, VALIDATOR_PATH } from "../validation";
 import { wireShape } from "../wire-shape";
 import { emitStorageAuthController } from "./auth";
 import { componentMap } from "./component-map";
@@ -87,6 +89,8 @@ export const emitStrapiStorage = (input: StrapiApiInput): StrapiApiEmission => {
     // No foreign-key columns on this layout: an owning relation is a link-table row, so the
     // serializer's `$wire['columns']` must name only columns the model can actually fill.
     const shape = wireShape(doc, ct, [], new Set(), new Set(), undefined, false);
+    const entity = entityRules(ct, doc, shape, "strapi");
+    gaps.push(...entity.gaps);
     files.push({
       path: `app/Http/Serializers/${names.model}Serializer.php`,
       content: emitSerializer(shape, "strapi"),
@@ -101,6 +105,8 @@ export const emitStrapiStorage = (input: StrapiApiInput): StrapiApiEmission => {
         scoped: secured,
         layout: "strapi",
         links: ownerLinks(ct),
+        rules: entity.constant,
+        unique: entity.unique,
       }),
     });
     files.push({
@@ -127,13 +133,6 @@ export const emitStrapiStorage = (input: StrapiApiInput): StrapiApiEmission => {
     });
     gaps.push(...contentTypeGaps(ct));
   }
-  gaps.push({
-    feature: "entityValidation",
-    location: {},
-    severity: "downgrade",
-    message:
-      "the strapi storage layout writes a request's fields as sent; Strapi's entity validator (required, lengths, regex, enumerations, bounds) runs only on the laravel layout",
-  });
 
   // Strapi's users-permissions tables: the host Laravel app owns no `users` table here.
   files.push({ path: "app/Models/User.php", content: emitStorageUserModel() });
@@ -147,10 +146,20 @@ export const emitStrapiStorage = (input: StrapiApiInput): StrapiApiEmission => {
     content: emitStrapiComponentAttributes(),
   });
   files.push({ path: "app/Http/Middleware/StrapiJwtGuard.php", content: emitStrapiJwtGuard() });
+  files.push({ path: VALIDATOR_PATH, content: emitStrapiValidator() });
 
   files.push({
     path: "routes/api.php",
-    content: emitStrapiRoutes(emitted, secured, "strapi-jwt"),
+    content: emitStrapiRoutes(
+      emitted,
+      secured,
+      "strapi-jwt",
+      false,
+      false,
+      false,
+      false,
+      input.routeHooked,
+    ),
   });
   files.push({ path: "config/camis.php", content: emitApiConfig("strapi") });
   files.push({
@@ -161,7 +170,7 @@ export const emitStrapiStorage = (input: StrapiApiInput): StrapiApiEmission => {
     path: "app/Http/Middleware/StrapiErrors.php",
     content: emitStrapiErrorsMiddleware(),
   });
-  // The middleware renders it; this layout's controllers do not throw one yet.
+  // The middleware renders the validator's.
   files.push({ path: "app/Support/StrapiError.php", content: emitStrapiError() });
   files.push({
     path: "app/Console/Commands/CamisStrapiSchemaCheck.php",

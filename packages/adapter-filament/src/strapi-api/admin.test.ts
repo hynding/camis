@@ -98,7 +98,7 @@ describe("the Strapi-like admin", () => {
     expect(roles).toContain("'authenticated' => 'Default role given to authenticated user.',");
     await expect(roles).toMatchFileSnapshot("./__golden__/strapi-api/StrapiRoles.php");
     const resource = content("app/Filament/Resources/Roles/RoleResource.php");
-    expect(resource).toContain("public static function canCreate(): bool");
+    expect(resource).toContain("public static function getCreateAuthorizationResponse(): Response");
     expect(resource).toContain("CheckboxList::make(");
   });
 
@@ -109,7 +109,7 @@ describe("the Strapi-like admin", () => {
       "protected static string | UnitEnum | null $navigationGroup = StrapiNavigation::SingleTypes;",
     );
     // Its update grant makes the entry, as on the API.
-    expect(resource).toContain("return Gate::allows('update', new Homepage());");
+    expect(resource).toContain("return Gate::inspect('update', new Homepage());");
     const list = content("app/Filament/Resources/Homepages/Pages/ListHomepages.php");
     expect(list).toContain("public function mount(): void");
     expect(list).toContain(
@@ -138,7 +138,8 @@ describe("the Strapi-like admin", () => {
     expect(table).toContain(
       "TextColumn::make('views')->searchable(query: fn (Builder $query, string $search): Builder => is_numeric($search) ? $query->where('views', $search) : $query->whereRaw('0 = 1'))->sortable(),",
     );
-    expect(table).toContain("->defaultSort('title')");
+    // The list starts sorted by the main field, as its view configuration says (Strapi's default).
+    expect(table).toContain("StrapiContentManager::table($table, PostResource::CONTENT_MANAGER");
     // A draft-and-publish entry is deleted with every version of it.
     expect(table).toContain(
       "DeleteAction::make()->using(fn (Post $record) => PostResource::deleteEntry($record)),",
@@ -166,8 +167,8 @@ describe("the Strapi-like admin", () => {
     expect(content("app/Filament/Resources/Tags/Pages/EditTag.php")).toContain(
       "DeleteAction::make(),",
     );
-    expect(content("app/Filament/Resources/Notes/Schemas/NotesTable.php")).toContain(
-      "->defaultSort('record_id')",
+    expect(content("app/Filament/Resources/Notes/NoteResource.php")).toContain(
+      "'recordId' => ['type' => 'string', 'list' => true, 'sort' => true",
     );
     // json is neither searched nor sorted.
     expect(content("app/Filament/Resources/Notes/Schemas/NotesTable.php")).toContain(
@@ -180,6 +181,139 @@ describe("the Strapi-like admin", () => {
   it("gives each policy a deleteAny held by the delete grant", () => {
     const policy = content("app/Policies/PostPolicy.php");
     expect(policy).toMatch(/public function deleteAny\(\??User \$user\): bool/);
+  });
+
+  // Strapi's list filters by its fields, relations, timestamps and creators (not json, media,
+  // richtext, blocks or components), each as its type compares.
+  it("filters a list by its fields and relations as Strapi's Content Manager does", () => {
+    const table = content("app/Filament/Resources/Books/Schemas/BooksTable.php");
+    expect(table).toContain("'id' => NumberConstraint::make('id'),");
+    expect(table).toContain("'title' => TextConstraint::make('title'),");
+    expect(table).toContain("'pages' => NumberConstraint::make('pages')->nullable(),");
+    expect(table).toContain("'inStock' => BooleanConstraint::make('in_stock')->nullable(),");
+    expect(table).toContain("'publishedOn' => DateConstraint::make('published_on')->nullable(),");
+    expect(table).toContain(
+      "'genres' => RelationshipConstraint::make('genres')->multiple()->selectable(IsRelatedToOperator::make()->titleAttribute('name')->searchable()->multiple()),",
+    );
+    // A draft-and-publish target offers its drafts, which links hold.
+    expect(table).toContain(
+      "'topic' => RelationshipConstraint::make('topic')->selectable(IsRelatedToOperator::make()->titleAttribute('name')->modifyRelationshipQueryUsing(fn ($query) => $query->whereNull('published_at'))->searchable()->multiple()),",
+    );
+    expect(table).toContain("'createdAt' => DateConstraint::make('created_at'),");
+    expect(table).toContain("'updatedBy' => RelationshipConstraint::make('updatedBy')");
+    expect(table).not.toMatch(/'price' => \w+Constraint/);
+    expect(table).not.toMatch(/'cover' => \w+Constraint/);
+    const submissions = content("app/Filament/Resources/Submissions/Schemas/SubmissionsTable.php");
+    expect(submissions).toContain(
+      "'kind' => SelectConstraint::make('kind')->options(['alpha' => 'alpha', 'beta' => 'beta'])->multiple()->nullable(),",
+    );
+  });
+
+  // Strapi duplicates an entry from its list row or its edit page; an entry with a uid or unique
+  // field, or a relation the copy would take, opens the create form filled with it instead.
+  it("duplicates an entry as Strapi's Content Manager does", () => {
+    const posts = content("app/Filament/Resources/Posts/Schemas/PostsTable.php");
+    expect(posts).toContain("Action::make('duplicate')");
+    expect(posts).toContain("$copy = PostResource::duplicate($record);");
+    const post = content("app/Filament/Resources/Posts/PostResource.php");
+    expect(post).toContain("public const PROHIBITED_CLONING_FIELDS = [];");
+    expect(post).toContain("return StrapiDocuments::duplicate($record, PostSerializer::class);");
+    expect(content("app/Filament/Resources/Posts/Pages/EditPost.php")).toContain(
+      "Action::make('duplicate')",
+    );
+    expect(content("app/Filament/Resources/Submissions/SubmissionResource.php")).toContain(
+      "public const PROHIBITED_CLONING_FIELDS = ['handle'];",
+    );
+    expect(content("app/Filament/Resources/Notes/NoteResource.php")).toContain(
+      "public const PROHIBITED_CLONING_FIELDS = ['recordId'];",
+    );
+    const submissions = content("app/Filament/Resources/Submissions/Schemas/SubmissionsTable.php");
+    expect(submissions).toContain(
+      "SubmissionResource::getUrl('create', ['duplicate' => $record->getKey()])",
+    );
+    const create = content("app/Filament/Resources/Submissions/Pages/CreateSubmission.php");
+    expect(create).toContain("StrapiContentManager::fillWith($this->form, $source,");
+    // A single type has one entry, which Strapi does not duplicate.
+    expect(content("app/Filament/Resources/Homepages/Pages/EditHomepage.php")).not.toContain(
+      "duplicate",
+    );
+    expect(content("app/Support/StrapiDocuments.php")).toContain(
+      "public static function duplicate(Model $from, string $serializer): Model",
+    );
+  });
+
+  // Strapi's uid field: made from its target field while the entry is created, regenerated on
+  // demand, and checked against other documents' drafts.
+  it("makes a uid from its target field as Strapi's Content Manager does", () => {
+    const form = content("app/Filament/Resources/Submissions/Schemas/SubmissionForm.php");
+    expect(form).toContain(
+      "$set('handle', StrapiUid::generate(Submission::class, 'handle', $get('title'), null, 'submission'));",
+    );
+    expect(form).toContain("->suffixAction(Action::make('regenerate')");
+    expect(form).toContain(
+      "->rule(fn (Get $get, ?Model $record): \\Closure => StrapiUid::rule(Submission::class, 'handle', null, $record))",
+    );
+    expect(content("app/Support/StrapiUid.php")).toContain(
+      "public static function slugify(string $value): string",
+    );
+  });
+
+  // Strapi's createdBy and updatedBy: columns every content type's table has, set by admin writes.
+  it("records who made and last changed an entry, as Strapi's createdBy and updatedBy", () => {
+    const migration = strapi.files.find((f) => /create_posts_table\.php$/.test(f.path))!.content;
+    expect(migration).toContain(
+      "$table->foreignId('created_by_id')->nullable()->constrained('users')->nullOnDelete();",
+    );
+    expect(migration).toContain(
+      "$table->foreignId('updated_by_id')->nullable()->constrained('users')->nullOnDelete();",
+    );
+    expect(content("app/Models/Post.php")).toContain("use HasCreatorFields;");
+    expect(content("app/Models/Concerns/HasCreatorFields.php")).toContain(
+      "public function createdBy(): BelongsTo",
+    );
+    expect(content("app/Filament/Resources/Posts/Schemas/PostsTable.php")).toContain(
+      "'createdBy' => TextColumn::make('createdBy.name')->sortable(),",
+    );
+  });
+
+  // Strapi's "Configure the view": a page per content type whose settings, list columns and edit
+  // fields the list and form are laid out by, attribute by attribute in schema order.
+  it("lays the list and form out as Strapi's view configuration says", async () => {
+    const resource = content("app/Filament/Resources/Books/BookResource.php");
+    expect(resource).toContain("'uid' => 'api::book.book',");
+    expect(resource).toContain(
+      "'price' => ['type' => 'component', 'list' => false, 'sort' => false, 'edit' => true, 'size' => 12, 'resizable' => false],",
+    );
+    expect(resource).toContain(
+      "'inStock' => ['type' => 'boolean', 'list' => true, 'sort' => true, 'edit' => true, 'size' => 4, 'resizable' => true],",
+    );
+    expect(resource).toContain("'configure' => ConfigureBooksView::route('/configure-the-view'),");
+    expect(resource).toContain("return auth()->user()?->can('book.update') ?? false;");
+    const form = content("app/Filament/Resources/Books/Schemas/BookForm.php");
+    expect(form).toContain(
+      "return StrapiContentManager::form($schema, BookResource::CONTENT_MANAGER, [",
+    );
+    // An embedded component's columns are edited together, under the component's attribute.
+    expect(form).toMatch(
+      /'price' => \[\n\s+TextInput::make\('price_minor'\)->numeric\(\),\n\s+TextInput::make\('price_currency'\),/,
+    );
+    expect(content("app/Filament/Resources/Books/Pages/ListBooks.php")).toContain(
+      "Action::make('configure')->label('Configure the view')",
+    );
+    expect(content("app/Filament/Resources/Books/Pages/ConfigureBooksView.php")).toContain(
+      "class ConfigureBooksView extends ConfigureView",
+    );
+    // A single type configures its edit view from its edit page.
+    expect(content("app/Filament/Resources/Homepages/Pages/EditHomepage.php")).toContain(
+      "Action::make('configure')",
+    );
+    // Settings resources keep their plain list.
+    expect(content("app/Filament/Resources/Locales/Schemas/LocalesTable.php")).not.toContain(
+      "StrapiContentManager",
+    );
+    await expect(content("app/Support/StrapiContentManager.php")).toMatchFileSnapshot(
+      "./__golden__/strapi-api/StrapiContentManager.php",
+    );
   });
 
   it("leaves the Laravel API style's admin as it was", () => {
