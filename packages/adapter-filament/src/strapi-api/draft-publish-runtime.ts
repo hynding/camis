@@ -20,6 +20,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /** $serializer is a generated serializer class: its FIELDS and ZONES say which children and links the row holds. */
 final class StrapiDocuments
@@ -157,6 +158,24 @@ final class StrapiDocuments
         return $draft;
     }
 
+    /**
+     * A new document with the entry's content, as Strapi's Content Manager duplicates one: a draft
+     * in the entry's locale, its components, files and links copied, made and last changed by
+     * whoever duplicates it.
+     */
+    public static function duplicate(Model $from, string $serializer): Model
+    {
+        $copy = StrapiWebhooks::quietly(fn () => DB::transaction(function () use ($from, $serializer): Model {
+            $to = $from->newInstance();
+            $to->setAttribute('document_id', $from::newDocumentId());
+
+            return self::copy($from, $to, $serializer, false, ['document_id', 'created_at', 'updated_at', 'created_by_id', 'updated_by_id']);
+        }));
+        StrapiWebhooks::entry('entry.create', $copy);
+
+        return $copy;
+    }
+
     /** Deletes every version of the document. */
     public static function destroy(Model $row): void
     {
@@ -188,13 +207,18 @@ final class StrapiDocuments
     }
 
     /** One version over another (created when $to is null), with its children and held links. */
-    private static function copy(Model $from, ?Model $to, string $serializer, bool $published): Model
+    private static function copy(Model $from, ?Model $to, string $serializer, bool $published, array $fresh = []): Model
     {
         $to ??= $from->newInstance();
-        $attributes = $from->getAttributes();
-        unset($attributes[$from->getKeyName()]);
+        // Only the table's own columns: a list may have loaded aggregates (a relation's count) too.
+        $attributes = array_intersect_key(
+            array_diff_key($from->getAttributes(), array_flip([$from->getKeyName(), ...$fresh])),
+            array_flip(self::columns($from)),
+        );
         $to->forceFill($attributes);
-        $to->setAttribute('published_at', $published ? now() : null);
+        if (method_exists($to, 'publishedVersion')) {
+            $to->setAttribute('published_at', $published ? now() : null);
+        }
         foreach ($serializer::FIELDS as $field) {
             if (($field['kind'] ?? null) === 'belongsTo') {
                 $fk = $field['foreignKey'];
@@ -246,6 +270,15 @@ final class StrapiDocuments
         }
 
         return $to;
+    }
+
+    /** @var array<string, list<string>> */
+    private static array $columns = [];
+
+    /** @return list<string> */
+    private static function columns(Model $row): array
+    {
+        return self::$columns[$row->getConnectionName() . '.' . $row->getTable()] ??= Schema::connection($row->getConnectionName())->getColumnListing($row->getTable());
     }
 
     /** The files one row's media field links, linked from another row in the same order. */

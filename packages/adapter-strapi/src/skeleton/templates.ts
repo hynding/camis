@@ -2,7 +2,10 @@
 // Captured from a real Strapi 5.48.0 project on 2026-06-16.
 // config/database.ts defaults to sqlite; all other configs match Strapi v5 defaults.
 
-export const packageJson = (projectName: string): string =>
+const STRAPI_VERSION = "5.48.0";
+
+/** `plugins` names the Strapi plugins the project's fields need beyond users-permissions. */
+export const packageJson = (projectName: string, plugins: readonly string[] = []): string =>
   JSON.stringify(
     {
       name: projectName,
@@ -16,8 +19,9 @@ export const packageJson = (projectName: string): string =>
         strapi: "strapi",
       },
       dependencies: {
-        "@strapi/plugin-users-permissions": "5.48.0",
-        "@strapi/strapi": "5.48.0",
+        ...Object.fromEntries(plugins.map((p) => [`@strapi/plugin-${p}`, STRAPI_VERSION])),
+        "@strapi/plugin-users-permissions": STRAPI_VERSION,
+        "@strapi/strapi": STRAPI_VERSION,
         "better-sqlite3": "^12.10.0",
         react: "^18.0.0",
         "react-dom": "^18.0.0",

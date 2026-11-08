@@ -36,6 +36,7 @@ final class StrapiImport
         'plugin_users-permissions_advanced' => 'users-permissions.advanced',
         'plugin_users-permissions_email' => 'users-permissions.email',
         'plugin_users-permissions_grant' => 'users-permissions.grant',
+        'plugin_upload_settings' => 'upload.settings',
     ];
 
     private const FOLDER = 'plugin::upload.folder';

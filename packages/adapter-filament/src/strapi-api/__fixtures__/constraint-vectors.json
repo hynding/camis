@@ -1,0 +1,606 @@
+{
+  "about": "What Strapi 5's entity validator checks beyond a field's own value, checked against strapi-php with api.documents.strictRelations on (as a new Strapi project ships it): a unique field (a uid always is) among the other entries, and among a repeatable component's items; a required relation and file, in each shape a write can send them; and a blocks field's document tree, node by node. Run on an empty database, in order, with strapi-populate-vectors.mjs. An error's details are compared, as they name each failing field.",
+  "details": true,
+  "seed": [
+    {
+      "path": "/genres",
+      "data": {
+        "name": "Hall"
+      },
+      "as": "genres:Hall"
+    }
+  ],
+  "reads": [],
+  "writes": [
+    {
+      "name": "upload the ticket's badge",
+      "path": "/upload",
+      "as": "files:Badge",
+      "upload": [
+        {
+          "file": "wide.png"
+        }
+      ]
+    },
+    {
+      "name": "a ticket meeting every constraint is stored",
+      "method": "POST",
+      "path": "/tickets",
+      "as": "tickets:First",
+      "data": {
+        "serial": "S-1",
+        "slug": "first",
+        "seat": 1,
+        "venue": "@genres:Hall",
+        "badge": "#files:Badge",
+        "body": [
+          {
+            "type": "heading",
+            "level": 2,
+            "children": [
+              {
+                "type": "text",
+                "text": "Doors"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "children": [
+              {
+                "type": "text",
+                "text": "Open at "
+              },
+              {
+                "type": "text",
+                "text": "seven",
+                "bold": true,
+                "italic": false
+              },
+              {
+                "type": "text",
+                "text": ", see "
+              },
+              {
+                "type": "link",
+                "url": "/about",
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "about"
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": " or "
+              },
+              {
+                "type": "link",
+                "url": "https://example.test/map",
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "the map"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "quote",
+            "children": [
+              {
+                "type": "text",
+                "text": "Bring the ticket."
+              }
+            ]
+          },
+          {
+            "type": "list",
+            "format": "ordered",
+            "children": [
+              {
+                "type": "list-item",
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "Coat"
+                  }
+                ]
+              },
+              {
+                "type": "list",
+                "format": "unordered",
+                "children": [
+                  {
+                    "type": "list-item",
+                    "children": [
+                      {
+                        "type": "text",
+                        "text": "Hat"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "code",
+            "language": "bash",
+            "children": [
+              {
+                "type": "text",
+                "text": "echo hi"
+              }
+            ]
+          },
+          {
+            "type": "image",
+            "image": {
+              "name": "wide.png",
+              "alternativeText": null,
+              "url": "/uploads/wide.png",
+              "caption": null,
+              "width": 4,
+              "height": 2,
+              "formats": null,
+              "hash": "wide",
+              "ext": ".png",
+              "mime": "image/png",
+              "size": 0.1,
+              "previewUrl": null,
+              "provider": "local",
+              "provider_metadata": null,
+              "createdAt": "2026-01-01T00:00:00.000Z",
+              "updatedAt": "2026-01-01T00:00:00.000Z"
+            },
+            "children": [
+              {
+                "type": "text",
+                "text": ""
+              }
+            ]
+          }
+        ],
+        "codes": [
+          {
+            "value": "a"
+          },
+          {
+            "value": "b"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a required relation and file left out",
+      "method": "POST",
+      "path": "/tickets",
+      "data": {
+        "serial": "S-2"
+      }
+    },
+    {
+      "name": "a required relation and file sent as null",
+      "method": "POST",
+      "path": "/tickets",
+      "data": {
+        "venue": null,
+        "badge": null
+      }
+    },
+    {
+      "name": "a required relation and file sent as empty lists",
+      "method": "POST",
+      "path": "/tickets",
+      "data": {
+        "venue": [],
+        "badge": []
+      }
+    },
+    {
+      "name": "a required relation and file sent as an empty connect and an empty set",
+      "method": "POST",
+      "path": "/tickets",
+      "data": {
+        "venue": {
+          "connect": []
+        },
+        "badge": {
+          "set": []
+        }
+      }
+    },
+    {
+      "name": "a required relation and file sent as a disconnect",
+      "method": "POST",
+      "path": "/tickets",
+      "data": {
+        "venue": {
+          "disconnect": ["#genres:Hall"]
+        },
+        "badge": {
+          "disconnect": ["#files:Badge"]
+        }
+      }
+    },
+    {
+      "name": "a unique string, uid and integer another entry holds",
+      "method": "POST",
+      "path": "/tickets",
+      "data": {
+        "serial": "S-1",
+        "slug": "first",
+        "seat": 1,
+        "venue": "@genres:Hall",
+        "badge": "#files:Badge"
+      }
+    },
+    {
+      "name": "a unique value another entry's item holds, and one the items repeat",
+      "method": "POST",
+      "path": "/tickets",
+      "data": {
+        "venue": "@genres:Hall",
+        "badge": "#files:Badge",
+        "codes": [
+          {
+            "value": "a"
+          },
+          {
+            "value": "x"
+          },
+          {
+            "value": "y"
+          },
+          {
+            "value": "x"
+          }
+        ]
+      }
+    },
+    {
+      "name": "an empty or null unique value is not checked",
+      "method": "POST",
+      "path": "/tickets",
+      "as": "tickets:Empty",
+      "data": {
+        "serial": "",
+        "slug": null,
+        "seat": null,
+        "venue": "@genres:Hall",
+        "badge": "#files:Badge"
+      }
+    },
+    {
+      "name": "a second ticket",
+      "method": "POST",
+      "path": "/tickets",
+      "as": "tickets:Second",
+      "data": {
+        "serial": "S-2",
+        "seat": 2,
+        "venue": "@genres:Hall",
+        "badge": "#files:Badge",
+        "codes": [
+          {
+            "value": "c"
+          }
+        ]
+      }
+    },
+    {
+      "name": "an update may send its own unique values and leave its relation and file out",
+      "method": "PUT",
+      "path": "/tickets/@tickets:First",
+      "data": {
+        "serial": "S-1",
+        "slug": "first",
+        "seat": 1,
+        "codes": [
+          {
+            "value": "a"
+          },
+          {
+            "value": "b"
+          }
+        ]
+      }
+    },
+    {
+      "name": "an update may not take another entry's unique values",
+      "method": "PUT",
+      "path": "/tickets/@tickets:Second",
+      "data": {
+        "serial": "S-1",
+        "slug": "first",
+        "seat": 1,
+        "codes": [
+          {
+            "value": "b"
+          }
+        ]
+      }
+    },
+    {
+      "name": "an update may not empty a required relation or file",
+      "method": "PUT",
+      "path": "/tickets/@tickets:Second",
+      "data": {
+        "venue": null,
+        "badge": []
+      }
+    },
+    {
+      "name": "an update may not only disconnect a required to-one relation",
+      "method": "PUT",
+      "path": "/tickets/@tickets:Second",
+      "data": {
+        "venue": {
+          "disconnect": ["#genres:Hall"]
+        }
+      }
+    },
+    {
+      "name": "an update's empty connect keeps the relation",
+      "method": "PUT",
+      "path": "/tickets/@tickets:Second",
+      "data": {
+        "venue": {
+          "connect": []
+        },
+        "serial": "S-2b"
+      }
+    },
+    {
+      "name": "a block of a type the editor lacks",
+      "method": "POST",
+      "path": "/tickets",
+      "data": {
+        "venue": "@genres:Hall",
+        "badge": "#files:Badge",
+        "body": [
+          {
+            "type": "video"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "name": "a paragraph, heading and quote need inline children, a heading its level",
+      "method": "POST",
+      "path": "/tickets",
+      "data": {
+        "venue": "@genres:Hall",
+        "badge": "#files:Badge",
+        "body": [
+          {
+            "type": "paragraph",
+            "children": []
+          },
+          {
+            "type": "heading",
+            "children": []
+          },
+          {
+            "type": "quote",
+            "children": [
+              {
+                "type": "text",
+                "text": "q"
+              }
+            ]
+          },
+          {
+            "type": "paragraph"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a text node needs its text, and its marks are booleans",
+      "method": "POST",
+      "path": "/tickets",
+      "data": {
+        "venue": "@genres:Hall",
+        "badge": "#files:Badge",
+        "body": [
+          {
+            "type": "paragraph",
+            "children": [
+              {
+                "type": "text"
+              },
+              {
+                "type": "text",
+                "text": "x",
+                "bold": "yes"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a link needs a url with a safe protocol",
+      "method": "POST",
+      "path": "/tickets",
+      "data": {
+        "venue": "@genres:Hall",
+        "badge": "#files:Badge",
+        "body": [
+          {
+            "type": "paragraph",
+            "children": [
+              {
+                "type": "link",
+                "url": "javascript:alert(1)",
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "x"
+                  }
+                ]
+              },
+              {
+                "type": "link",
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "y"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a heading's level and a list's format come from their sets",
+      "method": "POST",
+      "path": "/tickets",
+      "data": {
+        "venue": "@genres:Hall",
+        "badge": "#files:Badge",
+        "body": [
+          {
+            "type": "heading",
+            "level": 7,
+            "children": [
+              {
+                "type": "text",
+                "text": "x"
+              }
+            ]
+          },
+          {
+            "type": "list",
+            "format": "bulleted",
+            "children": [
+              {
+                "type": "list-item",
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "x"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a list holds list items and lists, a paragraph text and links",
+      "method": "POST",
+      "path": "/tickets",
+      "data": {
+        "venue": "@genres:Hall",
+        "badge": "#files:Badge",
+        "body": [
+          {
+            "type": "list",
+            "format": "ordered",
+            "children": [
+              {
+                "type": "quote"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "children": [
+              {
+                "type": "image"
+              }
+            ]
+          },
+          {
+            "type": "list",
+            "format": "ordered",
+            "children": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "a code block holds only text",
+      "method": "POST",
+      "path": "/tickets",
+      "data": {
+        "venue": "@genres:Hall",
+        "badge": "#files:Badge",
+        "body": [
+          {
+            "type": "code",
+            "children": [
+              {
+                "type": "link",
+                "url": "/a",
+                "children": []
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "an image block needs its file's fields",
+      "method": "POST",
+      "path": "/tickets",
+      "data": {
+        "venue": "@genres:Hall",
+        "badge": "#files:Badge",
+        "body": [
+          {
+            "type": "image",
+            "image": {
+              "name": "x"
+            },
+            "children": [
+              {
+                "type": "text",
+                "text": ""
+              }
+            ]
+          },
+          {
+            "type": "image",
+            "children": [
+              {
+                "type": "text",
+                "text": ""
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a node's children are a list",
+      "method": "POST",
+      "path": "/tickets",
+      "data": {
+        "venue": "@genres:Hall",
+        "badge": "#files:Badge",
+        "body": [
+          {
+            "type": "paragraph",
+            "children": "x"
+          }
+        ]
+      }
+    },
+    {
+      "name": "the second ticket after the failed updates",
+      "method": "GET",
+      "path": "/tickets/@tickets:Second",
+      "query": "populate[0]=venue&populate[1]=codes"
+    }
+  ]
+}

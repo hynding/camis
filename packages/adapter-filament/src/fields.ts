@@ -33,6 +33,7 @@ const SUPPORTED = new Set<string>([
   "timestamp",
   "json",
   "blocks",
+  "color",
   "media",
 ]);
 export const isSupportedField = (t: string): boolean => SUPPORTED.has(t);
@@ -180,6 +181,14 @@ const base = (field: Field, c: string): Base => {
         formImport: "App\\Filament\\Forms\\BlocksEditor",
         tableImport: TEXT_COLUMN,
         cast: "'array'",
+      };
+    case "color":
+      return {
+        migration: `$table->string('${c}')`,
+        formComponent: `ColorPicker::make('${c}')`,
+        tableColumn: `ColorColumn::make('${c}')`,
+        formImport: "Filament\\Forms\\Components\\ColorPicker",
+        tableImport: "Filament\\Tables\\Columns\\ColorColumn",
       };
     case "media": {
       const multiple = f.multiple === true;

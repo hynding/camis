@@ -18,7 +18,13 @@ export const emitMigration = (
   ct: ContentType,
   fkColumns: string[] = [],
   extraEmits: FieldEmit[] = [],
-  options: { documentId?: boolean; draftPublish?: boolean; localized?: boolean } = {},
+  options: {
+    documentId?: boolean;
+    draftPublish?: boolean;
+    localized?: boolean;
+    /** Strapi's createdBy and updatedBy: the users who made and last changed the row. */
+    creatorFields?: boolean;
+  } = {},
 ): string => {
   const names = filamentNames(ct);
   // Strapi 5 addresses a document by documentId, so the Strapi API style needs the column. A
@@ -42,7 +48,15 @@ export const emitMigration = (
     ...(options.draftPublish ? ["            $table->timestamp('published_at')->nullable();"] : []),
     ...(options.localized ? ["            $table->string('locale', 16)->index();"] : []),
   ];
-  const fkCols = fkColumns.map((c) => `            ${c};`);
+  const fkCols = [
+    ...fkColumns,
+    ...(options.creatorFields === true
+      ? [
+          "$table->foreignId('created_by_id')->nullable()->constrained('users')->nullOnDelete()",
+          "$table->foreignId('updated_by_id')->nullable()->constrained('users')->nullOnDelete()",
+        ]
+      : []),
+  ].map((c) => `            ${c};`);
   const columns = [...fieldCols, ...fkCols, ...publishedAtCol].join("\n");
   return `<?php
 

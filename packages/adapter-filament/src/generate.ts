@@ -60,6 +60,7 @@ import { linkOrdersConstant } from "./strapi-api/link-order";
 import { emitStrapiStorage } from "./strapi-api/storage/emit";
 import { emitAdminAccessFiles } from "./admin-access";
 import { zoneBuilder } from "./strapi-api/zones-admin";
+import { prohibitedCloningFields } from "./strapi-api/content-manager";
 
 export const filamentAdapter: GenerateAdapter = {
   target: "filament",
@@ -273,7 +274,11 @@ export const filamentAdapter: GenerateAdapter = {
             : [],
           [
             ...(apiStyle === "strapi"
-              ? ["App\\Models\\Concerns\\EmitsStrapiEvents", "App\\Models\\Concerns\\HasDocumentId"]
+              ? [
+                  "App\\Models\\Concerns\\EmitsStrapiEvents",
+                  "App\\Models\\Concerns\\HasDocumentId",
+                  "App\\Models\\Concerns\\HasCreatorFields",
+                ]
               : []),
             ...(versioned.has(ct.name) ? ["App\\Models\\Concerns\\HasDraftAndPublish"] : []),
             ...(localized.has(ct.name) ? ["App\\Models\\Concerns\\HasLocale"] : []),
@@ -305,6 +310,7 @@ export const filamentAdapter: GenerateAdapter = {
             documentId: apiStyle === "strapi",
             draftPublish: versioned.has(ct.name),
             localized: localized.has(ct.name),
+            creatorFields: apiStyle === "strapi",
           },
         ),
       });
@@ -333,8 +339,25 @@ export const filamentAdapter: GenerateAdapter = {
                 field: camelPath(s.path),
                 multiple: s.field.type === "media" && s.field.multiple === true,
                 ...mediaAllowedTypes(s.field),
+                attribute: s.path[0]!,
               })),
             ],
+            ...(contentManager === undefined
+              ? {}
+              : {
+                  contentManager: {
+                    fields: ct.fields,
+                    relations: rel.adminRelations.get(ct.name) ?? [],
+                    extraAttributes: expansion.scalars
+                      .filter((s) => !embeddedMedia.includes(s))
+                      .map((s) => s.path[0]!),
+                    repeaterAttributes: [
+                      ...expansion.tables.map((t) => t.path[0]!),
+                      ...(apiStyle === "strapi" ? expansion.zones.map((z) => z.name) : []),
+                    ],
+                    prohibited: prohibitedCloningFields(doc, ct),
+                  },
+                }),
             ...(contentManager === undefined
               ? {}
               : {

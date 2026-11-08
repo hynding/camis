@@ -29,6 +29,7 @@ class UploadController extends Controller
     private const TARGETS = [
         'api::post.post' => [\App\Models\Post::class, \App\Http\Serializers\PostSerializer::class],
         'api::book.book' => [\App\Models\Book::class, \App\Http\Serializers\BookSerializer::class],
+        'api::ticket.ticket' => [\App\Models\Ticket::class, \App\Http\Serializers\TicketSerializer::class],
     ];
 
     public function upload(Request $request): JsonResponse

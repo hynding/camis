@@ -1,0 +1,968 @@
+{
+  "upload the ticket's badge": {
+    "status": 201,
+    "data": [
+      {
+        "alternativeText": null,
+        "caption": null,
+        "ext": ".png",
+        "focalPoint": null,
+        "formats": {
+          "large": {
+            "ext": ".png",
+            "hash": "large_wide_<hash>",
+            "height": 667,
+            "mime": "image/png",
+            "name": "large_wide.png",
+            "path": null,
+            "url": "/uploads/large_wide_<hash>.png",
+            "width": 1000
+          },
+          "medium": {
+            "ext": ".png",
+            "hash": "medium_wide_<hash>",
+            "height": 500,
+            "mime": "image/png",
+            "name": "medium_wide.png",
+            "path": null,
+            "url": "/uploads/medium_wide_<hash>.png",
+            "width": 750
+          },
+          "small": {
+            "ext": ".png",
+            "hash": "small_wide_<hash>",
+            "height": 333,
+            "mime": "image/png",
+            "name": "small_wide.png",
+            "path": null,
+            "url": "/uploads/small_wide_<hash>.png",
+            "width": 500
+          },
+          "thumbnail": {
+            "ext": ".png",
+            "hash": "thumbnail_wide_<hash>",
+            "height": 156,
+            "mime": "image/png",
+            "name": "thumbnail_wide.png",
+            "path": null,
+            "url": "/uploads/thumbnail_wide_<hash>.png",
+            "width": 234
+          }
+        },
+        "hash": "wide_<hash>",
+        "height": 800,
+        "isUrlSigned": false,
+        "mime": "image/png",
+        "name": "wide.png",
+        "previewUrl": null,
+        "provider": "local",
+        "provider_metadata": null,
+        "url": "/uploads/wide_<hash>.png",
+        "width": 1200
+      }
+    ]
+  },
+  "a ticket meeting every constraint is stored": {
+    "status": 201,
+    "data": {
+      "body": [
+        {
+          "children": [
+            {
+              "text": "Doors",
+              "type": "text"
+            }
+          ],
+          "level": 2,
+          "type": "heading"
+        },
+        {
+          "children": [
+            {
+              "text": "Open at ",
+              "type": "text"
+            },
+            {
+              "bold": true,
+              "italic": false,
+              "text": "seven",
+              "type": "text"
+            },
+            {
+              "text": ", see ",
+              "type": "text"
+            },
+            {
+              "children": [
+                {
+                  "text": "about",
+                  "type": "text"
+                }
+              ],
+              "type": "link",
+              "url": "/about"
+            },
+            {
+              "text": " or ",
+              "type": "text"
+            },
+            {
+              "children": [
+                {
+                  "text": "the map",
+                  "type": "text"
+                }
+              ],
+              "type": "link",
+              "url": "https://example.test/map"
+            }
+          ],
+          "type": "paragraph"
+        },
+        {
+          "children": [
+            {
+              "text": "Bring the ticket.",
+              "type": "text"
+            }
+          ],
+          "type": "quote"
+        },
+        {
+          "children": [
+            {
+              "children": [
+                {
+                  "text": "Coat",
+                  "type": "text"
+                }
+              ],
+              "type": "list-item"
+            },
+            {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "text": "Hat",
+                      "type": "text"
+                    }
+                  ],
+                  "type": "list-item"
+                }
+              ],
+              "format": "unordered",
+              "type": "list"
+            }
+          ],
+          "format": "ordered",
+          "type": "list"
+        },
+        {
+          "children": [
+            {
+              "text": "echo hi",
+              "type": "text"
+            }
+          ],
+          "language": "bash",
+          "type": "code"
+        },
+        {
+          "children": [
+            {
+              "text": "",
+              "type": "text"
+            }
+          ],
+          "image": {
+            "alternativeText": null,
+            "caption": null,
+            "ext": ".png",
+            "formats": null,
+            "hash": "wide",
+            "height": 2,
+            "mime": "image/png",
+            "name": "wide.png",
+            "previewUrl": null,
+            "provider": "local",
+            "provider_metadata": null,
+            "url": "/uploads/wide.png",
+            "width": 4
+          },
+          "type": "image"
+        }
+      ],
+      "seat": 1,
+      "serial": "S-1",
+      "slug": "first"
+    }
+  },
+  "a required relation and file left out": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "2 errors occurred",
+      "details": {
+        "errors": [
+          {
+            "path": ["venue"],
+            "message": "venue must be defined.",
+            "name": "ValidationError"
+          },
+          {
+            "path": ["badge"],
+            "message": "badge must be defined.",
+            "name": "ValidationError"
+          }
+        ]
+      }
+    }
+  },
+  "a required relation and file sent as null": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "2 errors occurred",
+      "details": {
+        "errors": [
+          {
+            "path": ["venue"],
+            "message": "venue must be defined.",
+            "name": "ValidationError",
+            "value": null
+          },
+          {
+            "path": ["badge"],
+            "message": "badge must be defined.",
+            "name": "ValidationError",
+            "value": null
+          }
+        ]
+      }
+    }
+  },
+  "a required relation and file sent as empty lists": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "2 errors occurred",
+      "details": {
+        "errors": [
+          {
+            "path": ["venue"],
+            "message": "venue must be defined.",
+            "name": "ValidationError",
+            "value": {
+              "set": []
+            }
+          },
+          {
+            "path": ["badge"],
+            "message": "badge must be defined.",
+            "name": "ValidationError",
+            "value": {
+              "set": []
+            }
+          }
+        ]
+      }
+    }
+  },
+  "a required relation and file sent as an empty connect and an empty set": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "2 errors occurred",
+      "details": {
+        "errors": [
+          {
+            "path": ["venue"],
+            "message": "venue must be defined.",
+            "name": "ValidationError",
+            "value": {
+              "connect": []
+            }
+          },
+          {
+            "path": ["badge"],
+            "message": "badge must be defined.",
+            "name": "ValidationError",
+            "value": {
+              "set": []
+            }
+          }
+        ]
+      }
+    }
+  },
+  "a required relation and file sent as a disconnect": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "2 errors occurred",
+      "details": {
+        "errors": [
+          {
+            "path": ["venue"],
+            "message": "venue must be defined.",
+            "name": "ValidationError",
+            "value": {
+              "disconnect": [
+                {
+                  "id": 1
+                }
+              ]
+            }
+          },
+          {
+            "path": ["badge"],
+            "message": "badge must be defined.",
+            "name": "ValidationError",
+            "value": {
+              "disconnect": [
+                {
+                  "id": 1
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  "a unique string, uid and integer another entry holds": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "3 errors occurred",
+      "details": {
+        "errors": [
+          {
+            "path": ["serial"],
+            "message": "This attribute must be unique",
+            "name": "ValidationError",
+            "value": "S-1"
+          },
+          {
+            "path": ["slug"],
+            "message": "This attribute must be unique",
+            "name": "ValidationError",
+            "value": "first"
+          },
+          {
+            "path": ["seat"],
+            "message": "This attribute must be unique",
+            "name": "ValidationError",
+            "value": 1
+          }
+        ]
+      }
+    }
+  },
+  "a unique value another entry's item holds, and one the items repeat": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "3 errors occurred",
+      "details": {
+        "errors": [
+          {
+            "path": ["codes", "0", "value"],
+            "message": "This attribute must be unique",
+            "name": "ValidationError",
+            "value": "a"
+          },
+          {
+            "path": ["codes", "1", "value"],
+            "message": "This attribute must be unique",
+            "name": "ValidationError",
+            "value": "x"
+          },
+          {
+            "path": ["codes", "3", "value"],
+            "message": "This attribute must be unique",
+            "name": "ValidationError",
+            "value": "x"
+          }
+        ]
+      }
+    }
+  },
+  "an empty or null unique value is not checked": {
+    "status": 201,
+    "data": {
+      "body": null,
+      "seat": null,
+      "serial": "",
+      "slug": null
+    }
+  },
+  "a second ticket": {
+    "status": 201,
+    "data": {
+      "body": null,
+      "seat": 2,
+      "serial": "S-2",
+      "slug": null
+    }
+  },
+  "an update may send its own unique values and leave its relation and file out": {
+    "status": 200,
+    "data": {
+      "body": [
+        {
+          "children": [
+            {
+              "text": "Doors",
+              "type": "text"
+            }
+          ],
+          "level": 2,
+          "type": "heading"
+        },
+        {
+          "children": [
+            {
+              "text": "Open at ",
+              "type": "text"
+            },
+            {
+              "bold": true,
+              "italic": false,
+              "text": "seven",
+              "type": "text"
+            },
+            {
+              "text": ", see ",
+              "type": "text"
+            },
+            {
+              "children": [
+                {
+                  "text": "about",
+                  "type": "text"
+                }
+              ],
+              "type": "link",
+              "url": "/about"
+            },
+            {
+              "text": " or ",
+              "type": "text"
+            },
+            {
+              "children": [
+                {
+                  "text": "the map",
+                  "type": "text"
+                }
+              ],
+              "type": "link",
+              "url": "https://example.test/map"
+            }
+          ],
+          "type": "paragraph"
+        },
+        {
+          "children": [
+            {
+              "text": "Bring the ticket.",
+              "type": "text"
+            }
+          ],
+          "type": "quote"
+        },
+        {
+          "children": [
+            {
+              "children": [
+                {
+                  "text": "Coat",
+                  "type": "text"
+                }
+              ],
+              "type": "list-item"
+            },
+            {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "text": "Hat",
+                      "type": "text"
+                    }
+                  ],
+                  "type": "list-item"
+                }
+              ],
+              "format": "unordered",
+              "type": "list"
+            }
+          ],
+          "format": "ordered",
+          "type": "list"
+        },
+        {
+          "children": [
+            {
+              "text": "echo hi",
+              "type": "text"
+            }
+          ],
+          "language": "bash",
+          "type": "code"
+        },
+        {
+          "children": [
+            {
+              "text": "",
+              "type": "text"
+            }
+          ],
+          "image": {
+            "alternativeText": null,
+            "caption": null,
+            "ext": ".png",
+            "formats": null,
+            "hash": "wide",
+            "height": 2,
+            "mime": "image/png",
+            "name": "wide.png",
+            "previewUrl": null,
+            "provider": "local",
+            "provider_metadata": null,
+            "url": "/uploads/wide.png",
+            "width": 4
+          },
+          "type": "image"
+        }
+      ],
+      "seat": 1,
+      "serial": "S-1",
+      "slug": "first"
+    }
+  },
+  "an update may not take another entry's unique values": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "4 errors occurred",
+      "details": {
+        "errors": [
+          {
+            "path": ["serial"],
+            "message": "This attribute must be unique",
+            "name": "ValidationError",
+            "value": "S-1"
+          },
+          {
+            "path": ["slug"],
+            "message": "This attribute must be unique",
+            "name": "ValidationError",
+            "value": "first"
+          },
+          {
+            "path": ["seat"],
+            "message": "This attribute must be unique",
+            "name": "ValidationError",
+            "value": 1
+          },
+          {
+            "path": ["codes", "0", "value"],
+            "message": "This attribute must be unique",
+            "name": "ValidationError",
+            "value": "b"
+          }
+        ]
+      }
+    }
+  },
+  "an update may not empty a required relation or file": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "2 errors occurred",
+      "details": {
+        "errors": [
+          {
+            "path": ["venue"],
+            "message": "venue must be defined.",
+            "name": "ValidationError",
+            "value": null
+          },
+          {
+            "path": ["badge"],
+            "message": "badge must be defined.",
+            "name": "ValidationError",
+            "value": {
+              "set": []
+            }
+          }
+        ]
+      }
+    }
+  },
+  "an update may not only disconnect a required to-one relation": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "venue must be defined.",
+      "details": {
+        "errors": [
+          {
+            "path": ["venue"],
+            "message": "venue must be defined.",
+            "name": "ValidationError",
+            "value": {
+              "disconnect": [
+                {
+                  "id": 1
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  "an update's empty connect keeps the relation": {
+    "status": 200,
+    "data": {
+      "body": null,
+      "seat": 2,
+      "serial": "S-2b",
+      "slug": null
+    }
+  },
+  "a block of a type the editor lacks": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "2 errors occurred",
+      "details": {
+        "errors": [
+          {
+            "path": ["body", "0"],
+            "message": "Block node is of invalid type",
+            "name": "ValidationError",
+            "value": {
+              "type": "video"
+            }
+          },
+          {
+            "path": ["body", "1"],
+            "message": "Block node is of invalid type",
+            "name": "ValidationError",
+            "value": null
+          }
+        ]
+      }
+    }
+  },
+  "a paragraph, heading and quote need inline children, a heading its level": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "4 errors occurred",
+      "details": {
+        "errors": [
+          {
+            "path": ["body", "0", "children"],
+            "message": "Paragraph node children must have at least one Text or Link node",
+            "name": "ValidationError",
+            "value": []
+          },
+          {
+            "path": ["body", "1", "level"],
+            "message": "body[1].level is a required field",
+            "name": "ValidationError"
+          },
+          {
+            "path": ["body", "1", "children"],
+            "message": "Heading node children must have at least one Text or Link node",
+            "name": "ValidationError",
+            "value": []
+          },
+          {
+            "path": ["body", "3", "children"],
+            "message": "body[3].children is a required field",
+            "name": "ValidationError"
+          }
+        ]
+      }
+    }
+  },
+  "a text node needs its text, and its marks are booleans": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "2 errors occurred",
+      "details": {
+        "errors": [
+          {
+            "path": ["body", "0", "children", "0", "text"],
+            "message": "Text must be defined with at least an empty string",
+            "name": "ValidationError"
+          },
+          {
+            "path": ["body", "0", "children", "1", "bold"],
+            "message": "body[0].children[1].bold must be a `boolean` type, but the final value was: `\"yes\"`.",
+            "name": "ValidationError",
+            "value": "yes"
+          }
+        ]
+      }
+    }
+  },
+  "a link needs a url with a safe protocol": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "2 errors occurred",
+      "details": {
+        "errors": [
+          {
+            "path": ["body", "0", "children", "0", "url"],
+            "message": "Please specify a valid link.",
+            "name": "ValidationError",
+            "value": "javascript:alert(1)"
+          },
+          {
+            "path": ["body", "0", "children", "1", "url"],
+            "message": "Please specify a valid link.",
+            "name": "ValidationError"
+          }
+        ]
+      }
+    }
+  },
+  "a heading's level and a list's format come from their sets": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "2 errors occurred",
+      "details": {
+        "errors": [
+          {
+            "path": ["body", "0", "level"],
+            "message": "body[0].level must be one of the following values: 1, 2, 3, 4, 5, 6",
+            "name": "ValidationError",
+            "value": 7
+          },
+          {
+            "path": ["body", "1", "format"],
+            "message": "body[1].format must be one of the following values: ordered, unordered",
+            "name": "ValidationError",
+            "value": "bulleted"
+          }
+        ]
+      }
+    }
+  },
+  "a list holds list items and lists, a paragraph text and links": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "3 errors occurred",
+      "details": {
+        "errors": [
+          {
+            "path": ["body", "0", "children", "0"],
+            "message": "Inline node must be list-item or list",
+            "name": "ValidationError",
+            "value": {
+              "type": "quote"
+            }
+          },
+          {
+            "path": ["body", "1", "children", "0"],
+            "message": "Inline node must be Text or Link",
+            "name": "ValidationError",
+            "value": {
+              "type": "image"
+            }
+          },
+          {
+            "path": ["body", "2", "children"],
+            "message": "List node children must have at least one ListItem or ListNode",
+            "name": "ValidationError",
+            "value": []
+          }
+        ]
+      }
+    }
+  },
+  "a code block holds only text": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "2 errors occurred",
+      "details": {
+        "errors": [
+          {
+            "path": ["body", "0", "children", "0", "type"],
+            "message": "body[0].children[0].type must be one of the following values: text",
+            "name": "ValidationError",
+            "value": "link"
+          },
+          {
+            "path": ["body", "0", "children", "0", "text"],
+            "message": "Text must be defined with at least an empty string",
+            "name": "ValidationError"
+          }
+        ]
+      }
+    }
+  },
+  "an image block needs its file's fields": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "21 errors occurred",
+      "details": {
+        "errors": [
+          {
+            "path": ["body", "0", "image", "url"],
+            "message": "body[0].image.url is a required field",
+            "name": "ValidationError"
+          },
+          {
+            "path": ["body", "0", "image", "width"],
+            "message": "body[0].image.width is a required field",
+            "name": "ValidationError"
+          },
+          {
+            "path": ["body", "0", "image", "height"],
+            "message": "body[0].image.height is a required field",
+            "name": "ValidationError"
+          },
+          {
+            "path": ["body", "0", "image", "hash"],
+            "message": "body[0].image.hash is a required field",
+            "name": "ValidationError"
+          },
+          {
+            "path": ["body", "0", "image", "ext"],
+            "message": "body[0].image.ext is a required field",
+            "name": "ValidationError"
+          },
+          {
+            "path": ["body", "0", "image", "mime"],
+            "message": "body[0].image.mime is a required field",
+            "name": "ValidationError"
+          },
+          {
+            "path": ["body", "0", "image", "size"],
+            "message": "body[0].image.size is a required field",
+            "name": "ValidationError"
+          },
+          {
+            "path": ["body", "0", "image", "provider"],
+            "message": "body[0].image.provider is a required field",
+            "name": "ValidationError"
+          },
+          {
+            "path": ["body", "0", "image", "createdAt"],
+            "message": "body[0].image.createdAt is a required field",
+            "name": "ValidationError"
+          },
+          {
+            "path": ["body", "0", "image", "updatedAt"],
+            "message": "body[0].image.updatedAt is a required field",
+            "name": "ValidationError"
+          },
+          {
+            "path": ["body", "1", "image", "name"],
+            "message": "body[1].image.name is a required field",
+            "name": "ValidationError"
+          },
+          {
+            "path": ["body", "1", "image", "url"],
+            "message": "body[1].image.url is a required field",
+            "name": "ValidationError"
+          },
+          {
+            "path": ["body", "1", "image", "width"],
+            "message": "body[1].image.width is a required field",
+            "name": "ValidationError"
+          },
+          {
+            "path": ["body", "1", "image", "height"],
+            "message": "body[1].image.height is a required field",
+            "name": "ValidationError"
+          },
+          {
+            "path": ["body", "1", "image", "hash"],
+            "message": "body[1].image.hash is a required field",
+            "name": "ValidationError"
+          },
+          {
+            "path": ["body", "1", "image", "ext"],
+            "message": "body[1].image.ext is a required field",
+            "name": "ValidationError"
+          },
+          {
+            "path": ["body", "1", "image", "mime"],
+            "message": "body[1].image.mime is a required field",
+            "name": "ValidationError"
+          },
+          {
+            "path": ["body", "1", "image", "size"],
+            "message": "body[1].image.size is a required field",
+            "name": "ValidationError"
+          },
+          {
+            "path": ["body", "1", "image", "provider"],
+            "message": "body[1].image.provider is a required field",
+            "name": "ValidationError"
+          },
+          {
+            "path": ["body", "1", "image", "createdAt"],
+            "message": "body[1].image.createdAt is a required field",
+            "name": "ValidationError"
+          },
+          {
+            "path": ["body", "1", "image", "updatedAt"],
+            "message": "body[1].image.updatedAt is a required field",
+            "name": "ValidationError"
+          }
+        ]
+      }
+    }
+  },
+  "a node's children are a list": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "body[0].children must be a `array` type, but the final value was: `null` (cast from the value `\"x\"`).",
+      "details": {
+        "errors": [
+          {
+            "path": ["body", "0", "children"],
+            "message": "body[0].children must be a `array` type, but the final value was: `null` (cast from the value `\"x\"`).",
+            "name": "ValidationError",
+            "value": null
+          }
+        ]
+      }
+    }
+  },
+  "the second ticket after the failed updates": {
+    "status": 200,
+    "data": {
+      "body": null,
+      "codes": [
+        {
+          "value": "c"
+        }
+      ],
+      "seat": 2,
+      "serial": "S-2b",
+      "slug": null,
+      "venue": {
+        "name": "Hall"
+      }
+    }
+  }
+}

@@ -57,7 +57,7 @@ use Filament\\Resources\\Resource;
 use Filament\\Schemas\\Schema;
 use Filament\\Tables\\Columns\\IconColumn;
 use Filament\\Tables\\Columns\\TextColumn;
-use Filament\\Tables\\Table;${secured ? "\nuse Illuminate\\Database\\Eloquent\\Model;" : ""}
+use Filament\\Tables\\Table;${secured ? "\nuse Illuminate\\Auth\\Access\\Response;\nuse Illuminate\\Database\\Eloquent\\Model;" : ""}
 use Illuminate\\Support\\Facades\\Hash;
 use UnitEnum;
 
@@ -100,24 +100,24 @@ ${navigationProperties(navigation)}
 ${
   secured
     ? `    // The builtin user's grants, whether or not a policy for it was generated.
-    public static function canViewAny(): bool
+    public static function getViewAnyAuthorizationResponse(): Response
     {
-        return auth()->user()?->can('user.read') ?? false;
+        return (auth()->user()?->can('user.read') ?? false) ? Response::allow() : Response::deny();
     }
 
-    public static function canCreate(): bool
+    public static function getCreateAuthorizationResponse(): Response
     {
-        return auth()->user()?->can('user.create') ?? false;
+        return (auth()->user()?->can('user.create') ?? false) ? Response::allow() : Response::deny();
     }
 
-    public static function canEdit(Model $record): bool
+    public static function getEditAuthorizationResponse(Model $record): Response
     {
-        return auth()->user()?->can('user.update') ?? false;
+        return (auth()->user()?->can('user.update') ?? false) ? Response::allow() : Response::deny();
     }
 
-    public static function canDelete(Model $record): bool
+    public static function getDeleteAuthorizationResponse(Model $record): Response
     {
-        return auth()->user()?->can('user.delete') ?? false;
+        return (auth()->user()?->can('user.delete') ?? false) ? Response::allow() : Response::deny();
     }
 
 `

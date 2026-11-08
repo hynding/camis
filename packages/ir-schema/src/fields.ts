@@ -21,6 +21,7 @@ export const FIELD_TYPES = [
   "timestamp",
   "json",
   "blocks",
+  "color",
   "media",
   "relation",
   "component",
@@ -118,6 +119,13 @@ const jsonField = z.object({ type: z.literal("json"), ...common });
  * blocks editor stores.
  */
 const blocksField = z.object({ type: z.literal("blocks"), ...common });
+/** A color as text (`#rrggbb`), edited with a color picker. */
+const colorField = z.object({
+  type: z.literal("color"),
+  ...common,
+  pattern,
+  default: z.string().optional(),
+});
 const mediaField = z.object({
   type: z.literal("media"),
   ...common,
@@ -143,6 +151,7 @@ export const SCALAR_VARIANTS = [
   temporal("timestamp"),
   jsonField,
   blocksField,
+  colorField,
   mediaField,
 ] as const;
 

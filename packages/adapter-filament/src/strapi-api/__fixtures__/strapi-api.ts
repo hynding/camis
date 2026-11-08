@@ -281,11 +281,34 @@ export const strapiApiBundle: IrBundle = {
           { type: "integer", name: "rating", min: 1, max: 5 },
           { type: "float", name: "score", min: 0, max: 1 },
           { type: "text", name: "notes", maxLength: 10 },
-          { type: "uid", name: "handle" },
+          { type: "uid", name: "handle", targetField: "title" },
           { type: "boolean", name: "active" },
           { type: "date", name: "due" },
           { type: "component", name: "lines", component: "Line", repeatable: true },
           { type: "component", name: "total", component: "Money", repeatable: false },
+        ],
+      },
+      // What Strapi's entity validator checks beyond a field's own value (constraint-vectors.json):
+      // uniqueness among the published entries, a required relation and file under
+      // api.documents.strictRelations, and a blocks field's document tree.
+      {
+        name: "Ticket",
+        kind: "collection",
+        names: { plural: "Tickets" },
+        fields: [
+          { type: "string", name: "serial", unique: true },
+          { type: "uid", name: "slug" },
+          { type: "integer", name: "seat", unique: true },
+          {
+            type: "relation",
+            name: "venue",
+            relationKind: "manyToOne",
+            target: "Genre",
+            required: true,
+          },
+          { type: "media", name: "badge", allowedTypes: ["image"], required: true },
+          { type: "blocks", name: "body" },
+          { type: "component", name: "codes", component: "Code", repeatable: true },
         ],
       },
     ],
@@ -330,6 +353,8 @@ export const strapiApiBundle: IrBundle = {
           { type: "component", name: "items", component: "Quantity", repeatable: true },
         ],
       },
+      // A unique field inside a repeatable component (constraint-vectors.json).
+      { name: "Code", fields: [{ type: "string", name: "value", unique: true }] },
       {
         name: "Money",
         fields: [
@@ -382,6 +407,7 @@ export const strapiApiBundle: IrBundle = {
         { contentType: "Book", actions: ["create", "read", "update", "delete"] },
         { contentType: "Storyboard", actions: ["create", "read", "update", "delete"] },
         { contentType: "Submission", actions: ["create", "read", "update", "delete"] },
+        { contentType: "Ticket", actions: ["create", "read", "update", "delete"] },
         { contentType: "Author", actions: ["create", "read", "update", "delete"] },
         { contentType: "Genre", actions: ["create", "read", "update", "delete"] },
         { contentType: "Topic", actions: ["create", "read", "update", "delete", "publish"] },

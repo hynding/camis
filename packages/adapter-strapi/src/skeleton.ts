@@ -13,9 +13,9 @@ import {
 
 export const skeletonFiles = (
   projectName: string,
-  { cron = false }: { cron?: boolean } = {},
+  { cron = false, plugins = [] }: { cron?: boolean; plugins?: readonly string[] } = {},
 ): GeneratedFile[] => [
-  { path: "package.json", content: packageJson(projectName) },
+  { path: "package.json", content: packageJson(projectName, plugins) },
   { path: "tsconfig.json", content: TSCONFIG_JSON },
   { path: "config/server.ts", content: serverTs(cron) },
   { path: "config/admin.ts", content: ADMIN_TS },
