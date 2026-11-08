@@ -1521,6 +1521,37 @@ response, and that `schedule:run` runs the schedule, on SQLite, MySQL and Postgr
 
 ---
 
+## Phase 46 — relations inside components, repeatables inside items (`adapter-kernel`, `adapter-filament`)
+
+The last component shapes the Laravel layout reported instead of storing: a relation inside a
+component (`componentRelation`), a repeatable inside a repeatable's items (`nestedRepeatable`), and
+the files of a component inside an item in a transfer (`componentMediaTransfer`). The kernel's
+`expandComponents` takes `componentRelations`/`nestedTables` and hands them back on the row that
+holds them (the entry for an embedded component, an item for a repeatable's or a zone member's).
+A to-one is a key column on that row (`cta_author_id`, `link_author_id`), a to-many a link table
+keeping the targets' order (`menus_cta_topics_lnk`, as Strapi keeps one per component relation),
+both unlinked when the target goes; a nested repeatable is a table of its parent item's table.
+Strapi's component relations go one way, so one declaring an inverse is still a gap
+(`componentRelationInverse`).
+
+Over REST they behave as strapi-php's do: populated only when populate names them (`populate=*`
+leaves them out), filtered, sorted, counted and narrowed inside the component's populate, and an
+unknown key there refused at its path; a component sent without its id is a new one, so its links
+start from none and `connect`/`disconnect` apply to nothing it held; a draft links drafts and its
+published version published targets; publishing copies every nested item with its links. Items
+that link anything or hold items are written one by one (`StrapiItems`). In the admin, the form's
+repeaters nest and pick relations; a zone's Builder picks them by id and holds nested items as
+plain repeaters. `strapi:import`/`strapi:export` carry a component's relations as Strapi archives
+them (links from the component's uid and archived id) and a nested component's files from its own
+uid. GraphQL's component types still leave the relations out (`graphqlComponentRelations`).
+
+Exit: `component-vectors.json` (37 checks) and `nested-components-export.tar.gz` (import, export
+compared, read vectors) recorded from strapi-php with the fixture's Menu; the existing vector
+suites unchanged; ComponentRelationsAdminTest writes, reads back and publishes through the form
+and the zone's Builder; the OpenAPI document re-recorded with Menu.
+
+---
+
 ## Sequencing rationale (quick reference)
 
 1. **Strapi first** — mature schema validates the IR fastest, with the thinnest adapter.

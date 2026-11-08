@@ -682,6 +682,20 @@ export const buildGraphqlSchema = (input: GraphqlSchemaInput): GraphqlSchema => 
   queryFields.unshift(...plugins.queries);
   mutationFields.push(...plugins.mutations);
   if (input.media) b.define(genericMorph(b, types));
+  const linking = input.doc.components
+    .filter((c) => b.componentMaps.has(componentTypeName(c)))
+    .flatMap((c) =>
+      c.fields
+        .filter((f) => f.type === "relation")
+        .map((f) => `${componentUid(c)}.${fieldApiName(f)}`),
+    );
+  if (linking.length > 0)
+    gaps.push({
+      feature: "graphqlComponentRelations",
+      location: {},
+      severity: "downgrade",
+      message: `GraphQL's component types leave out the relations inside them (${linking.join(", ")}): read and write them over REST. A GraphQL write sending such a component replaces it whole, its relations too, as Strapi replaces a component sent without its id.`,
+    });
   gaps.push(
     {
       feature: "graphqlRoleMutations",

@@ -281,7 +281,7 @@ describe("media fields", () => {
       /'shared\.frame' => \['relation' => 'blocksFrame', 'components' => \['image'\], 'fields' => \[\n\s+'image' => \['relation' => 'image', 'kind' => 'mediaOne',/,
     );
     expect(serializer).toContain("'image' => $c->image->first() === null ? null");
-    expect(serializer).toContain("'__media' => array_intersect_key($item, ['image' => true]),");
+    expect(serializer).toContain("'__links' => array_intersect_key($item, ['image' => true]),");
     expect(content("app/Http/Controllers/Api/Generated/LandingApiController.php")).toContain(
       "StrapiRelations::zones($wire['children'], LandingSerializer::ZONES, ",
     );

@@ -1,5 +1,6 @@
 import type { ContentType } from "@camis/ir-schema";
 import { emitField, type FieldEmit } from "./fields";
+import { constrainedTo, indexName } from "./identifiers";
 import { filamentNames } from "./names";
 import type { ForeignKeyColumn, PivotTable } from "./relations";
 
@@ -98,8 +99,8 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('${pivot.table}', function (Blueprint $table): void {
-            $table->foreignId('${pivot.leftFk}')->constrained('${pivot.leftTable}')->cascadeOnDelete();
-            $table->foreignId('${pivot.rightFk}')->constrained('${pivot.rightTable}')->cascadeOnDelete();
+            $table->foreignId('${pivot.leftFk}')${constrainedTo(pivot.table, pivot.leftFk, pivot.leftTable)}->cascadeOnDelete();
+            $table->foreignId('${pivot.rightFk}')${constrainedTo(pivot.table, pivot.rightFk, pivot.rightTable)}->cascadeOnDelete();
         });
     }
 
@@ -113,11 +114,18 @@ return new class extends Migration
 /** Constrains keys a create-table migration declared bare, once the tables they point at exist. */
 export const emitForeignKeysMigration = (ct: ContentType, keys: ForeignKeyColumn[]): string => {
   const table = filamentNames(ct).table;
+  const named = (k: ForeignKeyColumn): string => {
+    const name = indexName(table, [k.column], "foreign");
+    return name === null ? "" : `, '${name}'`;
+  };
   const add = keys.map(
     (k) =>
-      `            $table->foreign('${k.column}')->references('id')->on('${k.table}')${k.onDelete};`,
+      `            $table->foreign('${k.column}'${named(k)})->references('id')->on('${k.table}')${k.onDelete};`,
   );
-  const drop = keys.map((k) => `            $table->dropForeign(['${k.column}']);`);
+  const drop = keys.map((k) => {
+    const name = indexName(table, [k.column], "foreign");
+    return `            $table->dropForeign(${name === null ? `['${k.column}']` : `'${name}'`});`;
+  });
   return `<?php
 
 declare(strict_types=1);

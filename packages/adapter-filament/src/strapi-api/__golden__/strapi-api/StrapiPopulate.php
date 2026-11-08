@@ -42,7 +42,14 @@ final class StrapiPopulate
             }
         }
 
-        return $rows->map(fn (Model $row) => self::render($row, $params, $tree, $loaded, $serializer))->values()->all();
+        $inside = [];
+        foreach ($tree as $key => $sub) {
+            if (in_array($key, $serializer::COMPONENTS, true)) {
+                self::componentLinks($inside, $rows, (string) $key, $sub, $serializer, $viewer, $published, $cohort);
+            }
+        }
+
+        return $rows->map(fn (Model $row) => self::render($row, $params, $tree, $loaded, $serializer, $inside))->values()->all();
     }
 
     // ------------------------------------------------------------------------------ the tree
@@ -93,6 +100,9 @@ final class StrapiPopulate
                 continue;
             }
             $sub = is_array($value) ? array_intersect_key($value, array_flip(self::PARAMS)) : [];
+            if (in_array($key, $serializer::COMPONENTS, true) && ! isset($serializer::ZONES[$key])) {
+                self::checkInside($sub['populate'] ?? null, self::componentFields($key, $serializer), self::join($at, $key));
+            }
             if (self::allowed($key, $serializer, $viewer)) {
                 $sub['tree'] = self::subtree($key, $sub, $serializer, $viewer, $at);
                 $tree[$key] = $sub;
@@ -113,6 +123,9 @@ final class StrapiPopulate
         $sub = $tree[$key] ?? ['tree' => []];
         if ($rest !== null && isset($serializer::FIELDS[$key]['relation'])) {
             self::dotted($sub['tree'], $rest, $serializer::FIELDS[$key]['serializer'], $viewer, self::join($at, $key));
+        } elseif ($rest !== null) {
+            // 'cta.author': what the component holds, populated inside it.
+            $sub['populate'] = [...(is_array($sub['populate'] ?? null) ? $sub['populate'] : []), $rest];
         }
         $tree[$key] = $sub;
     }
@@ -155,6 +168,230 @@ final class StrapiPopulate
         $parts = array_filter([$a, $b], fn ($p) => $p !== null && $p !== '');
 
         return $parts === [] ? null : implode('.', $parts);
+    }
+
+    /**
+     * Refuses a key a component's populate names that it does not hold (a field of its own, not a
+     * component, file, relation or repeatable), as Strapi does, before anything is read.
+     */
+    private static function checkInside(mixed $populate, array $fields, ?string $at): void
+    {
+        if (! is_array($populate) || array_is_list($populate)) {
+            return;
+        }
+        $own = self::nestedKeys($fields);
+        foreach ($populate as $key => $value) {
+            $key = (string) $key;
+            if (! in_array($key, $own, true)) {
+                throw StrapiError::invalidKey($key, $at, 'populate');
+            }
+            if (! is_array($value) || isset($fields[$key]['relation'])) {
+                continue;
+            }
+            $inner = isset($fields[$key]['component']) ? $fields[$key]['fields'] : self::under($fields, $key);
+            self::checkInside($value['populate'] ?? null, $inner, self::join($at, $key));
+        }
+    }
+
+    /** A component's map, keyed relative to it: a repeatable's item fields, or an embedded one's. */
+    private static function componentFields(string $key, string $serializer): array
+    {
+        return isset($serializer::FIELDS[$key]['component']) ? $serializer::FIELDS[$key]['fields'] : self::within($key, $serializer);
+    }
+
+    /** The entries of $fields under $key, keyed relative to it. */
+    private static function under(array $fields, string $key): array
+    {
+        $inner = [];
+        foreach ($fields as $path => $field) {
+            if (str_starts_with((string) $path, "{$key}.")) {
+                $inner[substr((string) $path, strlen($key) + 1)] = $field;
+            }
+        }
+
+        return $inner;
+    }
+
+    /**
+     * The parameters $populate gives a key at $path inside a component (['link', 'author']), or
+     * null when it does not name it. '*' names every key one level down, with nothing inside.
+     */
+    private static function namedAt(mixed $populate, array $path): ?array
+    {
+        $sub = null;
+        foreach ($path as $segment) {
+            $sub = self::named($populate, (string) $segment);
+            if ($sub === null) {
+                return null;
+            }
+            $populate = $sub['populate'] ?? null;
+        }
+
+        return $sub;
+    }
+
+    private static function named(mixed $populate, string $key): ?array
+    {
+        if ($populate === '*' || $populate === true || $populate === 'true') {
+            return [];
+        }
+        if (is_string($populate)) {
+            $populate = array_map('trim', explode(',', $populate));
+        }
+        if (! is_array($populate)) {
+            return null;
+        }
+        if (array_is_list($populate)) {
+            $sub = null;
+            foreach ($populate as $item) {
+                [$head, $rest] = array_pad(explode('.', (string) $item, 2), 2, null);
+                if ($head === $key) {
+                    $sub ??= [];
+                    if ($rest !== null) {
+                        $sub['populate'][] = $rest;
+                    }
+                }
+            }
+
+            return $sub;
+        }
+        if (! array_key_exists($key, $populate) || in_array($populate[$key], [false, 'false'], true)) {
+            return null;
+        }
+
+        return is_array($populate[$key]) ? array_intersect_key($populate[$key], array_flip(self::PARAMS)) : [];
+    }
+
+    // ------------------------------------------------------------------- inside components
+
+    /**
+     * The relations inside a populated component that its populate names, loaded for every row
+     * holding them at once (one query per relation and level, as a type's own relations are):
+     * path → load()'s result. A path is the keys down to the relation, '>' entering a
+     * repeatable's or a zone member's items ('cta.author', 'items>link.author',
+     * 'items>children>author', 'sections>shared.link>author').
+     */
+    private static function componentLinks(array &$inside, Collection $rows, string $key, array $sub, string $serializer, ?Authenticatable $viewer, bool $published, ?string $cohort): void
+    {
+        if (isset($serializer::ZONES[$key])) {
+            $on = is_array($sub['on'] ?? null) ? $sub['on'] : null;
+            foreach ($serializer::ZONES[$key] as $uid => $member) {
+                if ($on !== null && (! array_key_exists($uid, $on) || in_array($on[$uid], [false, 'false'], true))) {
+                    continue;
+                }
+                $populate = $on === null ? ($sub['populate'] ?? null) : (is_array($on[$uid]) ? ($on[$uid]['populate'] ?? null) : null);
+                self::holderLinks($inside, "{$key}>{$uid}>", self::items($rows, $member['relation']), self::memberFields($member), $populate, $serializer, $viewer, $published, $cohort, $key);
+            }
+
+            return;
+        }
+        $field = $serializer::FIELDS[$key] ?? [];
+        isset($field['component'])
+            ? self::holderLinks($inside, "{$key}>", self::items($rows, $field['component']), $field['fields'], $sub['populate'] ?? null, $serializer, $viewer, $published, $cohort, $key)
+            : self::holderLinks($inside, "{$key}.", $rows, self::within($key, $serializer), $sub['populate'] ?? null, $serializer, $viewer, $published, $cohort, $key);
+    }
+
+    /**
+     * For the rows holding a component (the entries, for an embedded one; the items, for a
+     * repeatable's), loads each relation inside it that $populate names, and goes on into the
+     * items of each repeatable inside it that $populate names. $fields is the component's map,
+     * keyed relative to the holding row.
+     */
+    private static function holderLinks(array &$inside, string $path, Collection $rows, array $fields, mixed $populate, string $serializer, ?Authenticatable $viewer, bool $published, ?string $cohort, string $at): void
+    {
+        if ($rows->isEmpty()) {
+            return;
+        }
+        foreach ($fields as $key => $field) {
+            $key = (string) $key;
+            $nested = isset($field['component']);
+            if (! $nested && (! isset($field['relation']) || in_array($field['kind'], ['mediaOne', 'mediaMany'], true))) {
+                continue;
+            }
+            $sub = self::namedAt($populate, explode('.', $key));
+            if ($sub === null) {
+                continue;
+            }
+            if ($nested) {
+                self::holderLinks($inside, "{$path}{$key}>", self::items($rows, $field['component']), $field['fields'], $sub['populate'] ?? null, $serializer, $viewer, $published, $cohort, "{$at}.{$key}");
+            } elseif (! isset($field['private']) && StrapiQuery::readable($field, $viewer)) {
+                $sub['tree'] = self::tree($sub['populate'] ?? null, $field['serializer'], $viewer, "{$at}.{$key}");
+                $inside["{$path}{$key}"] = self::load($rows, $serializer, $field, $sub, $viewer, "{$at}.{$key}", $published, $cohort);
+            }
+        }
+    }
+
+    /** Every item a relation of the rows holds, loaded once for all of them. */
+    private static function items(Collection $rows, string $relation): Collection
+    {
+        $rows->load($relation);
+
+        return new Collection($rows->flatMap(fn (Model $row) => $row->getRelation($relation)->all())->all());
+    }
+
+    /** A zone member's map, keyed relative to its item: its files, its relations and its repeatables. */
+    private static function memberFields(array $member): array
+    {
+        return [...$member['fields'] ?? [], ...$member['links'] ?? [], ...$member['children'] ?? []];
+    }
+
+    /**
+     * A holder's component value with the relations loaded for it put in place, and its items'
+     * in theirs. An unset component stays null, as Strapi sends it.
+     */
+    private static function place(array $value, array $inside, string $path, array $fields, int|string $id): array
+    {
+        foreach ($fields as $key => $field) {
+            $key = (string) $key;
+            $segments = explode('.', $key);
+            if (isset($field['component'])) {
+                $items = self::at($value, $segments);
+                if (is_array($items) && array_is_list($items)) {
+                    $value = self::setAt($value, $segments, array_map(fn (mixed $item) => is_array($item) && isset($item['id']) ? self::place($item, $inside, "{$path}{$key}>", $field['fields'], $item['id']) : $item, $items));
+                }
+                continue;
+            }
+            $result = $inside["{$path}{$key}"] ?? null;
+            $parent = array_slice($segments, 0, -1);
+            if ($result === null || ($parent !== [] && ! is_array(self::at($value, $parent)))) {
+                continue;
+            }
+            $value = self::setAt($value, $segments, self::linkedTo($result, $id, $field['kind']));
+        }
+
+        return $value;
+    }
+
+    /** One holder's links from load()'s result: their count, a list, or the one target (or null). */
+    private static function linkedTo(array $result, int|string $id, string $kind): mixed
+    {
+        $linked = $result['links'][$id] ?? [];
+        if ($result['count']) {
+            return ['count' => (int) $linked];
+        }
+        $wires = array_map(fn (int|string $target) => $result['wires'][$target], $linked);
+
+        return in_array($kind, ['hasMany', 'belongsToMany', 'localizations', 'mediaMany'], true) ? $wires : ($wires[0] ?? null);
+    }
+
+    private static function at(array $value, array $path): mixed
+    {
+        foreach ($path as $segment) {
+            if (! is_array($value) || ! array_key_exists($segment, $value)) {
+                return null;
+            }
+            $value = $value[$segment];
+        }
+
+        return $value;
+    }
+
+    private static function setAt(array $value, array $path, mixed $set): array
+    {
+        $segment = array_shift($path);
+        $value[$segment] = $path === [] ? $set : self::setAt(is_array($value[$segment] ?? null) ? $value[$segment] : [], $path, $set);
+
+        return $value;
     }
 
     // ------------------------------------------------------------------------------ loading
@@ -246,7 +483,8 @@ final class StrapiPopulate
         };
         $links = [];
         if ($count) {
-            $rows->loadCount([$name => $constrain]);
+            // Eloquent snake-cases a count's default name; a camelCase relation keeps its own.
+            $rows->loadCount(["{$name} as {$name}_count" => $constrain]);
             foreach ($rows as $row) {
                 $links[$row->getKey()] = (int) $row->getAttribute("{$name}_count");
             }
@@ -363,15 +601,20 @@ final class StrapiPopulate
 
     // ---------------------------------------------------------------------------- rendering
 
-    private static function render(Model $row, array $params, array $tree, array $loaded, string $serializer): array
+    private static function render(Model $row, array $params, array $tree, array $loaded, string $serializer, array $inside = []): array
     {
         $wire = $serializer::toWire($row);
         $always = (bool) config('camis.rest.always_populate_components', false);
         foreach ($serializer::COMPONENTS as $key) {
             if (isset($serializer::ZONES[$key]) && (array_key_exists($key, $tree) || $always)) {
-                $wire[$key] = self::zone($wire[$key] ?? [], $key, $tree[$key] ?? [], $serializer);
+                $wire[$key] = array_map(fn (array $item) => self::place($item, $inside, "{$key}>{$item['__component']}>", self::memberFields($serializer::ZONES[$key][$item['__component']] ?? []), $item['id']), self::zone($wire[$key] ?? [], $key, $tree[$key] ?? [], $serializer));
             } elseif (array_key_exists($key, $tree)) {
-                $wire[$key] = self::component($wire[$key] ?? null, $key, $tree[$key], $serializer);
+                $value = self::component($wire[$key] ?? null, $key, $tree[$key], $serializer);
+                $wire[$key] = match (true) {
+                    $value === null => null,
+                    isset($serializer::FIELDS[$key]['component']) => array_map(fn (array $item) => self::place($item, $inside, "{$key}>", $serializer::FIELDS[$key]['fields'], $item['id']), $value),
+                    default => self::place($value, $inside, "{$key}.", self::within($key, $serializer), $row->getKey()),
+                };
             } elseif (! $always) {
                 unset($wire[$key]);
             }
@@ -393,7 +636,7 @@ final class StrapiPopulate
 
     /**
      * A populated component: null or [] when empty, as Strapi sends it, without the nested
-     * components and media its own populate does not name, narrowed by its fields.
+     * components, media and items its own populate does not name, narrowed by its fields.
      */
     private static function component(mixed $value, string $key, array $sub, string $serializer): ?array
     {
@@ -401,27 +644,49 @@ final class StrapiPopulate
         if ($value === null) {
             return $repeatable ? [] : null;
         }
-        $fields = $repeatable ? $serializer::FIELDS[$key]['fields'] : self::within($key, $serializer);
+        $fields = self::componentFields($key, $serializer);
+
+        return $repeatable
+            ? array_map(fn (array $item) => self::shaped($item, $fields, $sub, $key), $value)
+            : self::shaped($value, $fields, $sub, $key);
+    }
+
+    /**
+     * One component value as its populate entry asks: what it holds of its own (components,
+     * files, items) only when named, the items of a repeatable inside it shaped in turn, and
+     * narrowed by its fields. $fields is its map, keyed relative to it.
+     */
+    private static function shaped(array $value, array $fields, array $sub, string $at): array
+    {
+        $populate = $sub['populate'] ?? null;
         $own = self::nestedKeys($fields);
-        $value = $repeatable
-            ? array_map(fn (array $item) => self::files(self::inside($item, $sub['populate'] ?? null, $own), $sub['populate'] ?? null, $fields), $value)
-            : self::files(self::inside($value, $sub['populate'] ?? null, $own), $sub['populate'] ?? null, $fields);
+        $value = self::files(self::inside($value, $populate, $own), $populate, $fields);
+        foreach ($fields as $key => $field) {
+            if (! isset($field['component'])) {
+                continue;
+            }
+            $segments = explode('.', (string) $key);
+            $named = self::namedAt($populate, $segments);
+            $items = self::at($value, $segments);
+            if ($named !== null && is_array($items)) {
+                $value = self::setAt($value, $segments, array_map(fn (mixed $item) => is_array($item) ? self::shaped($item, $field['fields'], $named, "{$at}.{$key}") : $item, $items));
+            }
+        }
         if (! array_key_exists('fields', $sub)) {
             return $value;
         }
         $wanted = is_string($sub['fields']) ? array_map('trim', explode(',', $sub['fields'])) : (array) $sub['fields'];
-        $known = $repeatable ? array_keys($serializer::FIELDS[$key]['fields']) : self::embedded($key, $serializer);
+        // Only its own scalars: a component, file, relation or repeatable inside it is populated.
+        $known = array_map('strval', array_keys(array_filter($fields, fn (array $field, int|string $path) => isset($field['column']) && ! str_contains((string) $path, '.'), ARRAY_FILTER_USE_BOTH)));
         foreach ($wanted as $field) {
             if (! is_string($field) || ! in_array($field, $known, true)) {
-                throw StrapiError::invalidKey((string) $field, $key, 'fields');
+                throw StrapiError::invalidKey((string) $field, $at, 'fields');
             }
         }
-        // Strapi selects a component's id whichever fields are asked for.
-        $keep = array_flip(['id', ...$wanted]);
 
-        return $repeatable
-            ? array_map(fn (array $item) => array_intersect_key($item, $keep), $value)
-            : array_intersect_key($value, $keep);
+        // Strapi selects a component's id whichever fields are asked for, and keeps what its
+        // populate names.
+        return array_intersect_key($value, array_flip(['id', ...$wanted, ...array_intersect($own, array_keys($value))]));
     }
 
     /**
@@ -449,14 +714,23 @@ final class StrapiPopulate
         return $zone;
     }
 
-    /** An item's files narrowed by the fields their own populate names, as an entry's are. */
-    private static function files(array $item, mixed $populate, array $fields): array
+    /**
+     * An item's files narrowed by the fields their own populate names, as an entry's are, those
+     * of the components inside it too. $fields is keyed relative to the item; $prefix is the path
+     * to the component $item is, within it.
+     */
+    private static function files(array $item, mixed $populate, array $fields, string $prefix = ''): array
     {
         if (! is_array($populate) || array_is_list($populate)) {
             return $item;
         }
         foreach ($populate as $key => $sub) {
-            $field = $fields[$key] ?? null;
+            $field = $fields[$prefix . $key] ?? null;
+            if ($field === null && is_array($sub) && is_array($item[$key] ?? null) && ! array_is_list($item[$key])) {
+                $item[$key] = self::files($item[$key], $sub['populate'] ?? null, $fields, "{$prefix}{$key}.");
+
+                continue;
+            }
             if (! isset($field['relation'], $item[$key]) || ! is_array($sub) || ! array_key_exists('fields', $sub)) {
                 continue;
             }
@@ -479,6 +753,8 @@ final class StrapiPopulate
             is_array($populate) => array_keys($populate),
             default => [],
         };
+        // 'link.author' names link.
+        $named = array_map(fn (mixed $name) => explode('.', (string) $name)[0], $named);
 
         return array_diff_key($item, array_flip(array_diff($own, $named)));
     }
@@ -492,12 +768,6 @@ final class StrapiPopulate
         $wanted = is_string($fields) ? array_map('trim', explode(',', $fields)) : (array) $fields;
 
         return array_intersect_key($item, array_flip(['id', '__component', ...$own, ...$wanted]));
-    }
-
-    /** @return list<string> the scalar keys of an embedded component, relative to it */
-    private static function embedded(string $key, string $serializer): array
-    {
-        return array_map(fn (string $path) => explode('.', $path)[0], array_keys(self::within($key, $serializer)));
     }
 
     /** An embedded component's entries in FIELDS, keyed by their paths relative to it. */

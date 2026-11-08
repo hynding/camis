@@ -23,6 +23,9 @@ export interface ContentManagerInput {
   relations: readonly AdminRelation[];
   /** The attribute each embedded component column belongs to, in the order of its emits. */
   extraAttributes: readonly string[];
+  /** The attribute each picker for a relation inside an embedded component belongs to, in the
+   * order of the relation fields that follow the type's own. */
+  componentRelationAttributes: readonly string[];
   /** The attribute each repeater or zone builder edits, in the order of the repeaters. */
   repeaterAttributes: readonly string[];
   /** The fields that keep an entry from being duplicated directly. */
@@ -134,8 +137,12 @@ export const contentManagerForm = (
   extraEmits.forEach((e, i) =>
     placed.push({ attribute: input.extraAttributes[i]!, component: options.formComponent(e) }),
   );
+  const relationAttributes = [
+    ...input.relations.map((r) => r.attribute),
+    ...input.componentRelationAttributes,
+  ];
   relationFields.forEach((s, i) =>
-    placed.push({ attribute: input.relations[i]!.attribute, component: s }),
+    placed.push({ attribute: relationAttributes[i]!, component: s }),
   );
   media.forEach((m) => placed.push(m));
   repeaters.forEach((r, i) =>

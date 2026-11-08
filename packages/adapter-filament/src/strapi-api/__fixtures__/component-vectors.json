@@ -1,0 +1,326 @@
+{
+  "about": "Components all the way down over REST, checked against strapi-php. Run on an empty database: seeds in order, then reads, then writes in order, with strapi-populate-vectors.mjs. Menu has draft and publish; its cta is a Link (a label, a one-way author and one-way topics), its items are MenuItems (a label, a Link, a Frame icon and a repeatable of Links: a repeatable inside a repeatable), and its sections zone holds Links and MenuItems. Topic has draft and publish, so a published menu shows each linked topic's published version and a draft one its draft. publishedAt is compared as present or absent.",
+  "publishedAt": "presence",
+  "seed": [
+    { "path": "/authors", "as": "authors:Ann", "data": { "name": "Ann" } },
+    { "path": "/authors", "as": "authors:Bob", "data": { "name": "Bob" } },
+    { "path": "/topics", "as": "topics:News", "data": { "name": "News" } },
+    { "path": "/topics", "as": "topics:Sport", "data": { "name": "Sport" } },
+    {
+      "path": "/topics",
+      "query": "status=draft",
+      "as": "topics:Hidden",
+      "data": { "name": "Hidden" }
+    },
+    {
+      "path": "/menus",
+      "as": "menus:Main",
+      "data": {
+        "title": "Main",
+        "cta": {
+          "label": "Start",
+          "author": "@authors:Ann",
+          "topics": ["@topics:Sport", "@topics:News", "@topics:Hidden"]
+        },
+        "items": [
+          {
+            "label": "Home",
+            "link": { "label": "Home link", "author": "@authors:Bob", "topics": ["@topics:News"] },
+            "children": [
+              {
+                "label": "First",
+                "author": "@authors:Ann",
+                "topics": ["@topics:News", "@topics:Sport"]
+              },
+              { "label": "Second" }
+            ]
+          },
+          { "label": "About", "children": [] },
+          {
+            "label": "Blog",
+            "link": { "label": "Blog link", "topics": ["@topics:Sport"] },
+            "children": [{ "label": "Only", "author": "@authors:Bob" }]
+          }
+        ],
+        "sections": [
+          {
+            "__component": "shared.link",
+            "label": "Section link",
+            "author": "@authors:Bob",
+            "topics": ["@topics:Sport"]
+          },
+          {
+            "__component": "shared.menu-item",
+            "label": "Section item",
+            "link": { "label": "Inner", "author": "@authors:Ann" },
+            "children": [
+              { "label": "Zoned", "author": "@authors:Ann", "topics": ["@topics:News"] },
+              { "label": "Zoned too" }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "path": "/menus",
+      "as": "menus:Footer",
+      "data": {
+        "title": "Footer",
+        "cta": { "label": "Contact", "author": "@authors:Bob" },
+        "items": [
+          { "label": "Legal", "children": [{ "label": "Terms", "topics": ["@topics:Hidden"] }] }
+        ]
+      }
+    },
+    { "path": "/menus", "as": "menus:Empty", "data": { "title": "Empty" } }
+  ],
+  "reads": [
+    {
+      "name": "components stay off the wire unless populated",
+      "path": "/menus/@menus:Main",
+      "query": ""
+    },
+    {
+      "name": "populate=* sends components without their relations or nested components",
+      "path": "/menus",
+      "query": "populate=*&sort=title"
+    },
+    {
+      "name": "an embedded component's relations, populated",
+      "path": "/menus",
+      "query": "sort=title&fields[0]=title&populate[cta][populate]=*"
+    },
+    {
+      "name": "an embedded component's relation named by populate, narrowed by fields",
+      "path": "/menus",
+      "query": "sort=title&fields[0]=title&populate[cta][populate][author][fields][0]=name"
+    },
+    {
+      "name": "an embedded component's to-many relation, sorted",
+      "path": "/menus/@menus:Main",
+      "query": "fields[0]=title&populate[cta][populate][topics][sort]=name:desc&populate[cta][populate][topics][fields][0]=name"
+    },
+    {
+      "name": "an embedded component's to-many relation, filtered and counted",
+      "path": "/menus/@menus:Main",
+      "query": "fields[0]=title&populate[cta][populate][topics][filters][name][$eq]=News&populate[cta][populate][author][count]=true"
+    },
+    {
+      "name": "populated without its relations, a component leaves them out",
+      "path": "/menus/@menus:Main",
+      "query": "fields[0]=title&populate[cta]=true"
+    },
+    {
+      "name": "the draft links the topics' drafts, a draft-only one included",
+      "path": "/menus/@menus:Main",
+      "query": "status=draft&fields[0]=title&populate[cta][populate][topics][fields][0]=name&populate[cta][populate][topics][fields][1]=publishedAt"
+    },
+    {
+      "name": "the published version links the published topics",
+      "path": "/menus/@menus:Main",
+      "query": "fields[0]=title&populate[cta][populate][topics][fields][0]=name&populate[cta][populate][topics][fields][1]=publishedAt"
+    },
+    {
+      "name": "relations of a repeatable's items",
+      "path": "/menus",
+      "query": "sort=title&fields[0]=title&populate[items][populate][link][populate][author][fields][0]=name&populate[items][populate][link][populate][topics][fields][0]=name"
+    },
+    {
+      "name": "a repeatable inside a repeatable's items, not populated",
+      "path": "/menus/@menus:Main",
+      "query": "fields[0]=title&populate[items]=true"
+    },
+    {
+      "name": "a repeatable inside a repeatable's items, populated",
+      "path": "/menus",
+      "query": "sort=title&fields[0]=title&populate[items][populate][children]=true"
+    },
+    {
+      "name": "a repeatable inside a repeatable's items, with its relations",
+      "path": "/menus",
+      "query": "sort=title&fields[0]=title&populate[items][populate][children][populate][author][fields][0]=name&populate[items][populate][children][populate][topics][fields][0]=name"
+    },
+    {
+      "name": "a repeatable inside a repeatable's items, narrowed by fields",
+      "path": "/menus/@menus:Main",
+      "query": "fields[0]=title&populate[items][fields][0]=label&populate[items][populate][children][fields][0]=label"
+    },
+    {
+      "name": "populate=* inside the items",
+      "path": "/menus/@menus:Main",
+      "query": "fields[0]=title&populate[items][populate]=*"
+    },
+    {
+      "name": "a zone's items, with their relations and nested repeatables",
+      "path": "/menus/@menus:Main",
+      "query": "fields[0]=title&populate[sections][populate]=*"
+    },
+    {
+      "name": "a zone's items through on, with relations two levels down",
+      "path": "/menus/@menus:Main",
+      "query": "fields[0]=title&populate[sections][on][shared.link][populate][author][fields][0]=name&populate[sections][on][shared.menu-item][populate][children][populate][author][fields][0]=name&populate[sections][on][shared.menu-item][populate][link][populate][author][fields][0]=name"
+    },
+    {
+      "name": "populate in dotted form reaches an embedded component's relation",
+      "path": "/menus/@menus:Main",
+      "query": "fields[0]=title&populate[0]=cta.author"
+    },
+    {
+      "name": "filter by an embedded component's relation",
+      "path": "/menus",
+      "query": "fields[0]=title&filters[cta][author][name][$eq]=Bob"
+    },
+    {
+      "name": "filter by an embedded component's to-many relation",
+      "path": "/menus",
+      "query": "fields[0]=title&filters[cta][topics][name][$eq]=News"
+    },
+    {
+      "name": "filter by a repeatable's items' relation",
+      "path": "/menus",
+      "query": "sort=title&fields[0]=title&filters[items][link][author][name][$eq]=Bob"
+    },
+    {
+      "name": "filter by a repeatable inside a repeatable",
+      "path": "/menus",
+      "query": "sort=title&fields[0]=title&filters[items][children][label][$eq]=Terms"
+    },
+    {
+      "name": "filter by a relation in a repeatable inside a repeatable",
+      "path": "/menus",
+      "query": "sort=title&fields[0]=title&filters[items][children][author][name][$eq]=Ann"
+    },
+    {
+      "name": "populate an unknown key inside a component",
+      "path": "/menus",
+      "query": "populate[cta][populate][nope]=true"
+    }
+  ],
+  "writes": [
+    {
+      "name": "an update keeps the components it does not send",
+      "method": "PUT",
+      "path": "/menus/@menus:Footer",
+      "query": "fields[0]=title&populate[cta][populate][author][fields][0]=name&populate[items][populate][children][populate][topics][fields][0]=name",
+      "data": { "title": "Footer, again" }
+    },
+    {
+      "name": "an embedded component sent without its id replaces its links",
+      "method": "PUT",
+      "path": "/menus/@menus:Footer",
+      "query": "fields[0]=title&populate[cta][populate][author][fields][0]=name&populate[cta][populate][topics][fields][0]=name",
+      "data": { "cta": { "label": "Write", "topics": ["@topics:News"] } }
+    },
+    {
+      "name": "connect and disconnect inside an embedded component",
+      "method": "PUT",
+      "path": "/menus/@menus:Main",
+      "query": "status=draft&fields[0]=title&populate[cta][populate][author][fields][0]=name&populate[cta][populate][topics][fields][0]=name",
+      "data": {
+        "cta": {
+          "label": "Start",
+          "author": { "connect": ["@authors:Bob"] },
+          "topics": {
+            "disconnect": ["@topics:Sport"],
+            "connect": [{ "documentId": "@topics:Sport", "position": { "start": true } }]
+          }
+        }
+      }
+    },
+    {
+      "name": "the items and their nested items replaced",
+      "method": "PUT",
+      "path": "/menus/@menus:Footer",
+      "query": "fields[0]=title&populate[items][populate][children][populate][author][fields][0]=name&populate[items][populate][link][populate][topics][fields][0]=name",
+      "data": {
+        "items": [
+          {
+            "label": "Help",
+            "link": { "label": "Help link", "topics": ["@topics:Sport", "@topics:News"] },
+            "children": [{ "label": "FAQ", "author": "@authors:Ann" }, { "label": "Chat" }]
+          },
+          { "label": "Legal", "children": [] }
+        ]
+      }
+    },
+    {
+      "name": "a zone's items with relations and nested items, replaced",
+      "method": "PUT",
+      "path": "/menus/@menus:Empty",
+      "query": "status=draft&fields[0]=title&populate[sections][on][shared.link][populate][author][fields][0]=name&populate[sections][on][shared.menu-item][populate][children][populate][author][fields][0]=name",
+      "data": {
+        "sections": [
+          {
+            "__component": "shared.menu-item",
+            "label": "Zone item",
+            "children": [{ "label": "Deep", "author": "@authors:Bob" }]
+          },
+          { "__component": "shared.link", "label": "Zone link", "author": "@authors:Ann" }
+        ]
+      }
+    },
+    {
+      "name": "a component's relation to a missing document is refused",
+      "method": "PUT",
+      "path": "/menus/@menus:Empty",
+      "data": { "cta": { "label": "Bad", "author": "nosuchdocumentidxxxxxxxx" } }
+    },
+    {
+      "name": "a nested item's relation to a missing document is refused",
+      "method": "PUT",
+      "path": "/menus/@menus:Empty",
+      "data": {
+        "items": [
+          {
+            "label": "Bad",
+            "children": [{ "label": "Worse", "topics": ["nosuchdocumentidxxxxxxxx"] }]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the refused writes changed nothing",
+      "method": "GET",
+      "path": "/menus/@menus:Empty",
+      "query": "status=draft&fields[0]=title&populate[cta]=true&populate[items][populate]=*"
+    },
+    {
+      "name": "a menu made as a draft, then published",
+      "method": "POST",
+      "path": "/menus",
+      "query": "status=draft",
+      "as": "menus:Later",
+      "data": {
+        "title": "Later",
+        "cta": { "label": "Soon", "topics": ["@topics:News", "@topics:Hidden"] },
+        "items": [
+          { "label": "One", "children": [{ "label": "Nested", "topics": ["@topics:Sport"] }] }
+        ]
+      }
+    },
+    {
+      "name": "the draft's links",
+      "method": "GET",
+      "path": "/menus/@menus:Later",
+      "query": "status=draft&fields[0]=title&populate[cta][populate][topics][fields][0]=name&populate[items][populate][children][populate][topics][fields][0]=name"
+    },
+    {
+      "name": "publishing copies every link onto the published topics",
+      "method": "PUT",
+      "path": "/menus/@menus:Later",
+      "query": "fields[0]=title&populate[cta][populate][topics][fields][0]=name&populate[cta][populate][topics][fields][1]=publishedAt&populate[items][populate][children][populate][topics][fields][0]=name",
+      "data": { "title": "Later" }
+    },
+    {
+      "name": "deleting a linked author unlinks it from every component",
+      "method": "DELETE",
+      "path": "/authors/@authors:Bob"
+    },
+    {
+      "name": "after the author is gone",
+      "method": "GET",
+      "path": "/menus/@menus:Main",
+      "query": "status=draft&fields[0]=title&populate[cta][populate][author][fields][0]=name&populate[items][populate][link][populate][author][fields][0]=name&populate[items][populate][children][populate][author][fields][0]=name"
+    }
+  ]
+}

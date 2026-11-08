@@ -15,12 +15,23 @@ import {
   childMigrationFilename,
   childRelationMethod,
   childTableEmit,
+  childTablesWithin,
   emitChildMigration,
   camelPath,
   emitChildModel,
+  linksFilesWithin,
+  relationPickers,
   repeaterComponent,
   type ChildTableEmit,
 } from "./components";
+import {
+  componentPivotMigrationFilename,
+  componentRelationMethod,
+  componentRelationPicker,
+  componentRelations,
+  emitComponentPivotMigration,
+  type ComponentPivot,
+} from "./component-relations";
 import { apiCustomSeed, emitApiController, emitApiRoutes } from "./api";
 import { emitBlocksFiles, hasBlocksFields } from "./blocks";
 import { emitJsonEditorFiles, hasJsonFields } from "./json-editor";
@@ -40,14 +51,13 @@ import {
 } from "./migration";
 import { migrationOrder } from "./migration-order";
 import { emitModel } from "./model";
-import { filamentNames, snakeColumn } from "./names";
+import { filamentNames, snake, snakeColumn } from "./names";
 import { constrainedColumn, resolveRelations, type ForeignKeyColumn } from "./relations";
 import { emitResourceFiles } from "./resource";
 import { draftPublishPlan } from "./strapi-api/draft-publish";
 import { guestsPlan } from "./strapi-api/guests";
 import { localizationPlan, sharedAcrossLocalesMethod } from "./strapi-api/localization";
 import {
-  itemMediaTransferGap,
   mediaAllowedTypes,
   mediaComponentsConstant,
   mediaFields,
@@ -195,6 +205,12 @@ export const filamentAdapter: GenerateAdapter = {
           : emitStrapiApi(strapiInput)
         : undefined;
     const children: { ct: (typeof emitted)[number]; child: ChildTableEmit }[] = [];
+    const componentPivots: ComponentPivot[] = [];
+    // Constraints on an entry's own component relation keys, added once every table exists.
+    const componentKeys = new Map<string, ForeignKeyColumn[]>();
+    // The Strapi API style over Laravel storage keeps what Strapi's components hold all the way
+    // down: relations inside them, and repeatables inside their items.
+    const deepComponents = apiStyle === "strapi" && storage !== "strapi";
     emitted.forEach((ct) => {
       for (const f of ct.fields) {
         if (f.type === "relation" || f.type === "component") continue;
@@ -209,7 +225,11 @@ export const filamentAdapter: GenerateAdapter = {
           });
         }
       }
-      const expansion = expandComponents(doc, ct);
+      const expansion = expandComponents(
+        doc,
+        ct,
+        deepComponents ? { componentRelations: true, nestedTables: true } : {},
+      );
       gaps.push(...expansion.gaps);
       // On the Strapi storage layout the schema, the admin panel and the models are Strapi's:
       // `emitStrapiStorage` owns every per-content-type file, so nothing below applies.
@@ -224,32 +244,42 @@ export const filamentAdapter: GenerateAdapter = {
       const embeddedEmits = expansion.scalars
         .filter((s) => !embeddedMedia.includes(s))
         .map((s) => emitField(columnField(s), s.path.map(snakeColumn).join("_")));
+      const context = deepComponents ? { doc } : undefined;
       const ctChildren = expansion.tables.map((t) =>
-        childTableEmit(ct, t, fileModel !== undefined),
+        childTableEmit(ct, t, fileModel !== undefined, context),
       );
-      ctChildren.forEach((child) => children.push({ ct, child }));
       const zoneChildren =
         apiStyle === "strapi"
           ? expansion.zones.flatMap((z) =>
-              z.members.map((m) => ({
-                ...childTableEmit(ct, m.table, fileModel !== undefined),
-                ordered: true,
-              })),
+              z.members.map(
+                (m): ChildTableEmit => ({
+                  ...childTableEmit(ct, m.table, fileModel !== undefined, context),
+                  ordered: true,
+                }),
+              ),
             )
           : [];
-      zoneChildren.forEach((child) => children.push({ ct, child }));
+      const allChildren = [...ctChildren, ...zoneChildren].flatMap(childTablesWithin);
+      allChildren.forEach((child) => children.push({ ct, child }));
       const names = filamentNames(ct);
+      const ownRelations = deepComponents
+        ? componentRelations(doc, names.table, `${snake(ct.name)}_id`, expansion.relations)
+        : [];
+      componentPivots.push(
+        ...[...allChildren.flatMap((c) => c.relations), ...ownRelations].flatMap((r) =>
+          r.pivot === null ? [] : [r.pivot],
+        ),
+      );
+      const ownKeys = ownRelations.flatMap((r) => (r.foreignKey === null ? [] : [r.foreignKey]));
+      if (ownKeys.length > 0) componentKeys.set(ct.name, ownKeys);
+      const pickers = relationPickers(ct, versioned, localized);
       const linkOrders = strapi?.linkOrders?.get(ct.name);
       // With a media library a media field is a link to its files, not a column; a dynamic zone
       // lives in its members' tables.
       const mediaOf = fileModel === undefined ? [] : mediaFields(ct);
       const mediaItems = [...ctChildren, ...zoneChildren]
-        .filter((c) => c.media.length > 0)
+        .filter(linksFilesWithin)
         .map((c) => c.relationName);
-      const nestedMediaItems = [...ctChildren, ...zoneChildren]
-        .filter((c) => c.media.some((m) => m.path.length > 1))
-        .map((c) => c.relationName);
-      if (nestedMediaItems.length > 0) gaps.push(itemMediaTransferGap(ct, nestedMediaItems));
       const columns = {
         ...ct,
         fields: ct.fields.filter(
@@ -265,10 +295,11 @@ export const filamentAdapter: GenerateAdapter = {
           [
             ...(rel.methods.get(ct.name) ?? []),
             ...[...ctChildren, ...zoneChildren].map(childRelationMethod),
+            ...ownRelations.map(componentRelationMethod),
           ],
           hooks.observedModels.has(ct.name) || aiObservedModels.has(ct.name),
           embeddedEmits,
-          rel.fkNames.get(ct.name) ?? [],
+          [...(rel.fkNames.get(ct.name) ?? []), ...ownKeys.map((k) => k.column)],
           strapi?.scopeMethods.get(ct.name) !== undefined
             ? [strapi.scopeMethods.get(ct.name)!]
             : [],
@@ -302,9 +333,13 @@ export const filamentAdapter: GenerateAdapter = {
         path: migrationFilename(ct, migrationOrdinal.get(ct.name)!),
         content: emitMigration(
           columns,
-          (rel.fkColumns.get(ct.name) ?? []).map((k) =>
-            isDeferred(ct.name, k) ? k.definition : constrainedColumn(k),
-          ),
+          [
+            ...(rel.fkColumns.get(ct.name) ?? []).map((k) =>
+              isDeferred(ct.name, k) ? k.definition : constrainedColumn(k),
+            ),
+            // Constrained once every table exists: the target's may come later.
+            ...ownKeys.map((k) => k.definition),
+          ],
           embeddedEmits,
           {
             documentId: apiStyle === "strapi",
@@ -317,12 +352,19 @@ export const filamentAdapter: GenerateAdapter = {
       files.push(
         ...emitResourceFiles(
           columns,
-          rel.formFields.get(ct.name) ?? [],
+          [
+            ...(rel.formFields.get(ct.name) ?? []),
+            ...ownRelations.map((r) =>
+              componentRelationPicker(r, versioned, localized, pickers.locale(0)),
+            ),
+          ],
           embeddedEmits,
           [
-            ...ctChildren.map(repeaterComponent),
+            ...ctChildren.map((c) => repeaterComponent(c, pickers)),
             ...(apiStyle === "strapi"
-              ? expansion.zones.map((z) => zoneBuilder(ct, z, fileModel !== undefined))
+              ? expansion.zones.map((z) =>
+                  zoneBuilder(ct, z, fileModel !== undefined, context, pickers),
+                )
               : []),
           ],
           {
@@ -348,6 +390,7 @@ export const filamentAdapter: GenerateAdapter = {
                   contentManager: {
                     fields: ct.fields,
                     relations: rel.adminRelations.get(ct.name) ?? [],
+                    componentRelationAttributes: ownRelations.map((r) => r.path[0]!),
                     extraAttributes: expansion.scalars
                       .filter((s) => !embeddedMedia.includes(s))
                       .map((s) => s.path[0]!),
@@ -370,7 +413,7 @@ export const filamentAdapter: GenerateAdapter = {
           },
         ),
       );
-      [...ctChildren, ...zoneChildren].forEach((child) => {
+      allChildren.forEach((child) => {
         files.push({
           path: `app/Models/${child.model}.php`,
           content: emitChildModel(child, fileModel),
@@ -432,18 +475,32 @@ export const filamentAdapter: GenerateAdapter = {
 
       [...children]
         .sort((a, b) => a.child.table.localeCompare(b.child.table))
-        .forEach(({ ct, child }, k) => {
+        .forEach(({ child }, k) => {
           files.push({
             path: childMigrationFilename(child, emitted.length + rel.pivots.length + 1 + k),
-            content: emitChildMigration(ct, child),
+            content: emitChildMigration(child),
           });
         });
 
-      const afterTables = emitted.length + rel.pivots.length + children.length;
+      // After the child tables, which a link from an item's component names.
+      const afterChildren = emitted.length + rel.pivots.length + children.length;
+      [...componentPivots]
+        .sort((a, b) => a.table.localeCompare(b.table))
+        .forEach((p, k) => {
+          files.push({
+            path: componentPivotMigrationFilename(p, afterChildren + 1 + k),
+            content: emitComponentPivotMigration(p),
+          });
+        });
+
+      const afterTables = afterChildren + componentPivots.length;
       migrationTypeOrder
         .map((ct) => ({
           ct,
-          keys: (rel.fkColumns.get(ct.name) ?? []).filter((k) => isDeferred(ct.name, k)),
+          keys: [
+            ...(rel.fkColumns.get(ct.name) ?? []).filter((k) => isDeferred(ct.name, k)),
+            ...(componentKeys.get(ct.name) ?? []),
+          ],
         }))
         .filter(({ keys }) => keys.length > 0)
         .forEach(({ ct, keys }, i) => {

@@ -67,7 +67,7 @@ final class StrapiImport
     /** @var list<array{0: string, 1: string, 2: int, 3: string, 4: int|string, 5: string}> keys set once every row exists */
     private array $pending = [];
 
-    /** @var array<string, array<int|string, array{0: class-string<Model>, 1: int, 2: array<string, string>}>> component uid → archived id → [item model, row id, field → media relation] */
+    /** @var array<string, array<int|string, array{0: class-string<Model>, 1: int, 2: array<string, array<string, mixed>>, 3: string}>> component uid → archived id → [the model holding it, its row id, field → the file or link descriptor, the entry's uid] */
     private array $items = [];
 
     /** @var array<int|string, string> archived role id → role type */
@@ -302,8 +302,8 @@ final class StrapiImport
             }
             $children = [];
             foreach ($type['attributes'] as $attribute) {
-                foreach (self::childRelations($attribute) as $name) {
-                    $children[] = $model->{$name}()->getRelated()->getTable();
+                foreach (self::childNodes($attribute) as $node) {
+                    array_push($children, ...self::itemTables($model->{$node['repeatable'] ?? $node['relation']}()->getRelated(), $node));
                 }
             }
             // Children before their parent; types in reverse insert order, owners before targets.
@@ -341,19 +341,37 @@ final class StrapiImport
     }
 
     /**
+     * The repeatables and zone members an attribute keeps items in.
+     *
      * @param array<string, mixed>|null $attribute
-     * @return list<string>
+     * @return list<array<string, mixed>>
      */
-    private static function childRelations(?array $attribute): array
+    private static function childNodes(?array $attribute): array
     {
         if (isset($attribute['repeatable'])) {
-            return [$attribute['repeatable']];
+            return [$attribute];
         }
         if (isset($attribute['component'])) {
-            return array_map(fn (array $child): string => $child['repeatable'], $attribute['children'] ?? []);
+            return $attribute['children'] ?? [];
         }
 
-        return isset($attribute['zone']) ? array_values(array_map(fn (array $m): string => $m['relation'], $attribute['zone'])) : [];
+        return isset($attribute['zone']) ? array_values($attribute['zone']) : [];
+    }
+
+    /**
+     * An item table and the tables of the items nested in it, nested ones first.
+     *
+     * @param array<string, mixed> $node
+     * @return list<string>
+     */
+    private static function itemTables(Model $item, array $node): array
+    {
+        $tables = [];
+        foreach ($node['children'] ?? [] as $child) {
+            array_push($tables, ...self::itemTables($item->{$child['repeatable']}()->getRelated(), $child));
+        }
+
+        return [...$tables, $item->getTable()];
     }
 
     private function content(): void
@@ -516,7 +534,7 @@ final class StrapiImport
         $model = new ($type['model'])();
         $row = [];
         $children = [];
-        $files = [];
+        $held = [];
         foreach ($data as $key => $value) {
             if (! array_key_exists($key, $type['attributes'])) {
                 throw new \RuntimeException("{$uid}.{$key} has nowhere to go in this project");
@@ -534,11 +552,7 @@ final class StrapiImport
                 foreach ($attribute['children'] ?? [] as $child) {
                     $children[$key . '.' . implode('.', $child['key'])] = [$child, is_array($value) ? self::at($value, $child['key']) : null];
                 }
-                if (is_array($value)) {
-                    foreach ($attribute['files'] ?? [] as $file) {
-                        $files[] = [$file, self::at($value, [...array_slice($file['key'], 0, -1), 'id'])];
-                    }
-                }
+                $held[] = [$attribute, $value];
             } else {
                 $children[$key] = [$attribute, $value];
             }
@@ -561,34 +575,79 @@ final class StrapiImport
             $this->pending[] = [$table, $column, $id, $targetUid, $targetRef, $uid];
         }
         $model->setAttribute($model->getKeyName(), $id);
-        // An embedded component's files link the entry's row, by the id its component was archived with.
-        foreach ($files as [$file, $archived]) {
-            if ($archived !== null) {
-                $this->items[$file['uid']][$archived] ??= [$model::class, $id, []];
-                $this->items[$file['uid']][$archived][2][$file['key'][count($file['key']) - 1]] = $file['relation'];
-            }
+        // An embedded component's files and relations go with the entry's row.
+        foreach ($held as [$attribute, $value]) {
+            $this->holds($uid, $model::class, $id, $value, $attribute);
         }
         $stamps = ['created_at' => $row['created_at'] ?? null, 'updated_at' => $row['updated_at'] ?? null];
         foreach ($children as [$attribute, $items]) {
+            if (isset($attribute['repeatable'])) {
+                $this->items($uid, $model->{$attribute['repeatable']}(), $attribute, $items, $stamps);
+
+                continue;
+            }
             $position = 0;
             foreach (is_array($items) ? array_values($items) : [] as $item) {
-                if (isset($attribute['repeatable'])) {
-                    $id = $this->child($model->{$attribute['repeatable']}(), $attribute['scalars'], $item, $stamps);
-                    if (isset($attribute['media'], $item['id'])) {
-                        $this->items[$attribute['uid']][$item['id']] = [$model->{$attribute['repeatable']}()->getRelated()::class, $id, $attribute['media']];
-                    }
-
-                    continue;
-                }
                 $member = $attribute['zone'][$item['__component'] ?? ''] ?? null;
                 if ($member === null) {
                     throw new \RuntimeException("{$uid}: this project's zone has no component " . ($item['__component'] ?? '?'));
                 }
-                $id = $this->child($model->{$member['relation']}(), $member['scalars'], $item, $stamps + ['position' => $position]);
-                if (isset($member['media'], $item['id'])) {
-                    $this->items[$item['__component']][$item['id']] = [$model->{$member['relation']}()->getRelated()::class, $id, $member['media']];
-                }
+                $this->item($uid, $model->{$member['relation']}(), $member, $item, $stamps + ['position' => $position]);
                 $position++;
+            }
+        }
+    }
+
+    /**
+     * A repeatable's items, each with what it links and holds.
+     *
+     * @param array<string, mixed> $node
+     * @param array<string, mixed> $stamps
+     */
+    private function items(string $uid, HasOneOrMany $relation, array $node, mixed $items, array $stamps): void
+    {
+        foreach (is_array($items) ? array_values($items) : [] as $item) {
+            $this->item($uid, $relation, $node, $item, $stamps);
+        }
+    }
+
+    /**
+     * One item: its row, then the files and relations Strapi links from the components in it
+     * (remembered by their archived ids until the links are read), then the items inside it.
+     *
+     * @param array<string, mixed> $node
+     * @param array<string, mixed> $item
+     * @param array<string, mixed> $extra
+     */
+    private function item(string $uid, HasOneOrMany $relation, array $node, array $item, array $extra): void
+    {
+        $id = $this->child($relation, $node['scalars'], $item, $extra);
+        $model = $relation->getRelated()->newInstance();
+        $model->setAttribute($model->getKeyName(), $id);
+        $this->holds($uid, $model::class, $id, $item, $node);
+        $stamps = array_intersect_key($extra, ['created_at' => true, 'updated_at' => true]);
+        foreach ($node['children'] ?? [] as $child) {
+            $this->items($uid, $model->{$child['repeatable']}(), $child, self::at($item, $child['key']), $stamps);
+        }
+    }
+
+    /**
+     * The files and relations of the components a row holds, by the uid and archived id of the
+     * component each is linked from, found beside it in $value.
+     *
+     * @param class-string<Model> $model
+     * @param array<string, mixed> $node
+     */
+    private function holds(string $uid, string $model, int $id, mixed $value, array $node): void
+    {
+        if (! is_array($value)) {
+            return;
+        }
+        foreach ([...$node['files'] ?? [], ...$node['links'] ?? []] as $field) {
+            $archived = self::at($value, [...array_slice($field['key'], 0, -1), 'id']);
+            if (is_int($archived) || is_string($archived)) {
+                $this->items[$field['uid']][$archived] ??= [$model, $id, [], $uid];
+                $this->items[$field['uid']][$archived][2][$field['key'][count($field['key']) - 1]] = $field;
             }
         }
     }
@@ -733,6 +792,11 @@ final class StrapiImport
 
                 continue;
             }
+            if (($link['kind'] ?? '') === 'relation.basic' && ! isset(StrapiTransferMap::TYPES[$left['type']]) && isset($this->items[$left['type']])) {
+                $this->componentLink($left, $right, $attach, $index);
+
+                continue;
+            }
             if (($link['kind'] ?? '') === 'relation.morph') {
                 $owner = StrapiTransferMap::TYPES[$right['type']] ?? null;
                 $descriptor = $owner['links'][$right['field']] ?? null;
@@ -741,7 +805,7 @@ final class StrapiImport
 
                     continue;
                 }
-                $attach[] = [$right['type'], $right['ref'], $descriptor['relation'], $this->rows['plugin::upload.file'][$left['ref']] ?? null, ['order' => $right['pos'] ?? 0], $right['pos'] ?? 0, $index];
+                $attach[] = [$owner['model'], $this->rows[$right['type']][$right['ref']] ?? null, $descriptor['relation'], $this->rows['plugin::upload.file'][$left['ref']] ?? null, ['order' => $right['pos'] ?? 0], $right['pos'] ?? 0, $index];
 
                 continue;
             }
@@ -775,18 +839,17 @@ final class StrapiImport
                     $orders[$descriptor[$key]] = $side['pos'];
                 }
             }
-            $attach[] = [$left['type'], $left['ref'], $descriptor['relation'], $this->rows[$right['type']][$right['ref']] ?? null, $orders, $left['pos'] ?? 0, $index];
+            $attach[] = [StrapiTransferMap::TYPES[$left['type']]['model'], $this->rows[$left['type']][$left['ref']] ?? null, $descriptor['relation'], $this->rows[$right['type']][$right['ref']] ?? null, $orders, $left['pos'] ?? 0, $index];
         }
         // In each list's order: by position, then as the archive lists them.
         usort($attach, fn (array $a, array $b): int => [$a[0], $a[1], $a[2], $a[5], $a[6]] <=> [$b[0], $b[1], $b[2], $b[5], $b[6]]);
         $seen = [];
-        foreach ($attach as [$uid, $ref, $name, $target, $pivot]) {
-            $owner = $this->rows[$uid][$ref] ?? null;
-            if ($owner === null || $target === null || isset($seen["{$uid}|{$owner}|{$name}|{$target}"])) {
+        foreach ($attach as [$class, $owner, $name, $target, $pivot]) {
+            if ($owner === null || $target === null || isset($seen["{$class}|{$owner}|{$name}|{$target}"])) {
                 continue;
             }
-            $seen["{$uid}|{$owner}|{$name}|{$target}"] = true;
-            $model = new (StrapiTransferMap::TYPES[$uid]['model'])();
+            $seen["{$class}|{$owner}|{$name}|{$target}"] = true;
+            $model = new $class();
             $model->setAttribute($model->getKeyName(), $owner);
             $relation = $model->{$name}();
             assert($relation instanceof BelongsToMany || $relation instanceof MorphToMany);
@@ -796,7 +859,42 @@ final class StrapiImport
     }
 
     /**
-     * A file a repeatable component's item links, which Strapi keeps on the item's own row.
+     * A link from a component's relation, which Strapi keeps on the component's own row and this
+     * app on the row holding it: a to-one sets its key there, a to-many joins the list in
+     * $attach, its position kept.
+     *
+     * @param array<string, mixed> $left
+     * @param array<string, mixed> $right
+     * @param list<array<int, mixed>> $attach
+     */
+    private function componentLink(array $left, array $right, array &$attach, int $index): void
+    {
+        $item = $this->items[$left['type']][$left['ref']] ?? null;
+        $descriptor = $item[2][$left['field']] ?? null;
+        if ($item === null || ! isset($descriptor['kind'])) {
+            $this->skipped["{$left['type']}.{$left['field']}"] = 'this project keeps no such link';
+
+            return;
+        }
+        $target = $this->rows[$right['type']][$right['ref']] ?? null;
+        if ($target === null || ! $this->keeps($item[3], $right['type'], $right['ref'])) {
+            return;
+        }
+        $model = new ($item[0])();
+        $relation = $model->{$descriptor['relation']}();
+        if ($relation instanceof BelongsTo) {
+            DB::table($model->getTable())->where($model->getKeyName(), $item[1])->update([$relation->getForeignKeyName() => $target]);
+            $this->counts['links'] = ($this->counts['links'] ?? 0) + 1;
+
+            return;
+        }
+        $pivot = $descriptor['order'] !== null && ($left['pos'] ?? null) !== null ? [$descriptor['order'] => $left['pos']] : [];
+        $attach[] = [$item[0], $item[1], $descriptor['relation'], $target, $pivot, $left['pos'] ?? 0, $index];
+    }
+
+    /**
+     * A file a component links, which Strapi keeps on the component's own row and this app on the
+     * row holding it (an item's, or the entry's).
      *
      * @param array<string, mixed> $left
      * @param array<string, mixed> $right
@@ -804,7 +902,8 @@ final class StrapiImport
     private function itemFile(array $left, array $right): void
     {
         $item = $this->items[$right['type']][$right['ref']] ?? null;
-        $relation = $item[2][$right['field']] ?? null;
+        $field = $item[2][$right['field']] ?? null;
+        $relation = isset($field['kind']) ? null : ($field['relation'] ?? null);
         $file = $this->rows['plugin::upload.file'][$left['ref']] ?? null;
         if ($item === null || $relation === null || $file === null) {
             $this->skipped["{$right['type']}.{$right['field']}"] = 'this project keeps no media there';

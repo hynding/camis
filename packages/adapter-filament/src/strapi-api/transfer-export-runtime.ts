@@ -461,12 +461,12 @@ final class StrapiExport
                 if (isset($attribute['column'])) {
                     $data[$key] = self::value($row[$attribute['column']] ?? null, $attribute['type']);
                 } elseif (isset($attribute['component'])) {
-                    $components[$key] = $this->component($attribute['component'], $row, $this->repeatables($model, $id, $attribute['children'] ?? []), $this->linkedFiles($model, $id, $attribute['files'] ?? []));
-                    $this->embeddedFiles($model, $id, $attribute['files'] ?? [], $components[$key]);
+                    $components[$key] = $this->component($attribute['component'], $row, $this->repeatables($model, $id, $attribute['children'] ?? [], $type['draftPublish']), $this->linked($model, $id, $row, $attribute));
+                    $this->held($model, $id, $row, $attribute, $components[$key], $type['draftPublish']);
                 } elseif (isset($attribute['repeatable'])) {
-                    $components[$key] = $this->repeatableItems($model, $id, $attribute);
+                    $components[$key] = $this->repeatableItems($model, $id, $attribute, $type['draftPublish']);
                 } else {
-                    $components[$key] = $this->zone($model, $id, $attribute['zone']);
+                    $components[$key] = $this->zone($model, $id, $attribute['zone'], $type['draftPublish']);
                 }
             }
             $created = self::value($row['created_at'] ?? null, 'dateTime');
@@ -494,13 +494,12 @@ final class StrapiExport
     }
 
     /**
-     * A zone's items in order. An item with media fields is remembered by the id it goes by in
-     * the archive, as a repeatable component's is.
+     * A zone's items in order, each as a repeatable component's is.
      *
-     * @param array<string, array{relation: string, scalars: list<array<string, mixed>>, media?: array<string, string>}> $members
+     * @param array<string, array<string, mixed>> $members
      * @return list<array<string, mixed>>
      */
-    private function zone(Model $model, int $id, array $members): array
+    private function zone(Model $model, int $id, array $members, bool $versioned): array
     {
         $items = [];
         foreach ($members as $component => $member) {
@@ -511,66 +510,56 @@ final class StrapiExport
         usort($items, fn (array $a, array $b): int => $a[0] <=> $b[0]);
         $zone = [];
         foreach ($items as [, $component, $member, $child]) {
-            $item = $this->item($member['scalars'], $child) + ['__component' => $component];
-            $morph = $model->{$member['relation']}()->getRelated()->getMorphClass();
-            foreach ($member['media'] ?? [] as $key => $relation) {
-                $this->items[$morph][(int) $child['id']][$relation] = [$component, (int) $item['id'], $key];
-            }
-            $zone[] = $item;
+            $zone[] = $this->item($model->{$member['relation']}()->getRelated(), $member, $child, $versioned) + ['__component' => $component];
         }
 
         return $zone;
     }
 
     /**
-     * One component instance: always there, even when every value is null.
+     * One item, always there even when every value is null: its columns, the components in it,
+     * the items of the repeatables inside it, and the files and relations its components link.
      *
-     * @param list<array<string, mixed>> $scalars
+     * @param array<string, mixed> $node
      * @param array<string, mixed> $row
      * @return array<string, mixed>
      */
-    private function item(array $scalars, array $row): array
+    private function item(Model $model, array $node, array $row, bool $versioned): array
     {
-        return $this->component($scalars, $row) ?? ['id' => ++$this->components];
+        $id = (int) $row['id'];
+        $item = $this->component($node['scalars'], $row, $this->repeatables($model, $id, $node['children'] ?? [], $versioned), $this->linked($model, $id, $row, $node))
+            ?? ['id' => ++$this->components];
+        $this->held($model, $id, $row, $node, $item, $versioned);
+
+        return $item;
     }
 
     /**
-     * The items of each repeatable inside a component, by its key there.
+     * The items of each repeatable inside a component (or an item), by its key there.
      *
-     * @param list<array{key: list<string>, repeatable: string, scalars: list<array<string, mixed>>}> $children
+     * @param list<array<string, mixed>> $children
      * @return list<array{key: list<string>, items: list<array<string, mixed>>}>
      */
-    private function repeatables(Model $model, int $id, array $children): array
+    private function repeatables(Model $model, int $id, array $children, bool $versioned): array
     {
         return array_map(fn (array $child): array => [
             'key' => $child['key'],
-            'items' => $this->repeatableItems($model, $id, $child),
+            'items' => $this->repeatableItems($model, $id, $child, $versioned),
         ], $children);
     }
 
     /**
-     * A repeatable component's items. Strapi links an item's files to the item, so an item with
-     * media fields is remembered by the id it goes by in the archive.
+     * A repeatable component's items.
      *
-     * @param array{repeatable: string, scalars: list<array<string, mixed>>, uid?: string, media?: array<string, string>} $attribute
+     * @param array<string, mixed> $node
      * @return list<array<string, mixed>>
      */
-    private function repeatableItems(Model $model, int $id, array $attribute): array
+    private function repeatableItems(Model $model, int $id, array $node, bool $versioned): array
     {
-        $items = [];
-        foreach ($this->children($model, $id, $attribute['repeatable']) as $row) {
-            $item = $this->item($attribute['scalars'], $row);
-            if (isset($attribute['uid'], $attribute['media'])) {
-                $morph = $model->{$attribute['repeatable']}()->getRelated()->getMorphClass();
-                foreach ($attribute['media'] as $key => $relation) {
-                    // An item's link rows name the field by its path in the item, as its relation does.
-                    $this->items[$morph][(int) $row['id']][$relation] = [$attribute['uid'], (int) $item['id'], $key];
-                }
-            }
-            $items[] = $item;
-        }
-
-        return $items;
+        return array_map(
+            fn (array $row): array => $this->item($model->{$node['repeatable']}()->getRelated(), $node, $row, $versioned),
+            $this->children($model, $id, $node['repeatable']),
+        );
     }
 
     private static function at(array $data, array $path): mixed
@@ -586,34 +575,90 @@ final class StrapiExport
     }
 
     /**
-     * The paths, within an embedded component, of the file fields that link a file on this row.
+     * The paths, within a component, of the file and relation fields that link something from
+     * this row: a component holding only a link is still there.
      *
-     * @param list<array{key: list<string>, relation: string}> $files
+     * @param array<string, mixed> $node
+     * @param array<string, mixed> $row
      * @return list<list<string>>
      */
-    private function linkedFiles(Model $model, int $id, array $files): array
+    private function linked(Model $model, int $id, array $row, array $node): array
     {
         $model->setAttribute($model->getKeyName(), $id);
+        $links = function (array $field) use ($model, $row): bool {
+            $relation = $model->{$field['relation']}();
+
+            return $relation instanceof BelongsTo ? ($row[$relation->getForeignKeyName()] ?? null) !== null : $relation->exists();
+        };
 
         return array_values(array_map(
-            fn (array $file): array => $file['key'],
-            array_filter($files, fn (array $file): bool => $model->{$file['relation']}()->exists()),
+            fn (array $field): array => $field['key'],
+            array_filter([...$node['files'] ?? [], ...$node['links'] ?? []], $links),
         ));
     }
 
     /**
-     * An embedded component's files go by the id the component was given in this archive, as
-     * Strapi links them to the component's own row.
+     * The files and relations of the components a row holds go by the id each component was
+     * given in this archive, as Strapi links them from the component's own row: its files when
+     * the media links are written, its relations now.
      *
-     * @param list<array{key: list<string>, uid: string, field: string}> $files
+     * @param array<string, mixed> $row
+     * @param array<string, mixed> $node
+     * @param array<string, mixed>|null $value
      */
-    private function embeddedFiles(Model $model, int $id, array $files, ?array $component): void
+    private function held(Model $model, int $id, array $row, array $node, ?array $value, bool $versioned): void
     {
-        foreach ($files as $file) {
-            $archived = $component === null ? null : self::at($component, [...array_slice($file['key'], 0, -1), 'id']);
-            if ($archived !== null) {
-                $this->items[$model->getMorphClass()][$id][$file['field']] = [$file['uid'], (int) $archived, $file['key'][count($file['key']) - 1]];
+        if ($value === null) {
+            return;
+        }
+        $archived = fn (array $field): mixed => self::at($value, [...array_slice($field['key'], 0, -1), 'id']);
+        foreach ($node['files'] ?? [] as $file) {
+            if ($archived($file) !== null) {
+                $this->items[$model->getMorphClass()][$id][$file['field']] = [$file['uid'], (int) $archived($file), $file['key'][count($file['key']) - 1]];
             }
+        }
+        foreach ($node['links'] ?? [] as $link) {
+            if ($archived($link) !== null) {
+                $this->componentLinks($model, $id, $row, $link, (int) $archived($link), $versioned);
+            }
+        }
+    }
+
+    /**
+     * A component's relation, from the component's archived id, in the order this row keeps its
+     * targets. A row without draft and publish links a document's draft, and Strapi its published
+     * version too.
+     *
+     * @param array<string, mixed> $row
+     * @param array<string, mixed> $link
+     */
+    private function componentLinks(Model $model, int $id, array $row, array $link, int $archived, bool $versioned): void
+    {
+        $model->setAttribute($model->getKeyName(), $id);
+        $relation = $model->{$link['relation']}();
+        $many = $relation instanceof BelongsToMany;
+        if ($relation instanceof BelongsTo) {
+            $target = $row[$relation->getForeignKeyName()] ?? null;
+            $pairs = $target === null ? [] : [[$id, (int) $target, null, null]];
+        } else {
+            assert($relation instanceof BelongsToMany);
+            [$own, $other] = [$relation->getForeignPivotKeyName(), $relation->getRelatedPivotKeyName()];
+            $order = $link['order'];
+            $pairs = DB::table($relation->getTable())->where($own, $id)->orderBy($other)->get([$other, ...($order === null ? [] : [$order])])
+                ->map(fn (object $r): array => [$id, (int) $r->{$other}, $order === null || $r->{$order} === null ? null : (float) $r->{$order}, null])->all();
+        }
+        $target = StrapiTransferMap::TYPES[$link['target']] ?? [];
+        if (! $versioned && ($target['draftPublish'] ?? false)) {
+            $pairs = $this->withPublished($pairs, $target);
+        }
+        $positions = self::positions($pairs, 0, 1, 2);
+        foreach ($pairs as $i => [, $right]) {
+            $this->link(
+                'relation.basic',
+                $link['declares'],
+                ['type' => $link['uid'], 'field' => $link['key'][count($link['key']) - 1], 'ref' => $archived, 'pos' => $many ? $positions[$i] : null],
+                ['type' => $link['target'], 'ref' => $right],
+            );
         }
     }
 

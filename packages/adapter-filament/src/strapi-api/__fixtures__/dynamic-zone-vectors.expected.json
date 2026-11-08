@@ -324,7 +324,7 @@
     "status": 400,
     "error": {
       "name": "ValidationError",
-      "message": "blocks[0].__component must be one of the following values: shared.code, shared.frame, shared.hero, shared.line, shared.money, shared.panel, shared.quantity, shared.seo"
+      "message": "blocks[0].__component must be one of the following values: shared.code, shared.frame, shared.hero, shared.line, shared.link, shared.menu-item, shared.money, shared.panel, shared.quantity, shared.seo"
     }
   },
   "an item whose component the zone does not hold is dropped": {

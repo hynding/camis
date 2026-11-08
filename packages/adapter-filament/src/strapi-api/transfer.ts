@@ -6,7 +6,13 @@ import { strapiActions } from "./strapi-actions";
 import { FILE_UID } from "./media-runtime";
 import { FOLDER_UID } from "./upload-folders";
 import { kebab } from "./names";
-import type { WireScalar, WireShape } from "./wire-shape";
+import type {
+  WireChild,
+  WireComponentRelation,
+  WireEmbeddedMedia,
+  WireScalar,
+  WireShape,
+} from "./wire-shape";
 
 const header = (namespace: string): string =>
   `<?php\n${PHP_MARKER}\n\ndeclare(strict_types=1);\n\nnamespace ${namespace};\n`;
@@ -64,6 +70,44 @@ const scalar = (s: WireScalar, from: number) => ({
   type: s.type,
 });
 
+/**
+ * An item of a repeatable or a zone: its columns, the files and relations Strapi links from the
+ * components in it (by each component's uid and archived id, found beside the field), and the
+ * items of the repeatables inside it, each described the same way. Keys are relative to the item.
+ */
+const item = (
+  c: Pick<WireChild, "scalars" | "media" | "relations" | "children">,
+): Record<string, unknown> => ({
+  scalars: c.scalars.map((s) => scalar(s, 0)),
+  ...(c.media.length > 0 ? { files: c.media.map((m) => file(m, m.key.split("."))) } : {}),
+  ...(c.relations.length > 0 ? { links: c.relations.map((r) => link(r, r.key.split("."))) } : {}),
+  ...(c.children.length > 0
+    ? { children: c.children.map((n) => ({ key: n.key, repeatable: n.relation, ...item(n) })) }
+    : {}),
+});
+
+/** A file field: where it sits, the component Strapi links it from, and the relation keeping it. */
+const file = (m: WireEmbeddedMedia, key: string[]) => ({
+  key,
+  uid: m.component,
+  field: m.field,
+  relation: m.relation,
+});
+
+/**
+ * A relation inside a component: where it sits, the component Strapi links it from, the relation
+ * keeping it here, its target and, for a list, the column its order goes to.
+ */
+const link = (r: WireComponentRelation, key: string[]) => ({
+  key,
+  uid: r.component,
+  declares: r.declares,
+  kind: r.kind,
+  relation: r.relation,
+  target: r.uid,
+  order: r.order?.column ?? null,
+});
+
 /** Where each key of an archived entry goes: a column, a component's columns, child rows. */
 const attributes = (shape: WireShape) => {
   const out: Record<string, unknown> = {
@@ -79,32 +123,24 @@ const attributes = (shape: WireShape) => {
       group.component.push(scalar(s, 1));
     }
   }
-  // Strapi links an embedded component's files to the component's own row, by its uid and id;
-  // here the entry holds them, under their path.
+  // Strapi links an embedded component's files and relations from the component's own row, by
+  // its uid and id; here the entry holds them, under their path.
   for (const r of shape.embeddedMedia) {
     const [first, ...rest] = r.key.split(".");
     if (first === undefined) continue;
     const group = (out[first] ??= { component: [] }) as { files?: unknown[] };
-    (group.files ??= []).push({
-      key: rest,
-      uid: r.component,
-      field: r.field,
-      relation: r.relation,
-    });
+    (group.files ??= []).push(file(r, rest));
+  }
+  for (const r of shape.embeddedRelations) {
+    const [first, ...rest] = r.key.split(".");
+    if (first === undefined) continue;
+    const group = (out[first] ??= { component: [] }) as { links?: unknown[] };
+    (group.links ??= []).push(link(r, rest));
   }
   for (const child of shape.children) {
     const [first] = child.key;
     if (first === undefined) continue;
-    // Strapi links an item's files to the item's own row, by its component's uid and its id.
-    const media = child.media.filter((m) => !m.key.includes("."));
-    const rows = {
-      repeatable: child.relation,
-      ...(media.length > 0 ? { uid: child.uid } : {}),
-      scalars: child.scalars.map((s) => scalar(s, 0)),
-      ...(media.length > 0
-        ? { media: Object.fromEntries(media.map((m) => [m.key, m.relation])) }
-        : {}),
-    };
+    const rows = { repeatable: child.relation, ...item(child) };
     if (child.key.length === 1) {
       out[first] = rows;
     } else {
@@ -117,20 +153,7 @@ const attributes = (shape: WireShape) => {
   for (const zone of shape.zones) {
     out[zone.key] = {
       zone: Object.fromEntries(
-        zone.members.map((m) => {
-          // Strapi links an item's files to the item, by its component's uid and its id.
-          const media = m.media.filter((r) => !r.key.includes("."));
-          return [
-            m.uid,
-            {
-              relation: m.relation,
-              scalars: m.scalars.map((s) => scalar(s, 0)),
-              ...(media.length > 0
-                ? { media: Object.fromEntries(media.map((r) => [r.key, r.relation])) }
-                : {}),
-            },
-          ];
-        }),
+        zone.members.map((m) => [m.uid, { relation: m.relation, ...item(m) }]),
       ),
     };
   }
