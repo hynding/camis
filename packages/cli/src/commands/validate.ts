@@ -4,7 +4,8 @@ import type { IrErrorLocation } from "@camis/ir-schema";
 import type { Io } from "../io";
 
 export const locStr = (l: IrErrorLocation): string =>
-  [l.contentType, l.component, l.field, l.rule].filter(Boolean).join(".") || "(document)";
+  l.file ??
+  ([l.contentType, l.component, l.field, l.rule].filter(Boolean).join(".") || "(document)");
 
 export const validateCommand = async (irPath: string, io: Io): Promise<number> => {
   const abs = isAbsolute(irPath) ? irPath : resolve(io.cwd, irPath);

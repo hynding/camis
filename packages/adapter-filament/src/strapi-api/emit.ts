@@ -227,6 +227,8 @@ export interface StrapiApiInput {
   observedModels?: ReadonlySet<string>;
   /** Each Content Manager entry's place in the admin's menu, by display name (`contentManagerSorts`). */
   contentManager?: ReadonlyMap<string, number> | undefined;
+  /** Content types whose routes run the IR's route policies and middlewares (`emitRouteHookFiles`). */
+  routeHooked?: ReadonlySet<string>;
 }
 export interface StrapiApiEmission {
   files: GeneratedFile[];
@@ -309,6 +311,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
       input.media !== undefined,
       true,
       guests,
+      input.routeHooked,
     ),
   });
   files.push({

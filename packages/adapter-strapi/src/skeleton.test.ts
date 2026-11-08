@@ -35,8 +35,8 @@ describe("skeletonFiles", () => {
   });
 
   it("depends on the color-picker plugin only when a field is a color", () => {
-    const deps = (plugins?: readonly string[]) =>
-      JSON.parse(skeletonFiles("blog", plugins).find((f) => f.path === "package.json")!.content)
+    const deps = (plugins: readonly string[] = []) =>
+      JSON.parse(skeletonFiles("blog", { plugins }).find((f) => f.path === "package.json")!.content)
         .dependencies as Record<string, string>;
     expect(deps()["@strapi/plugin-color-picker"]).toBeUndefined();
     expect(deps(["color-picker"])["@strapi/plugin-color-picker"]).toBe(deps()["@strapi/strapi"]);

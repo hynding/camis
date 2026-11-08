@@ -1474,6 +1474,53 @@ Exit: unit tests; `ContentManagerViewTest.php` in the `strapi-api` boot job, den
 
 ---
 
+## Phase 45 — Strapi's custom code: lifecycles, policies, middlewares, cron (`ir-schema`, `adapter-filament`, `adapter-strapi`, `adapter-express`, `cli`)
+
+Ring 2 had one seam, an `onPublish` hook, plus `routes/api-custom.php`. A Strapi project also
+customizes lifecycles, route policies and middlewares, and cron tasks, and the importer dropped
+every such file without a word.
+
+- **IR.** A hook's `trigger` is `onPublish` or one of `beforeCreate`, `afterCreate`,
+  `beforeUpdate`, `afterUpdate`, `beforeDelete`, `afterDelete`; only `onPublish` and the two
+  `before*` writes may return fields (`hook_output_not_written`), and a hook's fields must be its
+  content type's (`unknown_hook_field`). `policies` and `middlewares` put hand-written code on a
+  content type's API actions (`list`, `read`, `create`, `update`, `delete`; none means all).
+  `schedules` run on a five-field cron. Hooks, policies, middlewares and schedules share one
+  namespace of names, since each is a class of that name.
+- **Filament.** Each content type's hooks run from its one observer (`creating` … `deleted`,
+  as Strapi's database lifecycles run per row); a hook that cannot change the record returns
+  `void`. A generated `CamisRouteHooks` middleware sits on the routes of each hooked type, maps the
+  controller method to the action, runs its policies (false is Strapi's 403 `PolicyError`
+  "Policy Failed", plain 403 on the Laravel API style), then its middlewares through Laravel's
+  pipeline. Schedules go in a generated `routes/schedule.php` (`Schedule::call(...)->cron(...)`),
+  which `camis scaffold` loads from `routes/console.php`; they run only where cron calls
+  `schedule:run`, which DEPLOY.md explains. Every policy, middleware and task is a seeded class in
+  `app/Hooks` against a generated contract in `app/Hooks/Contracts`.
+- **Strapi target.** A type's hooks share one `lifecycles.ts` (before a delete the row is read
+  first, since Strapi's event carries only the filter); policies and middlewares are seeded as
+  Strapi's global ones and named per action in the core router's `config`; schedules become
+  `config/cron-tasks.ts` and `config/server.ts` turns cron on (`CRON_ENABLED=false` stops it).
+- **Express** reports each as a downgrade gap.
+- **Import.** `camis import strapi` reads the project's code files too (JS, TS, and strapi-php's
+  PHP) and reports each it cannot carry over as a gap located by its file: `customController`,
+  `customService`, `customRoutes`, `routeConfig`, `customPolicy`, `customMiddleware`, `lifecycles`,
+  `cronTasks`, `bootstrap`, `pluginExtension`, `localPlugin`, `adminCustomization`, `customCode`,
+  each saying where its behavior goes. The one-line core factories, an empty `src/index`, the
+  admin's examples, and files camis generated are passed over. strapi-php's `getstarted` names 13.
+
+Known limits: a policy runs before the content API's own permission check (Strapi runs it after),
+so a caller the role would refuse can see "Policy Failed" instead of "Forbidden". Route hooks are
+on REST only, as Strapi's are (GraphQL has its own resolver policies). Strapi's `afterFindMany`
+style read lifecycles, app-wide middlewares (`config/middlewares`), and cron rules with seconds
+have no IR form. An import never writes hooks: their code is not declarative.
+
+Exit: golden tests for every emitted file on both API styles and the Strapi target; the
+`adapter-filament-boot` job writes reference implementations and checks that `beforeCreate` and
+`afterDelete` run, that the policy answers 403 "Policy Failed" and the middleware tags a list
+response, and that `schedule:run` runs the schedule, on SQLite, MySQL and Postgres.
+
+---
+
 ## Sequencing rationale (quick reference)
 
 1. **Strapi first** — mature schema validates the IR fastest, with the thinnest adapter.

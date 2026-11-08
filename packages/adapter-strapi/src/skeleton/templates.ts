@@ -61,7 +61,10 @@ export const TSCONFIG_JSON = `{
   "exclude": ["node_modules/", "build/", "dist/", ".cache/", ".tmp/", "src/admin/", "**/*.test.*", "src/plugins/**"]
 }`;
 
-export const SERVER_TS = `export default ({ env }) => ({
+/** With `cron`, Strapi runs config/cron-tasks.ts (the IR's schedules); CRON_ENABLED=false stops it. */
+export const serverTs = (
+  cron: boolean,
+): string => `${cron ? 'import cronTasks from "./cron-tasks";\n\n' : ""}export default ({ env }) => ({
   host: env('HOST', '0.0.0.0'),
   port: env.int('PORT', 1337),
   app: {
@@ -69,7 +72,15 @@ export const SERVER_TS = `export default ({ env }) => ({
   },
   webhooks: {
     populateRelations: env.bool('WEBHOOKS_POPULATE_RELATIONS', false),
-  },
+  },${
+    cron
+      ? `
+  cron: {
+    enabled: env.bool('CRON_ENABLED', true),
+    tasks: cronTasks,
+  },`
+      : ""
+  }
 });
 `;
 

@@ -72,6 +72,74 @@ jobs:
               public function run(array $input): array { return ['title' => strtoupper($input['title'])]; }
           }
           PHP
+      - name: Lifecycle, policy, middleware and schedule reference impls
+        run: |
+          H="$GITHUB_WORKSPACE/app/app/Hooks"
+          cat > "$H/DefaultStatus.php" <<'PHP'
+          <?php
+          declare(strict_types=1);
+          namespace App\Hooks;
+          use App\Hooks\Contracts\DefaultStatusHook;
+          final class DefaultStatus implements DefaultStatusHook
+          {
+              public function run(array $input): array { return ['status' => 'draft']; }
+          }
+          PHP
+          cat > "$H/ForgetArticle.php" <<'PHP'
+          <?php
+          declare(strict_types=1);
+          namespace App\Hooks;
+          use App\Hooks\Contracts\ForgetArticleHook;
+          final class ForgetArticle implements ForgetArticleHook
+          {
+              public function run(array $input): void { cache()->forever('forgotten', $input['title']); }
+          }
+          PHP
+          cat > "$H/NoDeletes.php" <<'PHP'
+          <?php
+          declare(strict_types=1);
+          namespace App\Hooks;
+          use App\Hooks\Contracts\NoDeletesPolicy;
+          use Illuminate\Http\Request;
+          final class NoDeletes implements NoDeletesPolicy
+          {
+              public function allows(Request $request, string $action): bool { return false; }
+          }
+          PHP
+          cat > "$H/TagResponse.php" <<'PHP'
+          <?php
+          declare(strict_types=1);
+          namespace App\Hooks;
+          use App\Hooks\Contracts\TagResponseMiddleware;
+          use Closure;
+          use Illuminate\Http\Request;
+          use Symfony\Component\HttpFoundation\Response;
+          final class TagResponse implements TagResponseMiddleware
+          {
+              public function handle(Request $request, Closure $next): Response
+              {
+                  $response = $next($request);
+                  $response->headers->set('X-Camis-Hook', 'TagResponse');
+                  return $response;
+              }
+          }
+          PHP
+          cat > "$H/Heartbeat.php" <<'PHP'
+          <?php
+          declare(strict_types=1);
+          namespace App\Hooks;
+          use App\Hooks\Contracts\HeartbeatTask;
+          final class Heartbeat implements HeartbeatTask
+          {
+              public function run(): void { cache()->forever('heartbeat', 'beat'); }
+          }
+          PHP
+      - name: Load the IR's schedules from routes/console.php as camis scaffold does
+        run: >-
+          pnpm --filter @camis/cli exec tsx -e "import { readFileSync, writeFileSync } from 'node:fs';
+          import { patchConsoleRoutes } from './src/commands/scaffold';
+          const f = process.env.GITHUB_WORKSPACE + '/app/routes/console.php';
+          writeFileSync(f, patchConsoleRoutes(readFileSync(f, 'utf8')));"
       - name: Configure DB env (${{ matrix.db }})
         run: |
           cd app
@@ -99,7 +167,26 @@ jobs:
             $art->published_at = now(); $art->save();
             if ($art->fresh()->title !== "HELLO") { fwrite(STDERR, "HOOK MISMATCH title=".$art->fresh()->title."\n"); exit(1); }
             echo "HOOK OK\n";
+            $fresh = \App\Models\Article::create(["title" => "lifecycle"]);
+            if ($fresh->fresh()->status !== "draft") { fwrite(STDERR, "BEFORE CREATE MISMATCH status=".$fresh->fresh()->status."\n"); exit(1); }
+            $fresh->delete();
+            if (cache("forgotten") !== "lifecycle") { fwrite(STDERR, "AFTER DELETE MISMATCH\n"); exit(1); }
+            echo "LIFECYCLE OK\n";
+            $kernel = app(\Illuminate\Contracts\Http\Kernel::class);
+            auth()->login($u);
+            $list = $kernel->handle(\Illuminate\Http\Request::create("/api/articles", "GET", server: ["HTTP_ACCEPT" => "application/json"]));
+            $delete = $kernel->handle(\Illuminate\Http\Request::create("/api/articles/".$art->id, "DELETE", server: ["HTTP_ACCEPT" => "application/json"]));
+            $seen = [$list->getStatusCode(), $list->headers->get("X-Camis-Hook"), $delete->getStatusCode(), json_decode((string) $delete->getContent(), true)["message"] ?? null, \App\Models\Article::whereKey($art->id)->exists()];
+            if ($seen !== [200, "TagResponse", 403, "Policy Failed", true]) { fwrite(STDERR, "ROUTE HOOKS MISMATCH ".json_encode($seen)."\n"); exit(1); }
+            echo "ROUTE HOOKS OK\n";
           '
+      - name: Schedules run through Laravel's scheduler
+        run: |
+          cd app
+          php artisan schedule:list | tee $RUNNER_TEMP/schedule.txt
+          grep -q "Heartbeat" $RUNNER_TEMP/schedule.txt
+          php artisan schedule:run
+          [ "$(php artisan tinker --execute='echo cache("heartbeat");')" = "beat" ] || { echo "the Heartbeat schedule did not run"; exit 1; }
       - name: Admin access (only an admin role signs in; camis:admin makes the first admin)
         run: |
           cd app

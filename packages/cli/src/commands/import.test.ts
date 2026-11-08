@@ -159,6 +159,27 @@ describe("importCommand", () => {
     expect(code).toBe(0);
     expect(lines.join("\n")).toMatch(/⚠ morphRelation @ Page\.related/);
   });
+  it("names each file of custom code a Strapi project would leave behind", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "camis-cli-strapi-code-"));
+    const ctDir = join(dir, "src/api/page/content-types/page");
+    await mkdir(ctDir, { recursive: true });
+    await writeFile(
+      join(ctDir, "schema.json"),
+      JSON.stringify({
+        kind: "collectionType",
+        info: { singularName: "page", pluralName: "pages", displayName: "Page" },
+        attributes: { title: { type: "string" } },
+      }),
+    );
+    await mkdir(join(dir, "src/policies"), { recursive: true });
+    await writeFile(join(dir, "src/policies/is-owner.ts"), "export default () => true;");
+    const lines: string[] = [];
+    const code = await importCommand("strapi", dir, join(dir, "ir.json"), memIo({}, lines, {}));
+    expect(code).toBe(0);
+    expect(lines.join("\n")).toMatch(
+      /⚠ customPolicy @ src\/policies\/is-owner\.ts — policy code is not imported; declare it in the IR's policies/,
+    );
+  });
   it("passes --upsert-by through to the Strapi importer", async () => {
     const dir = await mkdtemp(join(tmpdir(), "camis-import-"));
     await mkdir(join(dir, "src/api/note/content-types/note"), { recursive: true });

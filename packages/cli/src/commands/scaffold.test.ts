@@ -5,6 +5,7 @@ import {
   patchBootstrapGraphql,
   patchBootstrapMiddleware,
   patchBootstrapTransfer,
+  patchConsoleRoutes,
   patchUserModel,
   scaffoldCommand,
 } from "./scaffold";
@@ -249,7 +250,45 @@ describe("patchBootstrapTransfer", () => {
   });
 });
 
+const STOCK_CONSOLE = `<?php
+
+use Illuminate\\Foundation\\Inspiring;
+use Illuminate\\Support\\Facades\\Artisan;
+
+Artisan::command('inspire', function () {
+    $this->comment(Inspiring::quote());
+})->purpose('Display an inspiring quote');
+`;
+
+describe("patchConsoleRoutes", () => {
+  it("loads the generated routes/schedule.php when there is one", () => {
+    const patched = patchConsoleRoutes(STOCK_CONSOLE);
+    expect(patched.startsWith(STOCK_CONSOLE)).toBe(true);
+    expect(patched).toContain(`if (is_file(__DIR__.'/schedule.php')) {
+    require __DIR__.'/schedule.php';
+}`);
+  });
+  it("is idempotent", () => {
+    const once = patchConsoleRoutes(STOCK_CONSOLE);
+    expect(patchConsoleRoutes(once)).toBe(once);
+  });
+});
+
 describe("scaffoldCommand", () => {
+  it("loads the IR's schedules from routes/console.php, on either storage layout", async () => {
+    for (const storage of ["laravel", "strapi"] as const) {
+      const { io, written } = fakeIo({
+        files: {
+          "/proj/app/app/Models/User.php": STOCK_USER,
+          "/proj/app/bootstrap/app.php": STOCK_BOOTSTRAP,
+          "/proj/app/routes/console.php": STOCK_CONSOLE,
+        },
+      });
+      expect(await scaffoldCommand("filament", "app", io, { storage })).toBe(0);
+      expect(written["/proj/app/routes/console.php"]).toBe(patchConsoleRoutes(STOCK_CONSOLE));
+    }
+  });
+
   it("creates the app's parent directory before composer runs in it", async () => {
     // `camis new` scaffolds into generated/filament before generated/ exists; spawning composer
     // with a missing cwd fails with ENOENT.

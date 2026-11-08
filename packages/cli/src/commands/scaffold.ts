@@ -118,6 +118,32 @@ export const patchBootstrapGraphql = (source: string): string =>
 export const patchBootstrapTransfer = (source: string): string =>
   patchBootstrapRoutes(source, "transfer.php");
 
+const LOAD_SCHEDULE = `
+// camis: the IR's schedules, generated into routes/schedule.php when it declares any.
+if (is_file(__DIR__.'/schedule.php')) {
+    require __DIR__.'/schedule.php';
+}
+`;
+
+/**
+ * Load the generated routes/schedule.php from routes/console.php, where Laravel 12 defines its
+ * schedule. Idempotent. The is_file guard keeps a project generated without schedules booting.
+ */
+export const patchConsoleRoutes = (source: string): string =>
+  source.includes("/schedule.php'") ? source : source + LOAD_SCHEDULE;
+
+const patchConsole = async (appDir: string, io: Io): Promise<void> => {
+  const consolePath = join(appDir, "routes/console.php");
+  let source = "<?php\n";
+  try {
+    source = await io.readFile(consolePath);
+  } catch {
+    // An app without the stock file gets one that does only this.
+  }
+  await io.writeFile(consolePath, patchConsoleRoutes(source));
+  io.out("✓ patched routes/console.php to load routes/schedule.php");
+};
+
 /**
  * One read and one write of bootstrap/app.php: the api routes entry on the Strapi storage layout
  * (which skips `install:api`), and StrapiErrors first on the api group on both layouts.
@@ -279,6 +305,7 @@ export const scaffoldCommand = async (
   }
 
   if (!(await patchBootstrap(appDir, io, storage, graphql))) return 1;
+  await patchConsole(appDir, io);
 
   if (storage === "strapi") {
     io.out(`✓ scaffolded Laravel 12 (Strapi storage) at ${dir}`);

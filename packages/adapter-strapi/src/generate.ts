@@ -11,6 +11,8 @@ import { aiFieldContentTypes, aiLifecycleFile, aiProviderFile, hasAiField } from
 import { apiFactoryFiles } from "./api-files";
 import { usersPermissionsExtensionFile } from "./extensions";
 import { emitHookFiles } from "./hooks/emit";
+import { emitRouteHookFiles, routerConfig } from "./hooks/route-hooks";
+import { emitScheduleFiles } from "./hooks/schedules";
 import { emitPermissions } from "./permissions/emit";
 import { skeletonFiles } from "./skeleton";
 import {
@@ -28,6 +30,7 @@ const typeFiles = (
   extraAttributes: Record<string, unknown>,
   builtinUsers: ReadonlySet<string>,
   uids: ReadonlyMap<string, string>,
+  router: string | undefined,
 ): GeneratedFile[] => {
   const names = strapiNames(ct);
   return [
@@ -35,7 +38,7 @@ const typeFiles = (
       path: `src/api/${names.singularName}/content-types/${names.singularName}/schema.json`,
       content: stableJson(contentTypeSchema(ct, extraAttributes, builtinUsers, uids)),
     },
-    ...apiFactoryFiles(names),
+    ...apiFactoryFiles(names, router),
   ];
 };
 
@@ -83,10 +86,21 @@ export const strapiAdapter: GenerateAdapter = {
       {},
     );
     const files: GeneratedFile[] = [
-      ...skeletonFiles(options.projectName, fieldPlugins(doc)),
+      ...skeletonFiles(options.projectName, {
+        cron: (doc.schedules ?? []).length > 0,
+        plugins: fieldPlugins(doc),
+      }),
       ...doc.contentTypes
         .filter((ct) => ct.builtin === undefined)
-        .flatMap((ct) => typeFiles(ct, inverses.get(ct.name) ?? {}, builtinUsers, uids)),
+        .flatMap((ct) =>
+          typeFiles(
+            ct,
+            inverses.get(ct.name) ?? {},
+            builtinUsers,
+            uids,
+            routerConfig(doc, ct.name),
+          ),
+        ),
       ...doc.components.map((c) => componentFile(c, builtinUsers, uids)),
       ...(Object.keys(userInverses).length > 0
         ? [usersPermissionsExtensionFile(userInverses)]
@@ -115,7 +129,14 @@ export const strapiAdapter: GenerateAdapter = {
         aiGenFiles.push(aiLifecycleFile(ct));
       }
     }
-    const allFiles = [...withPerm, ...perm.files, ...emitHookFiles(doc), ...aiGenFiles];
+    const allFiles = [
+      ...withPerm,
+      ...perm.files,
+      ...emitHookFiles(doc),
+      ...emitRouteHookFiles(doc),
+      ...emitScheduleFiles(doc),
+      ...aiGenFiles,
+    ];
     return {
       files: allFiles,
       manifest: buildManifest(allFiles),

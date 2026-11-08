@@ -1,0 +1,1424 @@
+{
+  "version": 1,
+  "contentTypes": [
+    {
+      "name": "Temp",
+      "kind": "collection",
+      "names": {
+        "display": "temp",
+        "plural": "Temps",
+        "collection": "temps"
+      },
+      "fields": [
+        {
+          "type": "string",
+          "name": "name"
+        },
+        {
+          "type": "relation",
+          "name": "category",
+          "relationKind": "oneToOne",
+          "target": "Category"
+        },
+        {
+          "type": "relation",
+          "name": "categories",
+          "relationKind": "manyToMany",
+          "target": "Category",
+          "inverse": "temps"
+        }
+      ],
+      "options": {
+        "draftPublish": false,
+        "timestamps": true,
+        "softDelete": false
+      }
+    },
+    {
+      "name": "Tag",
+      "kind": "collection",
+      "names": {
+        "display": "Tag",
+        "plural": "Tags",
+        "collection": "tags"
+      },
+      "fields": [
+        {
+          "type": "string",
+          "name": "name"
+        },
+        {
+          "type": "relation",
+          "name": "manyToOneKitchensink",
+          "names": {
+            "api": "many_to_one_kitchensink"
+          },
+          "relationKind": "manyToOne",
+          "target": "Kitchensink",
+          "inverse": "oneToManyTags",
+          "inverseNames": {
+            "api": "one_to_many_tags"
+          }
+        }
+      ],
+      "options": {
+        "draftPublish": true,
+        "timestamps": true,
+        "softDelete": false
+      }
+    },
+    {
+      "name": "Review",
+      "kind": "collection",
+      "names": {
+        "display": "Review",
+        "plural": "Reviews",
+        "collection": "reviews"
+      },
+      "fields": [
+        {
+          "type": "text",
+          "name": "comment",
+          "required": true
+        },
+        {
+          "type": "integer",
+          "name": "rating",
+          "required": true,
+          "min": 1,
+          "max": 5
+        },
+        {
+          "type": "relation",
+          "name": "author",
+          "relationKind": "oneToOne",
+          "target": "User"
+        },
+        {
+          "type": "relation",
+          "name": "restaurant",
+          "relationKind": "oneToOne",
+          "target": "Restaurant"
+        }
+      ],
+      "options": {
+        "draftPublish": false,
+        "timestamps": true,
+        "softDelete": false
+      }
+    },
+    {
+      "name": "Restaurant",
+      "kind": "collection",
+      "names": {
+        "display": "Restaurant",
+        "plural": "Restaurants",
+        "collection": "restaurants"
+      },
+      "fields": [
+        {
+          "type": "string",
+          "name": "name",
+          "required": true,
+          "minLength": 5,
+          "maxLength": 50
+        },
+        {
+          "type": "uid",
+          "name": "slug",
+          "targetField": "name"
+        },
+        {
+          "type": "enumeration",
+          "name": "priceRange",
+          "values": ["very_cheap", "cheap", "average", "expensive", "very_expensive"]
+        },
+        {
+          "type": "component",
+          "name": "closingPeriod",
+          "component": "Closingperiod",
+          "repeatable": false
+        },
+        {
+          "type": "email",
+          "name": "contactEmail"
+        },
+        {
+          "type": "integer",
+          "name": "stars",
+          "required": true,
+          "min": 0,
+          "max": 3
+        },
+        {
+          "type": "float",
+          "name": "averagePrice",
+          "min": 0,
+          "max": 35.12
+        },
+        {
+          "type": "relation",
+          "name": "address",
+          "relationKind": "oneToOne",
+          "target": "Address"
+        },
+        {
+          "type": "media",
+          "name": "cover",
+          "required": false,
+          "multiple": false
+        },
+        {
+          "type": "timestamp",
+          "name": "timestamp"
+        },
+        {
+          "type": "media",
+          "name": "images",
+          "required": false,
+          "multiple": true
+        },
+        {
+          "type": "text",
+          "name": "shortDescription"
+        },
+        {
+          "type": "date",
+          "name": "since"
+        },
+        {
+          "type": "relation",
+          "name": "categories",
+          "relationKind": "oneToMany",
+          "target": "Category"
+        },
+        {
+          "type": "richText",
+          "name": "description",
+          "required": true,
+          "minLength": 10
+        },
+        {
+          "type": "component",
+          "name": "services",
+          "component": "Restaurantservice",
+          "repeatable": true
+        },
+        {
+          "type": "relation",
+          "name": "menu",
+          "relationKind": "oneToOne",
+          "target": "Menu",
+          "inverse": "restaurant"
+        },
+        {
+          "type": "component",
+          "name": "openingTimes",
+          "component": "Openingtimes",
+          "repeatable": true
+        },
+        {
+          "type": "dynamicZone",
+          "name": "dz",
+          "components": ["Openingtimes", "Restaurantservice", "Closingperiod", "Dish"]
+        }
+      ],
+      "options": {
+        "draftPublish": true,
+        "timestamps": true,
+        "softDelete": false,
+        "localized": true
+      }
+    },
+    {
+      "name": "RelationLocale",
+      "kind": "collection",
+      "names": {
+        "display": "Relations",
+        "plural": "RelationLocales",
+        "collection": "relation_locales"
+      },
+      "fields": [
+        {
+          "type": "relation",
+          "name": "categories",
+          "relationKind": "manyToMany",
+          "target": "Category",
+          "inverse": "relationLocales",
+          "inverseNames": {
+            "api": "relation_locales"
+          }
+        },
+        {
+          "type": "string",
+          "name": "title"
+        },
+        {
+          "type": "component",
+          "name": "repeatableRelations",
+          "names": {
+            "api": "repeatable_relations"
+          },
+          "component": "Relation",
+          "repeatable": true
+        },
+        {
+          "type": "dynamicZone",
+          "name": "dynamicRelations",
+          "names": {
+            "api": "dynamic_relations"
+          },
+          "components": ["Relation", "Simple"]
+        },
+        {
+          "type": "component",
+          "name": "singleRelation",
+          "names": {
+            "api": "single_relation"
+          },
+          "component": "Relation",
+          "repeatable": false
+        },
+        {
+          "type": "component",
+          "name": "requireSingleRelation",
+          "names": {
+            "api": "require_single_relation"
+          },
+          "component": "Relation",
+          "repeatable": false
+        },
+        {
+          "type": "relation",
+          "name": "category",
+          "relationKind": "oneToOne",
+          "target": "Category",
+          "inverse": "relation"
+        }
+      ],
+      "options": {
+        "draftPublish": true,
+        "timestamps": true,
+        "softDelete": false,
+        "localized": true
+      }
+    },
+    {
+      "name": "Menusection",
+      "kind": "collection",
+      "names": {
+        "display": "Menu Section",
+        "plural": "Menusections",
+        "collection": "menusections"
+      },
+      "fields": [
+        {
+          "type": "string",
+          "name": "name",
+          "required": true,
+          "minLength": 6
+        },
+        {
+          "type": "component",
+          "name": "dishes",
+          "component": "Dish",
+          "repeatable": true
+        },
+        {
+          "type": "relation",
+          "name": "menu",
+          "relationKind": "manyToOne",
+          "target": "Menu",
+          "inverse": "menusections"
+        }
+      ],
+      "options": {
+        "draftPublish": false,
+        "timestamps": true,
+        "softDelete": false
+      }
+    },
+    {
+      "name": "Menu",
+      "kind": "collection",
+      "names": {
+        "display": "Menu",
+        "plural": "Menus",
+        "collection": "menus"
+      },
+      "fields": [
+        {
+          "type": "text",
+          "name": "description"
+        }
+      ],
+      "options": {
+        "draftPublish": false,
+        "timestamps": true,
+        "softDelete": false
+      }
+    },
+    {
+      "name": "Like",
+      "kind": "collection",
+      "names": {
+        "display": "Like",
+        "plural": "Likes",
+        "collection": "likes"
+      },
+      "fields": [
+        {
+          "type": "relation",
+          "name": "author",
+          "relationKind": "oneToOne",
+          "target": "User"
+        },
+        {
+          "type": "relation",
+          "name": "review",
+          "relationKind": "manyToOne",
+          "target": "Review",
+          "inverse": "likes"
+        }
+      ],
+      "options": {
+        "draftPublish": false,
+        "timestamps": true,
+        "softDelete": false
+      }
+    },
+    {
+      "name": "Kitchensink",
+      "kind": "collection",
+      "names": {
+        "display": "Kitchen Sink",
+        "plural": "Kitchensinks",
+        "collection": "kitchensinks"
+      },
+      "fields": [
+        {
+          "type": "string",
+          "name": "shortText",
+          "names": {
+            "api": "short_text"
+          }
+        },
+        {
+          "type": "text",
+          "name": "longText",
+          "names": {
+            "api": "long_text"
+          }
+        },
+        {
+          "type": "richText",
+          "name": "richText",
+          "names": {
+            "api": "rich_text"
+          }
+        },
+        {
+          "type": "blocks",
+          "name": "blocks"
+        },
+        {
+          "type": "integer",
+          "name": "integer"
+        },
+        {
+          "type": "bigInteger",
+          "name": "biginteger"
+        },
+        {
+          "type": "decimal",
+          "name": "decimal"
+        },
+        {
+          "type": "float",
+          "name": "float"
+        },
+        {
+          "type": "date",
+          "name": "date"
+        },
+        {
+          "type": "dateTime",
+          "name": "datetime"
+        },
+        {
+          "type": "time",
+          "name": "time"
+        },
+        {
+          "type": "timestamp",
+          "name": "timestamp"
+        },
+        {
+          "type": "boolean",
+          "name": "boolean"
+        },
+        {
+          "type": "email",
+          "name": "email"
+        },
+        {
+          "type": "enumeration",
+          "name": "enumeration",
+          "values": ["A", "B", "C", "D", "E"]
+        },
+        {
+          "type": "media",
+          "name": "singleMedia",
+          "names": {
+            "api": "single_media"
+          },
+          "required": false,
+          "multiple": false,
+          "allowedTypes": ["image", "file", "video"]
+        },
+        {
+          "type": "media",
+          "name": "multipleMedia",
+          "names": {
+            "api": "multiple_media"
+          },
+          "required": false,
+          "multiple": true,
+          "allowedTypes": ["image", "file", "video"]
+        },
+        {
+          "type": "json",
+          "name": "json"
+        },
+        {
+          "type": "component",
+          "name": "singleCompo",
+          "names": {
+            "api": "single_compo"
+          },
+          "component": "Simple",
+          "repeatable": false
+        },
+        {
+          "type": "component",
+          "name": "repeatableCompo",
+          "names": {
+            "api": "repeatable_compo"
+          },
+          "component": "Simple",
+          "repeatable": true
+        },
+        {
+          "type": "dynamicZone",
+          "name": "dynamiczone",
+          "components": ["Simple", "TestComo", "Closingperiod"]
+        },
+        {
+          "type": "relation",
+          "name": "oneWayTag",
+          "names": {
+            "api": "one_way_tag"
+          },
+          "relationKind": "oneToOne",
+          "target": "Tag"
+        },
+        {
+          "type": "relation",
+          "name": "oneToOneTag",
+          "names": {
+            "api": "one_to_one_tag"
+          },
+          "private": true,
+          "relationKind": "oneToOne",
+          "target": "Tag",
+          "inverse": "oneToOneKitchensink",
+          "inverseNames": {
+            "api": "one_to_one_kitchensink"
+          }
+        },
+        {
+          "type": "relation",
+          "name": "manyToOneTag",
+          "names": {
+            "api": "many_to_one_tag"
+          },
+          "relationKind": "manyToOne",
+          "target": "Tag",
+          "inverse": "oneToManyKitchensinks",
+          "inverseNames": {
+            "api": "one_to_many_kitchensinks"
+          }
+        },
+        {
+          "type": "relation",
+          "name": "manyToManyTags",
+          "names": {
+            "api": "many_to_many_tags"
+          },
+          "relationKind": "manyToMany",
+          "target": "Tag",
+          "inverse": "manyToManyKitchensinks",
+          "inverseNames": {
+            "api": "many_to_many_kitchensinks"
+          }
+        },
+        {
+          "type": "relation",
+          "name": "manyWayTags",
+          "names": {
+            "api": "many_way_tags"
+          },
+          "relationKind": "oneToMany",
+          "target": "Tag"
+        },
+        {
+          "type": "dynamicZone",
+          "name": "cats",
+          "components": ["Relation", "Simple"]
+        },
+        {
+          "type": "uid",
+          "name": "slug",
+          "targetField": "shortText"
+        }
+      ],
+      "options": {
+        "draftPublish": true,
+        "timestamps": true,
+        "softDelete": false
+      }
+    },
+    {
+      "name": "Homepage",
+      "kind": "single",
+      "names": {
+        "display": "Homepage",
+        "plural": "Homepages",
+        "collection": "homepages"
+      },
+      "fields": [
+        {
+          "type": "string",
+          "name": "title",
+          "required": true
+        },
+        {
+          "type": "uid",
+          "name": "slug",
+          "required": true,
+          "targetField": "title"
+        },
+        {
+          "type": "enumeration",
+          "name": "mediaType",
+          "required": true,
+          "values": ["multiple", "single"],
+          "default": "multiple"
+        },
+        {
+          "type": "media",
+          "name": "single",
+          "required": false,
+          "multiple": false,
+          "allowedTypes": ["image", "file", "video"]
+        },
+        {
+          "type": "media",
+          "name": "multiple",
+          "required": false,
+          "multiple": true,
+          "allowedTypes": ["image", "video"]
+        }
+      ],
+      "options": {
+        "draftPublish": true,
+        "timestamps": true,
+        "softDelete": false,
+        "localized": true
+      }
+    },
+    {
+      "name": "Footer",
+      "kind": "single",
+      "names": {
+        "display": "Footer",
+        "plural": "Footers",
+        "collection": "footers"
+      },
+      "fields": [
+        {
+          "type": "media",
+          "name": "logo",
+          "multiple": true,
+          "allowedTypes": ["image", "file", "video", "audio"]
+        },
+        {
+          "type": "text",
+          "name": "description"
+        },
+        {
+          "type": "component",
+          "name": "socialLinks",
+          "component": "Links",
+          "repeatable": true
+        },
+        {
+          "type": "text",
+          "name": "copyrightText"
+        },
+        {
+          "type": "string",
+          "name": "footerNote"
+        }
+      ],
+      "options": {
+        "draftPublish": true,
+        "timestamps": true,
+        "softDelete": false,
+        "localized": true
+      }
+    },
+    {
+      "name": "Country",
+      "kind": "collection",
+      "names": {
+        "display": "Country",
+        "plural": "Countries",
+        "collection": "countries"
+      },
+      "fields": [
+        {
+          "type": "string",
+          "name": "name",
+          "required": true,
+          "minLength": 3
+        },
+        {
+          "type": "string",
+          "name": "code",
+          "required": true,
+          "unique": true,
+          "minLength": 2,
+          "maxLength": 3
+        },
+        {
+          "type": "boolean",
+          "name": "visible"
+        }
+      ],
+      "options": {
+        "draftPublish": false,
+        "timestamps": true,
+        "softDelete": false,
+        "localized": true
+      }
+    },
+    {
+      "name": "Config",
+      "kind": "single",
+      "names": {
+        "display": "Config",
+        "plural": "Configs",
+        "collection": "configs"
+      },
+      "fields": [
+        {
+          "type": "string",
+          "name": "siteName"
+        },
+        {
+          "type": "media",
+          "name": "siteLogo",
+          "multiple": true,
+          "allowedTypes": ["image", "file", "video", "audio"]
+        },
+        {
+          "type": "email",
+          "name": "contactEmail"
+        },
+        {
+          "type": "string",
+          "name": "contactPhone"
+        },
+        {
+          "type": "component",
+          "name": "socialLinks",
+          "component": "SocialLinks",
+          "repeatable": true
+        },
+        {
+          "type": "json",
+          "name": "featureToggles"
+        },
+        {
+          "type": "enumeration",
+          "name": "defaultLanguage",
+          "values": ["en", "fr", "de"]
+        }
+      ],
+      "options": {
+        "draftPublish": true,
+        "timestamps": true,
+        "softDelete": false,
+        "localized": true
+      }
+    },
+    {
+      "name": "Condition",
+      "kind": "collection",
+      "names": {
+        "display": "Condition",
+        "plural": "Conditions",
+        "collection": "conditions"
+      },
+      "fields": [
+        {
+          "type": "boolean",
+          "name": "isActive"
+        },
+        {
+          "type": "relation",
+          "name": "country",
+          "relationKind": "oneToOne",
+          "target": "Country"
+        }
+      ],
+      "options": {
+        "draftPublish": true,
+        "timestamps": true,
+        "softDelete": false
+      }
+    },
+    {
+      "name": "Category",
+      "kind": "collection",
+      "names": {
+        "display": "Category",
+        "plural": "Categories",
+        "collection": "categories"
+      },
+      "fields": [
+        {
+          "type": "string",
+          "name": "name"
+        },
+        {
+          "type": "dateTime",
+          "name": "datetime",
+          "localized": false
+        },
+        {
+          "type": "date",
+          "name": "date"
+        }
+      ],
+      "options": {
+        "draftPublish": true,
+        "timestamps": true,
+        "softDelete": false,
+        "localized": true
+      }
+    },
+    {
+      "name": "Article",
+      "kind": "collection",
+      "names": {
+        "display": "Article",
+        "plural": "Articles",
+        "collection": "articles"
+      },
+      "fields": [
+        {
+          "type": "string",
+          "name": "title",
+          "required": true
+        },
+        {
+          "type": "blocks",
+          "name": "blocksContent"
+        },
+        {
+          "type": "richText",
+          "name": "markdownContent"
+        },
+        {
+          "type": "media",
+          "name": "cover",
+          "required": false,
+          "multiple": false,
+          "allowedTypes": ["image"]
+        },
+        {
+          "type": "string",
+          "name": "authorName",
+          "localized": false
+        },
+        {
+          "type": "uid",
+          "name": "slug",
+          "targetField": "title"
+        },
+        {
+          "type": "relation",
+          "name": "categories",
+          "relationKind": "manyToMany",
+          "target": "Category",
+          "inverse": "articles"
+        }
+      ],
+      "options": {
+        "draftPublish": true,
+        "timestamps": true,
+        "softDelete": false,
+        "localized": true
+      }
+    },
+    {
+      "name": "Address",
+      "kind": "collection",
+      "names": {
+        "display": "Address",
+        "plural": "Addresses",
+        "collection": "addresses"
+      },
+      "fields": [
+        {
+          "type": "string",
+          "name": "postalCode",
+          "names": {
+            "api": "postal_code"
+          },
+          "maxLength": 2
+        },
+        {
+          "type": "relation",
+          "name": "categories",
+          "relationKind": "manyToMany",
+          "target": "Category",
+          "inverse": "addresses"
+        },
+        {
+          "type": "media",
+          "name": "cover",
+          "required": false,
+          "multiple": false
+        },
+        {
+          "type": "media",
+          "name": "images",
+          "required": false,
+          "multiple": true,
+          "allowedTypes": ["image"]
+        },
+        {
+          "type": "string",
+          "name": "city",
+          "required": true,
+          "maxLength": 200
+        },
+        {
+          "type": "json",
+          "name": "json"
+        },
+        {
+          "type": "uid",
+          "name": "slug"
+        },
+        {
+          "type": "component",
+          "name": "notrepeatReq",
+          "names": {
+            "api": "notrepeat_req"
+          },
+          "component": "TestComo",
+          "repeatable": false
+        },
+        {
+          "type": "component",
+          "name": "notrepeatOptional",
+          "names": {
+            "api": "notrepeat_optional"
+          },
+          "component": "TestComo",
+          "repeatable": false
+        },
+        {
+          "type": "component",
+          "name": "repeatReq",
+          "names": {
+            "api": "repeat_req"
+          },
+          "component": "TestComo",
+          "repeatable": true
+        },
+        {
+          "type": "component",
+          "name": "repeatReqMin",
+          "names": {
+            "api": "repeat_req_min"
+          },
+          "component": "TestComo",
+          "repeatable": true
+        }
+      ],
+      "options": {
+        "draftPublish": false,
+        "timestamps": true,
+        "softDelete": false
+      }
+    },
+    {
+      "name": "About",
+      "kind": "single",
+      "names": {
+        "display": "About",
+        "plural": "Abouts",
+        "collection": "abouts"
+      },
+      "fields": [
+        {
+          "type": "string",
+          "name": "title",
+          "required": true
+        },
+        {
+          "type": "blocks",
+          "name": "content"
+        },
+        {
+          "type": "component",
+          "name": "teamMembers",
+          "component": "TeamMembers",
+          "repeatable": false
+        },
+        {
+          "type": "media",
+          "name": "coverImage",
+          "multiple": false,
+          "allowedTypes": ["image", "file", "video", "audio"]
+        },
+        {
+          "type": "dynamicZone",
+          "name": "dynamiczone",
+          "components": ["Simple", "TestComo", "Closingperiod"]
+        }
+      ],
+      "options": {
+        "draftPublish": true,
+        "timestamps": true,
+        "softDelete": false,
+        "localized": true
+      }
+    },
+    {
+      "name": "User",
+      "kind": "collection",
+      "builtin": "user",
+      "names": {
+        "display": "User",
+        "plural": "Users",
+        "collection": "users"
+      },
+      "fields": [
+        {
+          "type": "string",
+          "name": "username",
+          "required": true,
+          "unique": true
+        },
+        {
+          "type": "email",
+          "name": "email",
+          "required": true
+        }
+      ],
+      "options": {
+        "draftPublish": false,
+        "timestamps": true,
+        "softDelete": false
+      }
+    },
+    {
+      "name": "File",
+      "kind": "collection",
+      "builtin": "file",
+      "fields": [],
+      "names": {
+        "display": "File",
+        "plural": "Files",
+        "collection": "files"
+      },
+      "options": {
+        "draftPublish": false,
+        "timestamps": true,
+        "softDelete": false
+      }
+    }
+  ],
+  "components": [
+    {
+      "name": "Apple",
+      "names": {
+        "collection": "components_default_apples",
+        "group": "default"
+      },
+      "fields": [
+        {
+          "type": "string",
+          "name": "name",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Car",
+      "names": {
+        "collection": "components_default_cars",
+        "group": "default"
+      },
+      "fields": [
+        {
+          "type": "string",
+          "name": "name"
+        }
+      ]
+    },
+    {
+      "name": "Closingperiod",
+      "names": {
+        "collection": "components_closingperiods",
+        "group": "default"
+      },
+      "fields": [
+        {
+          "type": "string",
+          "name": "label",
+          "default": "toto"
+        },
+        {
+          "type": "date",
+          "name": "startDate",
+          "names": {
+            "api": "start_date"
+          },
+          "required": true
+        },
+        {
+          "type": "date",
+          "name": "endDate",
+          "names": {
+            "api": "end_date"
+          },
+          "required": true
+        },
+        {
+          "type": "media",
+          "name": "media",
+          "required": false,
+          "multiple": false
+        },
+        {
+          "type": "component",
+          "name": "dish",
+          "component": "Dish",
+          "repeatable": true
+        }
+      ]
+    },
+    {
+      "name": "Dish",
+      "names": {
+        "collection": "components_dishes",
+        "group": "default"
+      },
+      "fields": [
+        {
+          "type": "string",
+          "name": "name",
+          "required": false,
+          "default": "My super dish"
+        },
+        {
+          "type": "text",
+          "name": "description"
+        },
+        {
+          "type": "float",
+          "name": "price"
+        },
+        {
+          "type": "media",
+          "name": "picture",
+          "required": false
+        },
+        {
+          "type": "richText",
+          "name": "veryLongDescription",
+          "names": {
+            "api": "very_long_description"
+          }
+        },
+        {
+          "type": "relation",
+          "name": "categories",
+          "relationKind": "oneToOne",
+          "target": "Category"
+        }
+      ]
+    },
+    {
+      "name": "Links",
+      "names": {
+        "collection": "components_default_links",
+        "group": "default"
+      },
+      "fields": [
+        {
+          "type": "string",
+          "name": "platform"
+        },
+        {
+          "type": "string",
+          "name": "url"
+        }
+      ]
+    },
+    {
+      "name": "Openingtimes",
+      "names": {
+        "collection": "components_openingtimes",
+        "group": "default"
+      },
+      "fields": [
+        {
+          "type": "string",
+          "name": "label",
+          "required": true,
+          "default": "something"
+        },
+        {
+          "type": "string",
+          "name": "time"
+        },
+        {
+          "type": "component",
+          "name": "dishrep",
+          "component": "Dish",
+          "repeatable": true
+        }
+      ]
+    },
+    {
+      "name": "Org",
+      "names": {
+        "collection": "components_default_orgs",
+        "group": "default"
+      },
+      "fields": [
+        {
+          "type": "string",
+          "name": "name"
+        },
+        {
+          "type": "string",
+          "name": "address"
+        },
+        {
+          "type": "media",
+          "name": "coverOrgImage",
+          "multiple": true,
+          "allowedTypes": ["image", "file", "video", "audio"]
+        },
+        {
+          "type": "component",
+          "name": "testComponent",
+          "component": "TestComponent",
+          "repeatable": true
+        }
+      ]
+    },
+    {
+      "name": "Organization",
+      "names": {
+        "collection": "components_default_organizations",
+        "group": "default"
+      },
+      "fields": [
+        {
+          "type": "string",
+          "name": "name"
+        },
+        {
+          "type": "string",
+          "name": "address"
+        },
+        {
+          "type": "media",
+          "name": "coverPhotoOrganization",
+          "multiple": true,
+          "allowedTypes": ["image", "file", "video", "audio"]
+        }
+      ]
+    },
+    {
+      "name": "Restaurantservice",
+      "names": {
+        "collection": "components_restaurantservices",
+        "group": "default"
+      },
+      "fields": [
+        {
+          "type": "string",
+          "name": "name",
+          "required": true,
+          "default": "something"
+        },
+        {
+          "type": "media",
+          "name": "media"
+        },
+        {
+          "type": "boolean",
+          "name": "isAvailable",
+          "names": {
+            "api": "is_available"
+          },
+          "required": true,
+          "default": true
+        }
+      ]
+    },
+    {
+      "name": "SocialLinks",
+      "names": {
+        "collection": "components_default_social_links",
+        "group": "default"
+      },
+      "fields": []
+    },
+    {
+      "name": "Temp",
+      "names": {
+        "collection": "components_default_temps",
+        "group": "default"
+      },
+      "fields": [
+        {
+          "type": "string",
+          "name": "name",
+          "required": true
+        },
+        {
+          "type": "string",
+          "name": "url"
+        }
+      ]
+    },
+    {
+      "name": "TestComponent",
+      "names": {
+        "collection": "components_default_test_components",
+        "group": "default"
+      },
+      "fields": [
+        {
+          "type": "string",
+          "name": "testName"
+        },
+        {
+          "type": "string",
+          "name": "testAnotherText"
+        },
+        {
+          "type": "media",
+          "name": "testMedia",
+          "names": {
+            "api": "TestMedia"
+          },
+          "multiple": true,
+          "allowedTypes": ["image", "file", "video", "audio"]
+        }
+      ]
+    },
+    {
+      "name": "TestComo",
+      "names": {
+        "collection": "components_blog_test_comos",
+        "group": "blog"
+      },
+      "fields": [
+        {
+          "type": "string",
+          "name": "name",
+          "default": "toto"
+        }
+      ]
+    },
+    {
+      "name": "Relation",
+      "names": {
+        "collection": "components_basic_relations",
+        "group": "basic"
+      },
+      "fields": [
+        {
+          "type": "relation",
+          "name": "categories",
+          "relationKind": "oneToMany",
+          "target": "Category"
+        }
+      ]
+    },
+    {
+      "name": "Simple",
+      "names": {
+        "collection": "components_basic_simples",
+        "group": "basic"
+      },
+      "fields": [
+        {
+          "type": "string",
+          "name": "name",
+          "required": true
+        },
+        {
+          "type": "string",
+          "name": "test"
+        }
+      ]
+    },
+    {
+      "name": "TeamMembers",
+      "names": {
+        "collection": "components_basic_team_members",
+        "group": "basic"
+      },
+      "fields": [
+        {
+          "type": "string",
+          "name": "name"
+        },
+        {
+          "type": "string",
+          "name": "role"
+        },
+        {
+          "type": "media",
+          "name": "photo",
+          "multiple": false,
+          "allowedTypes": ["image", "file", "video", "audio"]
+        },
+        {
+          "type": "blocks",
+          "name": "bio"
+        },
+        {
+          "type": "component",
+          "name": "organization",
+          "component": "Org",
+          "repeatable": true
+        }
+      ]
+    }
+  ]
+}

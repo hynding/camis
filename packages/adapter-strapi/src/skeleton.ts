@@ -5,7 +5,7 @@ import {
   DATABASE_TS,
   ENV,
   MIDDLEWARES_TS,
-  SERVER_TS,
+  serverTs,
   SRC_INDEX_TS,
   TSCONFIG_JSON,
   packageJson,
@@ -13,11 +13,11 @@ import {
 
 export const skeletonFiles = (
   projectName: string,
-  plugins: readonly string[] = [],
+  { cron = false, plugins = [] }: { cron?: boolean; plugins?: readonly string[] } = {},
 ): GeneratedFile[] => [
   { path: "package.json", content: packageJson(projectName, plugins) },
   { path: "tsconfig.json", content: TSCONFIG_JSON },
-  { path: "config/server.ts", content: SERVER_TS },
+  { path: "config/server.ts", content: serverTs(cron) },
   { path: "config/admin.ts", content: ADMIN_TS },
   { path: "config/api.ts", content: API_TS },
   { path: "config/middlewares.ts", content: MIDDLEWARES_TS },

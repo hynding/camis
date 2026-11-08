@@ -1,0 +1,60 @@
+import { describe, expect, it } from "vitest";
+import type { IrBundle } from "@camis/permissions";
+import { expressAdapter } from "./generate";
+
+const bundle: IrBundle = {
+  document: {
+    version: 1,
+    contentTypes: [
+      { name: "Article", kind: "collection", fields: [{ type: "string", name: "title" }] },
+    ],
+    components: [],
+    hooks: [
+      {
+        name: "Slugify",
+        trigger: "beforeCreate",
+        contentType: "Article",
+        input: [{ name: "title", type: "string" }],
+        output: [{ name: "title", type: "string" }],
+      },
+    ],
+    policies: [{ name: "IsOwner", contentType: "Article" }],
+    middlewares: [{ name: "AuditTrail", contentType: "Article" }],
+    schedules: [{ name: "SendDigest", cron: "0 7 * * *" }],
+  },
+  roles: [],
+};
+
+describe("express custom code", () => {
+  it("reports each hook, policy, middleware and schedule it cannot run", () => {
+    const gaps = expressAdapter.generate(bundle, { projectName: "blog" }).gaps.gaps;
+    expect(
+      gaps.filter((g) => ["hook", "policy", "middleware", "schedule"].includes(g.feature)),
+    ).toEqual([
+      {
+        feature: "hook",
+        location: { contentType: "Article", rule: "Slugify" },
+        severity: "downgrade",
+        message: 'the Express target runs no hooks; "Slugify" (beforeCreate) is not wired',
+      },
+      {
+        feature: "policy",
+        location: { contentType: "Article", rule: "IsOwner" },
+        severity: "downgrade",
+        message: 'the Express target runs no route policies; "IsOwner" is not wired',
+      },
+      {
+        feature: "middleware",
+        location: { contentType: "Article", rule: "AuditTrail" },
+        severity: "downgrade",
+        message: 'the Express target runs no route middlewares; "AuditTrail" is not wired',
+      },
+      {
+        feature: "schedule",
+        location: { rule: "SendDigest" },
+        severity: "downgrade",
+        message: 'the Express target runs no schedules; "SendDigest" is not wired',
+      },
+    ]);
+  });
+});
