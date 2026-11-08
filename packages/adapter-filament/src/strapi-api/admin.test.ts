@@ -98,7 +98,7 @@ describe("the Strapi-like admin", () => {
     expect(roles).toContain("'authenticated' => 'Default role given to authenticated user.',");
     await expect(roles).toMatchFileSnapshot("./__golden__/strapi-api/StrapiRoles.php");
     const resource = content("app/Filament/Resources/Roles/RoleResource.php");
-    expect(resource).toContain("public static function canCreate(): bool");
+    expect(resource).toContain("public static function getCreateAuthorizationResponse(): Response");
     expect(resource).toContain("CheckboxList::make(");
   });
 
