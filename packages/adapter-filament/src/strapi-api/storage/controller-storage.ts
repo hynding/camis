@@ -1,5 +1,13 @@
 import { phpSingleQuoted } from "../../php-literal";
-import { authLine, createCheck, madeCheck, NESTED_STMT, STMT } from "../controller-shared";
+import {
+  authLine,
+  createCheck,
+  madeCheck,
+  NESTED_STMT,
+  routeKey,
+  STMT,
+  validate,
+} from "../controller-shared";
 import type { ControllerLink, ControllerParts, ControllerSpec } from "../controller";
 
 /** A PHP single-quoted string literal, or `null` for an absent value. */
@@ -65,21 +73,12 @@ ${indent}});`;
   const reload = (indent: string): string =>
     `${indent}$fresh = $m->fresh();\n${indent}StrapiComponents::loadOne($fresh, ${MAP});`;
 
-  // Strapi's own validator answers a duplicate uid with a 400 ValidationError before the insert;
-  // without this guard the driver's unique-constraint error would surface instead.
-  const duplicateGuard = upsert
-    ? `        if (${M}::query()->where(self::KEY, $wire['columns'][self::KEY] ?? null)->exists()) {
-            throw ValidationException::withMessages([self::KEY => 'This attribute must be unique']);
-        }
-`
-    : "";
-
   const createBranch = upsert
     ? `
         if (${M}::query()->where(self::KEY, $key)->exists()) {
             abort(404); // claimed by another scope: never reach across owners
         }
-${auth(`$this->authorize('create', ${M}::class);`)}        $m = new ${M}();
+${auth(`$this->authorize('create', ${M}::class);`)}${validate(spec, "true", STMT, routeKey(spec.ct), "$key")}        $m = new ${M}();
 ${createTransaction(STMT, true)}
 
 ${reload(STMT)}
@@ -96,11 +95,7 @@ ${reload(STMT)}
     .join("\n");
 
   return {
-    uses: [
-      "App\\Support\\StrapiComponents",
-      "App\\Support\\StrapiRows",
-      ...(upsert ? ["Illuminate\\Validation\\ValidationException"] : []),
-    ],
+    uses: ["App\\Support\\StrapiComponents", "App\\Support\\StrapiRows"],
     // Every owning relation is eager-loaded: the policy conditions and the ownership accessors
     // read them per row, which is one query each on a lazy relation.
     query: `${scoped ? `${M}::query()->forUser($request->user())` : `${M}::query()`}${
@@ -117,7 +112,7 @@ ${secured ? `        $rows = $rows->filter(fn (${M} $m) => Gate::allows('view', 
 
         return response()->json(['data' => ${S}::toWire($m)]);`,
     storeBody: `        $wire = ${S}::fromWire((array) $request->input('data', []));
-${duplicateGuard}${createCheck(spec)}        $m = new ${M}();
+${createCheck(spec)}${validate(spec, "true")}        $m = new ${M}();
 ${madeCheck(spec)}${createTransaction(STMT, false)}
 
 ${reload(STMT)}
@@ -126,7 +121,7 @@ ${reload(STMT)}
     updateBody: `        $wire = ${S}::fromWire((array) $request->input('data', []));
         $m = $this->scoped($request)->where(self::KEY, $key)->first();
         if ($m !== null${secured ? ` && Gate::allows('view', $m)` : ""}) {
-${auth(`$this->authorize('update', $m);`, NESTED_STMT)}${NESTED_STMT}DB::transaction(function () use ($m, $wire): void {
+${auth(`$this->authorize('update', $m);`, NESTED_STMT)}${validate(spec, "false", NESTED_STMT, "", "$key")}${NESTED_STMT}DB::transaction(function () use ($m, $wire): void {
 ${NESTED_STMT}    $m->fill(StrapiComponents::columnsOf($wire, ${MAP}))->save();
 ${NESTED_STMT}    StrapiComponents::apply($m, ${MAP}, $wire);
 ${NESTED_STMT}});

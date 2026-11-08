@@ -31,6 +31,7 @@ overwrite app/Support/StrapiComponentAttributes.php
 overwrite app/Support/StrapiComponents.php
 overwrite app/Support/StrapiError.php
 overwrite app/Support/StrapiRows.php
+overwrite app/Support/StrapiValidator.php
 overwrite config/camis.php
 overwrite routes/api.php
 seed app/Http/Controllers/Api/ActivitySessionApiController.php

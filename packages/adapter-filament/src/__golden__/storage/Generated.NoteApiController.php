@@ -10,19 +10,26 @@ use App\Http\Serializers\NoteSerializer;
 use App\Models\Note;
 use App\Support\StrapiComponents;
 use App\Support\StrapiRows;
+use App\Support\StrapiValidator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Validation\ValidationException;
 
 class NoteApiController extends Controller
 {
     use AuthorizesRequests;
 
     private const KEY = 'record_id';
+
+    /** Each written field's Strapi attribute, for StrapiValidator. */
+    private const RULES = [
+        'recordId' => ['type' => 'string', 'required' => true, 'unique' => ['column' => 'record_id']],
+        'text' => ['type' => 'text', 'required' => true],
+        'occurredAt' => ['type' => 'datetime', 'required' => true],
+    ];
 
     protected function scoped(Request $request): Builder
     {
@@ -38,6 +45,12 @@ class NoteApiController extends Controller
         }
 
         return $m;
+    }
+
+    /** The other entries' rows, among which a unique field's value must not already be. */
+    protected function others(Request $request, ?string $key): Builder
+    {
+        return Note::query()->whereNotNull('published_at')->when($key !== null, fn (Builder $q) => $q->where(self::KEY, '!=', $key));
     }
 
     public function index(Request $request): JsonResponse
@@ -61,10 +74,8 @@ class NoteApiController extends Controller
     public function store(Request $request): JsonResponse
     {
         $wire = NoteSerializer::fromWire((array) $request->input('data', []));
-        if (Note::query()->where(self::KEY, $wire['columns'][self::KEY] ?? null)->exists()) {
-            throw ValidationException::withMessages([self::KEY => 'This attribute must be unique']);
-        }
         $this->authorize('create', Note::class);
+        StrapiValidator::validate($request->input('data'), self::RULES, creating: true, unique: fn (): Builder => $this->others($request, null));
         $m = new Note();
         DB::transaction(function () use ($m, $wire, $request): void {
             $m->fill(StrapiComponents::columnsOf($wire, Note::COMPONENT_MAP));
@@ -85,6 +96,7 @@ class NoteApiController extends Controller
         $m = $this->scoped($request)->where(self::KEY, $key)->first();
         if ($m !== null && Gate::allows('view', $m)) {
             $this->authorize('update', $m);
+            StrapiValidator::validate($request->input('data'), self::RULES, creating: false, unique: fn (): Builder => $this->others($request, $key));
             DB::transaction(function () use ($m, $wire): void {
                 $m->fill(StrapiComponents::columnsOf($wire, Note::COMPONENT_MAP))->save();
                 StrapiComponents::apply($m, Note::COMPONENT_MAP, $wire);
@@ -100,6 +112,7 @@ class NoteApiController extends Controller
             abort(404); // claimed by another scope: never reach across owners
         }
         $this->authorize('create', Note::class);
+        StrapiValidator::validate($request->input('data'), self::RULES, creating: true, given: ['recordId' => $key], unique: fn (): Builder => $this->others($request, $key));
         $m = new Note();
         DB::transaction(function () use ($m, $wire, $key, $request): void {
             $m->fill(StrapiComponents::columnsOf($wire, Note::COMPONENT_MAP));

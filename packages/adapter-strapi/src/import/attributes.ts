@@ -99,6 +99,7 @@ export const irField = (
       ...named(attribute),
       relationKind: attr.relation,
       target,
+      ...(attr.required === true ? { required: true } : {}),
       ...privacy(attr),
     };
     if (attr.inversedBy !== undefined) {

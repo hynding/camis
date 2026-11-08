@@ -169,7 +169,7 @@ import { emitStrapiImport } from "./transfer-runtime";
 import { wireShape, type WireShape } from "./wire-shape";
 import { emitStrapiZones } from "./zones-runtime";
 import { emitStrapiValidator } from "./validation-runtime";
-import { rulesConstant, VALIDATOR_PATH } from "./validation";
+import { entityRules, VALIDATOR_PATH } from "./validation";
 import {
   emitUserResourceFiles,
   emitUsersPermissionsSettingsPages,
@@ -249,6 +249,8 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     const names = filamentNames(ct);
     const shape = wireShape(doc, ct, fkNames.get(ct.name) ?? [], versioned, localized, fileModel);
     shapes.set(ct.name, shape);
+    const entity = entityRules(ct, doc, shape, "laravel");
+    gaps.push(...entity.gaps);
     files.push({
       path: `app/Http/Serializers/${names.model}Serializer.php`,
       content: emitSerializer(shape),
@@ -261,7 +263,8 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
         assigns: perm.assigns.get(ct.name) ?? [],
         secured,
         scoped: secured,
-        rules: rulesConstant(ct.fields, doc),
+        rules: entity.constant,
+        unique: entity.unique,
       }),
     });
     files.push({

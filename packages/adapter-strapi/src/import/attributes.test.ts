@@ -122,6 +122,21 @@ describe("irField — relations + components", () => {
         .field,
     ).toEqual({ type: "relation", name: "owner", relationKind: "oneToOne", target: "User" });
   });
+  it("keeps a relation's required, which strictRelations enforces", () => {
+    expect(
+      irField(
+        "venue",
+        { type: "relation", relation: "manyToOne", target: "api::genre.genre", required: true },
+        loc,
+      ).field,
+    ).toEqual({
+      type: "relation",
+      name: "venue",
+      relationKind: "manyToOne",
+      target: "Genre",
+      required: true,
+    });
+  });
   it("skips the synthesized inverse side (mappedBy)", () => {
     const r = irField(
       "articles",

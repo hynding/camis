@@ -1382,6 +1382,39 @@ Laravel's s3 disk and mailers read, plus the `CAMIS_*` keys config/camis.php rea
 
 Exit: unit tests for each mapping; the CLI reads a `.php`, a `.ts` and a CommonJS `.js` config.
 
+---
+
+## Phase 42 — what the entity validator checks beyond a value (`strapi-schema`, `adapter-strapi`, `adapter-filament`, `cli`)
+
+The validation holes the 2026-11-07 review listed. `StrapiValidator` now checks, as Strapi 5's
+entity validator does:
+
+- **unique** (a uid always is): among the other entries' published rows in the locale written,
+  the entry written left out; an empty or null value, a draft, and a number its type refuses are
+  not looked up. A repeatable component's items may not repeat a unique value, nor hold one another
+  entry's item holds. Each rule names where the value is stored (a column, and the child relation
+  of a repeatable's items); the controller hands the validator `others()`. A unique field deeper
+  in components, or in a dynamic zone, is reported (`uniqueInComponent`).
+- **a required relation or file** under `api.documents.strictRelations`
+  (`camis.documents.strict_relations`, on by default as a new Strapi project ships it): a creation
+  must connect one, an update may leave it out or send an empty connect, a to-one link may not be
+  emptied by a disconnect alone. Errors carry the value as Strapi transforms it (`[]` → `{set: []}`).
+  A relation's `required` now survives `camis import` and the Strapi export.
+- **blocks**: each node of the document tree against Strapi's blocks schema, with its messages.
+
+The **strapi storage layout** validates every write too (the `entityValidation` gap is gone): its
+controllers carry the same `RULES` and check uniqueness against Strapi's own `published_at` rows;
+its components' unique fields are reported. Its upsert key's duplicate guard (a Laravel
+`ValidationException`) is replaced by the validator's Strapi error. GraphQL marks a required
+to-one link non-null and OpenAPI a blocks field required, as Strapi's do.
+
+Exit: `constraint-vectors.json` (26 checks, a `Ticket` type and `Code` component added to the
+fixture) recorded from strapi-php with strictRelations on; the dynamic zone vectors, OpenAPI and
+GraphQL oracles re-recorded for the new types; the storage crosscheck sends the same refused writes
+to Strapi and to the PHP app and compares the answers.
+
+---
+
 ## Phase 43 — Strapi's email send route (`adapter-filament`)
 
 Strapi's email plugin serves `POST /api/email` (`plugin::email.email.send`): to, cc, bcc, from,
