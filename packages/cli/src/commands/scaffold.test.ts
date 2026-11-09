@@ -3,6 +3,7 @@ import type { Io } from "../io";
 import {
   patchBootstrapApp,
   patchBootstrapGraphql,
+  patchBootstrapExceptions,
   patchBootstrapMiddleware,
   patchBootstrapTransfer,
   patchConsoleRoutes,
@@ -160,6 +161,30 @@ describe("patchBootstrapApp", () => {
   it("leaves an unrecognised bootstrap unchanged so the caller can fail loudly", () => {
     const hand = STOCK_BOOTSTRAP.replace("commands: __DIR__.'/../routes/console.php',", "");
     expect(patchBootstrapApp(hand)).toBe(hand);
+  });
+});
+
+// Strapi's sentry plugin reports what a request throws; Laravel's SDK does so once its
+// integration handles the app's exceptions. Guarded, so an app without the SDK still boots.
+describe("patchBootstrapExceptions", () => {
+  it("hands the app's exceptions to Sentry when its SDK is installed", () => {
+    const patched = patchBootstrapExceptions(STOCK_BOOTSTRAP);
+    expect(patched).toContain(`    ->withExceptions(function (Exceptions $exceptions): void {
+        // camis: report to Sentry, as Strapi's sentry plugin did, once sentry/sentry-laravel is installed.
+        if (class_exists(\\Sentry\\Laravel\\Integration::class)) {
+            \\Sentry\\Laravel\\Integration::handles($exceptions);
+        }
+    })`);
+  });
+
+  it("is idempotent", () => {
+    const once = patchBootstrapExceptions(STOCK_BOOTSTRAP);
+    expect(patchBootstrapExceptions(once)).toBe(once);
+  });
+
+  it("leaves an unrecognised bootstrap unchanged so the caller can fail loudly", () => {
+    const hand = STOCK_BOOTSTRAP.replace("        //\n    })->create();", "    })->create();");
+    expect(patchBootstrapExceptions(hand)).toBe(hand);
   });
 });
 
@@ -340,6 +365,7 @@ describe("scaffoldCommand", () => {
     const code = await scaffoldCommand("filament", "app", io);
     expect(code).toBe(0);
     expect(written["/proj/app/bootstrap/app.php"]).toContain("prependToGroup('api'");
+    expect(written["/proj/app/bootstrap/app.php"]).toContain("Integration::handles($exceptions);");
     expect(calls.map((c) => `${c.cmd} ${c.args[0] ?? ""}`.trim())).toEqual([
       "composer create-project",
       "composer require",

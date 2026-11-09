@@ -68,6 +68,25 @@ CAMIS_EMAIL_DEFAULT_REPLY_TO=\${REPLY_TO}
     expect(packages).toEqual(["league/flysystem-aws-s3-v3"]);
   });
 
+  it("points Laravel's Sentry SDK at the DSN the Strapi project reported to", () => {
+    const { env, packages } = deploymentEnv({
+      errorReporting: {
+        provider: "sentry",
+        dsn: { env: "SENTRY_DSN" },
+        environment: { env: "NODE_ENV" },
+        release: "site@1.2.3",
+        sampleRate: 0.5,
+      },
+    });
+    expect(env).toContain(`# Error reporting: sentry
+SENTRY_LARAVEL_DSN=\${SENTRY_DSN}
+SENTRY_ENVIRONMENT=\${NODE_ENV}
+SENTRY_RELEASE=site@1.2.3
+SENTRY_SAMPLE_RATE=0.5
+`);
+    expect(packages).toEqual(["sentry/sentry-laravel"]);
+  });
+
   it("maps Cloudinary storage onto the cloudinary disk its Laravel package adds", () => {
     const { env, packages } = deploymentEnv({
       upload: {

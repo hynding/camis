@@ -336,3 +336,55 @@ describe("deploymentSettings — the API and accounts", () => {
     });
   });
 });
+
+describe("deploymentSettings — sentry", () => {
+  it("reads the sentry plugin's DSN and the init options Laravel's SDK takes", () => {
+    const { settings, gaps } = deploymentSettings({
+      sentry: {
+        enabled: true,
+        config: {
+          dsn: env("SENTRY_DSN"),
+          sendMetadata: true,
+          init: { environment: env("NODE_ENV"), release: "site@1.2.3", sampleRate: 0.5 },
+        },
+      },
+    });
+    expect(gaps).toEqual([]);
+    expect(settings.errorReporting).toEqual({
+      provider: "sentry",
+      dsn: env("SENTRY_DSN"),
+      environment: env("NODE_ENV"),
+      release: "site@1.2.3",
+      sampleRate: 0.5,
+    });
+  });
+
+  it("reads nothing from a disabled plugin", () => {
+    const { settings } = deploymentSettings({
+      sentry: { enabled: false, config: { dsn: env("SENTRY_DSN") } },
+    });
+    expect(settings.errorReporting).toBeUndefined();
+  });
+
+  it("reports the options it cannot carry", () => {
+    const { gaps } = deploymentSettings({
+      sentry: {
+        config: {
+          dsn: env("SENTRY_DSN"),
+          sendMetadata: false,
+          init: { beforeSend: "fn", debug: true },
+        },
+      },
+    });
+    expect(gaps.map((g) => [g.feature, g.message])).toEqual([
+      [
+        "errorReportingOption",
+        "the sentry plugin's sendMetadata: false has no counterpart; Laravel's SDK attaches the request to each event.",
+      ],
+      [
+        "errorReportingOption",
+        "the sentry plugin's init options beforeSend, debug have no counterpart; set them in config/sentry.php.",
+      ],
+    ]);
+  });
+});
