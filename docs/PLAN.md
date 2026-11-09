@@ -374,7 +374,7 @@ behavioural oracle for the wire format.
 | 30 | Strapi-like admin in Filament: Content Manager navigation, Settings area, Strapi wording | Filament stays the admin (owner's call, 2026-10-16); no Strapi React bundle |
 
 Not planned: content-releases, review-workflows, content history, audit logs, preview (Enterprise,
-strapi-php does not port them either). The Content-Type Builder stays the camis CLI and AI
+strapi-php does not port them either; Steve confirmed Content Releases stays out on 2026-11-09). The Content-Type Builder stays the camis CLI and AI
 authoring: the IR is the source of truth and generation is one-way, so a runtime schema editor
 would need Node and codegen on the server.
 
