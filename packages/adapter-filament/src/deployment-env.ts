@@ -4,6 +4,7 @@ import {
   type PageSizes,
   type RestSettings,
   type EmailSettings,
+  type ErrorReportingSettings,
   type DeploymentSettings,
   type Setting,
   type UploadSettings,
@@ -26,6 +27,8 @@ export const deploymentEnv = (
   if (settings.rest !== undefined) sections.push(restLines(settings.rest));
   if (settings.graphql !== undefined) sections.push(graphqlLines(settings.graphql));
   if (settings.accounts !== undefined) sections.push(accountLines(settings.accounts));
+  if (settings.errorReporting !== undefined)
+    sections.push(errorReportingLines(settings.errorReporting, packages));
   if (sections.length === 0) return { env: "", packages: [] };
   const header = [
     "# From the Strapi project's config/plugins and config/api.",
@@ -86,6 +89,20 @@ const uploadLines = (upload: UploadSettings, packages: Set<string>): string[] =>
     lines.push(...line("CAMIS_UPLOAD_SIZE_LIMIT", upload.sizeLimit));
   }
   return lines;
+};
+
+const errorReportingLines = (
+  reporting: ErrorReportingSettings,
+  packages: Set<string>,
+): string[] => {
+  packages.add("sentry/sentry-laravel");
+  return [
+    `# Error reporting: ${reporting.provider}`,
+    ...line("SENTRY_LARAVEL_DSN", reporting.dsn),
+    ...line("SENTRY_ENVIRONMENT", reporting.environment),
+    ...line("SENTRY_RELEASE", reporting.release),
+    ...line("SENTRY_SAMPLE_RATE", reporting.sampleRate),
+  ];
 };
 
 /** "Name <address>" → its address and name; a bare address → itself. */

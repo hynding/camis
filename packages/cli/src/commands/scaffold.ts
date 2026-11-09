@@ -87,6 +87,27 @@ export const patchBootstrapMiddleware = (source: string): string => {
   return source.replace(STOCK_WITH_MIDDLEWARE, STRAPI_ERRORS_FIRST);
 };
 
+const STOCK_WITH_EXCEPTIONS = `->withExceptions(function (Exceptions $exceptions): void {
+        //
+    })`;
+const SENTRY_HANDLES = `->withExceptions(function (Exceptions $exceptions): void {
+        // camis: report to Sentry, as Strapi's sentry plugin did, once sentry/sentry-laravel is installed.
+        if (class_exists(\\Sentry\\Laravel\\Integration::class)) {
+            \\Sentry\\Laravel\\Integration::handles($exceptions);
+        }
+    })`;
+
+/**
+ * Hand the app's exceptions to Sentry's Laravel SDK, which a project migrated from Strapi's sentry
+ * plugin installs (deployment.env names it). Idempotent. The class_exists guard keeps an app
+ * without the SDK booting. A source not matching the stock skeleton is returned unchanged; the
+ * caller fails loudly.
+ */
+export const patchBootstrapExceptions = (source: string): string => {
+  if (source.includes("Integration::handles(")) return source;
+  return source.replace(STOCK_WITH_EXCEPTIONS, SENTRY_HANDLES);
+};
+
 const STOCK_HEALTH = "        health: '/up',\n";
 const THEN_OPEN = "        then: function (): void {\n";
 const loadRoutes = (file: string): string =>
@@ -174,6 +195,13 @@ const patchBootstrap = async (
       );
       return false;
     }
+    patched = patchBootstrapExceptions(patched);
+    if (!patched.includes("Integration::handles(")) {
+      io.out(
+        "✗ could not patch bootstrap/app.php: `->withExceptions(...)` is not the stock Laravel 12 form",
+      );
+      return false;
+    }
     patched = patchBootstrapTransfer(patched);
     if (!patched.includes("routes/transfer.php")) {
       io.out("✗ could not patch bootstrap/app.php: no stock `health: '/up',` routing line");
@@ -191,6 +219,7 @@ const patchBootstrap = async (
     if (graphql) io.out("✓ patched bootstrap/app.php to route routes/graphql.php");
     io.out("✓ patched bootstrap/app.php to route routes/transfer.php");
     io.out("✓ patched bootstrap/app.php to run StrapiErrors first on API routes");
+    io.out("✓ patched bootstrap/app.php to report errors to Sentry once its SDK is installed");
     return true;
   } catch (e) {
     io.out(`✗ cannot patch ${bootstrapPath}: ${(e as Error).message}`);

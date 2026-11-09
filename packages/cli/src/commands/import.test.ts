@@ -89,7 +89,7 @@ describe("importCommand", () => {
     await writeFile(
       join(dir, "config/plugins.js"),
       `module.exports = ({ env }) => ({
-  upload: { config: { provider: "cloudinary" } },
+  upload: { config: { provider: "uploadcare" } },
   email: { config: { provider: "sendmail", settings: { defaultFrom: env("FROM") } } },
 });\n`,
     );
@@ -101,7 +101,7 @@ describe("importCommand", () => {
         Promise.resolve({
           code: 0,
           stdout: JSON.stringify({
-            upload: { config: { provider: "cloudinary" } },
+            upload: { config: { provider: "uploadcare" } },
             email: { config: { provider: "sendmail", settings: { defaultFrom: { env: "FROM" } } } },
           }),
         }),

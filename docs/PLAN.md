@@ -1374,7 +1374,7 @@ no secret included.
 default addresses, REST and GraphQL page sizes, account sessions). `adapter-strapi` reads it from
 the config (`deploymentSettings`): uploads `local` and `aws-s3` (Strapi 4's and 5's option
 shapes), email `sendmail`, `nodemailer`, `sendgrid` (its SMTP relay), `mailgun` and `amazon-ses`.
-Anything else is a gap: `uploadProvider` (Cloudinary), `uploadRootPath`, `emailProvider`,
+Anything else is a gap: `uploadProvider` (Cloudinary until Phase 47), `uploadRootPath`, `emailProvider`,
 `emailProviderOption` (a nodemailer `service`). `adapter-filament` turns it into the `.env` lines
 Laravel's s3 disk and mailers read, plus the `CAMIS_*` keys config/camis.php reads
 (`deploymentEnv`), naming the Composer packages a disk or mailer needs. The CLI writes
@@ -1549,6 +1549,32 @@ Exit: `component-vectors.json` (37 checks) and `nested-components-export.tar.gz`
 compared, read vectors) recorded from strapi-php with the fixture's Menu; the existing vector
 suites unchanged; ComponentRelationsAdminTest writes, reads back and publishes through the form
 and the zone's Builder; the OpenAPI document re-recorded with Menu.
+
+---
+
+## Phase 47 — Strapi's Cloudinary and Sentry plugins (`adapter-kernel`, `adapter-strapi`, `adapter-filament`, `cli`)
+
+The last non-Enterprise plugins strapi-php ports that a migrated project lost: the
+`upload-cloudinary` provider and the `sentry` plugin. Both map onto a Laravel package rather than
+a port, as Phase 41's S3 and mailers do.
+
+- **Cloudinary**: `deploymentSettings` reads `providerOptions` (`cloud_name`, `api_key`,
+  `api_secret`) as a `cloudinary` `FileStorage`; `deploymentEnv` selects `CAMIS_UPLOAD_DISK=cloudinary`
+  with `CLOUDINARY_CLOUD_NAME`/`_KEY`/`_SECRET` and names `cloudinary-labs/cloudinary-laravel`.
+  config/camis.php's `upload.disks` defines that disk, used while config/filesystems.php has none
+  of the name, so the package and its keys are all a deploy adds. `actionOptions` (a folder, tags)
+  are an `uploadProviderOption` gap. Files keep Strapi's row shape; `provider_metadata`
+  (`public_id`) is not written, so a file uploaded here is addressed by its disk path.
+- **Sentry**: `deploymentSettings` reads `config.dsn` and `init`'s `environment`, `release` and
+  `sampleRate` as `errorReporting`; `deploymentEnv` writes `SENTRY_LARAVEL_DSN`, `SENTRY_ENVIRONMENT`,
+  `SENTRY_RELEASE`, `SENTRY_SAMPLE_RATE` and names `sentry/sentry-laravel`. `camis scaffold`
+  patches bootstrap/app.php's `withExceptions` to `Integration::handles($exceptions)` behind a
+  `class_exists` guard. `sendMetadata: false` and other `init` options are `errorReportingOption`
+  gaps. Strapi reports every error a request throws; here a `StrapiError` (a client's mistake) is
+  not reported, as it is not logged.
+
+Exit: unit tests for each mapping and the bootstrap patch; the strapi-api job boots with the patch
+and stores an upload on a disk config/camis.php defines.
 
 ---
 

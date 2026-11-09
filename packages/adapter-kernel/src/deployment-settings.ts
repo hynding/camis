@@ -91,12 +91,23 @@ export interface AccountSettings {
   registerAllowedFields?: Setting | string[];
 }
 
+/** Where the app reports the errors it throws. */
+export interface ErrorReportingSettings {
+  provider: "sentry";
+  dsn?: Setting;
+  environment?: Setting;
+  release?: Setting;
+  /** The share of errors sent, 0 to 1. */
+  sampleRate?: Setting;
+}
+
 export interface DeploymentSettings {
   upload?: UploadSettings;
   email?: EmailSettings;
   rest?: RestSettings;
   graphql?: PageSizes;
   accounts?: AccountSettings;
+  errorReporting?: ErrorReportingSettings;
 }
 
 export const isEnvReference = (value: unknown): value is EnvReference =>

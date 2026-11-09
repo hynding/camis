@@ -145,11 +145,13 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
   under `php`, `.ts`/`.js` under `node`) and writes `deployment.env` beside the IR (`--env-out` to
   move it): the Laravel `.env` lines that give the Filament app the REST and GraphQL page sizes,
   users-permissions' session settings and register fields, the project's upload provider (`aws-s3` → the
-  `s3` disk via `CAMIS_UPLOAD_DISK`) and email provider (`sendmail`, `nodemailer` and `sendgrid` →
-  SMTP, `mailgun`, `amazon-ses` → `ses`), plus its default sender and reply-to. Each `env()` the
+  `s3` disk, `cloudinary` → the `cloudinary` disk, via `CAMIS_UPLOAD_DISK`), email provider
+  (`sendmail`, `nodemailer` and `sendgrid` → SMTP, `mailgun`, `amazon-ses` → `ses`), plus its
+  default sender and reply-to, and the sentry plugin's DSN (→ `SENTRY_LARAVEL_DSN`). Each `env()` the
   config reads stays a `${NAME}` reference, so no secret is copied; the Composer packages the
-  chosen disk or mailer needs are printed. A provider or option with no counterpart (Cloudinary,
-  an S3 `rootPath`, a nodemailer `service`) is listed as a gap.
+  chosen disk, mailer or error reporter needs are printed. A provider or option with no
+  counterpart (an S3 `rootPath`, cloudinary `actionOptions`, a nodemailer `service`, sentry `init`
+  hooks) is listed as a gap.
 
 The Filament target also generates a JSON API: `routes/api.php` +
 `app/Http/Controllers/Api/*ApiController.php` per content type (index/show/store/update/
