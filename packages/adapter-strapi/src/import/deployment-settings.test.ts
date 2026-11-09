@@ -86,19 +86,58 @@ describe("deploymentSettings — upload", () => {
       },
     });
     expect(rooted.gaps.map((g) => g.feature)).toEqual(["uploadRootPath"]);
-    const cloudinary = deploymentSettings({
-      upload: { config: { provider: "cloudinary", providerOptions: { cloud_name: "x" } } },
+    const uploadcare = deploymentSettings({
+      upload: { config: { provider: "uploadcare", providerOptions: { public: "x" } } },
     });
-    expect(cloudinary.settings.upload).toBeUndefined();
-    expect(cloudinary.gaps).toEqual([
+    expect(uploadcare.settings.upload).toBeUndefined();
+    expect(uploadcare.gaps).toEqual([
       {
         feature: "uploadProvider",
         location: {},
         severity: "downgrade",
         message:
-          'the upload provider "cloudinary" has no counterpart here; files stay on the local disk until one is configured.',
+          'the upload provider "uploadcare" has no counterpart here; files stay on the local disk until one is configured.',
       },
     ]);
+  });
+
+  it("reads the cloudinary provider's cloud name and credentials", () => {
+    const { settings, gaps } = deploymentSettings({
+      upload: {
+        config: {
+          provider: "cloudinary",
+          providerOptions: {
+            cloud_name: env("CLOUDINARY_NAME"),
+            api_key: env("CLOUDINARY_KEY"),
+            api_secret: env("CLOUDINARY_SECRET"),
+          },
+          actionOptions: { upload: {}, uploadStream: {}, delete: {} },
+        },
+      },
+    });
+    expect(gaps).toEqual([]);
+    expect(settings.upload).toEqual({
+      provider: "cloudinary",
+      storage: {
+        kind: "cloudinary",
+        cloudName: env("CLOUDINARY_NAME"),
+        apiKey: env("CLOUDINARY_KEY"),
+        apiSecret: env("CLOUDINARY_SECRET"),
+      },
+    });
+  });
+
+  it("reports the cloudinary upload options it cannot carry", () => {
+    const { gaps } = deploymentSettings({
+      upload: {
+        config: {
+          provider: "cloudinary",
+          providerOptions: { cloud_name: "demo" },
+          actionOptions: { upload: { folder: "site" } },
+        },
+      },
+    });
+    expect(gaps.map((g) => g.feature)).toEqual(["uploadProviderOption"]);
   });
 });
 
@@ -233,8 +272,10 @@ describe("deploymentSettings — email", () => {
 describe("deploymentSettings — the API and accounts", () => {
   it("reads config/api's REST page sizes and count", () => {
     expect(
-      deploymentSettings({}, { rest: { defaultLimit: 10, maxLimit: env("MAX", 50), withCount: false } })
-        .settings,
+      deploymentSettings(
+        {},
+        { rest: { defaultLimit: 10, maxLimit: env("MAX", 50), withCount: false } },
+      ).settings,
     ).toEqual({ rest: { defaultLimit: 10, maxLimit: env("MAX", 50), withCount: false } });
   });
 
@@ -247,8 +288,9 @@ describe("deploymentSettings — the API and accounts", () => {
 
   it("reads the graphql plugin's page sizes", () => {
     expect(
-      deploymentSettings({ graphql: { config: { defaultLimit: 20, maxLimit: 200, depthLimit: 7 } } })
-        .settings,
+      deploymentSettings({
+        graphql: { config: { defaultLimit: 20, maxLimit: 200, depthLimit: 7 } },
+      }).settings,
     ).toEqual({ graphql: { defaultLimit: 20, maxLimit: 200 } });
   });
 
@@ -263,7 +305,13 @@ describe("deploymentSettings — the API and accounts", () => {
               maxRefreshTokenLifespan: env("MAX_REFRESH"),
               idleRefreshTokenLifespan: 86400,
               httpOnly: true,
-              cookie: { name: "rt", sameSite: "strict", path: "/api", domain: "example.com", secure: true },
+              cookie: {
+                name: "rt",
+                sameSite: "strict",
+                path: "/api",
+                domain: "example.com",
+                secure: true,
+              },
             },
             register: { allowedFields: ["nickname", "picture"] },
           },
@@ -276,7 +324,13 @@ describe("deploymentSettings — the API and accounts", () => {
         maxRefreshTokenLifespan: env("MAX_REFRESH"),
         idleRefreshTokenLifespan: 86400,
         httpOnly: true,
-        cookie: { name: "rt", sameSite: "strict", path: "/api", domain: "example.com", secure: true },
+        cookie: {
+          name: "rt",
+          sameSite: "strict",
+          path: "/api",
+          domain: "example.com",
+          secure: true,
+        },
         registerAllowedFields: ["nickname", "picture"],
       },
     });

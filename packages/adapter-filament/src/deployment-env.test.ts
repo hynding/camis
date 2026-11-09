@@ -68,6 +68,28 @@ CAMIS_EMAIL_DEFAULT_REPLY_TO=\${REPLY_TO}
     expect(packages).toEqual(["league/flysystem-aws-s3-v3"]);
   });
 
+  it("maps Cloudinary storage onto the cloudinary disk its Laravel package adds", () => {
+    const { env, packages } = deploymentEnv({
+      upload: {
+        provider: "cloudinary",
+        storage: {
+          kind: "cloudinary",
+          cloudName: { env: "CLOUDINARY_NAME" },
+          apiKey: { env: "CLOUDINARY_KEY" },
+          apiSecret: { env: "CLOUDINARY_SECRET" },
+        },
+      },
+    });
+    expect(env).toContain(`# Upload: cloudinary
+CAMIS_UPLOAD_PROVIDER=cloudinary
+CAMIS_UPLOAD_DISK=cloudinary
+CLOUDINARY_CLOUD_NAME=\${CLOUDINARY_NAME}
+# CLOUDINARY_KEY: the Strapi project reads the same variable.
+# CLOUDINARY_SECRET: the Strapi project reads the same variable.
+`);
+    expect(packages).toEqual(["cloudinary-labs/cloudinary-laravel"]);
+  });
+
   it("maps sendmail, mailgun and SES onto Laravel's mailers of those names", () => {
     expect(
       deploymentEnv({ email: { provider: "sendmail", transport: { kind: "sendmail" } } }).env,
