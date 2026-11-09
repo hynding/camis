@@ -73,6 +73,15 @@ const uploadLines = (upload: UploadSettings, packages: Set<string>): string[] =>
       ...line("AWS_URL", storage.baseUrl),
     );
     packages.add("league/flysystem-aws-s3-v3");
+  } else if (storage.kind === "cloudinary") {
+    lines.push(`CAMIS_UPLOAD_PROVIDER=${literal(upload.provider)}`, "CAMIS_UPLOAD_DISK=cloudinary");
+    lines.push(...line("CAMIS_UPLOAD_SIZE_LIMIT", upload.sizeLimit));
+    lines.push(
+      ...line("CLOUDINARY_CLOUD_NAME", storage.cloudName),
+      ...line("CLOUDINARY_KEY", storage.apiKey),
+      ...line("CLOUDINARY_SECRET", storage.apiSecret),
+    );
+    packages.add("cloudinary-labs/cloudinary-laravel");
   } else {
     lines.push(...line("CAMIS_UPLOAD_SIZE_LIMIT", upload.sizeLimit));
   }

@@ -66,12 +66,37 @@ const s3Storage = (options: Options, gaps: CapabilityGap[]): FileStorage => {
   };
 };
 
+const cloudinaryStorage = (config: Options, gaps: CapabilityGap[]): FileStorage => {
+  const options = object(config.providerOptions);
+  // actionOptions pass extra upload/delete parameters (a folder, tags, …) on every call.
+  const actions = Object.values(object(config.actionOptions)).some(
+    (action) => Object.keys(object(action)).length > 0,
+  );
+  if (actions)
+    gaps.push(
+      gap(
+        "uploadProviderOption",
+        "the cloudinary upload provider's actionOptions have no counterpart; set the cloudinary disk's prefix in config/camis.php for a folder.",
+      ),
+    );
+  return {
+    kind: "cloudinary",
+    ...settings([
+      ["cloudName", options.cloud_name],
+      ["apiKey", options.api_key],
+      ["apiSecret", options.api_secret],
+    ]),
+  };
+};
+
 const upload = (config: Options, gaps: CapabilityGap[]): UploadSettings | undefined => {
   const provider = typeof config.provider === "string" ? config.provider : "local";
   const sizeLimit = settings([["sizeLimit", config.sizeLimit]]);
   if (provider === "local") return { provider, storage: { kind: "local" }, ...sizeLimit };
   if (provider === "aws-s3")
     return { provider, storage: s3Storage(object(config.providerOptions), gaps), ...sizeLimit };
+  if (provider === "cloudinary")
+    return { provider, storage: cloudinaryStorage(config, gaps), ...sizeLimit };
   gaps.push(
     gap(
       "uploadProvider",

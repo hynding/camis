@@ -126,7 +126,9 @@ final class StrapiUpload
     {
         $name = config('camis.upload.disk');
         if ($name !== null && $name !== '') {
-            return Storage::disk($name);
+            $fallback = config("camis.upload.disks.{$name}");
+
+            return config("filesystems.disks.{$name}") === null && is_array($fallback) ? Storage::build($fallback) : Storage::disk($name);
         }
 
         return Storage::build(['driver' => 'local', 'root' => public_path('uploads'), 'url' => '/uploads', 'visibility' => 'public', 'throw' => true]);
