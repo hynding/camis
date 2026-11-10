@@ -1,0 +1,330 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Support;
+
+use App\Models\Concerns\HasLocale;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+
+/** $serializer is a generated serializer class: its FIELDS and ZONES say which children and links the row holds. */
+final class StrapiDocuments
+{
+    public const PUBLICATION_FILTERS = [
+        'never-published',
+        'has-published-version',
+        'modified',
+        'unmodified',
+        'never-published-document',
+        'has-published-version-document',
+        'published-without-draft',
+        'published-with-draft',
+    ];
+
+    /** Strapi's status parameter: anything but 'published' (the default) asks for drafts. */
+    public static function draftOnly(array $params): bool
+    {
+        return array_key_exists('status', $params) && $params['status'] !== 'published';
+    }
+
+    /** Narrows a query to the version the status parameter names, and to its publicationFilter. */
+    public static function version(Builder $query, array $params): Builder
+    {
+        $published = ! self::draftOnly($params);
+        self::withStatus($query, $published);
+        $cohort = self::publicationFilter($params);
+
+        return $cohort === null ? $query : self::cohort($query, $cohort, $published);
+    }
+
+    /**
+     * Strapi's publicationFilter parameter, or the cohort its deprecated hasPublishedVersion names
+     * (which is document-scoped); a value Strapi does not know is refused, on any type.
+     */
+    public static function publicationFilter(array $params): ?string
+    {
+        $mode = $params['publicationFilter'] ?? null;
+        if ($mode !== null && ! in_array($mode, self::PUBLICATION_FILTERS, true)) {
+            throw StrapiError::validation("Invalid value for 'publicationFilter'. Expected one of: ".implode(', ', self::PUBLICATION_FILTERS).'.');
+        }
+        $legacy = $params['hasPublishedVersion'] ?? null;
+        if ($legacy !== null && ! in_array($legacy, ['true', 'false'], true)) {
+            throw StrapiError::validation("Invalid value for 'hasPublishedVersion'. Expected boolean or 'true'/'false' string.");
+        }
+        if ($mode !== null || $legacy === null) {
+            return $mode;
+        }
+
+        return $legacy === 'true' ? 'has-published-version-document' : 'never-published-document';
+    }
+
+    /**
+     * Narrows rows of one status to a publicationFilter cohort by whether the other version of
+     * the same document exists: in the same locale, unless the mode is document-scoped
+     * ('-document'); modified and unmodified compare the two versions' updated_at. A mode
+     * the status cannot satisfy, such as published versions that were never published, is empty.
+     */
+    public static function cohort(Builder $query, string $mode, bool $published): Builder
+    {
+        $wanted = match ($mode) {
+            'never-published', 'never-published-document' => $published ? null : false,
+            'published-without-draft' => $published ? false : null,
+            'published-with-draft' => $published ? true : null,
+            default => true,
+        };
+        if ($wanted === null) {
+            return $query->whereRaw('1 = 0');
+        }
+        $model = $query->getModel();
+        $paired = ! str_ends_with($mode, '-document') && in_array(HasLocale::class, class_uses_recursive($model), true);
+        $newer = ['modified' => '>', 'unmodified' => '<='][$mode] ?? null;
+        $other = function (QueryBuilder $sub) use ($query, $model, $published, $paired, $newer): void {
+            $sub->selectRaw('1')
+                ->from($model->getTable().' as camis_other')
+                ->whereColumn('camis_other.document_id', $query->qualifyColumn('document_id'));
+            $published ? $sub->whereNull('camis_other.published_at') : $sub->whereNotNull('camis_other.published_at');
+            if ($paired) {
+                $sub->whereColumn('camis_other.locale', $query->qualifyColumn('locale'));
+            }
+            if ($newer !== null) {
+                [$draft, $live] = $published ? ['camis_other.updated_at', $query->qualifyColumn('updated_at')] : [$query->qualifyColumn('updated_at'), 'camis_other.updated_at'];
+                $sub->whereColumn($draft, $newer, $live);
+            }
+        };
+
+        return $wanted ? $query->whereExists($other) : $query->whereNotExists($other);
+    }
+
+    public static function withStatus(Builder $query, bool $published): Builder
+    {
+        $column = $query->qualifyColumn('published_at');
+
+        return $published ? $query->whereNotNull($column) : $query->whereNull($column);
+    }
+
+    /** A document's draft row, the one every write goes through. */
+    public static function draft(Builder $query, string $documentId): ?Model
+    {
+        return $query->where($query->qualifyColumn('document_id'), $documentId)
+            ->whereNull($query->qualifyColumn('published_at'))
+            ->first();
+    }
+
+    /** Each version's own write is not an event: the documents send what Strapi sends for it. */
+    public static function publish(Model $draft, string $serializer): Model
+    {
+        $published = StrapiWebhooks::quietly(fn () => DB::transaction(fn () => self::copy($draft, self::sibling($draft, true), $serializer, true)));
+        StrapiWebhooks::entry('entry.publish', $published);
+
+        return $published;
+    }
+
+    /** Drops the published version; the draft stays. */
+    public static function unpublish(Model $draft): void
+    {
+        $published = self::sibling($draft, true);
+        if ($published === null) {
+            return;
+        }
+        StrapiWebhooks::quietly(fn () => $published->delete());
+        StrapiWebhooks::entry('entry.unpublish', $published);
+    }
+
+    /** Resets the draft to the published version. */
+    public static function discard(Model $draft, string $serializer): Model
+    {
+        $published = self::sibling($draft, true);
+        if ($published === null) {
+            return $draft;
+        }
+        $draft = StrapiWebhooks::quietly(fn () => DB::transaction(fn () => self::copy($published, $draft, $serializer, false)));
+        StrapiWebhooks::entry('entry.draft-discard', $draft);
+
+        return $draft;
+    }
+
+    /**
+     * A new document with the entry's content, as Strapi's Content Manager duplicates one: a draft
+     * in the entry's locale, its components, files and links copied, made and last changed by
+     * whoever duplicates it.
+     */
+    public static function duplicate(Model $from, string $serializer): Model
+    {
+        $copy = StrapiWebhooks::quietly(fn () => DB::transaction(function () use ($from, $serializer): Model {
+            $to = $from->newInstance();
+            $to->setAttribute('document_id', $from::newDocumentId());
+
+            return self::copy($from, $to, $serializer, false, ['document_id', 'created_at', 'updated_at', 'created_by_id', 'updated_by_id']);
+        }));
+        StrapiWebhooks::entry('entry.create', $copy);
+
+        return $copy;
+    }
+
+    /** Deletes every version of the document. */
+    public static function destroy(Model $row): void
+    {
+        DB::transaction(function () use ($row): void {
+            $row->newQuery()->where('document_id', $row->getAttribute('document_id'))->get()->each->delete();
+        });
+    }
+
+    /** Draft, Published, or Modified (a draft edited since it was published), for the admin. */
+    public static function status(Model $draft): string
+    {
+        $published = $draft->relationLoaded('publishedVersion') ? $draft->getRelation('publishedVersion') : self::sibling($draft, true);
+        if ($published === null) {
+            return 'Draft';
+        }
+
+        return $draft->getAttribute('updated_at') > $published->getAttribute('updated_at') ? 'Modified' : 'Published';
+    }
+
+    /** The document's other version, in the same locale when the type keeps locales. */
+    private static function sibling(Model $row, bool $published): ?Model
+    {
+        $query = $row->newQuery()->where('document_id', $row->getAttribute('document_id'));
+        if ($row->getAttribute('locale') !== null) {
+            $query->where('locale', $row->getAttribute('locale'));
+        }
+
+        return ($published ? $query->whereNotNull('published_at') : $query->whereNull('published_at'))->first();
+    }
+
+    /** One version over another (created when $to is null), with its children and held links. */
+    private static function copy(Model $from, ?Model $to, string $serializer, bool $published, array $fresh = []): Model
+    {
+        $to ??= $from->newInstance();
+        // Only the table's own columns: a list may have loaded aggregates (a relation's count) too.
+        $attributes = array_intersect_key(
+            array_diff_key($from->getAttributes(), array_flip([$from->getKeyName(), ...$fresh])),
+            array_flip(self::columns($from)),
+        );
+        $to->forceFill($attributes);
+        if (method_exists($to, 'publishedVersion')) {
+            $to->setAttribute('published_at', $published ? now() : null);
+        }
+        self::copyToOne($from, $to, $serializer::FIELDS, $published);
+        $to->save();
+        self::copyLinks($from, $to, $serializer::FIELDS, $published);
+        foreach ($serializer::ZONES as $members) {
+            foreach ($members as $member) {
+                $fields = [...$member['fields'] ?? [], ...$member['links'] ?? [], ...$member['children'] ?? []];
+                self::copyItems($from, $to, $member['relation'], $fields, $published, 'position');
+            }
+        }
+
+        return $to;
+    }
+
+    /** The to-one links a row holds in its own columns, as the version written should hold them. */
+    private static function copyToOne(Model $from, Model $to, array $fields, bool $published): void
+    {
+        foreach ($fields as $field) {
+            if (($field['kind'] ?? null) === 'belongsTo') {
+                $fk = $field['foreignKey'];
+                $to->setAttribute($fk, self::counterparts($field, array_filter([$from->getAttribute($fk)]), $published)[0] ?? null);
+            }
+        }
+    }
+
+    /** A row's repeatables, files and to-many links over another row's, once that one is saved. */
+    private static function copyLinks(Model $from, Model $to, array $fields, bool $published): void
+    {
+        foreach ($fields as $field) {
+            if (isset($field['component'])) {
+                self::copyItems($from, $to, $field['component'], $field['fields'], $published, 'id');
+            } elseif (in_array($field['kind'] ?? null, ['mediaOne', 'mediaMany'], true)) {
+                self::copyFiles($from, $to, $field['relation']);
+            } elseif (($field['kind'] ?? null) === 'belongsToMany' && $field['holder'] === 'self') {
+                $relation = $from->{$field['relation']}();
+                if (($field['order'] ?? null) !== null) {
+                    StrapiLinkOrder::sort($relation, $relation->qualifyPivotColumn($field['order']));
+                }
+                $ids = $relation->orderBy($relation->getRelated()->getQualifiedKeyName())->pluck($relation->getRelated()->getQualifiedKeyName())->all();
+                $targets = self::counterparts($field, $ids, $published);
+                // The version written keeps the links in the order the other one holds them.
+                ($field['order'] ?? null) !== null
+                    ? StrapiLinkOrder::write($to, $to->{$field['relation']}(), ['relation' => $field, 'set' => $targets, 'connect' => [], 'disconnect' => []])
+                    : $to->{$field['relation']}()->sync($targets);
+            }
+        }
+    }
+
+    /**
+     * One row's items over another's: deleted one by one when they link anything (so their links
+     * go with them), then each copied with its links and the items inside it.
+     */
+    private static function copyItems(Model $from, Model $to, string $relation, array $fields, bool $published, string $order): void
+    {
+        $fields === [] ? $to->{$relation}()->delete() : $to->{$relation}()->get()->each->delete();
+        foreach ($from->{$relation}()->orderBy($order)->get() as $item) {
+            $copy = $item->replicate();
+            self::copyToOne($item, $copy, $fields, $published);
+            $to->{$relation}()->save($copy);
+            self::copyLinks($item, $copy, $fields, $published);
+        }
+    }
+
+    /** @var array<string, list<string>> */
+    private static array $columns = [];
+
+    /** @return list<string> */
+    private static function columns(Model $row): array
+    {
+        return self::$columns[$row->getConnectionName() . '.' . $row->getTable()] ??= Schema::connection($row->getConnectionName())->getColumnListing($row->getTable());
+    }
+
+    /** The files one row's media field links, linked from another row in the same order. */
+    private static function copyFiles(Model $from, Model $to, string $relation): void
+    {
+        $media = $from->{$relation}()->orderByPivot('order');
+        $to->{$relation}()->sync(StrapiRelations::ordered($media->pluck($media->getRelated()->getQualifiedKeyName())->all()));
+    }
+
+    /**
+     * Link targets as the version being written should hold them: a draft-and-publish target's
+     * row of the same status and locale (dropped when it has none), anything else unchanged.
+     *
+     * @return list<int>
+     */
+    private static function counterparts(array $relation, array $ids, bool $published): array
+    {
+        $ids = array_values(array_map('intval', $ids));
+        if (! $relation['draftPublish'] || $ids === []) {
+            return $ids;
+        }
+        $columns = $relation['localized'] ? ['document_id', 'locale'] : ['document_id'];
+        $linked = $relation['model']::query()->whereKey($ids)->get(['id', ...$columns])->keyBy('id');
+        $versions = $relation['model']::query()
+            ->whereIn('document_id', $linked->pluck('document_id')->unique()->values()->all())
+            ->{$published ? 'whereNotNull' : 'whereNull'}('published_at')
+            ->get(['id', ...$columns])
+            ->keyBy(fn (Model $row) => self::versionKey($row, $columns));
+        $mapped = [];
+        foreach ($ids as $id) {
+            $row = $linked[$id] ?? null;
+            $version = $row === null ? null : ($versions[self::versionKey($row, $columns)] ?? null);
+            if ($version !== null) {
+                $mapped[] = (int) $version->getKey();
+            }
+        }
+
+        return $mapped;
+    }
+
+    /**
+     * What a document's versions share: its documentId and, for a type that keeps locales, its
+     * locale.
+     *
+     * @param list<string> $columns
+     */
+    public static function versionKey(Model $row, array $columns): string
+    {
+        return implode('|', array_map(fn (string $column): string => (string) $row->getAttribute($column), $columns));
+    }
+}

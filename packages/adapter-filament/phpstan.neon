@@ -1,0 +1,9 @@
+# PHPStan for the runtime PHP the generator copies; scripts/runtime-phpstan.sh copies this file,
+# and the baseline for the app it analyses, into a scaffolded Laravel app and analyses the copied
+# files there. The baselines hold what the check found when it was introduced; a new finding fails.
+includes:
+  - vendor/larastan/larastan/extension.neon
+  - phpstan-baseline.neon
+
+parameters:
+  level: 5
