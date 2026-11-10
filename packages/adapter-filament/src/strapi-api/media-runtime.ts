@@ -1,4 +1,5 @@
 import { PHP_MARKER } from "../hooks/names";
+import { runtimePhp } from "../runtime-php";
 
 const header = (namespace: string): string =>
   `<?php\n${PHP_MARKER}\n\ndeclare(strict_types=1);\n\nnamespace ${namespace};\n`;
@@ -336,29 +337,7 @@ final class StrapiUpload
 
 /** The model half of a type with media fields, or with component items that link files: its links go when it does. */
 export const emitHasMedia = (): string =>
-  header("App\\Models\\Concerns") +
-  String.raw`
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\DB;
-
-trait HasMedia
-{
-    protected static function bootHasMedia(): void
-    {
-        static::deleting(function (Model $row): void {
-            DB::table('files_related_mph')
-                ->where('related_type', $row->getMorphClass())
-                ->where('related_id', $row->getKey())
-                ->delete();
-            // A repeatable component's items would go by the foreign key's cascade, past this hook.
-            $components = defined($row::class.'::MEDIA_COMPONENTS') ? constant($row::class.'::MEDIA_COMPONENTS') : [];
-            foreach ($components as $relation) {
-                $row->{$relation}()->get()->each->delete();
-            }
-        });
-    }
-}
-`;
+  runtimePhp(new URL("./php/app/Models/Concerns/HasMedia.php", import.meta.url));
 
 /** One media field of an entry: the files the link table holds for it, in their order. */
 export const mediaRelationMethod = (field: string, method: string, model = "File"): string =>

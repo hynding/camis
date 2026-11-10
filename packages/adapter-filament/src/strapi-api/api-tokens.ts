@@ -1,5 +1,6 @@
 import { PHP_MARKER } from "../hooks/names";
 import { navigationProperties, SETTINGS } from "./admin-navigation";
+import { runtimePhp } from "../runtime-php";
 
 /**
  * Strapi 5's content API tokens (the admin's API Tokens settings and its `content-api-token`
@@ -35,70 +36,16 @@ export const apiTokensConfigKeys = (): string => `
         'salt' => env('API_TOKEN_SALT'),
     ],`;
 
-export const emitApiTokensMigration = (): string => `<?php
-${PHP_MARKER}
+export const emitApiTokensMigration = (): string =>
+  runtimePhp(
+    new URL(
+      "./php/database/migrations/0001_01_02_000005_create_strapi_api_tokens_table.php",
+      import.meta.url,
+    ),
+  );
 
-declare(strict_types=1);
-
-use Illuminate\\Database\\Migrations\\Migration;
-use Illuminate\\Database\\Schema\\Blueprint;
-use Illuminate\\Support\\Facades\\Schema;
-
-return new class extends Migration
-{
-    public function up(): void
-    {
-        Schema::create('strapi_api_tokens', function (Blueprint $table): void {
-            $table->id();
-            $table->string('name')->unique();
-            $table->string('description')->default('');
-            $table->string('type', 16)->default('read-only');
-            $table->string('access_key', 128)->unique();
-            $table->text('encrypted_key')->nullable();
-            $table->json('permissions')->nullable();
-            $table->dateTime('last_used_at')->nullable();
-            $table->dateTime('expires_at')->nullable();
-            $table->unsignedBigInteger('lifespan')->nullable();
-            $table->timestamps();
-        });
-    }
-
-    public function down(): void
-    {
-        Schema::dropIfExists('strapi_api_tokens');
-    }
-};
-`;
-
-export const emitApiTokenModel = (): string => `<?php
-${PHP_MARKER}
-
-declare(strict_types=1);
-
-namespace App\\Models;
-
-use Illuminate\\Database\\Eloquent\\Model;
-
-/** A content API token; its key is kept only as a hash and, for the admin to show again, encrypted. */
-final class StrapiApiToken extends Model
-{
-    protected $table = 'strapi_api_tokens';
-
-    protected $fillable = ['name', 'description', 'type', 'permissions'];
-
-    protected $hidden = ['access_key', 'encrypted_key'];
-
-    protected function casts(): array
-    {
-        return [
-            'permissions' => 'array',
-            'last_used_at' => 'datetime',
-            'expires_at' => 'datetime',
-            'lifespan' => 'integer',
-        ];
-    }
-}
-`;
+export const emitApiTokenModel = (): string =>
+  runtimePhp(new URL("./php/app/Models/StrapiApiToken.php", import.meta.url));
 
 const USERS_PERMISSIONS = "plugin::users-permissions";
 
@@ -442,42 +389,8 @@ ${models}
 `;
 };
 
-export const emitStrapiApiTokenMiddleware = (): string => `<?php
-${PHP_MARKER}
-
-declare(strict_types=1);
-
-namespace App\\Http\\Middleware;
-
-use App\\Support\\StrapiApiTokens;
-use App\\Support\\StrapiError;
-use Closure;
-use Illuminate\\Http\\Request;
-use Symfony\\Component\\HttpFoundation\\Response;
-
-/**
- * Strapi's first content API strategy: an API token, checked against the route's action. A
- * GraphQL request runs many actions, so StrapiGraphql checks the token against each one it runs.
- */
-final class StrapiApiToken
-{
-    public function handle(Request $request, Closure $next): Response
-    {
-        $token = StrapiApiTokens::authenticate($request);
-        if ($token !== null && explode('@', (string) $request->route()?->getActionName())[0] === 'App\\GraphQL\\StrapiGraphql') {
-            StrapiApiTokens::actFor($request, $token, null);
-        } elseif ($token !== null) {
-            $action = StrapiApiTokens::action($request);
-            if (! StrapiApiTokens::allows($token, $action)) {
-                throw new StrapiError(403, 'ForbiddenError', 'Forbidden');
-            }
-            StrapiApiTokens::actFor($request, $token, $action);
-        }
-
-        return $next($request);
-    }
-}
-`;
+export const emitStrapiApiTokenMiddleware = (): string =>
+  runtimePhp(new URL("./php/app/Http/Middleware/StrapiApiToken.php", import.meta.url));
 
 const page = (cls: string, base: string, uses: string[], body: string): string => `<?php
 

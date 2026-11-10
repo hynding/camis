@@ -1,6 +1,6 @@
 import type { CapabilityGap } from "@camis/ir-schema";
 import { navigationProperties, SETTINGS } from "./admin-navigation";
-import { PHP_MARKER } from "../hooks/names";
+import { runtimePhp } from "../runtime-php";
 
 /**
  * Strapi 5's transfer tokens (the admin's Transfer Tokens settings and its `data-transfer`
@@ -32,221 +32,22 @@ export const remoteTransferGap: CapabilityGap = {
     "transfer tokens are kept and checked, and the data moves as an archive (`php artisan strapi:export`, `strapi import`).",
 };
 
-export const emitTransferTokensMigration = (): string => `<?php
-${PHP_MARKER}
+export const emitTransferTokensMigration = (): string =>
+  runtimePhp(
+    new URL(
+      "./php/database/migrations/0001_01_02_000007_create_strapi_transfer_tokens_table.php",
+      import.meta.url,
+    ),
+  );
 
-declare(strict_types=1);
+export const emitTransferTokenModel = (): string =>
+  runtimePhp(new URL("./php/app/Models/StrapiTransferToken.php", import.meta.url));
 
-use Illuminate\\Database\\Migrations\\Migration;
-use Illuminate\\Database\\Schema\\Blueprint;
-use Illuminate\\Support\\Facades\\Schema;
+export const emitStrapiTransferTokens = (): string =>
+  runtimePhp(new URL("./php/app/Support/StrapiTransferTokens.php", import.meta.url));
 
-return new class extends Migration
-{
-    public function up(): void
-    {
-        Schema::create('strapi_transfer_tokens', function (Blueprint $table): void {
-            $table->id();
-            $table->string('name')->unique();
-            $table->string('description')->default('');
-            $table->string('access_key', 128)->unique();
-            $table->json('permissions');
-            $table->dateTime('last_used_at')->nullable();
-            $table->dateTime('expires_at')->nullable();
-            $table->unsignedBigInteger('lifespan')->nullable();
-            $table->timestamps();
-        });
-    }
-
-    public function down(): void
-    {
-        Schema::dropIfExists('strapi_transfer_tokens');
-    }
-};
-`;
-
-export const emitTransferTokenModel = (): string => `<?php
-${PHP_MARKER}
-
-declare(strict_types=1);
-
-namespace App\\Models;
-
-use Illuminate\\Database\\Eloquent\\Model;
-
-/** A transfer token; as in Strapi, its key is kept only as a hash and shown once. */
-final class StrapiTransferToken extends Model
-{
-    protected $table = 'strapi_transfer_tokens';
-
-    protected $fillable = ['name', 'description', 'permissions'];
-
-    protected $hidden = ['access_key'];
-
-    protected function casts(): array
-    {
-        return [
-            'permissions' => 'array',
-            'last_used_at' => 'datetime',
-            'expires_at' => 'datetime',
-            'lifespan' => 'integer',
-        ];
-    }
-}
-`;
-
-export const emitStrapiTransferTokens = (): string => `<?php
-${PHP_MARKER}
-
-declare(strict_types=1);
-
-namespace App\\Support;
-
-use App\\Models\\StrapiTransferToken;
-use Illuminate\\Http\\Request;
-use InvalidArgumentException;
-
-/** Strapi's transfer tokens (admin's transfer token service and data-transfer strategy). */
-final class StrapiTransferTokens
-{
-    public const PERMISSIONS = ['push', 'pull'];
-
-    /** The lifespans the admin offers, in milliseconds as Strapi keeps them; none never expires. */
-    public const LIFESPANS = [7 * 86400000, 30 * 86400000, 90 * 86400000];
-
-    /**
-     * @param array{name: string, description?: string|null, permissions: list<string>, lifespan?: int|null} $attributes
-     * @return array{token: StrapiTransferToken, accessKey: string}
-     */
-    public static function create(array $attributes): array
-    {
-        $lifespan = $attributes['lifespan'] ?? null;
-        $key = self::newKey();
-        $token = new StrapiTransferToken();
-        $token->forceFill([
-            'name' => $attributes['name'],
-            'description' => $attributes['description'] ?? '',
-            'permissions' => self::permissions($attributes['permissions']),
-            'lifespan' => self::lifespan($lifespan),
-            'expires_at' => $lifespan === null ? null : now()->addMilliseconds($lifespan),
-            'access_key' => self::hash($key),
-        ])->save();
-
-        return ['token' => $token, 'accessKey' => $key];
-    }
-
-    /** A new key for the token; the old one stops verifying at once. */
-    public static function regenerate(StrapiTransferToken $token): string
-    {
-        $key = self::newKey();
-        $token->forceFill(['access_key' => self::hash($key)])->save();
-
-        return $key;
-    }
-
-    /**
-     * @param list<string> $permissions
-     * @return list<string>
-     */
-    public static function permissions(array $permissions): array
-    {
-        $permissions = array_values(array_unique($permissions));
-        if ($permissions === [] || array_diff($permissions, self::PERMISSIONS) !== []) {
-            throw new InvalidArgumentException('A transfer token needs push, pull or both');
-        }
-
-        return $permissions;
-    }
-
-    public static function hash(string $key): string
-    {
-        return hash_hmac('sha512', $key, (string) (config('camis.transfer_tokens.salt') ?: config('app.key')));
-    }
-
-    /** The request's transfer token, refusing an expired one; null when it presents none. */
-    public static function authenticate(Request $request): ?StrapiTransferToken
-    {
-        $key = $request->bearerToken();
-        if ($key === null || $key === '') {
-            return null;
-        }
-        $token = StrapiTransferToken::query()->where('access_key', self::hash($key))->first();
-        if ($token === null) {
-            return null;
-        }
-        if ($token->expires_at !== null && $token->expires_at->isPast()) {
-            throw new StrapiError(401, 'UnauthorizedError', 'Token expired');
-        }
-        // A use is recorded at most hourly, as for API tokens.
-        if ($token->last_used_at === null || $token->last_used_at->lte(now()->subHour())) {
-            $token->forceFill(['last_used_at' => now()])->saveQuietly();
-        }
-
-        return $token;
-    }
-
-    public static function allows(StrapiTransferToken $token, string $scope): bool
-    {
-        return in_array($scope, $token->permissions ?? [], true);
-    }
-
-    private static function lifespan(?int $lifespan): ?int
-    {
-        if ($lifespan !== null && ! in_array($lifespan, self::LIFESPANS, true)) {
-            throw new InvalidArgumentException('lifespan must be one of 7, 30 or 90 days, or none');
-        }
-
-        return $lifespan;
-    }
-
-    private static function newKey(): string
-    {
-        return bin2hex(random_bytes(128));
-    }
-}
-`;
-
-export const emitStrapiTransferRunner = (): string => `<?php
-${PHP_MARKER}
-
-declare(strict_types=1);
-
-namespace App\\Http\\Controllers\\Admin;
-
-use App\\Support\\StrapiError;
-use App\\Support\\StrapiTransferTokens;
-use Illuminate\\Http\\Request;
-
-/**
- * Strapi's transfer runner, GET /admin/transfer/runner/{push,pull}: the token is checked as
- * Strapi checks it, and a valid one is told the WebSocket the runner needs is not kept here.
- */
-final class StrapiTransferRunner
-{
-    public function push(Request $request): never
-    {
-        $this->refuse($request, 'push');
-    }
-
-    public function pull(Request $request): never
-    {
-        $this->refuse($request, 'pull');
-    }
-
-    private function refuse(Request $request, string $scope): never
-    {
-        $token = StrapiTransferTokens::authenticate($request);
-        if ($token === null) {
-            throw new StrapiError(401, 'UnauthorizedError', 'Missing or invalid credentials');
-        }
-        if (! StrapiTransferTokens::allows($token, $scope)) {
-            throw new StrapiError(403, 'ForbiddenError', 'Forbidden');
-        }
-        throw new StrapiError(501, 'NotImplementedError', 'Remote data transfer needs a server that keeps a WebSocket open, which this PHP host does not: '
-            .'export an archive with \`php artisan strapi:export\` (or the admin\\'s Data transfer page) and load it with \`strapi import\`, or the other way round.');
-    }
-}
-`;
+export const emitStrapiTransferRunner = (): string =>
+  runtimePhp(new URL("./php/app/Http/Controllers/Admin/StrapiTransferRunner.php", import.meta.url));
 
 /** Strapi's transfer runner when tokens are kept, and the Data transfer page's download link. */
 export const emitTransferRoutes = (secured: boolean): string => `<?php

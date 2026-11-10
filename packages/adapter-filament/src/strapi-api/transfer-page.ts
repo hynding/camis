@@ -1,5 +1,5 @@
-import { PHP_MARKER } from "../hooks/names";
 import { navigationProperties, SETTINGS } from "./admin-navigation";
+import { runtimePhp } from "../runtime-php";
 
 /**
  * strapi:export and strapi:import from the admin, for a shared host with no shell. An export is
@@ -12,81 +12,13 @@ export const TRANSFER_ARCHIVES_PATH = "app/Support/StrapiTransferArchives.php";
 export const TRANSFER_DOWNLOAD_PATH = "app/Http/Controllers/Admin/StrapiTransferDownload.php";
 export const DATA_TRANSFER_PAGE_PATH = "app/Filament/Pages/DataTransfer.php";
 
-export const emitStrapiTransferArchives = (): string => `<?php
-${PHP_MARKER}
+export const emitStrapiTransferArchives = (): string =>
+  runtimePhp(new URL("./php/app/Support/StrapiTransferArchives.php", import.meta.url));
 
-declare(strict_types=1);
-
-namespace App\\Support;
-
-use InvalidArgumentException;
-
-/** The directory the admin's Data transfer page writes exports to and reads imports from. */
-final class StrapiTransferArchives
-{
-    /** An archive's name, never a path: the download link and the import pick carry it. */
-    public const NAME = '[A-Za-z0-9][A-Za-z0-9_.-]*';
-
-    public static function directory(): string
-    {
-        $directory = storage_path('app/private/strapi-transfer');
-        if (! is_dir($directory)) {
-            mkdir($directory, 0775, true);
-        }
-
-        return $directory;
-    }
-
-    public static function path(string $name): string
-    {
-        if (preg_match('/^'.self::NAME.'$/', $name) !== 1 || str_contains($name, '..')) {
-            throw new InvalidArgumentException("Not an archive name: {$name}");
-        }
-
-        return self::directory().DIRECTORY_SEPARATOR.$name;
-    }
-
-    /** @return list<string> The archives in the directory, newest first. */
-    public static function names(): array
-    {
-        $paths = glob(self::directory().DIRECTORY_SEPARATOR.'*.tar*') ?: [];
-        usort($paths, static fn (string $a, string $b): int => filemtime($b) <=> filemtime($a));
-
-        return array_values(array_filter(array_map('basename', $paths), static fn (string $name): bool => preg_match('/^'.self::NAME.'$/', $name) === 1));
-    }
-
-    /** A request may run as long as the transfer takes, where the host allows it. */
-    public static function unlimited(): void
-    {
-        if (function_exists('set_time_limit')) {
-            set_time_limit(0);
-        }
-    }
-}
-`;
-
-export const emitStrapiTransferDownload = (): string => `<?php
-${PHP_MARKER}
-
-declare(strict_types=1);
-
-namespace App\\Http\\Controllers\\Admin;
-
-use App\\Support\\StrapiTransferArchives;
-use Symfony\\Component\\HttpFoundation\\BinaryFileResponse;
-
-/** An export the Data transfer page wrote, through the signed link it made; removed once sent. */
-final class StrapiTransferDownload
-{
-    public function __invoke(string $file): BinaryFileResponse
-    {
-        $path = StrapiTransferArchives::path($file);
-        abort_unless(is_file($path), 404);
-
-        return response()->download($path)->deleteFileAfterSend();
-    }
-}
-`;
+export const emitStrapiTransferDownload = (): string =>
+  runtimePhp(
+    new URL("./php/app/Http/Controllers/Admin/StrapiTransferDownload.php", import.meta.url),
+  );
 
 export const emitDataTransferPage = (secured: boolean): string => `<?php
 

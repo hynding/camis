@@ -1,0 +1,22 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Models\Concerns;
+
+use App\Support\StrapiLinkOrder;
+use Illuminate\Database\Eloquent\Model;
+
+trait HasLinkOrder
+{
+    protected static function bootHasLinkOrder(): void
+    {
+        static::saving(function (Model $row): void {
+            foreach ($row::LINK_ORDERS as $foreignKey => $order) {
+                if ($row->isDirty($foreignKey) && ! $row->isDirty($order)) {
+                    $row->setAttribute($order, StrapiLinkOrder::next($row, $foreignKey, $order, $row->getAttribute($foreignKey)));
+                }
+            }
+        });
+    }
+}

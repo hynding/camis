@@ -1,35 +1,17 @@
 import { PHP_MARKER } from "../hooks/names";
 import { phpSingleQuoted } from "../php-literal";
+import { runtimePhp } from "../runtime-php";
 
 export const USERNAME_MIGRATION_PATH =
   "database/migrations/0001_01_02_000000_add_username_to_users_table.php";
 
-export const emitUsernameMigration = (): string => `<?php
-${PHP_MARKER}
-
-declare(strict_types=1);
-
-use Illuminate\\Database\\Migrations\\Migration;
-use Illuminate\\Database\\Schema\\Blueprint;
-use Illuminate\\Support\\Facades\\Schema;
-
-return new class extends Migration
-{
-    public function up(): void
-    {
-        Schema::table('users', function (Blueprint $table): void {
-            $table->string('username')->nullable()->unique()->after('name');
-        });
-    }
-
-    public function down(): void
-    {
-        Schema::table('users', function (Blueprint $table): void {
-            $table->dropColumn('username');
-        });
-    }
-};
-`;
+export const emitUsernameMigration = (): string =>
+  runtimePhp(
+    new URL(
+      "./php/database/migrations/0001_01_02_000000_add_username_to_users_table.php",
+      import.meta.url,
+    ),
+  );
 
 // Exported so the Strapi storage layout's own AuthController (strapi-api/storage/auth.ts) can
 // reuse the identical wire shape and injection-safe quoting instead of redefining them.

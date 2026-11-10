@@ -1,5 +1,5 @@
-import { PHP_MARKER } from "../hooks/names";
 import { navigationProperties, SETTINGS } from "./admin-navigation";
+import { runtimePhp } from "../runtime-php";
 
 /**
  * Strapi's email plugin over Laravel's mailer: its settings (the provider's name, the default
@@ -21,88 +21,8 @@ export const emailConfigKeys = (): string => `
         'default_reply_to' => env('CAMIS_EMAIL_DEFAULT_REPLY_TO'),
     ],`;
 
-export const emitStrapiEmail = (): string => `<?php
-${PHP_MARKER}
-
-declare(strict_types=1);
-
-namespace App\\Support;
-
-use Illuminate\\Mail\\Message;
-use Illuminate\\Support\\Facades\\Mail;
-
-/** Strapi's email service: its settings, and a send that fills the sender and reply-to from them. */
-final class StrapiEmail
-{
-    /** @return array{provider: string, defaultFrom: ?string, defaultReplyTo: ?string} */
-    public static function settings(): array
-    {
-        return [
-            'provider' => (string) (self::filled(config('camis.email.provider')) ?? config('mail.default')),
-            'defaultFrom' => self::filled(config('camis.email.default_from')) ?? self::filled(config('mail.from.address')),
-            'defaultReplyTo' => self::filled(config('camis.email.default_reply_to')) ?? self::filled(config('mail.reply_to.address')),
-        ];
-    }
-
-    /**
-     * Sends as Strapi's email service does: to, cc, bcc, from, replyTo, subject, text and html,
-     * each address a string (comma separated for several) or a list.
-     *
-     * @param array<string, mixed> $options
-     */
-    public static function send(array $options): void
-    {
-        $settings = self::settings();
-        $from = self::filled($options['from'] ?? null) ?? $settings['defaultFrom'];
-        $replyTo = self::filled($options['replyTo'] ?? null) ?? $settings['defaultReplyTo'];
-        Mail::send([], [], function (Message $message) use ($options, $from, $replyTo): void {
-            $message->to(self::addresses($options['to'] ?? null));
-            foreach (['cc', 'bcc'] as $copy) {
-                if (self::addresses($options[$copy] ?? null) !== []) {
-                    $message->{$copy}(self::addresses($options[$copy]));
-                }
-            }
-            if ($from !== null) {
-                $message->from($from);
-            }
-            if ($replyTo !== null) {
-                $message->replyTo($replyTo);
-            }
-            $message->subject((string) ($options['subject'] ?? ''));
-            if (self::filled($options['html'] ?? null) !== null) {
-                $message->html((string) $options['html']);
-            }
-            if (self::filled($options['text'] ?? null) !== null) {
-                $message->text((string) $options['text']);
-            }
-        });
-    }
-
-    /** The test email Strapi's Email settings page sends, word for word. */
-    public static function test(string $to): void
-    {
-        $provider = self::settings()['provider'];
-        self::send([
-            'to' => $to,
-            'subject' => "Strapi test mail to: {$to}",
-            'text' => "Great! You have correctly configured the Strapi email plugin with the {$provider} provider. \\r\\nFor documentation on how to use the email plugin checkout: https://docs.strapi.io/developer-docs/latest/plugins/email.html",
-        ]);
-    }
-
-    /** @return list<string> */
-    private static function addresses(mixed $value): array
-    {
-        $list = is_array($value) ? $value : explode(',', (string) $value);
-
-        return array_values(array_filter(array_map(fn (mixed $address): string => trim((string) $address), $list), fn (string $address): bool => $address !== ''));
-    }
-
-    private static function filled(mixed $value): ?string
-    {
-        return is_string($value) && trim($value) !== '' ? $value : null;
-    }
-}
-`;
+export const emitStrapiEmail = (): string =>
+  runtimePhp(new URL("./php/app/Support/StrapiEmail.php", import.meta.url));
 
 export const EMAIL_CONTROLLER_PATH = "app/Http/Controllers/Api/EmailController.php";
 
@@ -111,44 +31,8 @@ export const EMAIL_CONTROLLER_PATH = "app/Http/Controllers/Api/EmailController.p
  * from the IR and none Strapi ships holds the action, so only an API token the StrapiApiToken
  * middleware has checked for it reaches the send.
  */
-export const emitEmailController = (): string => `<?php
-${PHP_MARKER}
-
-declare(strict_types=1);
-
-namespace App\\Http\\Controllers\\Api;
-
-use App\\Http\\Controllers\\Controller;
-use App\\Support\\StrapiApiTokens;
-use App\\Support\\StrapiEmail;
-use App\\Support\\StrapiError;
-use Illuminate\\Http\\JsonResponse;
-use Illuminate\\Http\\Request;
-use RuntimeException;
-use Throwable;
-
-final class EmailController extends Controller
-{
-    public function send(Request $request): JsonResponse
-    {
-        if (! StrapiApiTokens::active()) {
-            throw new StrapiError(403, 'ForbiddenError', 'Forbidden');
-        }
-        $options = $request->json()->all();
-        try {
-            StrapiEmail::send($options);
-        } catch (Throwable $error) {
-            // Strapi passes a provider's 400 on as an ApplicationError; anything else is a 500.
-            if ((int) ($error->statusCode ?? $error->getCode()) === 400) {
-                throw new StrapiError(400, 'ApplicationError', $error->getMessage());
-            }
-            throw new RuntimeException("Couldn't send email: {$error->getMessage()}.", 0, $error);
-        }
-
-        return response()->json(new \\stdClass());
-    }
-}
-`;
+export const emitEmailController = (): string =>
+  runtimePhp(new URL("./php/app/Http/Controllers/Api/EmailController.php", import.meta.url));
 
 /** Strapi's Settings › Email › Configuration: the settings, read only, and a test email. */
 export const emitEmailSettingsPage = (secured: boolean): string => `<?php

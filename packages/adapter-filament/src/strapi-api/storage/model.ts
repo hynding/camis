@@ -5,6 +5,7 @@ import { filamentNames } from "../../names";
 import { phpSingleQuoted } from "../../php-literal";
 import type { MappedComponent, MappedScalar } from "./component-map";
 import { linkColumns, linkTable, strapiTable, type RelationField } from "./names";
+import { runtimePhp } from "../../runtime-php";
 
 // The Strapi-owned datetime columns every content row carries, regardless of the IR: Strapi 5
 // writes them itself, so they never appear as IR fields but always need the per-driver cast.
@@ -239,91 +240,9 @@ ${methodsSection}}
  * `App\Models\User` on Strapi's `up_users` — the builtin the users-permissions plugin owns.
  * No `StrapiComponentAttributes`: Strapi's own user/role tables never carry component fields.
  */
-export const emitStorageUserModel = (): string => `<?php
-${PHP_MARKER}
-
-declare(strict_types=1);
-
-namespace App\\Models;
-
-use App\\Casts\\StrapiDateTime;
-use Illuminate\\Database\\Eloquent\\Relations\\BelongsToMany;
-use Illuminate\\Foundation\\Auth\\User as Authenticatable;
-
-class User extends Authenticatable
-{
-    protected $table = 'up_users';
-
-    protected $fillable = [
-        'username',
-        'email',
-        'password',
-        'provider',
-        'confirmed',
-        'blocked',
-        'document_id',
-        'published_at',
-        'locale',
-    ];
-
-    protected $hidden = [
-        'password',
-    ];
-
-    protected function casts(): array
-    {
-        return [
-            'confirmed' => 'boolean',
-            'blocked' => 'boolean',
-            'created_at' => StrapiDateTime::class,
-            'updated_at' => StrapiDateTime::class,
-            'published_at' => StrapiDateTime::class,
-        ];
-    }
-
-    public function roles(): BelongsToMany
-    {
-        return $this->belongsToMany(UpRole::class, 'up_users_role_lnk', 'user_id', 'role_id');
-    }
-
-    public function roleType(): ?string
-    {
-        return $this->roles->first()?->type;
-    }
-}
-`;
+export const emitStorageUserModel = (): string =>
+  runtimePhp(new URL("./../php/app/Models/User.php", import.meta.url));
 
 /** `App\Models\UpRole` on Strapi's `up_roles` — the users-permissions plugin's role table. */
-export const emitStorageUpRoleModel = (): string => `<?php
-${PHP_MARKER}
-
-declare(strict_types=1);
-
-namespace App\\Models;
-
-use App\\Casts\\StrapiDateTime;
-use Illuminate\\Database\\Eloquent\\Model;
-
-class UpRole extends Model
-{
-    protected $table = 'up_roles';
-
-    protected $fillable = [
-        'name',
-        'type',
-        'description',
-        'document_id',
-        'published_at',
-        'locale',
-    ];
-
-    protected function casts(): array
-    {
-        return [
-            'created_at' => StrapiDateTime::class,
-            'updated_at' => StrapiDateTime::class,
-            'published_at' => StrapiDateTime::class,
-        ];
-    }
-}
-`;
+export const emitStorageUpRoleModel = (): string =>
+  runtimePhp(new URL("./../php/app/Models/UpRole.php", import.meta.url));

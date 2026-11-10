@@ -1,5 +1,6 @@
 import { PHP_MARKER } from "../hooks/names";
 import { navigationProperties, SETTINGS } from "./admin-navigation";
+import { runtimePhp } from "../runtime-php";
 
 /**
  * Strapi 5's webhooks (the admin's Webhooks settings, and the `entry.*` and `media.*` events its
@@ -33,87 +34,20 @@ export const webhooksConfigKeys = (): string => `
     'webhooks' => ['default_headers' => []],`;
 
 /** Strapi's own table and columns, so a project moving between the runtimes keeps its webhooks. */
-export const emitWebhooksMigration = (): string => `<?php
-${PHP_MARKER}
+export const emitWebhooksMigration = (): string =>
+  runtimePhp(
+    new URL(
+      "./php/database/migrations/0001_01_02_000006_create_strapi_webhooks_table.php",
+      import.meta.url,
+    ),
+  );
 
-declare(strict_types=1);
-
-use Illuminate\\Database\\Migrations\\Migration;
-use Illuminate\\Database\\Schema\\Blueprint;
-use Illuminate\\Support\\Facades\\Schema;
-
-return new class extends Migration
-{
-    public function up(): void
-    {
-        Schema::create('strapi_webhooks', function (Blueprint $table): void {
-            $table->id();
-            $table->string('name')->nullable();
-            $table->text('url')->nullable();
-            $table->json('headers')->nullable();
-            $table->json('events')->nullable();
-            $table->boolean('enabled')->nullable();
-        });
-    }
-
-    public function down(): void
-    {
-        Schema::dropIfExists('strapi_webhooks');
-    }
-};
-`;
-
-export const emitWebhookModel = (): string => `<?php
-${PHP_MARKER}
-
-declare(strict_types=1);
-
-namespace App\\Models;
-
-use Illuminate\\Database\\Eloquent\\Model;
-
-/** A webhook: where to POST which events, with what headers. */
-final class StrapiWebhook extends Model
-{
-    protected $table = 'strapi_webhooks';
-
-    public $timestamps = false;
-
-    protected $fillable = ['name', 'url', 'headers', 'events', 'enabled'];
-
-    protected $attributes = ['enabled' => true];
-
-    protected function casts(): array
-    {
-        return [
-            'headers' => 'array',
-            'events' => 'array',
-            'enabled' => 'boolean',
-        ];
-    }
-}
-`;
+export const emitWebhookModel = (): string =>
+  runtimePhp(new URL("./php/app/Models/StrapiWebhook.php", import.meta.url));
 
 /** Wires a content type's (or the media library's) own writes to its webhooks. */
-export const emitEmitsStrapiEvents = (): string => `<?php
-${PHP_MARKER}
-
-declare(strict_types=1);
-
-namespace App\\Models\\Concerns;
-
-use App\\Support\\StrapiWebhooks;
-use Illuminate\\Database\\Eloquent\\Model;
-
-trait EmitsStrapiEvents
-{
-    protected static function bootEmitsStrapiEvents(): void
-    {
-        static::saved(fn (Model $row) => StrapiWebhooks::saved($row));
-        static::deleted(fn (Model $row) => StrapiWebhooks::deleted($row));
-    }
-}
-`;
+export const emitEmitsStrapiEvents = (): string =>
+  runtimePhp(new URL("./php/app/Models/Concerns/EmitsStrapiEvents.php", import.meta.url));
 
 const ENTRY_EVENTS = [
   "entry.create",

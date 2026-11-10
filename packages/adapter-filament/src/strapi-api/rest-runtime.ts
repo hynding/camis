@@ -1,4 +1,5 @@
 import { PHP_MARKER } from "../hooks/names";
+import { runtimePhp } from "../runtime-php";
 
 const header = (namespace: string): string =>
   `<?php\n${PHP_MARKER}\n\ndeclare(strict_types=1);\n\nnamespace ${namespace};\n`;
@@ -658,35 +659,7 @@ ${scopeBody(secured)}
 
 /** A Strapi application error (`@strapi/utils` errors): status, name, message and details. */
 export const emitStrapiError = (): string =>
-  header("App\\Support") +
-  String.raw`
-use RuntimeException;
-
-final class StrapiError extends RuntimeException
-{
-    public function __construct(
-        public readonly int $status,
-        public readonly string $name,
-        string $message,
-        public readonly array $details = [],
-    ) {
-        parent::__construct($message);
-    }
-
-    public static function validation(string $message, array $details = []): self
-    {
-        return new self(400, 'ValidationError', $message, $details);
-    }
-
-    /** Strapi's validate/utils throwInvalidKey, with the query parameter it was found in. */
-    public static function invalidKey(string $key, ?string $path, string $param): self
-    {
-        $message = $path !== null && $path !== '' && $path !== $key ? "Invalid key {$key} at {$path}" : "Invalid key {$key}";
-
-        return self::validation($message, ['key' => $key, 'path' => $path, 'source' => 'query', 'param' => $param]);
-    }
-}
-`;
+  runtimePhp(new URL("./php/app/Support/StrapiError.php", import.meta.url));
 
 /**
  * Strapi 5 addresses documents by a 24-character `documentId`. Strapi mints a cuid2; this mints
@@ -695,28 +668,4 @@ final class StrapiError extends RuntimeException
  * set one, so an import can carry ids across from Strapi.
  */
 export const emitHasDocumentId = (): string =>
-  header("App\\Models\\Concerns") +
-  String.raw`
-trait HasDocumentId
-{
-    protected static function bootHasDocumentId(): void
-    {
-        static::creating(function ($model): void {
-            if (($model->document_id ?? '') === '') {
-                $model->document_id = self::newDocumentId();
-            }
-        });
-    }
-
-    public static function newDocumentId(): string
-    {
-        $alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
-        $id = $alphabet[random_int(0, 25)];
-        for ($i = 1; $i < 24; $i++) {
-            $id .= $alphabet[random_int(0, 35)];
-        }
-
-        return $id;
-    }
-}
-`;
+  runtimePhp(new URL("./php/app/Models/Concerns/HasDocumentId.php", import.meta.url));

@@ -1,4 +1,4 @@
-import { PHP_MARKER } from "../hooks/names";
+import { runtimePhp } from "../runtime-php";
 
 /**
  * The admin's menu as Strapi's: the Content Manager's types, then Settings. Filament orders groups
@@ -54,32 +54,8 @@ export const contentManagerSorts = (displayNames: Iterable<string>): Map<string,
       .map((name, index) => [name, index + 1]),
   );
 
-export const emitStrapiNavigation = (): string => `<?php
-${PHP_MARKER}
-
-declare(strict_types=1);
-
-namespace App\\Filament;
-
-use Filament\\Support\\Contracts\\HasLabel;
-
-/** The admin's menu groups, in Strapi's order. */
-enum StrapiNavigation: string implements HasLabel
-{
-    case CollectionTypes = 'collection-types';
-    case SingleTypes = 'single-types';
-    case Settings = 'settings';
-
-    public function getLabel(): string
-    {
-        return match ($this) {
-            self::CollectionTypes => 'Collection Types',
-            self::SingleTypes => 'Single Types',
-            self::Settings => 'Settings',
-        };
-    }
-}
-`;
+export const emitStrapiNavigation = (): string =>
+  runtimePhp(new URL("./php/app/Filament/StrapiNavigation.php", import.meta.url));
 
 /** A list page's header, as Strapi's: its create button reads "Create new entry". */
 export const CREATE_ACTION_IMPORT = "Filament\\Actions\\CreateAction";

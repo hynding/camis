@@ -1,0 +1,32 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Support;
+
+use RuntimeException;
+
+final class StrapiError extends RuntimeException
+{
+    public function __construct(
+        public readonly int $status,
+        public readonly string $name,
+        string $message,
+        public readonly array $details = [],
+    ) {
+        parent::__construct($message);
+    }
+
+    public static function validation(string $message, array $details = []): self
+    {
+        return new self(400, 'ValidationError', $message, $details);
+    }
+
+    /** Strapi's validate/utils throwInvalidKey, with the query parameter it was found in. */
+    public static function invalidKey(string $key, ?string $path, string $param): self
+    {
+        $message = $path !== null && $path !== '' && $path !== $key ? "Invalid key {$key} at {$path}" : "Invalid key {$key}";
+
+        return self::validation($message, ['key' => $key, 'path' => $path, 'source' => 'query', 'param' => $param]);
+    }
+}

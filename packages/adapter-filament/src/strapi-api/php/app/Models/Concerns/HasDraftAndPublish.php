@@ -1,0 +1,24 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Models\Concerns;
+
+use Illuminate\Database\Eloquent\Relations\HasOne;
+
+trait HasDraftAndPublish
+{
+    public function initializeHasDraftAndPublish(): void
+    {
+        $this->mergeCasts(['published_at' => 'datetime']);
+    }
+
+    /** The document's published row, from its draft. */
+    public function publishedVersion(): HasOne
+    {
+        $published = $this->hasOne(static::class, 'document_id', 'document_id')->whereNotNull('published_at');
+
+        // Lazily loaded only: an eager load would apply the first row's locale to every row.
+        return $this->getAttribute('locale') === null ? $published : $published->where('locale', $this->getAttribute('locale'));
+    }
+}
