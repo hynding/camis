@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { ContentType } from "@camis/ir-schema";
 import { PHP_MARKER } from "../../hooks/names";
-import { emitScopeMethod } from "../scope";
+import { emitScopeMethod } from "../core/scope";
 import { componentMap } from "./component-map";
 import { storageBundle } from "./__fixtures__/storage";
 import { emitStorageModel, emitStorageUpRoleModel, emitStorageUserModel } from "./model";

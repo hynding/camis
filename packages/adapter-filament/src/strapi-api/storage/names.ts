@@ -1,6 +1,6 @@
 import type { Component, ContentType, Field } from "@camis/ir-schema";
 import { pluralize, snakeCase } from "@camis/ir-core";
-import { kebab } from "../names";
+import { kebab } from "../core/names";
 
 /**
  * A relation field, narrowed out of the IR's `Field` union. Kept local (rather than exported

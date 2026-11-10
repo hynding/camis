@@ -1,0 +1,26 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Models\Concerns;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
+
+trait HasMedia
+{
+    protected static function bootHasMedia(): void
+    {
+        static::deleting(function (Model $row): void {
+            DB::table('files_related_mph')
+                ->where('related_type', $row->getMorphClass())
+                ->where('related_id', $row->getKey())
+                ->delete();
+            // A repeatable component's items would go by the foreign key's cascade, past this hook.
+            $components = defined($row::class.'::MEDIA_COMPONENTS') ? constant($row::class.'::MEDIA_COMPONENTS') : [];
+            foreach ($components as $relation) {
+                $row->{$relation}()->get()->each->delete();
+            }
+        });
+    }
+}

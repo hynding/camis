@@ -203,6 +203,46 @@ jobs:
             if ($seen !== [true, true, false, false, false]) { fwrite(STDERR, "ADMIN ACCESS MISMATCH ".json_encode($seen)."\n"); exit(1); }
             echo "ADMIN ACCESS OK\n";
           '
+  runtime-phpstan:
+    # The runtime PHP the generator copies (src/strapi-api/<package>/php/), analysed inside the
+    # Laravel app it runs in so Eloquent, Filament and the generated classes it calls resolve.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: gd
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Scaffold Laravel 12 + Filament v5 + API + Spatie + GraphQL + Strapi storage deps + Larastan
+        run: |
+          composer create-project laravel/laravel:^12 app --no-interaction
+          cd app
+          composer require filament/filament:"^5.0" --no-interaction
+          php artisan filament:install --panels --no-interaction
+          php artisan install:api --no-interaction
+          composer require spatie/laravel-permission webonyx/graphql-php:"^15.19" firebase/php-jwt visus/cuid2 --no-interaction
+          php artisan vendor:publish --provider="Spatie\Permission\PermissionServiceProvider" --no-interaction
+          composer require --dev larastan/larastan:"^3.0" --no-interaction
+          cd "$GITHUB_WORKSPACE"
+          pnpm --filter @camis/cli exec tsx -e "import { readFileSync, writeFileSync } from 'node:fs';
+            import { isPatchedUserModel, patchUserModel } from './src/commands/scaffold';
+            const f = process.env.GITHUB_WORKSPACE + '/app/app/Models/User.php';
+            const patched = patchUserModel(readFileSync(f, 'utf8'));
+            if (!isPatchedUserModel(patched)) { console.error('User model patch did not apply'); process.exit(1); }
+            writeFileSync(f, patched);"
+      - name: Overlay the Strapi API style on both storage layouts
+        run: |
+          cp -r app app-storage
+          pnpm --filter @camis/adapter-filament overlay "$GITHUB_WORKSPACE/app" --style strapi
+          pnpm --filter @camis/adapter-filament overlay "$GITHUB_WORKSPACE/app-storage" --style strapi --storage strapi
+      - name: PHPStan over the runtime PHP
+        run: bash packages/adapter-filament/scripts/runtime-phpstan.sh app app-storage
   strapi-api:
     runs-on: ubuntu-latest
     # The REST and populate vectors build SQL per dialect (LIKE escapes, casts, relation

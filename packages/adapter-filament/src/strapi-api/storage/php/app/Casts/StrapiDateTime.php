@@ -1,0 +1,70 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Casts;
+
+use DateTimeInterface;
+use Illuminate\Contracts\Database\Eloquent\CastsAttributes;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
+
+/**
+ * Reads and writes the datetime columns Strapi created, whose storage differs per driver: SQLite
+ * holds integer milliseconds since the epoch, MySQL a `datetime(6)` string and Postgres a
+ * `timestamp(6)`. Laravel's built-in `datetime` cast assumes the string form on every driver, so
+ * under SQLite it would parse Strapi's millisecond integer as a year.
+ *
+ * The driver comes from the model's own connection rather than the default one, so a model bound
+ * to a second connection still writes that connection's format.
+ *
+ * Both directions are also exposed as static helpers: a component scalar is read and written by
+ * the raw query builder, which never passes through a cast, so StrapiComponents calls these
+ * directly rather than reimplementing the same per-driver rules.
+ */
+class StrapiDateTime implements CastsAttributes
+{
+    public function get(Model $model, string $key, mixed $value, array $attributes): ?Carbon
+    {
+        return self::fromStorage($value);
+    }
+
+    public function set(Model $model, string $key, mixed $value, array $attributes): int|string|null
+    {
+        return self::toStorage($value, $model->getConnection()->getDriverName());
+    }
+
+    /** Both stored forms land here: SQLite's millisecond integer and everyone else's string. */
+    public static function fromStorage(mixed $value): ?Carbon
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        if ($value instanceof DateTimeInterface) {
+            return Carbon::instance($value);
+        }
+
+        if (is_int($value) || is_float($value) || (is_string($value) && is_numeric($value))) {
+            return Carbon::createFromTimestampMs((int) $value);
+        }
+
+        // The column holds UTC. Parsing without a zone would read it as the app's local time and
+        // shift every value by the app's offset.
+        return Carbon::parse($value, 'UTC');
+    }
+
+    /** The inverse: milliseconds on SQLite, a microsecond UTC string on MySQL and Postgres. */
+    public static function toStorage(mixed $value, string $driver): int|string|null
+    {
+        $date = self::fromStorage($value);
+
+        if ($date === null) {
+            return null;
+        }
+
+        return $driver === 'sqlite'
+            ? (int) $date->getTimestampMs()
+            : $date->utc()->format('Y-m-d H:i:s.u');
+    }
+}
