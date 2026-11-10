@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Filament\Resources\Books\Pages\CreateBook;
 use App\Filament\Resources\Books\Pages\EditBook;
+use App\Models\AdminUser;
 use App\Models\Author;
 use App\Models\Book;
 use App\Models\Genre;
@@ -26,7 +27,7 @@ class LinkOrderAdminTest extends TestCase
 {
     use RefreshDatabase;
 
-    private User $admin;
+    private AdminUser $admin;
 
     private string $jwt;
 
@@ -34,7 +35,7 @@ class LinkOrderAdminTest extends TestCase
     {
         parent::setUp();
         $this->seed(\Database\Seeders\RolePermissionSeeder::class);
-        $this->admin = User::factory()->create(['username' => 'admin']);
+        $this->admin = AdminUser::forceCreate(['firstname' => 'Admin', 'email' => 'admin@example.test', 'is_active' => true]);
         $this->admin->givePermissionTo(['book.read', 'book.create', 'book.update', 'author.read', 'genre.read']);
         $caller = User::factory()->create(['username' => 'caller']);
         $caller->assignRole('authenticated');
@@ -43,8 +44,8 @@ class LinkOrderAdminTest extends TestCase
 
     private function inAdmin(): void
     {
-        // An API request leaves its guard the default; the admin signs in on the web guard.
-        $this->actingAs($this->admin, 'web');
+        // An API request leaves its guard the default; the admin signs in on the admin guard.
+        $this->actingAs($this->admin, 'admin');
         Filament::setCurrentPanel(Filament::getPanel('admin'));
     }
 

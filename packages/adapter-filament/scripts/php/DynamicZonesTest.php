@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Filament\Resources\Landings\Pages\CreateLanding;
 use App\Filament\Resources\Landings\Pages\EditLanding;
 use App\Http\Serializers\LandingSerializer;
+use App\Models\AdminUser;
 use App\Models\Landing;
 use App\Models\User;
 use App\Support\StrapiUpload;
@@ -29,9 +30,9 @@ class DynamicZonesTest extends TestCase
     private function login(array $permissions): void
     {
         $this->seed(\Database\Seeders\RolePermissionSeeder::class);
-        $user = User::factory()->create(['username' => 'admin']);
+        $user = AdminUser::forceCreate(['firstname' => 'Admin', 'email' => 'admin@example.test', 'is_active' => true]);
         $user->givePermissionTo($permissions);
-        $this->actingAs($user);
+        $this->actingAs($user, 'admin');
         Filament::setCurrentPanel(Filament::getPanel('admin'));
     }
 

@@ -12,6 +12,7 @@ use App\Filament\Widgets\StrapiLastEditedEntries;
 use App\Filament\Widgets\StrapiLastPublishedEntries;
 use App\Filament\Widgets\StrapiProjectStatistics;
 use App\Http\Serializers\PostSerializer;
+use App\Models\AdminUser;
 use App\Models\Author;
 use App\Models\Post;
 use App\Models\User;
@@ -43,9 +44,9 @@ class SettingsPagesTest extends TestCase
         foreach ($permissions as $permission) {
             \Spatie\Permission\Models\Permission::findOrCreate($permission);
         }
-        $user = User::factory()->create(['username' => 'admin']);
+        $user = AdminUser::forceCreate(['firstname' => 'Admin', 'email' => 'admin@example.test', 'is_active' => true]);
         $user->givePermissionTo($permissions);
-        $this->actingAs($user);
+        $this->actingAs($user, 'admin');
         Filament::setCurrentPanel(Filament::getPanel('admin'));
     }
 

@@ -14,6 +14,7 @@ use App\Filament\Resources\Roles\Pages\ListRoles;
 use App\Filament\Resources\Roles\Pages\ViewRole;
 use App\Filament\Resources\Roles\RoleResource;
 use App\Filament\Resources\Tags\TagResource;
+use App\Models\AdminUser;
 use App\Models\GlobalModel;
 use App\Models\Homepage;
 use App\Models\Locale;
@@ -36,15 +37,15 @@ class StrapiAdminTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function login(array $permissions): User
+    private function login(array $permissions): AdminUser
     {
         $this->seed(\Database\Seeders\RolePermissionSeeder::class);
         foreach ($permissions as $permission) {
             \Spatie\Permission\Models\Permission::findOrCreate($permission);
         }
-        $user = User::factory()->create(['username' => 'admin']);
+        $user = AdminUser::forceCreate(['firstname' => 'Admin', 'email' => 'admin@example.test', 'is_active' => true]);
         $user->givePermissionTo($permissions);
-        $this->actingAs($user);
+        $this->actingAs($user, 'admin');
         Filament::setCurrentPanel(Filament::getPanel('admin'));
 
         return $user;
@@ -73,7 +74,7 @@ class StrapiAdminTest extends TestCase
         $this->assertSame(['Article', 'Book', 'Note', 'User'], array_values(array_intersect($types, ['Article', 'Book', 'Note', 'User'])));
         $this->assertContains('Media Library', $menu['']);
         $this->assertSame(
-            ['Overview', 'API Tokens', 'Internationalization', 'Media Library', 'Transfer Tokens', 'Webhooks', 'Data transfer', 'Email', 'Roles', 'Providers', 'Email templates', 'Advanced settings'],
+            ['Overview', 'API Tokens', 'Internationalization', 'Media Library', 'Transfer Tokens', 'Webhooks', 'Data transfer', 'Admin users', 'Email', 'Roles', 'Providers', 'Email templates', 'Advanced settings'],
             $menu['Settings'],
         );
     }
@@ -154,7 +155,7 @@ class StrapiAdminTest extends TestCase
     public function test_a_role_shows_its_actions_and_the_conditions_on_them(): void
     {
         $this->login(['user.update']);
-        $role = Role::findByName('authenticated');
+        $role = Role::findByName('authenticated', 'web');
 
         $page = Livewire::test(ViewRole::class, ['record' => $role->getKey()])->assertOk();
         $state = $page->instance()->form->getRawState();
@@ -163,7 +164,7 @@ class StrapiAdminTest extends TestCase
         $this->assertEqualsCanonicalizing(['find', 'findOne', 'count'], $state[md5('plugin::users-permissions.user')]);
         $page->assertSee('find, findOne, create, update, delete: record.ownerId = user.id');
 
-        $public = Livewire::test(ViewRole::class, ['record' => Role::findByName('public')->getKey()]);
+        $public = Livewire::test(ViewRole::class, ['record' => Role::findByName('public', 'web')->getKey()]);
         $this->assertEqualsCanonicalizing(['find', 'findOne'], $public->instance()->form->getRawState()[md5('api::book.book')]);
         $this->assertSame([], $public->instance()->form->getRawState()[md5('api::note.note')]);
     }
@@ -171,7 +172,7 @@ class StrapiAdminTest extends TestCase
     public function test_the_roles_page_changes_nothing(): void
     {
         $this->login(['user.update']);
-        $role = Role::findByName('authenticated');
+        $role = Role::findByName('authenticated', 'web');
         $this->assertFalse(RoleResource::canCreate());
         $this->assertFalse(RoleResource::canEdit($role));
         $this->assertFalse(RoleResource::canDelete($role));

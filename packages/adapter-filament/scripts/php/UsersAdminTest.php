@@ -10,6 +10,7 @@ use App\Filament\Pages\UsersPermissionsProviders;
 use App\Filament\Resources\Users\Pages\CreateUser;
 use App\Filament\Resources\Users\Pages\EditUser;
 use App\Filament\Resources\Users\Pages\ListUsers;
+use App\Models\AdminUser;
 use App\Models\User;
 use App\Support\StrapiUsers;
 use Filament\Facades\Filament;
@@ -28,15 +29,15 @@ class UsersAdminTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function login(array $permissions): User
+    private function login(array $permissions): AdminUser
     {
         $this->seed(\Database\Seeders\RolePermissionSeeder::class);
         foreach ($permissions as $permission) {
             \Spatie\Permission\Models\Permission::findOrCreate($permission);
         }
-        $user = User::factory()->create(['username' => 'admin']);
+        $user = AdminUser::forceCreate(['firstname' => 'Admin', 'email' => 'admin@example.test', 'is_active' => true]);
         $user->givePermissionTo($permissions);
-        $this->actingAs($user);
+        $this->actingAs($user, 'admin');
         Filament::setCurrentPanel(Filament::getPanel('admin'));
 
         return $user;

@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Filament\Resources\ApiTokens\Pages\CreateApiToken;
 use App\Filament\Resources\ApiTokens\Pages\EditApiToken;
 use App\Filament\Resources\ApiTokens\Pages\ListApiTokens;
+use App\Models\AdminUser;
 use App\Models\Note;
 use App\Models\StrapiApiToken;
 use App\Models\User;
@@ -25,15 +26,15 @@ class ApiTokensTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function login(array $permissions): User
+    private function login(array $permissions): AdminUser
     {
         $this->seed(\Database\Seeders\RolePermissionSeeder::class);
         foreach ($permissions as $permission) {
             \Spatie\Permission\Models\Permission::findOrCreate($permission);
         }
-        $user = User::factory()->create(['username' => 'admin']);
+        $user = AdminUser::forceCreate(['firstname' => 'Admin', 'email' => 'admin@example.test', 'is_active' => true]);
         $user->givePermissionTo($permissions);
-        $this->actingAs($user);
+        $this->actingAs($user, 'admin');
         Filament::setCurrentPanel(Filament::getPanel('admin'));
 
         return $user;

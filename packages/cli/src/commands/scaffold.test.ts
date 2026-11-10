@@ -8,6 +8,7 @@ import {
   patchBootstrapTransfer,
   patchConsoleRoutes,
   isPatchedUserModel,
+  patchAdminPanelProvider,
   patchUserModel,
   scaffoldCommand,
 } from "./scaffold";
@@ -119,6 +120,41 @@ describe("patchUserModel", () => {
     );
     expect(patchUserModel(before)).toBe(before);
     expect(isPatchedUserModel(before)).toBe(true);
+  });
+});
+
+// The panel `php artisan filament:install --panels` writes, cut to what the patch reads.
+const STOCK_PANEL = `<?php
+
+namespace App\\Providers\\Filament;
+
+class AdminPanelProvider extends PanelProvider
+{
+    public function panel(Panel $panel): Panel
+    {
+        return $panel
+            ->default()
+            ->id('admin')
+            ->path('admin')
+            ->login()
+            ->colors([
+                'primary' => Color::Amber,
+            ]);
+    }
+}
+`;
+
+describe("patchAdminPanelProvider", () => {
+  // Admin accounts are AdminUser rows on the generated admin guard, apart from the API's users.
+  it("signs the admin panel in on the admin guard", () => {
+    expect(patchAdminPanelProvider(STOCK_PANEL)).toContain(
+      "            ->login()\n            ->authGuard('admin')\n            ->colors([",
+    );
+  });
+
+  it("is idempotent", () => {
+    const once = patchAdminPanelProvider(STOCK_PANEL);
+    expect(patchAdminPanelProvider(once)).toBe(once);
   });
 });
 
@@ -308,6 +344,7 @@ describe("scaffoldCommand", () => {
       const { io, written } = fakeIo({
         files: {
           "/proj/app/app/Models/User.php": STOCK_USER,
+          "/proj/app/app/Providers/Filament/AdminPanelProvider.php": STOCK_PANEL,
           "/proj/app/bootstrap/app.php": STOCK_BOOTSTRAP,
           "/proj/app/routes/console.php": STOCK_CONSOLE,
         },
@@ -323,6 +360,7 @@ describe("scaffoldCommand", () => {
     const { io, calls, madeDirs } = fakeIo({
       files: {
         "/proj/generated/filament/app/Models/User.php": STOCK_USER,
+        "/proj/generated/filament/app/Providers/Filament/AdminPanelProvider.php": STOCK_PANEL,
         "/proj/generated/filament/bootstrap/app.php": STOCK_BOOTSTRAP,
       },
     });
@@ -335,6 +373,7 @@ describe("scaffoldCommand", () => {
     const { io, calls, written } = fakeIo({
       files: {
         "/proj/app/app/Models/User.php": STOCK_USER,
+        "/proj/app/app/Providers/Filament/AdminPanelProvider.php": STOCK_PANEL,
         "/proj/app/bootstrap/app.php": STOCK_BOOTSTRAP,
       },
     });
@@ -351,6 +390,7 @@ describe("scaffoldCommand", () => {
     const { io, written } = fakeIo({
       files: {
         "/proj/app/app/Models/User.php": STOCK_USER,
+        "/proj/app/app/Providers/Filament/AdminPanelProvider.php": STOCK_PANEL,
         "/proj/app/bootstrap/app.php": STOCK_BOOTSTRAP,
       },
     });
@@ -362,6 +402,7 @@ describe("scaffoldCommand", () => {
     const { io, calls, written } = fakeIo({
       files: {
         "/proj/app/app/Models/User.php": STOCK_USER,
+        "/proj/app/app/Providers/Filament/AdminPanelProvider.php": STOCK_PANEL,
         "/proj/app/bootstrap/app.php": STOCK_BOOTSTRAP,
       },
     });
@@ -386,6 +427,24 @@ describe("scaffoldCommand", () => {
     expect(calls[4]!.args).toContain("spatie/laravel-permission");
     expect(calls[5]!.args.join(" ")).toContain("vendor:publish");
     expect(written["/proj/app/app/Models/User.php"]).toContain("HasRoles");
+    expect(written["/proj/app/app/Providers/Filament/AdminPanelProvider.php"]).toContain(
+      "->authGuard('admin')",
+    );
+  });
+
+  it("fails when the admin panel has no stock ->login() line", async () => {
+    const { io, lines } = fakeIo({
+      files: {
+        "/proj/app/app/Models/User.php": STOCK_USER,
+        "/proj/app/app/Providers/Filament/AdminPanelProvider.php": STOCK_PANEL.replace(
+          "->login()",
+          "->login(CustomLogin::class)",
+        ),
+        "/proj/app/bootstrap/app.php": STOCK_BOOTSTRAP,
+      },
+    });
+    expect(await scaffoldCommand("filament", "app", io)).toBe(1);
+    expect(lines.join("\n")).toContain("admin panel");
   });
 
   it("refuses a directory that already has composer.json", async () => {
@@ -415,6 +474,7 @@ describe("scaffoldCommand", () => {
     const { io, lines, written } = fakeIo({
       files: {
         "/proj/app/app/Models/User.php": unrecognised,
+        "/proj/app/app/Providers/Filament/AdminPanelProvider.php": STOCK_PANEL,
         "/proj/app/bootstrap/app.php": STOCK_BOOTSTRAP,
       },
     });
@@ -493,6 +553,7 @@ describe("scaffoldCommand — storage strapi", () => {
     const { io, calls } = fakeIo({
       files: {
         "/proj/app/app/Models/User.php": STOCK_USER,
+        "/proj/app/app/Providers/Filament/AdminPanelProvider.php": STOCK_PANEL,
         "/proj/app/bootstrap/app.php": STOCK_BOOTSTRAP,
       },
     });

@@ -64,14 +64,18 @@ describe("admin access", () => {
     expect(model).toContain("protected $table = 'admin_users';");
   });
 
-  it("signs the admin in on the web guard as an AdminUser, and keeps the users provider for the API", () => {
+  it("signs the admin in on its own guard as an AdminUser, and leaves the web guard to the API's users", () => {
     const auth = file(result, AUTH_CONFIG);
     expect(auth).toContain(
-      "'web' => [\n            'driver' => 'session',\n            'provider' => 'admin_users',",
+      "'admin' => [\n            'driver' => 'session',\n            'provider' => 'admin_users',",
+    );
+    expect(auth).toContain(
+      "'web' => [\n            'driver' => 'session',\n            'provider' => 'users',",
     );
     expect(auth).toContain("'model' => App\\Models\\AdminUser::class,");
     expect(auth).toContain("'model' => env('AUTH_MODEL', App\\Models\\User::class),");
-    expect(auth).toContain("'passwords' => env('AUTH_PASSWORD_BROKER', 'users'),");
+    // Spatie reads an account's roles on its guard; the IR's roles are seeded on the web guard.
+    expect(file(result, MODEL)).toContain("protected string $guard_name = 'web';");
   });
 
   it("makes the first admin account with camis:admin", () => {

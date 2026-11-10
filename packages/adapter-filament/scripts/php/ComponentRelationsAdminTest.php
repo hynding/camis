@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Filament\Resources\Menus\Pages\CreateMenu;
 use App\Filament\Resources\Menus\Pages\EditMenu;
 use App\Http\Serializers\MenuSerializer;
+use App\Models\AdminUser;
 use App\Models\Author;
 use App\Models\Menu;
 use App\Models\Topic;
@@ -30,9 +31,9 @@ class ComponentRelationsAdminTest extends TestCase
     private function login(): void
     {
         $this->seed(\Database\Seeders\RolePermissionSeeder::class);
-        $user = User::factory()->create(['username' => 'admin']);
+        $user = AdminUser::forceCreate(['firstname' => 'Admin', 'email' => 'admin@example.test', 'is_active' => true]);
         $user->givePermissionTo(['menu.create', 'menu.read', 'menu.update', 'menu.publish']);
-        $this->actingAs($user);
+        $this->actingAs($user, 'admin');
         Filament::setCurrentPanel(Filament::getPanel('admin'));
     }
 

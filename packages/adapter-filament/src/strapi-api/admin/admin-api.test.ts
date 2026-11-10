@@ -102,9 +102,16 @@ describe("Strapi's admin accounts and admin API", () => {
   });
 
   it("counts admin accounts on the Home page", () => {
-    expect(content("app/Support/StrapiHomepage.php")).toContain(
-      "'admins' => \\App\\Models\\AdminUser::query()",
+    const withAdmin = filamentAdapter.generate(
+      {
+        ...strapiApiBundle,
+        roles: [...strapiApiBundle.roles, { name: "super-admin", admin: true, grants: [] }],
+      },
+      { projectName: "oyl", apiStyle: "strapi" },
     );
+    expect(
+      withAdmin.files.find((f) => f.path === "app/Support/StrapiHomepage.php")!.content,
+    ).toContain("'admins' => \\App\\Models\\AdminUser::query()->whereHas('roles'");
   });
 
   it("has none of it without roles, as the API Tokens page", () => {

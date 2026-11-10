@@ -10,6 +10,7 @@ use App\Filament\Resources\Pages\Pages\EditPage;
 use App\Filament\Resources\Posts\Pages\EditPost;
 use App\Filament\Resources\Posts\Pages\ListPosts;
 use App\Http\Serializers\PostSerializer;
+use App\Models\AdminUser;
 use App\Models\Author;
 use App\Models\Locale;
 use App\Models\Page;
@@ -35,9 +36,9 @@ class ContentManagerListTest extends TestCase
     private function login(array $permissions): void
     {
         $this->seed(\Database\Seeders\RolePermissionSeeder::class);
-        $user = User::factory()->create(['username' => 'admin']);
+        $user = AdminUser::forceCreate(['firstname' => 'Admin', 'email' => 'admin@example.test', 'is_active' => true]);
         $user->givePermissionTo($permissions);
-        $this->actingAs($user);
+        $this->actingAs($user, 'admin');
         Filament::setCurrentPanel(Filament::getPanel('admin'));
     }
 

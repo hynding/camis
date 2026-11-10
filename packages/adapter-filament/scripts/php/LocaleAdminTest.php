@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Filament\Resources\Articles\Pages\EditArticle;
 use App\Filament\Resources\Articles\Pages\ListArticles;
+use App\Models\AdminUser;
 use App\Models\Article;
 use App\Models\Locale;
 use App\Models\User;
@@ -27,9 +28,9 @@ class LocaleAdminTest extends TestCase
     {
         $this->seed(\Database\Seeders\RolePermissionSeeder::class);
         Locale::create(['code' => 'fr', 'name' => 'French (fr)']);
-        $user = User::factory()->create(['username' => 'admin']);
+        $user = AdminUser::forceCreate(['firstname' => 'Admin', 'email' => 'admin@example.test', 'is_active' => true]);
         $user->givePermissionTo($permissions);
-        $this->actingAs($user);
+        $this->actingAs($user, 'admin');
         Filament::setCurrentPanel(Filament::getPanel('admin'));
     }
 
