@@ -48,6 +48,13 @@ components, and repeatables nested inside repeatables, are reported as downgrade
 - `camis generate [--config camis.config.json]` — dry-run: list the files each target would emit, plus
   any capability gaps. Writes nothing.
 - `camis build [--config camis.config.json]` — write the generated project(s) to each target's `out`.
+- `camis develop [--config camis.config.json] [--no-serve]` — Strapi's `strapi develop`: build, then
+  let the admin's Content-Type Builder edit the content model. Needs a filament target with
+  `apiStyle: "strapi"` on the laravel storage layout; writes `CAMIS_PROJECT_CONFIG` and
+  `CAMIS_BUILD_COMMAND` into its `.env`, runs `php artisan camis:schema-sync` and serves it with
+  `php artisan serve`. With APP_ENV=local each save in the builder writes `camis.json` (and the
+  super-admin's grants in `roles.json`), runs `camis build`, and syncs the database, keeping its
+  rows; a build that fails puts both files back. Elsewhere the builder is read-only.
 
 Exit codes: `0` on success (capability *downgrades* are warnings); non-zero on a validation failure,
 an unreadable/invalid config, an unknown command, or an `error`-severity capability gap.

@@ -1,4 +1,6 @@
+import { fileURLToPath } from "node:url";
 import type { Io } from "./io";
+import { developCommand } from "./commands/develop";
 import { generateCommand } from "./commands/generate";
 import { importCommand } from "./commands/import";
 import { newCommand } from "./commands/new";
@@ -20,7 +22,10 @@ Usage:
   camis scaffold filament <dir> [--storage laravel|strapi] [--graphql]
                                                  (create the Laravel host app for the overlay)
   camis generate [--config camis.config.json]   (dry-run: lists files + gaps)
-  camis build    [--config camis.config.json]   (writes the project to each out)`;
+  camis build    [--config camis.config.json]   (writes the project to each out)
+  camis develop  [--config camis.config.json] [--no-serve]
+                                                 (build, let the admin's Content-Type Builder edit
+                                                  the content model, and serve the Filament app)`;
 
 const flag = (args: string[], name: string, fallback: string): string => {
   const i = args.indexOf(name);
@@ -108,6 +113,12 @@ export const run = async (argv: string[], io: Io): Promise<number> => {
       return generateCommand(flag(rest, "--config", "camis.config.json"), io, { write: false });
     case "build":
       return generateCommand(flag(rest, "--config", "camis.config.json"), io, { write: true });
+    case "develop":
+      return developCommand(flag(rest, "--config", "camis.config.json"), io, {
+        node: process.execPath,
+        bin: fileURLToPath(new URL("../bin/camis.mjs", import.meta.url)),
+        serve: !rest.includes("--no-serve"),
+      });
     default:
       io.out(USAGE);
       return cmd === "help" || cmd === "--help" ? 0 : 1;

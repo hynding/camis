@@ -137,6 +137,7 @@ import {
   type Navigation,
 } from "./admin/admin-navigation";
 import { emitRoleResourceFiles, emitStrapiRoles, STRAPI_ROLES_PATH } from "./admin/roles-admin";
+import { emitContentTypeBuilder } from "../content-type-builder";
 import {
   emitStrapiTransferRunner,
   emitStrapiTransferTokens,
@@ -347,6 +348,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
       sort: input.contentManager?.get(USER_DISPLAY_NAME) ?? 1,
     }),
     { path: STRAPI_NAVIGATION_PATH, content: emitStrapiNavigation() },
+    ...emitContentTypeBuilder(bundle.document, secured),
   );
   if (secured) {
     files.push(
