@@ -122,6 +122,45 @@ describe("run", () => {
   });
 });
 
+describe("run — import strapi --admin-roles-from", () => {
+  it("writes the Strapi database's admin roles to --roles-out", async () => {
+    tmp = await mkdtemp(join(tmpdir(), "camis-cli-admin-roles-"));
+    const schemaDir = join(tmp, "strapi-app/src/api/book/content-types/book");
+    await mkdir(schemaDir, { recursive: true });
+    await writeFile(
+      join(schemaDir, "schema.json"),
+      JSON.stringify({
+        kind: "collectionType",
+        info: { singularName: "book", pluralName: "books", displayName: "Book" },
+        attributes: { title: { type: "string" } },
+      }),
+    );
+    const database = join(
+      dirname(fileURLToPath(import.meta.url)),
+      "../../adapter-strapi/src/import/__fixtures__/strapi-php-admin.db",
+    );
+    const code = await run(
+      [
+        "import",
+        "strapi",
+        join(tmp, "strapi-app"),
+        "--out",
+        join(tmp, "camis.json"),
+        "--admin-roles-from",
+        database,
+        "--roles-out",
+        join(tmp, "admin-roles.json"),
+      ],
+      realIo(tmp),
+    );
+    expect(code, lines.join("\n")).toBe(0);
+    const roles = JSON.parse(await readFile(join(tmp, "admin-roles.json"), "utf8")) as {
+      roles: { name: string }[];
+    };
+    expect(roles.roles.map((r) => r.name)).toContain("editor");
+  });
+});
+
 describe("run — import strapi --roles-from", () => {
   it("writes the export's roles beside the IR, and a build takes both", async () => {
     tmp = await mkdtemp(join(tmpdir(), "camis-cli-roles-"));

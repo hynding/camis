@@ -11,13 +11,15 @@ const USAGE = `camis — content-model build tool
 
 Usage:
   camis new <dir> [--template vanilla|example | --from-strapi <strapiProjectDir>
-                  [--roles-from <strapiExport.tar.gz[.enc]> [--key <key>]]]
+                  [--roles-from <strapiExport.tar.gz[.enc]> [--key <key>]]
+                  [--admin-roles-from <strapi .tmp/data.db>]]
                   [--targets strapi,filament,express] [--dialect sqlite|mysql|pgsql]
                   [--skip-scaffold] [--skip-build]
                                                  (create a project, then scaffold and build it)
   camis validate <ir.json>
   camis import <strapi|express> <projectDir> [--out ir.json] [--upsert-by <field>]
-               [--roles-from <strapiExport.tar.gz[.enc]> [--key <key>] [--roles-out roles.json]]
+               [--roles-from <strapiExport.tar.gz[.enc]> [--key <key>]]
+               [--admin-roles-from <strapi .tmp/data.db>] [--roles-out roles.json]
                [--env-out deployment.env]  (Strapi: the Laravel env for its upload/email providers)
   camis scaffold filament <dir> [--storage laravel|strapi] [--graphql]
                                                  (create the Laravel host app for the overlay)
@@ -51,8 +53,10 @@ export const run = async (argv: string[], io: Io): Promise<number> => {
       const dialect = optionalFlag(rest, "--dialect");
       const fromStrapi = optionalFlag(rest, "--from-strapi");
       const rolesFrom = optionalFlag(rest, "--roles-from");
+      const adminRolesFrom = optionalFlag(rest, "--admin-roles-from");
       const key = optionalFlag(rest, "--key");
       return newCommand(rest[0], io, {
+        ...(adminRolesFrom !== undefined ? { strapiAdminRoles: adminRolesFrom } : {}),
         ...(template !== undefined ? { template } : {}),
         ...(targets !== undefined ? { targets: targets.split(",") } : {}),
         ...(dialect !== undefined ? { dialect } : {}),
@@ -80,7 +84,11 @@ export const run = async (argv: string[], io: Io): Promise<number> => {
       const rolesFrom = optionalFlag(rest, "--roles-from");
       const key = optionalFlag(rest, "--key");
       const envOut = optionalFlag(rest, "--env-out");
+      const adminRolesFrom = optionalFlag(rest, "--admin-roles-from");
+      const rolesOut = optionalFlag(rest, "--roles-out");
       return importCommand(rest[0], rest[1], flag(rest, "--out", "camis.json"), io, {
+        ...(adminRolesFrom !== undefined ? { adminRoles: adminRolesFrom } : {}),
+        ...(rolesOut !== undefined ? { rolesOut } : {}),
         ...(upsertBy ? { upsertBy } : {}),
         ...(envOut !== undefined ? { envOut } : {}),
         ...(rolesFrom !== undefined
