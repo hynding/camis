@@ -1,5 +1,6 @@
 import type { CapabilityGap, ContentType, IrDocument } from "@camis/ir-schema";
-import { ACTIONS, type Action, type Grant, type Role } from "@camis/permissions";
+import type { Expression } from "@camis/expr";
+import { ACTIONS, CREATED_BY, type Action, type Grant, type Role } from "@camis/permissions";
 import { strapiNames } from "@camis/strapi-schema";
 import { FILE_ADMIN_ACTIONS, PLUGIN_USER_UID, STRAPI_ACTION_UID } from "../permissions/actions";
 import { BUILTIN_USER } from "./import-document";
@@ -32,6 +33,16 @@ export interface ImportedAdminRoles {
 
 const SUPER_ADMIN_CODE = "strapi-super-admin";
 
+/** Strapi's condition limiting a permission to the entries the signed-in admin created. */
+const IS_CREATOR = "admin::is-creator";
+
+/** admin::is-creator as a camis condition: the entry's creator is the caller. */
+const CREATED_BY_CALLER: Expression = {
+  kind: "eq",
+  left: { kind: "var", name: CREATED_BY },
+  right: { kind: "var", name: "user.id" },
+};
+
 const BUILTIN_FILE: ContentType = { name: "File", kind: "collection", builtin: "file", fields: [] };
 
 /**
@@ -61,10 +72,12 @@ const strings = (value: unknown): string[] | undefined =>
 
 /**
  * The IR's admin roles from a Strapi project's admin roles and permissions: the inverse of the
- * admin projection (permissions/project.ts). A camis grant covers a whole type for every caller,
- * so an action Strapi gave under a condition, or on only some fields or locales, is left out and
- * reported: an import never grants more than Strapi did. Settings and plugin actions have no IR
- * counterpart and are reported too.
+ * admin projection (permissions/project.ts). An action Strapi gave only on the entries the account
+ * created (admin::is-creator, as its default Author role has them) is granted under the condition
+ * that the entry's creator is the caller. A camis grant covers every field and locale, so an
+ * action Strapi gave on only some, or under another condition, is left out and reported: an import
+ * never grants more than Strapi did. Settings and plugin actions have no IR counterpart and are
+ * reported too.
  */
 export const importStrapiAdminRoles = (
   data: StrapiAdminData,
@@ -113,6 +126,12 @@ export const importStrapiAdminRoles = (
         const set = held.get(ct) ?? held.set(ct, new Set()).get(ct)!;
         for (const a of actions) set.add(a);
       };
+      // The actions held only on the entries the account created.
+      const heldCreated = new Map<ContentType, Set<Action>>();
+      const holdCreated = (ct: ContentType, actions: Action[]): void => {
+        const set = heldCreated.get(ct) ?? heldCreated.set(ct, new Set()).get(ct)!;
+        for (const a of actions) set.add(a);
+      };
       const fileActions = new Set<string>();
       const unimported: string[] = [];
 
@@ -131,12 +150,13 @@ export const importStrapiAdminRoles = (
           continue;
         }
         const conditions = strings(p.conditions) ?? [];
-        if (conditions.length > 0) {
-          withhold(
-            ct,
-            p.action,
-            `only when ${conditions.join(", ")}; a camis grant has no such condition`,
-          );
+        const onlyCreated = conditions.length > 0 && conditions.every((c) => c === IS_CREATOR);
+        if (conditions.length > 0 && !onlyCreated) {
+          withhold(ct, p.action, `only when ${conditions.join(", ")}; camis has no such condition`);
+          continue;
+        }
+        if (onlyCreated && isFile) {
+          withhold(ct, p.action, `only when ${IS_CREATOR}; camis records no creator of a file`);
           continue;
         }
         const properties = record(p.properties);
@@ -169,7 +189,7 @@ export const importStrapiAdminRoles = (
           continue;
         }
         if (!contentTypes.includes(ct)) contentTypes.push(ct);
-        hold(ct, [action!]);
+        (onlyCreated ? holdCreated : hold)(ct, [action!]);
       }
 
       // A media library action is granted once the role holds every upload action it stands for.
@@ -204,13 +224,21 @@ export const importStrapiAdminRoles = (
         );
       }
 
-      const grants: Grant[] = [...held]
-        .filter(([, actions]) => actions.size > 0)
-        .map(([ct, actions]) => ({
-          contentType: ct.name,
-          actions: ACTIONS.filter((a) => actions.has(a)),
-        }))
-        .sort((a, b) => a.contentType.localeCompare(b.contentType));
+      // An action held outright makes holding it on the entries the account created moot.
+      for (const [ct, actions] of heldCreated) {
+        for (const a of held.get(ct) ?? []) actions.delete(a);
+      }
+      const grantsOf = (holding: Map<ContentType, Set<Action>>, condition?: Expression): Grant[] =>
+        [...holding]
+          .filter(([, actions]) => actions.size > 0)
+          .map(([ct, actions]) => ({
+            contentType: ct.name,
+            actions: ACTIONS.filter((a) => actions.has(a)),
+            ...(condition === undefined ? {} : { condition }),
+          }));
+      const grants: Grant[] = [...grantsOf(held), ...grantsOf(heldCreated, CREATED_BY_CALLER)].sort(
+        (a, b) => a.contentType.localeCompare(b.contentType),
+      );
       const description = strapiRole.description ?? "";
       return { name, ...(description === "" ? {} : { description }), admin: true, grants };
     });

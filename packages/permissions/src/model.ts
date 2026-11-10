@@ -20,6 +20,12 @@ export const grant = z.object({
 });
 export type Grant = z.infer<typeof grant>;
 
+/**
+ * A condition's variable for the account that created the entry (Strapi's createdBy), on targets
+ * that record one: `record.createdBy == user.id` is Strapi's admin::is-creator.
+ */
+export const CREATED_BY = "record.createdBy";
+
 /** The role a caller without a session acts as; every target that serves guests reads it. */
 export const PUBLIC_ROLE = "public";
 

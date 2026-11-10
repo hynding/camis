@@ -1720,13 +1720,43 @@ read from there (a SQLite file; `node:sqlite`).
 - Permissions are the inverse of the admin projection: content-manager actions on a type (and on
   the users), and the media library's upload actions (`FILE_ADMIN_ACTIONS`: a camis action is
   granted once the role holds every upload action it stands for). A camis grant covers a whole
-  type for everyone, so an action Strapi gave under a condition (`admin::is-creator`), on only some
-  fields, or on only some locales, is not granted and is reported (`strapiAdminPermission`), as are
+  type for everyone, so an action Strapi gave under a condition (`admin::is-creator`, until
+  Phase 53), on only some fields, or on only some locales, is not granted and is reported (`strapiAdminPermission`), as are
   settings and plugin actions and types the project lacks: an import never grants more than Strapi.
 - `strapi:import-admins` finds each account's role under those names.
 
 Exit: unit tests on rows and on a fixture recorded from strapi-php 5.56 getstarted (Editor, Author
 and a custom role), CLI tests for `new` and `import`.
+
+## Phase 53 — Strapi's Author role: entries an account created (`permissions`, `adapter-filament`, `adapter-strapi`)
+
+Phase 52 left out every action Strapi gave under `admin::is-creator`, so Strapi's default Author
+role came in almost empty. It also showed that a grant's condition was kept per type and action,
+not per role: one role's condition narrowed every role holding the action, and two roles' conditions
+were "first wins".
+
+- **Conditions per role.** A policy method lets a role holding the action outright through, then
+  holds each other role to its own condition (a role's several conditions on one action are
+  alternatives). The content API's list scope keeps its single condition, from the roles of its
+  users only: an admin account never calls the content API.
+- **`record.createdBy`** (`CREATED_BY` in `@camis/permissions`): the admin account that created
+  the entry, which HasCreatorFields records in the Strapi API style. Only an admin role's condition
+  may read it (an API user's id is a row of another table, and the policy reads it as null for
+  one); elsewhere it is a `conditionContext` gap and the grant denies.
+- **The Content Manager lists what its roles may read.** Where an admin role reads a type under a
+  condition, the model gets a `forAdmin` scope (every row through a role reading outright, the rows
+  each other role's condition holds for, nothing for an account holding neither) and the resource's
+  `getEloquentQuery` goes through it, so the list, the edit page (404 for another's entry) and the
+  homepage widgets show an Author only its own entries. A condition outside SQL lists nothing for
+  its roles (`adminListScope` gap).
+- **The admin role import** grants an action Strapi gave only under `admin::is-creator` under
+  `record.createdBy == user.id`. Other conditions, and is-creator on media library actions (camis
+  records no file's creator), are still left out and reported.
+
+Exit: unit and golden tests; CI's `author-role` job overlays the author-role fixture (Story with
+draft and publish, Memo without; editor, author and an API role) and runs AuthorRoleTest: the
+Author lists, opens, edits, deletes and publishes only its own entries, the Editor every one, an
+account without a reading role lists nothing, and an API user is held to neither condition.
 
 ---
 

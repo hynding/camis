@@ -40,7 +40,8 @@ final class StrapiHomepage
     ];
 
     /**
-     * The documents edited last, newest first: each type's draft (or only) rows.
+     * The documents edited last, newest first: each type's draft (or only) rows, as its Content
+     * Manager lists them (an Author lists only the ones it created).
      *
      * @return array<string, array{title: string, contentType: string, status: ?string, updatedAt: mixed, publishedAt: mixed, url: ?string}>
      */
@@ -48,10 +49,7 @@ final class StrapiHomepage
     {
         $documents = [];
         foreach (self::permitted() as $uid => $type) {
-            $query = $type['model']::query();
-            if ($type['draftAndPublish']) {
-                $query->whereNull('published_at');
-            }
+            $query = $type['resource']::getEloquentQuery();
             foreach ($query->orderByDesc('updated_at')->limit(self::MAX_DOCUMENTS)->get() as $row) {
                 $documents["{$uid}:{$row->getKey()}"] = self::document($type, $row, $row);
             }
@@ -61,7 +59,8 @@ final class StrapiHomepage
     }
 
     /**
-     * The documents published last, newest first, from the types with draft and publish.
+     * The documents published last, newest first, from the types with draft and publish, of the
+     * documents its Content Manager lists.
      *
      * @return array<string, array{title: string, contentType: string, status: ?string, updatedAt: mixed, publishedAt: mixed, url: ?string}>
      */
@@ -72,7 +71,9 @@ final class StrapiHomepage
             if (! $type['draftAndPublish']) {
                 continue;
             }
-            $rows = $type['model']::query()->whereNotNull('published_at')->orderByDesc('published_at')->limit(self::MAX_DOCUMENTS)->get();
+            $rows = $type['model']::query()->whereNotNull('published_at')
+                ->whereIn('document_id', $type['resource']::getEloquentQuery()->select('document_id'))
+                ->orderByDesc('published_at')->limit(self::MAX_DOCUMENTS)->get();
             foreach ($rows as $row) {
                 $draft = $type['model']::query()->where('document_id', $row->getAttribute('document_id'))->whereNull('published_at')
                     ->when($type['localized'], fn (Builder $query): Builder => $query->where('locale', $row->getAttribute('locale')))

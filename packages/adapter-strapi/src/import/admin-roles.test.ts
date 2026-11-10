@@ -1,4 +1,5 @@
 import type { IrDocument } from "@camis/ir-schema";
+import { CREATED_BY } from "@camis/permissions";
 import { describe, expect, it } from "vitest";
 import { adminRoleName, importStrapiAdminRoles, type StrapiAdminData } from "./admin-roles";
 
@@ -48,6 +49,11 @@ const data = (
 ): StrapiAdminData => ({ roles, permissions, locales });
 
 const ARTICLE = "api::article.article";
+const IS_CREATOR = {
+  kind: "eq",
+  left: { kind: "var", name: CREATED_BY },
+  right: { kind: "var", name: "user.id" },
+};
 const FULL = { fields: ["title", "body"], locales: ["en", "fr"] };
 
 describe("importStrapiAdminRoles", () => {
@@ -150,25 +156,83 @@ describe("importStrapiAdminRoles", () => {
         [AUTHOR],
         [
           { role: 3, ...cm("create", ARTICLE, FULL) },
-          { role: 3, ...cm("read", ARTICLE, FULL, ["admin::is-creator"]) },
+          { role: 3, ...cm("read", ARTICLE, FULL, ["admin::has-same-role-as-creator"]) },
           { role: 3, ...cm("update", ARTICLE, { fields: ["title"], locales: ["en", "fr"] }) },
           { role: 3, ...cm("delete", ARTICLE, { locales: ["en"] }) },
-          { role: 3, ...cm("publish", ARTICLE, {}, ["admin::is-creator"]) },
+          {
+            role: 3,
+            ...cm("publish", ARTICLE, {}, ["admin::is-creator", "admin::has-same-role-as-creator"]),
+          },
         ],
       ),
       doc,
     );
     expect(imported.roles[0]?.grants).toEqual([{ contentType: "Article", actions: ["create"] }]);
     expect(imported.gaps.map((g) => g.message)).toEqual([
-      'admin role "author": plugin::content-manager.explorer.read, plugin::content-manager.explorer.publish on Article: only when admin::is-creator; a camis grant has no such condition, so not granted',
+      'admin role "author": plugin::content-manager.explorer.read on Article: only when admin::has-same-role-as-creator; camis has no such condition, so not granted',
       'admin role "author": plugin::content-manager.explorer.update on Article: only the fields title; a camis grant covers every field, so not granted',
       'admin role "author": plugin::content-manager.explorer.delete on Article: only the locales en; a camis grant covers every locale, so not granted',
+      'admin role "author": plugin::content-manager.explorer.publish on Article: only when admin::is-creator, admin::has-same-role-as-creator; camis has no such condition, so not granted',
     ]);
     expect(imported.gaps[0]).toMatchObject({
       feature: "strapiAdminPermission",
       severity: "downgrade",
       location: { contentType: "Article", rule: "author" },
     });
+  });
+
+  // Strapi's default Author: everything on the entries it created. camis grants it under the
+  // condition that the entry's creator is the signed-in account.
+  it("grants an action Strapi gave only on the entries the account created under that condition", () => {
+    const AUTHOR = { id: 3, name: "Author", code: "strapi-author", description: "" };
+    const imported = importStrapiAdminRoles(
+      data(
+        [AUTHOR],
+        [
+          { role: 3, ...cm("create", ARTICLE, FULL, ["admin::is-creator"]) },
+          { role: 3, ...cm("read", ARTICLE, FULL, ["admin::is-creator"]) },
+          { role: 3, ...cm("update", ARTICLE, FULL, ["admin::is-creator"]) },
+          { role: 3, ...cm("delete", ARTICLE, { locales: ["en", "fr"] }, ["admin::is-creator"]) },
+          { role: 3, ...cm("read", "api::homepage.homepage", { fields: ["title"] }) },
+          { role: 3, ...cm("update", "api::homepage.homepage", {}, ["admin::is-creator"]) },
+        ],
+      ),
+      doc,
+    );
+    expect(imported.roles[0]?.grants).toEqual([
+      {
+        contentType: "Article",
+        actions: ["create", "read", "update", "delete"],
+        condition: IS_CREATOR,
+      },
+      { contentType: "Homepage", actions: ["read"] },
+      { contentType: "Homepage", actions: ["update"], condition: IS_CREATOR },
+    ]);
+    expect(imported.gaps).toEqual([]);
+  });
+
+  // camis records no creator of a file, so the media library cannot tell an account's own.
+  it("leaves out a media library action Strapi gave only on the files the account uploaded", () => {
+    const AUTHOR = { id: 3, name: "Author", code: "strapi-author", description: "" };
+    const imported = importStrapiAdminRoles(
+      data(
+        [AUTHOR],
+        [
+          {
+            role: 3,
+            action: "plugin::upload.read",
+            subject: null,
+            properties: {},
+            conditions: ["admin::is-creator"],
+          },
+        ],
+      ),
+      doc,
+    );
+    expect(imported.roles[0]?.grants).toEqual([]);
+    expect(imported.gaps.map((g) => g.message)).toEqual([
+      'admin role "author": plugin::upload.read on File: only when admin::is-creator; camis records no creator of a file, so not granted',
+    ]);
   });
 
   it("reports the settings and plugin actions, and the types this project lacks, in one line each", () => {

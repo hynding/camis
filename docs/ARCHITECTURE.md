@@ -193,6 +193,12 @@ as the admin management UI over the Spatie permissions we generate. This is also
 reason Ring 1 must compile to PHP at all: field-level and condition rules become generated
 Policy predicate bodies.
 
+A condition belongs to the role whose grant carries it: a role holding an action outright is
+never narrowed by another role's condition on the same action. A condition reads `user.*`,
+`record.<field>` and, on a target that records who created an entry (the Filament target's
+Strapi API style), `record.createdBy`: the admin account that created it, readable by admin roles
+only. `record.createdBy == user.id` is Strapi's `admin::is-creator`.
+
 Anything a target genuinely cannot express appears in the capability-gap report.
 
 ---
