@@ -53,15 +53,22 @@ describe("camis develop", () => {
       developEnv({ project: "/p/camis.config.json", node: "/usr/bin/node", bin: "/c/camis.mjs" }),
     ).toEqual({
       CAMIS_PROJECT_CONFIG: "/p/camis.config.json",
-      CAMIS_BUILD_COMMAND: "'/usr/bin/node' '/c/camis.mjs' build --config '/p/camis.config.json'",
+      CAMIS_BUILD_COMMAND: "/usr/bin/node /c/camis.mjs build --config /p/camis.config.json",
     });
   });
 
+  it("quotes a path a shell would split", () => {
+    expect(
+      developEnv({ project: "/my p/c.json", node: "node", bin: "/c/camis.mjs" })
+        .CAMIS_BUILD_COMMAND,
+    ).toBe('node /c/camis.mjs build --config "/my p/c.json"');
+  });
+
   it("sets the builder's lines in .env, replacing earlier ones and keeping the rest", () => {
-    const env = { CAMIS_PROJECT_CONFIG: "/p/c.json", CAMIS_BUILD_COMMAND: "'node' 'x' build" };
+    const env = { CAMIS_PROJECT_CONFIG: "/p/c.json", CAMIS_BUILD_COMMAND: 'node x build "/my p"' };
     const once = patchDevelopEnv("APP_ENV=local\nCAMIS_PROJECT_CONFIG=/old.json\n", env);
     expect(once).toBe(
-      "APP_ENV=local\nCAMIS_PROJECT_CONFIG=\"/p/c.json\"\nCAMIS_BUILD_COMMAND=\"'node' 'x' build\"\n",
+      'APP_ENV=local\nCAMIS_PROJECT_CONFIG="/p/c.json"\nCAMIS_BUILD_COMMAND="node x build \\"/my p\\""\n',
     );
     expect(patchDevelopEnv(once, env)).toBe(once);
   });

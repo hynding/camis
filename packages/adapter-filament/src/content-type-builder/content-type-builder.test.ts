@@ -30,9 +30,9 @@ describe("the Content-Type Builder", () => {
 
   it("lists collection types, single types and components by category in its side menu", () => {
     const page = content("app/Filament/Pages/ContentTypeBuilder.php");
-    expect(page).toContain("->group('Collection Types')");
-    expect(page).toContain("->group('Single Types')");
-    expect(page).toContain("->group('Components · '.$category)");
+    expect(page).toContain("$item($node, 'contentType', 'Collection Types')");
+    expect(page).toContain("$item($node, 'contentType', 'Single Types')");
+    expect(page).toContain("$item($node, 'component', 'Components · '.$category)");
   });
 
   // The model is no secret, but Strapi gates its builder behind its own permission; camis gives it
@@ -55,7 +55,10 @@ describe("the Content-Type Builder", () => {
     expect(config).toContain("'project' => env('CAMIS_PROJECT_CONFIG'),");
     expect(config).toContain("'build_command' => env('CAMIS_BUILD_COMMAND'),");
     const builder = content("app/Support/ContentTypeBuilder.php");
-    expect(builder).toContain("if (! app()->environment('local')) {");
+    expect(builder).toContain(
+      "if (! app()->environment((array) config('content-type-builder.environments', ['local']))) {",
+    );
+    expect(config).toContain("'environments' => ['local'],");
     // A failed build puts the content model back: the IR's validator is the guardrail.
     expect(builder).toContain("camis build failed, so the content model was left as it was");
   });

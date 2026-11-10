@@ -1,11 +1,13 @@
 overwrite DEPLOY.md
 overwrite app/Console/Commands/CamisAdmin.php
+overwrite app/Console/Commands/CamisSchemaSync.php
 overwrite app/Console/Commands/StrapiExport.php
 overwrite app/Console/Commands/StrapiImport.php
 overwrite app/Console/Commands/StrapiImportTokens.php
 overwrite app/Filament/Forms/BlocksEditor.php
 overwrite app/Filament/Forms/BlocksStateCast.php
 overwrite app/Filament/Forms/JsonEditor.php
+overwrite app/Filament/Pages/ContentTypeBuilder.php
 overwrite app/Filament/Pages/DataTransfer.php
 overwrite app/Filament/Pages/EmailSettings.php
 overwrite app/Filament/Pages/MediaLibrarySettings.php
@@ -332,6 +334,9 @@ overwrite app/Policies/TopicPolicy.php
 overwrite app/Policies/TransactionPolicy.php
 overwrite app/Policies/UploadFolderPolicy.php
 overwrite app/Policies/UserPolicy.php
+overwrite app/Support/CamisSchemaSync.php
+overwrite app/Support/ContentTypeBuilder.php
+overwrite app/Support/ContentTypeBuilderSchema.php
 overwrite app/Support/JsonText.php
 overwrite app/Support/PublicRole.php
 overwrite app/Support/Ring1.php
@@ -370,6 +375,7 @@ overwrite app/Support/StrapiValidator.php
 overwrite app/Support/StrapiWebhooks.php
 overwrite app/Support/StrapiZones.php
 overwrite config/camis.php
+overwrite config/content-type-builder.php
 overwrite database/migrations/0001_01_02_000000_add_username_to_users_table.php
 overwrite database/migrations/0001_01_02_000000_create_files_table.php
 overwrite database/migrations/0001_01_02_000000_create_i18n_locales_table.php
@@ -429,6 +435,7 @@ overwrite database/migrations/0001_01_02_000046_add_menus_foreign_keys.php
 overwrite database/migrations/0001_01_03_000000_add_link_order_columns.php
 overwrite database/migrations/0001_01_03_000001_create_upload_folders_table.php
 overwrite database/seeders/RolePermissionSeeder.php
+overwrite resources/camis/schema.json
 overwrite resources/strapi/schemas.jsonl
 overwrite routes/api.php
 overwrite routes/transfer.php
