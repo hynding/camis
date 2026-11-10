@@ -6,7 +6,7 @@ import { deploymentSettings, readStrapiProject } from "@camis/adapter-strapi";
 import { validate } from "@camis/ir-core";
 import type { CapabilityGap, IrDocument, Result } from "@camis/ir-schema";
 import type { Io } from "../io";
-import { withMediaLibrary } from "../templates";
+import { withMediaLibrary, withStrapiUsers } from "../templates";
 import { printGaps } from "./generate";
 import { readStrapiConfig } from "./strapi-config";
 import { strapiRoles, type StrapiRolesSource } from "./strapi-roles";
@@ -75,6 +75,8 @@ export const importCommand = async (
     await io.writeFile(abs(io, opts.roles.out), stableJson(roles.roles));
     io.out(`✓ roles → ${opts.roles.out}`);
   }
+  // As its upload plugin, Strapi's users-permissions plugin is always there.
+  if (target === "strapi") document = withStrapiUsers(document);
   const out = abs(io, outPath);
   await io.writeFile(out, stableJson(document));
   io.out(`✓ imported → ${outPath}`);

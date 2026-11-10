@@ -68,6 +68,8 @@ import {
 import { emitStrapiPopulate, emitStrapiRelations } from "./core/populate-runtime";
 import { emitHasDocumentId, emitStrapiError, emitStrapiQuery } from "./core/rest-runtime";
 import { emitApiConfig, emitStrapiRoutes } from "./core/routes";
+import { emitCorsConfig } from "./core/cors";
+import { emitStrapiMimeTypes } from "./upload/upload-security";
 import { emitScopeMethod } from "./core/scope";
 import {
   emitConnectController,
@@ -323,6 +325,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
       input.routeHooked,
     ),
   });
+  files.push({ path: "config/cors.php", content: emitCorsConfig() });
   files.push({
     path: "config/camis.php",
     content: emitApiConfig(
@@ -619,6 +622,7 @@ const mediaLibraryFiles = (
     }));
   return [
     { path: "app/Support/StrapiUpload.php", content: emitStrapiUpload(names.model) },
+    { path: "app/Support/StrapiMimeTypes.php", content: emitStrapiMimeTypes() },
     { path: "app/Models/Concerns/HasMedia.php", content: emitHasMedia() },
     {
       path: `app/Models/${names.model}.php`,

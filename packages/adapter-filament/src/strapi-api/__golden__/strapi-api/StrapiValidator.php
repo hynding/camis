@@ -294,7 +294,7 @@ final class StrapiValidator
         if ($type === 'enumeration') {
             return in_array($value, $rule['enum'], true)
                 ? []
-                : [self::error($path, '{path} must be one of the following values: ' . implode(', ', [...$rule['enum'], 'null']), $value)];
+                : [self::error($path, '{path} must be one of the following values: ' . implode(', ', [...$rule['enum'], '']), $value)];
         }
         $found = [];
         $length = mb_strlen($value);

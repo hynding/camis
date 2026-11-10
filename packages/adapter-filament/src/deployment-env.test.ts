@@ -157,6 +157,20 @@ CLOUDINARY_CLOUD_NAME=\${CLOUDINARY_NAME}
     expect(env).not.toContain("MAIL_FROM_ADDRESS");
   });
 
+  it("writes the upload allow and deny lists, an empty one kept empty", () => {
+    const { env } = deploymentEnv({
+      upload: {
+        provider: "local",
+        storage: { kind: "local" },
+        allowedTypes: ["image/*", "application/vnd.openxmlformats-officedocument.*"],
+        deniedTypes: [],
+      },
+    });
+    expect(env).toContain(
+      'CAMIS_UPLOAD_ALLOWED_TYPES="image/*,application/vnd.openxmlformats-officedocument.*"\nCAMIS_UPLOAD_DENIED_TYPES=\n',
+    );
+  });
+
   it("keeps local storage on the default disk, writing only the size limit", () => {
     expect(
       deploymentEnv({ upload: { provider: "local", storage: { kind: "local" }, sizeLimit: 5 } })

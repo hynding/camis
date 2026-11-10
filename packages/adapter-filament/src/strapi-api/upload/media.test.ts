@@ -148,6 +148,27 @@ describe("the media library", () => {
       'return config("filesystems.disks.{$name}") === null && is_array($fallback) ? Storage::build($fallback) : Storage::disk($name);',
     );
   });
+  // Strapi's upload.security: config/plugins.php lists the MIME types an upload may have.
+  it("reads the upload allow and deny lists from the environment, unset by default", () => {
+    const config = content("config/camis.php");
+    expect(config).toContain(
+      "'allowed_types' => ($allowed = env('CAMIS_UPLOAD_ALLOWED_TYPES')) === null ? null : array_values(array_filter(array_map('trim', explode(',', (string) $allowed)), 'strlen')),",
+    );
+    expect(config).toContain(
+      "'denied_types' => ($denied = env('CAMIS_UPLOAD_DENIED_TYPES')) === null ? null : array_values(array_filter(array_map('trim', explode(',', (string) $denied)), 'strlen')),",
+    );
+  });
+  it("refuses an upload whose type the lists refuse, before storing it", () => {
+    const upload = content("app/Support/StrapiUpload.php");
+    expect(upload).toContain("$refused = StrapiMimeTypes::rejection($upload);");
+    expect(upload).toContain("throw StrapiError::validation($refused);");
+  });
+  it("uploads the files the lists let through and refuses only when none is left, as Strapi does", () => {
+    const controller = content("app/Http/Controllers/Api/UploadController.php");
+    expect(controller).toContain(
+      "[$uploads, $infos] = $this->permitted($uploads, $this->infos($request));",
+    );
+  });
   it("is browsed and filled in the admin", () => {
     const resource = content("app/Filament/Resources/Files/FileResource.php");
     expect(resource).toContain("protected static ?string $model = File::class;");
@@ -313,5 +334,20 @@ describe("media vectors", () => {
     const { default: vectors } = await import("../__fixtures__/media-vectors.json");
     const { default: expected } = await import("../__fixtures__/media-vectors.expected.json");
     expect(Object.keys(expected)).toEqual(vectors.writes.map((w) => w.name));
+  });
+});
+
+describe("upload security", () => {
+  it("StrapiMimeTypes golden", async () => {
+    await expect(content("app/Support/StrapiMimeTypes.php")).toMatchFileSnapshot(
+      "../__golden__/strapi-api/StrapiMimeTypes.php",
+    );
+  });
+  it.skipIf(!hasPhp())("StrapiMimeTypes parses", () => {
+    const dir = mkdtempSync(join(tmpdir(), "camis-mime-"));
+    const file = join(dir, "f.php");
+    writeFileSync(file, content("app/Support/StrapiMimeTypes.php"));
+    expect(execFileSync("php", ["-l", file], { encoding: "utf8" })).toContain("No syntax errors");
+    rmSync(dir, { recursive: true, force: true });
   });
 });

@@ -121,6 +121,10 @@ final class StrapiUpload
         if (! $upload->isValid()) {
             throw StrapiError::validation($upload->getErrorMessage());
         }
+        $refused = StrapiMimeTypes::rejection($upload);
+        if ($refused !== null) {
+            throw StrapiError::validation($refused);
+        }
         $limit = (int) config('camis.upload.size_limit', 209715200);
         if ($upload->getSize() > $limit) {
             $megabytes = round($limit / 1000000, 2);

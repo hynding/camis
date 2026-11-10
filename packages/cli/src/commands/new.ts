@@ -11,6 +11,7 @@ import {
   projectTemplate,
   strapiDefaultRoles,
   withMediaLibrary,
+  withStrapiUsers,
   withSuperAdmin,
   type ProjectTemplate,
 } from "../templates";
@@ -191,7 +192,11 @@ export const newCommand = async (dir: string, io: Io, options: NewOptions): Prom
         : "vanilla",
     );
   }
-  const validated = validate(withMediaLibrary(content.document));
+  // A Strapi project always has its upload and users-permissions plugins.
+  const withPlugins = withMediaLibrary(content.document);
+  const validated = validate(
+    options.fromStrapi === undefined ? withPlugins : withStrapiUsers(withPlugins),
+  );
   if (!validated.ok) {
     for (const e of validated.errors) io.out(`✗ [${e.code}] ${locStr(e.location)} — ${e.message}`);
     return 1;
@@ -216,7 +221,9 @@ export const newCommand = async (dir: string, io: Io, options: NewOptions): Prom
       return 1;
     }
   }
-  if (options.skipBuild === true) {
+  // The scaffold refuses a non-empty directory, so a filament build waits for it.
+  const scaffoldPending = plan.targets.includes("filament") && options.skipScaffold === true;
+  if (options.skipBuild === true || scaffoldPending) {
     pending.push("camis build");
   } else if (
     (await generateCommand(join(projectDir, "camis.config.json"), io, { write: true })) !== 0

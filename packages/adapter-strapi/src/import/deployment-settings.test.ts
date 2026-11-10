@@ -16,6 +16,30 @@ describe("deploymentSettings — upload", () => {
     });
   });
 
+  it("reads the MIME types upload.security allows and denies", () => {
+    const { settings, gaps } = deploymentSettings({
+      upload: { config: { security: { allowedTypes: ["image/*", "text/csv"], deniedTypes: [] } } },
+    });
+    expect(gaps).toEqual([]);
+    expect(settings.upload).toEqual({
+      provider: "local",
+      storage: { kind: "local" },
+      allowedTypes: ["image/*", "text/csv"],
+      deniedTypes: [],
+    });
+  });
+
+  it("reports a security list that is not a list of types", () => {
+    const { settings, gaps } = deploymentSettings({
+      upload: {
+        config: { security: { allowedTypes: env("TYPES"), deniedTypes: ["image/svg+xml"] } },
+      },
+    });
+    expect(settings.upload?.allowedTypes).toBeUndefined();
+    expect(settings.upload?.deniedTypes).toEqual(["image/svg+xml"]);
+    expect(gaps.map((g) => g.feature)).toEqual(["uploadSecurity"]);
+  });
+
   it("reads the aws-s3 provider's bucket, credentials, region, endpoint and CDN address", () => {
     const { settings, gaps } = deploymentSettings({
       upload: {

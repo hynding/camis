@@ -7,6 +7,7 @@ import type { StrapiApiEmission, StrapiApiInput } from "../emit";
 import { emitStrapiErrorsMiddleware } from "../core/errors";
 import { emitStrapiError } from "../core/rest-runtime";
 import { emitApiConfig, emitStrapiRoutes } from "../core/routes";
+import { emitCorsConfig } from "../core/cors";
 import { emitScopeMethod } from "../core/scope";
 import { emitSerializer } from "../core/serializer";
 import { emitStrapiValidator } from "../core/validation-runtime";
@@ -161,6 +162,7 @@ export const emitStrapiStorage = (input: StrapiApiInput): StrapiApiEmission => {
       input.routeHooked,
     ),
   });
+  files.push({ path: "config/cors.php", content: emitCorsConfig() });
   files.push({ path: "config/camis.php", content: emitApiConfig("strapi") });
   files.push({
     path: "app/Http/Controllers/Api/AuthController.php",

@@ -55,6 +55,10 @@ export const emitApiConfig = (
         'disk' => env('CAMIS_UPLOAD_DISK'),
         'provider' => env('CAMIS_UPLOAD_PROVIDER'),
         'size_limit' => (int) env('CAMIS_UPLOAD_SIZE_LIMIT', 209715200),
+        // Strapi's upload.security: comma-separated MIME types or patterns (image/*). Unset lets
+        // every type through; an empty allow list refuses every upload, as Strapi's does.
+        'allowed_types' => ($allowed = env('CAMIS_UPLOAD_ALLOWED_TYPES')) === null ? null : array_values(array_filter(array_map('trim', explode(',', (string) $allowed)), 'strlen')),
+        'denied_types' => ($denied = env('CAMIS_UPLOAD_DENIED_TYPES')) === null ? null : array_values(array_filter(array_map('trim', explode(',', (string) $denied)), 'strlen')),
         'disks' => [
             // cloudinary-labs/cloudinary-laravel's driver, for Strapi's cloudinary provider.
             'cloudinary' => [
