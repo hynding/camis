@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { IrDocument } from "@camis/ir-schema";
-import type { Role } from "@camis/permissions";
+import { CREATED_BY, type Role } from "@camis/permissions";
 import { projectFilamentPermissions } from "./project";
 import { strapiApiBundle } from "../strapi-api/__fixtures__/strapi-api";
 
@@ -57,7 +57,9 @@ describe("projectFilamentPermissions", () => {
       ["Editor"],
       ["Editor"],
     ]);
-    expect(article.methods.find((m) => m.method === "view")!.condition).toEqual(condition);
+    expect(article.methods.find((m) => m.method === "view")!.conditions).toEqual([
+      { roles: ["Editor"], condition },
+    ]);
     expect(out.gaps).toEqual([]);
   });
   it("gives a type no role mentions a policy that refuses everything", () => {
@@ -132,7 +134,9 @@ describe("projectFilamentPermissions", () => {
     expect(byMethod.viewAny!.roles).toEqual(["Alpha", "Zeta"]);
     expect(byMethod.update!.roles).toEqual(["Alpha"]);
   });
-  it("gaps a divergent multi-role condition on the same action (first wins)", () => {
+  // Each role holds its grant under its own condition: one role's condition must neither narrow
+  // a role holding the action outright nor stand in for another role's.
+  it("keeps each role's condition to that role", () => {
     const condA = {
       kind: "eq",
       left: { kind: "var", name: "user.role" },
@@ -146,14 +150,108 @@ describe("projectFilamentPermissions", () => {
     const roles: Role[] = [
       { name: "RoleA", grants: [{ contentType: "Article", actions: ["read"], condition: condA }] },
       { name: "RoleB", grants: [{ contentType: "Article", actions: ["read"], condition: condB }] },
+      { name: "RoleC", grants: [{ contentType: "Article", actions: ["read"] }] },
+      { name: "RoleD", grants: [{ contentType: "Article", actions: ["read"], condition: condA }] },
     ];
     const out = projectFilamentPermissions(doc, roles);
-    expect(out.gaps.some((g) => g.feature === "conditionConflict")).toBe(true);
-    // first-wins: the read-action methods carry RoleA's condition (condA), not condB.
+    expect(out.gaps.filter((g) => g.feature === "conditionConflict")).toHaveLength(1);
     const view = out.policies
       .find((p) => p.contentType === "Article")!
       .methods.find((m) => m.method === "view")!;
-    expect(view.condition).toEqual(condA);
+    expect(view.roles).toEqual(["RoleA", "RoleB", "RoleC", "RoleD"]);
+    expect(view.conditions).toEqual([
+      { roles: ["RoleA", "RoleD"], condition: condA },
+      { roles: ["RoleB"], condition: condB },
+    ]);
+  });
+  it("lets a role holding an action outright through any grant of it under a condition", () => {
+    const roles: Role[] = [
+      {
+        name: "Mixed",
+        grants: [
+          { contentType: "Article", actions: ["read"], condition },
+          { contentType: "Article", actions: ["read"] },
+        ],
+      },
+    ];
+    const view = projectFilamentPermissions(doc, roles).policies[0]!.methods.find(
+      (m) => m.method === "view",
+    )!;
+    expect(view.conditions).toBeUndefined();
+  });
+  it("joins one role's conditions on an action as alternatives", () => {
+    const other = { ...condition, right: { kind: "lit", value: "draft" } } as const;
+    const roles: Role[] = [
+      {
+        name: "Two",
+        grants: [
+          { contentType: "Article", actions: ["read"], condition },
+          { contentType: "Article", actions: ["read"], condition: other },
+        ],
+      },
+    ];
+    const view = projectFilamentPermissions(doc, roles).policies[0]!.methods.find(
+      (m) => m.method === "view",
+    )!;
+    expect(view.conditions).toEqual([
+      { roles: ["Two"], condition: { kind: "or", args: [condition, other] } },
+    ]);
+  });
+});
+
+describe("projectFilamentPermissions — the creator of an entry", () => {
+  const isCreator = {
+    kind: "eq",
+    left: { kind: "var", name: CREATED_BY },
+    right: { kind: "var", name: "user.id" },
+  } as const;
+  const roles: Role[] = [
+    {
+      name: "author",
+      admin: true,
+      grants: [
+        {
+          contentType: "Article",
+          actions: ["create", "read", "update", "delete"],
+          condition: isCreator,
+        },
+      ],
+    },
+    { name: "editor", admin: true, grants: [{ contentType: "Article", actions: ["read"] }] },
+  ];
+
+  it("lets an admin role's condition name the entry's creator where the target records one", () => {
+    const out = projectFilamentPermissions(doc, roles, { creators: true });
+    expect(out.gaps).toEqual([]);
+    const update = out.policies[0]!.methods.find((m) => m.method === "update")!;
+    expect(update.conditions).toEqual([{ roles: ["author"], condition: isCreator }]);
+  });
+  it("reports the creator as unknown where the target records none, so the grant denies", () => {
+    const gaps = projectFilamentPermissions(doc, roles).gaps;
+    expect(gaps.map((g) => g.feature)).toEqual(["conditionContext"]);
+    expect(gaps[0]!.message).toContain(CREATED_BY);
+  });
+  // The creator is an admin account; an API user's id is a row of another table.
+  it("reports the creator as unknown to a role that is not an admin role", () => {
+    const api: Role[] = [{ ...roles[0]!, admin: false }];
+    const gaps = projectFilamentPermissions(doc, api, { creators: true }).gaps;
+    expect(gaps.map((g) => g.feature)).toEqual(["conditionContext"]);
+  });
+  it("scopes the admin list per admin role reading under a condition", () => {
+    const out = projectFilamentPermissions(doc, roles, { creators: true });
+    expect(out.adminReadScopes.get("Article")).toEqual({
+      unconditional: ["editor"],
+      conditions: [{ roles: ["author"], condition: isCreator }],
+    });
+  });
+  it("leaves the admin list unscoped where no admin role reads under a condition", () => {
+    const out = projectFilamentPermissions(doc, [roles[1]!], { creators: true });
+    expect(out.adminReadScopes.size).toBe(0);
+  });
+  // An admin account never calls the content API, whose list scope is for its users.
+  it("keeps an admin role's read condition out of the content API's list scope", () => {
+    const out = projectFilamentPermissions(doc, roles, { creators: true });
+    expect(out.readConditions.has("Article")).toBe(false);
   });
 });
 
@@ -202,7 +300,7 @@ describe("projectFilamentPermissions — ownership conditions", () => {
     ];
     const result = projectFilamentPermissions(doc, roles);
     expect(result.gaps).toEqual([]);
-    expect(result.policies[0]?.methods.some((m) => m.condition !== undefined)).toBe(true);
+    expect(result.policies[0]?.methods.some((m) => m.conditions !== undefined)).toBe(true);
   });
 });
 
@@ -245,10 +343,10 @@ describe("projectFilamentPermissions — condition scoping", () => {
     ];
     const { policies } = projectFilamentPermissions(doc, roles);
     const byMethod = Object.fromEntries(policies[0]!.methods.map((m) => [m.method, m]));
-    expect(byMethod.create!.condition).toBeUndefined();
-    expect(byMethod.viewAny!.condition).toBeUndefined();
-    expect(byMethod.view!.condition).toBeDefined();
-    expect(byMethod.update!.condition).toBeDefined();
+    expect(byMethod.create!.conditions).toBeUndefined();
+    expect(byMethod.viewAny!.conditions).toBeUndefined();
+    expect(byMethod.view!.conditions).toBeDefined();
+    expect(byMethod.update!.conditions).toBeDefined();
   });
 });
 
@@ -269,8 +367,8 @@ describe("projectFilamentPermissions readConditions + assigns", () => {
   it("keeps a catalog type's write condition narrower than its read condition", () => {
     const activity = p.policies.find((x) => x.contentType === "Activity")!;
     const byMethod = Object.fromEntries(activity.methods.map((m) => [m.method, m]));
-    expect(byMethod.view!.condition!.kind).toBe("or");
-    expect(byMethod.update!.condition!.kind).toBe("eq");
-    expect(byMethod.delete!.condition!.kind).toBe("eq");
+    expect(byMethod.view!.conditions![0]!.condition.kind).toBe("or");
+    expect(byMethod.update!.conditions![0]!.condition.kind).toBe("eq");
+    expect(byMethod.delete!.conditions![0]!.condition.kind).toBe("eq");
   });
 });

@@ -254,6 +254,59 @@ jobs:
           pnpm --filter @camis/adapter-filament overlay "$GITHUB_WORKSPACE/app-storage" --style strapi --storage strapi
       - name: PHPStan over the runtime PHP
         run: bash packages/adapter-filament/scripts/runtime-phpstan.sh app app-storage
+  author-role:
+    # Strapi's default Author and Editor admin roles: the Author is held to the entries it created
+    # (admin::is-creator). The test runs on :memory: sqlite, so one database is enough.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: gd
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Scaffold Laravel 12 + Filament v5 + API + Spatie + GraphQL
+        run: |
+          composer create-project laravel/laravel:^12 app --no-interaction
+          cd app
+          composer require filament/filament:"^5.0" --no-interaction
+          php artisan filament:install --panels --no-interaction
+          php artisan install:api --no-interaction
+          composer require spatie/laravel-permission --no-interaction
+          php artisan vendor:publish --provider="Spatie\Permission\PermissionServiceProvider" --no-interaction
+          composer require webonyx/graphql-php:"^15.19" --no-interaction
+          cd "$GITHUB_WORKSPACE"
+          pnpm --filter @camis/cli exec tsx -e "import { readFileSync, writeFileSync } from 'node:fs';
+            import { isPatchedUserModel, patchAdminPanelProvider, patchUserModel } from './src/commands/scaffold';
+            const f = process.env.GITHUB_WORKSPACE + '/app/app/Models/User.php';
+            const patched = patchUserModel(readFileSync(f, 'utf8'));
+            if (!isPatchedUserModel(patched)) { console.error('User model patch did not apply'); process.exit(1); }
+            writeFileSync(f, patched);
+            const p = process.env.GITHUB_WORKSPACE + '/app/app/Providers/Filament/AdminPanelProvider.php';
+            const panel = patchAdminPanelProvider(readFileSync(p, 'utf8'));
+            if (!panel.includes(\"->authGuard('admin')\")) { console.error('admin panel patch did not apply'); process.exit(1); }
+            writeFileSync(p, panel);"
+      - name: Overlay (apiStyle strapi, the author-role fixture)
+        run: pnpm --filter @camis/adapter-filament overlay "$GITHUB_WORKSPACE/app" --style strapi --bundle author-role
+      - name: Patch bootstrap/app.php as camis scaffold does
+        run: >-
+          pnpm --filter @camis/cli exec tsx -e "import { readFileSync, writeFileSync } from 'node:fs';
+          import { patchBootstrapExceptions, patchBootstrapGraphql, patchBootstrapMiddleware, patchBootstrapTransfer } from './src/commands/scaffold';
+          const f = process.env.GITHUB_WORKSPACE + '/app/bootstrap/app.php';
+          writeFileSync(f, patchBootstrapExceptions(patchBootstrapGraphql(patchBootstrapTransfer(patchBootstrapMiddleware(readFileSync(f, 'utf8'))))));"
+      - name: An Author lists, opens and changes only the entries it created; an Editor every one
+        run: |
+          cd app
+          echo "DB_CONNECTION=sqlite" >> .env
+          touch database/database.sqlite
+          php artisan migrate --force
+          cp ../packages/adapter-filament/scripts/php/AuthorRoleTest.php tests/Feature/
+          php artisan test tests/Feature/AuthorRoleTest.php
   strapi-api:
     runs-on: ubuntu-latest
     # The REST and populate vectors build SQL per dialect (LIKE escapes, casts, relation
