@@ -340,7 +340,7 @@ describe("media vectors", () => {
 describe("upload security", () => {
   it("StrapiMimeTypes golden", async () => {
     await expect(content("app/Support/StrapiMimeTypes.php")).toMatchFileSnapshot(
-      "./__golden__/strapi-api/StrapiMimeTypes.php",
+      "../__golden__/strapi-api/StrapiMimeTypes.php",
     );
   });
   it.skipIf(!hasPhp())("StrapiMimeTypes parses", () => {
