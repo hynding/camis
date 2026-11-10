@@ -9,6 +9,7 @@ use App\Filament\Resources\Files\Pages\CreateFile;
 use App\Filament\Resources\Files\Pages\ListFiles;
 use App\Filament\Resources\Storyboards\Pages\CreateStoryboard;
 use App\Http\Serializers\StoryboardSerializer;
+use App\Models\AdminUser;
 use App\Models\Book;
 use App\Models\File;
 use App\Models\Storyboard;
@@ -33,9 +34,9 @@ class MediaAdminTest extends TestCase
     private function login(array $permissions): void
     {
         $this->seed(\Database\Seeders\RolePermissionSeeder::class);
-        $user = User::factory()->create(['username' => 'admin']);
+        $user = AdminUser::forceCreate(['firstname' => 'Admin', 'email' => 'admin@example.test', 'is_active' => true]);
         $user->givePermissionTo($permissions);
-        $this->actingAs($user);
+        $this->actingAs($user, 'admin');
         Filament::setCurrentPanel(Filament::getPanel('admin'));
     }
 

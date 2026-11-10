@@ -184,6 +184,6 @@ describe("Strapi's Home and settings pages", () => {
     // A type with no string field shows its id, as Strapi's default main field; with no roles,
     // every type is read.
     expect(homepage).toContain("'mainField' => 'id'");
-    expect(homepage).toContain("'admins' => \\App\\Models\\User::query()->count(),");
+    expect(homepage).toContain("'admins' => \\App\\Models\\AdminUser::query()->count(),");
   });
 });

@@ -45,7 +45,7 @@ describe("single types", () => {
 
   it("types a reserved-name model's policy by its class", () => {
     expect(content("app/Policies/GlobalModelPolicy.php")).toContain(
-      "public function update(?User $user, GlobalModel $record): bool",
+      "public function update(User|AdminUser|null $user, GlobalModel $record): bool",
     );
   });
 

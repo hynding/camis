@@ -11,6 +11,7 @@ use App\Filament\Resources\Files\Pages\ListFiles;
 use App\Filament\Resources\UploadFolders\Pages\CreateUploadFolder;
 use App\Filament\Resources\UploadFolders\Pages\EditUploadFolder;
 use App\Filament\Resources\UploadFolders\Pages\ListUploadFolders;
+use App\Models\AdminUser;
 use App\Models\Book;
 use App\Models\File;
 use App\Models\UploadFolder;
@@ -43,9 +44,9 @@ class FoldersTest extends TestCase
         foreach ($permissions as $permission) {
             \Spatie\Permission\Models\Permission::findOrCreate($permission);
         }
-        $user = User::factory()->create(['username' => 'admin', 'email' => 'admin@example.test']);
+        $user = AdminUser::forceCreate(['firstname' => 'Admin', 'email' => 'admin@example.test', 'is_active' => true]);
         $user->givePermissionTo($permissions);
-        $this->actingAs($user);
+        $this->actingAs($user, 'admin');
         Filament::setCurrentPanel(Filament::getPanel('admin'));
     }
 

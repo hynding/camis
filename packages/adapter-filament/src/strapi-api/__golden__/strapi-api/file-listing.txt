@@ -3,6 +3,7 @@ overwrite app/Console/Commands/CamisAdmin.php
 overwrite app/Console/Commands/CamisSchemaSync.php
 overwrite app/Console/Commands/StrapiExport.php
 overwrite app/Console/Commands/StrapiImport.php
+overwrite app/Console/Commands/StrapiImportAdmins.php
 overwrite app/Console/Commands/StrapiImportTokens.php
 overwrite app/Filament/Forms/BlocksEditor.php
 overwrite app/Filament/Forms/BlocksStateCast.php
@@ -29,6 +30,10 @@ overwrite app/Filament/Resources/ActivitySessions/Pages/EditActivitySession.php
 overwrite app/Filament/Resources/ActivitySessions/Pages/ListActivitySessions.php
 overwrite app/Filament/Resources/ActivitySessions/Schemas/ActivitySessionForm.php
 overwrite app/Filament/Resources/ActivitySessions/Schemas/ActivitySessionsTable.php
+overwrite app/Filament/Resources/AdminUsers/AdminUserResource.php
+overwrite app/Filament/Resources/AdminUsers/Pages/CreateAdminUser.php
+overwrite app/Filament/Resources/AdminUsers/Pages/EditAdminUser.php
+overwrite app/Filament/Resources/AdminUsers/Pages/ListAdminUsers.php
 overwrite app/Filament/Resources/ApiTokens/ApiTokenResource.php
 overwrite app/Filament/Resources/ApiTokens/Pages/CreateApiToken.php
 overwrite app/Filament/Resources/ApiTokens/Pages/EditApiToken.php
@@ -202,6 +207,8 @@ overwrite app/Filament/Widgets/StrapiEntries.php
 overwrite app/Filament/Widgets/StrapiLastEditedEntries.php
 overwrite app/Filament/Widgets/StrapiLastPublishedEntries.php
 overwrite app/Filament/Widgets/StrapiProjectStatistics.php
+overwrite app/Http/Controllers/Admin/StrapiAdminApiTokens.php
+overwrite app/Http/Controllers/Admin/StrapiAdminController.php
 overwrite app/Http/Controllers/Admin/StrapiTransferDownload.php
 overwrite app/Http/Controllers/Admin/StrapiTransferRunner.php
 overwrite app/Http/Controllers/Api/AuthController.php
@@ -264,6 +271,7 @@ overwrite app/Http/Serializers/UserSerializer.php
 overwrite app/Models/Activity.php
 overwrite app/Models/ActivitySession.php
 overwrite app/Models/ActivitySessionQuantities.php
+overwrite app/Models/AdminUser.php
 overwrite app/Models/Article.php
 overwrite app/Models/Author.php
 overwrite app/Models/Book.php
@@ -340,6 +348,8 @@ overwrite app/Support/ContentTypeBuilderSchema.php
 overwrite app/Support/JsonText.php
 overwrite app/Support/PublicRole.php
 overwrite app/Support/Ring1.php
+overwrite app/Support/StrapiAdminAuth.php
+overwrite app/Support/StrapiAdminImport.php
 overwrite app/Support/StrapiApiTokens.php
 overwrite app/Support/StrapiBlocks.php
 overwrite app/Support/StrapiContentManager.php
@@ -375,9 +385,11 @@ overwrite app/Support/StrapiUsers.php
 overwrite app/Support/StrapiValidator.php
 overwrite app/Support/StrapiWebhooks.php
 overwrite app/Support/StrapiZones.php
+overwrite config/auth.php
 overwrite config/camis.php
 overwrite config/content-type-builder.php
 overwrite config/cors.php
+overwrite database/migrations/0001_01_01_000003_create_admin_users_table.php
 overwrite database/migrations/0001_01_02_000000_add_username_to_users_table.php
 overwrite database/migrations/0001_01_02_000000_create_files_table.php
 overwrite database/migrations/0001_01_02_000000_create_i18n_locales_table.php
@@ -440,6 +452,7 @@ overwrite database/migrations/9999_12_31_000000_add_document_id_to_roles_table.p
 overwrite database/seeders/RolePermissionSeeder.php
 overwrite resources/camis/schema.json
 overwrite resources/strapi/schemas.jsonl
+overwrite routes/admin.php
 overwrite routes/api.php
 overwrite routes/transfer.php
 seed app/Http/Controllers/Api/ActivityApiController.php

@@ -4,33 +4,34 @@ declare(strict_types=1);
 
 namespace App\Policies;
 
+use App\Models\AdminUser;
 use App\Models\Article;
 use App\Models\User;
 use App\Support\Ring1;
 
 class ArticlePolicy
 {
-    public function create(User $user): bool
+    public function create(User|AdminUser $user): bool
     {
         return false;
     }
 
-    public function deleteAny(User $user): bool
+    public function deleteAny(User|AdminUser $user): bool
     {
         return false;
     }
 
-    public function delete(User $user, Article $record): bool
+    public function delete(User|AdminUser $user, Article $record): bool
     {
         return false;
     }
 
-    public function viewAny(User $user): bool
+    public function viewAny(User|AdminUser $user): bool
     {
         return $user->can('article.read');
     }
 
-    public function view(User $user, Article $record): bool
+    public function view(User|AdminUser $user, Article $record): bool
     {
         if (! $user->can('article.read')) {
             return false;
@@ -46,7 +47,7 @@ class ArticlePolicy
         return $result['ok'] === true && $result['value'] === true;
     }
 
-    public function update(User $user, Article $record): bool
+    public function update(User|AdminUser $user, Article $record): bool
     {
         if (! $user->can('article.update')) {
             return false;

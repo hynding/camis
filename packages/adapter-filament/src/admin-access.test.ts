@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { IrBundle } from "@camis/permissions";
 import { filamentAdapter } from "./generate";
 
-// Who may sign in to the admin: users holding a role the IR marks `admin` (owner's call,
-// 2026-10-29). Filament refuses every user outside APP_ENV=local unless the model says otherwise,
-// so the User model's canAccessPanel (the generated AdminAccess trait) is what lets anyone in.
+// Who may sign in to the admin: admin accounts holding a role the IR marks `admin` (owner's call,
+// 2026-10-29). Admin accounts live apart from the API's users, as Strapi keeps admin_users apart
+// from up_users (owner's call, 2026-11-10): Filament signs in on the web guard, whose provider is
+// the AdminUser model, and its canAccessPanel (the generated AdminAccess trait) lets anyone in.
 const bundle = (roles: IrBundle["roles"]): IrBundle => ({
   document: {
     version: 1,
@@ -29,25 +30,62 @@ const file = (result: ReturnType<typeof filamentAdapter.generate>, path: string)
   result.files.find((f) => f.path === path)?.content ?? "";
 const TRAIT = "app/Models/Concerns/AdminAccess.php";
 const COMMAND = "app/Console/Commands/CamisAdmin.php";
+const MODEL = "app/Models/AdminUser.php";
+const MIGRATION = "database/migrations/0001_01_01_000003_create_admin_users_table.php";
+const AUTH_CONFIG = "config/auth.php";
 
 describe("admin access", () => {
   const result = filamentAdapter.generate(bundle([editor, reader]), { projectName: "blog" });
 
-  it("lets in only users holding an admin role, and never a blocked one", () => {
+  it("lets in only active accounts holding an admin role, and never a blocked one", () => {
     const trait = file(result, TRAIT);
     expect(trait).toContain("trait AdminAccess");
     expect(trait).toContain("public const ADMIN_ROLES = ['Editor'];");
     expect(trait).toContain("public function canAccessPanel(Panel $panel): bool");
     expect(trait).toContain("$this->hasAnyRole(self::ADMIN_ROLES)");
     expect(trait).toContain("$this->getAttribute('blocked')");
+    expect(trait).toContain("$this->getAttribute('is_active')");
   });
 
-  it("makes the first admin with camis:admin", () => {
+  it("keeps admin accounts in Strapi's admin_users table, apart from the API's users", () => {
+    const migration = file(result, MIGRATION);
+    expect(migration).toContain("Schema::create('admin_users'");
+    for (const column of ["firstname", "lastname", "username", "prefered_language"]) {
+      expect(migration).toContain(`$table->string('${column}')->nullable();`);
+    }
+    expect(migration).toContain("$table->string('email')->unique();");
+    expect(migration).toContain("$table->boolean('is_active')->default(false);");
+    expect(migration).toContain("$table->boolean('blocked')->default(false);");
+    const model = file(result, MODEL);
+    expect(model).toContain(
+      "class AdminUser extends Authenticatable implements FilamentUser, HasName",
+    );
+    expect(model).toContain("use AdminAccess, HasRoles, Notifiable;");
+    expect(model).toContain("protected $table = 'admin_users';");
+  });
+
+  it("signs the admin in on its own guard as an AdminUser, and leaves the web guard to the API's users", () => {
+    const auth = file(result, AUTH_CONFIG);
+    expect(auth).toContain(
+      "'admin' => [\n            'driver' => 'session',\n            'provider' => 'admin_users',",
+    );
+    expect(auth).toContain(
+      "'web' => [\n            'driver' => 'session',\n            'provider' => 'users',",
+    );
+    expect(auth).toContain("'model' => App\\Models\\AdminUser::class,");
+    expect(auth).toContain("'model' => env('AUTH_MODEL', App\\Models\\User::class),");
+    // Spatie reads an account's roles on its guard; the IR's roles are seeded on the web guard.
+    expect(file(result, MODEL)).toContain("protected string $guard_name = 'web';");
+  });
+
+  it("makes the first admin account with camis:admin", () => {
     const command = file(result, COMMAND);
     expect(command).toContain("protected $signature = 'camis:admin");
-    // PHP refuses a trait's constant read through the trait, so the command reads them off User.
-    expect(command).toContain("User::ADMIN_ROLES");
+    // PHP refuses a trait's constant read through the trait, so the command reads them off the model.
+    expect(command).toContain("AdminUser::adminRoles()");
     expect(command).not.toMatch(/AdminAccess::[A-Z]/);
+    expect(command).not.toContain("App\\Models\\User;");
+    expect(command).toContain("'is_active' => true");
     expect(command).toContain("assignRole(");
   });
 
@@ -66,7 +104,7 @@ describe("admin access", () => {
     expect(file(closed, TRAIT)).toContain("public const EVERY_USER = false;");
     expect(file(closed, TRAIT)).toContain("$this->hasAnyRole(self::ADMIN_ROLES)");
     expect(file(closed, TRAIT)).not.toContain("return true;");
-    expect(file(closed, COMMAND)).toContain("! User::EVERY_USER && User::ADMIN_ROLES === []");
+    expect(file(closed, COMMAND)).toContain("! AdminUser::everyUser() && $roles === []");
   });
 
   it("reports a project whose roles let nobody in", () => {
@@ -82,12 +120,12 @@ describe("admin access", () => {
     ]);
   });
 
-  it("tells a deploy how to make the first admin, and how to let an older app's User model in", () => {
+  it("tells a deploy how to make the first admin, and what an older app's admins need", () => {
     const deploy = file(result, "DEPLOY.md");
     expect(deploy).toContain("## Admin sign-in");
     expect(deploy).toContain("php artisan camis:admin admin@example.com");
-    expect(deploy).toContain("implements \\Filament\\Models\\Contracts\\FilamentUser");
-    expect(deploy).toContain("\\App\\Models\\Concerns\\AdminAccess");
+    expect(deploy).toContain("`admin_users`");
+    expect(deploy).toContain("config/auth.php");
   });
 
   it("has no admin to let anyone into on the Strapi storage layout", () => {
@@ -99,6 +137,8 @@ describe("admin access", () => {
     const paths = strapi.files.map((f) => f.path);
     expect(paths).not.toContain(TRAIT);
     expect(paths).not.toContain(COMMAND);
+    expect(paths).not.toContain(MODEL);
+    expect(paths).not.toContain(AUTH_CONFIG);
     expect(file(strapi, "DEPLOY.md")).not.toContain("camis:admin");
   });
 });

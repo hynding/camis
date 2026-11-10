@@ -77,7 +77,7 @@ Route::middleware([StrapiErrors::class])->group(function (): void {
 `
     : ""
 }
-// An export the Data transfer page wrote; the link it signs is the only credential, for ten minutes.
+${secured ? "// Strapi's admin API, which bootstrap/app.php reaches through this file.\nrequire __DIR__.'/admin.php';\n\n" : ""}// An export the Data transfer page wrote; the link it signs is the only credential, for ten minutes.
 Route::get('/admin/data-transfer/{file}', StrapiTransferDownload::class)
     ->middleware('signed')
     ->where('file', '[A-Za-z0-9][A-Za-z0-9_.-]*')

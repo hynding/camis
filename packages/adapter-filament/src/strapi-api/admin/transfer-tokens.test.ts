@@ -45,7 +45,7 @@ describe("transfer tokens", () => {
     );
     expect(routes).toContain("Route::middleware([StrapiErrors::class])->group(");
     expect(content("app/Http/Middleware/StrapiErrors.php")).toContain(
-      "if (! $request->is('api/*', 'graphql', 'admin/transfer/*')) {",
+      "if (! $request->is('api/*', 'graphql', 'admin/transfer/*', ...self::ADMIN_API)) {",
     );
     await expect(routes).toMatchFileSnapshot("../__golden__/strapi-api/transfer-routes.php");
   });

@@ -363,6 +363,8 @@ describe("newCommand — scaffold and build", () => {
     files["/work/p/generated/filament/app/Models/User.php"] =
       "class User extends Authenticatable\n{\n    use HasFactory, Notifiable;\n}\n";
     files["/work/p/generated/filament/bootstrap/app.php"] = STOCK_BOOTSTRAP;
+    files["/work/p/generated/filament/app/Providers/Filament/AdminPanelProvider.php"] =
+      "        return $panel\n            ->login()\n            ->colors([]);\n";
     expect(await newCommand("p", io, { targets: ["filament"] })).toBe(0);
     expect(calls[0]).toMatchObject({
       cmd: "composer",

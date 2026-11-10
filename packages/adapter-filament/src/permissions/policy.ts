@@ -66,13 +66,18 @@ const grantCheck = (m: PolicyMethodSpec, layout: StorageLayout, guests: boolean)
 const evaluatesCondition = (m: PolicyMethodSpec): boolean =>
   m.condition !== undefined && !alwaysDenies(m);
 
+// The admin signs in as an AdminUser and an API caller is a User, and a policy decides for both;
+// the Strapi storage layout has no admin.
+const userType = (layout: StorageLayout): string =>
+  layout === "strapi" ? "User" : "User|AdminUser";
+
 const method = (
   m: PolicyMethodSpec,
   ct: ContentType,
   layout: StorageLayout,
   guests: boolean,
 ): string => {
-  const user = guests ? "?User $user" : "User $user";
+  const user = `${userType(layout)}${guests ? "|null" : ""} $user`;
   const sig = m.record
     ? `    public function ${m.method}(${user}, ${filamentNames(ct).model} $record): bool`
     : `    public function ${m.method}(${user}): bool`;
@@ -119,7 +124,10 @@ declare(strict_types=1);
 
 namespace App\\Policies;
 
-${spec.model === "User" ? "" : `use App\\Models\\${spec.model};\n`}use App\\Models\\User;
+${[...new Set([spec.model, ...(layout === "strapi" ? [] : ["AdminUser"]), "User"])]
+  .sort()
+  .map((model) => `use App\\Models\\${model};`)
+  .join("\n")}
 ${supportUses}
 class ${spec.model}Policy
 {

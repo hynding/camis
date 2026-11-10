@@ -53,8 +53,8 @@ export const emitMigration = (
     ...fkColumns,
     ...(options.creatorFields === true
       ? [
-          "$table->foreignId('created_by_id')->nullable()->constrained('users')->nullOnDelete()",
-          "$table->foreignId('updated_by_id')->nullable()->constrained('users')->nullOnDelete()",
+          "$table->foreignId('created_by_id')->nullable()->constrained('admin_users')->nullOnDelete()",
+          "$table->foreignId('updated_by_id')->nullable()->constrained('admin_users')->nullOnDelete()",
         ]
       : []),
   ].map((c) => `            ${c};`);

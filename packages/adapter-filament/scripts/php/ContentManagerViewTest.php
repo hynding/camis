@@ -15,6 +15,7 @@ use App\Filament\Resources\Submissions\Pages\CreateSubmission;
 use App\Filament\Resources\Submissions\Pages\EditSubmission;
 use App\Filament\Resources\Submissions\Pages\ListSubmissions;
 use App\Http\Serializers\PostSerializer;
+use App\Models\AdminUser;
 use App\Models\Author;
 use App\Models\Book;
 use App\Models\Post;
@@ -43,12 +44,12 @@ class ContentManagerViewTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function login(array $permissions, string $name = 'Admin'): User
+    private function login(array $permissions, string $name = 'Admin'): AdminUser
     {
         $this->seed(\Database\Seeders\RolePermissionSeeder::class);
-        $user = User::factory()->create(['name' => $name, 'username' => strtolower($name)]);
+        $user = AdminUser::forceCreate(['firstname' => $name, 'email' => strtolower($name).'@example.test', 'is_active' => true]);
         $user->givePermissionTo($permissions);
-        $this->actingAs($user);
+        $this->actingAs($user, 'admin');
         Filament::setCurrentPanel(Filament::getPanel('admin'));
 
         return $user;
@@ -196,9 +197,9 @@ class ContentManagerViewTest extends TestCase
         $this->assertSame($ann->id, (int) $author->created_by_id);
         $this->assertSame($ann->id, (int) $author->updated_by_id);
 
-        $bob = User::factory()->create(['name' => 'Bob', 'username' => 'bob']);
+        $bob = AdminUser::forceCreate(['firstname' => 'Bob', 'email' => 'bob@example.test', 'is_active' => true]);
         $bob->givePermissionTo(['author.read', 'author.update']);
-        $this->actingAs($bob);
+        $this->actingAs($bob, 'admin');
         Livewire::test(\App\Filament\Resources\Authors\Pages\EditAuthor::class, ['record' => $author->getRouteKey()])
             ->assertSee('Ann')
             ->fillForm(['name' => 'J. R. R. Tolkien'])

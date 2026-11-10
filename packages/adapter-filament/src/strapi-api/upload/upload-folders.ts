@@ -303,32 +303,33 @@ declare(strict_types=1);
 
 namespace App\\Policies;
 
+use App\\Models\\AdminUser;
 use App\\Models\\UploadFolder;
 use App\\Models\\User;
 
 class UploadFolderPolicy
 {
-    public function viewAny(User $user): bool
+    public function viewAny(User|AdminUser $user): bool
     {
         ${can("read")}
     }
 
-    public function view(User $user, UploadFolder $folder): bool
+    public function view(User|AdminUser $user, UploadFolder $folder): bool
     {
         ${can("read")}
     }
 
-    public function create(User $user): bool
+    public function create(User|AdminUser $user): bool
     {
         ${can("create")}
     }
 
-    public function update(User $user, UploadFolder $folder): bool
+    public function update(User|AdminUser $user, UploadFolder $folder): bool
     {
         ${can("update")}
     }
 
-    public function delete(User $user, UploadFolder $folder): bool
+    public function delete(User|AdminUser $user, UploadFolder $folder): bool
     {
         ${can("delete")}
     }

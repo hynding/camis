@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Filament\Pages\DataTransfer;
+use App\Models\AdminUser;
 use App\Models\User;
 use App\Support\StrapiTransferArchives;
 use Filament\Facades\Filament;
@@ -24,15 +25,15 @@ class DataTransferTest extends TestCase
 
     private const KEY = 'camis-fixture-key';
 
-    private function login(array $permissions): User
+    private function login(array $permissions): AdminUser
     {
         $this->seed(\Database\Seeders\RolePermissionSeeder::class);
         foreach ($permissions as $permission) {
             \Spatie\Permission\Models\Permission::findOrCreate($permission);
         }
-        $user = User::factory()->create(['username' => 'admin', 'email' => 'admin@example.test']);
+        $user = AdminUser::forceCreate(['firstname' => 'Admin', 'email' => 'admin@example.test', 'is_active' => true]);
         $user->givePermissionTo($permissions);
-        $this->actingAs($user);
+        $this->actingAs($user, 'admin');
         Filament::setCurrentPanel(Filament::getPanel('admin'));
 
         return $user;
@@ -65,7 +66,7 @@ class DataTransferTest extends TestCase
 
         $this->assertDatabaseHas('users', ['username' => 'alice']);
         // The admin's own account, which the archive lacks, is kept; the upload is not.
-        $this->assertDatabaseHas('users', ['username' => 'admin']);
+        $this->assertDatabaseHas('admin_users', ['email' => 'admin@example.test']);
         $this->assertSame([], StrapiTransferArchives::names());
     }
 

@@ -12,14 +12,16 @@ describe("the public role on the Strapi API style", () => {
 
   it("lets a policy answer for a caller without a session from the public role's grants", () => {
     const policy = content("app/Policies/BookPolicy.php");
-    expect(policy).toContain("public function viewAny(?User $user): bool");
+    expect(policy).toContain("public function viewAny(User|AdminUser|null $user): bool");
     expect(policy).toContain("return PublicRole::allows($user, 'book.read');");
-    expect(policy).toContain("public function create(?User $user): bool");
+    expect(policy).toContain("public function create(User|AdminUser|null $user): bool");
   });
 
   it("evaluates a condition for a guest without any user value but the role", () => {
     const policy = content("app/Policies/ActivityPolicy.php");
-    expect(policy).toContain("public function view(?User $user, Activity $record): bool");
+    expect(policy).toContain(
+      "public function view(User|AdminUser|null $user, Activity $record): bool",
+    );
     expect(policy).toContain("$user === null ? ['user.role' => 'public'] : [");
   });
 
@@ -110,7 +112,7 @@ describe("the public role elsewhere", () => {
     });
     const policies = result.files.filter((f) => f.path.startsWith("app/Policies/"));
     expect(policies.length).toBeGreaterThan(0);
-    for (const policy of policies) expect(policy.content).not.toContain("?User");
+    for (const policy of policies) expect(policy.content).not.toContain("|null $user");
     expect(result.files.some((f) => f.path === "app/Support/PublicRole.php")).toBe(false);
   });
 });

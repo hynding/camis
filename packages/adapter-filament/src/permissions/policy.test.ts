@@ -49,11 +49,13 @@ describe("emitPolicy", () => {
     expect(php).toContain("namespace App\\Policies;");
     expect(php).toContain("use App\\Models\\Article;");
     expect(php).toContain("use App\\Models\\User;");
+    // The admin signs in as an AdminUser, and an API caller is a User; a policy decides for both.
+    expect(php).toContain("use App\\Models\\AdminUser;");
     expect(php).toContain("use App\\Support\\Ring1;");
     expect(php).toContain("class ArticlePolicy");
   });
   it("no-condition method is a bare permission check", () => {
-    expect(php).toContain("public function create(User $user): bool");
+    expect(php).toContain("public function create(User|AdminUser $user): bool");
     expect(php).toContain("return $user->can('article.create');");
   });
   it("refuses outright what no role holds, on every layout", () => {
@@ -63,11 +65,11 @@ describe("emitPolicy", () => {
     };
     for (const out of [emitPolicy(denied, article), emitPolicy(denied, article, "laravel", true)])
       expect(out).toMatch(
-        /public function delete\(\??User \$user, Article \$record\): bool\n {4}\{\n {8}return false;\n {4}\}/,
+        /public function delete\(User\|AdminUser(\|null)? \$user, Article \$record\): bool\n {4}\{\n {8}return false;\n {4}\}/,
       );
   });
   it("record-scoped condition method builds record.* data and is fail-closed", () => {
-    expect(php).toContain("public function view(User $user, Article $record): bool");
+    expect(php).toContain("public function view(User|AdminUser $user, Article $record): bool");
     expect(php).toContain("if (! $user->can('article.read')) {");
     expect(php).toContain("'record.status' => $record->status,");
     expect(php).toContain("return $result['ok'] === true && $result['value'] === true;");
@@ -75,7 +77,7 @@ describe("emitPolicy", () => {
   });
   it("non-record method omits record.* data", () => {
     // viewAny has no condition here, so it's a bare check; ensure no record data leaks anywhere for non-record methods
-    expect(php).toContain("public function viewAny(User $user): bool");
+    expect(php).toContain("public function viewAny(User|AdminUser $user): bool");
   });
 });
 

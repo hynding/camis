@@ -15,6 +15,9 @@ Route::middleware([StrapiErrors::class])->group(function (): void {
     Route::get('/admin/transfer/runner/pull', [StrapiTransferRunner::class, 'pull']);
 });
 
+// Strapi's admin API, which bootstrap/app.php reaches through this file.
+require __DIR__.'/admin.php';
+
 // An export the Data transfer page wrote; the link it signs is the only credential, for ten minutes.
 Route::get('/admin/data-transfer/{file}', StrapiTransferDownload::class)
     ->middleware('signed')

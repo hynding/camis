@@ -45,7 +45,7 @@ jobs:
           cd app
           composer require filament/filament:"^5.0" --no-interaction
           php artisan filament:install --panels --no-interaction
-      - name: Install Sanctum + Spatie, patch the User model as camis scaffold does
+      - name: Install Sanctum + Spatie, patch the User model and the admin panel as camis scaffold does
         run: |
           cd app
           php artisan install:api --no-interaction
@@ -53,11 +53,15 @@ jobs:
           php artisan vendor:publish --provider="Spatie\Permission\PermissionServiceProvider" --no-interaction
           cd "$GITHUB_WORKSPACE"
           pnpm --filter @camis/cli exec tsx -e "import { readFileSync, writeFileSync } from 'node:fs';
-            import { isPatchedUserModel, patchUserModel } from './src/commands/scaffold';
+            import { isPatchedUserModel, patchAdminPanelProvider, patchUserModel } from './src/commands/scaffold';
             const f = process.env.GITHUB_WORKSPACE + '/app/app/Models/User.php';
             const patched = patchUserModel(readFileSync(f, 'utf8'));
             if (!isPatchedUserModel(patched)) { console.error('User model patch did not apply'); process.exit(1); }
-            writeFileSync(f, patched);"
+            writeFileSync(f, patched);
+            const p = process.env.GITHUB_WORKSPACE + '/app/app/Providers/Filament/AdminPanelProvider.php';
+            const panel = patchAdminPanelProvider(readFileSync(p, 'utf8'));
+            if (!panel.includes(\"->authGuard('admin')\")) { console.error('admin panel patch did not apply'); process.exit(1); }
+            writeFileSync(p, panel);"
       - name: Overlay camis-generated files
         run: pnpm --filter @camis/adapter-filament overlay "$GITHUB_WORKSPACE/app"
       - name: Hook reference impl (uppercase title on publish)
@@ -187,7 +191,7 @@ jobs:
           grep -q "Heartbeat" $RUNNER_TEMP/schedule.txt
           php artisan schedule:run
           [ "$(php artisan tinker --execute='echo cache("heartbeat");')" = "beat" ] || { echo "the Heartbeat schedule did not run"; exit 1; }
-      - name: Admin access (only an admin role signs in; camis:admin makes the first admin)
+      - name: Admin access (an admin account with an admin role signs in; camis:admin makes the first; an API user never does)
         run: |
           cd app
           php artisan camis:admin first@example.test --name=First --password=first-admin-pass
@@ -195,12 +199,15 @@ jobs:
           if php artisan camis:admin third@example.test --password=short; then echo "camis:admin took a short password"; exit 1; fi
           php artisan tinker --execute='
             $panel = \Filament\Facades\Filament::getPanel("admin");
-            $first = \App\Models\User::where("email", "first@example.test")->firstOrFail();
-            $reader = \App\Models\User::factory()->create();
+            $first = \App\Models\AdminUser::where("email", "first@example.test")->firstOrFail();
+            $reader = \App\Models\AdminUser::forceCreate(["email" => "reader@example.test", "is_active" => true]);
             $reader->assignRole("Reader");
-            $none = \App\Models\User::factory()->create();
-            $seen = [$first->hasRole("Editor"), $first->canAccessPanel($panel), $reader->canAccessPanel($panel), $none->canAccessPanel($panel), \App\Models\User::where("email", "second@example.test")->exists()];
-            if ($seen !== [true, true, false, false, false]) { fwrite(STDERR, "ADMIN ACCESS MISMATCH ".json_encode($seen)."\n"); exit(1); }
+            $asleep = \App\Models\AdminUser::forceCreate(["email" => "asleep@example.test", "is_active" => false]);
+            $asleep->assignRole("Editor");
+            $apiUser = \App\Models\User::factory()->create(["email" => "api@example.test", "password" => \Illuminate\Support\Facades\Hash::make("api-user-pass")]);
+            $apiUser->assignRole("Editor");
+            $seen = [$first->hasRole("Editor"), $first->canAccessPanel($panel), $reader->canAccessPanel($panel), $asleep->canAccessPanel($panel), \App\Models\AdminUser::where("email", "second@example.test")->exists(), \App\Models\User::where("email", "first@example.test")->exists(), $panel->getAuthGuard(), \Illuminate\Support\Facades\Auth::guard("admin")->validate(["email" => "api@example.test", "password" => "api-user-pass"]), \Illuminate\Support\Facades\Auth::guard("admin")->validate(["email" => "first@example.test", "password" => "first-admin-pass"])];
+            if ($seen !== [true, true, false, false, false, false, "admin", false, true]) { fwrite(STDERR, "ADMIN ACCESS MISMATCH ".json_encode($seen)."\n"); exit(1); }
             echo "ADMIN ACCESS OK\n";
           '
   runtime-phpstan:
@@ -231,11 +238,15 @@ jobs:
           composer require --dev larastan/larastan:"^3.0" --no-interaction
           cd "$GITHUB_WORKSPACE"
           pnpm --filter @camis/cli exec tsx -e "import { readFileSync, writeFileSync } from 'node:fs';
-            import { isPatchedUserModel, patchUserModel } from './src/commands/scaffold';
+            import { isPatchedUserModel, patchAdminPanelProvider, patchUserModel } from './src/commands/scaffold';
             const f = process.env.GITHUB_WORKSPACE + '/app/app/Models/User.php';
             const patched = patchUserModel(readFileSync(f, 'utf8'));
             if (!isPatchedUserModel(patched)) { console.error('User model patch did not apply'); process.exit(1); }
-            writeFileSync(f, patched);"
+            writeFileSync(f, patched);
+            const p = process.env.GITHUB_WORKSPACE + '/app/app/Providers/Filament/AdminPanelProvider.php';
+            const panel = patchAdminPanelProvider(readFileSync(p, 'utf8'));
+            if (!panel.includes(\"->authGuard('admin')\")) { console.error('admin panel patch did not apply'); process.exit(1); }
+            writeFileSync(p, panel);"
       - name: Overlay the Strapi API style on both storage layouts
         run: |
           cp -r app app-storage
@@ -292,11 +303,15 @@ jobs:
           composer require webonyx/graphql-php:"^15.19" --no-interaction
           cd "$GITHUB_WORKSPACE"
           pnpm --filter @camis/cli exec tsx -e "import { readFileSync, writeFileSync } from 'node:fs';
-            import { isPatchedUserModel, patchUserModel } from './src/commands/scaffold';
+            import { isPatchedUserModel, patchAdminPanelProvider, patchUserModel } from './src/commands/scaffold';
             const f = process.env.GITHUB_WORKSPACE + '/app/app/Models/User.php';
             const patched = patchUserModel(readFileSync(f, 'utf8'));
             if (!isPatchedUserModel(patched)) { console.error('User model patch did not apply'); process.exit(1); }
-            writeFileSync(f, patched);"
+            writeFileSync(f, patched);
+            const p = process.env.GITHUB_WORKSPACE + '/app/app/Providers/Filament/AdminPanelProvider.php';
+            const panel = patchAdminPanelProvider(readFileSync(p, 'utf8'));
+            if (!panel.includes(\"->authGuard('admin')\")) { console.error('admin panel patch did not apply'); process.exit(1); }
+            writeFileSync(p, panel);"
       - name: Overlay (apiStyle strapi)
         run: pnpm --filter @camis/adapter-filament overlay "$GITHUB_WORKSPACE/app" --style strapi
       - name: Patch bootstrap/app.php as camis scaffold does
@@ -627,10 +642,10 @@ jobs:
           cd app
           if php artisan camis:admin admin@example.test --password=first-admin-pass; then echo "camis:admin made an admin with no admin role"; exit 1; fi
           php artisan tinker --execute='
-            $panel = \Filament\Facades\Filament::getPanel("admin");
-            $user = \App\Models\User::factory()->create(["username" => "signed-up", "email" => "signed-up@example.test"]);
+            $user = \App\Models\User::factory()->create(["username" => "signed-up", "email" => "signed-up@example.test", "password" => \Illuminate\Support\Facades\Hash::make("signed-up-pass")]);
             $user->assignRole("authenticated");
-            if ($user->canAccessPanel($panel) !== false) { fwrite(STDERR, "an API user may sign in to the admin\n"); exit(1); }
+            $seen = [\Filament\Facades\Filament::getPanel("admin")->getAuthGuard(), \Illuminate\Support\Facades\Auth::guard("admin")->validate(["email" => "signed-up@example.test", "password" => "signed-up-pass"])];
+            if ($seen !== ["admin", false]) { fwrite(STDERR, "an API user may sign in to the admin ".json_encode($seen)."\n"); exit(1); }
             echo "ADMIN ACCESS OK\n";
           '
       - name: Strapi sign-in provider vectors (recorded from strapi-php against a stand-in provider)
@@ -715,14 +730,14 @@ jobs:
             --vectors $F/session-vectors.json --expected $F/session-vectors.expected.json
       - name: Strapi's OpenAPI document at /documentation lists only routes the app serves
         run: node packages/adapter-filament/scripts/strapi-openapi-routes.mjs app http://127.0.0.1:8765
-      - name: Filament admin publishes drafts, translates, keeps the media library and its folders, manages users, API and transfer tokens, exports and imports Strapi archives, builds dynamic zones, links inside components and nested repeatables, keeps link order, imports Strapi's tokens, searches, sorts, filters, deletes, duplicates and bulk-publishes lists, makes uids, records creators and lays views out as configured, sends email for a token holding the action, shows and (in development) edits the content model in the Content-Type Builder; GraphQL refuses what REST refuses
+      - name: Filament admin publishes drafts, translates, keeps the media library and its folders, manages users, API and transfer tokens, exports and imports Strapi archives, builds dynamic zones, links inside components and nested repeatables, keeps link order, imports Strapi's tokens, searches, sorts, filters, deletes, duplicates and bulk-publishes lists, makes uids, records creators and lays views out as configured, sends email for a token holding the action, shows and (in development) edits the content model in the Content-Type Builder, keeps admin accounts apart and signs them in through Strapi's admin API; GraphQL refuses what REST refuses
         run: |
           cd app
           # The cached config would point the tests at the served database instead of :memory:.
           php artisan config:clear
           S=../packages/adapter-filament/scripts/php
-          cp $S/DraftAdminTest.php $S/LocaleAdminTest.php $S/MediaAdminTest.php $S/FoldersTest.php $S/UsersAdminTest.php $S/ProvidersTest.php $S/ApiTokensTest.php $S/TransferTokensTest.php $S/DataTransferTest.php $S/StrapiAdminTest.php $S/WebhooksTest.php $S/DynamicZonesTest.php $S/GraphqlTest.php $S/LinkOrderAdminTest.php $S/TokenImportTest.php $S/ContentManagerListTest.php $S/ComponentIdTest.php $S/ComponentRelationsAdminTest.php $S/ContentManagerViewTest.php $S/SettingsPagesTest.php $S/EmailApiTest.php $S/ContentTypeBuilderTest.php tests/Feature/
-          php artisan test tests/Feature/DraftAdminTest.php tests/Feature/LocaleAdminTest.php tests/Feature/MediaAdminTest.php tests/Feature/FoldersTest.php tests/Feature/UsersAdminTest.php tests/Feature/ProvidersTest.php tests/Feature/ApiTokensTest.php tests/Feature/TransferTokensTest.php tests/Feature/DataTransferTest.php tests/Feature/StrapiAdminTest.php tests/Feature/WebhooksTest.php tests/Feature/DynamicZonesTest.php tests/Feature/GraphqlTest.php tests/Feature/LinkOrderAdminTest.php tests/Feature/TokenImportTest.php tests/Feature/ContentManagerListTest.php tests/Feature/ComponentIdTest.php tests/Feature/ComponentRelationsAdminTest.php tests/Feature/ContentManagerViewTest.php tests/Feature/SettingsPagesTest.php tests/Feature/EmailApiTest.php tests/Feature/ContentTypeBuilderTest.php
+          cp $S/DraftAdminTest.php $S/LocaleAdminTest.php $S/MediaAdminTest.php $S/FoldersTest.php $S/UsersAdminTest.php $S/ProvidersTest.php $S/ApiTokensTest.php $S/TransferTokensTest.php $S/DataTransferTest.php $S/StrapiAdminTest.php $S/WebhooksTest.php $S/DynamicZonesTest.php $S/GraphqlTest.php $S/LinkOrderAdminTest.php $S/TokenImportTest.php $S/ContentManagerListTest.php $S/ComponentIdTest.php $S/ComponentRelationsAdminTest.php $S/ContentManagerViewTest.php $S/SettingsPagesTest.php $S/EmailApiTest.php $S/ContentTypeBuilderTest.php $S/AdminAccountsTest.php tests/Feature/
+          php artisan test tests/Feature/DraftAdminTest.php tests/Feature/LocaleAdminTest.php tests/Feature/MediaAdminTest.php tests/Feature/FoldersTest.php tests/Feature/UsersAdminTest.php tests/Feature/ProvidersTest.php tests/Feature/ApiTokensTest.php tests/Feature/TransferTokensTest.php tests/Feature/DataTransferTest.php tests/Feature/StrapiAdminTest.php tests/Feature/WebhooksTest.php tests/Feature/DynamicZonesTest.php tests/Feature/GraphqlTest.php tests/Feature/LinkOrderAdminTest.php tests/Feature/TokenImportTest.php tests/Feature/ContentManagerListTest.php tests/Feature/ComponentIdTest.php tests/Feature/ComponentRelationsAdminTest.php tests/Feature/ContentManagerViewTest.php tests/Feature/SettingsPagesTest.php tests/Feature/EmailApiTest.php tests/Feature/ContentTypeBuilderTest.php tests/Feature/AdminAccountsTest.php
       - name: camis:schema-sync brings the database up to the generated migrations and keeps its rows (${{ matrix.db }})
         run: |
           cd app

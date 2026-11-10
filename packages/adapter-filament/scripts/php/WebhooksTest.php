@@ -9,6 +9,7 @@ use App\Filament\Resources\Posts\Pages\EditPost;
 use App\Filament\Resources\Webhooks\Pages\CreateWebhook;
 use App\Filament\Resources\Webhooks\Pages\EditWebhook;
 use App\Filament\Resources\Webhooks\Pages\ListWebhooks;
+use App\Models\AdminUser;
 use App\Models\Author;
 use App\Models\Post;
 use App\Models\StrapiWebhook;
@@ -38,9 +39,9 @@ class WebhooksTest extends TestCase
         foreach ($permissions as $permission) {
             \Spatie\Permission\Models\Permission::findOrCreate($permission);
         }
-        $user = User::factory()->create(['username' => 'admin']);
+        $user = AdminUser::forceCreate(['firstname' => 'Admin', 'email' => 'admin@example.test', 'is_active' => true]);
         $user->givePermissionTo($permissions);
-        $this->actingAs($user);
+        $this->actingAs($user, 'admin');
         Filament::setCurrentPanel(Filament::getPanel('admin'));
     }
 

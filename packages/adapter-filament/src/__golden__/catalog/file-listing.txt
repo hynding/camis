@@ -22,11 +22,14 @@ overwrite app/Filament/Resources/Tags/TagResource.php
 overwrite app/Http/Controllers/Api/ArticleApiController.php
 overwrite app/Http/Controllers/Api/AuthorApiController.php
 overwrite app/Http/Controllers/Api/TagApiController.php
+overwrite app/Models/AdminUser.php
 overwrite app/Models/Article.php
 overwrite app/Models/Author.php
 overwrite app/Models/Concerns/AdminAccess.php
 overwrite app/Models/Tag.php
 overwrite app/Support/JsonText.php
+overwrite config/auth.php
+overwrite database/migrations/0001_01_01_000003_create_admin_users_table.php
 overwrite database/migrations/0001_01_02_000001_create_authors_table.php
 overwrite database/migrations/0001_01_02_000002_create_articles_table.php
 overwrite database/migrations/0001_01_02_000003_create_tags_table.php

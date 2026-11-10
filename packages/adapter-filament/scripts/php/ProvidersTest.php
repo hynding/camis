@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Filament\Pages\UsersPermissionsProviders;
+use App\Models\AdminUser;
 use App\Models\User;
 use App\Support\StrapiProviders;
 use Filament\Facades\Filament;
@@ -104,9 +105,9 @@ class ProvidersTest extends TestCase
     {
         $this->seed(\Database\Seeders\RolePermissionSeeder::class);
         \Spatie\Permission\Models\Permission::findOrCreate('user.update');
-        $admin = User::factory()->create(['username' => 'admin']);
+        $admin = AdminUser::forceCreate(['firstname' => 'Admin', 'email' => 'admin@example.test', 'is_active' => true]);
         $admin->givePermissionTo('user.update');
-        $this->actingAs($admin);
+        $this->actingAs($admin, 'admin');
         Filament::setCurrentPanel(Filament::getPanel('admin'));
         $this->assertFalse(StrapiProviders::enabled('github'));
 
