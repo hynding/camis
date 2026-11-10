@@ -219,20 +219,20 @@ final class StrapiExport
         $roles = [];
         if (class_exists(Role::class)) {
             foreach (Role::query()->with('permissions')->orderBy('id')->get() as $role) {
-                $roles[] = [(int) $role->id, (string) $role->name, $role->permissions->pluck('name')->all(), self::stamp($role->created_at) ?? $now, self::stamp($role->updated_at) ?? $now];
+                $roles[] = [(int) $role->id, (string) $role->name, $role->permissions->pluck('name')->all(), self::stamp($role->created_at) ?? $now, self::stamp($role->updated_at) ?? $now, (string) ($role->document_id ?? '')];
             }
         } else {
             // Without roles every caller may do everything the API offers.
             $all = array_keys(StrapiTransferMap::ACTIONS);
-            $roles = [[0, 'authenticated', $all, $now, $now], [-1, 'public', $all, $now, $now]];
+            $roles = [[0, 'authenticated', $all, $now, $now, ''], [-1, 'public', $all, $now, $now, '']];
         }
         $permission = 0;
-        foreach ($roles as $index => [$id, $type, $grants, $created, $updated]) {
+        foreach ($roles as $index => [$id, $type, $grants, $created, $updated, $documentId]) {
             $ref = $index + 1;
             $this->roleRefs[$id] = $ref;
             [$name, $description, $defaults] = self::ROLES[$type] ?? [ucfirst(str_replace(['_', '-'], ' ', $type)), '', []];
             $this->entity(self::ROLE, $ref, [
-                'documentId' => self::documentId(), 'name' => $name, 'description' => $description, 'type' => $type,
+                'documentId' => $documentId !== '' ? $documentId : self::documentId(), 'name' => $name, 'description' => $description, 'type' => $type,
                 'createdAt' => $created, 'updatedAt' => $updated, 'publishedAt' => $created, 'locale' => null,
             ]);
             $actions = $defaults;

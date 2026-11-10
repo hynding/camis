@@ -114,6 +114,35 @@ describe("importCommand", () => {
     expect(lines.join("\n")).toMatch(/✓ deployment settings → .*deployment\.env/);
     expect(lines.join("\n")).toContain("uploadProvider");
   });
+  it("writes the CORS settings of a Strapi project's config/middlewares", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "camis-cli-strapi-cors-"));
+    const ctDir = join(dir, "src/api/article/content-types/article");
+    await mkdir(ctDir, { recursive: true });
+    await writeFile(
+      join(ctDir, "schema.json"),
+      JSON.stringify({
+        kind: "collectionType",
+        info: { singularName: "article", pluralName: "articles", displayName: "Article" },
+        attributes: { title: { type: "string" } },
+      }),
+    );
+    await mkdir(join(dir, "config"));
+    const middlewares = [
+      "strapi::errors",
+      { name: "strapi::cors", config: { origin: [{ env: "FRONTEND_URL" }], maxAge: 600 } },
+    ];
+    await writeFile(join(dir, "config/middlewares.js"), "module.exports = [];\n");
+    const lines: string[] = [];
+    const written: Record<string, string> = {};
+    const io: Io = {
+      ...memIo({}, lines, written),
+      capture: () => Promise.resolve({ code: 0, stdout: JSON.stringify(middlewares) }),
+    };
+    const code = await importCommand("strapi", dir, join(dir, "ir.json"), io);
+    expect(code).toBe(0);
+    const env = written[join(dir, "deployment.env")];
+    expect(env).toContain("CAMIS_CORS_ORIGIN=${FRONTEND_URL}\nCAMIS_CORS_MAX_AGE=600\n");
+  });
   // Strapi's upload plugin is always there: a project with media fields gets the media library's
   // type, as `camis new --from-strapi` gives it, or no role could ever be granted its files.
   it("declares the media library when a Strapi project uses media", async () => {

@@ -152,6 +152,22 @@ describe("users-permissions register and /users queries", () => {
       "\\Spatie\\Permission\\Models\\Role::class => 'plugin::users-permissions.role'",
     );
   });
+  it("keeps a role's own documentId, on a column added after Spatie made the roles table", () => {
+    expect(content("app/Http/Serializers/RoleSerializer.php")).toContain(
+      "'documentId' => ['column' => 'document_id', 'type' => 'string']",
+    );
+    const migration = result.files.find((f) =>
+      f.path.endsWith("_add_document_id_to_roles_table.php"),
+    );
+    expect(migration?.content).toContain(
+      "$table->string('document_id', 24)->nullable()->unique();",
+    );
+    // Spatie's migration is named for the day it was published, so this one must sort after any date.
+    expect(
+      migration !== undefined &&
+        migration.path > "database/migrations/2999_12_31_235959_create_permission_tables.php",
+    ).toBe(true);
+  });
   it("user-query-vectors: every step has a unique name and a recorded strapi-php outcome", () => {
     const read = (file: string): unknown =>
       JSON.parse(readFileSync(join(__dirname, "..", "__fixtures__", file), "utf8"));

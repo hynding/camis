@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasOneOrMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Spatie\Permission\Models\Role;
 
 final class StrapiImport
@@ -410,7 +411,35 @@ final class StrapiImport
             DB::table($table)->where('id', $id)->update([$column => $target]);
         }
         $this->links($links);
+        $this->roleDocumentIds($entities);
         $this->compareRoles($entities, $links);
+    }
+
+    /**
+     * A role keeps the documentId the archive gave it, as Strapi's import keeps every entry's; the
+     * role itself, and what it grants, stay the IR's.
+     *
+     * @param list<array<string, mixed>> $entities
+     */
+    private function roleDocumentIds(array $entities): void
+    {
+        // A project without grants keeps its roles without a documentId column.
+        if (! class_exists(Role::class) || ! Schema::hasColumn((new Role())->getTable(), 'document_id')) {
+            return;
+        }
+        foreach ($entities as $entity) {
+            $documentId = (string) ($entity['data']['documentId'] ?? '');
+            if ($entity['type'] !== 'plugin::users-permissions.role' || $documentId === '') {
+                continue;
+            }
+            $role = Role::query()->where('name', (string) ($entity['data']['type'] ?? ''))->first();
+            if ($role === null) {
+                continue;
+            }
+            // Another role may hold it from an earlier import, and the column is unique.
+            Role::query()->where('document_id', $documentId)->whereKeyNot($role->getKey())->update(['document_id' => null]);
+            $role->forceFill(['document_id' => $documentId])->saveQuietly();
+        }
     }
 
     /**

@@ -89,8 +89,8 @@ export const importCommand = async (
 };
 
 /**
- * The Laravel .env lines for how a Strapi project is run (config/plugins and config/api: its
- * upload and email providers, API page sizes and sessions), written for the Filament app; the
+ * The Laravel .env lines for how a Strapi project is run (config/plugins, config/api and
+ * config/middlewares: its upload and email providers, API page sizes, sessions and CORS), written for the Filament app; the
  * gaps are the options that have no counterpart there.
  */
 const writeDeploymentEnv = async (
@@ -100,17 +100,18 @@ const writeDeploymentEnv = async (
   shown: string,
 ): Promise<CapabilityGap[]> => {
   const capture = io.capture?.bind(io);
-  const plugins = await readStrapiConfig(dir, "plugins", capture);
-  const api = await readStrapiConfig(dir, "api", capture);
-  for (const read of [plugins, api])
+  const configs = [];
+  for (const name of ["plugins", "api", "middlewares"]) {
+    const read = await readStrapiConfig(dir, name, capture);
     if (!read.ok) {
       io.out(`  ⚠ ${read.message}; ${shown} not written`);
       return [];
     }
-  const pluginsConfig = plugins.ok ? plugins.config : undefined;
-  const apiConfig = api.ok ? api.config : undefined;
-  if (pluginsConfig === undefined && apiConfig === undefined) return [];
-  const { settings, gaps } = deploymentSettings(pluginsConfig ?? {}, apiConfig);
+    configs.push(read.config);
+  }
+  const [pluginsConfig, apiConfig, middlewaresConfig] = configs;
+  if (configs.every((config) => config === undefined)) return [];
+  const { settings, gaps } = deploymentSettings(pluginsConfig ?? {}, apiConfig, middlewaresConfig);
   const { env, packages } = deploymentEnv(settings);
   if (env !== "") {
     await io.writeFile(path, env);

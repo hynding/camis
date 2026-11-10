@@ -208,6 +208,8 @@ import {
   emitUsersPermissionsMigration,
   SETTINGS_MIGRATION_PATH,
   USERS_PERMISSIONS_MIGRATION_PATH,
+  ROLE_DOCUMENT_ID_MIGRATION_PATH,
+  emitRoleDocumentIdMigration,
 } from "./users-permissions/users-permissions";
 
 export interface StrapiApiInput {
@@ -541,7 +543,10 @@ const usersPermissionsFiles = (
   { path: "app/Support/StrapiUsers.php", content: emitStrapiUsers() },
   { path: "app/Http/Serializers/UserSerializer.php", content: emitUserSerializer(secured) },
   ...(secured
-    ? [{ path: "app/Http/Serializers/RoleSerializer.php", content: emitRoleSerializer() }]
+    ? [
+        { path: "app/Http/Serializers/RoleSerializer.php", content: emitRoleSerializer() },
+        { path: ROLE_DOCUMENT_ID_MIGRATION_PATH, content: emitRoleDocumentIdMigration() },
+      ]
     : []),
   { path: "app/Support/StrapiSettings.php", content: emitStrapiSettings() },
   {

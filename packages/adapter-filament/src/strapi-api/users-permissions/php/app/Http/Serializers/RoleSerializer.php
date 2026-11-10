@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Serializers;
 
 use App\Support\StrapiRoles;
+use App\Support\StrapiUsers;
 use Spatie\Permission\Models\Role;
 
 final class RoleSerializer
@@ -12,8 +13,7 @@ final class RoleSerializer
     /** Wire path → column, for StrapiQuery's filters, sort and fields. */
     public const FIELDS = [
         'id' => ['column' => 'id', 'type' => 'integer'],
-        // The role's type names it for good; Strapi's documentId is a random one.
-        'documentId' => ['column' => 'name', 'type' => 'string'],
+        'documentId' => ['column' => 'document_id', 'type' => 'string'],
         'name' => ['column' => 'name', 'type' => 'string'],
         'description' => ['column' => 'name', 'type' => 'string'],
         'type' => ['column' => 'name', 'type' => 'string'],
@@ -34,7 +34,7 @@ final class RoleSerializer
     {
         return [
             'id' => $m->getKey(),
-            'documentId' => $m->name,
+            'documentId' => self::documentId($m),
             'name' => ucfirst($m->name),
             'description' => StrapiRoles::description($m),
             'type' => $m->name,
@@ -42,5 +42,15 @@ final class RoleSerializer
             'updatedAt' => $m->updated_at?->toIso8601ZuluString('millisecond'),
             'publishedAt' => $m->created_at?->toIso8601ZuluString('millisecond'),
         ];
+    }
+
+    /** The one a Strapi archive gave the role, else one made the first time the role is read. */
+    public static function documentId(Role $m): string
+    {
+        if ((string) $m->getAttribute('document_id') === '') {
+            $m->forceFill(['document_id' => StrapiUsers::newDocumentId()])->saveQuietly();
+        }
+
+        return (string) $m->getAttribute('document_id');
     }
 }

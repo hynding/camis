@@ -448,6 +448,7 @@ overwrite database/migrations/0001_01_02_000045_create_menus_sections_menu_item_
 overwrite database/migrations/0001_01_02_000046_add_menus_foreign_keys.php
 overwrite database/migrations/0001_01_03_000000_add_link_order_columns.php
 overwrite database/migrations/0001_01_03_000001_create_upload_folders_table.php
+overwrite database/migrations/9999_12_31_000000_add_document_id_to_roles_table.php
 overwrite database/seeders/RolePermissionSeeder.php
 overwrite resources/camis/schema.json
 overwrite resources/strapi/schemas.jsonl
