@@ -71,6 +71,7 @@ import { emitHasDocumentId, emitStrapiError, emitStrapiQuery } from "./core/rest
 import { emitApiConfig, emitStrapiRoutes } from "./core/routes";
 import { emitCorsConfig } from "./core/cors";
 import { emitStrapiMimeTypes } from "./upload/upload-security";
+import { emitAdminScopeMethod } from "./core/admin-scope";
 import { emitScopeMethod } from "./core/scope";
 import {
   emitConnectController,
@@ -247,8 +248,10 @@ export interface StrapiApiInput {
 export interface StrapiApiEmission {
   files: GeneratedFile[];
   gaps: CapabilityGap[];
-  /** content type name → scopeForUser PHP method (spliced into the model). */
+  /** content type name → scopeForUser PHP method, and forAdmin's if any (spliced into the model). */
   scopeMethods: Map<string, string>;
+  /** The types whose Content Manager list goes through the model's forAdmin scope. */
+  adminScoped?: Set<string>;
   /**
    * content type name → its listed to-one foreign keys and their order columns, which the model's
    * `HasLinkOrder` keeps (Laravel storage only: Strapi storage writes its own models).
@@ -262,12 +265,18 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
   const localized = input.localized ?? new Set<string>();
   const secured = bundle.roles.length > 0;
   const guests = input.guests === true;
+  // Admin writes record the admin account that made an entry (HasCreatorFields).
   const perm = secured
-    ? projectFilamentPermissions(doc, bundle.roles)
-    : { readConditions: new Map<string, never>(), assigns: new Map<string, string[]>() };
+    ? projectFilamentPermissions(doc, bundle.roles, { creators: true })
+    : {
+        readConditions: new Map<string, never>(),
+        adminReadScopes: new Map<string, never>(),
+        assigns: new Map<string, string[]>(),
+      };
   const files: GeneratedFile[] = [];
   const gaps: CapabilityGap[] = [];
   const scopeMethods = new Map<string, string>();
+  const adminScoped = new Set<string>();
   const fileModel = input.media === undefined ? undefined : filamentNames(input.media).model;
 
   const shapes = new Map<string, WireShape>();
@@ -300,8 +309,14 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     });
     if (secured) {
       const scope = emitScopeMethod(ct, perm.readConditions.get(ct.name), "laravel", guests, true);
-      scopeMethods.set(ct.name, scope.php);
       if (scope.gap) gaps.push(scope.gap);
+      const adminScope = perm.adminReadScopes.get(ct.name);
+      const admin = adminScope === undefined ? undefined : emitAdminScopeMethod(ct, adminScope);
+      if (admin !== undefined) {
+        adminScoped.add(ct.name);
+        gaps.push(...admin.gaps);
+      }
+      scopeMethods.set(ct.name, admin === undefined ? scope.php : `${scope.php}\n\n${admin.php}`);
     }
   }
 
@@ -530,7 +545,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
       content: emitMediaLibrarySettingsPage(secured),
     });
   gaps.push(remoteTransferGap);
-  return { files, gaps, scopeMethods, linkOrders };
+  return { files, gaps, scopeMethods, adminScoped, linkOrders };
 };
 
 /** users-permissions beyond register and login: accounts, their settings and their admin. */

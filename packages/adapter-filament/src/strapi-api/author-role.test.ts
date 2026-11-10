@@ -14,7 +14,7 @@ describe("an admin role limited to the entries its accounts created", () => {
 
   it("generates with no gap about the condition", () => {
     expect(
-      result.gaps.filter((g) =>
+      result.gaps.gaps.filter((g) =>
         ["conditionContext", "conditionConflict", "adminListScope"].includes(g.feature),
       ),
     ).toEqual([]);
@@ -36,7 +36,7 @@ describe("an admin role limited to the entries its accounts created", () => {
     const view = policy.slice(policy.indexOf("public function view("));
     expect(view).toContain("if ($user->hasAnyRole(['authenticated', 'editor'])) {");
     expect(content("app/Models/Story.php")).toMatch(
-      /public function scopeForUser\(Builder \$q, User \$user\): Builder\n {4}\{\n(?: {8}.*\n)* {8}return \$q;\n {4}\}/,
+      /public function scopeForUser\(Builder \$q, \?User \$user\): Builder\n {4}\{\n {8}return \$q;\n {4}\}/,
     );
   });
 
@@ -68,6 +68,8 @@ describe("an admin role limited to the entries its accounts created", () => {
   // Only the Strapi API style records who created an entry.
   it("reports the condition where the target records no creator", () => {
     const plain = filamentAdapter.generate(authorRoleBundle, { projectName: "press" });
-    expect(plain.gaps.filter((g) => g.feature === "conditionContext").length).toBeGreaterThan(0);
+    expect(plain.gaps.gaps.filter((g) => g.feature === "conditionContext").length).toBeGreaterThan(
+      0,
+    );
   });
 });

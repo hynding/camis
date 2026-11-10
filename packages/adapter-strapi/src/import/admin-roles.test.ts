@@ -170,9 +170,9 @@ describe("importStrapiAdminRoles", () => {
     expect(imported.roles[0]?.grants).toEqual([{ contentType: "Article", actions: ["create"] }]);
     expect(imported.gaps.map((g) => g.message)).toEqual([
       'admin role "author": plugin::content-manager.explorer.read on Article: only when admin::has-same-role-as-creator; camis has no such condition, so not granted',
-      'admin role "author": plugin::content-manager.explorer.publish on Article: only when admin::is-creator, admin::has-same-role-as-creator; camis has no such condition, so not granted',
       'admin role "author": plugin::content-manager.explorer.update on Article: only the fields title; a camis grant covers every field, so not granted',
       'admin role "author": plugin::content-manager.explorer.delete on Article: only the locales en; a camis grant covers every locale, so not granted',
+      'admin role "author": plugin::content-manager.explorer.publish on Article: only when admin::is-creator, admin::has-same-role-as-creator; camis has no such condition, so not granted',
     ]);
     expect(imported.gaps[0]).toMatchObject({
       feature: "strapiAdminPermission",

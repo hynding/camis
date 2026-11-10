@@ -1,7 +1,8 @@
 import type { StorageLayout } from "@camis/adapter-kernel";
 import { emitPhp } from "@camis/expr-php-emit";
 import type { ContentType } from "@camis/ir-schema";
-import { PUBLIC_ROLE } from "@camis/permissions";
+import { freeVars } from "@camis/expr";
+import { CREATED_BY, PUBLIC_ROLE } from "@camis/permissions";
 import { filamentNames, snakeColumn } from "../names";
 import { phpSingleQuoted } from "../php-literal";
 import type { PolicyMethodSpec, PolicySpec } from "./project";
@@ -25,7 +26,12 @@ const guestData = (layout: StorageLayout): string[] => [
   "            ]),",
 ];
 
-const recordData = (ct: ContentType, layout: StorageLayout): string[] => [
+// Strapi's createdBy is an admin account, while an API user's id is a row of another table:
+// read as the creator's, it would match whichever entry an admin of the same id made.
+const creatorData =
+  "            'record.createdBy' => $user instanceof AdminUser ? $record->created_by_id : null,";
+
+const recordData = (ct: ContentType, layout: StorageLayout, creator: boolean): string[] => [
   ...ct.fields
     .filter((f) => f.type !== "relation" && f.type !== "component")
     .map(
@@ -46,6 +52,7 @@ const recordData = (ct: ContentType, layout: StorageLayout): string[] => [
           layout === "strapi" ? `${f.name}Id` : `${snakeColumn(f.name)}_id`
         },`,
     ),
+  ...(creator && !ct.fields.some((f) => `record.${f.name}` === CREATED_BY) ? [creatorData] : []),
 ];
 
 /**
@@ -62,14 +69,31 @@ const grantCheck = (m: PolicyMethodSpec, layout: StorageLayout, guests: boolean)
   return `in_array($user->roleType(), [${m.roles.map(phpSingleQuoted).join(", ")}], true)`;
 };
 
-/** Whether the method's body actually evaluates its condition (and so needs Ring1). */
+/**
+ * Whether $user holds one of `roles`. A guest holds only the public role, and a signed-in user
+ * never does (PublicRole).
+ */
+const holdsRole = (roles: string[], layout: StorageLayout, guests: boolean): string => {
+  const list = (names: string[]): string => `[${names.map(phpSingleQuoted).join(", ")}]`;
+  if (layout === "strapi") return `in_array($user->roleType(), ${list(roles)}, true)`;
+  if (!guests) return `$user->hasAnyRole(${list(roles)})`;
+  const others = roles.filter((r) => r !== PUBLIC_ROLE);
+  if (others.length === roles.length) return `$user !== null && $user->hasAnyRole(${list(roles)})`;
+  return others.length === 0
+    ? "$user === null"
+    : `$user === null || $user->hasAnyRole(${list(others)})`;
+};
+
+/** Whether the method's body actually evaluates a condition (and so needs Ring1). */
 const evaluatesCondition = (m: PolicyMethodSpec): boolean =>
-  m.condition !== undefined && !alwaysDenies(m);
+  m.conditions !== undefined && !alwaysDenies(m);
 
 // The admin signs in as an AdminUser and an API caller is a User, and a policy decides for both;
 // the Strapi storage layout has no admin.
 const userType = (layout: StorageLayout): string =>
   layout === "strapi" ? "User" : "User|AdminUser";
+
+const RESULT_HOLDS = "$result['ok'] === true && $result['value'] === true";
 
 const method = (
   m: PolicyMethodSpec,
@@ -82,23 +106,46 @@ const method = (
     ? `    public function ${m.method}(${user}, ${filamentNames(ct).model} $record): bool`
     : `    public function ${m.method}(${user}): bool`;
   const check = grantCheck(m, layout, guests);
-  if (m.condition === undefined || alwaysDenies(m)) {
+  if (m.conditions === undefined || alwaysDenies(m)) {
     return `${sig}\n    {\n        return ${check};\n    }`;
   }
+  const groups = m.conditions;
+  const conditioned = new Set(groups.flatMap((g) => g.roles));
+  const outright = m.roles.filter((r) => !conditioned.has(r));
+  const creator = groups.some((g) => freeVars(g.condition).includes(CREATED_BY));
   const data = [
     ...(guests ? guestData(layout) : userData(layout)),
-    ...(m.record ? recordData(ct, layout) : []),
+    ...(m.record ? recordData(ct, layout, creator) : []),
   ].join("\n");
-  return `${sig}
+  const head = `${sig}
     {
         if (! ${check}) {
             return false;
         }
-        $data = [
+${outright.length > 0 ? `        if (${holdsRole(outright, layout, guests)}) {\n            return true;\n        }\n` : ""}        $data = [
 ${data}
-        ];
-        $result = ${emitPhp(m.condition)};
-        return $result['ok'] === true && $result['value'] === true;
+        ];`;
+  // Every role holding the key is held to the one condition, so holding the key is enough.
+  if (outright.length === 0 && groups.length === 1) {
+    return `${head}
+        $result = ${emitPhp(groups[0]!.condition)};
+        return ${RESULT_HOLDS};
+    }`;
+  }
+  const tries = groups
+    .map(
+      (g) => `        if (${holdsRole(g.roles, layout, guests)}) {
+            $result = ${emitPhp(g.condition)};
+            if (${RESULT_HOLDS}) {
+                return true;
+            }
+        }`,
+    )
+    .join("\n");
+  return `${head}
+${tries}
+
+        return false;
     }`;
 };
 
