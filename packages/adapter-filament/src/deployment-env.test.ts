@@ -212,3 +212,38 @@ CAMIS_REGISTER_ALLOWED_FIELDS=nickname,picture
 `);
   });
 });
+
+describe("deploymentEnv — CORS", () => {
+  it("writes strapi::cors's settings as the CAMIS_CORS_* keys config/cors.php reads", () => {
+    const { env } = deploymentEnv({
+      cors: {
+        origin: ["https://app.example.com", { env: "FRONTEND_URL" }],
+        methods: ["GET", "POST"],
+        headers: "Content-Type,Authorization",
+        expose: ["X-Total-Count"],
+        maxAge: 600,
+        credentials: { env: "CORS_CREDENTIALS", default: true },
+      },
+    });
+    expect(env).toContain(`# CORS (strapi::cors)
+CAMIS_CORS_ORIGIN=https://app.example.com,\${FRONTEND_URL}
+CAMIS_CORS_METHODS=GET,POST
+CAMIS_CORS_HEADERS=Content-Type,Authorization
+CAMIS_CORS_EXPOSE=X-Total-Count
+CAMIS_CORS_MAX_AGE=600
+# The Strapi project falls back to true when CORS_CREDENTIALS is unset.
+CAMIS_CORS_CREDENTIALS=\${CORS_CREDENTIALS}
+`);
+  });
+
+  it("references an origin read from one variable", () => {
+    expect(deploymentEnv({ cors: { origin: { env: "CORS_ORIGIN" } } }).env).toContain(
+      "CAMIS_CORS_ORIGIN=${CORS_ORIGIN}\n",
+    );
+  });
+
+  // Strapi answers a preflight with the headers it asks for when the list is empty.
+  it("writes an empty headers list as *, which echoes the requested headers", () => {
+    expect(deploymentEnv({ cors: { headers: [] } }).env).toContain("CAMIS_CORS_HEADERS=*\n");
+  });
+});

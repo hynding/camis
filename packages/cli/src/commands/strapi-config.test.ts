@@ -147,3 +147,47 @@ describe("readStrapiConfig", () => {
     });
   });
 });
+
+describe("readStrapiConfig — config/middlewares", () => {
+  // config/middlewares is a list; a function (strapi::cors's per-request origin) comes back as {}.
+  const MIDDLEWARES = [
+    "strapi::errors",
+    {
+      name: "strapi::cors",
+      config: { origin: [{ env: "FRONTEND_URL" }, "https://app.example.com"], expose: {} },
+    },
+  ];
+
+  it("reads a Strapi project's config/middlewares.ts list", async () => {
+    const dir = await project(
+      "middlewares.ts",
+      `export default ({ env }: { env: any }) => [
+  "strapi::errors",
+  { name: "strapi::cors", config: { origin: [env("FRONTEND_URL"), "https://app.example.com"], expose: () => "X" } },
+];
+`,
+    );
+    expect(await readStrapiConfig(dir, "middlewares", capture)).toEqual({
+      ok: true,
+      config: MIDDLEWARES,
+    });
+  });
+
+  it.skipIf(!hasPhp)("reads a strapi-php project's config/middlewares.php list", async () => {
+    const dir = await project(
+      "middlewares.php",
+      `<?php
+declare(strict_types=1);
+use Strapi\\Utils\\EnvHelper;
+return static fn (EnvHelper $env): array => [
+    'strapi::errors',
+    ['name' => 'strapi::cors', 'config' => ['origin' => [$env('FRONTEND_URL'), 'https://app.example.com'], 'expose' => static fn () => 'X']],
+];
+`,
+    );
+    expect(await readStrapiConfig(dir, "middlewares", capture)).toEqual({
+      ok: true,
+      config: MIDDLEWARES,
+    });
+  });
+});
