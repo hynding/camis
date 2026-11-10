@@ -1,13 +1,13 @@
 import { PHP_MARKER } from "../../hooks/names";
 import { phpSingleQuoted } from "../../php-literal";
-import { strapiUser } from "../auth";
+import { strapiUser } from "../users-permissions/auth";
 
 /** Strapi's own default role for a freshly registered user, when the caller supplies none. */
 const STRAPI_DEFAULT_ROLE = "authenticated";
 
 /**
  * The Strapi-storage layout's `App\Http\Controllers\Api\AuthController` — same FQCN as the
- * Sanctum one (`../auth.ts`); only one is ever emitted per generated app, chosen by storage
+ * Sanctum one (`../users-permissions/auth.ts`); only one is ever emitted per generated app, chosen by storage
  * layout. It reads and writes `up_users`/`up_roles` directly (through `StrapiRows`) and mints
  * the same HS256 JWT shape Strapi's users-permissions plugin issues, so a session minted by
  * either backend authenticates on both.

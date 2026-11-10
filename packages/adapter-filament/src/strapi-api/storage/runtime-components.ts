@@ -7,4 +7,4 @@ import { runtimePhp } from "../../runtime-php";
  * five runtime files with real algorithmic weight.
  */
 export const emitStrapiComponents = (): string =>
-  runtimePhp(new URL("./../php/app/Support/StrapiComponents.php", import.meta.url));
+  runtimePhp(new URL("./php/app/Support/StrapiComponents.php", import.meta.url));

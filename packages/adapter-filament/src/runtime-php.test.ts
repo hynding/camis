@@ -7,7 +7,7 @@ import { filamentAdapter } from "./generate";
 import { PHP_MARKER } from "./hooks/names";
 import { runtimePhp } from "./runtime-php";
 import { strapiApiBundle } from "./strapi-api/__fixtures__/strapi-api";
-import { GRAPHQL_SCHEMA_PATH, emitStrapiGraphql } from "./strapi-api/graphql-runtime";
+import { GRAPHQL_SCHEMA_PATH, emitStrapiGraphql } from "./strapi-api/graphql/graphql-runtime";
 
 const sourceFile = (php: string): URL => {
   const path = join(mkdtempSync(join(tmpdir(), "camis-runtime-php-")), "Example.php");

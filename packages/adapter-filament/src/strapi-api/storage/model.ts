@@ -241,8 +241,8 @@ ${methodsSection}}
  * No `StrapiComponentAttributes`: Strapi's own user/role tables never carry component fields.
  */
 export const emitStorageUserModel = (): string =>
-  runtimePhp(new URL("./../php/app/Models/User.php", import.meta.url));
+  runtimePhp(new URL("./php/app/Models/User.php", import.meta.url));
 
 /** `App\Models\UpRole` on Strapi's `up_roles` — the users-permissions plugin's role table. */
 export const emitStorageUpRoleModel = (): string =>
-  runtimePhp(new URL("./../php/app/Models/UpRole.php", import.meta.url));
+  runtimePhp(new URL("./php/app/Models/UpRole.php", import.meta.url));
