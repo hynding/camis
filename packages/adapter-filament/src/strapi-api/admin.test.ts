@@ -180,7 +180,7 @@ describe("the Strapi-like admin", () => {
   // Filament offer it to everyone.
   it("gives each policy a deleteAny held by the delete grant", () => {
     const policy = content("app/Policies/PostPolicy.php");
-    expect(policy).toMatch(/public function deleteAny\(\??User \$user\): bool/);
+    expect(policy).toMatch(/public function deleteAny\(User\|AdminUser(\|null)? \$user\): bool/);
   });
 
   // Strapi's list filters by its fields, relations, timestamps and creators (not json, media,
@@ -262,17 +262,21 @@ describe("the Strapi-like admin", () => {
   it("records who made and last changed an entry, as Strapi's createdBy and updatedBy", () => {
     const migration = strapi.files.find((f) => /create_posts_table\.php$/.test(f.path))!.content;
     expect(migration).toContain(
-      "$table->foreignId('created_by_id')->nullable()->constrained('users')->nullOnDelete();",
+      "$table->foreignId('created_by_id')->nullable()->constrained('admin_users')->nullOnDelete();",
     );
     expect(migration).toContain(
-      "$table->foreignId('updated_by_id')->nullable()->constrained('users')->nullOnDelete();",
+      "$table->foreignId('updated_by_id')->nullable()->constrained('admin_users')->nullOnDelete();",
     );
     expect(content("app/Models/Post.php")).toContain("use HasCreatorFields;");
     expect(content("app/Models/Concerns/HasCreatorFields.php")).toContain(
       "public function createdBy(): BelongsTo",
     );
+    // Strapi's createdBy is an admin account, never an API user.
+    expect(content("app/Models/Concerns/HasCreatorFields.php")).toContain(
+      "return $this->belongsTo(AdminUser::class, 'created_by_id');",
+    );
     expect(content("app/Filament/Resources/Posts/Schemas/PostsTable.php")).toContain(
-      "'createdBy' => TextColumn::make('createdBy.name')->sortable(),",
+      "'createdBy' => TextColumn::make('createdBy.firstname')->sortable(),",
     );
   });
 
