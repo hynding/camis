@@ -1,6 +1,7 @@
 import type { StorageLayout } from "@camis/adapter-kernel";
 import type { Expression } from "@camis/expr";
 import type { ContentType, FieldType } from "@camis/ir-schema";
+import { CREATED_BY } from "@camis/permissions";
 import { snakeColumn } from "../../names";
 import { linkColumns, linkTable, strapiTable, type RelationField } from "../storage/names";
 
@@ -63,7 +64,12 @@ const STRINGY = new Set<FieldType>([
  * column comparison. `column` is still populated (as `<name>_id`) for shape parity but goes unused
  * whenever `link` is set. The `laravel` layout (the default) is unchanged.
  */
-export const whereContext = (ct: ContentType, layout: StorageLayout = "laravel"): WhereContext => {
+export const whereContext = (
+  ct: ContentType,
+  layout: StorageLayout = "laravel",
+  /** The table records the admin account that created each row (Strapi's createdBy). */
+  creators = false,
+): WhereContext => {
   const columns = new Map<string, { column: string; type: FieldType; link?: LinkInfo }>();
   const collided = new Set<string>();
   const claim = (
@@ -98,6 +104,7 @@ export const whereContext = (ct: ContentType, layout: StorageLayout = "laravel")
     if (f.type === "component" || f.type === "dynamicZone") continue;
     claim(`record.${f.name}`, { column: snakeColumn(f.name), type: f.type });
   }
+  if (creators) claim(CREATED_BY, { column: "created_by_id", type: "integer" });
   for (const key of collided) columns.delete(key);
   return { columns };
 };

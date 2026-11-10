@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { IrDocument } from "@camis/ir-schema";
+import { CREATED_BY } from "@camis/permissions";
 import { createRequire } from "node:module";
 import { afterEach, describe, expect, it } from "vitest";
 import { readStrapiAdminData, readStrapiAdminRoles } from "./read-admin-roles";
@@ -103,7 +104,7 @@ describe("readStrapiAdminRoles on a strapi-php database", () => {
     components: [],
   };
 
-  it("brings in Editor's grants, and only what Author and a custom role hold with no condition", () => {
+  it("brings in Editor's grants, Author's on the entries it created, and a custom role's", () => {
     const imported = readStrapiAdminRoles(FIXTURE, categories, ["public", "authenticated"]);
     expect(imported.superAdmin).toBe(true);
     expect(imported.roles).toEqual([
@@ -120,13 +121,24 @@ describe("readStrapiAdminRoles on a strapi-php database", () => {
         name: "author",
         description: "Authors can manage the content they have created.",
         admin: true,
-        grants: [{ contentType: "File", actions: ["create"] }],
+        grants: [
+          {
+            contentType: "Category",
+            actions: ["create", "read", "update"],
+            condition: {
+              kind: "eq",
+              left: { kind: "var", name: CREATED_BY },
+              right: { kind: "var", name: "user.id" },
+            },
+          },
+          { contentType: "File", actions: ["create"] },
+        ],
       },
       { name: "content-writer", description: "Writes articles", admin: true, grants: [] },
     ]);
     const messages = imported.gaps.map((g) => g.message);
     expect(messages).toContain(
-      'admin role "author": plugin::content-manager.explorer.create, plugin::content-manager.explorer.read, plugin::content-manager.explorer.update on Category: only when admin::is-creator; a camis grant has no such condition, so not granted',
+      'admin role "author": plugin::upload.read, plugin::upload.assets.update on File: only when admin::is-creator; camis records no creator of a file, so not granted',
     );
     expect(messages).toContain(
       'admin role "content-writer": admin::webhooks.read: settings and plugin actions are not imported; in camis the Settings pages follow the role\'s grants on the User type',

@@ -23,10 +23,14 @@ export const emitPermissions = (
   roles: Role[],
   layout: StorageLayout = "laravel",
   guests = false,
+  /** The target records who created an entry (the Strapi API style's createdBy). */
+  creators = false,
 ): PermissionEmission => {
   if (roles.length === 0) return { files: [], gaps: [] };
   const byName = new Map(doc.contentTypes.map((ct) => [ct.name, ct]));
-  const { permissionKeys, roleGrants, policies, gaps } = projectFilamentPermissions(doc, roles);
+  const { permissionKeys, roleGrants, policies, gaps } = projectFilamentPermissions(doc, roles, {
+    creators,
+  });
   const files: GeneratedFile[] =
     layout === "strapi"
       ? []
@@ -43,7 +47,7 @@ export const emitPermissions = (
     });
   }
   if (guests) files.push({ path: "app/Support/PublicRole.php", content: emitPublicRole() });
-  if (policies.some((p) => p.methods.some((m) => m.condition !== undefined))) {
+  if (policies.some((p) => p.methods.some((m) => m.conditions !== undefined))) {
     files.push({ path: "app/Support/Ring1.php", content: emitRing1File() });
   }
   return { files, gaps };

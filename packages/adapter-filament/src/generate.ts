@@ -371,6 +371,7 @@ export const filamentAdapter: GenerateAdapter = {
             versioned: versioned.has(ct.name),
             localized: localized.has(ct.name),
             secured: ir.roles.length > 0,
+            adminScoped: strapi?.adminScoped?.has(ct.name) === true,
             media: [
               ...mediaOf.map((f) => ({
                 field: f.name,
@@ -511,7 +512,13 @@ export const filamentAdapter: GenerateAdapter = {
         });
     }
 
-    const perm = emitPermissions(doc, ir.roles, storage, guests);
+    const perm = emitPermissions(
+      doc,
+      ir.roles,
+      storage,
+      guests,
+      apiStyle === "strapi" && storage !== "strapi",
+    );
     const allFiles = [
       ...files,
       ...hooks.files,

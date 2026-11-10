@@ -8,6 +8,7 @@ import { storageBundle } from "../strapi-api/storage/__fixtures__/storage";
 import type { PolicySpec } from "./project";
 import { projectFilamentPermissions } from "./project";
 import { emitPolicy } from "./policy";
+import { CREATED_BY } from "@camis/permissions";
 
 const hasPhp = (): boolean => {
   try {
@@ -23,6 +24,11 @@ const article: ContentType = {
   kind: "collection",
   fields: [{ type: "string", name: "status" }],
 } as ContentType;
+const published = {
+  kind: "eq",
+  left: { kind: "var", name: "record.status" },
+  right: { kind: "lit", value: "published" },
+} as const;
 const spec: PolicySpec = {
   contentType: "Article",
   model: "Article",
@@ -33,11 +39,7 @@ const spec: PolicySpec = {
       key: "article.read",
       record: true,
       roles: ["Editor"],
-      condition: {
-        kind: "eq",
-        left: { kind: "var", name: "record.status" },
-        right: { kind: "lit", value: "published" },
-      },
+      conditions: [{ roles: ["Editor"], condition: published }],
     },
     { method: "create", key: "article.create", record: false, roles: ["Editor"] },
   ],
@@ -81,6 +83,148 @@ describe("emitPolicy", () => {
   });
 });
 
+// A role holding an action outright is let through before any condition is read, and each role
+// holding it under a condition is held to its own.
+describe("emitPolicy — roles holding an action under different conditions", () => {
+  const draft = { ...published, right: { kind: "lit", value: "draft" } } as const;
+  const mixed: PolicySpec = {
+    contentType: "Article",
+    model: "Article",
+    methods: [
+      {
+        method: "update",
+        key: "article.update",
+        record: true,
+        roles: ["author", "editor", "reviewer"],
+        conditions: [
+          { roles: ["author"], condition: draft },
+          { roles: ["reviewer"], condition: published },
+        ],
+      },
+    ],
+  };
+  const body = (php: string): string =>
+    php.slice(php.indexOf("public function update"), php.lastIndexOf("}"));
+
+  it("lets a role holding it outright through, then tries each condition for its roles", () => {
+    expect(body(emitPolicy(mixed, article)))
+      .toBe(`public function update(User|AdminUser $user, Article $record): bool
+    {
+        if (! $user->can('article.update')) {
+            return false;
+        }
+        if ($user->hasAnyRole(['editor'])) {
+            return true;
+        }
+        $data = [
+            'user.id' => $user->id,
+            'user.email' => $user->email,
+            'user.role' => $user->getRoleNames()->first(),
+            'record.status' => $record->status,
+        ];
+        if ($user->hasAnyRole(['author'])) {
+            $result = Ring1::eq(fn() => Ring1::var($data, "record.status"), fn() => Ring1::lit("draft"));
+            if ($result['ok'] === true && $result['value'] === true) {
+                return true;
+            }
+        }
+        if ($user->hasAnyRole(['reviewer'])) {
+            $result = Ring1::eq(fn() => Ring1::var($data, "record.status"), fn() => Ring1::lit("published"));
+            if ($result['ok'] === true && $result['value'] === true) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+`);
+  });
+
+  it("checks role membership by the Strapi role type on the Strapi layout", () => {
+    const php = emitPolicy(mixed, article, "strapi");
+    expect(php).toContain("if (in_array($user->roleType(), ['editor'], true)) {");
+    expect(php).toContain("if (in_array($user->roleType(), ['author'], true)) {");
+  });
+
+  // A guest holds only the public role's grants, and a signed-in user never does.
+  it("holds a guest to the public role's condition", () => {
+    const guests: PolicySpec = {
+      ...mixed,
+      methods: [
+        {
+          ...mixed.methods[0]!,
+          roles: ["editor", "public"],
+          conditions: [{ roles: ["public"], condition: published }],
+        },
+      ],
+    };
+    const php = emitPolicy(guests, article, "laravel", true);
+    expect(php).toContain("if ($user !== null && $user->hasAnyRole(['editor'])) {");
+    expect(php).toContain("if ($user === null) {");
+  });
+
+  it("lints clean", () => {
+    if (!hasPhp()) return;
+    const dir = mkdtempSync(join(tmpdir(), "mixed-policy-"));
+    try {
+      for (const [name, php] of [
+        ["laravel", emitPolicy(mixed, article)],
+        ["guests", emitPolicy(mixed, article, "laravel", true)],
+        ["strapi", emitPolicy(mixed, article, "strapi")],
+      ] as const) {
+        const file = join(dir, `${name}.php`);
+        writeFileSync(file, php);
+        expect(execFileSync("php", ["-l", file], { encoding: "utf8" })).toContain(
+          "No syntax errors detected",
+        );
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// Strapi's createdBy is an admin account; an API user's id is a row of another table, so it must
+// never be read as the creator's.
+describe("emitPolicy — the entry's creator", () => {
+  const isCreator = {
+    kind: "eq",
+    left: { kind: "var", name: CREATED_BY },
+    right: { kind: "var", name: "user.id" },
+  } as const;
+  const authorSpec: PolicySpec = {
+    contentType: "Article",
+    model: "Article",
+    methods: [
+      {
+        method: "update",
+        key: "article.update",
+        record: true,
+        roles: ["author"],
+        conditions: [{ roles: ["author"], condition: isCreator }],
+      },
+      {
+        method: "view",
+        key: "article.read",
+        record: true,
+        roles: ["author"],
+        conditions: [{ roles: ["author"], condition: published }],
+      },
+    ],
+  };
+  const php = emitPolicy(authorSpec, article);
+
+  it("reads the creator of an entry for an admin account only", () => {
+    expect(php).toContain(
+      "'record.createdBy' => $user instanceof AdminUser ? $record->created_by_id : null,",
+    );
+  });
+  it("reads it only where a condition names it", () => {
+    const view = php.slice(php.indexOf("public function view"));
+    expect(view).not.toContain("record.createdBy");
+  });
+});
+
 // The user type's own policy: its model is User, which every policy already imports, and PHP
 // refuses a second `use` of one name, so the whole policy (and every Gate check on a user) fails.
 describe("emitPolicy — the user type", () => {
@@ -112,11 +256,16 @@ describe("emitPolicy — ownership via relation FKs", () => {
         key: "note.read",
         record: true,
         roles: ["member"],
-        condition: {
-          kind: "eq",
-          left: { kind: "var", name: "record.ownerId" },
-          right: { kind: "var", name: "user.id" },
-        },
+        conditions: [
+          {
+            roles: ["member"],
+            condition: {
+              kind: "eq",
+              left: { kind: "var", name: "record.ownerId" },
+              right: { kind: "var", name: "user.id" },
+            },
+          },
+        ],
       },
     ],
   };
@@ -164,11 +313,16 @@ describe("emitPolicy — strapi storage layout", () => {
           key: "note.read",
           record: true,
           roles: [],
-          condition: {
-            kind: "eq",
-            left: { kind: "var", name: "record.ownerId" },
-            right: { kind: "var", name: "user.id" },
-          },
+          conditions: [
+            {
+              roles: [],
+              condition: {
+                kind: "eq",
+                left: { kind: "var", name: "record.ownerId" },
+                right: { kind: "var", name: "user.id" },
+              },
+            },
+          ],
         },
       ],
     };

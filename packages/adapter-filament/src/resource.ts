@@ -45,6 +45,8 @@ export const emitResourceFiles = (
     versioned?: boolean;
     localized?: boolean;
     secured?: boolean;
+    /** The Content Manager lists through the model's forAdmin scope (some admin role reads under a condition). */
+    adminScoped?: boolean;
     /** Media fields, picked from the media library. */
     media?: {
       field: string;
@@ -111,12 +113,18 @@ export const emitResourceFiles = (
         );
   const configure = cm === undefined ? undefined : configureViewPage(ns, n);
 
+  const adminScoped = options.adminScoped === true;
   // One row per document: its draft, which every edit goes through, with its published version.
-  const draftQuery = `
+  // An admin account lists and opens only the rows its roles may read.
+  const ownQuery = `${versioned ? `->whereNull('published_at')${localized ? "" : "->with('publishedVersion')"}` : ""}${adminScoped ? "->forAdmin(Filament::auth()->user())" : ""}`;
+  const listQuery =
+    ownQuery === ""
+      ? ""
+      : `
 
     public static function getEloquentQuery(): Builder
     {
-        return parent::getEloquentQuery()->whereNull('published_at')${localized ? "" : "->with('publishedVersion')"};
+        return parent::getEloquentQuery()${ownQuery};
     }`;
 
   const resource = `<?php
@@ -132,9 +140,9 @@ use ${ns}\\Pages\\${listPage};${configure === undefined ? "" : `\nuse ${ns}\\Pag
 use ${ns}\\Schemas\\${n.formClass};
 use ${ns}\\Schemas\\${n.tableClass};${navigation === undefined ? "" : `\nuse ${STRAPI_NAVIGATION_CLASS};`}
 use App\\Models\\${n.model};${cmCollection ? `\nuse App\\Http\\Serializers\\${n.model}Serializer;\nuse App\\Support\\StrapiDocuments;` : ""}
-use Filament\\Resources\\Resource;
+${adminScoped ? "use Filament\\Facades\\Filament;\n" : ""}use Filament\\Resources\\Resource;
 use Filament\\Schemas\\Schema;
-use Filament\\Tables\\Table;${single && secured ? "\nuse Illuminate\\Auth\\Access\\Response;" : ""}${versioned ? "\nuse Illuminate\\Database\\Eloquent\\Builder;" : ""}${deletesDocument ? "\nuse Illuminate\\Support\\Facades\\DB;" : ""}${single && secured ? "\nuse Illuminate\\Support\\Facades\\Gate;" : ""}${single && localized ? "\nuse App\\Support\\StrapiLocales;" : ""}${navigation === undefined ? "" : "\nuse UnitEnum;"}
+use Filament\\Tables\\Table;${single && secured ? "\nuse Illuminate\\Auth\\Access\\Response;" : ""}${versioned || adminScoped ? "\nuse Illuminate\\Database\\Eloquent\\Builder;" : ""}${deletesDocument ? "\nuse Illuminate\\Support\\Facades\\DB;" : ""}${single && secured ? "\nuse Illuminate\\Support\\Facades\\Gate;" : ""}${single && localized ? "\nuse App\\Support\\StrapiLocales;" : ""}${navigation === undefined ? "" : "\nuse UnitEnum;"}
 
 class ${n.resourceClass} extends Resource
 {
@@ -159,7 +167,7 @@ ${navigation === undefined ? "" : navigationProperties(navigation)}
             'create' => ${createPage}::route('/create'),
             'edit' => ${editPage}::route('/{record}/edit'),${configure === undefined ? "" : `\n            'configure' => ${configure.cls}::route('/configure-the-view'),`}
         ];
-    }${versioned ? draftQuery : ""}${single ? singleEntry(n.model, localized, secured) : ""}${deletesDocument ? deleteEntry(n.model, localized) : ""}${
+    }${listQuery}${single ? singleEntry(n.model, localized, secured) : ""}${deletesDocument ? deleteEntry(n.model, localized) : ""}${
       cmForm === undefined
         ? ""
         : contentManagerResourceMembers(ct, cmForm.attributes, n, {

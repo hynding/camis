@@ -73,6 +73,16 @@ describe("Strapi's Home and settings pages", () => {
       await expect(homepage).toMatchFileSnapshot("./__golden__/strapi-api/StrapiHomepage.php");
     });
 
+    // An Author lists only the entries it created, so the widgets read through the same query as
+    // the Content Manager's list rather than the whole table.
+    it("lists only the entries the Content Manager would list", () => {
+      const homepage = content("app/Support/StrapiHomepage.php");
+      expect(homepage).toContain("$query = $type['resource']::getEloquentQuery();");
+      expect(homepage).toContain(
+        "->whereIn('document_id', $type['resource']::getEloquentQuery()->select('document_id'))",
+      );
+    });
+
     // Strapi's key statistics: its components count is of their categories.
     it("counts what Strapi's Project statistics count", () => {
       const homepage = content("app/Support/StrapiHomepage.php");
