@@ -69,6 +69,9 @@ class AuthorRoleTest extends TestCase
         $this->get(StoryResource::getUrl('edit', ['record' => $own]))->assertOk();
         $this->get(StoryResource::getUrl('edit', ['record' => $other]))->assertNotFound();
 
+        // A fresh session: the author's would sign the editor out on the next request.
+        $this->flushSession();
+        $this->app['auth']->forgetGuards();
         $this->actingAs($editor, 'admin');
         Livewire::test(ListStories::class)->assertCanSeeTableRecords([$own, $other]);
         $this->get(StoryResource::getUrl('edit', ['record' => $own]))->assertOk();
@@ -152,9 +155,9 @@ class AuthorRoleTest extends TestCase
     {
         $author = $this->admin('author@example.test', 'author');
         $story = $this->storyBy($author, 'Mine');
-        $impostor = User::forceCreate(['id' => $author->id, 'username' => 'impostor', 'email' => 'impostor@example.test', 'password' => 'Impostor-pass-1']);
+        $impostor = User::forceCreate(['id' => $author->id, 'name' => 'Impostor', 'username' => 'impostor', 'email' => 'impostor@example.test', 'password' => 'Impostor-pass-1']);
         $impostor->assignRole('author');
-        $reader = User::forceCreate(['username' => 'reader', 'email' => 'reader@example.test', 'password' => 'Reader-pass-1']);
+        $reader = User::forceCreate(['name' => 'Reader', 'username' => 'reader', 'email' => 'reader@example.test', 'password' => 'Reader-pass-1']);
         $reader->assignRole('authenticated');
         $this->assertTrue($reader->can('view', $story));
         $this->assertFalse($reader->can('update', $story));
