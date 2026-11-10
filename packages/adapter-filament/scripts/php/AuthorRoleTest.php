@@ -9,10 +9,13 @@ use App\Filament\Resources\Memos\Pages\ListMemos;
 use App\Filament\Resources\Stories\Pages\CreateStory;
 use App\Filament\Resources\Stories\Pages\ListStories;
 use App\Filament\Resources\Stories\StoryResource;
+use App\Http\Serializers\StorySerializer;
 use App\Models\AdminUser;
 use App\Models\Memo;
 use App\Models\Story;
 use App\Models\User;
+use App\Support\StrapiDocuments;
+use App\Support\StrapiHomepage;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -113,6 +116,23 @@ class AuthorRoleTest extends TestCase
         $this->get(MemoResource::getUrl('edit', ['record' => $other]))->assertNotFound();
         $this->assertFalse($author->can('delete', $other));
         $this->assertTrue($author->can('delete', $own));
+    }
+
+    public function test_the_homepage_widgets_show_an_author_only_its_own_entries(): void
+    {
+        $author = $this->admin('author@example.test', 'author');
+        $editor = $this->admin('editor@example.test', 'editor');
+        $own = $this->storyBy($author, 'Mine');
+        $other = $this->storyBy($editor, 'Theirs');
+        StrapiDocuments::publish($own, StorySerializer::class);
+        StrapiDocuments::publish($other, StorySerializer::class);
+
+        $this->actingAs($author, 'admin');
+        $this->assertSame(['Mine'], array_column(StrapiHomepage::lastEdited(), 'title'));
+        $this->assertSame(['Mine'], array_column(StrapiHomepage::lastPublished(), 'title'));
+
+        $this->actingAs($editor, 'admin');
+        $this->assertEqualsCanonicalizing(['Mine', 'Theirs'], array_column(StrapiHomepage::lastEdited(), 'title'));
     }
 
     // An account with no role reading the type lists nothing, rather than every entry.
