@@ -86,19 +86,58 @@ describe("deploymentSettings — upload", () => {
       },
     });
     expect(rooted.gaps.map((g) => g.feature)).toEqual(["uploadRootPath"]);
-    const cloudinary = deploymentSettings({
-      upload: { config: { provider: "cloudinary", providerOptions: { cloud_name: "x" } } },
+    const uploadcare = deploymentSettings({
+      upload: { config: { provider: "uploadcare", providerOptions: { public: "x" } } },
     });
-    expect(cloudinary.settings.upload).toBeUndefined();
-    expect(cloudinary.gaps).toEqual([
+    expect(uploadcare.settings.upload).toBeUndefined();
+    expect(uploadcare.gaps).toEqual([
       {
         feature: "uploadProvider",
         location: {},
         severity: "downgrade",
         message:
-          'the upload provider "cloudinary" has no counterpart here; files stay on the local disk until one is configured.',
+          'the upload provider "uploadcare" has no counterpart here; files stay on the local disk until one is configured.',
       },
     ]);
+  });
+
+  it("reads the cloudinary provider's cloud name and credentials", () => {
+    const { settings, gaps } = deploymentSettings({
+      upload: {
+        config: {
+          provider: "cloudinary",
+          providerOptions: {
+            cloud_name: env("CLOUDINARY_NAME"),
+            api_key: env("CLOUDINARY_KEY"),
+            api_secret: env("CLOUDINARY_SECRET"),
+          },
+          actionOptions: { upload: {}, uploadStream: {}, delete: {} },
+        },
+      },
+    });
+    expect(gaps).toEqual([]);
+    expect(settings.upload).toEqual({
+      provider: "cloudinary",
+      storage: {
+        kind: "cloudinary",
+        cloudName: env("CLOUDINARY_NAME"),
+        apiKey: env("CLOUDINARY_KEY"),
+        apiSecret: env("CLOUDINARY_SECRET"),
+      },
+    });
+  });
+
+  it("reports the cloudinary upload options it cannot carry", () => {
+    const { gaps } = deploymentSettings({
+      upload: {
+        config: {
+          provider: "cloudinary",
+          providerOptions: { cloud_name: "demo" },
+          actionOptions: { upload: { folder: "site" } },
+        },
+      },
+    });
+    expect(gaps.map((g) => g.feature)).toEqual(["uploadProviderOption"]);
   });
 });
 
@@ -233,8 +272,10 @@ describe("deploymentSettings — email", () => {
 describe("deploymentSettings — the API and accounts", () => {
   it("reads config/api's REST page sizes and count", () => {
     expect(
-      deploymentSettings({}, { rest: { defaultLimit: 10, maxLimit: env("MAX", 50), withCount: false } })
-        .settings,
+      deploymentSettings(
+        {},
+        { rest: { defaultLimit: 10, maxLimit: env("MAX", 50), withCount: false } },
+      ).settings,
     ).toEqual({ rest: { defaultLimit: 10, maxLimit: env("MAX", 50), withCount: false } });
   });
 
@@ -247,8 +288,9 @@ describe("deploymentSettings — the API and accounts", () => {
 
   it("reads the graphql plugin's page sizes", () => {
     expect(
-      deploymentSettings({ graphql: { config: { defaultLimit: 20, maxLimit: 200, depthLimit: 7 } } })
-        .settings,
+      deploymentSettings({
+        graphql: { config: { defaultLimit: 20, maxLimit: 200, depthLimit: 7 } },
+      }).settings,
     ).toEqual({ graphql: { defaultLimit: 20, maxLimit: 200 } });
   });
 
@@ -263,7 +305,13 @@ describe("deploymentSettings — the API and accounts", () => {
               maxRefreshTokenLifespan: env("MAX_REFRESH"),
               idleRefreshTokenLifespan: 86400,
               httpOnly: true,
-              cookie: { name: "rt", sameSite: "strict", path: "/api", domain: "example.com", secure: true },
+              cookie: {
+                name: "rt",
+                sameSite: "strict",
+                path: "/api",
+                domain: "example.com",
+                secure: true,
+              },
             },
             register: { allowedFields: ["nickname", "picture"] },
           },
@@ -276,9 +324,67 @@ describe("deploymentSettings — the API and accounts", () => {
         maxRefreshTokenLifespan: env("MAX_REFRESH"),
         idleRefreshTokenLifespan: 86400,
         httpOnly: true,
-        cookie: { name: "rt", sameSite: "strict", path: "/api", domain: "example.com", secure: true },
+        cookie: {
+          name: "rt",
+          sameSite: "strict",
+          path: "/api",
+          domain: "example.com",
+          secure: true,
+        },
         registerAllowedFields: ["nickname", "picture"],
       },
     });
+  });
+});
+
+describe("deploymentSettings — sentry", () => {
+  it("reads the sentry plugin's DSN and the init options Laravel's SDK takes", () => {
+    const { settings, gaps } = deploymentSettings({
+      sentry: {
+        enabled: true,
+        config: {
+          dsn: env("SENTRY_DSN"),
+          sendMetadata: true,
+          init: { environment: env("NODE_ENV"), release: "site@1.2.3", sampleRate: 0.5 },
+        },
+      },
+    });
+    expect(gaps).toEqual([]);
+    expect(settings.errorReporting).toEqual({
+      provider: "sentry",
+      dsn: env("SENTRY_DSN"),
+      environment: env("NODE_ENV"),
+      release: "site@1.2.3",
+      sampleRate: 0.5,
+    });
+  });
+
+  it("reads nothing from a disabled plugin", () => {
+    const { settings } = deploymentSettings({
+      sentry: { enabled: false, config: { dsn: env("SENTRY_DSN") } },
+    });
+    expect(settings.errorReporting).toBeUndefined();
+  });
+
+  it("reports the options it cannot carry", () => {
+    const { gaps } = deploymentSettings({
+      sentry: {
+        config: {
+          dsn: env("SENTRY_DSN"),
+          sendMetadata: false,
+          init: { beforeSend: "fn", debug: true },
+        },
+      },
+    });
+    expect(gaps.map((g) => [g.feature, g.message])).toEqual([
+      [
+        "errorReportingOption",
+        "the sentry plugin's sendMetadata: false has no counterpart; Laravel's SDK attaches the request to each event.",
+      ],
+      [
+        "errorReportingOption",
+        "the sentry plugin's init options beforeSend, debug have no counterpart; set them in config/sentry.php.",
+      ],
+    ]);
   });
 });

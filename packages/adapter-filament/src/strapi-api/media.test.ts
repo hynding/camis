@@ -138,6 +138,16 @@ describe("the media library", () => {
     expect(config).toContain("'disk' => env('CAMIS_UPLOAD_DISK'),");
     expect(config).toContain("'size_limit' => (int) env('CAMIS_UPLOAD_SIZE_LIMIT', 209715200),");
   });
+  // A migrated Strapi project on Cloudinary needs only cloudinary-labs/cloudinary-laravel and its
+  // keys: the disk is defined here unless config/filesystems.php defines its own.
+  it("defines the cloudinary disk a migrated project's provider stores on", () => {
+    const config = content("config/camis.php");
+    expect(config).toContain("'cloudinary' => [\n                'driver' => 'cloudinary',");
+    expect(config).toContain("'cloud' => env('CLOUDINARY_CLOUD_NAME'),");
+    expect(content("app/Support/StrapiUpload.php")).toContain(
+      'return config("filesystems.disks.{$name}") === null && is_array($fallback) ? Storage::build($fallback) : Storage::disk($name);',
+    );
+  });
   it("is browsed and filled in the admin", () => {
     const resource = content("app/Filament/Resources/Files/FileResource.php");
     expect(resource).toContain("protected static ?string $model = File::class;");

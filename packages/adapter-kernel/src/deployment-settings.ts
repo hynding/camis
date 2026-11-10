@@ -25,7 +25,8 @@ export type FileStorage =
       pathStyle?: Setting;
       /** The public address files are served from, when not the bucket's own (a CDN). */
       baseUrl?: Setting;
-    };
+    }
+  | { kind: "cloudinary"; cloudName?: Setting; apiKey?: Setting; apiSecret?: Setting };
 
 export interface UploadSettings {
   /** The provider name the source records on every file it stores. */
@@ -90,12 +91,23 @@ export interface AccountSettings {
   registerAllowedFields?: Setting | string[];
 }
 
+/** Where the app reports the errors it throws. */
+export interface ErrorReportingSettings {
+  provider: "sentry";
+  dsn?: Setting;
+  environment?: Setting;
+  release?: Setting;
+  /** The share of errors sent, 0 to 1. */
+  sampleRate?: Setting;
+}
+
 export interface DeploymentSettings {
   upload?: UploadSettings;
   email?: EmailSettings;
   rest?: RestSettings;
   graphql?: PageSizes;
   accounts?: AccountSettings;
+  errorReporting?: ErrorReportingSettings;
 }
 
 export const isEnvReference = (value: unknown): value is EnvReference =>

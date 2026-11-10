@@ -262,15 +262,16 @@ jobs:
       - name: Patch bootstrap/app.php as camis scaffold does
         run: >-
           pnpm --filter @camis/cli exec tsx -e "import { readFileSync, writeFileSync } from 'node:fs';
-          import { patchBootstrapGraphql, patchBootstrapMiddleware, patchBootstrapTransfer } from './src/commands/scaffold';
+          import { patchBootstrapExceptions, patchBootstrapGraphql, patchBootstrapMiddleware, patchBootstrapTransfer } from './src/commands/scaffold';
           const f = process.env.GITHUB_WORKSPACE + '/app/bootstrap/app.php';
-          writeFileSync(f, patchBootstrapGraphql(patchBootstrapTransfer(patchBootstrapMiddleware(readFileSync(f, 'utf8')))));"
+          writeFileSync(f, patchBootstrapExceptions(patchBootstrapGraphql(patchBootstrapTransfer(patchBootstrapMiddleware(readFileSync(f, 'utf8'))))));"
       - name: Migrate + seed + cache (as a shared-host deploy does) + serve (${{ matrix.db }})
         run: |
           cd app
           grep -q "prependToGroup('api'" bootstrap/app.php || { echo "bootstrap/app.php patch did not apply"; exit 1; }
           grep -q "routes/graphql.php" bootstrap/app.php || { echo "bootstrap/app.php graphql patch did not apply"; exit 1; }
           grep -q "routes/transfer.php" bootstrap/app.php || { echo "bootstrap/app.php transfer patch did not apply"; exit 1; }
+          grep -q "Integration::handles" bootstrap/app.php || { echo "bootstrap/app.php Sentry patch did not apply"; exit 1; }
           case "${{ matrix.db }}" in
             sqlite) echo "DB_CONNECTION=sqlite" >> .env; touch database/database.sqlite ;;
             mysql)  printf 'DB_CONNECTION=mysql\nDB_HOST=127.0.0.1\nDB_PORT=3306\nDB_DATABASE=camis\nDB_USERNAME=root\nDB_PASSWORD=camis\n' >> .env ;;

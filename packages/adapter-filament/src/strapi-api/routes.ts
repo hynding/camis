@@ -46,6 +46,8 @@ export const emitApiConfig = (
     : "";
   // Where the media library keeps its files: unset, public/uploads, served at /uploads as Strapi's
   // local provider serves it; else a Laravel disk name (s3, …). The limit is Strapi's default.
+  // `disks` defines the disks a Strapi provider maps onto that Laravel does not ship, each used
+  // only while config/filesystems.php has no disk of the same name.
   const uploadKeys = upload
     ? `
 
@@ -53,6 +55,18 @@ export const emitApiConfig = (
         'disk' => env('CAMIS_UPLOAD_DISK'),
         'provider' => env('CAMIS_UPLOAD_PROVIDER'),
         'size_limit' => (int) env('CAMIS_UPLOAD_SIZE_LIMIT', 209715200),
+        'disks' => [
+            // cloudinary-labs/cloudinary-laravel's driver, for Strapi's cloudinary provider.
+            'cloudinary' => [
+                'driver' => 'cloudinary',
+                'key' => env('CLOUDINARY_KEY'),
+                'secret' => env('CLOUDINARY_SECRET'),
+                'cloud' => env('CLOUDINARY_CLOUD_NAME'),
+                'url' => env('CLOUDINARY_URL'),
+                'secure' => (bool) env('CLOUDINARY_SECURE', true),
+                'prefix' => env('CLOUDINARY_PREFIX'),
+            ],
+        ],
     ],`
     : "";
   // The locale the locales table starts with, which reads and writes use when a request names none.

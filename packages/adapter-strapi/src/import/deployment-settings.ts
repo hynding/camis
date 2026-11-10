@@ -4,6 +4,7 @@ import {
   type PageSizes,
   type RestSettings,
   type EmailSettings,
+  type ErrorReportingSettings,
   type FileStorage,
   type MailTransport,
   type DeploymentSettings,
@@ -66,12 +67,37 @@ const s3Storage = (options: Options, gaps: CapabilityGap[]): FileStorage => {
   };
 };
 
+const cloudinaryStorage = (config: Options, gaps: CapabilityGap[]): FileStorage => {
+  const options = object(config.providerOptions);
+  // actionOptions pass extra upload/delete parameters (a folder, tags, …) on every call.
+  const actions = Object.values(object(config.actionOptions)).some(
+    (action) => Object.keys(object(action)).length > 0,
+  );
+  if (actions)
+    gaps.push(
+      gap(
+        "uploadProviderOption",
+        "the cloudinary upload provider's actionOptions have no counterpart; set the cloudinary disk's prefix in config/camis.php for a folder.",
+      ),
+    );
+  return {
+    kind: "cloudinary",
+    ...settings([
+      ["cloudName", options.cloud_name],
+      ["apiKey", options.api_key],
+      ["apiSecret", options.api_secret],
+    ]),
+  };
+};
+
 const upload = (config: Options, gaps: CapabilityGap[]): UploadSettings | undefined => {
   const provider = typeof config.provider === "string" ? config.provider : "local";
   const sizeLimit = settings([["sizeLimit", config.sizeLimit]]);
   if (provider === "local") return { provider, storage: { kind: "local" }, ...sizeLimit };
   if (provider === "aws-s3")
     return { provider, storage: s3Storage(object(config.providerOptions), gaps), ...sizeLimit };
+  if (provider === "cloudinary")
+    return { provider, storage: cloudinaryStorage(config, gaps), ...sizeLimit };
   gaps.push(
     gap(
       "uploadProvider",
@@ -219,9 +245,39 @@ const accounts = (config: Options): AccountSettings => {
   };
 };
 
+const SENTRY_INIT = ["environment", "release", "sampleRate"];
+
+const sentry = (config: Options, gaps: CapabilityGap[]): ErrorReportingSettings => {
+  const init = object(config.init);
+  if (config.sendMetadata === false)
+    gaps.push(
+      gap(
+        "errorReportingOption",
+        "the sentry plugin's sendMetadata: false has no counterpart; Laravel's SDK attaches the request to each event.",
+      ),
+    );
+  const other = Object.keys(init).filter((key) => !SENTRY_INIT.includes(key));
+  if (other.length > 0)
+    gaps.push(
+      gap(
+        "errorReportingOption",
+        `the sentry plugin's init options ${other.join(", ")} have no counterpart; set them in config/sentry.php.`,
+      ),
+    );
+  return {
+    provider: "sentry",
+    ...settings([
+      ["dsn", config.dsn],
+      ["environment", init.environment],
+      ["release", init.release],
+      ["sampleRate", init.sampleRate],
+    ]),
+  };
+};
+
 /**
- * How a Strapi project is run, from its config/plugins (the upload, email, graphql and
- * users-permissions plugins) and config/api, each `env()` read kept as a reference to the
+ * How a Strapi project is run, from its config/plugins (the upload, email, graphql,
+ * users-permissions and sentry plugins) and config/api, each `env()` read kept as a reference to the
  * variable, never its value. Options with no counterpart are gaps.
  */
 export const deploymentSettings = (
@@ -250,5 +306,8 @@ export const deploymentSettings = (
     const read = accounts(pluginConfig("users-permissions"));
     if (Object.keys(read).length > 0) out.accounts = read;
   }
+  // Strapi's sentry plugin is on unless the project turns it off.
+  if (config.sentry !== undefined && object(config.sentry).enabled !== false)
+    out.errorReporting = sentry(pluginConfig("sentry"), gaps);
   return { settings: out, gaps };
 };

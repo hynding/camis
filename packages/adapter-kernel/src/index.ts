@@ -27,6 +27,7 @@ export { materialize } from "./materialize";
 export { isEnvReference } from "./deployment-settings";
 export type {
   EmailSettings,
+  ErrorReportingSettings,
   EnvReference,
   FileStorage,
   AccountSettings,

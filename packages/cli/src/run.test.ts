@@ -186,6 +186,9 @@ describe("run — scaffold --storage", () => {
     )
     ->withMiddleware(function (Middleware $middleware): void {
         //
+    })
+    ->withExceptions(function (Exceptions $exceptions): void {
+        //
     })->create();
 `;
 

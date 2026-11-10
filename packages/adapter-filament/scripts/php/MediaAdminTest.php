@@ -68,6 +68,20 @@ class MediaAdminTest extends TestCase
         $this->assertFileDoesNotExist(public_path(ltrim($file->url, '/')));
     }
 
+    // A provider's disk Laravel does not ship (Strapi's cloudinary) comes from config/camis.php's
+    // upload.disks while config/filesystems.php has none of that name; a driver stands in for it.
+    public function test_an_upload_goes_to_the_disk_camis_defines_for_a_provider(): void
+    {
+        $root = sys_get_temp_dir().'/camis-provider-disk-'.uniqid();
+        \Illuminate\Support\Facades\Storage::extend('stand-in', fn ($app, array $config) => \Illuminate\Support\Facades\Storage::createLocalDriver(['root' => $config['root'], 'url' => 'https://cdn.example.test']));
+        config(['camis.upload.disk' => 'provider', 'camis.upload.disks.provider' => ['driver' => 'stand-in', 'root' => $root]]);
+
+        $file = $this->upload('note.txt');
+
+        $this->assertStringStartsWith('https://cdn.example.test/note_', $file->url);
+        $this->assertFileExists($root.'/'.basename($file->url));
+    }
+
     public function test_a_book_links_its_cover_and_attachments(): void
     {
         $this->login(['book.read', 'book.create', 'file.read']);
