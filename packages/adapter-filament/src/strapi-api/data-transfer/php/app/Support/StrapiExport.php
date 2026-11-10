@@ -851,6 +851,17 @@ final class StrapiExport
                 $store('plugin_i18n_default_locale', (string) $default, 'string');
             }
         }
+        if (class_exists(StrapiContentManager::class)) {
+            // The Content Manager views saved or imported here; one never configured is made by
+            // Strapi itself on its next start, as here.
+            $views = DB::table('strapi_settings')->where('key', 'like', StrapiContentManager::KEY_PREFIX . '%')->orderBy('key')->get();
+            foreach ($views as $view) {
+                $configuration = self::json($view->value);
+                if (is_array($configuration) && $configuration !== []) {
+                    $store(...StrapiContentManager::toStrapi((string) $view->key, $configuration));
+                }
+            }
+        }
         foreach (DB::table('strapi_webhooks')->orderBy('id')->get() as $webhook) {
             $this->line('configuration', ['type' => 'webhook', 'value' => [
                 'id' => (int) $webhook->id,
