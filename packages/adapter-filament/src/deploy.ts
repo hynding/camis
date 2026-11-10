@@ -108,7 +108,10 @@ php artisan camis:admin admin@example.com --name="Admin"
 
 On the Strapi API style, Settings › Admin users manages the rest, and
 \`php artisan strapi:import-admins --database=<the Strapi database>\` brings a Strapi project's
-admin accounts over with their passwords and admin roles.
+admin accounts over with their passwords and admin roles. Bring the roles in first:
+\`camis import strapi <project> --admin-roles-from <its .tmp/data.db>\` (or \`camis new
+--from-strapi … --admin-roles-from …\`) adds Strapi's admin roles and their permissions to the
+roles file, so each account finds its role once the app is rebuilt and seeded.
 
 \`camis scaffold filament\` signs the panel in on that guard. An app scaffolded before admin
 accounts were separate still signs its admins in as users: add \`->authGuard('admin')\` after

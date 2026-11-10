@@ -16,7 +16,9 @@ use Spatie\Permission\Models\Role;
  * data out of its archive. Each account keeps its documentId, names, email, state and password
  * hash, so its owner signs in with the same password. Its Strapi admin roles become the IR's admin
  * roles of the same name: Super Admin is the IR's super-admin (else its first admin role), and any
- * other is the admin role named as it is (Editor → editor). A role with no match is reported.
+ * other is the admin role `camis import strapi --admin-roles-from` named after it: its name in kebab
+ * case (Content Writer → content-writer), or admin-<that> when a users' role had the name. A role
+ * with no match is reported.
  */
 final class StrapiAdminImport
 {
@@ -83,7 +85,7 @@ final class StrapiAdminImport
                 foreach ($roles[$row->id] ?? [] as $role) {
                     $name = $this->adminRole($role);
                     if ($name === null) {
-                        $this->notes[] = "{$email}: the Strapi admin role \"{$role->name}\" has no admin role of that name here; add one to the roles file, or give the account a role in the admin";
+                        $this->notes[] = "{$email}: the Strapi admin role \"{$role->name}\" has no admin role of that name here; import it with `camis import strapi --admin-roles-from`, or give the account a role in the admin";
                     } else {
                         $admin->assignRole($name);
                     }
@@ -120,7 +122,7 @@ final class StrapiAdminImport
         $rows = $this->source->table($link)
             ->join('admin_roles', 'admin_roles.id', '=', "{$link}.role_id")
             ->orderBy("{$link}.user_id")->orderBy("{$link}.id")
-            ->get(["{$link}.user_id as account", 'admin_roles.name as name', 'admin_roles.code as code']);
+            ->get(["{$link}.user_id as account", 'admin_roles.id as id', 'admin_roles.name as name', 'admin_roles.code as code']);
         $roles = [];
         foreach ($rows as $row) {
             $roles[$row->account][] = $row;
@@ -137,13 +139,21 @@ final class StrapiAdminImport
         if (($role->code ?? null) === self::SUPER_ADMIN) {
             return in_array('super-admin', $seeded, true) ? 'super-admin' : ($roles[0] ?? null);
         }
-        $wanted = array_map('mb_strtolower', array_filter([
-            (string) ($role->name ?? ''),
+        $kebab = trim(preg_replace('/[^a-z0-9]+/', '-', strtolower((string) ($role->name ?? ''))) ?? '', '-');
+        $named = $kebab === '' ? 'admin-role-' . ($role->id ?? '') : $kebab;
+        $wanted = array_values(array_filter([
+            $named,
+            "admin-{$named}",
+            mb_strtolower((string) ($role->name ?? '')),
             preg_replace('/^strapi-/', '', (string) ($role->code ?? '')) ?? '',
         ]));
+        $byName = [];
         foreach ($seeded as $name) {
-            if (in_array(mb_strtolower($name), $wanted, true)) {
-                return $name;
+            $byName[mb_strtolower($name)] ??= $name;
+        }
+        foreach ($wanted as $name) {
+            if (isset($byName[$name])) {
+                return $byName[$name];
             }
         }
 

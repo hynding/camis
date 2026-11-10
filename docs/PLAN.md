@@ -1706,6 +1706,28 @@ Exit: unit and golden tests; AdminAccountsTest (guard, `/api/users`, sign-in err
 register-admin, API tokens with denied paths, the Admin users page, the import); the boot job's
 admin access step checks an API user never validates on the admin guard.
 
+## Phase 52 — Strapi's admin roles and their permissions (`adapter-strapi`, `adapter-filament`, `cli`)
+
+Phase 51 imported admin accounts but matched their roles by name to admin roles someone had written
+by hand. A Strapi project's admin roles live in its database, not in `strapi export`, so they are
+read from there (a SQLite file; `node:sqlite`).
+
+- **`camis import strapi … --admin-roles-from <data.db>`** and **`camis new --from-strapi …
+  --admin-roles-from <data.db>`** add Strapi's admin roles to `roles.json`, flagged `admin`, after
+  the users' roles and the super-admin (Strapi's Super Admin, which may do everything, is not read).
+  A role is named after Strapi's name in kebab case (Content Writer → `content-writer`), or
+  `admin-<name>` when a users' role has the name.
+- Permissions are the inverse of the admin projection: content-manager actions on a type (and on
+  the users), and the media library's upload actions (`FILE_ADMIN_ACTIONS`: a camis action is
+  granted once the role holds every upload action it stands for). A camis grant covers a whole
+  type for everyone, so an action Strapi gave under a condition (`admin::is-creator`), on only some
+  fields, or on only some locales, is not granted and is reported (`strapiAdminPermission`), as are
+  settings and plugin actions and types the project lacks: an import never grants more than Strapi.
+- `strapi:import-admins` finds each account's role under those names.
+
+Exit: unit tests on rows and on a fixture recorded from strapi-php 5.56 getstarted (Editor, Author
+and a custom role), CLI tests for `new` and `import`.
+
 ---
 
 ## Sequencing rationale (quick reference)
