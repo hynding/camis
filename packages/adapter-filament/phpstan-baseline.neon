@@ -1,2 +1,182 @@
 parameters:
-  ignoreErrors: []
+  ignoreErrors:
+    -
+      rawMessage: 'Access to an undefined property App\Filament\Support\ConfigureView::$form.'
+      count: 2
+      path: app/Filament/Support/ConfigureView.php
+    -
+      rawMessage: 'Parameter #1 $options of method Filament\Forms\Components\Select::options() expects array<array<string>|string>|Closure|Illuminate\Contracts\Support\Arrayable|string|null, array{10: 10, 20: 20, 50: 50, 100: 100} given.'
+      count: 1
+      path: app/Filament/Support/ConfigureView.php
+    -
+      rawMessage: 'Access to an undefined property GraphQL\Type\Definition\NamedType&GraphQL\Type\Definition\Type::$name.'
+      count: 3
+      path: app/GraphQL/StrapiGraphql.php
+    -
+      rawMessage: 'Left side of && is always true.'
+      count: 1
+      path: app/GraphQL/StrapiGraphql.php
+    -
+      rawMessage: 'Parameter #1 $errorFormatter of method GraphQL\Executor\ExecutionResult::setErrorFormatter() expects (callable(Throwable): array{message: string, locations?: array<int, array{line: int, column: int}>, path?: array<int, int|string>, extensions?: array<string, mixed>})|null, Closure(GraphQL\Error\Error): array given.'
+      count: 1
+      path: app/GraphQL/StrapiGraphql.php
+    -
+      rawMessage: 'Parameter #1 $source of static method GraphQL\Utils\BuildSchema::build() expects GraphQL\Language\AST\DocumentNode|GraphQL\Language\Source|string, GraphQL\Language\AST\Node given.'
+      count: 1
+      path: app/GraphQL/StrapiGraphql.php
+    -
+      rawMessage: 'Parameter #2 $node of static method GraphQL\Executor\Values::getDirectiveValues() expects GraphQL\Language\AST\EnumTypeDefinitionNode|GraphQL\Language\AST\EnumTypeExtensionNode|GraphQL\Language\AST\EnumValueDefinitionNode|GraphQL\Language\AST\FieldDefinitionNode|GraphQL\Language\AST\FieldNode|GraphQL\Language\AST\FragmentDefinitionNode|GraphQL\Language\AST\FragmentSpreadNode|GraphQL\Language\AST\InlineFragmentNode|GraphQL\Language\AST\InputObjectTypeDefinitionNode|GraphQL\Language\AST\InputObjectTypeExtensionNode|GraphQL\Language\AST\InputValueDefinitionNode|GraphQL\Language\AST\InterfaceTypeDefinitionNode|GraphQL\Language\AST\InterfaceTypeExtensionNode|GraphQL\Language\AST\ObjectTypeDefinitionNode|GraphQL\Language\AST\ObjectTypeExtensionNode|GraphQL\Language\AST\OperationDefinitionNode|GraphQL\Language\AST\ScalarTypeDefinitionNode|GraphQL\Language\AST\ScalarTypeExtensionNode|GraphQL\Language\AST\SchemaExtensionNode|GraphQL\Language\AST\UnionTypeDefinitionNode|GraphQL\Language\AST\UnionTypeExtensionNode|GraphQL\Language\AST\VariableDefinitionNode, GraphQL\Language\AST\Node given.'
+      count: 2
+      path: app/GraphQL/StrapiGraphql.php
+    -
+      rawMessage: 'Ternary operator condition is always true.'
+      count: 2
+      path: app/GraphQL/StrapiGraphql.php
+    -
+      rawMessage: 'Using nullsafe property access "?->selections" on left side of ?? is unnecessary. Use -> instead.'
+      count: 1
+      path: app/GraphQL/StrapiGraphql.php
+    -
+      rawMessage: 'Parameter #1 $role of static method App\GraphQL\StrapiGraphqlPlugins::role() expects Spatie\Permission\Models\Role, Illuminate\Database\Eloquent\Model given.'
+      count: 1
+      path: app/GraphQL/StrapiGraphqlPlugins.php
+    -
+      rawMessage: 'Call to an undefined static method class@anonymous/app/Support/StrapiUsers.php:251::creating().'
+      count: 1
+      path: app/Models/Concerns/HasDocumentId.php
+    -
+      rawMessage: 'Call to an undefined method Filament\Schemas\Components\Component::label().'
+      count: 1
+      path: app/Support/StrapiContentManager.php
+    -
+      rawMessage: 'Strict comparison using !== between non-empty-list<array{name: string, size: mixed}> and array{} will always evaluate to true.'
+      count: 1
+      path: app/Support/StrapiContentManager.php
+    -
+      rawMessage: 'Call to an undefined static method Illuminate\Database\Eloquent\Model::newDocumentId().'
+      count: 1
+      path: app/Support/StrapiDocuments.php
+    -
+      rawMessage: 'Offset ''model'' on array{plugin: ''file'', model: ''App\\Models\\File''} in isset() always exists and is not nullable.'
+      count: 2
+      path: app/Support/StrapiExport.php
+    -
+      rawMessage: 'Offset ''model'' on array{plugin: ''file'', model: ''App\\Models\\File''} on left side of ?? always exists and is not nullable.'
+      count: 1
+      path: app/Support/StrapiExport.php
+    -
+      rawMessage: 'Offset ''model'' on array{plugin: ''folder'', model: ''App\\Models\\UploadFolder''} in isset() always exists and is not nullable.'
+      count: 1
+      path: app/Support/StrapiExport.php
+    -
+      rawMessage: 'Offset ''model'' on array{plugin: ''folder'', model: ''App\\Models\\UploadFolder''} on left side of ?? always exists and is not nullable.'
+      count: 1
+      path: app/Support/StrapiExport.php
+    -
+      rawMessage: 'Offset ''model'' on array{plugin: ''locale'', model: ''App\\Models\\Locale''} in isset() always exists and is not nullable.'
+      count: 1
+      path: app/Support/StrapiExport.php
+    -
+      rawMessage: 'Offset ''model'' on array{plugin: ''locale'', model: ''App\\Models\\Locale''} on left side of ?? always exists and is not nullable.'
+      count: 2
+      path: app/Support/StrapiExport.php
+    -
+      rawMessage: 'Strict comparison using !== between ''App\\Models\\Locale'' and null will always evaluate to true.'
+      count: 1
+      path: app/Support/StrapiExport.php
+    -
+      rawMessage: 'Strict comparison using === between ''App\\Models\\File'' and null will always evaluate to false.'
+      count: 1
+      path: app/Support/StrapiExport.php
+    -
+      rawMessage: 'Strict comparison using === between ''App\\Models\\Locale'' and null will always evaluate to false.'
+      count: 1
+      path: app/Support/StrapiExport.php
+    -
+      rawMessage: 'Strict comparison using === between ''App\\Models\\UploadFolder'' and null will always evaluate to false.'
+      count: 1
+      path: app/Support/StrapiExport.php
+    -
+      rawMessage: 'Instanceof between mixed and Illuminate\Database\Eloquent\Relations\MorphToMany will always evaluate to false.'
+      count: 1
+      path: app/Support/StrapiImport.php
+    -
+      rawMessage: 'Offset ''model'' on array{plugin: ''file'', model: ''App\\Models\\File''} on left side of ?? always exists and is not nullable.'
+      count: 1
+      path: app/Support/StrapiImport.php
+    -
+      rawMessage: 'Offset ''model'' on array{plugin: ''folder'', model: ''App\\Models\\UploadFolder''} in isset() always exists and is not nullable.'
+      count: 1
+      path: app/Support/StrapiImport.php
+    -
+      rawMessage: 'Offset ''model'' on array{plugin: ''folder'', model: ''App\\Models\\UploadFolder''} on left side of ?? always exists and is not nullable.'
+      count: 1
+      path: app/Support/StrapiImport.php
+    -
+      rawMessage: 'Offset ''model'' on array{plugin: ''locale'', model: ''App\\Models\\Locale''} on left side of ?? always exists and is not nullable.'
+      count: 2
+      path: app/Support/StrapiImport.php
+    -
+      rawMessage: 'Strict comparison using !== between ''App\\Models\\File'' and null will always evaluate to true.'
+      count: 1
+      path: app/Support/StrapiImport.php
+    -
+      rawMessage: 'Strict comparison using !== between ''App\\Models\\Locale'' and null will always evaluate to true.'
+      count: 2
+      path: app/Support/StrapiImport.php
+    -
+      rawMessage: 'Strict comparison using !== between ''App\\Models\\UploadFolder'' and null will always evaluate to true.'
+      count: 1
+      path: app/Support/StrapiImport.php
+    -
+      rawMessage: 'Strict comparison using === between string and null will always evaluate to false.'
+      count: 1
+      path: app/Support/StrapiImport.php
+    -
+      rawMessage: 'Parameter #1 $array (list<int>) of array_values is already a list, call has no effect.'
+      count: 1
+      path: app/Support/StrapiLinkOrder.php
+    -
+      rawMessage: 'Call to an undefined method Illuminate\Database\Eloquent\Model::sharedAcrossLocales().'
+      count: 1
+      path: app/Support/StrapiLocales.php
+    -
+      rawMessage: 'Illuminate\Database\Eloquent\Collection<*NEVER*, *NEVER*> does not accept Illuminate\Database\Eloquent\Model.'
+      count: 1
+      path: app/Support/StrapiPopulate.php
+    -
+      rawMessage: 'Call to function is_array() with non-empty-array<mixed, mixed> will always evaluate to true.'
+      count: 1
+      path: app/Support/StrapiRelations.php
+    -
+      rawMessage: 'Parameter #1 $array (array{0?: mixed}) of array_values is already a list, call has no effect.'
+      count: 1
+      path: app/Support/StrapiRelations.php
+    -
+      rawMessage: 'Parameter #1 $array (list<int>) of array_values is already a list, call has no effect.'
+      count: 1
+      path: app/Support/StrapiRelations.php
+    -
+      rawMessage: 'Using nullsafe property access "?->name" on left side of ?? is unnecessary. Use -> instead.'
+      count: 1
+      path: app/Support/StrapiSessions.php
+    -
+      rawMessage: 'Method App\Support\StrapiTokenImport::apiTokens() should return Illuminate\Support\Collection<int, object> but returns Illuminate\Support\Collection<int, stdClass>.'
+      count: 1
+      path: app/Support/StrapiTokenImport.php
+    -
+      rawMessage: 'Cannot call method isPast() on string.'
+      count: 1
+      path: app/Support/StrapiTransferTokens.php
+    -
+      rawMessage: 'Cannot call method lte() on string.'
+      count: 1
+      path: app/Support/StrapiTransferTokens.php
+    -
+      rawMessage: 'Match expression does not handle remaining value: mixed'
+      count: 1
+      path: app/Support/StrapiValidator.php
+    -
+      rawMessage: 'Match expression does not handle remaining value: string'
+      count: 1
+      path: app/Support/StrapiValidator.php
