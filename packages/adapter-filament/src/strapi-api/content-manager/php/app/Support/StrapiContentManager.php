@@ -34,10 +34,58 @@ final class StrapiContentManager
 
     private const SETTINGS = ['searchable', 'filterable', 'bulkable', 'pageSize', 'mainField', 'defaultSortBy', 'defaultSortOrder'];
 
+    /** Where the configurations are kept: a type's under its uid, a component's under components::<uid>. */
+    public const KEY_PREFIX = 'content-manager.configuration.';
+
+    /** Where Strapi's core store keeps them, by the prefix each kind's keys have here. */
+    private const STRAPI_KEYS = [
+        'components::' => 'plugin_content_manager_configuration_components::',
+        '' => 'plugin_content_manager_configuration_content_types::',
+    ];
+
     /** The setting the configuration is kept under. */
     public static function key(array $view): string
     {
-        return 'content-manager.configuration.' . $view['uid'];
+        return self::KEY_PREFIX . $view['uid'];
+    }
+
+    /**
+     * The setting a Strapi core-store key's configuration is kept under, with the type's or
+     * component's uid; null for a key that holds none.
+     *
+     * @return array{0: string, 1: string}|null
+     */
+    public static function fromStrapiKey(string $strapiKey): ?array
+    {
+        foreach (self::STRAPI_KEYS as $kind => $prefix) {
+            if (str_starts_with($strapiKey, $prefix)) {
+                $uid = substr($strapiKey, strlen($prefix));
+
+                return [self::KEY_PREFIX . $kind . $uid, $uid];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * A kept configuration as Strapi's core store keeps it: its key, and its value naming the uid
+     * (and, for a component, that it is one) as Strapi's do.
+     *
+     * @return array{0: string, 1: array<string, mixed>}
+     */
+    public static function toStrapi(string $key, array $configuration): array
+    {
+        $name = substr($key, strlen(self::KEY_PREFIX));
+        foreach (self::STRAPI_KEYS as $kind => $prefix) {
+            if ($kind === '' || str_starts_with($name, $kind)) {
+                $uid = substr($name, strlen($kind));
+
+                return [$prefix . $uid, $configuration + ['uid' => $uid] + ($kind === '' ? [] : ['isComponent' => true])];
+            }
+        }
+
+        throw new \LogicException("No Strapi key for {$key}");
     }
 
     /** The configuration as saved, synced with the type as it is now. */
@@ -46,10 +94,27 @@ final class StrapiContentManager
         return self::sync($view, StrapiSettings::get(self::key($view)));
     }
 
+    /**
+     * Saves a configuration, keeping what Strapi stored beyond what this admin uses (such as
+     * relationOpenMode, or a relation's mainField), so an export gives Strapi its view back whole.
+     */
     public static function save(array $view, array $configuration): void
     {
         $synced = self::sync($view, $configuration);
-        StrapiSettings::merge(self::key($view), ['settings' => $synced['settings'], 'metadatas' => $synced['metadatas'], 'layouts' => $synced['layouts']]);
+        $stored = StrapiSettings::get(self::key($view));
+        $metadatas = [];
+        foreach ($synced['metadatas'] as $name => $metadata) {
+            $kept = (array) ($stored['metadatas'][$name] ?? []);
+            $metadatas[$name] = [
+                'edit' => array_replace((array) ($kept['edit'] ?? []), $metadata['edit']),
+                'list' => array_replace((array) ($kept['list'] ?? []), $metadata['list']),
+            ];
+        }
+        StrapiSettings::merge(self::key($view), [
+            'settings' => array_replace((array) ($stored['settings'] ?? []), $synced['settings']),
+            'metadatas' => $metadatas,
+            'layouts' => $synced['layouts'],
+        ]);
     }
 
     /**

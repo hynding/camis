@@ -958,8 +958,13 @@ final class StrapiImport
     private function configuration(): void
     {
         DB::table('strapi_settings')->whereIn('key', [...array_values(self::SETTINGS), self::API_FOLDER[1]])->delete();
+        $views = class_exists(StrapiContentManager::class);
+        if ($views) {
+            DB::table('strapi_settings')->where('key', 'like', StrapiContentManager::KEY_PREFIX . '%')->delete();
+        }
         DB::table('strapi_webhooks')->delete();
         $now = CarbonImmutable::now()->utc()->format('Y-m-d H:i:s');
+        $uids = $views ? self::schemaUids() : [];
         foreach ($this->lines('configuration') as $entry) {
             $value = $entry['value'] ?? [];
             if (($entry['type'] ?? null) === 'webhook') {
@@ -992,6 +997,13 @@ final class StrapiImport
                     continue;
                 }
                 DB::table('strapi_settings')->insert(['key' => self::API_FOLDER[1], 'value' => json_encode(['id' => $folder], JSON_THROW_ON_ERROR), 'created_at' => $now, 'updated_at' => $now]);
+            } elseif ($views && ($view = StrapiContentManager::fromStrapiKey($key)) !== null) {
+                // A Content Manager view, kept whole (what this admin does not use goes back out
+                // with an export); one of a type or component this app lacks is dropped.
+                if (! is_array($stored) || ($uids !== null && ! isset($uids[$view[1]]))) {
+                    continue;
+                }
+                DB::table('strapi_settings')->insert(['key' => $view[0], 'value' => json_encode($stored, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 'created_at' => $now, 'updated_at' => $now]);
             } elseif (isset(self::SETTINGS[$key])) {
                 DB::table('strapi_settings')->insert(['key' => self::SETTINGS[$key], 'value' => json_encode($stored, JSON_THROW_ON_ERROR), 'created_at' => $now, 'updated_at' => $now]);
             } else {
@@ -999,6 +1011,30 @@ final class StrapiImport
             }
             $this->counts['configuration'] = ($this->counts['configuration'] ?? 0) + 1;
         }
+    }
+
+    /**
+     * The uids of this app's types and components, as its Strapi schemas name them; null when
+     * those cannot be read, so nothing is dropped for want of them.
+     *
+     * @return array<string, true>|null
+     */
+    private static function schemaUids(): ?array
+    {
+        $path = resource_path(StrapiExport::SCHEMAS_PATH);
+        $schemas = is_file($path) ? file_get_contents($path) : false;
+        if ($schemas === false) {
+            return null;
+        }
+        $uids = [];
+        foreach (explode("\n", $schemas) as $line) {
+            $schema = $line === '' ? null : json_decode($line, true);
+            if (is_array($schema) && is_string($schema['uid'] ?? null)) {
+                $uids[$schema['uid']] = true;
+            }
+        }
+
+        return $uids;
     }
 
     /** The files' bytes, onto this app's upload disk under the names their rows give. */

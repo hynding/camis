@@ -638,6 +638,19 @@ jobs:
             http://127.0.0.1:8765/api/auth/local/register | jq -r .jwt)
           node ../packages/adapter-filament/scripts/strapi-populate-vectors.mjs http://127.0.0.1:8765/api \
             --token "$T" --vectors $F/link-order-read-vectors.json --expected $F/link-order-read-vectors.expected.json
+      - name: Strapi data import and export keep Content Manager views (a strapi-php archive whose Post and Hero views were configured)
+        run: |
+          cd app
+          php artisan migrate:fresh --force
+          php artisan db:seed --class="Database\\Seeders\\RolePermissionSeeder" --force
+          F=../packages/adapter-filament/src/strapi-api/__fixtures__/transfer
+          php artisan strapi:import --file=$F/view-config-export.tar.gz --force
+          # Exported again, each view is the one Strapi saved, with what this admin does not use.
+          php artisan strapi:export --no-encrypt --file=$RUNNER_TEMP/camis-view-config
+          node ../packages/adapter-filament/scripts/strapi-transfer-compare.mjs \
+            $F/view-config-export.tar.gz $RUNNER_TEMP/camis-view-config.tar.gz
+          tar xzOf $RUNNER_TEMP/camis-view-config.tar.gz configuration/configuration_00001.jsonl \
+            | grep -q '"key":"plugin_content_manager_configuration_content_types::api::post.post".*"Headline"'
       - name: Strapi data import and export keep components' files (a strapi-php archive whose frames, seo and zone items link images)
         run: |
           cd app

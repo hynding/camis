@@ -1760,6 +1760,33 @@ account without a reading role lists nothing, and an API user is held to neither
 
 ---
 
+## Phase 54 — Strapi's Content Manager views come over (`adapter-filament`)
+
+Phase 44 kept a type's view configuration as Strapi's core store does, but a migrated project
+started from Strapi's defaults: editors lost the list columns, labels, sorting and edit layouts
+they had configured. Strapi's `strapi export` carries every view in its configuration stage
+(`plugin_content_manager_configuration_content_types::<uid>` and `…_components::<uid>`).
+
+- **`strapi:import`** keeps each view of a type or component this app has (by its Strapi schemas,
+  `resources/strapi/schemas.jsonl`) whole, under `content-manager.configuration.<uid>` (a
+  component's under `content-manager.configuration.components::<uid>`), replacing the views kept
+  before, as it replaces the other settings; `--exclude config` leaves them alone. A type's list and
+  edit form follow its imported view at once, through the sync Phase 44 made.
+- **`strapi:export`** writes every kept view back under Strapi's key, its `uid` (and `isComponent`)
+  added when a view saved here lacks them, so an archive read in and written out is the one Strapi
+  wrote. A type never configured is left out: Strapi makes its default view on its next start.
+- **Saving a view** in "Configure the view" keeps what Strapi stored beyond what this admin uses
+  (`relationOpenMode`, a relation's `mainField`, the uid), so it goes back to Strapi whole.
+
+Not built: laying out a component's fields by its view (they stay boxed together), and a relation's
+`mainField` changing the admin's pickers and list column. Both views are kept for an export.
+
+Exit: `ContentManagerViewTest.php` imports `transfer/view-config-export.tar.gz` (strapi-php's
+archive with Post's and Hero's views configured) and checks the list, the edit form and a later
+save; the boot job round-trips it through `strapi:export` and `strapi-transfer-compare.mjs`.
+
+---
+
 ## Sequencing rationale (quick reference)
 
 1. **Strapi first** — mature schema validates the IR fastest, with the thinnest adapter.

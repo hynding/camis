@@ -55,6 +55,13 @@ class ContentManagerViewTest extends TestCase
         return $user;
     }
 
+    private static function fixture(string $name): string
+    {
+        $directory = getenv('CAMIS_TRANSFER_FIXTURES') ?: base_path('../packages/adapter-filament/src/strapi-api/__fixtures__/transfer');
+
+        return $directory.'/'.$name;
+    }
+
     private function rule(string $type, string $operator, array $settings): array
     {
         return ['rules' => ['rule' => ['type' => $type, 'data' => ['operator' => $operator, 'settings' => $settings]]]];
@@ -304,6 +311,75 @@ class ContentManagerViewTest extends TestCase
         $synced = StrapiContentManager::sync($view, $stored);
         $this->assertSame(['id', 'title'], $synced['layouts']['list']);
         $this->assertSame([[['name' => 'title', 'size' => 12]], [['name' => 'views', 'size' => 4], ['name' => 'image', 'size' => 6]]], $synced['layouts']['edit']);
+    }
+
+    /**
+     * transfer/view-config-export.tar.gz is strapi-php's archive (strapi-php-export.tar.gz) with
+     * Post's view configured as Strapi's "Configure the view" saves it: twenty a page by views,
+     * newest first, no bulk actions; title (labelled Headline), views and createdAt listed; views
+     * then title on the first edit row, views locked, image left out. Hero's view is changed too.
+     */
+    public function test_a_view_configured_in_strapi_comes_over_with_its_archive(): void
+    {
+        $this->login(['post.read', 'post.update']);
+        $this->artisan('strapi:import', ['--file' => self::fixture('view-config-export.tar.gz'), '--force' => true])->assertSuccessful();
+
+        $list = Livewire::test(ListPosts::class);
+        $table = $list->instance()->getTable();
+        $this->assertFalse($list->instance()->isTableColumnToggledHidden('title'));
+        $this->assertFalse($list->instance()->isTableColumnToggledHidden('created_at'));
+        $this->assertTrue($list->instance()->isTableColumnToggledHidden('id'));
+        $this->assertTrue($list->instance()->isTableColumnToggledHidden('author.name'));
+        $list->assertSee('Headline');
+        $this->assertSame('views', $table->getDefaultSortColumn());
+        $this->assertSame('desc', $table->getDefaultSortDirection());
+        $this->assertSame(20, $table->getDefaultPaginationPageOption());
+        $this->assertSame([], $table->getToolbarActions());
+
+        $post = Post::create(['title' => 'Kept', 'views' => 7]);
+        Livewire::test(EditPost::class, ['record' => $post->getRouteKey()])
+            ->assertSee('Headline')
+            ->assertSee('What readers see first')
+            ->assertFormFieldDisabled('views')
+            ->assertFormFieldHidden('image');
+        $this->assertSame(
+            [[['name' => 'views', 'size' => 4], ['name' => 'title', 'size' => 8]], [['name' => 'author', 'size' => 6], ['name' => 'topics', 'size' => 6]]],
+            StrapiContentManager::configuration(PostResource::CONTENT_MANAGER)['layouts']['edit'],
+        );
+        // A component's view comes over too, for the next export to carry.
+        $this->assertSame('Title', StrapiSettings::get('content-manager.configuration.components::shared.hero')['metadatas']['heading']['edit']['label']);
+    }
+
+    public function test_saving_a_view_keeps_what_strapi_stored_beyond_it(): void
+    {
+        $this->login(['post.read', 'post.update']);
+        $this->artisan('strapi:import', ['--file' => self::fixture('view-config-export.tar.gz'), '--force' => true])->assertSuccessful();
+
+        Livewire::test(ConfigurePostsView::class)
+            ->fillForm(['settings' => ['pageSize' => 50]])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $stored = StrapiSettings::get('content-manager.configuration.api::post.post');
+        $this->assertSame(50, $stored['settings']['pageSize']);
+        // What Strapi keeps and this admin does not use goes back out with the next export.
+        $this->assertSame('modal', $stored['settings']['relationOpenMode']);
+        $this->assertSame('name', $stored['metadatas']['author']['edit']['mainField']);
+        $this->assertSame('api::post.post', $stored['uid']);
+    }
+
+    public function test_an_import_replaces_the_views_unless_settings_are_left_out(): void
+    {
+        $this->login(['post.read', 'post.update']);
+        $saved = StrapiContentManager::defaults(PostResource::CONTENT_MANAGER);
+        $saved['layouts']['list'] = ['views', 'id', 'title', 'author'];
+        StrapiContentManager::save(PostResource::CONTENT_MANAGER, $saved);
+        $this->artisan('strapi:import', ['--file' => self::fixture('view-config-export.tar.gz'), '--force' => true, '--exclude' => 'config'])->assertSuccessful();
+        $this->assertSame(['views', 'id', 'title', 'author'], StrapiSettings::get('content-manager.configuration.api::post.post')['layouts']['list']);
+
+        // strapi-php's own archive holds Strapi's default view, which replaces the saved one.
+        $this->artisan('strapi:import', ['--file' => self::fixture('strapi-php-export.tar.gz'), '--force' => true])->assertSuccessful();
+        $this->assertSame(['id', 'title', 'views', 'author'], StrapiSettings::get('content-manager.configuration.api::post.post')['layouts']['list']);
     }
 
     public function test_only_who_may_update_the_type_configures_its_view(): void
