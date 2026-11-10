@@ -12,7 +12,7 @@ sources="$package/src/strapi-api"
 in_app() { sed "s#^$sources/[^/]*/php/##"; }
 
 analyse() {
-  local app="$1" failed=0 path
+  local app="$1" baseline="$2" failed=0 path
   local -a paths=()
   while IFS= read -r path; do
     if [ -f "$app/$path" ]; then
@@ -24,12 +24,14 @@ analyse() {
   done
   [ "$failed" -eq 0 ] || return 1
   cp "$package/phpstan.neon" "$app/phpstan.neon"
+  cp "$package/$baseline" "$app/phpstan-baseline.neon"
   echo "PHPStan over ${#paths[@]} runtime files in $app"
-  (cd "$app" && vendor/bin/phpstan analyse --no-progress --memory-limit=1G --error-format=github "${paths[@]}")
+  (cd "$app" && vendor/bin/phpstan analyse --no-progress --memory-limit=1G --error-format=raw "${paths[@]}")
 }
 
 st=0
 find "$sources" -mindepth 3 -path "$sources/*/php/*" ! -path "$sources/storage/*" -name '*.php' |
-  in_app | sort | analyse "$(cd "$1" && pwd)" || st=1
-find "$sources/storage/php" -name '*.php' | in_app | sort | analyse "$(cd "$2" && pwd)" || st=1
+  in_app | sort | analyse "$(cd "$1" && pwd)" phpstan-baseline.neon || st=1
+find "$sources/storage/php" -name '*.php' | in_app | sort |
+  analyse "$(cd "$2" && pwd)" phpstan-baseline.storage.neon || st=1
 exit "$st"
