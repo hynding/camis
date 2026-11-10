@@ -1650,6 +1650,37 @@ its conformance fixtures, its PWA's sign-in flow, an export/import of real conte
 Exit: unit and golden tests for each; new populate vectors; sitlab's conformance suite passes on
 strapi-php and CAMIS, and its export imports with 32 of 34 compared API paths identical.
 
+## Phase 50 — Strapi's admin accounts and admin API (`adapter-filament`, `cli`)
+
+Strapi keeps the admin's accounts (`admin_users`) apart from the API's users (`up_users`); a
+migrated project kept its admins in `users`, so `/api/users` listed them and nothing could sign in
+the way Strapi's admin API does. Owner's call (2026-11-10), reversing the 2026-10-29 "one users
+table" decision.
+
+- **Admin accounts**: every Filament app keeps them in `admin_users` (Strapi's columns: names,
+  email, password, `is_active`, `blocked`, `prefered_language`, `document_id`) as `App\Models\AdminUser`.
+  The generated `config/auth.php` gives them an `admin` guard and leaves `web` to the API's users;
+  `camis scaffold` signs the panel in on it (`->authGuard('admin')`). An AdminUser holds the IR's
+  admin roles on the web guard the roles are seeded on; AdminAccess lets in an active, unblocked
+  account holding one. `camis:admin` makes AdminUsers, and the User model is no Filament user.
+  Policies decide for `User|AdminUser`; createdBy/updatedBy point at `admin_users`.
+- **Strapi's admin API** (Strapi API style, with roles): `GET /admin/init`, `POST /admin/login`,
+  `POST /admin/register-admin`, `GET /admin/users/me` and `/admin/api-tokens` (list, create, get,
+  update, revoke, regenerate), with Strapi's bodies and errors. An admin access token is an HS256
+  JWT under `ADMIN_JWT_SECRET` for 30 minutes, taken by the admin API only; API tokens need the
+  grant the API Tokens page needs (`user.update`). The page moves to `settings/api-tokens`, Strapi's
+  own path, which frees `/admin/api-tokens`. `routes/admin.php` is required from
+  `routes/transfer.php`, so an existing app needs no bootstrap patch.
+- **Settings › Admin users** lists, invites and edits admin accounts (admin roles only).
+- **`php artisan strapi:import-admins --database=…`** brings a Strapi project's admin accounts over
+  from its database (an export holds none), keeping documentId, names, state and the bcrypt hash
+  (`$2a$` read as `$2y$`); Super Admin becomes `super-admin` (else the first admin role), another
+  role the admin role of its name, and a role with no match is reported.
+
+Exit: unit and golden tests; AdminAccountsTest (guard, `/api/users`, sign-in errors and expiry,
+register-admin, API tokens with denied paths, the Admin users page, the import); the boot job's
+admin access step checks an API user never validates on the admin guard.
+
 ---
 
 ## Sequencing rationale (quick reference)

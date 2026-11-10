@@ -1,6 +1,7 @@
 import type { GeneratedFile } from "@camis/adapter-kernel";
 import type { CapabilityGap, ContentType, IrDocument } from "@camis/ir-schema";
 import type { IrBundle } from "@camis/permissions";
+import { strapiAdminFiles } from "./admin/admin-api";
 import {
   emitStrapiImportTokensCommand,
   emitStrapiTokenImport,
@@ -381,6 +382,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
         localized.size > 0,
       ),
       ...transferTokenFiles(),
+      ...strapiAdminFiles(),
     );
   }
   files.push(

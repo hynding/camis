@@ -20,6 +20,9 @@ use Throwable;
 
 class StrapiErrors
 {
+    /** Strapi's admin API routes (routes/admin.php), among Filament's own /admin pages. */
+    private const ADMIN_API = ['admin/init', 'admin/login', 'admin/register-admin', 'admin/users/me', 'admin/api-tokens', 'admin/api-tokens/*'];
+
     public function __construct(private readonly ExceptionHandler $handler)
     {
     }
@@ -46,7 +49,7 @@ class StrapiErrors
         }
 
         $this->handler->renderable(function (Throwable $e, Request $request): ?JsonResponse {
-            if (! $request->is('api/*', 'graphql', 'admin/transfer/*')) {
+            if (! $request->is('api/*', 'graphql', 'admin/transfer/*', ...self::ADMIN_API)) {
                 return null;
             }
 

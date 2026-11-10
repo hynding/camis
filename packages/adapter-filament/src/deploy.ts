@@ -95,20 +95,25 @@ php artisan route:cache
 /** Who may sign in to the Filament admin (the Strapi storage layout serves Strapi's admin instead). */
 const adminSection = `## Admin sign-in
 
-Only a user holding a role the roles file marks \`"admin": true\` may sign in to the admin, and
-never a blocked one; a project without roles lets every signed-in user in. Make the first admin
-after seeding (the password is asked for when \`--password\` is left out):
+The admin's accounts live in their own \`admin_users\` table, apart from the API's users, as
+Strapi keeps them: the generated \`config/auth.php\` gives them the \`admin\` guard, which the
+admin panel signs in on, and an API user never reaches the admin. Only an active account holding
+a role the roles file marks \`"admin": true\` may sign in, and never a blocked one; a project
+without roles lets every active account in. Make the first admin after seeding (the password is
+asked for when \`--password\` is left out):
 
 \`\`\`sh
 php artisan camis:admin admin@example.com --name="Admin"
 \`\`\`
 
-\`camis scaffold filament\` makes the User model a Filament user whose access the generated
-\`AdminAccess\` trait decides. On an app scaffolded before admin roles, edit
-\`app/Models/User.php\` by hand: declare
-\`class User extends Authenticatable implements \\Filament\\Models\\Contracts\\FilamentUser\`
-and add \`\\App\\Models\\Concerns\\AdminAccess\` to its \`use\` line. Until then Filament refuses
-every user outside \`APP_ENV=local\`.
+On the Strapi API style, Settings › Admin users manages the rest, and
+\`php artisan strapi:import-admins --database=<the Strapi database>\` brings a Strapi project's
+admin accounts over with their passwords and admin roles.
+
+\`camis scaffold filament\` signs the panel in on that guard. An app scaffolded before admin
+accounts were separate still signs its admins in as users: add \`->authGuard('admin')\` after
+\`->login()\` in \`app/Providers/Filament/AdminPanelProvider.php\`, make each admin again with
+\`camis:admin\`, then delete their old rows from \`users\`, where the API still lists them.
 
 `;
 

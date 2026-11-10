@@ -29,7 +29,7 @@ export interface HomepageType {
 export interface HomepageInput {
   types: HomepageType[];
   secured: boolean;
-  /** The admin roles, whose users Project statistics counts as admins (every user when unsecured). */
+  /** The admin roles, whose accounts Project statistics counts as admins (every one when unsecured). */
   adminRoles: string[];
   /** Strapi counts its components' categories. */
   componentCategories: number;
@@ -43,9 +43,9 @@ const typeEntry = (t: HomepageType): string =>
   `        ${phpSingleQuoted(t.uid)} => ['model' => \\${t.model}::class, 'resource' => \\${t.resource}::class, 'displayName' => ${phpSingleQuoted(t.displayName)}, 'mainField' => ${phpSingleQuoted(t.mainField)}, 'read' => ${phpSingleQuoted(t.read)}, 'draftAndPublish' => ${phpBool(t.draftAndPublish)}, 'localized' => ${phpBool(t.localized)}],`;
 
 const adminCount = (input: HomepageInput): string => {
-  if (!input.secured) return "\\App\\Models\\User::query()->count()";
+  if (!input.secured) return "\\App\\Models\\AdminUser::query()->count()";
   if (input.adminRoles.length === 0) return "0";
-  return `\\App\\Models\\User::query()->whereHas('roles', fn (Builder $role): Builder => $role->whereIn('name', [${input.adminRoles.map(phpSingleQuoted).join(", ")}]))->count()`;
+  return `\\App\\Models\\AdminUser::query()->whereHas('roles', fn (Builder $role): Builder => $role->whereIn('name', [${input.adminRoles.map(phpSingleQuoted).join(", ")}]))->count()`;
 };
 
 const statistics = (input: HomepageInput): string =>

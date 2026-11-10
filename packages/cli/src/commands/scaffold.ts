@@ -6,40 +6,42 @@ const STOCK_TRAIT_USE = "use HasFactory, Notifiable;";
 const ROLES_ONLY_TRAIT_USE = "use HasFactory, Notifiable, \\Spatie\\Permission\\Traits\\HasRoles;";
 const TOKENS_TRAIT_USE =
   "use HasFactory, Notifiable, \\Spatie\\Permission\\Traits\\HasRoles, \\Laravel\\Sanctum\\HasApiTokens;";
-const PATCHED_TRAIT_USE = TOKENS_TRAIT_USE.replace(";", ", \\App\\Models\\Concerns\\AdminAccess;");
-const STOCK_CLASS_LINE = "class User extends Authenticatable\n";
-const PATCHED_CLASS_LINE =
-  "class User extends Authenticatable implements \\Filament\\Models\\Contracts\\FilamentUser\n";
-
-const patchTraitUse = (source: string): string => {
-  if (source.includes(PATCHED_TRAIT_USE)) return source;
-  const from = [TOKENS_TRAIT_USE, ROLES_ONLY_TRAIT_USE, STOCK_TRAIT_USE].find((form) =>
-    source.includes(form),
-  );
-  return from === undefined ? source : source.replace(from, PATCHED_TRAIT_USE);
-};
-
-const patchClassLine = (source: string): string =>
-  source.includes(PATCHED_CLASS_LINE)
-    ? source
-    : source.replace(STOCK_CLASS_LINE, PATCHED_CLASS_LINE);
+// Every patched form starts so, the one from before admin accounts were separate (which goes on
+// with the AdminAccess trait) included.
+const PATCHED_TRAITS = TOKENS_TRAIT_USE.slice(0, -1);
 
 /**
- * Add Spatie's HasRoles, Sanctum's HasApiTokens and the generated AdminAccess to the Laravel User
- * model, and make it a FilamentUser so AdminAccess decides who may sign in to the admin.
- * Idempotent.
+ * Add Spatie's HasRoles and Sanctum's HasApiTokens to the Laravel User model: the API's users hold
+ * the IR's roles and Sanctum tokens. Idempotent. The User is not a Filament user: the admin's
+ * accounts are the generated AdminUser, apart from the API's users, as Strapi keeps them.
  *
- * Handles every earlier patched form as well as the stock one: an app already patched by the
- * non-strapi boot path has HasRoles but no HasApiTokens, and one scaffolded before admin roles
- * has both but no AdminAccess; returning either unchanged would leave an app that cannot issue
- * Sanctum tokens or that no one can sign in to. A source matching none is returned unchanged; the
- * caller treats that as a failure rather than reporting a patch that never happened.
+ * Handles the stock form and the roles-only one the non-strapi boot path left (HasRoles but no
+ * HasApiTokens, which would leave an app that cannot issue Sanctum tokens). A model patched before
+ * admin accounts were separate (with AdminAccess and FilamentUser) is left as it is: the trait is
+ * still generated, and lets no User into the admin. A source matching none is returned unchanged;
+ * the caller treats that as a failure rather than reporting a patch that never happened.
  */
-export const patchUserModel = (source: string): string => patchClassLine(patchTraitUse(source));
+export const patchUserModel = (source: string): string => {
+  if (source.includes(PATCHED_TRAITS)) return source;
+  const from = [ROLES_ONLY_TRAIT_USE, STOCK_TRAIT_USE].find((form) => source.includes(form));
+  return from === undefined ? source : source.replace(from, TOKENS_TRAIT_USE);
+};
 
-/** Whether the User model carries every trait and the FilamentUser contract. */
-export const isPatchedUserModel = (source: string): boolean =>
-  source.includes(PATCHED_TRAIT_USE) && source.includes(PATCHED_CLASS_LINE);
+/** Whether the User model carries HasRoles and HasApiTokens. */
+export const isPatchedUserModel = (source: string): boolean => source.includes(PATCHED_TRAITS);
+
+const STOCK_PANEL_LOGIN = "            ->login()\n";
+const ADMIN_GUARD = "->authGuard('admin')";
+
+/**
+ * Sign the admin panel in on the generated `admin` guard, whose accounts are AdminUser rows apart
+ * from the API's users. Idempotent. A source without the stock `->login()` line is returned
+ * unchanged; the caller treats that as a failure rather than reporting a patch that never happened.
+ */
+export const patchAdminPanelProvider = (source: string): string =>
+  source.includes(ADMIN_GUARD)
+    ? source
+    : source.replace(STOCK_PANEL_LOGIN, `${STOCK_PANEL_LOGIN}            ${ADMIN_GUARD}\n`);
 
 const STOCK_ROUTING_CONSOLE = "commands: __DIR__.'/../routes/console.php',";
 const ROUTING_WITH_API = `api: __DIR__.'/../routes/api.php',\n        ${STOCK_ROUTING_CONSOLE}`;
@@ -353,11 +355,23 @@ export const scaffoldCommand = async (
       return 1;
     }
     await io.writeFile(userModelPath, patched);
-    io.out(
-      "✓ patched app/Models/User.php with Spatie HasRoles, Sanctum HasApiTokens and the admin access",
-    );
+    io.out("✓ patched app/Models/User.php with Spatie HasRoles and Sanctum HasApiTokens");
   } catch (e) {
     io.out(`✗ cannot patch ${userModelPath}: ${(e as Error).message}`);
+    return 1;
+  }
+
+  const panelPath = join(appDir, "app/Providers/Filament/AdminPanelProvider.php");
+  try {
+    const patched = patchAdminPanelProvider(await io.readFile(panelPath));
+    if (!patched.includes(ADMIN_GUARD)) {
+      io.out("✗ could not patch the admin panel provider: no stock `->login()` line");
+      return 1;
+    }
+    await io.writeFile(panelPath, patched);
+    io.out("✓ patched the admin panel to sign in on the admin guard (admin accounts)");
+  } catch (e) {
+    io.out(`✗ cannot patch ${panelPath}: ${(e as Error).message}`);
     return 1;
   }
 

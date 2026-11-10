@@ -459,6 +459,9 @@ class ApiTokenResource extends Resource
 {
     protected static ?string $model = StrapiApiToken::class;
 
+    // Strapi's own path for the page, which leaves /admin/api-tokens to its admin API.
+    protected static ?string $slug = 'settings/api-tokens';
+
     protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-key';
 ${navigationProperties(SETTINGS.apiTokens)}
     protected static ?string $modelLabel = 'API token';

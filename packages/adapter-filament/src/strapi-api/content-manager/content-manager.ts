@@ -110,14 +110,14 @@ const relationConstraint = (
 ): string =>
   `RelationshipConstraint::make('${relation}')${multiple ? "->multiple()" : ""}->selectable(IsRelatedToOperator::make()->titleAttribute('${title}')${drafts ? "->modifyRelationshipQueryUsing(fn ($query) => $query->whereNull('published_at'))" : ""}->searchable()->multiple())`;
 
-/** The user an admin write records, as Strapi's createdBy and updatedBy. */
+/** The admin account an admin write records, as Strapi's createdBy and updatedBy. */
 const creator = (name: string, relation: string): ContentManagerAttribute => ({
   name,
   type: "relation",
   relation: "oneToOne",
   components: [],
-  column: `TextColumn::make('${relation}.name')->sortable()`,
-  constraint: relationConstraint(relation, "name", false),
+  column: `TextColumn::make('${relation}.firstname')->sortable()`,
+  constraint: relationConstraint(relation, "firstname", false),
   sortable: true,
 });
 

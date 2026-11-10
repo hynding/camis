@@ -30,6 +30,8 @@ export const SETTINGS = {
   transferTokens: settings("Transfer Tokens", 30),
   webhooks: settings("Webhooks", 40),
   dataTransfer: settings("Data transfer", 50),
+  // Strapi's Administration Panel › Users: the admin's own accounts, apart from the API's users.
+  adminUsers: settings("Admin users", 52),
   email: settings("Email", 55),
   roles: settings("Roles", 60),
   providers: settings("Providers", 70),

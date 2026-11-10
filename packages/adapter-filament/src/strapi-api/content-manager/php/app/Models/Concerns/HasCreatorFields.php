@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models\Concerns;
 
-use App\Models\User;
+use App\Models\AdminUser;
 use Filament\Facades\Filament;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -27,7 +27,7 @@ trait HasCreatorFields
         });
     }
 
-    /** The signed-in admin's id, while the admin panel serves the write. */
+    /** The signed-in admin account's id, while the admin panel serves the write. */
     private static function adminUser(): ?int
     {
         if (Filament::getCurrentPanel() === null) {
@@ -40,11 +40,11 @@ trait HasCreatorFields
 
     public function createdBy(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'created_by_id');
+        return $this->belongsTo(AdminUser::class, 'created_by_id');
     }
 
     public function updatedBy(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'updated_by_id');
+        return $this->belongsTo(AdminUser::class, 'updated_by_id');
     }
 }
