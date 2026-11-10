@@ -4,6 +4,7 @@ import { vanillaTemplate } from "./vanilla";
 
 export type { ProjectTemplate } from "./project-template";
 export {
+  SUPER_ADMIN_ROLE,
   strapiDefaultRoles,
   withMediaLibrary,
   withStrapiUsers,

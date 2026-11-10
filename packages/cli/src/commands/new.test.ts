@@ -281,6 +281,75 @@ describe("newCommand — from an existing Strapi project", () => {
     expect(roles.roles[2]?.grants.map((g) => g.contentType)).toEqual(["Page", "File", "User"]);
   });
 
+  // strapi-php's getstarted database with Strapi's Editor and Author and a custom role.
+  const ADMIN_DATABASE = join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../../../adapter-strapi/src/import/__fixtures__/strapi-php-admin.db",
+  );
+  const categoryProject = async (): Promise<string> => {
+    const dir = await mkdtemp(join(tmpdir(), "camis-new-admin-roles-"));
+    const ctDir = join(dir, "src/api/category/content-types/category");
+    await mkdir(ctDir, { recursive: true });
+    await writeFile(
+      join(ctDir, "schema.json"),
+      JSON.stringify({
+        kind: "collectionType",
+        info: { singularName: "category", pluralName: "categories", displayName: "Category" },
+        options: { draftAndPublish: true },
+        attributes: {
+          name: { type: "string" },
+          datetime: { type: "datetime" },
+          date: { type: "date" },
+        },
+      }),
+    );
+    return dir;
+  };
+
+  it("brings Strapi's admin roles in from its database, after the super-admin", async () => {
+    const { io, files, lines } = memoryIo();
+    expect(
+      await newCommand("migrated", io, {
+        fromStrapi: await categoryProject(),
+        strapiAdminRoles: ADMIN_DATABASE,
+        skipScaffold: true,
+        skipBuild: true,
+      }),
+    ).toBe(0);
+    const roles = json(files, "/work/migrated/roles.json") as {
+      roles: {
+        name: string;
+        admin?: boolean;
+        grants: { contentType: string; actions: string[] }[];
+      }[];
+    };
+    expect(roles.roles.map((r) => [r.name, r.admin === true])).toEqual([
+      ["public", false],
+      ["authenticated", false],
+      ["super-admin", true],
+      ["editor", true],
+      ["author", true],
+      ["content-writer", true],
+    ]);
+    expect(roles.roles[3]?.grants).toEqual([
+      { contentType: "Category", actions: ["create", "read", "update"] },
+      { contentType: "File", actions: ["create", "read", "update", "delete"] },
+    ]);
+    // The super-admin manages the media library the admin roles' grants brought in.
+    expect(roles.roles[2]?.grants.map((g) => g.contentType)).toEqual(["Category", "File", "User"]);
+    const out = lines.join("\n");
+    expect(out).toContain(`✓ imported 3 admin roles from ${ADMIN_DATABASE}`);
+    expect(out).toMatch(/⚠ strapiAdminPermission .*admin role "author"/);
+  });
+
+  it("reads admin roles only along with --from-strapi", async () => {
+    const { io, lines } = memoryIo();
+    expect(await newCommand("p", io, { strapiAdminRoles: "data.db" })).toBe(1);
+    expect(lines.join("\n")).toContain(
+      "--admin-roles-from reads a Strapi database, so it needs --from-strapi",
+    );
+  });
+
   it("gives the super-admin the archive's builtin types too, after the archive's roles", async () => {
     const source = await strapiProject();
     const archive = join(

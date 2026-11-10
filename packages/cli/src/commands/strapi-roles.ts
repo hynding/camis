@@ -1,9 +1,10 @@
 import { isAbsolute, resolve } from "node:path";
-import { readStrapiRoles } from "@camis/adapter-strapi";
+import { readStrapiAdminRoles, readStrapiRoles } from "@camis/adapter-strapi";
 import { validate } from "@camis/ir-core";
 import type { IrDocument } from "@camis/ir-schema";
-import { validateBundle, type RolesFile } from "@camis/permissions";
+import { validateBundle, type Role, type RolesFile } from "@camis/permissions";
 import type { Io } from "../io";
+import { SUPER_ADMIN_ROLE, withSuperAdmin } from "../templates";
 import { printGaps } from "./generate";
 import { locStr } from "./validate";
 
@@ -50,4 +51,53 @@ export const strapiRoles = async (
   io.out(`✓ imported ${imported.roles.roles.length} roles from ${source.archive}`);
   printGaps(io, imported.gaps);
   return { ok: true, document: validated.value, roles: imported.roles };
+};
+
+/**
+ * Strapi's admin roles, read from its SQLite database (a `strapi export` holds none), as the IR's
+ * admin roles, with the document they need; errors and gaps are printed. A role keeps clear of
+ * the names in `taken`, and of the super-admin, which stands for Strapi's Super Admin.
+ */
+export const strapiAdminRoles = (
+  io: Io,
+  document: IrDocument,
+  database: string,
+  taken: readonly string[],
+): { ok: true; document: IrDocument; roles: Role[] } | { ok: false } => {
+  const path =
+    database.includes("://") || isAbsolute(database) ? database : resolve(io.cwd, database);
+  let imported: ReturnType<typeof readStrapiAdminRoles>;
+  try {
+    imported = readStrapiAdminRoles(path, document, [...taken, SUPER_ADMIN_ROLE]);
+  } catch (e) {
+    io.out(`✗ cannot read admin roles from ${database}: ${(e as Error).message}`);
+    return { ok: false };
+  }
+  io.out(`✓ imported ${imported.roles.length} admin roles from ${database}`);
+  printGaps(io, imported.gaps);
+  return { ok: true, document: imported.document, roles: imported.roles };
+};
+
+/**
+ * The users' roles, then the super-admin (Strapi's Super Admin), then Strapi's other admin roles,
+ * checked against the document.
+ */
+export const withAdminRoles = (
+  io: Io,
+  roles: RolesFile,
+  adminRoles: readonly Role[],
+  document: IrDocument,
+): { ok: true; roles: RolesFile } | { ok: false } => {
+  const withSuper = withSuperAdmin(roles, document);
+  const merged: RolesFile = { ...withSuper, roles: [...withSuper.roles, ...adminRoles] };
+  const bundle = validateBundle({
+    document,
+    roles: merged.roles,
+    ...(merged.defaultRole !== undefined ? { defaultRole: merged.defaultRole } : {}),
+  });
+  if (!bundle.ok) {
+    for (const e of bundle.errors) io.out(`✗ [${e.code}] ${locStr(e.location)} — ${e.message}`);
+    return { ok: false };
+  }
+  return { ok: true, roles: merged };
 };

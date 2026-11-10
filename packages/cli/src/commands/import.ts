@@ -5,11 +5,17 @@ import { deploymentEnv } from "@camis/adapter-filament";
 import { deploymentSettings, readStrapiProject } from "@camis/adapter-strapi";
 import { validate } from "@camis/ir-core";
 import type { CapabilityGap, IrDocument, Result } from "@camis/ir-schema";
+import type { Role, RolesFile } from "@camis/permissions";
 import type { Io } from "../io";
-import { withMediaLibrary, withStrapiUsers } from "../templates";
+import { strapiDefaultRoles, withMediaLibrary, withStrapiUsers } from "../templates";
 import { printGaps } from "./generate";
 import { readStrapiConfig } from "./strapi-config";
-import { strapiRoles, type StrapiRolesSource } from "./strapi-roles";
+import {
+  strapiAdminRoles,
+  strapiRoles,
+  withAdminRoles,
+  type StrapiRolesSource,
+} from "./strapi-roles";
 import { locStr } from "./validate";
 
 const abs = (io: Io, p: string): string => (isAbsolute(p) ? p : resolve(io.cwd, p));
@@ -23,6 +29,10 @@ export const importCommand = async (
     upsertBy?: string;
     /** A Strapi export whose roles become the IR's, and where to write them. */
     roles?: StrapiRolesSource & { out: string };
+    /** A Strapi project's SQLite database, whose admin roles join the roles file. */
+    adminRoles?: string;
+    /** Where the roles file goes when only admin roles are read (default roles.json). */
+    rolesOut?: string;
     /** Where the Laravel env a Strapi project's config maps to goes (default: beside the IR). */
     envOut?: string;
   } = {},
@@ -39,6 +49,9 @@ export const importCommand = async (
     gaps = read.gaps.gaps;
   } else if (opts.roles !== undefined) {
     io.out("✗ --roles-from reads a Strapi export, so it applies only to `import strapi`");
+    return 1;
+  } else if (opts.adminRoles !== undefined) {
+    io.out("✗ --admin-roles-from reads a Strapi database, so it applies only to `import strapi`");
     return 1;
   } else if (target === "express") {
     let content: string;
@@ -68,15 +81,33 @@ export const importCommand = async (
     return 1;
   }
   let document = revalidated.value;
+  let roles: RolesFile | undefined;
   if (opts.roles !== undefined) {
-    const roles = await strapiRoles(io, document, opts.roles);
-    if (!roles.ok) return 1;
-    document = roles.document;
-    await io.writeFile(abs(io, opts.roles.out), stableJson(roles.roles));
-    io.out(`✓ roles → ${opts.roles.out}`);
+    const read = await strapiRoles(io, document, opts.roles);
+    if (!read.ok) return 1;
+    document = read.document;
+    roles = read.roles;
+  }
+  let adminRoles: Role[] | undefined;
+  if (opts.adminRoles !== undefined) {
+    const taken = (roles ?? strapiDefaultRoles()).roles.map((r) => r.name);
+    const read = strapiAdminRoles(io, document, opts.adminRoles, taken);
+    if (!read.ok) return 1;
+    document = read.document;
+    adminRoles = read.roles;
   }
   // As its upload plugin, Strapi's users-permissions plugin is always there.
   if (target === "strapi") document = withStrapiUsers(document);
+  if (adminRoles !== undefined) {
+    const merged = withAdminRoles(io, roles ?? strapiDefaultRoles(), adminRoles, document);
+    if (!merged.ok) return 1;
+    roles = merged.roles;
+  }
+  if (roles !== undefined) {
+    const rolesOut = opts.roles?.out ?? opts.rolesOut ?? "roles.json";
+    await io.writeFile(abs(io, rolesOut), stableJson(roles));
+    io.out(`✓ roles → ${rolesOut}`);
+  }
   const out = abs(io, outPath);
   await io.writeFile(out, stableJson(document));
   io.out(`✓ imported → ${outPath}`);

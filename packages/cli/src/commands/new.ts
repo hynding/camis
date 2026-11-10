@@ -12,12 +12,17 @@ import {
   strapiDefaultRoles,
   withMediaLibrary,
   withStrapiUsers,
-  withSuperAdmin,
   type ProjectTemplate,
 } from "../templates";
 import { generateCommand, printGaps } from "./generate";
 import { scaffoldCommand } from "./scaffold";
-import { strapiRoles, type StrapiRolesSource } from "./strapi-roles";
+import {
+  strapiAdminRoles,
+  strapiRoles,
+  withAdminRoles,
+  type StrapiRolesSource,
+} from "./strapi-roles";
+import type { Role } from "@camis/permissions";
 import { locStr } from "./validate";
 
 type TargetName = TargetConfig["target"];
@@ -33,6 +38,8 @@ export interface NewOptions {
   fromStrapi?: string;
   /** With `fromStrapi`: a Strapi export whose roles become the project's. */
   strapiRoles?: StrapiRolesSource;
+  /** With `fromStrapi`: its SQLite database, whose admin roles become the project's. */
+  strapiAdminRoles?: string;
   skipScaffold?: boolean;
   skipBuild?: boolean;
 }
@@ -48,6 +55,12 @@ const planFrom = (options: NewOptions): { ok: true; plan: Plan } | { ok: false; 
   }
   if (options.strapiRoles !== undefined && options.fromStrapi === undefined) {
     return { ok: false, error: "--roles-from reads a Strapi export, so it needs --from-strapi" };
+  }
+  if (options.strapiAdminRoles !== undefined && options.fromStrapi === undefined) {
+    return {
+      ok: false,
+      error: "--admin-roles-from reads a Strapi database, so it needs --from-strapi",
+    };
   }
   if (options.template !== undefined && !isProjectTemplateName(options.template)) {
     return {
@@ -175,6 +188,7 @@ export const newCommand = async (dir: string, io: Io, options: NewOptions): Prom
   }
 
   let content: ProjectTemplate;
+  let adminRoles: Role[] = [];
   if (options.fromStrapi !== undefined) {
     const imported = await importFromStrapi(io, options.fromStrapi);
     if (!imported.ok) return 1;
@@ -184,6 +198,13 @@ export const newCommand = async (dir: string, io: Io, options: NewOptions): Prom
       const roles = await strapiRoles(io, imported.document, options.strapiRoles);
       if (!roles.ok) return 1;
       content = { document: roles.document, roles: roles.roles };
+    }
+    if (options.strapiAdminRoles !== undefined) {
+      const taken = content.roles.roles.map((r) => r.name);
+      const read = strapiAdminRoles(io, content.document, options.strapiAdminRoles, taken);
+      if (!read.ok) return 1;
+      content = { ...content, document: read.document };
+      adminRoles = read.roles;
     }
   } else {
     content = projectTemplate(
@@ -202,13 +223,10 @@ export const newCommand = async (dir: string, io: Io, options: NewOptions): Prom
     return 1;
   }
 
+  const roles = withAdminRoles(io, content.roles, adminRoles, validated.value);
+  if (!roles.ok) return 1;
   const targets = plan.targets.map((t) => targetConfig(t, name, plan));
-  await writeProject(
-    io,
-    projectDir,
-    { document: validated.value, roles: withSuperAdmin(content.roles, validated.value) },
-    targets,
-  );
+  await writeProject(io, projectDir, { document: validated.value, roles: roles.roles }, targets);
   io.out(`✓ wrote camis.json, roles.json and camis.config.json in ${dir}`);
 
   const pending: string[] = [];
