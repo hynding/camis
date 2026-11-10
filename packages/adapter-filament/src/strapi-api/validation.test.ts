@@ -96,6 +96,13 @@ describe("entity validation", () => {
     expect(ticket).toContain("'body' => ['type' => 'blocks'],");
   });
 
+  // yup's oneOf([...enum, null]) prints null as an empty string (strapi-php fixed its copy in #17).
+  it("ends an enumeration's allowed values with an empty string, as Strapi does", () => {
+    expect(content("app/Support/StrapiValidator.php")).toContain(
+      "implode(', ', [...$rule['enum'], ''])",
+    );
+  });
+
   it("ships the validator", async () => {
     expect(content("app/Support/StrapiValidator.php")).toContain("final class StrapiValidator");
     await expect(content("app/Support/StrapiValidator.php")).toMatchFileSnapshot(

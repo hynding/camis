@@ -138,6 +138,16 @@
       "path": "/books",
       "query": "populate[nope]=true"
     },
+    {
+      "name": "populate a field that is not populatable, as an object",
+      "path": "/books",
+      "query": "populate[title]=true"
+    },
+    {
+      "name": "populate a related type's field that is not populatable",
+      "path": "/books",
+      "query": "populate[author][populate][name]=true"
+    },
     { "name": "populate=true is not a key", "path": "/books", "query": "populate=true" },
     {
       "name": "nested populate of an unknown key",

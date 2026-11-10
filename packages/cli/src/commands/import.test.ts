@@ -138,6 +138,29 @@ describe("importCommand", () => {
       expect.objectContaining({ name: "File", builtin: "file" }),
     );
   });
+  it("declares Strapi's users on a Strapi import, as the users-permissions plugin is always there", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "camis-cli-strapi-users-"));
+    const ctDir = join(dir, "src/api/page/content-types/page");
+    await mkdir(ctDir, { recursive: true });
+    await writeFile(
+      join(ctDir, "schema.json"),
+      JSON.stringify({
+        kind: "collectionType",
+        info: { singularName: "page", pluralName: "pages", displayName: "Page" },
+        attributes: { title: { type: "string" } },
+      }),
+    );
+    const written: Record<string, string> = {};
+    expect(await importCommand("strapi", dir, join(dir, "ir.json"), memIo({}, [], written))).toBe(
+      0,
+    );
+    const document = JSON.parse(written[join(dir, "ir.json")]!) as {
+      contentTypes: { name: string; builtin?: string }[];
+    };
+    expect(document.contentTypes).toContainEqual(
+      expect.objectContaining({ name: "User", builtin: "user" }),
+    );
+  });
   // A dropped attribute must be visible: otherwise an import silently loses fields.
   it("prints the capability gaps of a Strapi import", async () => {
     const dir = await mkdtemp(join(tmpdir(), "camis-cli-strapi-gaps-"));

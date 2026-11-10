@@ -185,12 +185,12 @@
     "status": 400,
     "error": {
       "name": "ValidationError",
-      "message": "kind must be one of the following values: alpha, beta, null",
+      "message": "kind must be one of the following values: alpha, beta, ",
       "details": {
         "errors": [
           {
             "path": ["kind"],
-            "message": "kind must be one of the following values: alpha, beta, null",
+            "message": "kind must be one of the following values: alpha, beta, ",
             "name": "ValidationError",
             "value": "gamma"
           }
@@ -417,7 +417,7 @@
           },
           {
             "path": ["kind"],
-            "message": "kind must be one of the following values: alpha, beta, null",
+            "message": "kind must be one of the following values: alpha, beta, ",
             "name": "ValidationError",
             "value": "gamma"
           },

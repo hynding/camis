@@ -575,6 +575,32 @@
       }
     }
   },
+  "populate a field that is not populatable, as an object": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid key title",
+      "details": {
+        "key": "title",
+        "path": "title",
+        "source": "query",
+        "param": "populate"
+      }
+    }
+  },
+  "populate a related type's field that is not populatable": {
+    "status": 400,
+    "error": {
+      "name": "ValidationError",
+      "message": "Invalid key name at author.populate.name",
+      "details": {
+        "key": "name",
+        "path": "author.populate.name",
+        "source": "query",
+        "param": "populate"
+      }
+    }
+  },
   "populate=true is not a key": {
     "status": 400,
     "error": {

@@ -97,6 +97,17 @@ describe("newCommand — project files", () => {
     expect(ir.contentTypes.map((ct) => ct.name)).toContain("Article");
   });
 
+  // The users-permissions plugin seeds them with these words; the API serves them on /users.
+  it("describes the two default roles in Strapi's words", async () => {
+    const { io, files } = memoryIo();
+    await newCommand("p", io, {});
+    const roles = json(files, "/work/p/roles.json") as { roles: { description: string }[] };
+    expect(roles.roles.slice(0, 2).map((r) => r.description)).toEqual([
+      "Default role given to unauthenticated user.",
+      "Default role given to authenticated user.",
+    ]);
+  });
+
   it("refuses to write over an existing camis project", async () => {
     const { io, files, lines } = memoryIo({
       files: { "/work/taken/camis.config.json": "{}" },
@@ -149,7 +160,7 @@ describe("newCommand — from an existing Strapi project", () => {
     const { io, files, lines } = memoryIo();
     expect(await newCommand("migrated", io, { fromStrapi: source })).toBe(0);
     const ir = json(files, "/work/migrated/camis.json") as { contentTypes: { name: string }[] };
-    expect(ir.contentTypes.map((ct) => ct.name)).toEqual(["Page"]);
+    expect(ir.contentTypes.map((ct) => ct.name)).toEqual(["Page", "User"]);
     expect(lines.join("\n")).toMatch(/⚠ morphRelation @ Page\.related/);
   });
 
@@ -218,7 +229,31 @@ describe("newCommand — from an existing Strapi project", () => {
     expect(roles.roles.map((r) => r.name)).toEqual(["public", "authenticated", "super-admin"]);
     expect(roles.roles[2]).toMatchObject({
       admin: true,
-      grants: [{ contentType: "Page", actions: ["create", "read", "update", "delete"] }],
+      grants: [
+        { contentType: "Page", actions: ["create", "read", "update", "delete"] },
+        { contentType: "User", actions: ["create", "read", "update", "delete"] },
+      ],
+    });
+  });
+
+  // Strapi's users-permissions plugin is always there, and the admin's settings pages (users,
+  // roles, API tokens) are behind the user grants: without the type the super-admin is locked out.
+  it("declares Strapi's users, so the super-admin may manage them and the settings", async () => {
+    const source = await strapiProject();
+    const { io, files } = memoryIo();
+    await newCommand("migrated", io, { fromStrapi: source, skipScaffold: true, skipBuild: true });
+    const ir = json(files, "/work/migrated/camis.json") as {
+      contentTypes: { name: string; builtin?: string }[];
+    };
+    expect(ir.contentTypes).toContainEqual(
+      expect.objectContaining({ name: "User", builtin: "user" }),
+    );
+    const roles = json(files, "/work/migrated/roles.json") as {
+      roles: { name: string; grants: { contentType: string; actions: string[] }[] }[];
+    };
+    expect(roles.roles[2]?.grants).toContainEqual({
+      contentType: "User",
+      actions: ["create", "read", "update", "delete"],
     });
   });
 
@@ -243,7 +278,7 @@ describe("newCommand — from an existing Strapi project", () => {
     const roles = json(files, "/work/migrated/roles.json") as {
       roles: { name: string; grants: { contentType: string }[] }[];
     };
-    expect(roles.roles[2]?.grants.map((g) => g.contentType)).toEqual(["Page", "File"]);
+    expect(roles.roles[2]?.grants.map((g) => g.contentType)).toEqual(["Page", "File", "User"]);
   });
 
   it("gives the super-admin the archive's builtin types too, after the archive's roles", async () => {
@@ -359,6 +394,18 @@ describe("newCommand — scaffold and build", () => {
     expect(calls).toEqual([]);
     expect(materialized).toEqual([]);
     expect(lines.join("\n")).toContain("camis scaffold filament generated/filament");
+  });
+
+  // The scaffold refuses a non-empty directory, so building first would block the next step.
+  it("leaves the build for after the scaffold when only the scaffold is skipped", async () => {
+    const { io, calls, materialized, lines } = memoryIo();
+    const code = await newCommand("p", io, { targets: ["filament"], skipScaffold: true });
+    expect(code).toBe(0);
+    expect(calls).toEqual([]);
+    expect(materialized).toEqual([]);
+    expect(lines.join("\n")).toContain(
+      "next: cd p && camis scaffold filament generated/filament && camis build",
+    );
   });
 
   it("finishes with the next steps", async () => {

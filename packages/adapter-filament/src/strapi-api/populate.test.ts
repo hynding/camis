@@ -51,6 +51,16 @@ describe("populate and relation runtime files", () => {
     expect(php.startsWith(`<?php\n${PHP_MARKER}\n\ndeclare(strict_types=1);\n`)).toBe(true);
     expect(php).toContain("namespace App\\Support;");
   });
+  // Strapi reports an attribute it cannot populate at its own path, and an unknown key at none.
+  it("reports a field that is not populatable at its own path", () => {
+    expect(emitStrapiPopulate()).toContain(
+      "throw StrapiError::invalidKey($key, isset($serializer::FIELDS[$key]) ? $fieldPath : $path, 'populate');",
+    );
+    // The object form's path runs through each `populate` key: author.populate.name.
+    expect(emitStrapiPopulate()).toContain(
+      "$at === null ? $key : str_replace('.', '.populate.', $at).'.populate.'.$key",
+    );
+  });
   it("StrapiPopulate golden", async () => {
     await expect(emitStrapiPopulate()).toMatchFileSnapshot(
       "./__golden__/strapi-api/StrapiPopulate.php",
