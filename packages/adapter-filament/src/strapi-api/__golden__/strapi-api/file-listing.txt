@@ -349,6 +349,7 @@ overwrite app/Support/StrapiItems.php
 overwrite app/Support/StrapiLinkOrder.php
 overwrite app/Support/StrapiLinkPivot.php
 overwrite app/Support/StrapiLocales.php
+overwrite app/Support/StrapiMimeTypes.php
 overwrite app/Support/StrapiOAuth.php
 overwrite app/Support/StrapiPopulate.php
 overwrite app/Support/StrapiProviders.php
@@ -370,6 +371,7 @@ overwrite app/Support/StrapiValidator.php
 overwrite app/Support/StrapiWebhooks.php
 overwrite app/Support/StrapiZones.php
 overwrite config/camis.php
+overwrite config/cors.php
 overwrite database/migrations/0001_01_02_000000_add_username_to_users_table.php
 overwrite database/migrations/0001_01_02_000000_create_files_table.php
 overwrite database/migrations/0001_01_02_000000_create_i18n_locales_table.php

@@ -34,6 +34,10 @@ export interface UploadSettings {
   storage: FileStorage;
   /** The largest upload accepted, in bytes. */
   sizeLimit?: Setting;
+  /** The MIME types (or patterns such as image/*) an upload may have; none at all when empty. */
+  allowedTypes?: string[];
+  /** The MIME types (or patterns) an upload may not have. */
+  deniedTypes?: string[];
 }
 
 export type MailTransport =

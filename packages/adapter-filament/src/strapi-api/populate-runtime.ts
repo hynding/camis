@@ -115,7 +115,7 @@ final class StrapiPopulate
         }
         foreach ($populate as $key => $value) {
             $key = (string) $key;
-            self::known($key, $serializer, self::join($at, null), $at);
+            self::known($key, $serializer, $at, $at, $at === null ? $key : str_replace('.', '.populate.', $at).'.populate.'.$key);
             if ($value === false || $value === 'false') {
                 continue;
             }
@@ -136,7 +136,7 @@ final class StrapiPopulate
     private static function dotted(array &$tree, string $item, string $serializer, ?Authenticatable $viewer, ?string $at): void
     {
         [$key, $rest] = array_pad(explode('.', $item, 2), 2, null);
-        self::known($key, $serializer, self::join($at, $key), $at);
+        self::known($key, $serializer, self::join($at, $key), $at, (string) self::join($at, $key));
         if (! self::allowed($key, $serializer, $viewer)) {
             return;
         }
@@ -162,17 +162,18 @@ final class StrapiPopulate
 
     /**
      * A key populate may name: a component or a relation, not a private one. $path is what the error
-     * reports; Strapi names a private key's own path even in the object form, which reports none for
-     * an unknown key.
+     * reports; Strapi names a private or unpopulatable field's own path even in the object form, which
+     * reports none for an unknown key. $fieldPath is the field's own path, through each populate key
+     * in the object form.
      */
-    private static function known(string $key, string $serializer, ?string $path, ?string $at): void
+    private static function known(string $key, string $serializer, ?string $path, ?string $at, string $fieldPath): void
     {
         $field = $serializer::FIELDS[$key] ?? [];
         if (isset($field['private'])) {
             throw StrapiError::invalidKey($key, self::join($at, $key), 'populate');
         }
         if (! in_array($key, $serializer::COMPONENTS, true) && ! isset($field['relation'])) {
-            throw StrapiError::invalidKey($key, $path ?? $at, 'populate');
+            throw StrapiError::invalidKey($key, isset($serializer::FIELDS[$key]) ? $fieldPath : $path, 'populate');
         }
     }
 

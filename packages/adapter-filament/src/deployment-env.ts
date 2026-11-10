@@ -60,7 +60,16 @@ const line = (name: string, value: Setting | undefined): string[] => {
   return [...fallback, `${name}=\${${value.env}}`];
 };
 
-const uploadLines = (upload: UploadSettings, packages: Set<string>): string[] => {
+const typeLines = (upload: UploadSettings): string[] => [
+  ...(upload.allowedTypes === undefined
+    ? []
+    : [`CAMIS_UPLOAD_ALLOWED_TYPES=${literal(upload.allowedTypes.join(","))}`]),
+  ...(upload.deniedTypes === undefined
+    ? []
+    : [`CAMIS_UPLOAD_DENIED_TYPES=${literal(upload.deniedTypes.join(","))}`]),
+];
+
+const storageLines = (upload: UploadSettings, packages: Set<string>): string[] => {
   const lines = [`# Upload: ${upload.provider}`];
   const storage = upload.storage;
   if (storage.kind === "s3") {
@@ -90,6 +99,11 @@ const uploadLines = (upload: UploadSettings, packages: Set<string>): string[] =>
   }
   return lines;
 };
+
+const uploadLines = (upload: UploadSettings, packages: Set<string>): string[] => [
+  ...storageLines(upload, packages),
+  ...typeLines(upload),
+];
 
 const errorReportingLines = (
   reporting: ErrorReportingSettings,

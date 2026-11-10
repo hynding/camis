@@ -1,3 +1,4 @@
+import { BUILTIN_USER } from "@camis/adapter-strapi";
 import type { IrDocument } from "@camis/ir-schema";
 import type { Grant, RolesFile } from "@camis/permissions";
 
@@ -15,12 +16,12 @@ export const strapiDefaultRoles = (publicGrants: Grant[] = []): RolesFile => ({
   roles: [
     {
       name: "public",
-      description: "Default role given to unauthenticated users.",
+      description: "Default role given to unauthenticated user.",
       grants: publicGrants,
     },
     {
       name: "authenticated",
-      description: "Default role given to authenticated users.",
+      description: "Default role given to authenticated user.",
       grants: [],
     },
   ],
@@ -76,3 +77,13 @@ export const withMediaLibrary = (document: IrDocument): IrDocument => {
     ],
   };
 };
+
+/**
+ * A Strapi project's document with Strapi's users, as its users-permissions plugin is always there;
+ * the admin's users, roles and API token pages are behind the user grants, so without the type no
+ * role, the super-admin included, may open them.
+ */
+export const withStrapiUsers = (document: IrDocument): IrDocument =>
+  document.contentTypes.some((ct) => ct.builtin === "user" || ct.name === BUILTIN_USER.name)
+    ? document
+    : { ...document, contentTypes: [...document.contentTypes, BUILTIN_USER] };

@@ -10,6 +10,7 @@ use App\Http\Serializers\FileSerializer;
 use App\Models\File;
 use App\Support\StrapiError;
 use App\Support\StrapiFolders;
+use App\Support\StrapiMimeTypes;
 use App\Support\StrapiPopulate;
 use App\Support\StrapiQuery;
 use App\Support\StrapiUpload;
@@ -42,7 +43,7 @@ class UploadController extends Controller
         if ($uploads === []) {
             throw StrapiError::validation('Files are empty');
         }
-        $infos = $this->infos($request);
+        [$uploads, $infos] = $this->permitted($uploads, $this->infos($request));
         $entry = $this->entry($request);
         $stored = DB::transaction(function () use ($uploads, $infos, $entry): array {
             // As Strapi's Content API: every upload goes to the API Uploads folder.
@@ -170,6 +171,37 @@ class UploadController extends Controller
         $files = $files instanceof UploadedFile ? [$files] : (is_array($files) ? $files : []);
 
         return array_values(array_filter($files, fn (mixed $f): bool => $f instanceof UploadedFile));
+    }
+
+    /**
+     * The uploads the upload security lets through, with their fileInfo, as Strapi's Content API
+     * drops the others; refused when none is left, with the first one's reason.
+     *
+     * @param  list<UploadedFile>  $uploads
+     * @param  list<array>  $infos
+     * @return array{list<UploadedFile>, list<array>}
+     */
+    private function permitted(array $uploads, array $infos): array
+    {
+        $kept = [[], []];
+        $reasons = [];
+        foreach ($uploads as $i => $upload) {
+            $refused = StrapiMimeTypes::rejection($upload);
+            if ($refused !== null) {
+                $reasons[] = $refused;
+
+                continue;
+            }
+            $kept[0][] = $upload;
+            if (array_key_exists($i, $infos)) {
+                $kept[1][] = $infos[$i];
+            }
+        }
+        if ($kept[0] === []) {
+            throw StrapiError::validation($reasons[0] ?? 'Validation failed');
+        }
+
+        return $kept;
     }
 
     /** @return list<array> each file's fileInfo, sent as JSON text or as form fields */

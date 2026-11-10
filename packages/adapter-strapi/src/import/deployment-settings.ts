@@ -90,14 +90,41 @@ const cloudinaryStorage = (config: Options, gaps: CapabilityGap[]): FileStorage 
   };
 };
 
+const typeList = (value: unknown): string[] | undefined =>
+  Array.isArray(value) && value.every((type) => typeof type === "string")
+    ? (value as string[])
+    : undefined;
+
+/** upload.security's allowedTypes and deniedTypes, each kept only as a literal list of types. */
+const security = (
+  config: Options,
+  gaps: CapabilityGap[],
+): Pick<UploadSettings, "allowedTypes" | "deniedTypes"> => {
+  const options = object(config.security);
+  const lists: Pick<UploadSettings, "allowedTypes" | "deniedTypes"> = {};
+  for (const key of ["allowedTypes", "deniedTypes"] as const) {
+    if (options[key] === undefined || options[key] === null) continue;
+    const list = typeList(options[key]);
+    if (list === undefined)
+      gaps.push(
+        gap(
+          "uploadSecurity",
+          `the upload plugin's security.${key} is not a list of MIME types; set CAMIS_UPLOAD_${key === "allowedTypes" ? "ALLOWED" : "DENIED"}_TYPES by hand.`,
+        ),
+      );
+    else lists[key] = list;
+  }
+  return lists;
+};
+
 const upload = (config: Options, gaps: CapabilityGap[]): UploadSettings | undefined => {
   const provider = typeof config.provider === "string" ? config.provider : "local";
-  const sizeLimit = settings([["sizeLimit", config.sizeLimit]]);
-  if (provider === "local") return { provider, storage: { kind: "local" }, ...sizeLimit };
+  const limits = { ...settings([["sizeLimit", config.sizeLimit]]), ...security(config, gaps) };
+  if (provider === "local") return { provider, storage: { kind: "local" }, ...limits };
   if (provider === "aws-s3")
-    return { provider, storage: s3Storage(object(config.providerOptions), gaps), ...sizeLimit };
+    return { provider, storage: s3Storage(object(config.providerOptions), gaps), ...limits };
   if (provider === "cloudinary")
-    return { provider, storage: cloudinaryStorage(config, gaps), ...sizeLimit };
+    return { provider, storage: cloudinaryStorage(config, gaps), ...limits };
   gaps.push(
     gap(
       "uploadProvider",

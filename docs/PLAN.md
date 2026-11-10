@@ -1578,6 +1578,34 @@ and stores an upload on a disk config/camis.php defines.
 
 ---
 
+## Phase 48 — what a real migration still tripped on (`adapter-kernel`, `adapter-strapi`, `adapter-filament`, `cli`)
+
+Found moving sitlab (a Strapi 5 project on strapi-php with a PWA client) onto CAMIS end to end:
+its conformance fixtures, its PWA's sign-in flow, an export/import of real content and the admin.
+
+- **CORS**: the app emits `config/cors.php` with `strapi::cors`'s defaults (every path, credentials
+  allowed, Strapi's methods, headers and max age; `CAMIS_CORS_ORIGIN` for the origin list).
+  Laravel's own defaults answer `Access-Control-Allow-Origin: *` without credentials, which a
+  browser refuses for a client that sends `credentials: 'include'` to keep its refresh cookie.
+- **Upload security**: `upload.config.security.allowedTypes` / `deniedTypes` import as
+  `CAMIS_UPLOAD_ALLOWED_TYPES` / `CAMIS_UPLOAD_DENIED_TYPES` and `StrapiMimeTypes` enforces them on
+  every upload, in the order of Strapi's mime-validation (a non-list is an `uploadSecurity` gap).
+  The Content API keeps the files that pass and refuses only when none does, as Strapi does.
+- **Users on a migrated project**: `camis new --from-strapi` and `camis import strapi` declare the
+  builtin User type, so the super-admin holds the user grants that the Users, Roles and API Tokens
+  pages require; without them a migrated project's admin could not make an API token.
+- **Wire details**: an enumeration's allowed values end with an empty string (as Strapi's yup
+  prints `null`), a populate key naming a field that cannot be populated reports the field's path
+  (through each `populate` key in the object form), and the default roles carry Strapi's
+  descriptions.
+- **`camis new --skip-scaffold`** leaves the build for after the scaffold, which refuses a
+  non-empty directory.
+
+Exit: unit and golden tests for each; new populate vectors; sitlab's conformance suite passes on
+strapi-php and CAMIS, and its export imports with 32 of 34 compared API paths identical.
+
+---
+
 ## Sequencing rationale (quick reference)
 
 1. **Strapi first** — mature schema validates the IR fastest, with the thinnest adapter.
