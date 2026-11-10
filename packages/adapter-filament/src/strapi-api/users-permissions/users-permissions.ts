@@ -10,6 +10,8 @@ import { runtimePhp } from "../../runtime-php";
 
 export const USERS_PERMISSIONS_MIGRATION_PATH =
   "database/migrations/0001_01_02_000001_add_users_permissions_to_users_table.php";
+export const ROLE_DOCUMENT_ID_MIGRATION_PATH =
+  "database/migrations/9999_12_31_000000_add_document_id_to_roles_table.php";
 export const SETTINGS_MIGRATION_PATH =
   "database/migrations/0001_01_02_000002_create_strapi_settings_table.php";
 
@@ -18,6 +20,15 @@ export const emitUsersPermissionsMigration = (): string =>
   runtimePhp(
     new URL(
       "./php/database/migrations/0001_01_02_000001_add_users_permissions_to_users_table.php",
+      import.meta.url,
+    ),
+  );
+
+/** Strapi's documentId on Spatie's roles table, so a role keeps the one a Strapi archive gave it. */
+export const emitRoleDocumentIdMigration = (): string =>
+  runtimePhp(
+    new URL(
+      "./php/database/migrations/9999_12_31_000000_add_document_id_to_roles_table.php",
       import.meta.url,
     ),
   );
