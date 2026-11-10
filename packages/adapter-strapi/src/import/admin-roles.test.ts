@@ -10,7 +10,7 @@ const doc: IrDocument = {
     {
       name: "Article",
       kind: "collection",
-      options: { draftPublish: true, i18n: true },
+      options: { draftPublish: true, localized: true },
       fields: [
         { type: "string", name: "title", localized: true },
         { type: "text", name: "body", localized: true },

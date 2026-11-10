@@ -1,9 +1,11 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import { createRequire } from "node:module";
 import { afterEach, describe, expect, it } from "vitest";
 import { readStrapiAdminData } from "./read-admin-roles";
+
+const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as typeof import("node:sqlite");
 
 // The tables as strapi-php 5.56 creates them on SQLite (columns the reader skips left out).
 const SCHEMA = `
