@@ -7,9 +7,10 @@ import type { Io } from "../io";
  * variable it is asked for (`{ env, default }`, or `${NAME}` when spliced into text) instead of
  * its value: the settings come back as the project wrote them, and no secret is read.
  * A strapi-php project's PHP config runs under `php`, a Strapi project's JS or TS under `node`.
+ * A function in the settings (a per-request option) comes back as `{}` from either.
  */
 export type StrapiConfigRead =
-  | { ok: true; config: Record<string, unknown> | undefined }
+  | { ok: true; config: Record<string, unknown> | unknown[] | undefined }
   | { ok: false; message: string };
 
 const EXTENSIONS = ["php", "ts", "js", "mjs", "cjs"] as const;
@@ -65,7 +66,8 @@ const module = await import(pathToFileURL(process.argv[1]).href);
 let config = module.default ?? module;
 if (config !== null && typeof config === "object" && "default" in config) config = config.default;
 if (typeof config === "function") config = await config({ env });
-process.stdout.write(JSON.stringify(config ?? {}));
+// As PHP's json_encode gives a closure, so both runtimes report a per-request option alike.
+process.stdout.write(JSON.stringify(config ?? {}, (key, value) => typeof value === "function" ? {} : value));
 `;
 
 const exists = async (path: string): Promise<boolean> => {
@@ -121,8 +123,8 @@ export const readStrapiConfig = async (
     return {
       ok: true,
       config:
-        typeof config === "object" && config !== null && !Array.isArray(config)
-          ? (config as Record<string, unknown>)
+        typeof config === "object" && config !== null
+          ? (config as Record<string, unknown> | unknown[])
           : {},
     };
   } catch {

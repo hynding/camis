@@ -1652,6 +1652,27 @@ strapi-php and CAMIS, and its export imports with 32 of 34 compared API paths id
 
 ---
 
+## Phase 50 — Strapi's CORS settings (`adapter-kernel`, `adapter-strapi`, `adapter-filament`, `cli`)
+
+`camis import strapi` reads `config/middlewares` beside `config/plugins` and `config/api`, so a
+migrated project keeps the CORS it had instead of `CAMIS_CORS_ORIGIN` set by hand.
+
+- **Read**: the config reader gives back a list config (config/middlewares is one), and a function
+  in the settings comes back as `{}` from `node` as it does from `php`.
+- **Import**: `strapi::cors`'s `origin`, `methods`, `headers`, `expose`, `maxAge` and `credentials`
+  become the neutral `CorsSettings` (a list is literal items or one setting holding a
+  comma-separated list; `env()` reads stay references). A per-request option is a `corsOrigin` /
+  `corsOption` gap; a middleware list without `strapi::cors` is a `corsMiddleware` gap.
+  `keepHeadersOnError` needs nothing: `HandleCors` adds its headers to a rendered exception too.
+- **Target**: `deployment.env` gets `CAMIS_CORS_ORIGIN`, `_METHODS`, `_HEADERS` (an empty list → `*`,
+  which echoes the requested headers as Strapi does), `_EXPOSE`, `_MAX_AGE` and `_CREDENTIALS`;
+  `config/cors.php` (now a static runtime PHP file) reads each, defaulting to Strapi's values.
+
+Exit: unit tests for the importer, the env lines and both config readers (TS and PHP lists); the
+cors config golden.
+
+---
+
 ## Sequencing rationale (quick reference)
 
 1. **Strapi first** — mature schema validates the IR fastest, with the thinnest adapter.

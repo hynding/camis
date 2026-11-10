@@ -36,7 +36,7 @@ describe("deploymentEnv", () => {
         defaultReplyTo: { env: "REPLY_TO" },
       },
     });
-    expect(env).toBe(`# From the Strapi project's config/plugins and config/api.
+    expect(env).toBe(`# From the Strapi project's config/plugins, config/api and config/middlewares.
 # \${NAME} reads the variable the Strapi project read: copy it from that project's .env.
 
 # Upload: aws-s3
@@ -236,6 +236,16 @@ CAMIS_CORS_CREDENTIALS=\${CORS_CREDENTIALS}
 `);
   });
 
+  it("notes the fallback of a variable read inside the origin list", () => {
+    expect(
+      deploymentEnv({
+        cors: { origin: [{ env: "FRONTEND_URL", default: "http://localhost:5173" }] },
+      }).env,
+    ).toContain(
+      "# The Strapi project falls back to http://localhost:5173 when FRONTEND_URL is unset.\nCAMIS_CORS_ORIGIN=${FRONTEND_URL}\n",
+    );
+  });
+
   it("references an origin read from one variable", () => {
     expect(deploymentEnv({ cors: { origin: { env: "CORS_ORIGIN" } } }).env).toContain(
       "CAMIS_CORS_ORIGIN=${CORS_ORIGIN}\n",
@@ -244,6 +254,6 @@ CAMIS_CORS_CREDENTIALS=\${CORS_CREDENTIALS}
 
   // Strapi answers a preflight with the headers it asks for when the list is empty.
   it("writes an empty headers list as *, which echoes the requested headers", () => {
-    expect(deploymentEnv({ cors: { headers: [] } }).env).toContain("CAMIS_CORS_HEADERS=*\n");
+    expect(deploymentEnv({ cors: { headers: [] } }).env).toContain('CAMIS_CORS_HEADERS="*"\n');
   });
 });

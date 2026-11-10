@@ -105,6 +105,23 @@ export interface ErrorReportingSettings {
   sampleRate?: Setting;
 }
 
+/**
+ * Which other origins a browser may call the app from, and with what. Each list is a literal list
+ * (its items settings) or one setting holding a comma-separated list.
+ */
+export interface CorsSettings {
+  /** The allowed origins; "*" allows any (echoed back). */
+  origin?: Setting | Setting[];
+  methods?: Setting | Setting[];
+  /** The request headers allowed; an empty list allows whichever a preflight asks for. */
+  headers?: Setting | Setting[];
+  /** The response headers a browser lets the caller read. */
+  expose?: Setting | Setting[];
+  /** How long a browser keeps a preflight's answer, in seconds. */
+  maxAge?: Setting;
+  credentials?: Setting;
+}
+
 export interface DeploymentSettings {
   upload?: UploadSettings;
   email?: EmailSettings;
@@ -112,6 +129,7 @@ export interface DeploymentSettings {
   graphql?: PageSizes;
   accounts?: AccountSettings;
   errorReporting?: ErrorReportingSettings;
+  cors?: CorsSettings;
 }
 
 export const isEnvReference = (value: unknown): value is EnvReference =>
