@@ -118,11 +118,25 @@ const read = (path) => {
   const configuration = new Map(
     stage("configuration").map((c) => [
       c.type === "core-store" ? c.value.key : `webhook|${c.value.name}`,
-      c.value.value ?? c.value,
+      sorted(c.value.value ?? c.value),
     ]),
   );
   return { entities, links: links.sort(), assets, configuration };
 };
+
+/**
+ * A setting with its keys in order: MySQL's JSON column keeps an object's keys in its own order,
+ * so a setting read back whole (a Content Manager view) can come out reordered.
+ */
+function sorted(value) {
+  if (Array.isArray(value)) return value.map(sorted);
+  if (value === null || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, v]) => [k, sorted(v)]),
+  );
+}
 
 /** An entry's data as an import restores it: no ids, timestamps to the second, keys in order. */
 function normalize(value, versioned, top = true) {
