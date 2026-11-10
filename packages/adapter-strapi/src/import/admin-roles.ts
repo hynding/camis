@@ -143,7 +143,9 @@ export const importStrapiAdminRoles = (
         const fields = strings(properties.fields);
         const missingField =
           fields !== undefined &&
-          ct.fields.some((f) => !fields.some((path) => path.split(".")[0] === f.name));
+          ct.fields.some(
+            (f) => !fields.some((path) => path.split(".")[0] === (f.names?.api ?? f.name)),
+          );
         if (missingField) {
           withhold(
             ct,
