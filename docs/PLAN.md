@@ -1646,6 +1646,10 @@ its conformance fixtures, its PWA's sign-in flow, an export/import of real conte
   descriptions.
 - **`camis new --skip-scaffold`** leaves the build for after the scaffold, which refuses a
   non-empty directory.
+- **A role's documentId**: Spatie's roles table gains `document_id` (in a migration named
+  `9999_12_31_…` because Spatie's is named for the day it was published), `strapi:import` keeps
+  the archive's for the role of the same type, `strapi:export` writes it back, and the API serves
+  it (making one the first time a role without one is read) instead of the role's name.
 
 Exit: unit and golden tests for each; new populate vectors; sitlab's conformance suite passes on
 strapi-php and CAMIS, and its export imports with 32 of 34 compared API paths identical.
