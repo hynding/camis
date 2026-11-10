@@ -6,7 +6,7 @@ import {
   emitStrapiTokenImport,
   TOKEN_IMPORT_COMMAND_PATH,
   TOKEN_IMPORT_ENGINE_PATH,
-} from "./token-import";
+} from "./admin/token-import";
 import { filamentNames } from "../names";
 import { projectFilamentPermissions } from "../permissions/project";
 import {
@@ -17,10 +17,14 @@ import {
   emitStrapiApiTokenMiddleware,
   emitStrapiApiTokens,
   type TokenContentType,
-} from "./api-tokens";
-import { emitAuthController, emitUsernameMigration, USERNAME_MIGRATION_PATH } from "./auth";
-import { emitGeneratedController, emitProtectedController } from "./controller";
-import { emitHasDraftAndPublish, emitStrapiDocuments } from "./draft-publish-runtime";
+} from "./admin/api-tokens";
+import {
+  emitAuthController,
+  emitUsernameMigration,
+  USERNAME_MIGRATION_PATH,
+} from "./users-permissions/auth";
+import { emitGeneratedController, emitProtectedController } from "./core/controller";
+import { emitHasDraftAndPublish, emitStrapiDocuments } from "./core/draft-publish-runtime";
 import {
   CONFIGURE_VIEW_PATH,
   emitConfigureView,
@@ -30,7 +34,7 @@ import {
   HAS_CREATOR_FIELDS_PATH,
   STRAPI_CONTENT_MANAGER_PATH,
   STRAPI_UID_PATH,
-} from "./content-manager-runtime";
+} from "./content-manager/content-manager-runtime";
 import {
   emitHasLocale,
   emitLocaleController,
@@ -38,10 +42,10 @@ import {
   emitLocalesMigration,
   emitStrapiLocales,
   LOCALES_MIGRATION_PATH,
-} from "./i18n-runtime";
+} from "./i18n/i18n-runtime";
 import { emitResourceFiles } from "../resource";
-import { emitStrapiErrorsMiddleware } from "./errors";
-import { mediaFields } from "./media";
+import { emitStrapiErrorsMiddleware } from "./core/errors";
+import { mediaFields } from "./upload/media";
 import {
   emitFileModel,
   emitFileResourceFiles,
@@ -52,7 +56,7 @@ import {
   emitStrapiUpload,
   emitUploadController,
   FILES_MIGRATION_PATH,
-} from "./media-runtime";
+} from "./upload/media-runtime";
 import {
   emitStrapiFolders,
   emitUploadFolderModel,
@@ -60,20 +64,20 @@ import {
   emitUploadFolderResourceFiles,
   emitUploadFoldersMigration,
   UPLOAD_FOLDERS_MIGRATION_PATH,
-} from "./upload-folders";
-import { emitStrapiPopulate, emitStrapiRelations } from "./populate-runtime";
-import { emitHasDocumentId, emitStrapiError, emitStrapiQuery } from "./rest-runtime";
-import { emitApiConfig, emitStrapiRoutes } from "./routes";
-import { emitCorsConfig } from "./cors";
-import { emitStrapiMimeTypes } from "./upload-security";
-import { emitScopeMethod } from "./scope";
+} from "./upload/upload-folders";
+import { emitStrapiPopulate, emitStrapiRelations } from "./core/populate-runtime";
+import { emitHasDocumentId, emitStrapiError, emitStrapiQuery } from "./core/rest-runtime";
+import { emitApiConfig, emitStrapiRoutes } from "./core/routes";
+import { emitCorsConfig } from "./core/cors";
+import { emitStrapiMimeTypes } from "./upload/upload-security";
+import { emitScopeMethod } from "./core/scope";
 import {
   emitConnectController,
   emitPasswordlessMigration,
   emitStrapiOAuth,
   emitStrapiProviders,
   PASSWORDLESS_MIGRATION_PATH,
-} from "./oauth";
+} from "./users-permissions/oauth";
 import {
   emitHasLinkOrder,
   emitLinkOrderMigration,
@@ -83,16 +87,16 @@ import {
   LINK_ORDER_MIGRATION_PATH,
   linkOrderColumns,
   toOneLinkOrders,
-} from "./link-order";
-import { emitSerializer } from "./serializer";
+} from "./core/link-order";
+import { emitSerializer } from "./core/serializer";
 import {
   emitRoleController,
   emitSessionController,
   emitSessionsMigration,
   emitStrapiSessions,
   SESSIONS_MIGRATION_PATH,
-} from "./sessions";
-import { componentUid, kebab } from "./names";
+} from "./users-permissions/sessions";
+import { componentUid, kebab } from "./core/names";
 import {
   emitEmitsStrapiEvents,
   emitStrapiWebhooks,
@@ -101,21 +105,21 @@ import {
   emitWebhooksMigration,
   WEBHOOKS_MIGRATION_PATH,
   type WebhookContentType,
-} from "./webhooks";
-import { emitStrapiGraphqlPlugins } from "./graphql-plugins-runtime";
+} from "./core/webhooks";
+import { emitStrapiGraphqlPlugins } from "./graphql/graphql-plugins-runtime";
 import {
   DOCUMENTATION_PAGE_PATH,
   emitDocumentationPage,
   emitOpenApiDocument,
   OPENAPI_PATH,
-} from "./openapi";
-import { buildGraphqlSchema } from "./graphql-schema";
+} from "./documentation/openapi";
+import { buildGraphqlSchema } from "./graphql/graphql-schema";
 import {
   emitGraphqlRoutes,
   emitStrapiGraphql,
   emitStrapiGraphqlTypes,
   GRAPHQL_SCHEMA_PATH,
-} from "./graphql-runtime";
+} from "./graphql/graphql-runtime";
 import {
   emitStrapiExportCommand,
   emitStrapiImportCommand,
@@ -126,15 +130,16 @@ import {
   IMPORT_ENGINE_PATH,
   TRANSFER_MAP_PATH,
   TRANSFER_SCHEMAS_PATH,
-} from "./transfer";
+} from "./data-transfer/transfer";
 import {
   emitStrapiNavigation,
   SETTINGS,
   STRAPI_NAVIGATION_PATH,
   USER_DISPLAY_NAME,
   type Navigation,
-} from "./admin-navigation";
-import { emitRoleResourceFiles, emitStrapiRoles, STRAPI_ROLES_PATH } from "./roles-admin";
+} from "./admin/admin-navigation";
+import { emitRoleResourceFiles, emitStrapiRoles, STRAPI_ROLES_PATH } from "./admin/roles-admin";
+import { emitContentTypeBuilder } from "../content-type-builder";
 import {
   emitStrapiTransferRunner,
   emitStrapiTransferTokens,
@@ -145,7 +150,7 @@ import {
   remoteTransferGap,
   TRANSFER_ROUTES_PATH,
   TRANSFER_TOKENS_MIGRATION_PATH,
-} from "./transfer-tokens";
+} from "./admin/transfer-tokens";
 import {
   DATA_TRANSFER_PAGE_PATH,
   emitDataTransferPage,
@@ -153,7 +158,7 @@ import {
   emitStrapiTransferDownload,
   TRANSFER_ARCHIVES_PATH,
   TRANSFER_DOWNLOAD_PATH,
-} from "./transfer-page";
+} from "./data-transfer/transfer-page";
 import { runtimeSchemas, strapiNames } from "@camis/strapi-schema";
 import {
   EMAIL_SETTINGS_PAGE_PATH,
@@ -162,7 +167,7 @@ import {
   emitStrapiEmail,
   EMAIL_CONTROLLER_PATH,
   STRAPI_EMAIL_PATH,
-} from "./email";
+} from "./email/email";
 import {
   emitHomepageWidgets,
   emitSettingsOverviewPage,
@@ -170,23 +175,26 @@ import {
   SETTINGS_OVERVIEW_PAGE_PATH,
   STRAPI_HOMEPAGE_PATH,
   type HomepageType,
-} from "./homepage";
-import { emitMediaLibrarySettingsPage, MEDIA_LIBRARY_SETTINGS_PAGE_PATH } from "./upload-settings";
-import { mainFieldName } from "./content-manager-list";
+} from "./admin/homepage";
+import {
+  emitMediaLibrarySettingsPage,
+  MEDIA_LIBRARY_SETTINGS_PAGE_PATH,
+} from "./upload/upload-settings";
+import { mainFieldName } from "./content-manager/content-manager-list";
 import { snakeColumn } from "../names";
 import { permissionKey } from "../permissions/keys";
-import { emitStrapiTransferCipher, TRANSFER_CIPHER_PATH } from "./transfer-cipher";
-import { emitStrapiExport } from "./transfer-export-runtime";
-import { emitStrapiImport } from "./transfer-runtime";
-import { wireShape, type WireShape } from "./wire-shape";
-import { emitStrapiZones } from "./zones-runtime";
-import { emitStrapiItems, ITEMS_PATH, writesItems } from "./items-runtime";
-import { emitStrapiValidator } from "./validation-runtime";
-import { entityRules, VALIDATOR_PATH } from "./validation";
+import { emitStrapiTransferCipher, TRANSFER_CIPHER_PATH } from "./data-transfer/transfer-cipher";
+import { emitStrapiExport } from "./data-transfer/transfer-export-runtime";
+import { emitStrapiImport } from "./data-transfer/transfer-runtime";
+import { wireShape, type WireShape } from "./core/wire-shape";
+import { emitStrapiZones } from "./core/zones-runtime";
+import { emitStrapiItems, ITEMS_PATH, writesItems } from "./core/items-runtime";
+import { emitStrapiValidator } from "./core/validation-runtime";
+import { entityRules, VALIDATOR_PATH } from "./core/validation";
 import {
   emitUserResourceFiles,
   emitUsersPermissionsSettingsPages,
-} from "./users-permissions-admin";
+} from "./users-permissions/users-permissions-admin";
 import {
   emitSettingsMigration,
   emitStrapiActiveUser,
@@ -199,7 +207,7 @@ import {
   emitUsersPermissionsMigration,
   SETTINGS_MIGRATION_PATH,
   USERS_PERMISSIONS_MIGRATION_PATH,
-} from "./users-permissions";
+} from "./users-permissions/users-permissions";
 
 export interface StrapiApiInput {
   doc: IrDocument;
@@ -343,6 +351,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
       sort: input.contentManager?.get(USER_DISPLAY_NAME) ?? 1,
     }),
     { path: STRAPI_NAVIGATION_PATH, content: emitStrapiNavigation() },
+    ...emitContentTypeBuilder(bundle.document, secured),
   );
   if (secured) {
     files.push(

@@ -10,8 +10,8 @@ import { emitField, type FieldEmit } from "./fields";
 import { constrainedTo } from "./identifiers";
 import { filamentNames, snake, snakeColumn } from "./names";
 import type { RelationMethod } from "./relations";
-import { mediaAllowedTypes } from "./strapi-api/media";
-import { mediaRelationMethod } from "./strapi-api/media-runtime";
+import { mediaAllowedTypes } from "./strapi-api/upload/media";
+import { mediaRelationMethod } from "./strapi-api/upload/media-runtime";
 
 const studlySegment = (segment: string): string =>
   segment.charAt(0).toUpperCase() + segment.slice(1);

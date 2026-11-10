@@ -1,0 +1,80 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Support;
+
+use Illuminate\Mail\Message;
+use Illuminate\Support\Facades\Mail;
+
+/** Strapi's email service: its settings, and a send that fills the sender and reply-to from them. */
+final class StrapiEmail
+{
+    /** @return array{provider: string, defaultFrom: ?string, defaultReplyTo: ?string} */
+    public static function settings(): array
+    {
+        return [
+            'provider' => (string) (self::filled(config('camis.email.provider')) ?? config('mail.default')),
+            'defaultFrom' => self::filled(config('camis.email.default_from')) ?? self::filled(config('mail.from.address')),
+            'defaultReplyTo' => self::filled(config('camis.email.default_reply_to')) ?? self::filled(config('mail.reply_to.address')),
+        ];
+    }
+
+    /**
+     * Sends as Strapi's email service does: to, cc, bcc, from, replyTo, subject, text and html,
+     * each address a string (comma separated for several) or a list.
+     *
+     * @param array<string, mixed> $options
+     */
+    public static function send(array $options): void
+    {
+        $settings = self::settings();
+        $from = self::filled($options['from'] ?? null) ?? $settings['defaultFrom'];
+        $replyTo = self::filled($options['replyTo'] ?? null) ?? $settings['defaultReplyTo'];
+        Mail::send([], [], function (Message $message) use ($options, $from, $replyTo): void {
+            $message->to(self::addresses($options['to'] ?? null));
+            foreach (['cc', 'bcc'] as $copy) {
+                if (self::addresses($options[$copy] ?? null) !== []) {
+                    $message->{$copy}(self::addresses($options[$copy]));
+                }
+            }
+            if ($from !== null) {
+                $message->from($from);
+            }
+            if ($replyTo !== null) {
+                $message->replyTo($replyTo);
+            }
+            $message->subject((string) ($options['subject'] ?? ''));
+            if (self::filled($options['html'] ?? null) !== null) {
+                $message->html((string) $options['html']);
+            }
+            if (self::filled($options['text'] ?? null) !== null) {
+                $message->text((string) $options['text']);
+            }
+        });
+    }
+
+    /** The test email Strapi's Email settings page sends, word for word. */
+    public static function test(string $to): void
+    {
+        $provider = self::settings()['provider'];
+        self::send([
+            'to' => $to,
+            'subject' => "Strapi test mail to: {$to}",
+            'text' => "Great! You have correctly configured the Strapi email plugin with the {$provider} provider. \r\nFor documentation on how to use the email plugin checkout: https://docs.strapi.io/developer-docs/latest/plugins/email.html",
+        ]);
+    }
+
+    /** @return list<string> */
+    private static function addresses(mixed $value): array
+    {
+        $list = is_array($value) ? $value : explode(',', (string) $value);
+
+        return array_values(array_filter(array_map(fn (mixed $address): string => trim((string) $address), $list), fn (string $address): bool => $address !== ''));
+    }
+
+    private static function filled(mixed $value): ?string
+    {
+        return is_string($value) && trim($value) !== '' ? $value : null;
+    }
+}

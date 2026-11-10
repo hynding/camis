@@ -4,21 +4,40 @@ import { materialize } from "@camis/adapter-kernel";
 import { filamentAdapter } from "../src/generate";
 import { bootBundle } from "../src/__fixtures__/boot";
 import { strapiApiBundle } from "../src/strapi-api/__fixtures__/strapi-api";
+import { storageBundle } from "../src/strapi-api/storage/__fixtures__/storage";
 
-const dest = process.argv[2];
-const style = process.argv[3] === "--style" ? process.argv[4] : undefined;
-if (!dest) {
-  console.error("usage: tsx scripts/overlay.ts <laravel-app-dir> [--style strapi]");
+const [dest, ...flags] = process.argv.slice(2);
+const flag = (name: string): string | undefined => {
+  const at = flags.indexOf(name);
+  return at === -1 ? undefined : flags[at + 1];
+};
+const style = flag("--style");
+const storage = flag("--storage");
+if (!dest || (storage !== undefined && style !== "strapi")) {
+  console.error(
+    "usage: tsx scripts/overlay.ts <laravel-app-dir> [--style strapi [--storage strapi]]",
+  );
   process.exit(1);
 }
 const result =
-  style === "strapi"
-    ? filamentAdapter.generate(strapiApiBundle, {
+  storage === "strapi"
+    ? filamentAdapter.generate(storageBundle, {
         projectName: "oyl",
         apiStyle: "strapi",
-        graphql: true,
-        documentation: true,
+        storageLayout: "strapi",
       })
-    : filamentAdapter.generate(bootBundle, { projectName: "blog" });
+    : style === "strapi"
+      ? filamentAdapter.generate(strapiApiBundle, {
+          projectName: "oyl",
+          apiStyle: "strapi",
+          graphql: true,
+          documentation: true,
+        })
+      : filamentAdapter.generate(bootBundle, { projectName: "blog" });
 await materialize(result, dest);
-console.log(`overlay materialized into ${dest}${style ? ` (apiStyle ${style})` : ""}`);
+const described = [style && `apiStyle ${style}`, storage && `storageLayout ${storage}`].filter(
+  Boolean,
+);
+console.log(
+  `overlay materialized into ${dest}${described.length ? ` (${described.join(", ")})` : ""}`,
+);

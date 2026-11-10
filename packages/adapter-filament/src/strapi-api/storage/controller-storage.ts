@@ -7,8 +7,8 @@ import {
   routeKey,
   STMT,
   validate,
-} from "../controller-shared";
-import type { ControllerLink, ControllerParts, ControllerSpec } from "../controller";
+} from "../core/controller-shared";
+import type { ControllerLink, ControllerParts, ControllerSpec } from "../core/controller";
 
 /** A PHP single-quoted string literal, or `null` for an absent value. */
 const nullableString = (value: string | undefined): string =>

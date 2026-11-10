@@ -9,8 +9,12 @@ import {
   navigationProperties,
   STRAPI_NAVIGATION_CLASS,
   type Navigation,
-} from "./strapi-api/admin-navigation";
-import { listedColumn, mainFieldName, searchesNumbers } from "./strapi-api/content-manager-list";
+} from "./strapi-api/admin/admin-navigation";
+import {
+  listedColumn,
+  mainFieldName,
+  searchesNumbers,
+} from "./strapi-api/content-manager/content-manager-list";
 import {
   configureViewAction,
   configureViewPage,
@@ -24,7 +28,7 @@ import {
   duplicateAction,
   duplicateCreateBody,
   type ContentManagerInput,
-} from "./strapi-api/content-manager-resource";
+} from "./strapi-api/content-manager/content-manager-resource";
 
 const useBlock = (imports: string[]): string =>
   [...new Set(imports)]

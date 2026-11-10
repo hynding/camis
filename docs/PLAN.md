@@ -1578,7 +1578,53 @@ and stores an upload on a disk config/camis.php defines.
 
 ---
 
-## Phase 48 — what a real migration still tripped on (`adapter-kernel`, `adapter-strapi`, `adapter-filament`, `cli`)
+## Phase 48 — Strapi's Content-Type Builder (`adapter-filament`, `cli`)
+
+Strapi's admin has a Content-Type Builder; camis's content model is the IR, which stays the single
+source of truth. The builder is a Filament page in Strapi's place in the main menu: the model's
+collection types, single types and components (by category) in a side menu, the chosen one's
+fields in a list with Strapi's type names. The media library's file type is hidden, as Strapi
+hides it. Whoever may change the admin's settings (`user.update`) may open it when the project has
+roles.
+
+- **Read-only** (production, or any app not run by `camis develop`): it shows the model the app was
+  built from, which the generator ships as `resources/camis/schema.json`, and says why it cannot
+  edit.
+- **Editable** under `camis develop` (Strapi's `strapi develop`): the command builds the project,
+  writes `CAMIS_PROJECT_CONFIG` and `CAMIS_BUILD_COMMAND` into the Strapi-style Filament app's
+  `.env`, syncs its database and serves it. With APP_ENV=local the page then offers Strapi's
+  dialogs: create a collection type, single type or component; edit a type's display name, plural,
+  Draft & Publish and Internationalization, or a component's category; delete either; add, edit
+  and delete fields of every IR type through Strapi's field cards and Basic/Advanced settings. An
+  edit is applied to the project's IR (keys the dialogs do not show are kept; a type's or
+  component's name, its API ID, cannot change, as in Strapi), and to its roles file: a deleted type
+  leaves no grant, a type without Draft & Publish no publish action, and the type an edit made or
+  changed is the `super-admin` role's to do everything with, as Strapi's Super Admin. Then
+  `camis build` runs, which validates the IR; when it fails both files are put back and the dialog
+  shows why. A refused edit (a taken name, a reserved one) writes nothing.
+- **`camis:schema-sync`** brings the database up to the rebuilt app and keeps its rows, as Strapi's
+  schema sync does. A new type renumbers the generated migrations after it, so a migration is known
+  by its name without its number: each generated migration is replayed into a recorder (pretending,
+  so a migration's seeded rows are not written twice); a missing table is created; an existing one
+  gains the columns it lacks (nullable, as Strapi's columns are; with their foreign keys outside
+  SQLite) and loses those no generated migration declares; a table a recorded migration created
+  that none creates now is dropped; the migrations table then lists exactly the generated
+  migrations, and `migrate` and the role seeder run. It refuses to run outside APP_ENV=local
+  without `--force`.
+
+Known gaps: a field's type cannot change once made (Strapi allows only a few such changes; here
+only within its card: short and long text, a number's format, a date's type), and a column whose
+type changed keeps its old type until the table is rebuilt; a renamed field or type loses its data,
+as in Strapi; components' icons, a type's description, custom fields beyond the color picker and
+the relation kinds Strapi calls one-way and many-way (an IR relation without an inverse covers
+them) are not offered; the builder edits only through the first Strapi-style Filament target.
+
+Exit: unit and golden tests (`content-type-builder.test.ts`, `develop.test.ts`);
+`ContentTypeBuilderTest.php` in the `strapi-api` boot job (read-only view, denied path, edits
+written to the IR and roles, a failed build put back, the schema sync on SQLite), and
+`schema-sync-check.php` against the job's served database on sqlite, mysql and pgsql.
+
+## Phase 49 — what a real migration still tripped on (`adapter-kernel`, `adapter-strapi`, `adapter-filament`, `cli`)
 
 Found moving sitlab (a Strapi 5 project on strapi-php with a PWA client) onto CAMIS end to end:
 its conformance fixtures, its PWA's sign-in flow, an export/import of real content and the admin.

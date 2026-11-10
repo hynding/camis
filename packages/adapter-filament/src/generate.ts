@@ -54,23 +54,23 @@ import { emitModel } from "./model";
 import { filamentNames, snake, snakeColumn } from "./names";
 import { constrainedColumn, resolveRelations, type ForeignKeyColumn } from "./relations";
 import { emitResourceFiles } from "./resource";
-import { draftPublishPlan } from "./strapi-api/draft-publish";
-import { guestsPlan } from "./strapi-api/guests";
-import { localizationPlan, sharedAcrossLocalesMethod } from "./strapi-api/localization";
+import { draftPublishPlan } from "./strapi-api/core/draft-publish";
+import { guestsPlan } from "./strapi-api/core/guests";
+import { localizationPlan, sharedAcrossLocalesMethod } from "./strapi-api/i18n/localization";
 import {
   mediaAllowedTypes,
   mediaComponentsConstant,
   mediaFields,
   mediaPlan,
-} from "./strapi-api/media";
-import { mediaRelationMethod } from "./strapi-api/media-runtime";
-import { contentManagerSorts, USER_DISPLAY_NAME } from "./strapi-api/admin-navigation";
+} from "./strapi-api/upload/media";
+import { mediaRelationMethod } from "./strapi-api/upload/media-runtime";
+import { contentManagerSorts, USER_DISPLAY_NAME } from "./strapi-api/admin/admin-navigation";
 import { emitStrapiApi } from "./strapi-api/emit";
-import { linkOrdersConstant } from "./strapi-api/link-order";
+import { linkOrdersConstant } from "./strapi-api/core/link-order";
 import { emitStrapiStorage } from "./strapi-api/storage/emit";
 import { emitAdminAccessFiles } from "./admin-access";
-import { zoneBuilder } from "./strapi-api/zones-admin";
-import { prohibitedCloningFields } from "./strapi-api/content-manager";
+import { zoneBuilder } from "./strapi-api/content-manager/zones-admin";
+import { prohibitedCloningFields } from "./strapi-api/content-manager/content-manager";
 
 export const filamentAdapter: GenerateAdapter = {
   target: "filament",
