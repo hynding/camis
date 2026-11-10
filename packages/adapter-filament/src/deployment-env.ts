@@ -1,6 +1,7 @@
 import {
   isEnvReference,
   type AccountSettings,
+  type CorsSettings,
   type PageSizes,
   type RestSettings,
   type EmailSettings,
@@ -29,9 +30,10 @@ export const deploymentEnv = (
   if (settings.accounts !== undefined) sections.push(accountLines(settings.accounts));
   if (settings.errorReporting !== undefined)
     sections.push(errorReportingLines(settings.errorReporting, packages));
+  if (settings.cors !== undefined) sections.push(corsLines(settings.cors));
   if (sections.length === 0) return { env: "", packages: [] };
   const header = [
-    "# From the Strapi project's config/plugins and config/api.",
+    "# From the Strapi project's config/plugins, config/api and config/middlewares.",
     "# ${NAME} reads the variable the Strapi project read: copy it from that project's .env.",
   ];
   return {
@@ -208,3 +210,36 @@ const accountLines = (accounts: AccountSettings): string[] => {
     ...line("CAMIS_REGISTER_ALLOWED_FIELDS", Array.isArray(allowed) ? allowed.join(",") : allowed),
   ];
 };
+
+/** A literal list as one comma-separated value, each read variable spliced in as ${NAME}. */
+const commaList = (list: Setting | Setting[] | undefined): Setting | undefined =>
+  Array.isArray(list)
+    ? list.map((item) => (isEnvReference(item) ? `\${${item.env}}` : String(item))).join(",")
+    : list;
+
+/** The fallbacks of the variables a literal list reads, which ${NAME} in the list cannot carry. */
+const listFallbacks = (list: Setting | Setting[] | undefined): string[] =>
+  Array.isArray(list)
+    ? list.flatMap((item) =>
+        isEnvReference(item) && item.default !== undefined
+          ? [
+              `# The Strapi project falls back to ${String(item.default)} when ${item.env} is unset.`,
+            ]
+          : [],
+      )
+    : [];
+
+const corsLines = (cors: CorsSettings): string[] => [
+  "# CORS (strapi::cors)",
+  ...listFallbacks(cors.origin),
+  ...line("CAMIS_CORS_ORIGIN", commaList(cors.origin)),
+  ...line("CAMIS_CORS_METHODS", commaList(cors.methods)),
+  // Strapi allows whichever headers a preflight asks for when the list is empty; so does `*`.
+  ...line(
+    "CAMIS_CORS_HEADERS",
+    Array.isArray(cors.headers) && cors.headers.length === 0 ? "*" : commaList(cors.headers),
+  ),
+  ...line("CAMIS_CORS_EXPOSE", commaList(cors.expose)),
+  ...line("CAMIS_CORS_MAX_AGE", cors.maxAge),
+  ...line("CAMIS_CORS_CREDENTIALS", cors.credentials),
+];

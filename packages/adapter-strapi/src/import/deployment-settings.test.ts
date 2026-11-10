@@ -412,3 +412,64 @@ describe("deploymentSettings — sentry", () => {
     ]);
   });
 });
+
+describe("deploymentSettings — strapi::cors in config/middlewares", () => {
+  const cors = (config: unknown) => ["strapi::errors", { name: "strapi::cors", config }];
+
+  it("reads strapi::cors's origin, methods, headers, exposed headers, max age and credentials", () => {
+    expect(
+      deploymentSettings(
+        {},
+        undefined,
+        cors({
+          origin: ["https://app.example.com", env("FRONTEND_URL")],
+          methods: ["GET", "POST"],
+          headers: "Content-Type,Authorization",
+          expose: ["X-Total-Count"],
+          maxAge: 600,
+          credentials: env("CORS_CREDENTIALS", true),
+          keepHeadersOnError: true,
+        }),
+      ).settings,
+    ).toEqual({
+      cors: {
+        origin: ["https://app.example.com", env("FRONTEND_URL")],
+        methods: ["GET", "POST"],
+        headers: "Content-Type,Authorization",
+        expose: ["X-Total-Count"],
+        maxAge: 600,
+        credentials: env("CORS_CREDENTIALS", true),
+      },
+    });
+  });
+
+  it("keeps an origin read from one variable as a reference to it", () => {
+    expect(
+      deploymentSettings({}, undefined, cors({ origin: env("CORS_ORIGIN") })).settings.cors,
+    ).toEqual({ origin: env("CORS_ORIGIN") });
+  });
+
+  it("leaves CORS at its defaults for strapi::cors with no config, or none at all", () => {
+    const { settings, gaps } = deploymentSettings({}, undefined, ["strapi::cors"]);
+    expect(settings.cors).toBeUndefined();
+    expect(gaps).toEqual([]);
+    expect(deploymentSettings({}).settings.cors).toBeUndefined();
+  });
+
+  // A function origin decides per request; the config reader gives it back as an empty object.
+  it("reports an origin computed per request, and keeps the rest", () => {
+    const { settings, gaps } = deploymentSettings({}, undefined, cors({ origin: {}, maxAge: 5 }));
+    expect(settings.cors).toEqual({ maxAge: 5 });
+    expect(gaps.map((g) => g.feature)).toEqual(["corsOrigin"]);
+  });
+
+  // Strapi then sends no CORS headers at all, or the project's own middleware does it.
+  it("reports a middleware list without strapi::cors", () => {
+    const { settings, gaps } = deploymentSettings({}, undefined, [
+      "strapi::errors",
+      "global::cors",
+    ]);
+    expect(settings.cors).toBeUndefined();
+    expect(gaps.map((g) => g.feature)).toEqual(["corsMiddleware"]);
+  });
+});

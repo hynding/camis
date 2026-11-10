@@ -26,6 +26,7 @@ export { buildManifest, MANIFEST_PATH, sha256 } from "./manifest";
 export { materialize } from "./materialize";
 export { isEnvReference } from "./deployment-settings";
 export type {
+  CorsSettings,
   EmailSettings,
   ErrorReportingSettings,
   EnvReference,

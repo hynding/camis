@@ -1,6 +1,7 @@
 import {
   isEnvReference,
   type AccountSettings,
+  type CorsSettings,
   type PageSizes,
   type RestSettings,
   type EmailSettings,
@@ -302,14 +303,67 @@ const sentry = (config: Options, gaps: CapabilityGap[]): ErrorReportingSettings 
   };
 };
 
+/** A list option: a literal list (its items settings), or one setting holding a list. */
+const listSetting = (value: unknown): Setting | Setting[] | undefined => {
+  if (!Array.isArray(value)) return setting(value);
+  const items = value.map(setting);
+  return items.every((item) => item !== undefined) ? (items as Setting[]) : undefined;
+};
+
+const CORS_LISTS = ["origin", "methods", "headers", "expose"] as const;
+
+/**
+ * strapi::cors's options from config/middlewares (a list of names, or `{ name, config }`).
+ * keepHeadersOnError has no counterpart to set: Laravel's HandleCors adds its headers to the
+ * response an exception renders as well.
+ */
+const cors = (middlewares: unknown[], gaps: CapabilityGap[]): CorsSettings | undefined => {
+  const entry = middlewares.find(
+    (middleware) => middleware === "strapi::cors" || object(middleware).name === "strapi::cors",
+  );
+  if (entry === undefined) {
+    gaps.push(
+      gap(
+        "corsMiddleware",
+        "config/middlewares has no strapi::cors; the app still answers cross-origin requests as CAMIS_CORS_ORIGIN says (any origin unless set).",
+      ),
+    );
+    return undefined;
+  }
+  const options = object(object(entry).config);
+  const read: CorsSettings = {};
+  for (const key of CORS_LISTS) {
+    if (options[key] === undefined || options[key] === null) continue;
+    const list = listSetting(options[key]);
+    if (list !== undefined) read[key] = list;
+    else
+      gaps.push(
+        gap(
+          key === "origin" ? "corsOrigin" : "corsOption",
+          `strapi::cors's ${key} is computed per request; set CAMIS_CORS_${key.toUpperCase()} by hand.`,
+        ),
+      );
+  }
+  Object.assign(
+    read,
+    settings([
+      ["maxAge", options.maxAge],
+      ["credentials", options.credentials],
+    ]),
+  );
+  return Object.keys(read).length > 0 ? read : undefined;
+};
+
 /**
  * How a Strapi project is run, from its config/plugins (the upload, email, graphql,
- * users-permissions and sentry plugins) and config/api, each `env()` read kept as a reference to the
- * variable, never its value. Options with no counterpart are gaps.
+ * users-permissions and sentry plugins), config/api and config/middlewares (strapi::cors), each
+ * `env()` read kept as a reference to the variable, never its value. Options with no counterpart
+ * are gaps.
  */
 export const deploymentSettings = (
   plugins: unknown,
   api?: unknown,
+  middlewares?: unknown,
 ): { settings: DeploymentSettings; gaps: CapabilityGap[] } => {
   const gaps: CapabilityGap[] = [];
   const config = object(plugins);
@@ -336,5 +390,9 @@ export const deploymentSettings = (
   // Strapi's sentry plugin is on unless the project turns it off.
   if (config.sentry !== undefined && object(config.sentry).enabled !== false)
     out.errorReporting = sentry(pluginConfig("sentry"), gaps);
+  if (Array.isArray(middlewares)) {
+    const read = cors(middlewares, gaps);
+    if (read !== undefined) out.cors = read;
+  }
   return { settings: out, gaps };
 };
