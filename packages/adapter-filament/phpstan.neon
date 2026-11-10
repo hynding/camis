@@ -1,0 +1,7 @@
+# PHPStan for the runtime PHP the generator copies; scripts/runtime-phpstan.sh copies this file
+# into a scaffolded Laravel app and analyses the copied files there.
+includes:
+  - vendor/larastan/larastan/extension.neon
+
+parameters:
+  level: 5
