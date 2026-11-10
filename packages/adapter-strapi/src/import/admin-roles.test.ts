@@ -229,6 +229,27 @@ it("reports media library actions that make up only part of a camis action", () 
   ]);
 });
 
+it("reads a field under the name Strapi gives it", () => {
+  const snake: IrDocument = {
+    ...doc,
+    contentTypes: [
+      {
+        name: "Address",
+        kind: "collection",
+        fields: [{ type: "string", name: "postalCode", names: { api: "postal_code" } }],
+      },
+    ],
+  };
+  const imported = importStrapiAdminRoles(
+    data(
+      [EDITOR],
+      [{ role: 2, ...cm("read", "api::address.address", { fields: ["postal_code"] }) }],
+    ),
+    snake,
+  );
+  expect(imported.roles[0]?.grants).toEqual([{ contentType: "Address", actions: ["read"] }]);
+});
+
 describe("adminRoleName", () => {
   it("is the role's name in kebab case, else one made of its id", () => {
     expect(adminRoleName("Editor", 2)).toBe("editor");
