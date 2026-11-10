@@ -245,7 +245,6 @@ final class StrapiUsers
         }, $layout);
     }
 
-    /** A documentId as Strapi makes one, for a row Laravel's tables made without it. */
     public static function newDocumentId(): string
     {
         return (new class () {

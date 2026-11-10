@@ -47,10 +47,10 @@ final class RoleSerializer
     /** The one a Strapi archive gave the role, else one made the first time the role is read. */
     public static function documentId(Role $m): string
     {
-        if (($m->document_id ?? '') === '') {
+        if ((string) $m->getAttribute('document_id') === '') {
             $m->forceFill(['document_id' => StrapiUsers::newDocumentId()])->saveQuietly();
         }
 
-        return (string) $m->document_id;
+        return (string) $m->getAttribute('document_id');
     }
 }
