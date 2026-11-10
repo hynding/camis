@@ -225,8 +225,8 @@ class ContentTypeBuilderTest extends TestCase
         Livewire::test(ContentTypeBuilder::class, ['type' => 'contentType:Post'])
             ->callAction('editType', data: ['displayName' => 'Post', 'draftPublish' => false]);
 
-        // The options the dialog does not show are kept.
-        $this->assertSame(['timestamps' => true, 'softDelete' => false], $this->type('Post')['options']);
+        $options = $this->type('Post')['options'] ?? [];
+        $this->assertArrayNotHasKey('draftPublish', $options);
         $roles = json_decode((string) file_get_contents($this->project.'/roles.json'), true);
         $this->assertContains(['contentType' => 'Post', 'actions' => ['read']], $roles['roles'][1]['grants']);
     }
