@@ -53,6 +53,22 @@ class AdminUser extends Authenticatable implements FilamentUser, HasName
         'registration_token',
     ];
 
+    /**
+     * The admin roles, read through a method so that analysis does not fold in one project's list.
+     *
+     * @return list<string>
+     */
+    public static function adminRoles(): array
+    {
+        return self::ADMIN_ROLES;
+    }
+
+    /** Whether every account may sign in, read through a method for the same reason. */
+    public static function everyUser(): bool
+    {
+        return self::EVERY_USER;
+    }
+
     /** A new account gets a documentId, as every Strapi 5 row has one. */
     protected static function booted(): void
     {

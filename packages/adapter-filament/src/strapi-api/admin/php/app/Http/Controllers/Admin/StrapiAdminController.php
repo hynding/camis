@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Admin;
 use App\Models\AdminUser;
 use App\Support\StrapiAdminAuth;
 use App\Support\StrapiError;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -57,7 +58,7 @@ final class StrapiAdminController
     public function registerAdmin(Request $request): JsonResponse
     {
         $input = $this->registration($request);
-        $role = AdminUser::ADMIN_ROLES[0] ?? null;
+        $role = AdminUser::adminRoles()[0] ?? null;
         if ($role === null || Role::query()->where('name', $role)->doesntExist()) {
             throw new StrapiError(400, 'ApplicationError', "Cannot register the first admin because the super admin role doesn't exist.");
         }
@@ -95,11 +96,11 @@ final class StrapiAdminController
             'preferedLanguage' => $admin->getAttribute('prefered_language'),
             'createdAt' => $admin->created_at?->toISOString(),
             'updatedAt' => $admin->updated_at?->toISOString(),
-            'roles' => $admin->roles->map(fn (Role $role): array => [
-                'id' => $role->id,
-                'name' => $role->name,
+            'roles' => $admin->roles->map(fn (Model $role): array => [
+                'id' => $role->getKey(),
+                'name' => $role->getAttribute('name'),
                 'description' => '',
-                'code' => $role->name,
+                'code' => $role->getAttribute('name'),
             ])->values()->all(),
         ];
     }

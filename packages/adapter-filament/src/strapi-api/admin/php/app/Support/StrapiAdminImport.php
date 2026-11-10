@@ -132,9 +132,10 @@ final class StrapiAdminImport
     /** The IR admin role a Strapi admin role becomes, when one is seeded here. */
     private function adminRole(object $role): ?string
     {
-        $seeded = Role::query()->whereIn('name', AdminUser::ADMIN_ROLES)->pluck('name')->all();
+        $roles = AdminUser::adminRoles();
+        $seeded = Role::query()->whereIn('name', $roles)->pluck('name')->all();
         if (($role->code ?? null) === self::SUPER_ADMIN) {
-            return in_array('super-admin', $seeded, true) ? 'super-admin' : (AdminUser::ADMIN_ROLES[0] ?? null);
+            return in_array('super-admin', $seeded, true) ? 'super-admin' : ($roles[0] ?? null);
         }
         $wanted = array_map('mb_strtolower', array_filter([
             (string) ($role->name ?? ''),

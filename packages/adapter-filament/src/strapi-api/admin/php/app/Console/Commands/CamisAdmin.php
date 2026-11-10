@@ -24,14 +24,15 @@ final class CamisAdmin extends Command
 
     public function handle(): int
     {
-        if (! AdminUser::EVERY_USER && AdminUser::ADMIN_ROLES === []) {
+        $roles = AdminUser::adminRoles();
+        if (! AdminUser::everyUser() && $roles === []) {
             $this->error('No role may sign in to the admin: mark one with "admin": true in the roles file, then rebuild');
 
             return self::FAILURE;
         }
-        $role = AdminUser::EVERY_USER ? null : $this->option('role') ?? AdminUser::ADMIN_ROLES[0];
-        if ($role !== null && ! in_array($role, AdminUser::ADMIN_ROLES, true)) {
-            $this->error("\"{$role}\" is not an admin role; admin roles: " . implode(', ', AdminUser::ADMIN_ROLES));
+        $role = AdminUser::everyUser() ? null : $this->option('role') ?? $roles[0];
+        if ($role !== null && ! in_array($role, $roles, true)) {
+            $this->error("\"{$role}\" is not an admin role; admin roles: " . implode(', ', $roles));
 
             return self::FAILURE;
         }
