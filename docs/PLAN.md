@@ -1760,7 +1760,7 @@ account without a reading role lists nothing, and an API user is held to neither
 
 ---
 
-## Phase 53 — Strapi's Content Manager views come over (`adapter-filament`)
+## Phase 54 — Strapi's Content Manager views come over (`adapter-filament`)
 
 Phase 44 kept a type's view configuration as Strapi's core store does, but a migrated project
 started from Strapi's defaults: editors lost the list columns, labels, sorting and edit layouts
