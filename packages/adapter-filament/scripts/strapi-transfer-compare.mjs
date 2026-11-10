@@ -4,7 +4,7 @@
 // the same entries in the same positions. Ids differ between databases, so entries are named by
 // type, documentId, locale and version, and component instances by their place in their entry; timestamps are compared to the second, which is what a
 // Laravel timestamp column keeps. What camis does not keep is left out: users-permissions
-// permissions (the IR's grants), a role's documentId and timestamps, a plain type's publishedAt,
+// permissions (the IR's grants), a role's timestamps, a plain type's publishedAt,
 // and a role only the expected archive has: roles are the IR's, so `strapi:import` reports one
 // the IR lacks instead of making it, and an export does not hold it.
 // usage: strapi-transfer-compare.mjs <expected.tar.gz> <actual.tar.gz>
@@ -79,10 +79,16 @@ const read = (path) => {
         : `${type}|${data.documentId}|${data.locale ?? ""}|${version}`;
     names.set(`${type}|${id}`, name);
     nameComponents(type, data, name);
-    // A role is the IR's, made anew by every build: its name and type are what carry over.
+    // A role is the IR's, made anew by every build: its name and type carry over, and the
+    // documentId an import gave it.
     const kept =
       type === "plugin::users-permissions.role"
-        ? { name: data.name, description: data.description, type: data.type }
+        ? {
+            documentId: data.documentId,
+            name: data.name,
+            description: data.description,
+            type: data.type,
+          }
         : data;
     entities.set(name, normalize(kept, versioned.has(type)));
   }
