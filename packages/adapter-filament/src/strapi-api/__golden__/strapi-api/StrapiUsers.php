@@ -246,7 +246,7 @@ final class StrapiUsers
         }, $layout);
     }
 
-    private static function newDocumentId(): string
+    public static function newDocumentId(): string
     {
         return (new class () {
             use HasDocumentId;
