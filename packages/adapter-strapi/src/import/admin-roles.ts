@@ -93,6 +93,20 @@ export const importStrapiAdminRoles = (
           message: `admin role "${name}": ${message}`,
         });
       };
+      // One line per type and reason, listing the actions, as a role holds one permission per
+      // action and type and a project has dozens of types.
+      const withheld = new Map<
+        string,
+        { contentType: string; actions: string[]; reason: string }
+      >();
+      const withhold = (ct: ContentType, uid: string, reason: string): void => {
+        const key = `${ct.name}\u0000${reason}`;
+        const entry =
+          withheld.get(key) ??
+          withheld.set(key, { contentType: ct.name, actions: [], reason }).get(key)!;
+        entry.actions.push(uid);
+      };
+      const missing = new Set<string>();
 
       const held = new Map<ContentType, Set<Action>>();
       const hold = (ct: ContentType, actions: Action[]): void => {
@@ -109,17 +123,19 @@ export const importStrapiAdminRoles = (
           unimported.push(p.action);
           continue;
         }
-        const ct = isFile ? builtin("file", BUILTIN_FILE) : subjectOf(p.subject, contentTypes, builtin);
-        const where = isFile ? p.action : `${p.action} on ${ct?.name ?? p.subject}`;
+        const ct = isFile
+          ? builtin("file", BUILTIN_FILE)
+          : subjectOf(p.subject, contentTypes, builtin);
         if (ct === undefined) {
-          report(`${where}: this project has no such type, so it is not granted`);
+          missing.add(p.subject ?? "");
           continue;
         }
         const conditions = strings(p.conditions) ?? [];
         if (conditions.length > 0) {
-          report(
-            `${where} holds only when ${conditions.join(", ")}; a camis grant has no such condition, so it is not granted`,
-            ct.name,
+          withhold(
+            ct,
+            p.action,
+            `only when ${conditions.join(", ")}; a camis grant has no such condition`,
           );
           continue;
         }
@@ -129,17 +145,19 @@ export const importStrapiAdminRoles = (
           fields !== undefined &&
           ct.fields.some((f) => !fields.some((path) => path.split(".")[0] === f.name));
         if (missingField) {
-          report(
-            `${where} covers only the fields ${fields.join(", ")}; a camis grant covers every field, so it is not granted`,
-            ct.name,
+          withhold(
+            ct,
+            p.action,
+            `only the fields ${fields.join(", ")}; a camis grant covers every field`,
           );
           continue;
         }
         const locales = strings(properties.locales);
         if (locales !== undefined && data.locales.some((code) => !locales.includes(code))) {
-          report(
-            `${where} covers only the locales ${locales.join(", ")}; a camis grant covers every locale, so it is not granted`,
-            ct.name,
+          withhold(
+            ct,
+            p.action,
+            `only the locales ${locales.join(", ")}; a camis grant covers every locale`,
           );
           continue;
         }
@@ -155,12 +173,27 @@ export const importStrapiAdminRoles = (
       // A media library action is granted once the role holds every upload action it stands for.
       if (fileActions.size > 0) {
         const file = builtin("file", BUILTIN_FILE);
-        hold(
-          file,
-          ACTIONS.filter((a) => {
-            const needs = FILE_ADMIN_ACTIONS[a];
-            return needs.length > 0 && needs.every((uid) => fileActions.has(uid));
-          }),
+        const given = ACTIONS.filter((a) => {
+          const needs = FILE_ADMIN_ACTIONS[a];
+          return needs.length > 0 && needs.every((uid) => fileActions.has(uid));
+        });
+        hold(file, given);
+        const used = new Set(given.flatMap((a) => FILE_ADMIN_ACTIONS[a]));
+        const left = [...fileActions].filter((uid) => !used.has(uid));
+        if (left.length > 0) {
+          withhold(
+            file,
+            left.join(", "),
+            `a camis grant on ${file.name} stands for ${describeFileActions()}, and the role holds only part of one`,
+          );
+        }
+      }
+      for (const { contentType, actions, reason } of withheld.values()) {
+        report(`${actions.join(", ")} on ${contentType}: ${reason}, so not granted`, contentType);
+      }
+      if (missing.size > 0) {
+        report(
+          `${[...missing].sort().join(", ")}: this project has no such type, so nothing on it is granted`,
         );
       }
       if (unimported.length > 0) {
@@ -182,6 +215,12 @@ export const importStrapiAdminRoles = (
 
   return { document: { ...input, contentTypes }, roles, superAdmin, gaps };
 };
+
+const describeFileActions = (): string =>
+  ACTIONS.flatMap((action) => {
+    const needs = FILE_ADMIN_ACTIONS[action];
+    return needs.length === 0 ? [] : [`${action} = ${needs.join(" + ")}`];
+  }).join(", ");
 
 const fileActionUids = new Set(Object.values(FILE_ADMIN_ACTIONS).flat());
 

@@ -1,10 +1,16 @@
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import type { IrDocument } from "@camis/ir-schema";
-import { importStrapiAdminRoles, type ImportedAdminRoles, type StrapiAdminData } from "./admin-roles";
+import {
+  importStrapiAdminRoles,
+  type ImportedAdminRoles,
+  type StrapiAdminData,
+} from "./admin-roles";
 
 // Vite (Vitest) does not know node:sqlite as a builtin and strips its prefix, so it is required.
-const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as typeof import("node:sqlite");
+const { DatabaseSync } = createRequire(import.meta.url)(
+  "node:sqlite",
+) as typeof import("node:sqlite");
 
 const json = (value: unknown): unknown => {
   if (typeof value !== "string") return value ?? null;

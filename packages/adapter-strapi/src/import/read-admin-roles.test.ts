@@ -1,11 +1,15 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import type { IrDocument } from "@camis/ir-schema";
 import { createRequire } from "node:module";
 import { afterEach, describe, expect, it } from "vitest";
-import { readStrapiAdminData } from "./read-admin-roles";
+import { readStrapiAdminData, readStrapiAdminRoles } from "./read-admin-roles";
 
-const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as typeof import("node:sqlite");
+const { DatabaseSync } = createRequire(import.meta.url)(
+  "node:sqlite",
+) as typeof import("node:sqlite");
 
 // The tables as strapi-php 5.56 creates them on SQLite (columns the reader skips left out).
 const SCHEMA = `
@@ -72,6 +76,60 @@ describe("readStrapiAdminData", () => {
   it("reads only a SQLite file", () => {
     expect(() => readStrapiAdminData("mysql://u:p@host/db")).toThrow(
       "mysql://u:p@host/db is not a SQLite file; the admin roles are read from a Strapi project's SQLite database",
+    );
+  });
+});
+
+// strapi-php 5.56's getstarted database after registering the first admin and adding a
+// "Content Writer" role through its admin API: Strapi's own Editor and Author, with their default
+// permissions, and a custom role (admin tables and locales only).
+const FIXTURE = fileURLToPath(new URL("./__fixtures__/strapi-php-admin.db", import.meta.url));
+
+describe("readStrapiAdminRoles on a strapi-php database", () => {
+  const categories: IrDocument = {
+    version: 1,
+    contentTypes: [
+      {
+        name: "Category",
+        kind: "collection",
+        options: { draftPublish: true, localized: true },
+        fields: [
+          { type: "string", name: "name", localized: true },
+          { type: "dateTime", name: "datetime" },
+          { type: "date", name: "date", localized: true },
+        ],
+      },
+    ],
+    components: [],
+  };
+
+  it("brings in Editor's grants, and only what Author and a custom role hold with no condition", () => {
+    const imported = readStrapiAdminRoles(FIXTURE, categories, ["public", "authenticated"]);
+    expect(imported.superAdmin).toBe(true);
+    expect(imported.roles).toEqual([
+      {
+        name: "editor",
+        description: "Editors can manage and publish contents including those of other users.",
+        admin: true,
+        grants: [
+          { contentType: "Category", actions: ["create", "read", "update"] },
+          { contentType: "File", actions: ["create", "read", "update", "delete"] },
+        ],
+      },
+      {
+        name: "author",
+        description: "Authors can manage the content they have created.",
+        admin: true,
+        grants: [{ contentType: "File", actions: ["create"] }],
+      },
+      { name: "content-writer", description: "Writes articles", admin: true, grants: [] },
+    ]);
+    const messages = imported.gaps.map((g) => g.message);
+    expect(messages).toContain(
+      'admin role "author": plugin::content-manager.explorer.create, plugin::content-manager.explorer.read, plugin::content-manager.explorer.update on Category: only when admin::is-creator; a camis grant has no such condition, so not granted',
+    );
+    expect(messages).toContain(
+      'admin role "content-writer": admin::webhooks.read: settings and plugin actions are not imported; in camis the Settings pages follow the role\'s grants on the User type',
     );
   });
 });

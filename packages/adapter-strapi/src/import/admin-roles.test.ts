@@ -29,7 +29,12 @@ const EDITOR = {
   description: "Editors can manage and publish contents including those of other users.",
 };
 
-const cm = (action: string, subject: string, properties: unknown = {}, conditions: unknown = []) => ({
+const cm = (
+  action: string,
+  subject: string,
+  properties: unknown = {},
+  conditions: unknown = [],
+) => ({
   action: `plugin::content-manager.explorer.${action}`,
   subject,
   properties,
@@ -90,11 +95,38 @@ describe("importStrapiAdminRoles", () => {
         [EDITOR],
         [
           { role: 2, action: "plugin::upload.read", subject: null, properties: {}, conditions: [] },
-          { role: 2, action: "plugin::upload.assets.download", subject: null, properties: {}, conditions: [] },
-          { role: 2, action: "plugin::upload.assets.copy-link", subject: null, properties: {}, conditions: [] },
-          { role: 2, action: "plugin::upload.assets.create", subject: null, properties: {}, conditions: [] },
-          { role: 2, action: "plugin::upload.assets.update", subject: null, properties: {}, conditions: [] },
-          { role: 2, ...cm("read", "plugin::users-permissions.user", { fields: ["username", "email"] }) },
+          {
+            role: 2,
+            action: "plugin::upload.assets.download",
+            subject: null,
+            properties: {},
+            conditions: [],
+          },
+          {
+            role: 2,
+            action: "plugin::upload.assets.copy-link",
+            subject: null,
+            properties: {},
+            conditions: [],
+          },
+          {
+            role: 2,
+            action: "plugin::upload.assets.create",
+            subject: null,
+            properties: {},
+            conditions: [],
+          },
+          {
+            role: 2,
+            action: "plugin::upload.assets.update",
+            subject: null,
+            properties: {},
+            conditions: [],
+          },
+          {
+            role: 2,
+            ...cm("read", "plugin::users-permissions.user", { fields: ["username", "email"] }),
+          },
         ],
       ),
       doc,
@@ -121,15 +153,16 @@ describe("importStrapiAdminRoles", () => {
           { role: 3, ...cm("read", ARTICLE, FULL, ["admin::is-creator"]) },
           { role: 3, ...cm("update", ARTICLE, { fields: ["title"], locales: ["en", "fr"] }) },
           { role: 3, ...cm("delete", ARTICLE, { locales: ["en"] }) },
+          { role: 3, ...cm("publish", ARTICLE, {}, ["admin::is-creator"]) },
         ],
       ),
       doc,
     );
     expect(imported.roles[0]?.grants).toEqual([{ contentType: "Article", actions: ["create"] }]);
     expect(imported.gaps.map((g) => g.message)).toEqual([
-      'admin role "author": plugin::content-manager.explorer.read on Article holds only when admin::is-creator; a camis grant has no such condition, so it is not granted',
-      'admin role "author": plugin::content-manager.explorer.update on Article covers only the fields title; a camis grant covers every field, so it is not granted',
-      'admin role "author": plugin::content-manager.explorer.delete on Article covers only the locales en; a camis grant covers every locale, so it is not granted',
+      'admin role "author": plugin::content-manager.explorer.read, plugin::content-manager.explorer.publish on Article: only when admin::is-creator; a camis grant has no such condition, so not granted',
+      'admin role "author": plugin::content-manager.explorer.update on Article: only the fields title; a camis grant covers every field, so not granted',
+      'admin role "author": plugin::content-manager.explorer.delete on Article: only the locales en; a camis grant covers every locale, so not granted',
     ]);
     expect(imported.gaps[0]).toMatchObject({
       feature: "strapiAdminPermission",
@@ -138,21 +171,29 @@ describe("importStrapiAdminRoles", () => {
     });
   });
 
-  it("reports the settings and plugin actions, and a type this project lacks, in one line each", () => {
+  it("reports the settings and plugin actions, and the types this project lacks, in one line each", () => {
     const imported = importStrapiAdminRoles(
       data(
         [EDITOR],
         [
           { role: 2, ...cm("read", "api::gone.gone", {}) },
+          { role: 2, ...cm("update", "api::gone.gone", {}) },
+          { role: 2, ...cm("read", "api::away.away", {}) },
           { role: 2, action: "admin::users.read", subject: null, properties: {}, conditions: [] },
-          { role: 2, action: "plugin::content-type-builder.read", subject: null, properties: {}, conditions: [] },
+          {
+            role: 2,
+            action: "plugin::content-type-builder.read",
+            subject: null,
+            properties: {},
+            conditions: [],
+          },
         ],
       ),
       doc,
     );
     expect(imported.roles[0]?.grants).toEqual([]);
     expect(imported.gaps.map((g) => g.message)).toEqual([
-      'admin role "editor": plugin::content-manager.explorer.read on api::gone.gone: this project has no such type, so it is not granted',
+      'admin role "editor": api::away.away, api::gone.gone: this project has no such type, so nothing on it is granted',
       'admin role "editor": admin::users.read, plugin::content-type-builder.read: settings and plugin actions are not imported; in camis the Settings pages follow the role\'s grants on the User type',
     ]);
   });
@@ -172,6 +213,20 @@ describe("importStrapiAdminRoles", () => {
     expect(imported.roles.map((r) => r.name)).toEqual(["content-writer", "admin-authenticated"]);
     expect(imported.roles[0]).not.toHaveProperty("description");
   });
+});
+
+it("reports media library actions that make up only part of a camis action", () => {
+  const imported = importStrapiAdminRoles(
+    data(
+      [EDITOR],
+      [{ role: 2, action: "plugin::upload.read", subject: null, properties: {}, conditions: [] }],
+    ),
+    doc,
+  );
+  expect(imported.roles[0]?.grants).toEqual([]);
+  expect(imported.gaps.map((g) => g.message)).toEqual([
+    'admin role "editor": plugin::upload.read on File: a camis grant on File stands for create = plugin::upload.assets.create, read = plugin::upload.read + plugin::upload.assets.download + plugin::upload.assets.copy-link, update = plugin::upload.assets.update, delete = plugin::upload.assets.update, and the role holds only part of one, so not granted',
+  ]);
 });
 
 describe("adminRoleName", () => {
