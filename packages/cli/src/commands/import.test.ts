@@ -293,6 +293,82 @@ describe("importCommand", () => {
   };
   const CRUD = ["create", "read", "update", "delete"];
 
+  const ADMIN_DATABASE = join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../../../adapter-strapi/src/import/__fixtures__/strapi-php-admin.db",
+  );
+
+  it("adds Strapi's admin roles to the export's, kept apart from a users' role of the same name", async () => {
+    const lines: string[] = [];
+    const written: Record<string, string> = {};
+    const code = await importCommand(
+      "strapi",
+      await archiveProject(),
+      "out.json",
+      memIo({}, lines, written),
+      {
+        roles: { archive: ARCHIVE, key: "camis-fixture-key", out: "roles.json" },
+        adminRoles: ADMIN_DATABASE,
+      },
+    );
+    expect(code, lines.join("\n")).toBe(0);
+    const roles = JSON.parse(written["/p/roles.json"]!) as {
+      roles: { name: string; admin?: boolean; grants: { contentType: string }[] }[];
+    };
+    expect(roles.roles.map((r) => r.name)).toEqual([
+      "public",
+      "authenticated",
+      "editor",
+      "super-admin",
+      "admin-editor",
+      "author",
+      "content-writer",
+    ]);
+    expect(roles.roles.filter((r) => r.admin === true).map((r) => r.name)).toEqual([
+      "super-admin",
+      "admin-editor",
+      "author",
+      "content-writer",
+    ]);
+  });
+
+  it("writes the default users' roles beside the admin roles when there is no export", async () => {
+    const lines: string[] = [];
+    const written: Record<string, string> = {};
+    const code = await importCommand(
+      "strapi",
+      await archiveProject(),
+      "out.json",
+      memIo({}, lines, written),
+      { adminRoles: ADMIN_DATABASE },
+    );
+    expect(code, lines.join("\n")).toBe(0);
+    const roles = JSON.parse(written["/p/roles.json"]!) as { roles: { name: string }[] };
+    expect(roles.roles.map((r) => r.name)).toEqual([
+      "public",
+      "authenticated",
+      "super-admin",
+      "editor",
+      "author",
+      "content-writer",
+    ]);
+  });
+
+  it("says why it cannot read the admin roles", async () => {
+    const lines: string[] = [];
+    const code = await importCommand(
+      "strapi",
+      await archiveProject(),
+      "out.json",
+      memIo({}, lines, {}),
+      { adminRoles: "mysql://u:p@host/db" },
+    );
+    expect(code).toBe(1);
+    expect(lines.join("\n")).toContain(
+      "✗ cannot read admin roles from mysql://u:p@host/db: mysql://u:p@host/db is not a SQLite file",
+    );
+  });
+
   it("brings a Strapi export's roles and permissions in as the IR's roles", async () => {
     const lines: string[] = [];
     const written: Record<string, string> = {};
