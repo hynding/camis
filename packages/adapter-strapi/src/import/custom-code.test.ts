@@ -121,7 +121,6 @@ export default factories.createCoreController('api::article.article', ({ strapi 
       ["customMiddleware", "src/api/article/middlewares/audit.ts"],
       ["customPolicy", "src/api/article/policies/is-draft.ts"],
       ["customRoutes", "src/api/article/routes/01-custom.ts"],
-      ["routeConfig", "src/api/article/routes/article.ts"],
       ["customService", "src/api/article/services/article.ts"],
       ["pluginExtension", "src/extensions/users-permissions/strapi-server.ts"],
       ["bootstrap", "src/index.ts"],
@@ -198,7 +197,6 @@ export default factories.createCoreController('api::article.article', ({ strapi 
       [
         ["bootstrap", "src/api/address/index.php"],
         ["customPolicy", "src/api/address/policies/address.php"],
-        ["routeConfig", "src/api/address/routes/address.php"],
         ["customCode", "src/custom/middleware.php"],
         ["cronTasks", "config/src/cron-tasks.php"],
       ].sort((a, b) => (a[1]! < b[1]! ? -1 : 1)),

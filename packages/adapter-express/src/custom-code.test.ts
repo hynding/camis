@@ -58,3 +58,33 @@ describe("express custom code", () => {
     ]);
   });
 });
+
+describe("express content API actions", () => {
+  it("reports a type serving only some actions, since it routes every one", () => {
+    const restricted: IrBundle = {
+      document: {
+        version: 1,
+        contentTypes: [
+          {
+            name: "Address",
+            kind: "collection",
+            options: { apiActions: ["list", "read"] },
+            fields: [{ type: "string", name: "city" }],
+          },
+        ],
+        components: [],
+      },
+      roles: [],
+    };
+    const gaps = expressAdapter.generate(restricted, { projectName: "blog" }).gaps.gaps;
+    expect(gaps.filter((g) => g.feature === "apiActions")).toEqual([
+      {
+        feature: "apiActions",
+        location: { contentType: "Address" },
+        severity: "downgrade",
+        message:
+          "the Express target routes every action; Address serves only list, read, so its create, update and delete routes are open to whoever its roles let in",
+      },
+    ]);
+  });
+});

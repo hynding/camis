@@ -33,6 +33,31 @@ describe("strapi custom code", () => {
     await golden("src/api/homepage/routes/homepage.ts", "homepage.router.ts.txt");
   });
 
+  // A single type's core router has find, update and delete only.
+  it("serves only a type's listed actions through the core router's only", () => {
+    const restricted = strapiAdapter.generate(
+      {
+        document: {
+          ...customCodeDoc,
+          contentTypes: customCodeDoc.contentTypes.map((ct) => ({
+            ...ct,
+            options: {
+              ...ct.options,
+              apiActions: ct.kind === "single" ? ["read"] : ["list", "read"],
+            },
+          })),
+        },
+        roles: [],
+      },
+      { projectName: "blog" },
+    );
+    const router = (p: string) => restricted.files.find((f) => f.path === p)!.content;
+    expect(router("src/api/article/routes/article.ts")).toContain('  only: ["find", "findOne"],\n');
+    expect(router("src/api/homepage/routes/homepage.ts")).toContain('  only: ["find"],\n');
+    // A policy on an action the type does not serve has no route to run on.
+    expect(router("src/api/article/routes/article.ts")).not.toContain("update:");
+  });
+
   it("seeds each policy and middleware as Strapi's global ones", async () => {
     expect(file("src/policies/is-owner.ts")!.mode).toBe("seed");
     expect(file("src/middlewares/audit-trail.ts")!.mode).toBe("seed");
