@@ -1542,7 +1542,7 @@ that link anything or hold items are written one by one (`StrapiItems`). In the 
 repeaters nest and pick relations; a zone's Builder picks them by id and holds nested items as
 plain repeaters. `strapi:import`/`strapi:export` carry a component's relations as Strapi archives
 them (links from the component's uid and archived id) and a nested component's files from its own
-uid. GraphQL's component types still leave the relations out (`graphqlComponentRelations`).
+uid. GraphQL's component types left the relations out (`graphqlComponentRelations`) until Phase 56.
 
 Exit: `component-vectors.json` (37 checks) and `nested-components-export.tar.gz` (import, export
 compared, read vectors) recorded from strapi-php with the fixture's Menu; the existing vector
@@ -1818,6 +1818,28 @@ Exit: golden tests for `CamisRouteHooks` on both API styles; the boot job checks
 holds no delete, is refused before `NoDeletes` is asked, and that an Editor holding delete still
 meets "Policy Failed"; `api-actions.test.ts` (Filament routes and OpenAPI), the Strapi target's
 router, and `router-config.test.ts`, which reads back the routers the Strapi target writes.
+
+---
+
+## Phase 56 — relations inside components over GraphQL (`adapter-filament`)
+
+Phase 46 stored, served and edited relations inside components over REST, but GraphQL's
+component types left them out (`graphqlComponentRelations`), so a GraphQL client of a migrated
+project could not ask for a menu link's target.
+
+- **Schema.** A component's type carries its relations as a content type's do (`author: Author`;
+  `topics(...)` and `topics_connection(...)` for a to-many), its filters take the target's filters,
+  and its input takes the target's `ID` or `[ID]`, as strapi-php prints them.
+- **Runtime.** An entry's populate for a component that holds a relation, at any depth, follows the
+  selection: each relation inside it with its own filters and sort, each component and file inside
+  it that is asked for, and a dynamic zone's members by `on`. A component without relations keeps
+  `populate: '*'`. A component's relation reads what that populate brought; a second ask of it with
+  other arguments shares the first's.
+
+Exit: the schema test against strapi-php's printed types (Link, MenuItem and Menu spliced into
+`graphql-schema.strapi-php.graphql`), and `graphql-component-vectors.json`, recorded from strapi-php
+(embedded, repeatable, nested and zoned relations, a connection, a filtered relation, a list filtered
+by a component's relation, and a create and update), replayed by the `strapi-api` job.
 
 ---
 

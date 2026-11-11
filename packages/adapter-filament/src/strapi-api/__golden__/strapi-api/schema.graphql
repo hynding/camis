@@ -1099,10 +1099,19 @@ type LandingEntityResponseCollection {
 type ComponentSharedLink {
   id: ID!
   label: String
+  author: Author
+  topics_connection(filters: TopicFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): TopicRelationResponseCollection
+  topics(filters: TopicFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): [Topic]!
+}
+
+type TopicRelationResponseCollection {
+  nodes: [Topic!]!
 }
 
 input ComponentSharedLinkFiltersInput {
   label: StringFilterInput
+  author: AuthorFiltersInput
+  topics: TopicFiltersInput
   and: [ComponentSharedLinkFiltersInput]
   or: [ComponentSharedLinkFiltersInput]
   not: ComponentSharedLinkFiltersInput
@@ -1111,6 +1120,8 @@ input ComponentSharedLinkFiltersInput {
 input ComponentSharedLinkInput {
   id: ID
   label: String
+  author: ID
+  topics: [ID]
 }
 
 type ComponentSharedMenuItem {
@@ -1295,10 +1306,6 @@ input PageFiltersInput {
 type PageEntityResponseCollection {
   nodes: [Page!]!
   pageInfo: Pagination!
-}
-
-type TopicRelationResponseCollection {
-  nodes: [Topic!]!
 }
 
 type Post {

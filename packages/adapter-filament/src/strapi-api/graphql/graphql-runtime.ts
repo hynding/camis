@@ -1,5 +1,5 @@
 import { PHP_MARKER } from "../../hooks/names";
-import type { GraphqlSchema } from "./graphql-schema";
+import type { GraphqlRelation, GraphqlSchema } from "./graphql-schema";
 import { runtimePhp } from "../../runtime-php";
 
 const header = `<?php\n${PHP_MARKER}\n\ndeclare(strict_types=1);\n\nnamespace App\\GraphQL;\n`;
@@ -23,6 +23,13 @@ export const emitStrapiGraphqlTypes = (schema: GraphqlSchema, tokens: boolean): 
         ([k, v]) => `'${k}' => ['type' => '${v.type}', 'repeatable' => ${phpBool(v.repeatable)}]`,
       )
       .join(", ");
+  const relations = (entries: Record<string, GraphqlRelation>) =>
+    Object.entries(entries)
+      .map(
+        ([k, r]) =>
+          `'${k}' => ['type' => '${r.type}', 'many' => ${phpBool(r.many)}, 'model' => \\App\\Models\\${r.model}::class]`,
+      )
+      .join(", ");
   const types = schema.types
     .map(
       (t) => `        '${t.name}' => [
@@ -30,12 +37,7 @@ export const emitStrapiGraphqlTypes = (schema: GraphqlSchema, tokens: boolean): 
             'routeKey' => ${t.routeKey === null ? "null" : phpString(t.routeKey)},
             'draftPublish' => ${phpBool(t.draftPublish)},
             'localized' => ${phpBool(t.localized)},
-            'relations' => [${Object.entries(t.relations)
-              .map(
-                ([k, r]) =>
-                  `'${k}' => ['type' => '${r.type}', 'many' => ${phpBool(r.many)}, 'model' => \\App\\Models\\${r.model}::class]`,
-              )
-              .join(", ")}],
+            'relations' => [${relations(t.relations)}],
             'components' => [${nested(t.components)}],
             'zones' => [${t.zones.map(phpString).join(", ")}],
         ],`,
@@ -44,7 +46,7 @@ export const emitStrapiGraphqlTypes = (schema: GraphqlSchema, tokens: boolean): 
   const components = schema.components
     .map(
       (c) =>
-        `        '${c.name}' => ['uid' => ${phpString(c.uid)}, 'components' => [${nested(c.components)}]],`,
+        `        '${c.name}' => ['uid' => ${phpString(c.uid)}, 'components' => [${nested(c.components)}], 'relations' => [${relations(c.relations)}]],`,
     )
     .join("\n");
   const plugins = schema.plugins
@@ -82,7 +84,7 @@ ${roots(schema.mutations)}
 ${types}
     ];
 
-    /** Component type → its uid and its own components. */
+    /** Component type → its uid, its own components and its relations. */
     public const COMPONENTS = [
 ${components}
     ];
