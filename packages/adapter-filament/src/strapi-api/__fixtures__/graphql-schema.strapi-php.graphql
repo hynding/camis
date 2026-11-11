@@ -1590,3 +1590,90 @@ input TicketInput {
   publishedAt: DateTime
   locale: String
 }
+
+type ComponentSharedLink {
+  author: Author
+  id: ID!
+  label: String
+  topics(filters: TopicFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): [Topic]!
+  topics_connection(filters: TopicFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): TopicRelationResponseCollection
+}
+
+input ComponentSharedLinkFiltersInput {
+  label: StringFilterInput
+  author: AuthorFiltersInput
+  topics: TopicFiltersInput
+  and: [ComponentSharedLinkFiltersInput]
+  or: [ComponentSharedLinkFiltersInput]
+  not: ComponentSharedLinkFiltersInput
+}
+
+input ComponentSharedLinkInput {
+  id: ID
+  label: String
+  author: ID
+  topics: [ID]
+}
+
+type ComponentSharedMenuItem {
+  children(filters: ComponentSharedLinkFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): [ComponentSharedLink]
+  icon: ComponentSharedFrame
+  id: ID!
+  label: String!
+  link: ComponentSharedLink
+}
+
+input ComponentSharedMenuItemFiltersInput {
+  label: StringFilterInput
+  link: ComponentSharedLinkFiltersInput
+  icon: ComponentSharedFrameFiltersInput
+  children: ComponentSharedLinkFiltersInput
+  and: [ComponentSharedMenuItemFiltersInput]
+  or: [ComponentSharedMenuItemFiltersInput]
+  not: ComponentSharedMenuItemFiltersInput
+}
+
+input ComponentSharedMenuItemInput {
+  id: ID
+  label: String
+  link: ComponentSharedLinkInput
+  icon: ComponentSharedFrameInput
+  children: [ComponentSharedLinkInput]
+}
+
+type Menu {
+  createdAt: DateTime
+  cta: ComponentSharedLink
+  documentId: ID!
+  items(filters: ComponentSharedMenuItemFiltersInput, pagination: PaginationArg = {  }, sort: [String] = []): [ComponentSharedMenuItem]
+  publishedAt: DateTime
+  sections: [MenuSectionsDynamicZone]
+  title: String!
+  updatedAt: DateTime
+}
+
+input MenuFiltersInput {
+  documentId: IDFilterInput
+  title: StringFilterInput
+  cta: ComponentSharedLinkFiltersInput
+  items: ComponentSharedMenuItemFiltersInput
+  createdAt: DateTimeFilterInput
+  updatedAt: DateTimeFilterInput
+  publishedAt: DateTimeFilterInput
+  and: [MenuFiltersInput]
+  or: [MenuFiltersInput]
+  not: MenuFiltersInput
+}
+
+input MenuInput {
+  title: String
+  cta: ComponentSharedLinkInput
+  items: [ComponentSharedMenuItemInput]
+  sections: [MenuSectionsDynamicZoneInput!]
+  publishedAt: DateTime
+  locale: String
+}
+
+union MenuSectionsDynamicZone = ComponentSharedLink | ComponentSharedMenuItem | Error
+
+scalar MenuSectionsDynamicZoneInput

@@ -1,0 +1,260 @@
+{
+  "an embedded component's relations, to one and to many": {
+    "data": {
+      "menus": [
+        {
+          "cta": null,
+          "title": "Empty"
+        },
+        {
+          "cta": {
+            "author": {
+              "name": "Bob"
+            },
+            "label": "Contact",
+            "topics": []
+          },
+          "title": "Footer"
+        },
+        {
+          "cta": {
+            "author": {
+              "name": "Ann"
+            },
+            "label": "Start",
+            "topics": [
+              {
+                "name": "News"
+              },
+              {
+                "name": "Sport"
+              }
+            ]
+          },
+          "title": "Main"
+        }
+      ]
+    },
+    "errors": []
+  },
+  "a to-many relation in a component as a connection": {
+    "data": {
+      "menu": {
+        "cta": {
+          "topics_connection": {
+            "nodes": [
+              {
+                "name": "News"
+              },
+              {
+                "name": "Sport"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "errors": []
+  },
+  "a component's relation, filtered": {
+    "data": {
+      "menu": {
+        "cta": {
+          "topics": [
+            {
+              "name": "News"
+            }
+          ]
+        }
+      }
+    },
+    "errors": []
+  },
+  "relations inside a repeatable's items, a component in them and a repeatable in them": {
+    "data": {
+      "menu": {
+        "items": [
+          {
+            "children": [
+              {
+                "author": {
+                  "name": "Ann"
+                },
+                "label": "First",
+                "topics": [
+                  {
+                    "name": "News"
+                  },
+                  {
+                    "name": "Sport"
+                  }
+                ]
+              },
+              {
+                "author": null,
+                "label": "Second",
+                "topics": []
+              }
+            ],
+            "label": "Home",
+            "link": {
+              "author": {
+                "name": "Bob"
+              },
+              "label": "Home link",
+              "topics": [
+                {
+                  "name": "News"
+                }
+              ]
+            }
+          },
+          {
+            "children": [],
+            "label": "About",
+            "link": null
+          },
+          {
+            "children": [
+              {
+                "author": {
+                  "name": "Bob"
+                },
+                "label": "Only",
+                "topics": []
+              }
+            ],
+            "label": "Blog",
+            "link": {
+              "author": null,
+              "label": "Blog link",
+              "topics": [
+                {
+                  "name": "Sport"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "errors": []
+  },
+  "relations inside a dynamic zone's items": {
+    "data": {
+      "menu": {
+        "sections": [
+          {
+            "__typename": "ComponentSharedLink",
+            "author": {
+              "name": "Bob"
+            },
+            "label": "Section link",
+            "topics": [
+              {
+                "name": "Sport"
+              }
+            ]
+          },
+          {
+            "__typename": "ComponentSharedMenuItem",
+            "children": [
+              {
+                "author": {
+                  "name": "Ann"
+                },
+                "label": "Zoned",
+                "topics": [
+                  {
+                    "name": "News"
+                  }
+                ]
+              },
+              {
+                "author": null,
+                "label": "Zoned too",
+                "topics": []
+              }
+            ],
+            "itemLabel": "Section item",
+            "link": {
+              "author": {
+                "name": "Ann"
+              },
+              "label": "Inner"
+            }
+          }
+        ]
+      }
+    },
+    "errors": []
+  },
+  "a list filtered by a relation inside a component": {
+    "data": {
+      "menus": [
+        {
+          "title": "Footer"
+        }
+      ]
+    },
+    "errors": []
+  },
+  "create a menu with relations inside its components": {
+    "data": {
+      "createMenu": {
+        "cta": {
+          "author": {
+            "name": "Bob"
+          },
+          "label": "Go",
+          "topics": [
+            {
+              "name": "News"
+            },
+            {
+              "name": "Sport"
+            }
+          ]
+        },
+        "items": [
+          {
+            "children": [
+              {
+                "label": "Kid",
+                "topics": [
+                  {
+                    "name": "Sport"
+                  }
+                ]
+              }
+            ],
+            "label": "One",
+            "link": {
+              "author": {
+                "name": "Ann"
+              },
+              "label": "Inner"
+            }
+          }
+        ],
+        "title": "Side"
+      }
+    },
+    "errors": []
+  },
+  "update a menu's component relations": {
+    "data": {
+      "updateMenu": {
+        "cta": {
+          "author": {
+            "name": "Ann"
+          },
+          "label": "Went",
+          "topics": []
+        },
+        "title": "Side"
+      }
+    },
+    "errors": []
+  }
+}

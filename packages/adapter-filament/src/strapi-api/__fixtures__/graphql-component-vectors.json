@@ -1,0 +1,183 @@
+{
+  "about": "Relations inside components over GraphQL, checked against strapi-php's GraphQL plugin. Seeds component-vectors.json's authors, topics and menus over REST, then posts each query and mutation in order to /graphql with strapi-populate-vectors.mjs. A published menu shows each linked topic's published version, so the draft-only Hidden topic stays out. publishedAt is compared as present or absent; documentId, id and the timestamps are left out.",
+  "publishedAt": "presence",
+  "seed": [
+    {
+      "path": "/authors",
+      "as": "authors:Ann",
+      "data": {
+        "name": "Ann"
+      }
+    },
+    {
+      "path": "/authors",
+      "as": "authors:Bob",
+      "data": {
+        "name": "Bob"
+      }
+    },
+    {
+      "path": "/topics",
+      "as": "topics:News",
+      "data": {
+        "name": "News"
+      }
+    },
+    {
+      "path": "/topics",
+      "as": "topics:Sport",
+      "data": {
+        "name": "Sport"
+      }
+    },
+    {
+      "path": "/topics",
+      "query": "status=draft",
+      "as": "topics:Hidden",
+      "data": {
+        "name": "Hidden"
+      }
+    },
+    {
+      "path": "/menus",
+      "as": "menus:Main",
+      "data": {
+        "title": "Main",
+        "cta": {
+          "label": "Start",
+          "author": "@authors:Ann",
+          "topics": ["@topics:Sport", "@topics:News", "@topics:Hidden"]
+        },
+        "items": [
+          {
+            "label": "Home",
+            "link": {
+              "label": "Home link",
+              "author": "@authors:Bob",
+              "topics": ["@topics:News"]
+            },
+            "children": [
+              {
+                "label": "First",
+                "author": "@authors:Ann",
+                "topics": ["@topics:News", "@topics:Sport"]
+              },
+              {
+                "label": "Second"
+              }
+            ]
+          },
+          {
+            "label": "About",
+            "children": []
+          },
+          {
+            "label": "Blog",
+            "link": {
+              "label": "Blog link",
+              "topics": ["@topics:Sport"]
+            },
+            "children": [
+              {
+                "label": "Only",
+                "author": "@authors:Bob"
+              }
+            ]
+          }
+        ],
+        "sections": [
+          {
+            "__component": "shared.link",
+            "label": "Section link",
+            "author": "@authors:Bob",
+            "topics": ["@topics:Sport"]
+          },
+          {
+            "__component": "shared.menu-item",
+            "label": "Section item",
+            "link": {
+              "label": "Inner",
+              "author": "@authors:Ann"
+            },
+            "children": [
+              {
+                "label": "Zoned",
+                "author": "@authors:Ann",
+                "topics": ["@topics:News"]
+              },
+              {
+                "label": "Zoned too"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "path": "/menus",
+      "as": "menus:Footer",
+      "data": {
+        "title": "Footer",
+        "cta": {
+          "label": "Contact",
+          "author": "@authors:Bob"
+        },
+        "items": [
+          {
+            "label": "Legal",
+            "children": [
+              {
+                "label": "Terms",
+                "topics": ["@topics:Hidden"]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "path": "/menus",
+      "as": "menus:Empty",
+      "data": {
+        "title": "Empty"
+      }
+    }
+  ],
+  "reads": [
+    {
+      "name": "an embedded component's relations, to one and to many",
+      "graphql": "{ menus(sort: \"title\") { title cta { label author { name } topics(sort: \"name\") { name } } } }"
+    },
+    {
+      "name": "a to-many relation in a component as a connection",
+      "graphql": "{ menu(documentId: \"@menus:Main\") { cta { topics_connection(sort: \"name\") { nodes { name } } } } }"
+    },
+    {
+      "name": "a component's relation, filtered",
+      "graphql": "{ menu(documentId: \"@menus:Main\") { cta { topics(filters: { name: { eq: \"News\" } }) { name } } } }"
+    },
+    {
+      "name": "relations inside a repeatable's items, a component in them and a repeatable in them",
+      "graphql": "{ menu(documentId: \"@menus:Main\") { items { label link { label author { name } topics { name } } children { label author { name } topics(sort: \"name\") { name } } } } }"
+    },
+    {
+      "name": "relations inside a dynamic zone's items",
+      "graphql": "{ menu(documentId: \"@menus:Main\") { sections { __typename ... on ComponentSharedLink { label author { name } topics { name } } ... on ComponentSharedMenuItem { itemLabel: label link { label author { name } } children { label author { name } topics { name } } } } } }"
+    },
+    {
+      "name": "a list filtered by a relation inside a component",
+      "graphql": "{ menus(filters: { cta: { author: { name: { eq: \"Bob\" } } } }) { title } }"
+    }
+  ],
+  "writes": [
+    {
+      "name": "create a menu with relations inside its components",
+      "as": "menus:Side",
+      "graphql": "mutation { createMenu(data: { title: \"Side\", cta: { label: \"Go\", author: \"@authors:Bob\", topics: [\"@topics:News\", \"@topics:Sport\"] }, items: [{ label: \"One\", link: { label: \"Inner\", author: \"@authors:Ann\" }, children: [{ label: \"Kid\", topics: [\"@topics:Sport\"] }] }] }) { documentId title cta { label author { name } topics(sort: \"name\") { name } } items { label link { label author { name } } children { label topics { name } } } } }"
+    },
+    {
+      "name": "update a menu's component relations",
+      "graphql": "mutation { updateMenu(documentId: \"@menus:Side\", data: { cta: { label: \"Went\", author: \"@authors:Ann\", topics: [] } }) { title cta { label author { name } topics { name } } } }"
+    }
+  ]
+}
