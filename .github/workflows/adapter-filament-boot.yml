@@ -182,6 +182,14 @@ jobs:
             $delete = $kernel->handle(\Illuminate\Http\Request::create("/api/articles/".$art->id, "DELETE", server: ["HTTP_ACCEPT" => "application/json"]));
             $seen = [$list->getStatusCode(), $list->headers->get("X-Camis-Hook"), $delete->getStatusCode(), json_decode((string) $delete->getContent(), true)["message"] ?? null, \App\Models\Article::whereKey($art->id)->exists()];
             if ($seen !== [200, "TagResponse", 403, "Policy Failed", true]) { fwrite(STDERR, "ROUTE HOOKS MISMATCH ".json_encode($seen)."\n"); exit(1); }
+            // Strapi checks the permission before the policies: a Reader holds no delete, so it is refused before NoDeletes is asked.
+            $reader = \App\Models\User::factory()->create();
+            $reader->assignRole("Reader");
+            auth()->forgetGuards();
+            auth()->login($reader);
+            $refused = $kernel->handle(\Illuminate\Http\Request::create("/api/articles/".$art->id, "DELETE", server: ["HTTP_ACCEPT" => "application/json"]));
+            $seen = [$refused->getStatusCode(), json_decode((string) $refused->getContent(), true)["message"] ?? null];
+            if ($seen[0] !== 403 || $seen[1] === "Policy Failed") { fwrite(STDERR, "ROUTE HOOKS ORDER MISMATCH ".json_encode($seen)."\n"); exit(1); }
             echo "ROUTE HOOKS OK\n";
           '
       - name: Schedules run through Laravel's scheduler
