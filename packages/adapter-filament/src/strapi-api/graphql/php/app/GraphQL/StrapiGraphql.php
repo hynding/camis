@@ -385,7 +385,7 @@ final class StrapiGraphql
             } elseif (isset($meta['components'][$name])) {
                 $populate[$name] = ['populate' => self::inside($meta['components'][$name]['type'], [$field], $info)];
             } elseif (in_array($name, $meta['zones'] ?? [], true)) {
-                $populate[$name] = self::zone(Type::getNamedType($object->getField($name)->getType())->name, $field, $info);
+                $populate[$name] = self::zone(self::namedType($object->getField($name)->getType()), $field, $info);
             }
         }
 
@@ -421,12 +421,12 @@ final class StrapiGraphql
                     continue;
                 }
                 $fetch = self::fetching(Values::getArgumentValues($definition, $field, $info->variableValues), $definition->getArg('filters')?->getType());
-                $children = $key !== $name ? self::nodes([$field], Type::getNamedType($definition->getType())->name, $info) : [$field];
+                $children = $key !== $name ? self::nodes([$field], self::namedType($definition->getType()), $info) : [$field];
                 [$inner] = self::populate($meta['relations'][$key]['type'], $children, $info);
                 $populate[$key] = array_filter($fetch, fn ($v) => $v !== null && $v !== []) + ($inner === [] ? [] : ['populate' => $inner]);
             } elseif (isset($meta['components'][$name])) {
                 $populate[$name] = ['populate' => self::inside($meta['components'][$name]['type'], [$field], $info)];
-            } elseif (Type::getNamedType($definition->getType())->name === 'UploadFile') {
+            } elseif (self::namedType($definition->getType()) === 'UploadFile') {
                 $populate[$name] = true;
             }
         }
@@ -447,6 +447,12 @@ final class StrapiGraphql
         }
 
         return ['on' => $on];
+    }
+
+    /** The name of the type a field's type wraps (lists and non-null taken off). */
+    private static function namedType(Type $type): string
+    {
+        return (string) Type::getNamedType($type);
     }
 
     /** Whether a relation is inside the component, or inside a component it holds. */
