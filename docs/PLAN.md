@@ -1508,8 +1508,7 @@ every such file without a word.
   each saying where its behavior goes. The one-line core factories, an empty `src/index`, the
   admin's examples, and files camis generated are passed over. strapi-php's `getstarted` names 13.
 
-Known limits: a policy runs before the content API's own permission check (Strapi runs it after),
-so a caller the role would refuse can see "Policy Failed" instead of "Forbidden". Route hooks are
+Known limits: Route hooks are
 on REST only, as Strapi's are (GraphQL has its own resolver policies). Strapi's `afterFindMany`
 style read lifecycles, app-wide middlewares (`config/middlewares`), and cron rules with seconds
 have no IR form. An import never writes hooks: their code is not declarative.
@@ -1784,6 +1783,23 @@ Not built: laying out a component's fields by its view (they stay boxed together
 Exit: `ContentManagerViewTest.php` imports `transfer/view-config-export.tar.gz` (strapi-php's
 archive with Post's and Hero's views configured) and checks the list, the edit form and a later
 save; the boot job round-trips it through `strapi:export` and `strapi-transfer-compare.mjs`.
+
+---
+
+## Phase 55 — Strapi's route pipeline (`adapter-filament`, `ir-schema`, `adapter-strapi`, `adapter-express`)
+
+Strapi composes a content API route as authenticate, authorize, the route's policies, its
+middlewares, then the action. Phase 45 ran the IR's policies before the controller's own permission
+check, so a caller its role refuses saw "Policy Failed" where Strapi answers "Forbidden".
+
+- **Policies after the permission.** `CamisRouteHooks` first asks the action's role-level ability
+  (`viewAny`, `create`, the new `updateAny`, `deleteAny`) of the type's policy, then the policies,
+  then the middlewares. A grant's record-level condition stays with the controller, as Strapi's
+  users-permissions has none at the route.
+
+Exit: golden tests for `CamisRouteHooks` on both API styles; the boot job checks that a Reader, who
+holds no delete, is refused before `NoDeletes` is asked, and that an Editor holding delete still
+meets "Policy Failed".
 
 ---
 

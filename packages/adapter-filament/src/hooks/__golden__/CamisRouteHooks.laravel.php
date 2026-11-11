@@ -8,11 +8,14 @@ namespace App\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Pipeline\Pipeline;
+use Illuminate\Support\Facades\Gate;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Runs the policies, then the middlewares, the IR puts on a content API route, as Strapi runs a
  * route's config.policies and then its config.middlewares. Each is a hand-written class in app/Hooks.
+ * Strapi asks a route's policies only once the caller holds the action, so the action's
+ * role-level ability is checked first; its record-level conditions stay with the controller.
  */
 final class CamisRouteHooks
 {
@@ -28,9 +31,19 @@ final class CamisRouteHooks
         'destroySingle' => 'delete',
     ];
 
-    /** @var array<class-string, array{policies: array<class-string, list<string>>, middlewares: array<class-string, list<string>>}> */
+    /** The policy ability that holds whether the caller's role has each action at all. */
+    private const ABILITIES = [
+        'list' => 'viewAny',
+        'read' => 'viewAny',
+        'create' => 'create',
+        'update' => 'updateAny',
+        'delete' => 'deleteAny',
+    ];
+
+    /** @var array<class-string, array{model: class-string, policies: array<class-string, list<string>>, middlewares: array<class-string, list<string>>}> */
     private const ROUTES = [
         \App\Http\Controllers\Api\ArticleApiController::class => [
+            'model' => \App\Models\Article::class,
             'policies' => [
                 \App\Hooks\IsOwner::class => ['update', 'delete'],
             ],
@@ -39,6 +52,7 @@ final class CamisRouteHooks
             ],
         ],
         \App\Http\Controllers\Api\HomepageApiController::class => [
+            'model' => \App\Models\Homepage::class,
             'policies' => [],
             'middlewares' => [
                 \App\Hooks\CacheHomepage::class => ['list', 'read', 'create', 'update', 'delete'],
@@ -54,6 +68,7 @@ final class CamisRouteHooks
         if ($hooks === null || $action === null) {
             return $next($request);
         }
+        Gate::authorize(self::ABILITIES[$action], $hooks['model']);
         foreach ($hooks['policies'] as $policy => $actions) {
             if (in_array($action, $actions, true) && ! app($policy)->allows($request, $action)) {
                 abort(403, 'Policy Failed');
