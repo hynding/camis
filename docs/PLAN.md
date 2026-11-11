@@ -1786,7 +1786,7 @@ save; the boot job round-trips it through `strapi:export` and `strapi-transfer-c
 
 ---
 
-## Phase 55 — Strapi's route pipeline (`adapter-filament`, `ir-schema`, `adapter-strapi`, `adapter-express`)
+## Phase 55 — Strapi's route pipeline and core routers (`ir-schema`, `adapter-strapi`, `adapter-filament`, `adapter-express`)
 
 Strapi composes a content API route as authenticate, authorize, the route's policies, its
 middlewares, then the action. Phase 45 ran the IR's policies before the controller's own permission
@@ -1796,10 +1796,28 @@ check, so a caller its role refuses saw "Policy Failed" where Strapi answers "Fo
   (`viewAny`, `create`, the new `updateAny`, `deleteAny`) of the type's policy, then the policies,
   then the middlewares. A grant's record-level condition stays with the controller, as Strapi's
   users-permissions has none at the route.
+- **A type's served actions.** IR `contentType.options.apiActions` lists the content API actions a
+  type serves (absent: every one; a single type has no `list` or `create`), as Strapi's core router
+  `only`/`except` does. The Filament target routes only those (Strapi API style: each route;
+  Laravel style: `apiResource(...)->only(...)`) and documents only those in OpenAPI; GraphQL keeps
+  every operation, as Strapi's `only` is REST's. The Strapi target writes `only`, and a single
+  type's router now names its actions `find`, `update`, `delete` (it named `findOne` and `create`).
+  Express routes every action and reports an `apiActions` gap.
+- **Importing core routers.** `camis import strapi` reads each hand-written
+  `src/api/*/routes/*.{js,ts,php}` that calls `createCoreRouter` without running it: its options'
+  literals (a JS object or a PHP array; a function or variable reads as opaque and is skipped).
+  `only`/`except` become `apiActions`; each served action's `config.policies` and
+  `config.middlewares` naming the project's own (`global::x`, `api::<api>.x`, `x`) become IR policies
+  and middlewares (`IsOwner`, prefixed with the type's name when two types use one), whose code
+  stays a `customPolicy`/`customMiddleware` gap. Reported instead: `routeAuth` (`auth: false`),
+  `routePrefix`, `inlinePolicy`/`inlineMiddleware`, `pluginPolicy`/`pluginMiddleware`,
+  `routeHookConfig`, and `routeConfig` for a router whose options are not literals. strapi-php's
+  getstarted Address router (`only: find, findOne`) now imports with no gap.
 
 Exit: golden tests for `CamisRouteHooks` on both API styles; the boot job checks that a Reader, who
 holds no delete, is refused before `NoDeletes` is asked, and that an Editor holding delete still
-meets "Policy Failed".
+meets "Policy Failed"; `api-actions.test.ts` (Filament routes and OpenAPI), the Strapi target's
+router, and `router-config.test.ts`, which reads back the routers the Strapi target writes.
 
 ---
 

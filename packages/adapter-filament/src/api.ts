@@ -1,5 +1,10 @@
 import type { GeneratedFile } from "@camis/adapter-kernel";
-import type { ContentType } from "@camis/ir-schema";
+import {
+  ROUTE_ACTIONS,
+  servesApiAction,
+  type ContentType,
+  type RouteAction,
+} from "@camis/ir-schema";
 import { filamentNames, snake, snakeColumn } from "./names";
 
 export interface ApiOptions {
@@ -84,6 +89,23 @@ ${auth(`$this->authorize('delete', $${param});`)}        $${param}->delete();
 `;
 };
 
+// The resource method serving each content API action.
+const RESOURCE_METHODS: Record<RouteAction, string> = {
+  list: "index",
+  read: "show",
+  create: "store",
+  update: "update",
+  delete: "destroy",
+};
+
+/** `->only(...)` the methods of the actions a type serves, when it lists them. */
+const only = (ct: ContentType): string =>
+  ct.options?.apiActions === undefined
+    ? ""
+    : `->only([${ROUTE_ACTIONS.filter((a) => servesApiAction(ct, a))
+        .map((a) => `'${RESOURCE_METHODS[a]}'`)
+        .join(", ")}])`;
+
 export const emitApiRoutes = (cts: ContentType[], options: ApiOptions): string => {
   const rows = [...cts]
     .sort((a, b) => filamentNames(a).table.localeCompare(filamentNames(b).table))
@@ -91,7 +113,7 @@ export const emitApiRoutes = (cts: ContentType[], options: ApiOptions): string =
       const n = filamentNames(ct);
       const hooks =
         options.hooked?.has(ct.name) === true ? "->middleware(CamisRouteHooks::class)" : "";
-      return `    Route::apiResource('${n.table}', ${n.model}ApiController::class)${hooks};`;
+      return `    Route::apiResource('${n.table}', ${n.model}ApiController::class)${only(ct)}${hooks};`;
     })
     .join("\n");
   const uses = [...cts]

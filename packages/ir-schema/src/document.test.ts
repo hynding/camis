@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { component, contentType, irDocument } from "./document";
+import { component, contentType, irDocument, servesApiAction } from "./document";
 
 const ct = (fields: unknown[]) =>
   contentType.safeParse({ name: "Article", kind: "collection", fields });
@@ -299,5 +299,15 @@ describe("localization", () => {
       });
       expect(r.error.issues[0]?.path).toEqual(["fields", 0, "localized"]);
     }
+  });
+});
+
+describe("servesApiAction", () => {
+  it("serves every action unless the type lists the ones it serves", () => {
+    const all = { name: "Tag", kind: "collection" as const, fields: [] };
+    expect(servesApiAction(all, "delete")).toBe(true);
+    const some = { ...all, options: { apiActions: ["list" as const] } };
+    expect(servesApiAction(some, "list")).toBe(true);
+    expect(servesApiAction(some, "delete")).toBe(false);
   });
 });

@@ -4,6 +4,8 @@ import type { CapabilityGapReport, IrDocument, Result } from "@camis/ir-schema";
 import { customCodeGaps, type ProjectFile } from "./custom-code";
 import type { ImportOptions } from "./import-document";
 import { importDocument } from "./import-document";
+import { importRouters, type RouterImport } from "./router-config";
+import { validate } from "@camis/ir-core";
 
 const SCHEMAS = ["src/api/*/content-types/*/schema.json", "src/components/*/*.json"];
 const CODE = [
@@ -32,6 +34,24 @@ export const readStrapiProject = async (
   opts: ImportOptions = {},
 ): Promise<{ document: Result<IrDocument>; gaps: CapabilityGapReport }> => {
   const imported = importDocument(await read(dir, SCHEMAS), opts);
-  const code = customCodeGaps(await read(dir, CODE));
-  return { ...imported, gaps: { ...imported.gaps, gaps: [...imported.gaps.gaps, ...code] } };
+  const files = await read(dir, CODE);
+  const code = customCodeGaps(files);
+  const gaps = [...imported.gaps.gaps, ...code];
+  if (!imported.document.ok) return { ...imported, gaps: { ...imported.gaps, gaps } };
+  const routers = importRouters(files, imported.document.value);
+  return {
+    document: validate(withRouters(imported.document.value, routers)),
+    gaps: { ...imported.gaps, gaps: [...gaps, ...routers.gaps] },
+  };
 };
+
+/** The document with the routes, policies and middlewares its core routers declare. */
+const withRouters = (doc: IrDocument, routers: RouterImport): IrDocument => ({
+  ...doc,
+  contentTypes: doc.contentTypes.map((ct) => {
+    const apiActions = routers.apiActions.get(ct.name);
+    return apiActions === undefined ? ct : { ...ct, options: { ...ct.options, apiActions } };
+  }),
+  ...(routers.policies.length > 0 ? { policies: routers.policies } : {}),
+  ...(routers.middlewares.length > 0 ? { middlewares: routers.middlewares } : {}),
+});

@@ -1,4 +1,4 @@
-import { customCodeGaps } from "./custom-code";
+import { apiActionGaps, customCodeGaps } from "./custom-code";
 import {
   buildManifest,
   expandComponents,
@@ -63,6 +63,7 @@ export const expressAdapterFor = (dialect: Dialect): GenerateAdapter => ({
     const gaps: CapabilityGap[] = [
       ...privateFieldGaps(doc, "the Express target"),
       ...customCodeGaps(doc),
+      ...apiActionGaps(doc),
     ];
     const files: GeneratedFile[] = [
       ...skeletonFiles(doc, options.projectName, dialect, { secured }),

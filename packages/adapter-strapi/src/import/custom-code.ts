@@ -18,8 +18,6 @@ const MESSAGES = {
     "service code is not imported; port it by hand beside the custom routes that call it",
   customRoutes:
     "custom routes are not imported; port them by hand into the target's custom routes (Filament: routes/api-custom.php)",
-  routeConfig:
-    "the core router's config is not imported; declare its policies and middlewares in the IR's policies and middlewares",
   customPolicy:
     "policy code is not imported; declare it in the IR's policies and port its code into the seeded policy class",
   customMiddleware:
@@ -85,7 +83,8 @@ const classify = (path: string, content: string): Feature | undefined => {
   if (isDefaultFactory(content)) return undefined;
   if (api[1] === "controllers") return "customController";
   if (api[1] === "services") return "customService";
-  return /createCoreRouter\s*\(/.test(content) ? "routeConfig" : "customRoutes";
+  // A core router's options are read by importRouters, which reports what it cannot carry.
+  return /createCoreRouter\s*\(/.test(content) ? undefined : "customRoutes";
 };
 
 const gap = (feature: Feature, file: string): CapabilityGap => ({

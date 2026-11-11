@@ -1,11 +1,13 @@
 import {
   fieldApiName,
   inverseApiName,
+  servesApiAction,
   type Component,
   type ComponentFieldT,
   type ContentType,
   type Field,
   type IrDocument,
+  type RouteAction,
 } from "@camis/ir-schema";
 import { componentUid, kebab, routePath } from "../core/names";
 import plugins from "./openapi-plugins.json";
@@ -399,7 +401,7 @@ class DocumentBuilder {
     });
     const tags = [singular];
     if (ct.kind === "single")
-      return {
+      return served(ct, {
         [`/${plural}`]: {
           get: {
             operationId: operation("get", false),
@@ -421,8 +423,8 @@ class DocumentBuilder {
             tags,
           },
         },
-      };
-    return {
+      });
+    return served(ct, {
       [`/${plural}`]: {
         get: {
           operationId: operation("get", false),
@@ -459,9 +461,36 @@ class DocumentBuilder {
           tags,
         },
       },
-    };
+    });
   }
 }
+
+/** The content API action each documented operation serves, by its method and whether it names an entry. */
+const operationAction = (kind: ContentType["kind"], method: string, byId: boolean): RouteAction =>
+  method === "put"
+    ? "update"
+    : method === "delete"
+      ? "delete"
+      : method === "post"
+        ? "create"
+        : kind === "collection" && !byId
+          ? "list"
+          : "read";
+
+/** The type's paths with only the operations of the actions it serves; a path left none goes. */
+const served = (ct: ContentType, paths: Record<string, Record<string, unknown>>) =>
+  Object.fromEntries(
+    Object.entries(paths)
+      .map(([path, item]): [string, Record<string, unknown>] => [
+        path,
+        Object.fromEntries(
+          Object.entries(item).filter(([method]) =>
+            servesApiAction(ct, operationAction(ct.kind, method, path.endsWith("{id}"))),
+          ),
+        ),
+      ])
+      .filter(([, item]) => Object.keys(item).length > 0),
+  );
 
 const DESCRIPTIONS: Record<string, string> = {
   biginteger: "A biginteger field",

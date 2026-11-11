@@ -1,15 +1,18 @@
 import type { GeneratedFile } from "@camis/adapter-kernel";
-import type { IrDocument, RouteAction, RouteHook } from "@camis/ir-schema";
+import type { ContentType, IrDocument, RouteAction, RouteHook } from "@camis/ir-schema";
 import { ROUTE_ACTIONS } from "@camis/ir-schema";
 import { hookSlug } from "./names";
 
-// Strapi's core router action for each content API action.
-const CORE_ACTION: Record<RouteAction, string> = {
-  list: "find",
-  read: "findOne",
-  create: "create",
-  update: "update",
-  delete: "delete",
+// Strapi's core router action for each content API action a type of each kind has.
+const CORE_ACTIONS: Record<ContentType["kind"], Partial<Record<RouteAction, string>>> = {
+  collection: {
+    list: "find",
+    read: "findOne",
+    create: "create",
+    update: "update",
+    delete: "delete",
+  },
+  single: { read: "find", update: "update", delete: "delete" },
 };
 
 const actionsOf = (r: RouteHook): readonly RouteAction[] => r.actions ?? ROUTE_ACTIONS;
@@ -39,24 +42,41 @@ export default (config, { strapi }: { strapi: Core.Strapi }) =>
 `;
 
 /**
- * The core router's `config` for a content type: each action's policies and middlewares, as
- * Strapi's global ones. Undefined when the IR puts none on it.
+ * The core router's options for a content type: `only` the actions it serves, when not every one,
+ * and each served action's policies and middlewares, as Strapi's global ones. Undefined when the
+ * IR puts nothing on it.
  */
 export const routerConfig = (doc: IrDocument, contentType: string): string | undefined => {
+  const ct = doc.contentTypes.find((c) => c.name === contentType);
+  if (ct === undefined) return undefined;
+  const core = CORE_ACTIONS[ct.kind];
+  const served = ROUTE_ACTIONS.filter(
+    (a) => core[a] !== undefined && (ct.options?.apiActions ?? ROUTE_ACTIONS).includes(a),
+  );
   const refs = (list: RouteHook[] | undefined, action: RouteAction): string[] =>
     (list ?? [])
       .filter((r) => r.contentType === contentType && actionsOf(r).includes(action))
       .map((r) => `"global::${hookSlug(r.name)}"`);
-  const rows = ROUTE_ACTIONS.map((action) => {
-    const policies = refs(doc.policies, action);
-    const middlewares = refs(doc.middlewares, action);
-    const parts = [
-      ...(policies.length > 0 ? [`policies: [${policies.join(", ")}]`] : []),
-      ...(middlewares.length > 0 ? [`middlewares: [${middlewares.join(", ")}]`] : []),
-    ];
-    return parts.length === 0 ? undefined : `    ${CORE_ACTION[action]}: { ${parts.join(", ")} },`;
-  }).filter((row): row is string => row !== undefined);
-  return rows.length === 0 ? undefined : `{\n  config: {\n${rows.join("\n")}\n  },\n}`;
+  const rows = served
+    .map((action) => {
+      const policies = refs(doc.policies, action);
+      const middlewares = refs(doc.middlewares, action);
+      const parts = [
+        ...(policies.length > 0 ? [`policies: [${policies.join(", ")}]`] : []),
+        ...(middlewares.length > 0 ? [`middlewares: [${middlewares.join(", ")}]`] : []),
+      ];
+      return parts.length === 0 ? undefined : `    ${core[action]}: { ${parts.join(", ")} },`;
+    })
+    .filter((row): row is string => row !== undefined);
+  const only =
+    ct.options?.apiActions === undefined
+      ? undefined
+      : `  only: [${served.map((a) => `"${core[a]}"`).join(", ")}],`;
+  const options = [
+    ...(only === undefined ? [] : [only]),
+    ...(rows.length === 0 ? [] : [`  config: {\n${rows.join("\n")}\n  },`]),
+  ];
+  return options.length === 0 ? undefined : `{\n${options.join("\n")}\n}`;
 };
 
 /** A seeded file for each of the IR's route policies and middlewares, where Strapi looks for them. */
