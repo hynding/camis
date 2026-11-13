@@ -1548,5 +1548,210 @@
       ],
       "title": "Framed"
     }
+  },
+  "upload an image to replace": {
+    "status": 201,
+    "data": [
+      {
+        "alternativeText": null,
+        "caption": "kept",
+        "ext": ".png",
+        "focalPoint": null,
+        "formats": null,
+        "hash": "tall_<hash>",
+        "height": 80,
+        "isUrlSigned": false,
+        "mime": "image/png",
+        "name": "tall.png",
+        "previewUrl": null,
+        "provider": "local",
+        "provider_metadata": null,
+        "url": "/uploads/tall_<hash>.png",
+        "width": 40
+      }
+    ]
+  },
+  "upload with an id and a file replaces what it stores, named as the new file": {
+    "status": 200,
+    "data": {
+      "alternativeText": null,
+      "caption": "kept",
+      "ext": ".png",
+      "focalPoint": null,
+      "formats": {
+        "large": {
+          "ext": ".png",
+          "hash": "large_tall_<hash>",
+          "height": 667,
+          "mime": "image/png",
+          "name": "large_wide.png",
+          "path": null,
+          "url": "/uploads/large_tall_<hash>.png",
+          "width": 1000
+        },
+        "medium": {
+          "ext": ".png",
+          "hash": "medium_tall_<hash>",
+          "height": 500,
+          "mime": "image/png",
+          "name": "medium_wide.png",
+          "path": null,
+          "url": "/uploads/medium_tall_<hash>.png",
+          "width": 750
+        },
+        "small": {
+          "ext": ".png",
+          "hash": "small_tall_<hash>",
+          "height": 333,
+          "mime": "image/png",
+          "name": "small_wide.png",
+          "path": null,
+          "url": "/uploads/small_tall_<hash>.png",
+          "width": 500
+        },
+        "thumbnail": {
+          "ext": ".png",
+          "hash": "thumbnail_tall_<hash>",
+          "height": 156,
+          "mime": "image/png",
+          "name": "thumbnail_wide.png",
+          "path": null,
+          "url": "/uploads/thumbnail_tall_<hash>.png",
+          "width": 234
+        }
+      },
+      "hash": "tall_<hash>",
+      "height": 800,
+      "isUrlSigned": false,
+      "mime": "image/png",
+      "name": "wide.png",
+      "previewUrl": null,
+      "provider": "local",
+      "provider_metadata": null,
+      "url": "/uploads/tall_<hash>.png",
+      "width": 1200
+    }
+  },
+  "a replacement keeps the name its info gives": {
+    "status": 200,
+    "data": {
+      "alternativeText": "alt",
+      "caption": "kept",
+      "ext": ".png",
+      "focalPoint": null,
+      "formats": {
+        "large": {
+          "ext": ".png",
+          "hash": "large_tall_<hash>",
+          "height": 667,
+          "mime": "image/png",
+          "name": "large_renamed.png",
+          "path": null,
+          "url": "/uploads/large_tall_<hash>.png",
+          "width": 1000
+        },
+        "medium": {
+          "ext": ".png",
+          "hash": "medium_tall_<hash>",
+          "height": 500,
+          "mime": "image/png",
+          "name": "medium_renamed.png",
+          "path": null,
+          "url": "/uploads/medium_tall_<hash>.png",
+          "width": 750
+        },
+        "small": {
+          "ext": ".png",
+          "hash": "small_tall_<hash>",
+          "height": 333,
+          "mime": "image/png",
+          "name": "small_renamed.png",
+          "path": null,
+          "url": "/uploads/small_tall_<hash>.png",
+          "width": 500
+        },
+        "thumbnail": {
+          "ext": ".png",
+          "hash": "thumbnail_tall_<hash>",
+          "height": 156,
+          "mime": "image/png",
+          "name": "thumbnail_renamed.png",
+          "path": null,
+          "url": "/uploads/thumbnail_tall_<hash>.png",
+          "width": 234
+        }
+      },
+      "hash": "tall_<hash>",
+      "height": 800,
+      "isUrlSigned": false,
+      "mime": "image/png",
+      "name": "renamed.png",
+      "previewUrl": null,
+      "provider": "local",
+      "provider_metadata": null,
+      "url": "/uploads/tall_<hash>.png",
+      "width": 1200
+    }
+  },
+  "the replaced file reads back": {
+    "status": 200,
+    "data": {
+      "alternativeText": "alt",
+      "caption": "kept",
+      "ext": ".png",
+      "focalPoint": null,
+      "formats": {
+        "large": {
+          "ext": ".png",
+          "hash": "large_tall_<hash>",
+          "height": 667,
+          "mime": "image/png",
+          "name": "large_renamed.png",
+          "path": null,
+          "url": "/uploads/large_tall_<hash>.png",
+          "width": 1000
+        },
+        "medium": {
+          "ext": ".png",
+          "hash": "medium_tall_<hash>",
+          "height": 500,
+          "mime": "image/png",
+          "name": "medium_renamed.png",
+          "path": null,
+          "url": "/uploads/medium_tall_<hash>.png",
+          "width": 750
+        },
+        "small": {
+          "ext": ".png",
+          "hash": "small_tall_<hash>",
+          "height": 333,
+          "mime": "image/png",
+          "name": "small_renamed.png",
+          "path": null,
+          "url": "/uploads/small_tall_<hash>.png",
+          "width": 500
+        },
+        "thumbnail": {
+          "ext": ".png",
+          "hash": "thumbnail_tall_<hash>",
+          "height": 156,
+          "mime": "image/png",
+          "name": "thumbnail_renamed.png",
+          "path": null,
+          "url": "/uploads/thumbnail_tall_<hash>.png",
+          "width": 234
+        }
+      },
+      "hash": "tall_<hash>",
+      "height": 800,
+      "isUrlSigned": false,
+      "mime": "image/png",
+      "name": "renamed.png",
+      "previewUrl": null,
+      "provider": "local",
+      "provider_metadata": null,
+      "url": "/uploads/tall_<hash>.png",
+      "width": 1200
+    }
   }
 }
