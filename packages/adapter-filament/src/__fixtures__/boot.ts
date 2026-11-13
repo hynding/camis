@@ -42,7 +42,7 @@ export const bootBundle: IrBundle = {
       grants: [
         {
           contentType: "Article",
-          actions: ["read", "update"],
+          actions: ["read", "update", "delete"],
           condition: {
             kind: "eq",
             left: { kind: "var", name: "record.status" },

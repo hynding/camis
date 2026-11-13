@@ -61,6 +61,11 @@ class NotePolicy
         return $result['ok'] === true && $result['value'] === true;
     }
 
+    public function updateAny(User $user): bool
+    {
+        return in_array($user->roleType(), ['authenticated'], true);
+    }
+
     public function update(User $user, Note $record): bool
     {
         if (! in_array($user->roleType(), ['authenticated'], true)) {

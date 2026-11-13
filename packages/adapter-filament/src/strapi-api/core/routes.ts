@@ -1,5 +1,5 @@
 import type { StorageLayout } from "@camis/adapter-kernel";
-import type { ContentType } from "@camis/ir-schema";
+import { servesApiAction, type ContentType, type RouteAction } from "@camis/ir-schema";
 import { filamentNames } from "../../names";
 import { routePath } from "./names";
 import { adminAuthConfigKeys } from "../admin/admin-api";
@@ -184,15 +184,24 @@ export const emitStrapiRoutes = (
       const p = routePath(ct);
       const c = `${filamentNames(ct).model}ApiController::class`;
       const h = hooked.has(ct.name) ? "->middleware(CamisRouteHooks::class)" : "";
-      if (ct.kind === "single")
-        return `        Route::get('/${p}', [${c}, 'single'])${h};
-        Route::put('/${p}', [${c}, 'putSingle'])${h};
-        Route::delete('/${p}', [${c}, 'destroySingle'])${h};`;
-      return `        Route::get('/${p}', [${c}, 'index'])${h};
-        Route::post('/${p}', [${c}, 'store'])${h};
-        Route::get('/${p}/{key}', [${c}, 'show'])${h};
-        Route::put('/${p}/{key}', [${c}, 'update'])${h};
-        Route::delete('/${p}/{key}', [${c}, 'destroy'])${h};`;
+      const routes: [RouteAction, string][] =
+        ct.kind === "single"
+          ? [
+              ["read", `Route::get('/${p}', [${c}, 'single'])`],
+              ["update", `Route::put('/${p}', [${c}, 'putSingle'])`],
+              ["delete", `Route::delete('/${p}', [${c}, 'destroySingle'])`],
+            ]
+          : [
+              ["list", `Route::get('/${p}', [${c}, 'index'])`],
+              ["create", `Route::post('/${p}', [${c}, 'store'])`],
+              ["read", `Route::get('/${p}/{key}', [${c}, 'show'])`],
+              ["update", `Route::put('/${p}/{key}', [${c}, 'update'])`],
+              ["delete", `Route::delete('/${p}/{key}', [${c}, 'destroy'])`],
+            ];
+      return routes
+        .filter(([action]) => servesApiAction(ct, action))
+        .map(([, route]) => `        ${route}${h};`)
+        .join("\n");
     })
     .join("\n\n");
   const uploads = upload

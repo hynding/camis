@@ -57,3 +57,31 @@ describe("readStrapiProject custom code", () => {
     ]);
   });
 });
+
+describe("readStrapiProject routers", () => {
+  it("brings a hand-written core router's routes, policies and middlewares into the IR", async () => {
+    await materialize(
+      strapiAdapter.generate({ document: blog, roles: [] }, { projectName: "blog" }),
+      dir,
+    );
+    const { writeFile } = await import("node:fs/promises");
+    await writeFile(
+      join(dir, "src/api/article/routes/article.ts"),
+      `import { factories } from '@strapi/strapi';
+
+export default factories.createCoreRouter('api::article.article', {
+  only: ['find', 'findOne', 'update'],
+  config: { update: { policies: ['global::is-owner'] } },
+});
+`,
+    );
+    const { document, gaps } = await readStrapiProject(dir);
+    expect(gaps.gaps).toEqual([]);
+    expect(document.ok).toBe(true);
+    if (!document.ok) return;
+    expect(document.value.contentTypes[0]!.options?.apiActions).toEqual(["list", "read", "update"]);
+    expect(document.value.policies).toEqual([
+      { name: "IsOwner", contentType: "Article", actions: ["update"] },
+    ]);
+  });
+});

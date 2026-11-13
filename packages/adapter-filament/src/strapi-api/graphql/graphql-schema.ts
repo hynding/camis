@@ -61,6 +61,7 @@ export interface GraphqlComponent {
   name: string;
   uid: string;
   components: Record<string, { type: string; repeatable: boolean }>;
+  relations: Record<string, GraphqlRelation>;
 }
 export interface GraphqlSchema {
   sdl: string;
@@ -185,11 +186,25 @@ const UPLOAD_FILE_FIELDS: [string, string][] = [
 class SchemaBuilder implements DefinitionSink {
   private readonly definitions = new Map<string, Definition>();
   private readonly componentsByName: Map<string, Component>;
+  private readonly emittedByName: Map<string, ContentType>;
   readonly componentMaps = new Map<string, GraphqlComponent>();
   readonly zoneMembers: Record<string, string[]> = {};
 
   constructor(input: GraphqlSchemaInput) {
     this.componentsByName = new Map(input.doc.components.map((c) => [c.name, c]));
+    this.emittedByName = new Map(input.emitted.map((ct) => [ct.name, ct]));
+  }
+
+  /** A relation inside a component: its target's type and model, unless the target is not served. */
+  componentRelation(field: ComponentFieldT): GraphqlRelation | undefined {
+    if (field.type !== "relation") return undefined;
+    const target = this.emittedByName.get(field.target);
+    if (target === undefined) return undefined;
+    return {
+      type: target.builtin === "user" ? "UsersPermissionsUser" : typeName(target),
+      many: field.relationKind === "oneToMany" || field.relationKind === "manyToMany",
+      model: filamentNames(target).model,
+    };
   }
 
   define(definition: Definition): void {
@@ -267,16 +282,21 @@ class SchemaBuilder implements DefinitionSink {
     return component;
   }
 
-  /** A component's type, with its id, its own components and its files; relations stay off it. */
+  /** A component's type, with its id, its own components, its files and its relations. */
   componentType(component: Component): string {
     const name = componentTypeName(component);
     return this.need(name, () => {
       const nested: GraphqlComponent["components"] = {};
+      const relations: GraphqlComponent["relations"] = {};
       const fields: Member[] = [{ name: "id", type: "ID!" }];
       for (const f of component.fields) {
         const key = fieldApiName(f);
         if (f.private === true) continue;
-        if (f.type === "component") {
+        const relation = this.componentRelation(f);
+        if (relation !== undefined) {
+          relations[key] = relation;
+          fields.push(...this.relationFields(key, relation, f.required === true));
+        } else if (f.type === "component") {
           const target = this.component(f.component);
           nested[key] = { type: componentTypeName(target), repeatable: f.repeatable };
           fields.push(this.componentField(key, target, f.repeatable));
@@ -290,9 +310,33 @@ class SchemaBuilder implements DefinitionSink {
           });
         }
       }
-      this.componentMaps.set(name, { name, uid: componentUid(component), components: nested });
+      this.componentMaps.set(name, {
+        name,
+        uid: componentUid(component),
+        components: nested,
+        relations,
+      });
       return { kind: "type", name, fields };
     });
+  }
+
+  /** A relation's fields on a type: one to the target, or a list of them and its connection. */
+  relationFields(key: string, relation: GraphqlRelation, required: boolean): Member[] {
+    if (!relation.many) return [{ name: key, type: `${relation.type}${required ? "!" : ""}` }];
+    this.pagination();
+    const args = listArguments(`${relation.type}FiltersInput`);
+    return [
+      { name: `${key}_connection`, args, type: this.relationCollection(relation.type) },
+      { name: key, args, type: `[${relation.type}]!` },
+    ];
+  }
+
+  /** A component relation's filter: its target's filters. */
+  private relationFilter(field: ComponentFieldT): Member[] {
+    const relation = this.componentRelation(field);
+    return relation === undefined
+      ? []
+      : [{ name: fieldApiName(field), type: `${relation.type}FiltersInput` }];
   }
 
   componentField(key: string, component: Component, repeatable: boolean): Member {
@@ -318,9 +362,11 @@ class SchemaBuilder implements DefinitionSink {
                     type: this.componentFilters(this.component(f.component)),
                   },
                 ]
-              : f.type === "relation" || f.type === "media"
-                ? []
-                : [{ name: fieldApiName(f), type: this.scalarFilter(scalarOf(f.type)) }],
+              : f.type === "relation"
+                ? this.relationFilter(f)
+                : f.type === "media"
+                  ? []
+                  : [{ name: fieldApiName(f), type: this.scalarFilter(scalarOf(f.type)) }],
         ),
         { name: "and", type: `[${name}]` },
         { name: "or", type: `[${name}]` },
@@ -343,9 +389,15 @@ class SchemaBuilder implements DefinitionSink {
           }
           if (f.type === "media")
             return [{ name: fieldApiName(f), type: f.multiple === true ? "[ID]" : "ID" }];
-          return f.type === "relation"
-            ? []
-            : [{ name: fieldApiName(f), type: this.scalarType(componentTypeName(component), f) }];
+          if (f.type === "relation") {
+            const relation = this.componentRelation(f);
+            return relation === undefined
+              ? []
+              : [{ name: fieldApiName(f), type: relation.many ? "[ID]" : "ID" }];
+          }
+          return [
+            { name: fieldApiName(f), type: this.scalarType(componentTypeName(component), f) },
+          ];
         }),
       ],
     }));
@@ -509,16 +561,8 @@ export const buildGraphqlSchema = (input: GraphqlSchemaInput): GraphqlSchema => 
         const many = MANY.has(relation.kind);
         map.relations[key] = { type: target, many, model: relation.model };
         const media = target === "UploadFile";
-        if (many) {
-          const args = listArguments(`${target}FiltersInput`);
-          typeFields.push(
-            { name: `${key}_connection`, args, type: b.relationCollection(target) },
-            { name: key, args, type: `[${target}]!` },
-          );
-        } else {
-          // A required to-one link is never empty on Strapi's type.
-          typeFields.push({ name: key, type: `${target}${field?.required === true ? "!" : ""}` });
-        }
+        // A required to-one link is never empty on Strapi's type.
+        typeFields.push(...b.relationFields(key, map.relations[key], field?.required === true));
         if (!media) filter(key, () => `${target}FiltersInput`);
         inputFields.push({ name: key, type: many ? "[ID]" : "ID" });
         continue;
@@ -682,20 +726,6 @@ export const buildGraphqlSchema = (input: GraphqlSchemaInput): GraphqlSchema => 
   queryFields.unshift(...plugins.queries);
   mutationFields.push(...plugins.mutations);
   if (input.media) b.define(genericMorph(b, types));
-  const linking = input.doc.components
-    .filter((c) => b.componentMaps.has(componentTypeName(c)))
-    .flatMap((c) =>
-      c.fields
-        .filter((f) => f.type === "relation")
-        .map((f) => `${componentUid(c)}.${fieldApiName(f)}`),
-    );
-  if (linking.length > 0)
-    gaps.push({
-      feature: "graphqlComponentRelations",
-      location: {},
-      severity: "downgrade",
-      message: `GraphQL's component types leave out the relations inside them (${linking.join(", ")}): read and write them over REST. A GraphQL write sending such a component replaces it whole, its relations too, as Strapi replaces a component sent without its id.`,
-    });
   gaps.push(
     {
       feature: "graphqlRoleMutations",

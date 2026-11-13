@@ -283,17 +283,23 @@ final class StrapiGraphql
         }
     }
 
-    /** A relation's value: the row's own populate when it fetched this ask, else fetched for the row. */
+    /**
+     * A relation's value: the row's own populate when it fetched this ask, else fetched for the row.
+     * A component's relations come with the populate of the entry holding it, which asked for them.
+     */
     private static function related(array $source, string $parent, string $key, bool $connection, array $args, Request $request, ResolveInfo $info): mixed
     {
-        $relation = StrapiGraphqlTypes::TYPES[$parent]['relations'][$key];
+        $component = isset(StrapiGraphqlTypes::COMPONENTS[$parent]);
+        $relation = ($component ? StrapiGraphqlTypes::COMPONENTS[$parent] : StrapiGraphqlTypes::TYPES[$parent])['relations'][$key];
         // Strapi refuses the field, where REST's populate leaves it out, when no grant reads its target.
         if (! StrapiQuery::readable($relation, $request->user())) {
             throw new AuthorizationException();
         }
         $fetch = self::fetching($args, $info->fieldDefinition->getArg('filters')?->getType());
         $meta = $source[self::META] ?? null;
-        if (is_array($meta) && ($meta['claims']['claims'][$key] ?? null) === $fetch && array_key_exists($key, $source)) {
+        if ($component) {
+            $value = $source[$key] ?? null;
+        } elseif (is_array($meta) && ($meta['claims']['claims'][$key] ?? null) === $fetch && array_key_exists($key, $source)) {
             $value = $source[$key];
         } else {
             $value = self::refetch($source, $parent, $key, $fetch, $connection, $request, $info);
@@ -376,13 +382,93 @@ final class StrapiGraphql
                     $populate[$key]['populate'] = array_replace_recursive($populate[$key]['populate'] ?? [], $inner);
                     $claims['children'][$key] = array_replace_recursive($claims['children'][$key], $innerClaims);
                 }
-            } elseif (isset($meta['components'][$name]) || in_array($name, $meta['zones'] ?? [], true)) {
-                // Everything inside, its files included: the selection picks what it shows.
-                $populate[$name] = ['populate' => '*'];
+            } elseif (isset($meta['components'][$name])) {
+                $populate[$name] = ['populate' => self::inside($meta['components'][$name]['type'], [$field], $info)];
+            } elseif (in_array($name, $meta['zones'] ?? [], true)) {
+                $populate[$name] = self::zone(self::namedType($object->getField($name)->getType()), $field, $info);
             }
         }
 
         return [$populate, $claims];
+    }
+
+    /**
+     * What a component's populate asks for: everything inside it, its files included, unless a
+     * relation is inside it somewhere; then what the selection asks for, each relation with its
+     * own filters and sort, as REST populates a component's relations only where its populate
+     * names them.
+     *
+     * @param iterable<FieldNode> $nodes
+     */
+    private static function inside(string $typeName, iterable $nodes, ResolveInfo $info): array|string
+    {
+        $object = $info->schema->getType($typeName);
+        if (! self::relational($typeName) || ! $object instanceof ObjectType) {
+            return '*';
+        }
+        $meta = StrapiGraphqlTypes::COMPONENTS[$typeName];
+        $populate = [];
+        foreach (self::collect($nodes, $typeName, $info) as $field) {
+            $name = $field->name->value;
+            $key = str_ends_with($name, '_connection') ? substr($name, 0, -strlen('_connection')) : $name;
+            if (! $object->hasField($name)) {
+                continue; // __typename
+            }
+            $definition = $object->getField($name);
+            if (isset($meta['relations'][$key])) {
+                // The first ask of a relation is populated; another ask of it shares what it got.
+                if (array_key_exists($key, $populate)) {
+                    continue;
+                }
+                $fetch = self::fetching(Values::getArgumentValues($definition, $field, $info->variableValues), $definition->getArg('filters')?->getType());
+                $children = $key !== $name ? self::nodes([$field], self::namedType($definition->getType()), $info) : [$field];
+                [$inner] = self::populate($meta['relations'][$key]['type'], $children, $info);
+                $populate[$key] = array_filter($fetch, fn ($v) => $v !== null && $v !== []) + ($inner === [] ? [] : ['populate' => $inner]);
+            } elseif (isset($meta['components'][$name])) {
+                $populate[$name] = ['populate' => self::inside($meta['components'][$name]['type'], [$field], $info)];
+            } elseif (self::namedType($definition->getType()) === 'UploadFile') {
+                $populate[$name] = true;
+            }
+        }
+
+        return $populate === [] ? '*' : $populate;
+    }
+
+    /** A dynamic zone's populate: each member's own, by its uid, where a member holds a relation. */
+    private static function zone(string $union, FieldNode $field, ResolveInfo $info): array
+    {
+        $members = StrapiGraphqlTypes::ZONES[$union] ?? [];
+        if (array_filter($members, fn (string $member) => self::relational($member)) === []) {
+            return ['populate' => '*'];
+        }
+        $on = [];
+        foreach ($members as $member) {
+            $on[StrapiGraphqlTypes::COMPONENTS[$member]['uid']] = ['populate' => self::inside($member, [$field], $info)];
+        }
+
+        return ['on' => $on];
+    }
+
+    /** The name of the type a field's type wraps (lists and non-null taken off). */
+    private static function namedType(Type $type): string
+    {
+        return (string) Type::getNamedType($type);
+    }
+
+    /** Whether a relation is inside the component, or inside a component it holds. */
+    private static function relational(string $typeName): bool
+    {
+        $meta = StrapiGraphqlTypes::COMPONENTS[$typeName] ?? [];
+        if (($meta['relations'] ?? []) !== []) {
+            return true;
+        }
+        foreach ($meta['components'] ?? [] as $nested) {
+            if (self::relational($nested['type'])) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

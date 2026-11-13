@@ -16,6 +16,19 @@ describe("filament route policies and middlewares", () => {
       );
     });
 
+    // Strapi composes a route as authenticate, authorize, policies, middlewares, action: a caller
+    // without the action's permission is refused as forbidden before any policy is asked.
+    it(`${apiStyle}: checks the caller's permission for the action before the policies`, () => {
+      const runtime = file("app/Http/Middleware/CamisRouteHooks.php")!.content;
+      expect(runtime).toContain("'update' => 'updateAny',");
+      expect(runtime).toContain("'model' => \\App\\Models\\Article::class,");
+      const authorize = runtime.indexOf(
+        "Gate::authorize(self::ABILITIES[$action], $hooks['model']);",
+      );
+      expect(authorize).toBeGreaterThan(0);
+      expect(authorize).toBeLessThan(runtime.indexOf("->allows($request, $action)"));
+    });
+
     it(`${apiStyle}: seeds a policy and a middleware against a generated contract`, async () => {
       expect(file("app/Hooks/IsOwner.php")!.mode).toBe("seed");
       expect(file("app/Hooks/AuditTrail.php")!.mode).toBe("seed");

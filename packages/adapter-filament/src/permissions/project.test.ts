@@ -45,6 +45,7 @@ describe("projectFilamentPermissions", () => {
       "delete",
       "viewAny",
       "view",
+      "updateAny",
       "update",
     ]);
     // Every method carries the roles whose grants hold its key, so a layout without a
@@ -53,6 +54,7 @@ describe("projectFilamentPermissions", () => {
       [],
       [],
       [],
+      ["Editor"],
       ["Editor"],
       ["Editor"],
       ["Editor"],
@@ -79,6 +81,7 @@ describe("projectFilamentPermissions", () => {
       "delete",
       "viewAny",
       "view",
+      "updateAny",
       "update",
     ]);
     expect(note.methods.every((m) => m.roles.length === 0)).toBe(true);

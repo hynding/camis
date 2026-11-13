@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { componentField, field, fieldApiName } from "./fields";
-import { hook, routeHook, schedule } from "./hooks";
+import { hook, ROUTE_ACTIONS, routeHook, schedule, type RouteAction } from "./hooks";
 import { collectionName, fieldName, typeName } from "./identifiers";
 
 const RESERVED_FIELD_NAMES = new Set(["id"]);
@@ -97,11 +97,25 @@ export const contentType = z
         upsertBy: fieldName.optional(),
         /** Each document keeps one version per locale. */
         localized: z.boolean().optional(),
+        /** The content API actions the type serves; absent, it serves every one. */
+        apiActions: z.array(z.enum(ROUTE_ACTIONS)).optional(),
       })
       .optional(),
   })
   .superRefine((ct, ctx) => {
     nodeRefine(ct.fields as RefinedField[], ctx);
+    if (ct.kind === "single") {
+      // A single type is one entry: there is no list of them, and nothing to create beside it.
+      (ct.options?.apiActions ?? []).forEach((action, i) => {
+        if (action !== "list" && action !== "create") return;
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `single type "${ct.name}" serves one entry, so it has no "${action}" action`,
+          params: { irCode: "single_type_action" },
+          path: ["options", "apiActions", i],
+        });
+      });
+    }
     if (ct.options?.localized === true) return;
     ct.fields.forEach((f, i) => {
       if ("localized" in f && f.localized !== undefined) {
@@ -191,3 +205,7 @@ export const irDocument = z
 export type ContentType = z.infer<typeof contentType>;
 export type Component = z.infer<typeof component>;
 export type IrDocument = z.infer<typeof irDocument>;
+
+/** Whether the type's content API serves the action (a type lists none: it serves every one). */
+export const servesApiAction = (ct: ContentType, action: RouteAction): boolean =>
+  (ct.options?.apiActions ?? ROUTE_ACTIONS).includes(action);

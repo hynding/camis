@@ -17,7 +17,11 @@ export const POLICY_METHODS: Record<Action, PolicyMethod[]> = {
     { method: "view", record: true },
   ],
   create: [{ method: "create", record: false }],
-  update: [{ method: "update", record: true }],
+  // updateAny is the role-level check a route makes before its policies run (CamisRouteHooks).
+  update: [
+    { method: "updateAny", record: false },
+    { method: "update", record: true },
+  ],
   // Bulk actions are offered on the record-less methods; Filament allows what a policy has no
   // method for, so each needs one.
   delete: [

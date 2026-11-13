@@ -47,6 +47,11 @@ class ArticlePolicy
         return $result['ok'] === true && $result['value'] === true;
     }
 
+    public function updateAny(User|AdminUser $user): bool
+    {
+        return $user->can('article.update');
+    }
+
     public function update(User|AdminUser $user, Article $record): bool
     {
         if (! $user->can('article.update')) {

@@ -11,6 +11,9 @@ describe("keys", () => {
       { method: "viewAny", record: false },
       { method: "view", record: true },
     ]);
-    expect(POLICY_METHODS.update).toEqual([{ method: "update", record: true }]);
+    expect(POLICY_METHODS.update).toEqual([
+      { method: "updateAny", record: false },
+      { method: "update", record: true },
+    ]);
   });
 });

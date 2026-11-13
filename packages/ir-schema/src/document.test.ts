@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { component, contentType, irDocument } from "./document";
+import { component, contentType, irDocument, servesApiAction } from "./document";
 
 const ct = (fields: unknown[]) =>
   contentType.safeParse({ name: "Article", kind: "collection", fields });
@@ -252,6 +252,28 @@ describe("options.upsertBy", () => {
   });
 });
 
+describe("options.apiActions", () => {
+  const typed = (kind: string, apiActions: unknown) =>
+    contentType.safeParse({ name: "Address", kind, options: { apiActions }, fields: [] });
+
+  it("keeps the content API actions a type serves, none included", () => {
+    const r = typed("collection", ["list", "read"]);
+    expect(r.success && r.data.options?.apiActions).toEqual(["list", "read"]);
+    expect(typed("collection", []).success).toBe(true);
+  });
+
+  it("rejects an action that is not a content API action", () => {
+    expect(typed("collection", ["publish"]).success).toBe(false);
+  });
+
+  it("rejects list and create on a single type, which serves one entry", () => {
+    expect(typed("single", ["read", "update"]).success).toBe(true);
+    const r = typed("single", ["read", "create"]);
+    expect(r.success).toBe(false);
+    if (!r.success) expect(r.error.issues[0]!.path).toEqual(["options", "apiActions", 1]);
+  });
+});
+
 describe("localization", () => {
   const localized = (fields: unknown[], options: object = { localized: true }) =>
     contentType.safeParse({ name: "Article", kind: "collection", options, fields });
@@ -277,5 +299,15 @@ describe("localization", () => {
       });
       expect(r.error.issues[0]?.path).toEqual(["fields", 0, "localized"]);
     }
+  });
+});
+
+describe("servesApiAction", () => {
+  it("serves every action unless the type lists the ones it serves", () => {
+    const all = { name: "Tag", kind: "collection" as const, fields: [] };
+    expect(servesApiAction(all, "delete")).toBe(true);
+    const some = { ...all, options: { apiActions: ["list" as const] } };
+    expect(servesApiAction(some, "list")).toBe(true);
+    expect(servesApiAction(some, "delete")).toBe(false);
   });
 });
