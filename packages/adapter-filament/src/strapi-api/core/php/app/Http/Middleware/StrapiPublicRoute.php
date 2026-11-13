@@ -34,7 +34,7 @@ final class StrapiPublicRoute
     /** Whether the request's route is one this opens, read off the route before it runs. */
     public static function opens(Request $request): bool
     {
-        return in_array(self::class, $request->route()?->middleware() ?? [], true);
+        return in_array(self::class, $request->route()?->gatherMiddleware() ?? [], true);
     }
 
     /** Whether the current request runs a route this opened. */
