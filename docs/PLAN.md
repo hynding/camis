@@ -1974,6 +1974,25 @@ A Strapi admin permission held under `admin::has-same-role-as-creator` was withh
 Exit: the import, policy, scope and readable-condition tests, and AuthorRoleTest's Reviewer (the
 author-role fixture's role that reads and changes the memos an account of its role created).
 
+## Phase 63 — is-creator on the media library (`adapter-strapi`, `adapter-filament`)
+
+Strapi records the admin account that uploaded a file, and its default Author reads and changes
+only its own files; camis recorded no creator of a file, so the Author's media library actions
+were withheld.
+
+- **Filament.** `files` carries `created_by_id` and `updated_by_id`, which the File model's
+  `HasCreatorFields` fills from the signed-in admin account (an upload through the content API
+  records none, as on Strapi). An admin role's file grant may name `record.createdBy` and
+  `record.creatorSharesRole`; the media library lists through the model's `forAdmin` scope.
+- **Import.** A camis file action stands for several upload actions (`FILE_ADMIN_ACTIONS`); it is
+  granted under the condition its conditioned parts hold, and withheld when they hold different
+  ones. Strapi's Author imports as create, and read, update and delete under is-creator.
+- Not yet carried: a file's creator through `strapi:export`/`strapi:import` archives.
+
+Exit: the import tests (the strapi-php fixture's Author holds its files under is-creator),
+`media-creator.test.ts`, and AuthorRoleTest's media library case (the author-role fixture gains
+the media library).
+
 ---
 
 ## Sequencing rationale (quick reference)

@@ -168,7 +168,9 @@ export const importStrapiAdminRoles = (
         const set = under.holding.get(ct) ?? under.holding.set(ct, new Set()).get(ct)!;
         for (const a of actions) set.add(a);
       };
-      const fileActions = new Set<string>();
+      // Each upload action the role holds, with the Strapi conditions of each permission holding
+      // it ("" for none).
+      const fileActions = new Map<string, Set<string>>();
       const unimported: string[] = [];
 
       for (const p of data.permissions.filter((x) => String(x.role) === String(strapiRole.id))) {
@@ -188,14 +190,6 @@ export const importStrapiAdminRoles = (
         const conditions = strings(p.conditions) ?? [];
         if (conditions.some((c) => !ADMIN_CONDITIONS.has(c))) {
           withhold(ct, p.action, `only when ${conditions.join(", ")}; camis has no such condition`);
-          continue;
-        }
-        if (conditions.length > 0 && isFile) {
-          withhold(
-            ct,
-            p.action,
-            `only when ${conditions.join(", ")}; camis records no creator of a file`,
-          );
           continue;
         }
         const properties = record(p.properties);
@@ -223,7 +217,9 @@ export const importStrapiAdminRoles = (
           continue;
         }
         if (isFile) {
-          fileActions.add(p.action);
+          const held =
+            fileActions.get(p.action) ?? fileActions.set(p.action, new Set()).get(p.action)!;
+          held.add(ORDER.filter((c) => conditions.includes(c)).join(","));
           if (!contentTypes.includes(ct)) contentTypes.push(ct);
           continue;
         }
@@ -240,13 +236,33 @@ export const importStrapiAdminRoles = (
       // A media library action is granted once the role holds every upload action it stands for.
       if (fileActions.size > 0) {
         const file = builtin("file", BUILTIN_FILE);
-        const given = ACTIONS.filter((a) => {
+        // An upload action held outright needs no condition; else it takes the conditions it was given.
+        const conditionOf = (uid: string): string => {
+          const keys = fileActions.get(uid)!;
+          return keys.has("") ? "" : [...keys].sort()[0]!;
+        };
+        const used = new Set<string>();
+        for (const a of ACTIONS) {
           const needs = FILE_ADMIN_ACTIONS[a];
-          return needs.length > 0 && needs.every((uid) => fileActions.has(uid));
-        });
-        hold(file, given);
-        const used = new Set(given.flatMap((a) => FILE_ADMIN_ACTIONS[a]));
-        const left = [...fileActions].filter((uid) => !used.has(uid));
+          if (needs.length === 0 || !needs.every((uid) => fileActions.has(uid))) continue;
+          const keys = [...new Set(needs.map(conditionOf).filter((k) => k !== ""))];
+          if (keys.length > 1) {
+            for (const uid of needs) {
+              withhold(
+                file,
+                uid,
+                `its parts are held under different conditions (${keys.join("; ")})`,
+              );
+            }
+            continue;
+          }
+          for (const uid of needs) used.add(uid);
+          if (keys.length === 0) hold(file, [a]);
+          else holdUnder(keys[0]!.split(","), file, [a]);
+        }
+        const left = [...fileActions.keys()].filter(
+          (uid) => !used.has(uid) && ![...withheld.values()].some((w) => w.actions.includes(uid)),
+        );
         if (left.length > 0) {
           withhold(
             file,

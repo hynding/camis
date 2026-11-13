@@ -469,7 +469,19 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
         )
       : undefined;
     if (scope?.gap) gaps.push(scope.gap);
-    files.push(...mediaLibraryFiles(input.media, emitted, secured, scope?.php));
+    // The media library lists what an admin role reads, as the Content Manager does.
+    const adminScope = secured ? perm.adminReadScopes.get(input.media.name) : undefined;
+    const admin =
+      adminScope === undefined ? undefined : emitAdminScopeMethod(input.media, adminScope);
+    if (admin !== undefined) gaps.push(...admin.gaps);
+    files.push(
+      ...mediaLibraryFiles(
+        input.media,
+        emitted,
+        secured,
+        [scope?.php, admin?.php].filter((m): m is string => m !== undefined),
+      ),
+    );
   }
   // Every read asks it which version the status parameter names, with or without versioned types.
   files.push({ path: "app/Support/StrapiDocuments.php", content: emitStrapiDocuments() });
@@ -655,9 +667,10 @@ const mediaLibraryFiles = (
   file: ContentType,
   emitted: ContentType[],
   secured: boolean,
-  scope: string | undefined,
+  members: string[],
 ): GeneratedFile[] => {
   const names = filamentNames(file);
+  const adminScoped = members.some((m) => m.includes("function scopeForAdmin("));
   const targets = emitted
     .filter((ct) => mediaFields(ct).length > 0)
     .map((ct) => ({
@@ -670,7 +683,7 @@ const mediaLibraryFiles = (
     { path: "app/Models/Concerns/HasMedia.php", content: emitHasMedia() },
     {
       path: `app/Models/${names.model}.php`,
-      content: emitFileModel(names.model, scope === undefined ? [] : [scope]),
+      content: emitFileModel(names.model, members),
     },
     {
       path: `app/Http/Serializers/${names.model}Serializer.php`,
@@ -682,7 +695,7 @@ const mediaLibraryFiles = (
     },
     { path: FILES_MIGRATION_PATH, content: emitFilesMigration() },
     { path: "app/Filament/Support/MediaPicker.php", content: emitMediaPicker(names.model) },
-    ...emitFileResourceFiles(names.model, names.resourceDir, names.resourceDir),
+    ...emitFileResourceFiles(names.model, names.resourceDir, names.resourceDir, adminScoped),
     { path: UPLOAD_FOLDERS_MIGRATION_PATH, content: emitUploadFoldersMigration() },
     { path: "app/Models/UploadFolder.php", content: emitUploadFolderModel(names.model) },
     { path: "app/Support/StrapiFolders.php", content: emitStrapiFolders(names.model) },
