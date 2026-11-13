@@ -43,15 +43,20 @@ final class StrapiValidator
             'strict' => (bool) config('camis.documents.strict_relations', true),
         ];
         $errors = [];
-        self::object($data, $rules, [], $context, [], $errors);
+        self::object($data, $rules, [], $context, null, $errors);
         if ($errors !== []) {
             $message = count($errors) > 1 ? count($errors) . ' errors occurred' : $errors[0]['message'];
             throw StrapiError::validation($message, ['errors' => $errors]);
         }
     }
 
-    /** $repeated holds, per unique key, the values a repeatable's items share, which none of them may hold. */
-    private static function object(array $data, array $rules, array $path, array $context, array $repeated, array &$errors): void
+    /**
+     * $siblings holds the items a unique value must be the only one of (a repeatable on the entry,
+     * or a dynamic zone's items of one component) and the path to these fields within an item.
+     *
+     * @param  array{items: list<mixed>, within: list<string>}|null  $siblings
+     */
+    private static function object(array $data, array $rules, array $path, array $context, ?array $siblings, array &$errors): void
     {
         foreach ($rules as $key => $rule) {
             $at = [...$path, (string) $key];
@@ -69,9 +74,9 @@ final class StrapiValidator
             }
             $value = array_key_exists($key, $data) ? $data[$key] : $rule['default'];
             match ($rule['type']) {
-                'component' => self::component($value, $rule, $at, $context, $errors),
+                'component' => self::component($value, $rule, $at, $context, $siblings, $errors),
                 'dynamiczone' => self::zone($value, $rule, $at, $context, $errors),
-                default => self::scalar($value, $rule, $at, $context, $repeated[$key] ?? [], $errors),
+                default => self::scalar($value, $rule, $at, $context, self::shared($siblings, (string) $key), $errors),
             };
         }
     }
@@ -171,7 +176,8 @@ final class StrapiValidator
         return is_int($target) ? ['id' => $target] : $target;
     }
 
-    private static function component(mixed $value, array $rule, array $path, array $context, array &$errors): void
+    /** @param  array{items: list<mixed>, within: list<string>}|null  $siblings */
+    private static function component(mixed $value, array $rule, array $path, array $context, ?array $siblings, array &$errors): void
     {
         if (! ($rule['repeatable'] ?? false)) {
             if ($value === null) {
@@ -182,7 +188,8 @@ final class StrapiValidator
 
                 return;
             }
-            self::object($value, $rule['fields'], $path, $context, [], $errors);
+            $within = $siblings === null ? null : ['items' => $siblings['items'], 'within' => [...$siblings['within'], (string) end($path)]];
+            self::object($value, $rule['fields'], $path, $context, $within, $errors);
 
             return;
         }
@@ -191,44 +198,56 @@ final class StrapiValidator
 
             return;
         }
-        $repeated = self::repeated($value, $rule['fields']);
+        // Strapi compares the items of a repeatable on the entry itself, not of one deeper down.
+        $siblings = count($path) === 1 ? ['items' => $value, 'within' => []] : null;
         foreach ($value as $i => $item) {
             if (! is_array($item) || ($item !== [] && array_is_list($item))) {
                 $errors[] = self::notType([...$path, (string) $i], 'object', $item);
                 continue;
             }
-            self::object($item, $rule['fields'], [...$path, (string) $i], $context, $repeated, $errors);
+            self::object($item, $rule['fields'], [...$path, (string) $i], $context, $siblings, $errors);
         }
     }
 
-    /** Per unique field of a repeatable's items, the values more than one item holds. */
-    private static function repeated(array $items, array $fields): array
+    /**
+     * The values more than one of the siblings holds at a field, which none of them may hold.
+     *
+     * @param  array{items: list<mixed>, within: list<string>}|null  $siblings
+     * @return list<mixed>
+     */
+    private static function shared(?array $siblings, string $key): array
     {
-        $repeated = [];
-        foreach ($fields as $key => $rule) {
-            if (! isset($rule['unique'])) {
-                continue;
+        if ($siblings === null) {
+            return [];
+        }
+        $seen = [];
+        foreach ($siblings['items'] as $item) {
+            foreach ([...$siblings['within'], $key] as $step) {
+                $item = is_array($item) && array_key_exists($step, $item) ? $item[$step] : null;
             }
-            $seen = [];
-            foreach ($items as $item) {
-                if (is_array($item) && array_key_exists($key, $item)) {
-                    $seen[] = $item[$key];
-                }
+            if ($item !== null) {
+                $seen[] = $item;
             }
-            $repeated[$key] = array_values(array_filter($seen, fn (mixed $v): bool => count(array_keys($seen, $v, true)) > 1));
         }
 
-        return $repeated;
+        return array_values(array_filter($seen, fn (mixed $v): bool => count(array_keys($seen, $v, true)) > 1));
     }
 
-    /** A zone's items by their component; one naming a component the zone lacks is StrapiZones' to refuse or drop. */
+    /**
+     * A zone's items by their component; one naming a component the zone lacks is StrapiZones' to
+     * refuse or drop. A unique value is compared with the zone's other items of its component.
+     */
     private static function zone(mixed $value, array $rule, array $path, array $context, array &$errors): void
     {
-        foreach (is_array($value) && array_is_list($value) ? $value : [] as $i => $item) {
-            $fields = is_array($item) ? ($rule['components'][$item['__component'] ?? ''] ?? null) : null;
-            if ($fields !== null) {
-                self::object($item, $fields, [...$path, (string) $i], $context, [], $errors);
+        $items = is_array($value) && array_is_list($value) ? $value : [];
+        foreach ($items as $i => $item) {
+            $uid = is_array($item) ? ($item['__component'] ?? '') : '';
+            $fields = $rule['components'][$uid] ?? null;
+            if ($fields === null) {
+                continue;
             }
+            $same = array_values(array_filter($items, fn (mixed $other): bool => is_array($other) && ($other['__component'] ?? null) === $uid));
+            self::object($item, $fields, [...$path, (string) $i], $context, ['items' => $same, 'within' => []], $errors);
         }
     }
 

@@ -1393,8 +1393,8 @@ entity validator does:
   the entry written left out; an empty or null value, a draft, and a number its type refuses are
   not looked up. A repeatable component's items may not repeat a unique value, nor hold one another
   entry's item holds. Each rule names where the value is stored (a column, and the child relation
-  of a repeatable's items); the controller hands the validator `others()`. A unique field deeper
-  in components, or in a dynamic zone, is reported (`uniqueInComponent`).
+  of a repeatable's items); the controller hands the validator `others()`. Phase 59 takes this to
+  every component depth; what it leaves is reported (`uniqueInComponent`).
 - **a required relation or file** under `api.documents.strictRelations`
   (`camis.documents.strict_relations`, on by default as a new Strapi project ships it): a creation
   must connect one, an update may leave it out or send an empty connect, a to-one link may not be
@@ -1904,6 +1904,29 @@ Exit: the endpoint tests in each adapter, the import's round trip of the Strapi 
 and `EndpointsTest.php` in the author-role boot job (the fixture's MemoPin, listed by the
 authenticated role, and the public MemoCount: params reach the handler, an unlisted role and a
 read-only token are refused, a fixed path is not taken for an entry's key).
+
+## Phase 59 — unique fields inside components and dynamic zones (`adapter-filament`)
+
+A unique field below a type's own fields (an embedded component's, a repeatable's item's, one in a
+dynamic zone) was a `uniqueInComponent` gap, so a migrated app took duplicates that Strapi refuses.
+
+- **Against the other entries**, as Strapi's entity validator does: a unique field in an embedded
+  component, a repeatable's items, a component either embeds, a repeatable inside one, and a
+  dynamic zone member's own fields. Each rule names where the value is stored: its column and the
+  dotted chain of child relations from the entry (`slots.seats`), which the lookup follows with
+  `whereHas`; a zone member's is the member's relation.
+- **Within the request**, two items clash only where Strapi compares them: the items of a
+  top-level repeatable (and what each embeds), and a zone's members of one component. A
+  repeatable inside a component is not compared with itself.
+- A component's columns carry no unique index, as Strapi's tables carry none: the check skips an
+  empty value and a nested repeatable's own items, which a constraint would refuse.
+- Strapi checks no deeper than a zone member's own fields; a unique field below one stays a
+  `uniqueInComponent` gap, as does every one on the Strapi storage layout.
+
+Exit: `unique-components.test.ts` (each depth's rule and the gaps), and `UniqueComponentsTest.php`
+in the unique-components boot job, its answers (paths such as `slots.0.seats.0.code`, the
+`N errors occurred` message, an entry keeping its own values, empty values) recorded from
+strapi-php.
 
 ---
 

@@ -9,7 +9,7 @@ import {
 } from "@camis/ir-schema";
 import { phpSingleQuoted } from "../../php-literal";
 import { componentUid } from "./names";
-import type { WireScalar, WireShape } from "./wire-shape";
+import type { WireChild, WireScalar, WireShape } from "./wire-shape";
 
 export const VALIDATOR_PATH = "app/Support/StrapiValidator.php";
 
@@ -37,8 +37,9 @@ const toOne = (field: Field): boolean =>
 
 type Rule = Record<string, unknown>;
 
-/** Where a unique field's value is stored: a column of the entry's row, or of its items' rows. */
+/** Where a unique field's value is stored: a column of the entry's row, or of rows it holds. */
 interface UniqueTarget {
+  /** The relations from the entry to the rows holding it, dotted (`slots.seats`), when not its own. */
   relation?: string;
   column: string;
 }
@@ -60,28 +61,50 @@ interface RuleContext {
 const sameKey = (a: readonly string[], b: readonly string[]): boolean =>
   a.length === b.length && a.every((k, i) => k === b[i]);
 
-const columnOf = (scalars: readonly WireScalar[], key: readonly string[]): string | undefined =>
-  scalars.find((s) => sameKey(s.key, key))?.column;
+const startsWith = (key: readonly string[], prefix: readonly string[]): boolean =>
+  prefix.length <= key.length && prefix.every((k, i) => k === key[i]);
+
+/** Rows that hold scalars and repeatables: the entry's, an item's or a zone member's. */
+interface Holder {
+  scalars: readonly WireScalar[];
+  children: readonly WireChild[];
+}
+
+/**
+ * Where a key path is stored below a holder: an embedded component's column is the holder's, a
+ * repeatable's items are rows of their own, reached through its relation, at any depth.
+ */
+const storedAt = (
+  holder: Holder,
+  key: readonly string[],
+  relations: string[] = [],
+): UniqueTarget | undefined => {
+  const column = holder.scalars.find((s) => sameKey(s.key, key))?.column;
+  if (column !== undefined)
+    return relations.length === 0 ? { column } : { relation: relations.join("."), column };
+  const child = holder.children.find((c) => c.key.length < key.length && startsWith(key, c.key));
+  return child === undefined
+    ? undefined
+    : storedAt(child, key.slice(child.key.length), [...relations, child.relation]);
+};
 
 const nowhere: Locate = () => undefined;
 
-/** The entry's own fields, and an embedded component's (its columns are the entry's). */
-const embeddedAt =
+/** A field at a component path from the entry, wherever its rows are. */
+const pathAt =
   (ctx: RuleContext, path: string[]): Locate =>
-  (key) => {
-    const column = columnOf(ctx.shape.scalars, [...path, key]);
-    return column === undefined ? undefined : { column };
-  };
+  (key) =>
+    storedAt(ctx.shape, [...path, key]);
 
-/** A repeatable component held directly by the entry: its items are rows of their own table. */
-const itemsAt =
-  (ctx: RuleContext, key: string): Locate =>
-  (field) => {
-    const child = ctx.shape.children.find((c) => sameKey(c.key, [key]));
-    const column = child === undefined ? undefined : columnOf(child.scalars, [field]);
-    return child === undefined || column === undefined
+/** A dynamic zone member's own field: a column of its items' rows (Strapi checks no deeper). */
+const memberAt =
+  (ctx: RuleContext, zone: string, uid: string): Locate =>
+  (key) => {
+    const member = ctx.shape.zones.find((z) => z.key === zone)?.members.find((m) => m.uid === uid);
+    const column = member?.scalars.find((s) => sameKey(s.key, [key]))?.column;
+    return member === undefined || column === undefined
       ? undefined
-      : { relation: child.relation, column };
+      : { relation: member.relation, column };
   };
 
 const constraints = (field: Field, locate: Locate, ctx: RuleContext, path: string[]): Rule => {
@@ -106,10 +129,10 @@ const uncheckedUnique = (ctx: RuleContext, path: string[]): CapabilityGap => ({
   feature: "uniqueInComponent",
   location: { contentType: ctx.contentType, field: path.join(".") },
   severity: "downgrade",
-  message: `"${path.join(".")}" is unique, which camis checks only among a type's own fields${
+  message: `"${path.join(".")}" is unique, which camis checks ${
     ctx.layout === "laravel"
-      ? ", its embedded components' and the items of a repeatable component it holds"
-      : ""
+      ? "in components at any depth and in a dynamic zone's components, not below them"
+      : "only among a type's own fields on the Strapi storage layout"
   }; Strapi's check of it is skipped`,
 });
 
@@ -139,16 +162,9 @@ const rules = (
       if (rule !== undefined) out[key] = rule;
     } else if (field.type === "component") {
       const component = byName.get(field.component);
+      // Inside a dynamic zone's member Strapi checks no deeper than the member's own fields.
       const inner =
-        ctx.layout !== "laravel"
-          ? nowhere
-          : field.repeatable
-            ? path.length === 0
-              ? itemsAt(ctx, key)
-              : nowhere
-            : locate === nowhere
-              ? nowhere
-              : embeddedAt(ctx, [...path, key]);
+        ctx.layout !== "laravel" || locate === nowhere ? nowhere : pathAt(ctx, [...path, key]);
       out[key] = {
         type: "component",
         repeatable: field.repeatable,
@@ -162,7 +178,19 @@ const rules = (
             const component = byName.get(name);
             return component === undefined
               ? []
-              : [[componentUid(component), rules(component.fields, ctx, nowhere, [...path, key])]];
+              : [
+                  [
+                    componentUid(component),
+                    rules(
+                      component.fields,
+                      ctx,
+                      ctx.layout === "laravel" && path.length === 0
+                        ? memberAt(ctx, key, componentUid(component))
+                        : nowhere,
+                      [...path, key],
+                    ),
+                  ],
+                ];
           }),
         ),
       };
@@ -205,7 +233,7 @@ export const entityRules = (
   layout: StorageLayout,
 ): EntityRules => {
   const ctx: RuleContext = { doc, shape, layout, gaps: [], contentType: ct.name, unique: false };
-  const built = rules(ct.fields, ctx, embeddedAt(ctx, []), []);
+  const built = rules(ct.fields, ctx, pathAt(ctx, []), []);
   return {
     constant: `    /** Each written field's Strapi attribute, for StrapiValidator. */\n    private const RULES = ${literal(built, "    ")};\n`,
     unique: ctx.unique,

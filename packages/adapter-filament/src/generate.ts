@@ -15,6 +15,7 @@ import {
   childMigrationFilename,
   childRelationMethod,
   childTableEmit,
+  childWithoutUniqueIndex,
   childTablesWithin,
   emitChildMigration,
   camelPath,
@@ -23,6 +24,7 @@ import {
   relationPickers,
   repeaterComponent,
   type ChildTableEmit,
+  withoutUniqueIndex,
 } from "./components";
 import {
   componentPivotMigrationFilename,
@@ -36,7 +38,7 @@ import { apiCustomSeed, emitApiController, emitApiRoutes } from "./api";
 import { emitBlocksFiles, hasBlocksFields } from "./blocks";
 import { emitJsonEditorFiles, hasJsonFields } from "./json-editor";
 import { deployFile } from "./deploy";
-import { emitField, isSupportedField } from "./fields";
+import { emitField, isSupportedField, type FieldEmit } from "./fields";
 import { emitHookFiles } from "./hooks/emit";
 import { emitRouteHookFiles } from "./hooks/route-hooks";
 import { emitScheduleFiles } from "./hooks/schedules";
@@ -249,19 +251,24 @@ export const filamentAdapter: GenerateAdapter = {
       const embeddedMedia = expansion.scalars.filter(
         (s) => fileModel !== undefined && s.field.type === "media",
       );
+      // The Strapi API style's validator checks a component's unique fields as Strapi does.
+      const indexed = (emit: FieldEmit): FieldEmit =>
+        apiStyle === "strapi" ? withoutUniqueIndex(emit) : emit;
+      const indexedChild = (child: ChildTableEmit): ChildTableEmit =>
+        apiStyle === "strapi" ? childWithoutUniqueIndex(child) : child;
       const embeddedEmits = expansion.scalars
         .filter((s) => !embeddedMedia.includes(s))
-        .map((s) => emitField(columnField(s), s.path.map(snakeColumn).join("_")));
+        .map((s) => indexed(emitField(columnField(s), s.path.map(snakeColumn).join("_"))));
       const context = deepComponents ? { doc } : undefined;
       const ctChildren = expansion.tables.map((t) =>
-        childTableEmit(ct, t, fileModel !== undefined, context),
+        indexedChild(childTableEmit(ct, t, fileModel !== undefined, context)),
       );
       const zoneChildren =
         apiStyle === "strapi"
           ? expansion.zones.flatMap((z) =>
               z.members.map(
                 (m): ChildTableEmit => ({
-                  ...childTableEmit(ct, m.table, fileModel !== undefined, context),
+                  ...indexedChild(childTableEmit(ct, m.table, fileModel !== undefined, context)),
                   ordered: true,
                 }),
               ),
