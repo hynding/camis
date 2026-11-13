@@ -308,3 +308,47 @@ describe("upsertBy invariants", () => {
     expect(errors.map((e) => e.code)).toEqual(["non_unique_upsert_field"]);
   });
 });
+
+describe("polymorphic relations", () => {
+  const withNote = (inverse: object): IrDocument =>
+    ({
+      version: 1,
+      contentTypes: [
+        {
+          name: "Note",
+          kind: "collection",
+          fields: [
+            { type: "polymorphicRelation", name: "subjects", many: true },
+            { type: "string", name: "title" },
+          ],
+        },
+        {
+          name: "Book",
+          kind: "collection",
+          fields: [{ type: "polymorphicInverse", name: "notes", many: true, ...inverse }],
+        },
+      ],
+      components: [],
+    }) as IrDocument;
+
+  it("accepts an inverse whose target's field is a polymorphic relation", () => {
+    expect(codes(withNote({ target: "Note", via: "subjects" }))).toEqual([]);
+  });
+
+  it("flags an inverse whose target does not exist", () => {
+    expect(codes(withNote({ target: "Ghost", via: "subjects" }))).toEqual([
+      "unknown_relation_target",
+    ]);
+  });
+
+  it("flags an inverse whose field is not a polymorphic relation of the target", () => {
+    const errors = validateInvariants(withNote({ target: "Note", via: "title" }));
+    expect(errors).toEqual([
+      expect.objectContaining({
+        code: "invalid_polymorphic_inverse",
+        message: `polymorphic inverse "notes" reads "Note.title", which is not a polymorphic relation`,
+        location: { contentType: "Book", field: "notes" },
+      }),
+    ]);
+  });
+});
