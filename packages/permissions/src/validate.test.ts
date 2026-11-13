@@ -156,3 +156,32 @@ describe("validateBundle — admin roles", () => {
     ]);
   });
 });
+
+describe("validateBundle endpoints", () => {
+  const withEndpoint: IrDocument = {
+    ...doc,
+    endpoints: [
+      { name: "ArticleLike", contentType: "Article", method: "POST", path: "/articles/:id/like" },
+    ],
+  };
+
+  it("lets a role list the endpoints its users may call", () => {
+    const r = validateBundle({
+      document: withEndpoint,
+      roles: [{ name: "Ed", grants: [], endpoints: ["ArticleLike"] }],
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it("rejects an endpoint the document does not declare", () => {
+    const r = validateBundle({
+      document: withEndpoint,
+      roles: [{ name: "Ed", grants: [], endpoints: ["ArticleShare"] }],
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok)
+      expect(r.errors.map((e) => [e.code, e.path])).toEqual([
+        ["unknown_role_endpoint", ["roles", 0, "endpoints", 0]],
+      ]);
+  });
+});

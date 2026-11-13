@@ -61,6 +61,27 @@ export const routeHook = z.object({
 });
 export type RouteHook = z.infer<typeof routeHook>;
 
+export const ENDPOINT_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
+export type EndpointMethod = (typeof ENDPOINT_METHODS)[number];
+
+/**
+ * Hand-written code behind an API route of its own, beside a content type's (Strapi's custom route
+ * and controller action). Only the public endpoints and those a role lists are reached.
+ */
+export const endpoint = z.object({
+  name: typeName,
+  /** The content type it belongs beside, as a Strapi custom route belongs to an API. */
+  contentType: typeName,
+  method: z.enum(ENDPOINT_METHODS),
+  /** Under the API's prefix, Strapi's form: `/articles/:id/like`. */
+  path: z
+    .string()
+    .regex(/^(?:\/:?[A-Za-z0-9_-]+)+$/, "a path is /segments, each a name or a :param"),
+  /** Open to anyone: no caller is authenticated and no role is asked (Strapi's auth: false). */
+  public: z.boolean().optional(),
+});
+export type Endpoint = z.infer<typeof endpoint>;
+
 // Five fields (minute hour day-of-month month day-of-week); every target's scheduler reads these.
 const CRON_FIELD = "[0-9A-Za-z*/,?-]+";
 const CRON = new RegExp(`^${CRON_FIELD}( ${CRON_FIELD}){4}$`);

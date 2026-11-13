@@ -1,11 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  component,
-  contentType,
-  irDocument,
-  isPublicApiAction,
-  servesApiAction,
-} from "./document";
+import { component, contentType, irDocument, isPublicApiAction, servesApiAction } from "./document";
 
 const ct = (fields: unknown[]) =>
   contentType.safeParse({ name: "Article", kind: "collection", fields });

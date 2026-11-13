@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 import { grant, parseRolesFile, role } from "./model";
 
 describe("role schema", () => {
+  it("keeps the endpoints a role's users may call", () => {
+    const r = role.safeParse({ name: "Ed", grants: [], endpoints: ["ArticleLike"] });
+    expect(r.success && r.data.endpoints).toEqual(["ArticleLike"]);
+  });
+
   it("accepts a role with a field rule and a condition", () => {
     const r = role.safeParse({
       name: "Editor",

@@ -60,8 +60,11 @@ describe("filament public content API actions", () => {
   it("leaves a project without public actions as it was", () => {
     const closed = generate("strapi", {
       ...authorRoleBundle,
+      roles: authorRoleBundle.roles.map((r) => ({ ...r, endpoints: [] })),
       document: {
         ...authorRoleBundle.document,
+        // A public endpoint is routed with them.
+        endpoints: [],
         contentTypes: authorRoleBundle.document.contentTypes.map((ct) => ({
           ...ct,
           options: { ...ct.options, publicApiActions: [] },

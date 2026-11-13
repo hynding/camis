@@ -35,6 +35,8 @@ export const role = z.object({
   /** Its users may sign in to the admin of a target that has one. */
   admin: z.boolean().optional(),
   grants: z.array(grant),
+  /** The IR endpoints its users may call (the public role's: anyone without a session). */
+  endpoints: z.array(z.string().min(1)).optional(),
 });
 export type Role = z.infer<typeof role>;
 

@@ -86,3 +86,28 @@ export default factories.createCoreRouter('api::article.article', {
     ]);
   });
 });
+
+describe("readStrapiProject endpoints", () => {
+  it("brings a custom routes file in as endpoints, and reports only what they cannot carry", async () => {
+    await materialize(
+      strapiAdapter.generate({ document: blog, roles: [] }, { projectName: "blog" }),
+      dir,
+    );
+    const { writeFile } = await import("node:fs/promises");
+    await writeFile(
+      join(dir, "src/api/article/routes/custom.ts"),
+      "export default { routes: [{ method: 'GET', path: '/articles/trending', handler: 'article.trending', config: { auth: false } }] };\n",
+    );
+    const { document, gaps } = await readStrapiProject(dir);
+    expect(gaps.gaps).toEqual([]);
+    expect(document.ok && document.value.endpoints).toEqual([
+      {
+        name: "ArticleTrending",
+        contentType: "Article",
+        method: "GET",
+        path: "/articles/trending",
+        public: true,
+      },
+    ]);
+  });
+});

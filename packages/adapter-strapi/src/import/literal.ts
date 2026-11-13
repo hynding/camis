@@ -95,7 +95,7 @@ class Reader {
   /** Whether the value starting here ends where a value ends (so it is whole, not an expression). */
   private endsHere(): boolean {
     const t = this.peek();
-    return t === undefined || [",", "}", "]", ")"].some((p) => isPunct(t, p));
+    return t === undefined || [",", "}", "]", ")", ";"].some((p) => isPunct(t, p));
   }
 
   value(): Literal {
@@ -162,6 +162,26 @@ class Reader {
     return keyed ? map : list;
   }
 
+  /** The module's value: `export default`, `module.exports =` or a PHP file's `return`. */
+  exported(): Literal | undefined {
+    const word = (i: number, value: string): boolean =>
+      this.tokens[i]?.kind === "word" && (this.tokens[i] as { value: string }).value === value;
+    for (let i = 0; i < this.tokens.length; i++) {
+      const skip =
+        word(i, "export") && word(i + 1, "default")
+          ? 2
+          : word(i, "module") && isPunct(this.tokens[i + 1], ".") && word(i + 2, "exports")
+            ? 4
+            : word(i, "return")
+              ? 1
+              : 0;
+      if (skip === 0) continue;
+      this.at = i + skip;
+      return this.value();
+    }
+    return undefined;
+  }
+
   /** The arguments of the first call to `name`, or undefined when there is none. */
   callArguments(name: string): Literal[] | undefined {
     const at = this.tokens.findIndex(
@@ -182,3 +202,7 @@ class Reader {
 /** The literal arguments of the source's first call to `name` (JavaScript, TypeScript or PHP). */
 export const readCallArguments = (source: string, name: string): Literal[] | undefined =>
   new Reader(tokenize(source)).callArguments(name);
+
+/** The literal a module exports (JavaScript or TypeScript) or a PHP file returns. */
+export const readExportedValue = (source: string): Literal | undefined =>
+  new Reader(tokenize(source)).exported();

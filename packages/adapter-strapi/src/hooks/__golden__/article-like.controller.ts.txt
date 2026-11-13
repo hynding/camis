@@ -1,0 +1,10 @@
+import type { Core } from "@strapi/strapi";
+
+// Ring 2 endpoint — hand-written. camis seeds this once and never overwrites it.
+// Strapi answers POST /api/articles/:id/like with it (api::article.article-like.handle).
+export default ({ strapi }: { strapi: Core.Strapi }) => ({
+  async handle(ctx) {
+    // TODO: answer the request; ctx.params holds the path's :params.
+    ctx.body = { data: null };
+  },
+});

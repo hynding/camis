@@ -14,6 +14,7 @@ import {
   STRAPI_ACTION_UID,
   USER_RELATION_WRITE_ACTION,
 } from "./actions";
+import { endpointHandler } from "../hooks/endpoints";
 import { conditionName } from "./condition-name";
 
 export const USER_CONTEXT = ["user.id", "user.email", "user.role"] as const;
@@ -222,6 +223,11 @@ export const projectApiRoles = (doc: IrDocument, roles: Role[]): ApiRoleProjecti
           message: `"${role.name}" grant on "${grant.contentType}" is unconditioned at the users-permissions API; conditions apply to the admin panel only`,
         });
       }
+    }
+    for (const name of role.endpoints ?? []) {
+      const endpoint = (doc.endpoints ?? []).find((e) => e.name === name);
+      const ct = endpoint === undefined ? undefined : byName.get(endpoint.contentType);
+      if (endpoint !== undefined && ct !== undefined) actions.add(endpointHandler(endpoint, ct));
     }
     return { type: role.name, actions: [...actions].sort() };
   });

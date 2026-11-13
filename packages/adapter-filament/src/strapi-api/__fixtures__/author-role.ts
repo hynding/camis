@@ -12,7 +12,8 @@ const isCreator: Expression = {
  * Strapi's default Editor and Author admin roles over a draft-and-publish type (Story) and a plain
  * one (Memo): the Editor may do everything, the Author only to entries it created. Memo's list and
  * read are open to anyone, as Strapi's route auth: false opens them. CI's author-role job overlays
- * it (scripts/overlay.ts --bundle author-role) and runs AuthorRoleTest and PublicActionsTest.
+ * it (scripts/overlay.ts --bundle author-role) and runs AuthorRoleTest, PublicActionsTest and
+ * EndpointsTest.
  */
 export const authorRoleBundle: IrBundle = {
   document: {
@@ -44,6 +45,11 @@ export const authorRoleBundle: IrBundle = {
       },
     ],
     components: [],
+    // Strapi custom routes beside Memo: one its users may call, one anyone may (EndpointsTest).
+    endpoints: [
+      { name: "MemoPin", contentType: "Memo", method: "POST", path: "/memos/:id/pin" },
+      { name: "MemoCount", contentType: "Memo", method: "GET", path: "/memos/count", public: true },
+    ],
   },
   roles: [
     {
@@ -71,6 +77,10 @@ export const authorRoleBundle: IrBundle = {
       ],
     },
     // The content API's users read every story: an admin role's condition is not theirs.
-    { name: "authenticated", grants: [{ contentType: "Story", actions: ["read"] }] },
+    {
+      name: "authenticated",
+      grants: [{ contentType: "Story", actions: ["read"] }],
+      endpoints: ["MemoPin"],
+    },
   ],
 };

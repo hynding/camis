@@ -5,6 +5,7 @@ import { customCodeGaps, type ProjectFile } from "./custom-code";
 import type { ImportOptions } from "./import-document";
 import { importDocument } from "./import-document";
 import { importRouters, type RouterImport } from "./router-config";
+import { importEndpoints } from "./endpoints";
 import { validate } from "@camis/ir-core";
 
 const SCHEMAS = ["src/api/*/content-types/*/schema.json", "src/components/*/*.json"];
@@ -39,9 +40,23 @@ export const readStrapiProject = async (
   const gaps = [...imported.gaps.gaps, ...code];
   if (!imported.document.ok) return { ...imported, gaps: { ...imported.gaps, gaps } };
   const routers = importRouters(files, imported.document.value);
+  const endpoints = importEndpoints(files, imported.document.value);
+  const document = withRouters(imported.document.value, routers);
   return {
-    document: validate(withRouters(imported.document.value, routers)),
-    gaps: { ...imported.gaps, gaps: [...gaps, ...routers.gaps] },
+    document: validate(
+      endpoints.endpoints.length > 0 ? { ...document, endpoints: endpoints.endpoints } : document,
+    ),
+    gaps: {
+      ...imported.gaps,
+      gaps: [
+        // A routes file read whole is reported by what its endpoints cannot carry.
+        ...gaps.filter(
+          (g) => g.feature !== "customRoutes" || !endpoints.read.has(g.location.file ?? ""),
+        ),
+        ...routers.gaps,
+        ...endpoints.gaps,
+      ],
+    },
   };
 };
 
