@@ -35,6 +35,8 @@ export const authorRoleBundle: IrBundle = {
           { type: "email", name: "email", required: true, unique: true },
         ],
       },
+      // The media library, whose files an Author reads and changes only where it uploaded them.
+      { name: "File", kind: "collection", builtin: "file", fields: [] },
       {
         name: "Story",
         kind: "collection",
@@ -65,6 +67,7 @@ export const authorRoleBundle: IrBundle = {
       grants: [
         { contentType: "Story", actions: ["create", "read", "update", "delete", "publish"] },
         { contentType: "Memo", actions: ["create", "read", "update", "delete"] },
+        { contentType: "File", actions: ["create", "read", "update", "delete"] },
       ],
     },
     {
@@ -81,6 +84,8 @@ export const authorRoleBundle: IrBundle = {
           actions: ["create", "read", "update", "delete"],
           condition: isCreator,
         },
+        { contentType: "File", actions: ["create"] },
+        { contentType: "File", actions: ["read", "update", "delete"], condition: isCreator },
       ],
     },
     // A role whose accounts share their memos (admin::has-same-role-as-creator).

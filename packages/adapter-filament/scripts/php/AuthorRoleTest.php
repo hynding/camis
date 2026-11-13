@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Filament\Resources\Files\FileResource;
+use App\Filament\Resources\Files\Pages\ListFiles;
 use App\Filament\Resources\Memos\MemoResource;
 use App\Filament\Resources\Memos\Pages\ListMemos;
 use App\Filament\Resources\Stories\Pages\CreateStory;
@@ -11,6 +13,7 @@ use App\Filament\Resources\Stories\Pages\ListStories;
 use App\Filament\Resources\Stories\StoryResource;
 use App\Http\Serializers\StorySerializer;
 use App\Models\AdminUser;
+use App\Models\File;
 use App\Models\Memo;
 use App\Models\Story;
 use App\Models\User;
@@ -145,6 +148,42 @@ class AuthorRoleTest extends TestCase
         $orphan = Memo::create(['title' => 'Orphan']);
         $orphan->forceFill(['created_by_id' => null])->save();
         $this->assertFalse($second->can('view', $orphan));
+    }
+
+    /** A file $admin uploaded in the admin, which records it as the file's creator. */
+    private function fileBy(AdminUser $admin, string $name): File
+    {
+        $this->actingAs($admin, 'admin');
+
+        return File::forceCreate([
+            'name' => $name, 'hash' => md5($name), 'ext' => '.png', 'mime' => 'image/png',
+            'size' => 1.5, 'url' => "/uploads/{$name}", 'provider' => 'local',
+        ]);
+    }
+
+    /** Strapi's Author reads and changes only the files it uploaded; an Editor every one. */
+    public function test_an_author_lists_and_changes_only_the_files_it_uploaded(): void
+    {
+        $author = $this->admin('author@example.test', 'author');
+        $editor = $this->admin('editor@example.test', 'editor');
+        $own = $this->fileBy($author, 'mine.png');
+        $other = $this->fileBy($editor, 'theirs.png');
+        $this->assertSame($author->id, $own->created_by_id);
+
+        $this->actingAs($author, 'admin');
+        Livewire::test(ListFiles::class)
+            ->assertCanSeeTableRecords([$own])
+            ->assertCanNotSeeTableRecords([$other]);
+        $this->get(FileResource::getUrl('edit', ['record' => $other]))->assertNotFound();
+        $this->assertTrue($author->can('update', $own));
+        $this->assertFalse($author->can('update', $other));
+        $this->assertFalse($author->can('delete', $other));
+        $this->assertTrue($author->can('create', File::class));
+
+        $this->flushSession();
+        $this->app['auth']->forgetGuards();
+        $this->actingAs($editor, 'admin');
+        Livewire::test(ListFiles::class)->assertCanSeeTableRecords([$own, $other]);
     }
 
     public function test_the_homepage_widgets_show_an_author_only_its_own_entries(): void

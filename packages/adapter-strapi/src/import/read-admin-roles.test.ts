@@ -112,7 +112,7 @@ describe("readStrapiAdminRoles on a strapi-php database", () => {
     components: [],
   };
 
-  it("brings in Editor's grants, Author's on the entries it created, and a custom role's", async () => {
+  it("brings in Editor's grants, Author's on the entries and files it created, and a custom role's", async () => {
     const imported = await readStrapiAdminRoles(FIXTURE, categories, ["public", "authenticated"]);
     expect(imported.superAdmin).toBe(true);
     expect(imported.roles).toEqual([
@@ -140,14 +140,23 @@ describe("readStrapiAdminRoles on a strapi-php database", () => {
             },
           },
           { contentType: "File", actions: ["create"] },
+          {
+            contentType: "File",
+            actions: ["read", "update", "delete"],
+            condition: {
+              kind: "eq",
+              left: { kind: "var", name: CREATED_BY },
+              right: { kind: "var", name: "user.id" },
+            },
+          },
         ],
       },
       { name: "content-writer", description: "Writes articles", admin: true, grants: [] },
     ]);
     const messages = imported.gaps.map((g) => g.message);
-    expect(messages).toContain(
-      'admin role "author": plugin::upload.read, plugin::upload.assets.update on File: only when admin::is-creator; camis records no creator of a file, so not granted',
-    );
+    expect(
+      messages.filter((m) => m.startsWith('admin role "author"') && m.includes("File")),
+    ).toEqual([]);
     expect(messages).toContain(
       'admin role "content-writer": admin::webhooks.read: settings and plugin actions are not imported; in camis the Settings pages follow the role\'s grants on the User type',
     );
