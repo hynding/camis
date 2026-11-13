@@ -270,5 +270,8 @@ class MorphRelationsTest extends TestCase
         $this->assertSame('Relation with any type (one)', $label('Note', 'pinnedTo'));
         $this->assertSame('Relation with Note, through pinnedTo (many)', $label('Book', 'pins'));
         $this->assertSame('Relation with Note, through pinnedTo (one)', $label('Film', 'pin'));
+        // Strapi's builder cannot design them either: they are written in schema.json by hand.
+        $this->assertFalse(\App\Support\ContentTypeBuilderSchema::designable(['type' => 'polymorphicRelation']));
+        $this->assertTrue(\App\Support\ContentTypeBuilderSchema::designable(['type' => 'string']));
     }
 }
