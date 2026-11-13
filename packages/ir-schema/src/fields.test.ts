@@ -22,6 +22,17 @@ describe("scalar fields", () => {
     expect(componentField.safeParse({ type: "blocks", name: "bio" }).success).toBe(true);
   });
 
+  it("keeps the editor a source project chose for a field, which targets may show or ignore", () => {
+    const rating = {
+      type: "integer",
+      name: "rating",
+      editor: { name: "plugin::stars.rating", options: { max: 5 } },
+    };
+    expect(parse(rating).data).toEqual(rating);
+    expect(componentField.safeParse(rating).success).toBe(true);
+    expect(parse({ type: "integer", name: "rating", editor: { name: "" } }).success).toBe(false);
+  });
+
   it("accepts a string field with constraints", () => {
     expect(parse({ type: "string", name: "title", required: true, maxLength: 200 }).success).toBe(
       true,
