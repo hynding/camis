@@ -258,4 +258,17 @@ class MorphRelationsTest extends TestCase
             'morphToOne n2.pinned_to → api::book.book Dune',
         ], $said);
     }
+
+    public function test_the_content_type_builder_names_them(): void
+    {
+        $ir = json_decode((string) file_get_contents(resource_path('camis/schema.json')), true, 512, JSON_THROW_ON_ERROR);
+        $label = fn (string $type, string $field) => \App\Support\ContentTypeBuilderSchema::typeLabel(
+            collect(collect($ir['contentTypes'])->firstWhere('name', $type)['fields'])->firstWhere('name', $field),
+            $ir,
+        );
+        $this->assertSame('Relation with any type (many)', $label('Note', 'subjects'));
+        $this->assertSame('Relation with any type (one)', $label('Note', 'pinnedTo'));
+        $this->assertSame('Relation with Note, through pinnedTo (many)', $label('Book', 'pins'));
+        $this->assertSame('Relation with Note, through pinnedTo (one)', $label('Film', 'pin'));
+    }
 }
