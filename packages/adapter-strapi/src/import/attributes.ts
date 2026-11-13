@@ -50,6 +50,62 @@ const named = (attribute: string): { name: string; names?: { api: string } } => 
   return name === attribute ? { name } : { name, names: { api: attribute } };
 };
 
+/**
+ * A morphTo relation links entries of any type; a morphOne or morphMany reads the entries of its
+ * target whose morphTo relation (its morphBy) links here.
+ */
+const polymorphic = (
+  attribute: string,
+  attr: Record<string, unknown>,
+  location: CapabilityGap["location"],
+): IrFieldResult => {
+  const relation = String(attr.relation);
+  const name = fieldNameOf(attribute);
+  if (relation.startsWith("morphTo")) {
+    return {
+      field: {
+        type: "polymorphicRelation",
+        ...named(attribute),
+        many: relation === "morphToMany",
+        ...privacy(attr),
+      },
+    };
+  }
+  const rawTarget = String(attr.target);
+  if (rawTarget.startsWith("plugin::")) {
+    return {
+      gap: {
+        feature: "pluginRelation",
+        location: { ...location, field: name },
+        severity: "downgrade",
+        message: `relation "${attribute}" targets plugin type "${rawTarget}", which has no IR representation; skipped.`,
+      },
+    };
+  }
+  if (typeof attr.morphBy !== "string" || attr.morphBy === "") {
+    return {
+      gap: {
+        feature: "morphRelation",
+        location: { ...location, field: name },
+        severity: "downgrade",
+        message: `polymorphic relation "${attribute}" (${relation}) names no morphBy field; skipped.`,
+      },
+    };
+  }
+  const via = fieldNameOf(attr.morphBy);
+  return {
+    field: {
+      type: "polymorphicInverse",
+      ...named(attribute),
+      target: irName(rawTarget.split("::")[1]?.split(".")[0] ?? ""),
+      via,
+      ...(via === attr.morphBy ? {} : { viaNames: { api: attr.morphBy } }),
+      many: relation === "morphMany",
+      ...privacy(attr),
+    },
+  };
+};
+
 export const irField = (
   attribute: string,
   attr: Record<string, unknown>,
@@ -71,16 +127,7 @@ export const irField = (
 
   if (strapiType === "relation") {
     if (attr.mappedBy !== undefined) return { skip: true };
-    if (String(attr.relation).startsWith("morph")) {
-      return {
-        gap: {
-          feature: "morphRelation",
-          location: { ...location, field: name },
-          severity: "downgrade",
-          message: `polymorphic relation "${attribute}" (${String(attr.relation)}) has no IR representation; skipped.`,
-        },
-      };
-    }
+    if (String(attr.relation).startsWith("morph")) return polymorphic(attribute, attr, location);
     const rawTarget = String(attr.target);
     const builtinUser = rawTarget === PLUGIN_USER_UID;
     if (rawTarget.startsWith("plugin::") && !builtinUser) {

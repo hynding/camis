@@ -202,7 +202,7 @@ describe("importCommand", () => {
         info: { singularName: "page", pluralName: "pages", displayName: "Page" },
         attributes: {
           title: { type: "string" },
-          related: { type: "relation", relation: "morphToMany" },
+          related: { type: "relation", relation: "morphMany", target: "api::page.page" },
         },
       }),
     );

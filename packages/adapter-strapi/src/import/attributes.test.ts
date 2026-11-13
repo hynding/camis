@@ -233,10 +233,91 @@ describe("irField — what strapi-php projects carry", () => {
       ).field,
     ).toEqual({ type: "dynamicZone", name: "blocks", components: ["Hero", "SeoMeta"] });
   });
-  it("reports a polymorphic relation as a downgrade gap", () => {
-    const r = irField("related", { type: "relation", relation: "morphToMany" }, loc);
-    expect(r.field).toBeUndefined();
-    expect(r.gap).toMatchObject({ feature: "morphRelation", severity: "downgrade" });
+  it("maps morphToOne and morphToMany to a polymorphic relation", () => {
+    expect(irField("morph_to_many", { type: "relation", relation: "morphToMany" }, loc)).toEqual({
+      field: {
+        type: "polymorphicRelation",
+        name: "morphToMany",
+        names: { api: "morph_to_many" },
+        many: true,
+      },
+    });
+    // Strapi's own column names for a morphToOne are its storage, not the field's meaning.
+    const taggable = {
+      type: "relation",
+      relation: "morphToOne",
+      private: true,
+      morphColumn: {
+        typeColumn: { name: "taggable_type" },
+        idColumn: { name: "taggable_id", referencedColumn: "id" },
+      },
+    };
+    expect(irField("taggable", taggable, loc).field).toEqual({
+      type: "polymorphicRelation",
+      name: "taggable",
+      many: false,
+      private: true,
+    });
+  });
+  it("maps morphOne and morphMany to a polymorphic inverse of the target's relation", () => {
+    expect(
+      irField(
+        "morph_one",
+        { type: "relation", relation: "morphOne", target: "api::tag.tag", morphBy: "taggable" },
+        loc,
+      ).field,
+    ).toEqual({
+      type: "polymorphicInverse",
+      name: "morphOne",
+      names: { api: "morph_one" },
+      target: "Tag",
+      via: "taggable",
+      many: false,
+    });
+    expect(
+      irField(
+        "notes",
+        {
+          type: "relation",
+          relation: "morphMany",
+          target: "api::note.note",
+          morphBy: "pinned_to",
+        },
+        loc,
+      ).field,
+    ).toEqual({
+      type: "polymorphicInverse",
+      name: "notes",
+      target: "Note",
+      via: "pinnedTo",
+      viaNames: { api: "pinned_to" },
+      many: true,
+    });
+  });
+  it("reports a polymorphic inverse of a plugin type, or of no field, as a downgrade gap", () => {
+    const file = irField(
+      "files",
+      {
+        type: "relation",
+        relation: "morphMany",
+        target: "plugin::upload.file",
+        morphBy: "related",
+      },
+      loc,
+    );
+    expect(file.field).toBeUndefined();
+    expect(file.gap).toMatchObject({ feature: "pluginRelation", severity: "downgrade" });
+    const loose = irField(
+      "notes",
+      { type: "relation", relation: "morphMany", target: "api::note.note" },
+      loc,
+    );
+    expect(loose.field).toBeUndefined();
+    expect(loose.gap).toMatchObject({
+      feature: "morphRelation",
+      severity: "downgrade",
+      message: `polymorphic relation "notes" (morphMany) names no morphBy field; skipped.`,
+    });
   });
 });
 

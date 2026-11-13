@@ -12,6 +12,7 @@ import { camelPath, childTableEmit, type ChildMedia, type ChildTableEmit } from 
 import { componentRelations, type ComponentRelation } from "../../component-relations";
 import { filamentNames, snake, snakeColumn } from "../../names";
 import { FILE_UID } from "../upload/media-runtime";
+import type { WireMorph } from "./morphs";
 import { componentUid, kebab } from "./names";
 
 export interface WireScalar {
@@ -106,6 +107,8 @@ export interface WireRelation {
   order: LinkOrder | null;
   /** Where this row's place in the target's own to-many list is kept, when the target lists it. */
   inverseOrder: LinkOrder | null;
+  /** Read through the target's links, never written from this side (a polymorphic inverse). */
+  readOnly?: true;
   private?: true;
 }
 /** An order column: on the pivot for a many-to-many, else on the table holding the foreign key. */
@@ -133,6 +136,10 @@ export interface WireShape {
   zones: WireZone[];
   /** Relations to other content types, both the sides this type declares and their inverses. */
   relations: WireRelation[];
+  /** Polymorphic relations this type owns: links to entries of any type (`morphs.ts`). */
+  morphs?: WireMorph[];
+  /** Polymorphic inverses: relations read through another type's polymorphic links, never written. */
+  morphInverses?: WireRelation[];
   /** Whether this type keeps a draft and a published version of each document. */
   draftPublish: boolean;
   /** Whether this type keeps one row per locale of each document. */
@@ -397,7 +404,7 @@ const mediaRelations = (ct: ContentType, fileModel: string): WireRelation[] =>
 /** The users-permissions user's uid, which its relation errors name. */
 export const USER_UID = "plugin::users-permissions.user";
 
-const strapiUid = (ct: ContentType): string =>
+export const strapiUid = (ct: ContentType): string =>
   ct.builtin === "user" ? USER_UID : `api::${kebab(ct.name)}.${kebab(ct.name)}`;
 
 /**

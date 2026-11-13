@@ -1,6 +1,7 @@
 import type { StorageLayout } from "@camis/adapter-kernel";
 import { PHP_MARKER } from "../../hooks/names";
 import { itemsLinkAnything } from "./items-runtime";
+import { morphEntry } from "./morphs";
 import type {
   WireChild,
   WireRelation,
@@ -392,7 +393,7 @@ const fieldEntry = (s: WireScalar, indent: string): string =>
 const column = (c: string | null | undefined): string => (c == null ? "null" : `'${c}'`);
 
 const relationEntry = (r: WireRelation, indent: string): string =>
-  `${indent}'${r.key}' => ['relation' => '${r.relation}', 'kind' => '${r.kind}', 'model' => \\App\\Models\\${r.model}::class, 'serializer' => ${r.model}Serializer::class, 'foreignKey' => ${column(r.foreignKey)}, 'uid' => '${r.uid}', 'holder' => '${r.holder}', 'draftPublish' => ${r.draftPublish}, 'localized' => ${r.localized}, 'order' => ${column(r.order?.column)}, 'inverseOrder' => ${column(r.inverseOrder?.column)}${privateEntry(r)}],`;
+  `${indent}'${r.key}' => ['relation' => '${r.relation}', 'kind' => '${r.kind}', 'model' => \\App\\Models\\${r.model}::class, 'serializer' => ${r.model}Serializer::class, 'foreignKey' => ${column(r.foreignKey)}, 'uid' => '${r.uid}', 'holder' => '${r.holder}', 'draftPublish' => ${r.draftPublish}, 'localized' => ${r.localized}, 'order' => ${column(r.order?.column)}, 'inverseOrder' => ${column(r.inverseOrder?.column)}${r.readOnly === true ? ", 'readOnly' => true" : ""}${privateEntry(r)}],`;
 
 /**
  * A repeatable's entry: its child relation and its items' own map, keyed relative to the item: the
@@ -436,6 +437,8 @@ const fieldsConstant = (shape: WireShape): string => {
     // A zone is a key Strapi knows but will not filter, sort or select by.
     ...shape.zones.map((z) => `${l2}'${z.key}' => ['zone' => true],`),
     ...shape.relations.map((r) => relationEntry(r, l2)),
+    ...(shape.morphs ?? []).map((m) => morphEntry(m, l2)),
+    ...(shape.morphInverses ?? []).map((r) => relationEntry(r, l2)),
     ...timestamps.map((s) => fieldEntry(s, l2)),
   ];
   const components = shape.components.map((c) => `'${c}'`).join(", ");

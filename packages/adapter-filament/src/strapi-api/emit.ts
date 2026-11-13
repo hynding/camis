@@ -191,6 +191,7 @@ import { emitStrapiTransferCipher, TRANSFER_CIPHER_PATH } from "./data-transfer/
 import { emitStrapiExport } from "./data-transfer/transfer-export-runtime";
 import { emitStrapiImport } from "./data-transfer/transfer-runtime";
 import { wireShape, type WireShape } from "./core/wire-shape";
+import { emitMorphTypes, emitStrapiMorphs, type MorphPlan } from "./core/morphs";
 import { emitStrapiZones } from "./core/zones-runtime";
 import { emitStrapiItems, ITEMS_PATH, writesItems } from "./core/items-runtime";
 import { emitStrapiValidator } from "./core/validation-runtime";
@@ -250,6 +251,8 @@ export interface StrapiApiInput {
   contentManager?: ReadonlyMap<string, number> | undefined;
   /** Content types whose routes run the IR's route policies and middlewares (`emitRouteHookFiles`). */
   routeHooked?: ReadonlySet<string>;
+  /** The polymorphic relations served, each type's own and its inverses (`morphPlan`). */
+  morphs?: Pick<MorphPlan, "owners" | "inverses">;
 }
 export interface StrapiApiEmission {
   files: GeneratedFile[];
@@ -292,7 +295,11 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
   const shapes = new Map<string, WireShape>();
   for (const ct of emitted) {
     const names = filamentNames(ct);
-    const shape = wireShape(doc, ct, fkNames.get(ct.name) ?? [], versioned, localized, fileModel);
+    const shape: WireShape = {
+      ...wireShape(doc, ct, fkNames.get(ct.name) ?? [], versioned, localized, fileModel),
+      morphs: input.morphs?.owners.get(ct.name) ?? [],
+      morphInverses: (input.morphs?.inverses.get(ct.name) ?? []).map((i) => i.wire),
+    };
     shapes.set(ct.name, shape);
     const entity = entityRules(ct, doc, shape, "laravel");
     gaps.push(...entity.gaps);
@@ -389,6 +396,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
       sort: input.contentManager?.get(USER_DISPLAY_NAME) ?? 1,
     }),
     { path: STRAPI_NAVIGATION_PATH, content: emitStrapiNavigation() },
+
     ...emitContentTypeBuilder(bundle.document, secured),
   );
   if (secured) {
@@ -441,6 +449,8 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
   files.push({ path: "app/Support/StrapiQuery.php", content: emitStrapiQuery(secured) });
   files.push({ path: "app/Support/StrapiPopulate.php", content: emitStrapiPopulate() });
   files.push({ path: "app/Support/StrapiRelations.php", content: emitStrapiRelations() });
+  files.push({ path: "app/Support/StrapiMorphs.php", content: emitStrapiMorphs() });
+  files.push({ path: "app/Support/StrapiMorphTypes.php", content: emitMorphTypes(emitted) });
   if ([...shapes.values()].some(writesItems))
     files.push({ path: ITEMS_PATH, content: emitStrapiItems() });
   files.push({ path: "app/Support/StrapiLinkOrder.php", content: emitStrapiLinkOrder() });

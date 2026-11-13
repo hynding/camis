@@ -228,6 +228,8 @@ final class StrapiDocuments
             if (($field['kind'] ?? null) === 'belongsTo') {
                 $fk = $field['foreignKey'];
                 $to->setAttribute($fk, self::counterparts($field, array_filter([$from->getAttribute($fk)]), $published)[0] ?? null);
+            } elseif (($field['morph'] ?? null) === 'morphToOne') {
+                StrapiMorphs::copy($from, $to, $field, $published);
             }
         }
     }
@@ -240,6 +242,8 @@ final class StrapiDocuments
                 self::copyItems($from, $to, $field['component'], $field['fields'], $published, 'id');
             } elseif (in_array($field['kind'] ?? null, ['mediaOne', 'mediaMany'], true)) {
                 self::copyFiles($from, $to, $field['relation']);
+            } elseif (($field['morph'] ?? null) === 'morphToMany') {
+                StrapiMorphs::copy($from, $to, $field, $published);
             } elseif (($field['kind'] ?? null) === 'belongsToMany' && $field['holder'] === 'self') {
                 $relation = $from->{$field['relation']}();
                 if (($field['order'] ?? null) !== null) {
@@ -292,7 +296,7 @@ final class StrapiDocuments
      *
      * @return list<int>
      */
-    private static function counterparts(array $relation, array $ids, bool $published): array
+    public static function counterparts(array $relation, array $ids, bool $published): array
     {
         $ids = array_values(array_map('intval', $ids));
         if (! $relation['draftPublish'] || $ids === []) {

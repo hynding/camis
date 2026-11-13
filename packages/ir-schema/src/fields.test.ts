@@ -69,6 +69,39 @@ describe("structural fields", () => {
     ).toBe(true);
   });
 
+  it("accepts a polymorphic relation, to one or many entries of any content type", () => {
+    expect(
+      field.safeParse({ type: "polymorphicRelation", name: "subjects", many: true }).success,
+    ).toBe(true);
+    expect(
+      field.safeParse({ type: "polymorphicRelation", name: "pinnedTo", many: false }).success,
+    ).toBe(true);
+    expect(field.safeParse({ type: "polymorphicRelation", name: "subjects" }).success).toBe(false);
+  });
+
+  it("accepts a polymorphic inverse: the entries of a target whose polymorphic relation links here", () => {
+    expect(
+      field.safeParse({
+        type: "polymorphicInverse",
+        name: "notes",
+        target: "Note",
+        via: "subjects",
+        many: true,
+      }).success,
+    ).toBe(true);
+    expect(
+      field.safeParse({ type: "polymorphicInverse", name: "notes", target: "Note", many: true })
+        .success,
+    ).toBe(false);
+  });
+
+  it("keeps polymorphic relations out of components", () => {
+    expect(
+      componentField.safeParse({ type: "polymorphicRelation", name: "subjects", many: true })
+        .success,
+    ).toBe(false);
+  });
+
   it("accepts a component field", () => {
     expect(
       field.safeParse({ type: "component", name: "seo", component: "SeoMeta", repeatable: false })

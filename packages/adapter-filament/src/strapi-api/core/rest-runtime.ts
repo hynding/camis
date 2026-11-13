@@ -171,7 +171,7 @@ ${scopeBody(secured)}
             }
             if (! isset($fields[$key]['column']) || str_contains($key, '.')) {
                 // Strapi names the path only when the key is a component it refused to select.
-                $isComponent = isset($fields[$key]['component']) || isset($fields[$key]['zone']) || self::isComponent($fields, $key);
+                $isComponent = isset($fields[$key]['component']) || isset($fields[$key]['zone']) || isset($fields[$key]['morph']) || self::isComponent($fields, $key);
                 throw StrapiError::invalidKey($key, $isComponent ? $key : null, 'fields');
             }
         }
@@ -227,7 +227,8 @@ ${scopeBody(secured)}
                 if (is_array($value)) {
                     $query->whereHas($field['component'], fn (Builder $q) => self::where($q, $value, $field['fields'], null, $viewer, self::join($at, $wirePath)));
                 }
-            } elseif (isset($field['zone'])) {
+            } elseif (isset($field['zone']) || isset($field['morph'])) {
+                // A polymorphic link names entries of any type, which Strapi will not filter by.
                 throw StrapiError::invalidKey($key, self::join($at, $wirePath), 'filters');
             } elseif (isset($field['relation'])) {
                 if (! self::readable($field, $viewer)) {
@@ -449,7 +450,7 @@ ${scopeBody(secured)}
                 self::sortByRelation($query, $fields[$head[0]], $head[0], $head[1], $direction, $viewer);
                 continue;
             }
-            if (isset($field['zone'])) {
+            if (isset($field['zone']) || isset($field['morph'])) {
                 throw StrapiError::invalidKey($path, $path, 'sort');
             }
             if (isset($field['component']) || isset($field['relation']) || (! isset($field['column']) && self::isComponent($fields, $path))) {

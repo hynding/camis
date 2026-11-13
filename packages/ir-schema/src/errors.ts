@@ -13,6 +13,7 @@ export type IrErrorCode =
   | "unknown_upsert_field"
   | "non_unique_upsert_field"
   | "unknown_relation_target"
+  | "invalid_polymorphic_inverse"
   | "unknown_component_ref"
   | "unknown_grant_content_type"
   | "unknown_field_rule_field"

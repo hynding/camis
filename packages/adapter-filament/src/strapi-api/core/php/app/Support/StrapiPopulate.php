@@ -38,6 +38,8 @@ final class StrapiPopulate
             $relation = $serializer::FIELDS[$key] ?? [];
             if (isset($relation['relation'])) {
                 $loaded[$key] = self::load($rows, $serializer, $relation, $sub, $viewer, $key, $published, $cohort);
+            } elseif (isset($relation['morph'])) {
+                $loaded[$key] = StrapiMorphs::load($rows, $relation, $sub, $viewer, $published);
             }
         }
 
@@ -68,7 +70,7 @@ final class StrapiPopulate
             $tree = array_fill_keys($serializer::COMPONENTS, []);
             foreach ($serializer::FIELDS as $key => $field) {
                 // An embedded component's files (a dotted key) go with its component's own populate.
-                if (isset($field['relation']) && ! isset($field['private']) && ! str_contains((string) $key, '.') && StrapiQuery::readable($field, $viewer)) {
+                if ((isset($field['relation']) || isset($field['morph'])) && ! isset($field['private']) && ! str_contains((string) $key, '.') && self::allowed((string) $key, $serializer, $viewer)) {
                     $tree[$key] = [];
                 }
             }
@@ -116,6 +118,10 @@ final class StrapiPopulate
     {
         [$key, $rest] = array_pad(explode('.', $item, 2), 2, null);
         self::known($key, $serializer, self::join($at, $key), $at, (string) self::join($at, $key));
+        if ($rest !== null && isset($serializer::FIELDS[$key]['morph'])) {
+            // A polymorphic link's entries are of no one type, so Strapi reads no path through them.
+            throw StrapiError::invalidKey($key, self::join($at, $key), 'populate');
+        }
         if (! self::allowed($key, $serializer, $viewer)) {
             return;
         }
@@ -151,7 +157,7 @@ final class StrapiPopulate
         if (isset($field['private'])) {
             throw StrapiError::invalidKey($key, self::join($at, $key), 'populate');
         }
-        if (! in_array($key, $serializer::COMPONENTS, true) && ! isset($field['relation'])) {
+        if (! in_array($key, $serializer::COMPONENTS, true) && ! isset($field['relation']) && ! isset($field['morph'])) {
             throw StrapiError::invalidKey($key, isset($serializer::FIELDS[$key]) ? $fieldPath : $path, 'populate');
         }
     }
@@ -627,8 +633,8 @@ final class StrapiPopulate
                 continue;
             }
             $wires = array_map(fn (int|string $target) => $result['wires'][$target], $linked);
-            $kind = $serializer::FIELDS[$key]['kind'];
-            $wire[$key] = in_array($kind, ['hasMany', 'belongsToMany', 'localizations', 'mediaMany'], true) ? $wires : ($wires[0] ?? null);
+            $kind = $serializer::FIELDS[$key]['kind'] ?? $serializer::FIELDS[$key]['morph'];
+            $wire[$key] = in_array($kind, ['hasMany', 'belongsToMany', 'localizations', 'mediaMany', 'morphToMany'], true) ? $wires : ($wires[0] ?? null);
         }
 
         return $wire;

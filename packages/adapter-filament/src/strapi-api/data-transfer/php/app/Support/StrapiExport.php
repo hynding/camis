@@ -148,6 +148,7 @@ final class StrapiExport
             foreach (StrapiTransferMap::TYPES as $uid => $type) {
                 if (isset($type['attributes'])) {
                     $this->relationLinks($uid, $type);
+                    $this->morphLinks($uid, $type);
                 }
             }
             // After the entries: an item's files go by the id the item was given there.
@@ -728,6 +729,38 @@ final class StrapiExport
                     ['type' => $uid, 'field' => $field, 'ref' => $left, 'pos' => $leftMany ? $leftPositions[$i] : null],
                     ['type' => $link['target'], 'field' => $link['inverse'], 'ref' => $right, 'pos' => $rightMany ? $rightPositions[$i] : null],
                 );
+            }
+        }
+    }
+
+    /**
+     * Each polymorphic link this type holds, as Strapi exports it from its side: a to-many's with
+     * its place in the list and the link's field, a to-one's from its row's two columns.
+     *
+     * @param array<string, mixed> $type
+     */
+    private function morphLinks(string $uid, array $type): void
+    {
+        foreach ($type['morphs'] ?? [] as $field => $morph) {
+            if ($morph['morph'] === 'morphToOne') {
+                $rows = DB::table((new ($type['model'])())->getTable())
+                    ->whereNotNull($morph['typeColumn'])->whereNotNull($morph['idColumn'])
+                    ->orderBy('id')->get(['id', $morph['typeColumn'], $morph['idColumn']]);
+                foreach ($rows as $row) {
+                    $this->link('relation.morph', 'morphToOne', ['type' => $uid, 'ref' => (int) $row->id, 'field' => $field], ['type' => (string) $row->{$morph['typeColumn']}, 'ref' => (int) $row->{$morph['idColumn']}]);
+                }
+
+                continue;
+            }
+            $rows = DB::table($morph['table'])->orderBy($morph['ownerColumn'])->orderBy('order')->orderBy('id')->get();
+            foreach ($rows as $row) {
+                $order = $row->order === null ? null : (float) $row->order;
+                $this->link('relation.morph', 'morphToMany', ['type' => $uid, 'field' => $field, 'ref' => (int) $row->{$morph['ownerColumn']}], [
+                    'ref' => (int) $row->{$morph['idColumn']},
+                    'pos' => $order !== null && floor($order) === $order ? (int) $order : $order,
+                    'type' => (string) $row->{$morph['typeColumn']},
+                    'field' => $row->field,
+                ]);
             }
         }
     }

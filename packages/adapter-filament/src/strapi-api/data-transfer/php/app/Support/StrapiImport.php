@@ -149,7 +149,7 @@ final class StrapiImport
 
                 continue;
             }
-            $ours = [...array_keys($type['attributes']), ...array_keys($type['links'])];
+            $ours = [...array_keys($type['attributes']), ...array_keys($type['links']), ...array_keys($type['morphs'] ?? [])];
             $owned = array_filter((array) ($schema['attributes'] ?? []), fn (mixed $a): bool => ! isset($a['mappedBy']) && ! isset($a['morphBy']));
             foreach (array_diff(array_keys($owned), self::SYSTEM, $ours) as $attribute) {
                 if (isset($held[$uid][$attribute])) {
@@ -207,7 +207,8 @@ final class StrapiImport
                 $this->configuration();
             }
         });
-        if (in_array('files', $stages, true)) {
+        // A project without a media library has no disk for the archive's files.
+        if (in_array('files', $stages, true) && self::serves('plugin::upload.file')) {
             $this->assets();
         }
         ksort($this->counts);
@@ -800,12 +801,47 @@ final class StrapiImport
         ]);
     }
 
+    /**
+     * A polymorphic link the entry holds: its link table's row, or its row's two columns. A link
+     * to an entry this app did not import goes with that entry.
+     *
+     * @param array<string, mixed> $type
+     * @param array<string, mixed> $left
+     * @param array<string, mixed> $right
+     */
+    private function morphLink(array $type, array $left, array $right): void
+    {
+        $morph = $type['morphs'][$left['field']];
+        $owner = $this->rows[$left['type']][$left['ref']] ?? null;
+        $target = $this->rows[$right['type']][$right['ref']] ?? null;
+        if ($owner === null || $target === null) {
+            return;
+        }
+        if ($morph['morph'] === 'morphToOne') {
+            DB::table((new ($type['model'])())->getTable())->where('id', $owner)->update([$morph['typeColumn'] => $right['type'], $morph['idColumn'] => $target]);
+
+            return;
+        }
+        DB::table($morph['table'])->insert([
+            $morph['ownerColumn'] => $owner,
+            $morph['idColumn'] => $target,
+            $morph['typeColumn'] => $right['type'],
+            'field' => $right['field'] ?? null,
+            'order' => $right['pos'] ?? null,
+        ]);
+    }
+
     /** @param list<array<string, mixed>> $links */
     private function links(array $links): void
     {
         $attach = [];
         foreach ($links as $index => $link) {
             [$left, $right] = [$link['left'], $link['right']];
+            if (($link['kind'] ?? '') === 'relation.morph' && isset(StrapiTransferMap::TYPES[$left['type']]['morphs'][$left['field'] ?? ''])) {
+                $this->morphLink(StrapiTransferMap::TYPES[$left['type']], $left, $right);
+
+                continue;
+            }
             if (($link['kind'] ?? '') === 'relation.morph' && isset($this->items[$right['type']])) {
                 $this->itemFile($left, $right);
 
@@ -1087,5 +1123,13 @@ final class StrapiImport
             'boolean' => (bool) $value,
             default => is_array($value) ? json_encode($value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE) : $value,
         };
+    }
+
+    /** Whether this project holds the type, as the transfer map's per-project types say. */
+    private static function serves(string $uid): bool
+    {
+        $types = StrapiTransferMap::TYPES;
+
+        return isset($types[$uid]['model']);
     }
 }

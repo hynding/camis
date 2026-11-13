@@ -9,6 +9,8 @@ const TYPE_MAP: Record<string, string> = {
   bigInteger: "biginteger",
   dateTime: "datetime",
   dynamicZone: "dynamiczone",
+  polymorphicRelation: "relation",
+  polymorphicInverse: "relation",
 };
 
 // Copy a key onto the attribute only when defined (no `undefined` keys → stable JSON).
@@ -47,6 +49,19 @@ export const toAttribute = (
       : `api::${targetSingular}.${targetSingular}`;
     put(attr, "inversedBy", inverseApiName(field));
     put(attr, "required", f.required);
+    return withPrivate(attr);
+  }
+
+  if (field.type === "polymorphicRelation") {
+    attr.relation = field.many ? "morphToMany" : "morphToOne";
+    return withPrivate(attr);
+  }
+
+  if (field.type === "polymorphicInverse") {
+    const targetSingular = kebab(field.target);
+    attr.relation = field.many ? "morphMany" : "morphOne";
+    attr.target = `api::${targetSingular}.${targetSingular}`;
+    attr.morphBy = field.viaNames?.api ?? field.via;
     return withPrivate(attr);
   }
 
