@@ -161,6 +161,68 @@ describe("run — import strapi --admin-roles-from", () => {
   });
 });
 
+describe("run — --custom-field", () => {
+  const project = async (): Promise<string> => {
+    tmp = await mkdtemp(join(tmpdir(), "camis-cli-custom-field-"));
+    const schemaDir = join(tmp, "strapi-app/src/api/film/content-types/film");
+    await mkdir(schemaDir, { recursive: true });
+    await writeFile(
+      join(schemaDir, "schema.json"),
+      JSON.stringify({
+        kind: "collectionType",
+        info: { singularName: "film", pluralName: "films", displayName: "Film" },
+        attributes: {
+          rating: { type: "customField", customField: "plugin::stars.rating" },
+          review: { type: "customField", customField: "global::html" },
+        },
+      }),
+    );
+    return join(tmp, "strapi-app");
+  };
+  const fields = async (path: string): Promise<unknown> =>
+    (JSON.parse(await readFile(path, "utf8")) as { contentTypes: { fields: unknown }[] })
+      .contentTypes[0]?.fields;
+
+  it("imports each named custom field as the Strapi type it stores", async () => {
+    const source = await project();
+    const out = join(tmp, "camis.json");
+    const args = ["import", "strapi", source, "--out", out];
+    const named = [
+      "--custom-field",
+      "plugin::stars.rating=integer",
+      "--custom-field",
+      "global::html=richtext",
+    ];
+    expect(await run([...args, ...named], realIo(tmp)), lines.join("\n")).toBe(0);
+    expect(await fields(out)).toEqual([
+      { type: "integer", name: "rating", editor: { name: "plugin::stars.rating" } },
+      { type: "richText", name: "review", editor: { name: "global::html" } },
+    ]);
+  });
+  it("names them for camis new --from-strapi too", async () => {
+    const source = await project();
+    const args = [
+      "new",
+      join(tmp, "app"),
+      "--from-strapi",
+      source,
+      "--skip-scaffold",
+      "--skip-build",
+    ];
+    const named = ["--custom-field", "plugin::stars.rating=integer"];
+    expect(await run([...args, ...named], realIo(tmp)), lines.join("\n")).toBe(0);
+    expect(await fields(join(tmp, "app/camis.json"))).toEqual([
+      { type: "integer", name: "rating", editor: { name: "plugin::stars.rating" } },
+    ]);
+  });
+  it("refuses a custom field it cannot read", async () => {
+    const source = await project();
+    const args = ["import", "strapi", source, "--custom-field", "plugin::stars.rating"];
+    expect(await run(args, realIo(tmp))).toBe(1);
+    expect(lines.join("\n")).toContain("--custom-field takes <uid>=<strapi type>");
+  });
+});
+
 describe("run — import strapi --roles-from", () => {
   it("writes the export's roles beside the IR, and a build takes both", async () => {
     tmp = await mkdtemp(join(tmpdir(), "camis-cli-roles-"));
