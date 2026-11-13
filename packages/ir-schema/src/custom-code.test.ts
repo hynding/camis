@@ -156,7 +156,7 @@ describe("endpoints", () => {
         ...base,
         policies: [{ name: "ArticleLike", contentType: "Article" }],
         endpoints: [
-          { ...like, contentType: "Nope", name: "Other" },
+          { ...like, contentType: "Nope", name: "Other", path: "/other" },
           like,
           { ...like, name: "Again" },
         ],

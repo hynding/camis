@@ -18,14 +18,18 @@ export {
   HOOK_SCALARS,
   HOOK_TRIGGERS,
   LIFECYCLE_TRIGGERS,
+  ENDPOINT_METHODS,
   ROUTE_ACTIONS,
   WRITING_TRIGGERS,
+  endpoint,
   hook,
   routeHook,
   schedule,
   shapeField,
 } from "./hooks";
 export type {
+  Endpoint,
+  EndpointMethod,
   Hook,
   HookScalar,
   HookTrigger,

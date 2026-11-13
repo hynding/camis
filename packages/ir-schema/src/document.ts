@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { componentField, field, fieldApiName } from "./fields";
-import { hook, ROUTE_ACTIONS, routeHook, schedule, type RouteAction } from "./hooks";
+import { endpoint, hook, ROUTE_ACTIONS, routeHook, schedule, type RouteAction } from "./hooks";
 import { collectionName, fieldName, typeName } from "./identifiers";
 
 const RESERVED_FIELD_NAMES = new Set(["id"]);
@@ -16,6 +16,7 @@ const SINGULAR: Record<string, string> = {
   hooks: "hook",
   policies: "policy",
   middlewares: "middleware",
+  endpoints: "endpoint",
 };
 
 /** A single type is one entry: there is no list of them, and nothing to create beside it. */
@@ -168,6 +169,7 @@ export const irDocument = z
     policies: z.array(routeHook).optional(),
     middlewares: z.array(routeHook).optional(),
     schedules: z.array(schedule).optional(),
+    endpoints: z.array(endpoint).optional(),
   })
   .superRefine((doc, ctx) => {
     const byName = new Map(doc.contentTypes.map((ct) => [ct.name, ct]));
@@ -217,6 +219,21 @@ export const irDocument = z
       });
     }
     (doc.schedules ?? []).forEach((s, i) => unique("schedules", i, s.name));
+    // A route answers one endpoint: a parameter's name does not tell two routes apart.
+    const routes = new Set<string>();
+    (doc.endpoints ?? []).forEach((e, i) => {
+      unknownType("endpoints", i, e.name, e.contentType);
+      unique("endpoints", i, e.name);
+      const route = `${e.method} ${e.path.replace(/:[^/]+/g, ":")}`;
+      if (routes.has(route))
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `endpoint "${e.name}" answers ${e.method} ${e.path}, which another endpoint answers`,
+          params: { irCode: "duplicate_endpoint_route" },
+          path: ["endpoints", i, "path"],
+        });
+      routes.add(route);
+    });
   });
 
 export type ContentType = z.infer<typeof contentType>;
