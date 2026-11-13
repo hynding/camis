@@ -183,9 +183,9 @@ final class StrapiMorphs
     {
         $byRow = [];
         foreach ($rows as $row) {
-            $byRow[$row->getKey()] = $field['morph'] === 'morphToOne'
-                ? array_values(array_filter([[$row->getAttribute($field['typeColumn']), $row->getAttribute($field['idColumn'])]], fn (array $pair) => is_string($pair[0]) && $pair[1] !== null))
-                : [];
+            $type = $field['morph'] === 'morphToOne' ? $row->getAttribute($field['typeColumn']) : null;
+            $id = $field['morph'] === 'morphToOne' ? $row->getAttribute($field['idColumn']) : null;
+            $byRow[$row->getKey()] = is_string($type) && $id !== null ? [[$type, $id]] : [];
         }
         if ($field['morph'] === 'morphToMany' && $byRow !== []) {
             $links = DB::table($field['table'])

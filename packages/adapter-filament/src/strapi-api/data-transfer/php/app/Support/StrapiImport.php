@@ -208,7 +208,7 @@ final class StrapiImport
             }
         });
         // A project without a media library has no disk for the archive's files.
-        if (in_array('files', $stages, true) && isset(StrapiTransferMap::TYPES['plugin::upload.file']['model'])) {
+        if (in_array('files', $stages, true) && self::serves('plugin::upload.file')) {
             $this->assets();
         }
         ksort($this->counts);
@@ -1123,5 +1123,13 @@ final class StrapiImport
             'boolean' => (bool) $value,
             default => is_array($value) ? json_encode($value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE) : $value,
         };
+    }
+
+    /** Whether this project holds the type, as the transfer map's per-project types say. */
+    private static function serves(string $uid): bool
+    {
+        $types = StrapiTransferMap::TYPES;
+
+        return isset($types[$uid]['model']);
     }
 }
