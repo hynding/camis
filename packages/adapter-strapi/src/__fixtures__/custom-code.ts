@@ -1,7 +1,7 @@
 import type { IrDocument } from "@camis/ir-schema";
 
 // Every kind of hand-written code the IR declares: lifecycle hooks beside an onPublish one, route
-// policies and middlewares, and schedules.
+// policies and middlewares, schedules, and endpoints.
 export const customCodeDoc: IrDocument = {
   version: 1,
   contentTypes: [
@@ -76,5 +76,15 @@ export const customCodeDoc: IrDocument = {
   schedules: [
     { name: "SendDigest", cron: "0 7 * * 1-5" },
     { name: "PruneDrafts", cron: "*/30 * * * *" },
+  ],
+  endpoints: [
+    { name: "ArticleLike", contentType: "Article", method: "POST", path: "/articles/:id/like" },
+    {
+      name: "ArticleTrending",
+      contentType: "Article",
+      method: "GET",
+      path: "/articles/trending",
+      public: true,
+    },
   ],
 };
