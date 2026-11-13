@@ -87,4 +87,32 @@ describe("express content API actions", () => {
       },
     ]);
   });
+
+  it("reports a type's public actions, which it still checks against the caller's grants", () => {
+    const opened: IrBundle = {
+      document: {
+        version: 1,
+        contentTypes: [
+          {
+            name: "Address",
+            kind: "collection",
+            options: { publicApiActions: ["list", "read"] },
+            fields: [{ type: "string", name: "city" }],
+          },
+        ],
+        components: [],
+      },
+      roles: [],
+    };
+    const gaps = expressAdapter.generate(opened, { projectName: "blog" }).gaps.gaps;
+    expect(gaps.filter((g) => g.feature === "publicApiActions")).toEqual([
+      {
+        feature: "publicApiActions",
+        location: { contentType: "Address" },
+        severity: "downgrade",
+        message:
+          "the Express target checks the caller's grants on every route; Address opens list and read to anyone, so grant them to its roles instead",
+      },
+    ]);
+  });
 });
