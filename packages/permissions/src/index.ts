@@ -2,6 +2,7 @@ export { ACTIONS, action } from "./actions";
 export type { Action } from "./actions";
 export {
   CREATED_BY,
+  CREATOR_SHARES_ROLE,
   fieldRule,
   grant,
   parseRolesFile,

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { filamentAdapter } from "../generate";
+import { authorRoleBundle } from "./__fixtures__/author-role";
 import { strapiApiBundle } from "./__fixtures__/strapi-api";
 
 // The Filament admin laid out as Strapi's: the Content Manager's collection types by display name,
@@ -89,17 +90,24 @@ describe("the Strapi-like admin", () => {
     }
   });
 
-  it("shows each role's actions as Strapi's Roles page does, with the IR's conditions", async () => {
+  it("shows each role's actions as Strapi's Roles page does, with the IR's conditions in words", async () => {
     const roles = content("app/Support/StrapiRoles.php");
     expect(roles).toContain("'api::article.article' => [");
     expect(roles).toContain("'findOne' => ['article.read'],");
     expect(roles).toContain("'publish' => ['post.publish'],");
-    expect(roles).toContain("'note.read' => 'record.ownerId = user.id',");
+    expect(roles).toContain("'note.read' => 'Owner id is the user\\'s id',");
     expect(roles).toContain("'authenticated' => 'Default role given to authenticated user.',");
     await expect(roles).toMatchFileSnapshot("./__golden__/strapi-api/StrapiRoles.php");
     const resource = content("app/Filament/Resources/Roles/RoleResource.php");
     expect(resource).toContain("public static function getCreateAuthorizationResponse(): Response");
     expect(resource).toContain("CheckboxList::make(");
+  });
+
+  it("names Strapi's is-creator condition as Strapi's admin does", () => {
+    const roles = filamentAdapter
+      .generate(authorRoleBundle, { projectName: "press", apiStyle: "strapi" })
+      .files.find((f) => f.path === "app/Support/StrapiRoles.php")!.content;
+    expect(roles).toContain("'story.read' => 'Is creator',");
   });
 
   // Strapi's Content Manager opens a single type's one entry, or its create form while it has none.

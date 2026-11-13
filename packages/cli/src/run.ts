@@ -12,14 +12,14 @@ const USAGE = `camis — content-model build tool
 Usage:
   camis new <dir> [--template vanilla|example | --from-strapi <strapiProjectDir>
                   [--roles-from <strapiExport.tar.gz[.enc]> [--key <key>]]
-                  [--admin-roles-from <strapi .tmp/data.db>]]
+                  [--admin-roles-from <strapi .tmp/data.db | mysql:// | postgres:// URL>]]
                   [--targets strapi,filament,express] [--dialect sqlite|mysql|pgsql]
                   [--skip-scaffold] [--skip-build]
                                                  (create a project, then scaffold and build it)
   camis validate <ir.json>
   camis import <strapi|express> <projectDir> [--out ir.json] [--upsert-by <field>]
                [--roles-from <strapiExport.tar.gz[.enc]> [--key <key>]]
-               [--admin-roles-from <strapi .tmp/data.db>] [--roles-out roles.json]
+               [--admin-roles-from <strapi .tmp/data.db | mysql:// | postgres:// URL>] [--roles-out roles.json]
                [--env-out deployment.env]  (Strapi: the Laravel env for its upload/email providers)
   camis scaffold filament <dir> [--storage laravel|strapi] [--graphql]
                                                  (create the Laravel host app for the overlay)

@@ -38,7 +38,7 @@ export interface NewOptions {
   fromStrapi?: string;
   /** With `fromStrapi`: a Strapi export whose roles become the project's. */
   strapiRoles?: StrapiRolesSource;
-  /** With `fromStrapi`: its SQLite database, whose admin roles become the project's. */
+  /** With `fromStrapi`: its database (SQLite file or MySQL/PostgreSQL URL), whose admin roles become the project's. */
   strapiAdminRoles?: string;
   skipScaffold?: boolean;
   skipBuild?: boolean;
@@ -201,7 +201,7 @@ export const newCommand = async (dir: string, io: Io, options: NewOptions): Prom
     }
     if (options.strapiAdminRoles !== undefined) {
       const taken = content.roles.roles.map((r) => r.name);
-      const read = strapiAdminRoles(io, content.document, options.strapiAdminRoles, taken);
+      const read = await strapiAdminRoles(io, content.document, options.strapiAdminRoles, taken);
       if (!read.ok) return 1;
       content = { ...content, document: read.document };
       adminRoles = read.roles;

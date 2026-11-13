@@ -2,7 +2,7 @@ import type { StorageLayout } from "@camis/adapter-kernel";
 import { emitPhp } from "@camis/expr-php-emit";
 import type { ContentType } from "@camis/ir-schema";
 import { freeVars } from "@camis/expr";
-import { CREATED_BY, PUBLIC_ROLE } from "@camis/permissions";
+import { CREATED_BY, CREATOR_SHARES_ROLE, PUBLIC_ROLE } from "@camis/permissions";
 import { filamentNames, snakeColumn } from "../names";
 import { phpSingleQuoted } from "../php-literal";
 import type { PolicyMethodSpec, PolicySpec } from "./project";
@@ -31,7 +31,16 @@ const guestData = (layout: StorageLayout): string[] => [
 const creatorData =
   "            'record.createdBy' => $user instanceof AdminUser ? $record->created_by_id : null,";
 
-const recordData = (ct: ContentType, layout: StorageLayout, creator: boolean): string[] => [
+// Strapi's has-same-role-as-creator: the creating admin account holds one of the caller's roles.
+const sharesRoleData =
+  "            'record.creatorSharesRole' => $user instanceof AdminUser && $record->created_by_id !== null && AdminUser::query()->whereKey($record->created_by_id)->whereHas('roles', fn ($role) => $role->whereKey($user->roles->modelKeys()))->exists(),";
+
+const recordData = (
+  ct: ContentType,
+  layout: StorageLayout,
+  creator: boolean,
+  sharesRole: boolean,
+): string[] => [
   ...ct.fields
     .filter((f) => f.type !== "relation" && f.type !== "component")
     .map(
@@ -53,6 +62,9 @@ const recordData = (ct: ContentType, layout: StorageLayout, creator: boolean): s
         },`,
     ),
   ...(creator && !ct.fields.some((f) => `record.${f.name}` === CREATED_BY) ? [creatorData] : []),
+  ...(sharesRole && !ct.fields.some((f) => `record.${f.name}` === CREATOR_SHARES_ROLE)
+    ? [sharesRoleData]
+    : []),
 ];
 
 /**
@@ -113,9 +125,10 @@ const method = (
   const conditioned = new Set(groups.flatMap((g) => g.roles));
   const outright = m.roles.filter((r) => !conditioned.has(r));
   const creator = groups.some((g) => freeVars(g.condition).includes(CREATED_BY));
+  const sharesRole = groups.some((g) => freeVars(g.condition).includes(CREATOR_SHARES_ROLE));
   const data = [
     ...(guests ? guestData(layout) : userData(layout)),
-    ...(m.record ? recordData(ct, layout, creator) : []),
+    ...(m.record ? recordData(ct, layout, creator, sharesRole) : []),
   ].join("\n");
   const head = `${sig}
     {

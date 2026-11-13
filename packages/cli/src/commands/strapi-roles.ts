@@ -1,5 +1,5 @@
 import { isAbsolute, resolve } from "node:path";
-import { readStrapiAdminRoles, readStrapiRoles } from "@camis/adapter-strapi";
+import { adminSourceLabel, readStrapiAdminRoles, readStrapiRoles } from "@camis/adapter-strapi";
 import { validate } from "@camis/ir-core";
 import type { IrDocument } from "@camis/ir-schema";
 import { validateBundle, type Role, type RolesFile } from "@camis/permissions";
@@ -54,26 +54,28 @@ export const strapiRoles = async (
 };
 
 /**
- * Strapi's admin roles, read from its SQLite database (a `strapi export` holds none), as the IR's
- * admin roles, with the document they need; errors and gaps are printed. A role keeps clear of
- * the names in `taken`, and of the super-admin, which stands for Strapi's Super Admin.
+ * Strapi's admin roles, read from its database (a `strapi export` holds none), as the IR's admin
+ * roles, with the document they need; errors and gaps are printed, a URL without its password. The
+ * database is a SQLite file or a MySQL, MariaDB or PostgreSQL URL. A role keeps clear of the names
+ * in `taken`, and of the super-admin, which stands for Strapi's Super Admin.
  */
-export const strapiAdminRoles = (
+export const strapiAdminRoles = async (
   io: Io,
   document: IrDocument,
   database: string,
   taken: readonly string[],
-): { ok: true; document: IrDocument; roles: Role[] } | { ok: false } => {
+): Promise<{ ok: true; document: IrDocument; roles: Role[] } | { ok: false }> => {
   const path =
     database.includes("://") || isAbsolute(database) ? database : resolve(io.cwd, database);
-  let imported: ReturnType<typeof readStrapiAdminRoles>;
+  const label = adminSourceLabel(database);
+  let imported: Awaited<ReturnType<typeof readStrapiAdminRoles>>;
   try {
-    imported = readStrapiAdminRoles(path, document, [...taken, SUPER_ADMIN_ROLE]);
+    imported = await readStrapiAdminRoles(path, document, [...taken, SUPER_ADMIN_ROLE]);
   } catch (e) {
-    io.out(`✗ cannot read admin roles from ${database}: ${(e as Error).message}`);
+    io.out(`✗ cannot read admin roles from ${label}: ${(e as Error).message}`);
     return { ok: false };
   }
-  io.out(`✓ imported ${imported.roles.length} admin roles from ${database}`);
+  io.out(`✓ imported ${imported.roles.length} admin roles from ${label}`);
   printGaps(io, imported.gaps);
   return { ok: true, document: imported.document, roles: imported.roles };
 };

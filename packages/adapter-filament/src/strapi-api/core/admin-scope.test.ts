@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ContentType } from "@camis/ir-schema";
-import { CREATED_BY } from "@camis/permissions";
+import { CREATED_BY, CREATOR_SHARES_ROLE } from "@camis/permissions";
 import { emitAdminScopeMethod } from "./admin-scope";
 
 const story: ContentType = {
@@ -73,6 +73,32 @@ describe("emitAdminScopeMethod", () => {
             }
         });
     }`);
+  });
+
+  it("lists the entries an account sharing one of the user's roles created", () => {
+    const out = emitAdminScopeMethod(story, {
+      unconditional: [],
+      conditions: [
+        {
+          roles: ["reviewer"],
+          condition: {
+            kind: "or",
+            args: [
+              isCreator,
+              {
+                kind: "eq",
+                left: { kind: "var", name: CREATOR_SHARES_ROLE },
+                right: { kind: "lit", value: true },
+              },
+            ],
+          },
+        },
+      ],
+    });
+    expect(out.gaps).toEqual([]);
+    expect(out.php).toContain(
+      "$q->where(function ($q) use ($user) { $q->where('created_by_id', '=', $user->id); $q->orWhereIn('created_by_id', \\App\\Models\\AdminUser::query()->select('id')->whereHas('roles', fn ($role) => $role->whereKey($user->roles->modelKeys()))); });",
+    );
   });
 
   // A condition the list cannot put in SQL lists nothing for its roles, rather than every row.

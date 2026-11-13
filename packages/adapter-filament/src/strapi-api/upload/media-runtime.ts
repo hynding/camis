@@ -384,6 +384,9 @@ return new class extends Migration
             $table->string('provider');
             $table->json('provider_metadata')->nullable();
             $table->string('folder_path')->default('/')->index();
+            // Strapi's createdBy and updatedBy: the admin accounts that uploaded and last changed it.
+            $table->foreignId('created_by_id')->nullable()->constrained('admin_users')->nullOnDelete();
+            $table->foreignId('updated_by_id')->nullable()->constrained('admin_users')->nullOnDelete();
             $table->timestamps();
             $table->timestamp('published_at')->nullable();
         });
@@ -415,6 +418,7 @@ declare(strict_types=1);
 namespace App\\Models;
 
 use App\\Models\\Concerns\\EmitsStrapiEvents;
+use App\\Models\\Concerns\\HasCreatorFields;
 use App\\Models\\Concerns\\HasDocumentId;
 use App\\Support\\StrapiFolders;
 use App\\Support\\StrapiUpload;${members.length > 0 ? "\nuse Illuminate\\Database\\Eloquent\\Builder;" : ""}
@@ -424,6 +428,7 @@ use Illuminate\\Database\\Eloquent\\Relations\\BelongsTo;
 class ${model} extends Model
 {
     use EmitsStrapiEvents;
+    use HasCreatorFields;
     use HasDocumentId;
 
     protected $table = 'files';
@@ -960,6 +965,8 @@ export const emitFileResourceFiles = (
   model: string,
   dir: string,
   plural: string,
+  /** It lists through the model's forAdmin scope (an admin role reads files under a condition). */
+  adminScoped = false,
 ): { path: string; content: string }[] => {
   const ns = `App\\Filament\\Resources\\${dir}`;
   const resource = `${model}Resource`;
@@ -993,14 +1000,14 @@ use BackedEnum;
 use ${ns}\\Pages\\Create${model};
 use ${ns}\\Pages\\Edit${model};
 use ${ns}\\Pages\\List${plural};
-use Filament\\Actions\\BulkAction;
+use Filament\\Actions\\BulkAction;${adminScoped ? "\nuse Filament\\Facades\\Filament;" : ""}
 use Filament\\Forms\\Components\\TextInput;
 use Filament\\Resources\\Resource;
 use Filament\\Schemas\\Schema;
 use Filament\\Tables\\Columns\\ImageColumn;
 use Filament\\Tables\\Columns\\TextColumn;
 use Filament\\Tables\\Filters\\SelectFilter;
-use Filament\\Tables\\Table;
+use Filament\\Tables\\Table;${adminScoped ? "\nuse Illuminate\\Database\\Eloquent\\Builder;" : ""}
 use Illuminate\\Support\\Collection;
 
 class ${resource} extends Resource
@@ -1010,7 +1017,17 @@ class ${resource} extends Resource
     protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-photo';
 
     protected static ?string $navigationLabel = 'Media Library';
-
+${
+  adminScoped
+    ? `
+    /** The files an admin account may list, as its roles' read conditions allow (Strapi's Author: its own). */
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()->forAdmin(Filament::auth()->user());
+    }
+`
+    : ""
+}
     public static function form(Schema $schema): Schema
     {
         return $schema->components([

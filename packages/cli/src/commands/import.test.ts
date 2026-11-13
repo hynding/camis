@@ -361,11 +361,11 @@ describe("importCommand", () => {
       await archiveProject(),
       "out.json",
       memIo({}, lines, {}),
-      { adminRoles: "mysql://u:p@host/db" },
+      { adminRoles: "missing.db" },
     );
     expect(code).toBe(1);
-    expect(lines.join("\n")).toContain(
-      "✗ cannot read admin roles from mysql://u:p@host/db: mysql://u:p@host/db is not a SQLite file",
+    expect(lines.join("\n")).toMatch(
+      /✗ cannot read admin roles from missing\.db: \S*missing\.db is neither a SQLite file nor a mysql:\/\/ or postgres:\/\/ URL/,
     );
   });
 

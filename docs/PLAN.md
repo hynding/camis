@@ -1709,7 +1709,7 @@ admin access step checks an API user never validates on the admin guard.
 
 Phase 51 imported admin accounts but matched their roles by name to admin roles someone had written
 by hand. A Strapi project's admin roles live in its database, not in `strapi export`, so they are
-read from there (a SQLite file; `node:sqlite`).
+read from there (a SQLite file; `node:sqlite`; Phase 60 adds MySQL and PostgreSQL).
 
 - **`camis import strapi … --admin-roles-from <data.db>`** and **`camis new --from-strapi …
   --admin-roles-from <data.db>`** add Strapi's admin roles to `roles.json`, flagged `admin`, after
@@ -1927,6 +1927,71 @@ Exit: `unique-components.test.ts` (each depth's rule and the gaps), and `UniqueC
 in the unique-components boot job, its answers (paths such as `slots.0.seats.0.code`, the
 `N errors occurred` message, an entry keeping its own values, empty values) recorded from
 strapi-php.
+
+## Phase 60 — admin roles from a MySQL or PostgreSQL Strapi database (`adapter-strapi`, `cli`)
+
+`--admin-roles-from` read only a SQLite file, so a Strapi project in production (MySQL, MariaDB or
+PostgreSQL) could not bring its admin roles across.
+
+- **`--admin-roles-from`** takes a SQLite path or a database URL (`mysql://`, `mariadb://`,
+  `postgres://`, `postgresql://`), read with `mysql2` and `pg`. The same queries run on each; a
+  table's presence is asked of the database's own catalog. JSON columns arrive as text (SQLite,
+  MariaDB) or parsed (MySQL 8, PostgreSQL), and either is read.
+- What the CLI prints shows a URL without its password.
+
+Exit: `read-admin-roles.databases.test.ts` in CI's `admin-roles-databases` job (MySQL 8 and
+PostgreSQL 16 services) loads strapi-php's admin tables, recorded from getstarted on each database
+set up as the SQLite fixture was, and imports the same roles and gaps as the SQLite fixture.
+
+## Phase 61 — the Roles page says each condition in words (`adapter-filament`)
+
+The Roles page showed a grant's condition as a Ring 1 expression (`record.createdBy = user.id`).
+
+- Strapi's own condition reads as its admin names it: `record.createdBy = user.id` is **Is
+  creator**. Any other is a sentence over the record's fields and the user's values: `Owner id is
+  the user's id`, `Visibility is "public" or is creator`, `Published at is not empty`; arithmetic
+  keeps its operators, and a call other than `isNull` its compact form.
+- The homepage's Entries widget stays as it is: Strapi counts every document of the types a user
+  may read, an Author's included, without the is-creator condition (strapi-php's
+  `getCountDocuments`), and camis counts the same.
+
+Exit: `readable-condition.test.ts`, and the Roles page's golden.
+
+## Phase 62 — Strapi's admin::has-same-role-as-creator (`permissions`, `adapter-strapi`, `adapter-filament`)
+
+A Strapi admin permission held under `admin::has-same-role-as-creator` was withheld on import.
+
+- **`record.creatorSharesRole`** (`CREATOR_SHARES_ROLE`): true when the account that created the
+  entry holds one of the caller's roles. Like `record.createdBy`, only an admin role's condition
+  may name it, on a target that records a creator.
+- **Import.** `admin::has-same-role-as-creator` becomes `record.creatorSharesRole == true`; a
+  permission holding several of Strapi's conditions is granted under their `or`, as Strapi ORs
+  them. Any other condition, and either on the media library, is still withheld.
+- **Filament.** The policy asks whether the creating `AdminUser` holds one of the account's roles;
+  the `forAdmin` scope lists the rows whose `created_by_id` is such an account; the Roles page
+  names it "Has same role as creator".
+
+Exit: the import, policy, scope and readable-condition tests, and AuthorRoleTest's Reviewer (the
+author-role fixture's role that reads and changes the memos an account of its role created).
+
+## Phase 63 — is-creator on the media library (`adapter-strapi`, `adapter-filament`)
+
+Strapi records the admin account that uploaded a file, and its default Author reads and changes
+only its own files; camis recorded no creator of a file, so the Author's media library actions
+were withheld.
+
+- **Filament.** `files` carries `created_by_id` and `updated_by_id`, which the File model's
+  `HasCreatorFields` fills from the signed-in admin account (an upload through the content API
+  records none, as on Strapi). An admin role's file grant may name `record.createdBy` and
+  `record.creatorSharesRole`; the media library lists through the model's `forAdmin` scope.
+- **Import.** A camis file action stands for several upload actions (`FILE_ADMIN_ACTIONS`); it is
+  granted under the condition its conditioned parts hold, and withheld when they hold different
+  ones. Strapi's Author imports as create, and read, update and delete under is-creator.
+- Not yet carried: a file's creator through `strapi:export`/`strapi:import` archives.
+
+Exit: the import tests (the strapi-php fixture's Author holds its files under is-creator),
+`media-creator.test.ts`, and AuthorRoleTest's media library case (the author-role fixture gains
+the media library).
 
 ---
 

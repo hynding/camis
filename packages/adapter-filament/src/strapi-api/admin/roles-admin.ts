@@ -1,10 +1,11 @@
-import { formatExpression, type Expression } from "@camis/expr";
+import type { Expression } from "@camis/expr";
 import type { Role } from "@camis/permissions";
 import { strapiNames } from "@camis/strapi-schema";
 import { PHP_MARKER } from "../../hooks/names";
 import { permissionKey } from "../../permissions/keys";
 import { phpSingleQuoted } from "../../php-literal";
 import { navigationProperties, SETTINGS, USER_DISPLAY_NAME } from "./admin-navigation";
+import { readableCondition } from "./readable-condition";
 import {
   contentTypeUid,
   strapiActions,
@@ -84,7 +85,7 @@ const conditions = (roles: Role[]): Map<string, Map<string, string>> => {
           .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
           .map(([key, conditions]) => [
             key,
-            formatExpression(
+            readableCondition(
               conditions.length === 1 ? conditions[0]! : { kind: "or", args: conditions },
             ),
           ]),

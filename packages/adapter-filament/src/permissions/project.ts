@@ -1,7 +1,7 @@
 import type { Expression } from "@camis/expr";
 import { freeVars } from "@camis/expr";
 import type { CapabilityGap, ContentType, IrDocument } from "@camis/ir-schema";
-import { CREATED_BY, type Role } from "@camis/permissions";
+import { CREATED_BY, CREATOR_SHARES_ROLE, type Role } from "@camis/permissions";
 import { filamentNames } from "../names";
 import { permissionKey, POLICY_METHODS, USER_CONTEXT } from "./keys";
 
@@ -127,7 +127,8 @@ export const projectFilamentPermissions = (
       if (grant.condition) {
         // The creator is an admin account, so only an admin role's condition may compare it
         // with the caller.
-        const creator = options.creators === true && role.admin === true ? [CREATED_BY] : [];
+        const creator =
+          options.creators === true && role.admin === true ? [CREATED_BY, CREATOR_SHARES_ROLE] : [];
         const allowed = new Set<string>([...USER_CONTEXT, ...recordVars(ct), ...creator]);
         const escaping = freeVars(grant.condition).filter((v) => !allowed.has(v));
         if (escaping.length > 0) {

@@ -19,9 +19,12 @@
     "@camis/ir-core": "workspace:*",
     "@camis/ir-schema": "workspace:*",
     "@camis/permissions": "workspace:*",
-    "@camis/strapi-schema": "workspace:*"
+    "@camis/strapi-schema": "workspace:*",
+    "mysql2": "^3.24.6",
+    "pg": "^8.23.1"
   },
   "devDependencies": {
+    "@types/pg": "^8.23.1",
     "tsx": "^4.22.4"
   }
 }

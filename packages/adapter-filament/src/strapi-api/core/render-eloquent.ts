@@ -33,6 +33,9 @@ const stmt = (node: WhereNode, q: string, user: string, or: boolean): string => 
     }
     return `${q}->${method}(${phpSingleQuoted(node.column)}, '=', ${phpLit(node.value)});`;
   }
+  if (node.kind === "creatorSharesRole") {
+    return `${q}->${or ? "orWhereIn" : "whereIn"}('created_by_id', \\App\\Models\\AdminUser::query()->select('id')->whereHas('roles', fn ($role) => $role->whereKey(${user}->roles->modelKeys())));`;
+  }
   const inner = node.args.map((a, i) => stmt(a, "$q", user, node.kind === "or" && i > 0)).join(" ");
   return `${q}->${method}(function ($q) use (${user}) { ${inner} });`;
 };

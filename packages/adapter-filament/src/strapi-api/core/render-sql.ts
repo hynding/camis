@@ -31,5 +31,8 @@ export const renderSql = (node: WhereNode, userId: number): string => {
     if (node.value.kind === "lit" && node.value.value === null) return `(${node.column} IS NULL)`;
     return `(${node.column} = ${sqlLit(node.value, userId)})`;
   }
+  if (node.kind === "creatorSharesRole") {
+    throw new Error("renderSql has no user's roles to compare a creator's with");
+  }
   return `(${node.args.map((a) => renderSql(a, userId)).join(node.kind === "and" ? " AND " : " OR ")})`;
 };
