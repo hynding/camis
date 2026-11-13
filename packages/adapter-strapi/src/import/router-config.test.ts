@@ -86,6 +86,32 @@ describe("importRouters", () => {
     expect(read.gaps).toEqual([]);
   });
 
+  it("opens to anyone the actions whose route sets auth: false", () => {
+    const read = importRouters(
+      [
+        router(
+          "address",
+          "['config' => ['find' => ['auth' => false], 'findOne' => ['auth' => false]]]",
+          true,
+        ),
+        router(
+          "article",
+          "{ only: ['find', 'create'], config: { find: { auth: false }, create: { auth: true }, delete: { auth: false } } }",
+        ),
+        router("homepage", "{ config: { find: { auth: false } } }"),
+      ],
+      doc,
+    );
+    expect(read.publicApiActions).toEqual(
+      new Map([
+        ["Address", ["list", "read"]],
+        ["Article", ["list"]],
+        ["Homepage", ["read"]],
+      ]),
+    );
+    expect(read.gaps).toEqual([]);
+  });
+
   it("names a policy after its type too when two types use it", () => {
     const read = importRouters(
       [
@@ -97,7 +123,7 @@ describe("importRouters", () => {
     expect(read.policies.map((p) => p.name)).toEqual(["AddressIsOwner", "ArticleIsOwner"]);
   });
 
-  it("reports what it cannot carry: an open route, inline or plugin code, a hook's config, a prefix", () => {
+  it("reports what it cannot carry: a route's auth scope, inline or plugin code, a hook's config, a prefix", () => {
     const read = importRouters(
       [
         router(
@@ -105,7 +131,7 @@ describe("importRouters", () => {
           `{
             prefix: '/v2',
             config: {
-              find: { auth: false, policies: ['plugin::users-permissions.isAuthenticated', (ctx) => true] },
+              find: { auth: { scope: ['api::article.article.find'] }, policies: ['plugin::users-permissions.isAuthenticated', (ctx) => true] },
               update: { policies: [{ name: 'global::is-owner', config: { field: 'author' } }] },
             },
           }`,
@@ -170,6 +196,7 @@ describe("importRouters round trip", () => {
                   "update" as const,
                   "delete" as const,
                 ],
+                publicApiActions: ["list" as const, "read" as const],
               },
             },
       ),
@@ -185,6 +212,7 @@ describe("importRouters round trip", () => {
     const read = importRouters(files, doc);
     expect(read.gaps).toEqual([]);
     expect(read.apiActions).toEqual(new Map([["Article", ["list", "read", "update", "delete"]]]));
+    expect(read.publicApiActions).toEqual(new Map([["Article", ["list", "read"]]]));
     expect(read.policies).toEqual(doc.policies);
     expect(read.middlewares).toEqual(doc.middlewares);
   });

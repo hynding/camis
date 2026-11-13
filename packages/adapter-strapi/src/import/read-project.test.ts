@@ -71,7 +71,7 @@ describe("readStrapiProject routers", () => {
 
 export default factories.createCoreRouter('api::article.article', {
   only: ['find', 'findOne', 'update'],
-  config: { update: { policies: ['global::is-owner'] } },
+  config: { find: { auth: false }, update: { policies: ['global::is-owner'] } },
 });
 `,
     );
@@ -80,6 +80,7 @@ export default factories.createCoreRouter('api::article.article', {
     expect(document.ok).toBe(true);
     if (!document.ok) return;
     expect(document.value.contentTypes[0]!.options?.apiActions).toEqual(["list", "read", "update"]);
+    expect(document.value.contentTypes[0]!.options?.publicApiActions).toEqual(["list"]);
     expect(document.value.policies).toEqual([
       { name: "IsOwner", contentType: "Article", actions: ["update"] },
     ]);
