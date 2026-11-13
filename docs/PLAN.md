@@ -1943,6 +1943,20 @@ Exit: `read-admin-roles.databases.test.ts` in CI's `admin-roles-databases` job (
 PostgreSQL 16 services) loads strapi-php's admin tables, recorded from getstarted on each database
 set up as the SQLite fixture was, and imports the same roles and gaps as the SQLite fixture.
 
+## Phase 61 — the Roles page says each condition in words (`adapter-filament`)
+
+The Roles page showed a grant's condition as a Ring 1 expression (`record.createdBy = user.id`).
+
+- Strapi's own condition reads as its admin names it: `record.createdBy = user.id` is **Is
+  creator**. Any other is a sentence over the record's fields and the user's values: `Owner id is
+  the user's id`, `Visibility is "public" or is creator`, `Published at is not empty`; arithmetic
+  keeps its operators, and a call other than `isNull` its compact form.
+- The homepage's Entries widget stays as it is: Strapi counts every document of the types a user
+  may read, an Author's included, without the is-creator condition (strapi-php's
+  `getCountDocuments`), and camis counts the same.
+
+Exit: `readable-condition.test.ts`, and the Roles page's golden.
+
 ---
 
 ## Sequencing rationale (quick reference)
