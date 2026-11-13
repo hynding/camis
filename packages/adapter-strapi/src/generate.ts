@@ -12,6 +12,7 @@ import { apiFactoryFiles } from "./api-files";
 import { usersPermissionsExtensionFile } from "./extensions";
 import { emitHookFiles } from "./hooks/emit";
 import { emitRouteHookFiles, routerConfig } from "./hooks/route-hooks";
+import { emitEndpointFiles } from "./hooks/endpoints";
 import { emitScheduleFiles } from "./hooks/schedules";
 import { emitPermissions } from "./permissions/emit";
 import { skeletonFiles } from "./skeleton";
@@ -134,6 +135,7 @@ export const strapiAdapter: GenerateAdapter = {
       ...perm.files,
       ...emitHookFiles(doc),
       ...emitRouteHookFiles(doc),
+      ...emitEndpointFiles(doc),
       ...emitScheduleFiles(doc),
       ...aiGenFiles,
     ];
