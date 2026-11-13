@@ -19,6 +19,7 @@ export type {
   ExpandedZone,
   ExpandedZoneMember,
 } from "./expand";
+export { fieldEditorGaps } from "./field-editors";
 export { privateFieldGaps } from "./private-fields";
 export { stableJson } from "./stable-json";
 export { TS_MARKER, withMarker } from "./marker";
