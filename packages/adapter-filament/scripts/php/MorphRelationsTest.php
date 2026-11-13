@@ -59,6 +59,28 @@ class MorphRelationsTest extends TestCase
         return array_map(fn (array $s) => [$s['title'], $s['__type']], $subjects);
     }
 
+    private static function fixture(string $name): string
+    {
+        $directory = getenv('CAMIS_TRANSFER_FIXTURES') ?: base_path('../packages/adapter-filament/src/strapi-api/__fixtures__/transfer');
+
+        return $directory.'/'.$name;
+    }
+
+    /** @return list<array<string, mixed>> one stage's records of an export archive */
+    private static function archived(string $archive, string $stage): array
+    {
+        $records = [];
+        foreach (new \RecursiveIteratorIterator(new \PharData($archive)) as $entry) {
+            if (str_contains($entry->getPathname(), "/{$stage}/")) {
+                foreach (array_filter(explode("\n", (string) file_get_contents($entry->getPathname()))) as $line) {
+                    $records[] = json_decode($line, true, 512, JSON_THROW_ON_ERROR);
+                }
+            }
+        }
+
+        return $records;
+    }
+
     private function assertInvalidKey(TestResponse $response, string $key, string $source, ?string $param = null): void
     {
         $response->assertStatus(400)
@@ -189,5 +211,51 @@ class MorphRelationsTest extends TestCase
         $this->assertSame([$emma, $dune], array_column($this->api('GET', 'books?sort=pins.title&fields[0]=title')->json('data'), 'documentId'));
         // Its notes are read, never written through it.
         $this->api('POST', 'books', ['title' => 'Ulysses', 'pins' => []])->assertCreated();
+    }
+
+    public function test_a_strapi_archive_carries_the_links_in_and_out(): void
+    {
+        // strapi-php's export: n1's subjects are Heat then Dune and it is pinned to Heat, n2's
+        // subject is Emma and it is pinned to Dune, on the draft and the published version alike.
+        $this->artisan('strapi:import', ['--file' => self::fixture('morph-relations-export.tar.gz'), '--force' => true])->assertSuccessful();
+        $n1 = (string) Note::query()->where('title', 'n1')->value('document_id');
+        $n2 = (string) Note::query()->where('title', 'n2')->value('document_id');
+        $this->assertSame([['Heat', 'api::film.film'], ['Dune', 'api::book.book']], $this->subjects($n1));
+        $this->assertSame([['Heat', 'api::film.film'], ['Dune', 'api::book.book']], $this->subjects($n1, '&status=draft'));
+        $this->assertSame([['Emma', 'api::book.book']], $this->subjects($n2));
+        $this->api('GET', "notes/{$n2}?populate=pinned_to")->assertOk()
+            ->assertJsonPath('data.pinned_to.title', 'Dune')
+            ->assertJsonPath('data.pinned_to.__type', 'api::book.book');
+        $this->api('GET', 'films?populate=pin')->assertOk()->assertJsonPath('data.0.pin.title', 'n1');
+
+        $file = sys_get_temp_dir().'/camis-morph-'.uniqid();
+        $this->artisan('strapi:export', ['--file' => $file, '--no-encrypt' => true])->assertSuccessful();
+        $entities = [];
+        foreach (self::archived("{$file}.tar.gz", 'entities') as $entity) {
+            $entities[$entity['type']][$entity['id']] = $entity['data']['title'].($entity['data']['publishedAt'] ?? null ? '' : ' (draft)');
+        }
+        $links = array_values(array_filter(self::archived("{$file}.tar.gz", 'links'), fn (array $l) => $l['kind'] === 'relation.morph'));
+        $said = array_map(fn (array $l) => sprintf(
+            '%s %s.%s → %s %s%s',
+            $l['relation'],
+            $entities[$l['left']['type']][$l['left']['ref']],
+            $l['left']['field'],
+            $l['right']['type'],
+            $entities[$l['right']['type']][$l['right']['ref']],
+            isset($l['right']['pos']) ? " #{$l['right']['pos']}" : '',
+        ), $links);
+        sort($said);
+        $this->assertSame([
+            'morphToMany n1 (draft).subjects → api::book.book Dune #2',
+            'morphToMany n1 (draft).subjects → api::film.film Heat #1',
+            'morphToMany n1.subjects → api::book.book Dune #2',
+            'morphToMany n1.subjects → api::film.film Heat #1',
+            'morphToMany n2 (draft).subjects → api::book.book Emma #1',
+            'morphToMany n2.subjects → api::book.book Emma #1',
+            'morphToOne n1 (draft).pinned_to → api::film.film Heat',
+            'morphToOne n1.pinned_to → api::film.film Heat',
+            'morphToOne n2 (draft).pinned_to → api::book.book Dune',
+            'morphToOne n2.pinned_to → api::book.book Dune',
+        ], $said);
     }
 }
