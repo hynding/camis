@@ -72,6 +72,18 @@ export const validateBundle = (bundle: IrBundle): Result<IrBundle> => {
       });
     });
   });
+  const endpoints = new Set((bundle.document.endpoints ?? []).map((e) => e.name));
+  bundle.roles.forEach((role, ri) =>
+    role.endpoints?.forEach((name, ei) => {
+      if (endpoints.has(name)) return;
+      errors.push({
+        code: "unknown_role_endpoint",
+        message: `role "${role.name}" lists endpoint "${name}", which the document does not declare`,
+        location: { rule: role.name },
+        path: ["roles", ri, "endpoints", ei],
+      });
+    }),
+  );
   if (
     bundle.defaultRole !== undefined &&
     !bundle.roles.some((r) => r.name === bundle.defaultRole)
