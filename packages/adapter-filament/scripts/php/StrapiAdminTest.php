@@ -162,7 +162,7 @@ class StrapiAdminTest extends TestCase
         $this->assertEqualsCanonicalizing(['find', 'findOne', 'create', 'update', 'delete'], $state[md5('api::note.note')]);
         $this->assertEqualsCanonicalizing(['find', 'findOne', 'create', 'update', 'delete', 'publish'], $state[md5('api::post.post')]);
         $this->assertEqualsCanonicalizing(['find', 'findOne', 'count'], $state[md5('plugin::users-permissions.user')]);
-        $page->assertSee('find, findOne, create, update, delete: record.ownerId = user.id');
+        $page->assertSee("find, findOne, create, update, delete: Owner id is the user's id");
 
         $public = Livewire::test(ViewRole::class, ['record' => Role::findByName('public', 'web')->getKey()]);
         $this->assertEqualsCanonicalizing(['find', 'findOne'], $public->instance()->form->getRawState()[md5('api::book.book')]);
