@@ -6,6 +6,7 @@ import { strapiActions } from "../users-permissions/strapi-actions";
 import { FILE_UID } from "../upload/media-runtime";
 import { FOLDER_UID } from "../upload/upload-folders";
 import { kebab } from "../core/names";
+import type { WireMorph } from "../core/morphs";
 import type {
   WireChild,
   WireComponentRelation,
@@ -214,6 +215,23 @@ const links = (shape: WireShape, ct: ContentType, userType: string | undefined) 
   return out;
 };
 
+/** Where each polymorphic link of an archived entry goes: its link table, or its row's columns. */
+const morphs = (owned: readonly WireMorph[]): Record<string, unknown> =>
+  Object.fromEntries(
+    owned.map((m) => [
+      m.key,
+      m.kind === "morphToMany"
+        ? {
+            morph: m.kind,
+            table: m.table,
+            ownerColumn: m.ownerColumn,
+            idColumn: m.idColumn,
+            typeColumn: m.typeColumn,
+          }
+        : { morph: m.kind, idColumn: m.idColumn, typeColumn: m.typeColumn },
+    ]),
+  );
+
 const required = (ct: ContentType, relation: string): boolean =>
   ct.fields.some((f) => f.type === "relation" && f.name === relation && f.required === true);
 
@@ -275,6 +293,7 @@ export const emitStrapiTransferMap = (input: TransferMapInput): string => {
       localized: shape.localized,
       attributes: attributes(shape),
       links: links(shape, ct, input.userType),
+      ...((shape.morphs ?? []).length > 0 ? { morphs: morphs(shape.morphs ?? []) } : {}),
     };
   }
   return (

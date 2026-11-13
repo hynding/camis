@@ -231,7 +231,7 @@ class MorphRelationsTest extends TestCase
         $file = sys_get_temp_dir().'/camis-morph-'.uniqid();
         $this->artisan('strapi:export', ['--file' => $file, '--no-encrypt' => true])->assertSuccessful();
         $entities = [];
-        foreach (self::archived("{$file}.tar.gz", 'entities') as $entity) {
+        foreach (array_filter(self::archived("{$file}.tar.gz", 'entities'), fn (array $e) => str_starts_with($e['type'], 'api::')) as $entity) {
             $entities[$entity['type']][$entity['id']] = $entity['data']['title'].($entity['data']['publishedAt'] ?? null ? '' : ' (draft)');
         }
         $links = array_values(array_filter(self::archived("{$file}.tar.gz", 'links'), fn (array $l) => $l['kind'] === 'relation.morph'));
