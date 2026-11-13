@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { irDocument } from "./document";
-import { hook } from "./hooks";
+import { endpoint, hook } from "./hooks";
 
 const base = {
   version: 1,
@@ -123,6 +123,48 @@ describe("Ring 2 names", () => {
     ).toEqual([
       { code: "duplicate_hook", path: ["middlewares", 0, "name"] },
       { code: "duplicate_hook", path: ["schedules", 0, "name"] },
+    ]);
+  });
+});
+
+describe("endpoints", () => {
+  const like = {
+    name: "ArticleLike",
+    contentType: "Article",
+    method: "POST",
+    path: "/articles/:id/like",
+  };
+
+  it("keeps a route of its own with hand-written code behind it", () => {
+    expect(
+      issues({
+        ...base,
+        endpoints: [like, { ...like, name: "Ping", method: "GET", path: "/ping", public: true }],
+      }),
+    ).toEqual([]);
+  });
+
+  it("rejects a path that is not Strapi's /segment/:param form", () => {
+    expect(endpoint.safeParse({ ...like, path: "articles/like" }).success).toBe(false);
+    expect(endpoint.safeParse({ ...like, path: "/articles/{id}" }).success).toBe(false);
+    expect(endpoint.safeParse({ ...like, method: "OPTIONS" }).success).toBe(false);
+  });
+
+  it("rejects an unknown type, a name another hook has, and a route another endpoint has", () => {
+    expect(
+      issues({
+        ...base,
+        policies: [{ name: "ArticleLike", contentType: "Article" }],
+        endpoints: [
+          { ...like, contentType: "Nope", name: "Other" },
+          like,
+          { ...like, name: "Again" },
+        ],
+      }),
+    ).toEqual([
+      { code: "unknown_hook_content_type", path: ["endpoints", 0, "contentType"] },
+      { code: "duplicate_hook", path: ["endpoints", 1, "name"] },
+      { code: "duplicate_endpoint_route", path: ["endpoints", 2, "path"] },
     ]);
   });
 });
