@@ -1709,7 +1709,7 @@ admin access step checks an API user never validates on the admin guard.
 
 Phase 51 imported admin accounts but matched their roles by name to admin roles someone had written
 by hand. A Strapi project's admin roles live in its database, not in `strapi export`, so they are
-read from there (a SQLite file; `node:sqlite`).
+read from there (a SQLite file; `node:sqlite`; Phase 60 adds MySQL and PostgreSQL).
 
 - **`camis import strapi … --admin-roles-from <data.db>`** and **`camis new --from-strapi …
   --admin-roles-from <data.db>`** add Strapi's admin roles to `roles.json`, flagged `admin`, after
@@ -1927,6 +1927,21 @@ Exit: `unique-components.test.ts` (each depth's rule and the gaps), and `UniqueC
 in the unique-components boot job, its answers (paths such as `slots.0.seats.0.code`, the
 `N errors occurred` message, an entry keeping its own values, empty values) recorded from
 strapi-php.
+
+## Phase 60 — admin roles from a MySQL or PostgreSQL Strapi database (`adapter-strapi`, `cli`)
+
+`--admin-roles-from` read only a SQLite file, so a Strapi project in production (MySQL, MariaDB or
+PostgreSQL) could not bring its admin roles across.
+
+- **`--admin-roles-from`** takes a SQLite path or a database URL (`mysql://`, `mariadb://`,
+  `postgres://`, `postgresql://`), read with `mysql2` and `pg`. The same queries run on each; a
+  table's presence is asked of the database's own catalog. JSON columns arrive as text (SQLite,
+  MariaDB) or parsed (MySQL 8, PostgreSQL), and either is read.
+- What the CLI prints shows a URL without its password.
+
+Exit: `read-admin-roles.databases.test.ts` in CI's `admin-roles-databases` job (MySQL 8 and
+PostgreSQL 16 services) loads strapi-php's admin tables, recorded from getstarted on each database
+set up as the SQLite fixture was, and imports the same roles and gaps as the SQLite fixture.
 
 ---
 

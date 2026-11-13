@@ -29,7 +29,7 @@ export const importCommand = async (
     upsertBy?: string;
     /** A Strapi export whose roles become the IR's, and where to write them. */
     roles?: StrapiRolesSource & { out: string };
-    /** A Strapi project's SQLite database, whose admin roles join the roles file. */
+    /** A Strapi project's database (SQLite file or MySQL/PostgreSQL URL), whose admin roles join the roles file. */
     adminRoles?: string;
     /** Where the roles file goes when only admin roles are read (default roles.json). */
     rolesOut?: string;
@@ -91,7 +91,7 @@ export const importCommand = async (
   let adminRoles: Role[] | undefined;
   if (opts.adminRoles !== undefined) {
     const taken = (roles ?? strapiDefaultRoles()).roles.map((r) => r.name);
-    const read = strapiAdminRoles(io, document, opts.adminRoles, taken);
+    const read = await strapiAdminRoles(io, document, opts.adminRoles, taken);
     if (!read.ok) return 1;
     document = read.document;
     adminRoles = read.roles;
