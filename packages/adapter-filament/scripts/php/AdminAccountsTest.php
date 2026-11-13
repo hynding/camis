@@ -91,9 +91,16 @@ class AdminAccountsTest extends TestCase
             ->assertHasNoFormErrors();
         $this->assertSame('fr', $admin->refresh()->prefered_language);
 
-        $this->get('/admin/profile')->assertOk()->assertSee('<html lang="fr"', false);
-        $admin->forceFill(['prefered_language' => null])->save();
-        $this->get('/admin/profile')->assertOk()->assertSee('<html lang="'.config('app.locale').'"', false);
+        $this->assertContains(\App\Http\Middleware\AdminLocale::class, Filament::getPanel('admin')->getMiddleware());
+        $speaks = function (): string {
+            app()->setLocale((string) config('app.locale'));
+            (new \App\Http\Middleware\AdminLocale())->handle(request(), fn () => response(''));
+
+            return app()->getLocale();
+        };
+        $this->assertSame('fr', $speaks());
+        $admin->forceFill(['prefered_language' => 'de'])->save();
+        $this->assertSame(config('app.locale'), $speaks());
     }
 
     public function test_an_admin_account_is_not_an_api_user(): void

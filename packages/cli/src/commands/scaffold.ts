@@ -33,15 +33,27 @@ export const isPatchedUserModel = (source: string): boolean => source.includes(P
 const STOCK_PANEL_LOGIN = "            ->login()\n";
 const ADMIN_GUARD = "->authGuard('admin')";
 
+const ADMIN_LOCALE = "AdminLocale::class";
+const PROFILE_AND_LOCALE =
+  "            ->profile(\\App\\Filament\\Pages\\AdminProfile::class, isSimple: false)\n" +
+  "            ->middleware([\\App\\Http\\Middleware\\AdminLocale::class], isPersistent: true)\n";
+
 /**
  * Sign the admin panel in on the generated `admin` guard, whose accounts are AdminUser rows apart
- * from the API's users. Idempotent. A source without the stock `->login()` line is returned
- * unchanged; the caller treats that as a failure rather than reporting a patch that never happened.
+ * from the API's users, and give it the admin's profile page and interface language (Strapi's
+ * preferedLanguage). Idempotent, and completes a panel an earlier camis patched. A source without
+ * the stock `->login()` line is returned unchanged; the caller treats that as a failure rather than
+ * reporting a patch that never happened.
  */
-export const patchAdminPanelProvider = (source: string): string =>
-  source.includes(ADMIN_GUARD)
+export const patchAdminPanelProvider = (source: string): string => {
+  const guarded = source.includes(ADMIN_GUARD)
     ? source
     : source.replace(STOCK_PANEL_LOGIN, `${STOCK_PANEL_LOGIN}            ${ADMIN_GUARD}\n`);
+  const guardLine = `            ${ADMIN_GUARD}\n`;
+  return guarded.includes(ADMIN_LOCALE) || !guarded.includes(guardLine)
+    ? guarded
+    : guarded.replace(guardLine, `${guardLine}${PROFILE_AND_LOCALE}`);
+};
 
 const STOCK_ROUTING_CONSOLE = "commands: __DIR__.'/../routes/console.php',";
 const ROUTING_WITH_API = `api: __DIR__.'/../routes/api.php',\n        ${STOCK_ROUTING_CONSOLE}`;

@@ -148,7 +148,7 @@ describe("patchAdminPanelProvider", () => {
   // Admin accounts are AdminUser rows on the generated admin guard, apart from the API's users.
   it("signs the admin panel in on the admin guard", () => {
     expect(patchAdminPanelProvider(STOCK_PANEL)).toContain(
-      "            ->login()\n            ->authGuard('admin')\n            ->colors([",
+      "            ->login()\n            ->authGuard('admin')\n            ->profile(",
     );
   });
 
