@@ -24,6 +24,8 @@ export const FIELD_TYPES = [
   "color",
   "media",
   "relation",
+  "polymorphicRelation",
+  "polymorphicInverse",
   "component",
   "dynamicZone",
 ] as const;
@@ -201,6 +203,20 @@ const relationField = z.object({
   /** The key the inverse goes by on the API when it is not its name: an imported project's own. */
   inverseNames: z.object({ api: apiName }).optional(),
 });
+/** Links to entries of any content type, each link naming its entry's type. */
+const polymorphicRelationField = z.object({
+  type: z.literal("polymorphicRelation"),
+  ...common,
+  many: z.boolean(),
+});
+/** The entries of `target` whose polymorphic relation `via` links here: read, never written. */
+const polymorphicInverseField = z.object({
+  type: z.literal("polymorphicInverse"),
+  ...common,
+  target: typeName,
+  via: fieldName,
+  many: z.boolean(),
+});
 const componentRefField = z.object({
   type: z.literal("component"),
   ...common,
@@ -216,6 +232,8 @@ const dynamicZoneField = z.object({
 const ALL_VARIANTS = [
   ...SCALAR_VARIANTS,
   relationField,
+  polymorphicRelationField,
+  polymorphicInverseField,
   componentRefField,
   dynamicZoneField,
 ] as const;

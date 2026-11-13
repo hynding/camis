@@ -71,6 +71,26 @@ export const validateInvariants = (doc: IrDocument): IrError[] => {
           });
         }
       }
+      if (f.type === "polymorphicInverse") {
+        const source = typeByName.get(f.target);
+        if (source === undefined) {
+          errors.push({
+            code: "unknown_relation_target",
+            message: `relation target "${f.target}" does not exist`,
+            location: { ...location, field: f.name },
+            path: [],
+          });
+        } else if (
+          !source.fields.some((s) => s.name === f.via && s.type === "polymorphicRelation")
+        ) {
+          errors.push({
+            code: "invalid_polymorphic_inverse",
+            message: `polymorphic inverse "${f.name}" reads "${f.target}.${f.via}", which is not a polymorphic relation`,
+            location: { ...location, field: f.name },
+            path: [],
+          });
+        }
+      }
       if (f.type === "component" && !componentNames.has(f.component)) {
         errors.push({
           code: "unknown_component_ref",
