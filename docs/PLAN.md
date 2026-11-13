@@ -2024,6 +2024,28 @@ Exit: `morph-relations.test.ts`, the import/export and invariant tests, and the
 `morph-relations` boot job's MorphRelationsTest (the morph-relations fixture, checked against
 strapi-php over REST and an export archive).
 
+## Phase 65 — custom fields beyond color (`ir-schema`, `adapter-strapi`, `strapi-schema`, `adapter-kernel`, `adapter-filament`, `cli`)
+
+A Strapi custom field is a plugin's input over one of Strapi's own types, but schema.json names
+only the field's uid (`customField: "plugin::stars.rating"`); the type it stores is in the
+plugin's code (`strapi.customFields.register`). camis imports only declarative sources, so it
+kept color and skipped the rest.
+
+- **IR.** Any field may carry `editor { name, options? }`: the input the source project chose.
+- **Import.** `camis import strapi` and `camis new --from-strapi` take `--custom-field
+  <uid>=<strapi type>`, repeatable; a named custom field imports as that type with its editor
+  (and its `options`), in content types and components. An unnamed one stays a `customField`
+  gap whose message says which flag to pass.
+- **Export.** A field with an editor writes back as `type: customField` with its uid and options;
+  the runtime schemas of an export archive hold it as the stored type beside the uid, as Strapi's
+  `convertCustomFieldType` does.
+- **Filament.** The value is its type everywhere (validation, REST, OpenAPI, transfer); the admin
+  shows that type's own input and reports a `fieldEditor` gap per field. The Content-Type
+  Builder keeps a field's editor when it edits the field.
+
+Exit: the import, export and runtime-schema tests, `field-editors.test.ts`, and the CLI's
+`--custom-field` cases.
+
 ---
 
 ## Sequencing rationale (quick reference)
