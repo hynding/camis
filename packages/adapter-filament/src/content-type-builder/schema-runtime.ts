@@ -174,8 +174,27 @@ final class ContentTypeBuilderSchema
             'relation' => 'Relation with '.self::targetName($ir, (string) $field['target']),
             'component' => 'Component '.self::componentLabel($ir, (string) $field['component']).(($field['repeatable'] ?? false) ? ' (repeatable)' : ''),
             'dynamicZone' => 'Dynamic zone',
+            'polymorphicRelation' => 'Relation with any type ('.self::cardinality($field).')',
+            'polymorphicInverse' => 'Relation with '.self::targetName($ir, (string) $field['target']).', through '.$field['via'].' ('.self::cardinality($field).')',
             default => self::FIELD_KINDS[self::kindOf($type)]['label'],
         };
+    }
+
+    /**
+     * Whether the field dialog can edit this field. Strapi's builder has no card for a polymorphic
+     * relation, so its fields are listed but written in the schema by hand.
+     *
+     * @param  array<string, mixed>  $field
+     */
+    public static function designable(array $field): bool
+    {
+        return ! in_array($field['type'], ['polymorphicRelation', 'polymorphicInverse'], true);
+    }
+
+    /** @param array<string, mixed> $field */
+    private static function cardinality(array $field): string
+    {
+        return ($field['many'] ?? false) ? 'many' : 'one';
     }
 
     /** The builder kind (Strapi's field card) an IR type belongs to. */

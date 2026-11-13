@@ -309,7 +309,7 @@ class ContentTypeBuilder extends Page implements HasTable
             ->label('Edit')
             ->icon('heroicon-o-pencil')
             ->iconButton()
-            ->visible(fn (): bool => Builder::editable())
+            ->visible(fn (array $record): bool => Builder::editable() && ModelSchema::designable($this->field($record['name'])))
             ->modalHeading(fn (array $record): string => 'Edit '.$record['name'])
             ->fillForm(fn (array $record): array => ModelSchema::stateFromField($this->field($record['name'])))
             ->schema(fn (): array => $this->fieldSchema(adding: false))
