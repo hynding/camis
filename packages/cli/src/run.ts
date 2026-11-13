@@ -12,7 +12,8 @@ const USAGE = `camis — content-model build tool
 Usage:
   camis new <dir> [--template vanilla|example | --from-strapi <strapiProjectDir>
                   [--roles-from <strapiExport.tar.gz[.enc]> [--key <key>]]
-                  [--admin-roles-from <strapi .tmp/data.db | mysql:// | postgres:// URL>]]
+                  [--admin-roles-from <strapi .tmp/data.db | mysql:// | postgres:// URL>]
+                  [--custom-field <uid>=<strapi type> ...]]
                   [--targets strapi,filament,express] [--dialect sqlite|mysql|pgsql]
                   [--skip-scaffold] [--skip-build]
                                                  (create a project, then scaffold and build it)
@@ -21,6 +22,7 @@ Usage:
                [--roles-from <strapiExport.tar.gz[.enc]> [--key <key>]]
                [--admin-roles-from <strapi .tmp/data.db | mysql:// | postgres:// URL>] [--roles-out roles.json]
                [--env-out deployment.env]  (Strapi: the Laravel env for its upload/email providers)
+               [--custom-field <uid>=<strapi type> ...]  (Strapi: the type a plugin's custom field stores)
   camis scaffold filament <dir> [--storage laravel|strapi] [--graphql]
                                                  (create the Laravel host app for the overlay)
   camis generate [--config camis.config.json]   (dry-run: lists files + gaps)
@@ -40,8 +42,28 @@ const optionalFlag = (args: string[], name: string): string | undefined => {
   return value === "" ? undefined : value;
 };
 
+/** Every `--custom-field <uid>=<type>`, or the first value that is not one. */
+const customFieldFlags = (args: string[]): { named: Record<string, string>; invalid?: string } => {
+  const named: Record<string, string> = {};
+  for (const [i, arg] of args.entries()) {
+    if (arg !== "--custom-field") continue;
+    const value = args[i + 1] ?? "";
+    const match = /^(.+)=([a-z]+)$/.exec(value);
+    if (match === null) return { named, invalid: value };
+    named[match[1]!] = match[2]!;
+  }
+  return { named };
+};
+
 export const run = async (argv: string[], io: Io): Promise<number> => {
   const [cmd, ...rest] = argv;
+  const customFields = customFieldFlags(rest);
+  if (customFields.invalid !== undefined) {
+    io.out(`✗ --custom-field takes <uid>=<strapi type>, not "${customFields.invalid}"`);
+    return 1;
+  }
+  const namedCustomFields =
+    Object.keys(customFields.named).length > 0 ? { customFields: customFields.named } : {};
   switch (cmd) {
     case "new": {
       if (!rest[0] || rest[0].startsWith("--")) {
@@ -56,6 +78,7 @@ export const run = async (argv: string[], io: Io): Promise<number> => {
       const adminRolesFrom = optionalFlag(rest, "--admin-roles-from");
       const key = optionalFlag(rest, "--key");
       return newCommand(rest[0], io, {
+        ...namedCustomFields,
         ...(adminRolesFrom !== undefined ? { strapiAdminRoles: adminRolesFrom } : {}),
         ...(template !== undefined ? { template } : {}),
         ...(targets !== undefined ? { targets: targets.split(",") } : {}),
@@ -87,6 +110,7 @@ export const run = async (argv: string[], io: Io): Promise<number> => {
       const adminRolesFrom = optionalFlag(rest, "--admin-roles-from");
       const rolesOut = optionalFlag(rest, "--roles-out");
       return importCommand(rest[0], rest[1], flag(rest, "--out", "camis.json"), io, {
+        ...namedCustomFields,
         ...(adminRolesFrom !== undefined ? { adminRoles: adminRolesFrom } : {}),
         ...(rolesOut !== undefined ? { rolesOut } : {}),
         ...(upsertBy ? { upsertBy } : {}),

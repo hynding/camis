@@ -7,6 +7,7 @@ import type {
   IrDocument,
   Result,
 } from "@camis/ir-schema";
+import type { FieldImportOptions } from "./attributes";
 import { irComponent, irContentType } from "./schema";
 
 const CONTENT_TYPE_RE = /\/content-types\/[^/]+\/schema\.json$/;
@@ -30,7 +31,7 @@ export const BUILTIN_USER: ContentType = {
   ],
 };
 
-export interface ImportOptions {
+export interface ImportOptions extends FieldImportOptions {
   /** Set `options.upsertBy` on every content type carrying a unique field of this name. */
   upsertBy?: string;
 }
@@ -46,7 +47,7 @@ export const importDocument = (
 
   for (const file of files) {
     if (CONTENT_TYPE_RE.test(file.path)) {
-      const r = irContentType(JSON.parse(file.content) as Record<string, unknown>);
+      const r = irContentType(JSON.parse(file.content) as Record<string, unknown>, opts);
       contentTypes.push(r.contentType);
       gaps.push(...r.gaps);
       if (r.usesBuiltinUser) usesBuiltinUser = true;
@@ -58,6 +59,7 @@ export const importDocument = (
         pascal(m[2]!),
         JSON.parse(file.content) as Record<string, unknown>,
         m[1]!,
+        opts,
       );
       components.push(r.component);
       gaps.push(...r.gaps);

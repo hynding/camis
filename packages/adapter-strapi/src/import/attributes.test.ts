@@ -92,6 +92,35 @@ describe("irField — scalars", () => {
     expect(r.field).toBeUndefined();
     expect(r.gap?.feature).toBe("customField");
     expect(r.gap?.message).toContain("plugin::stars.rating");
+    expect(r.gap?.message).toContain("--custom-field plugin::stars.rating=<type>");
+  });
+  it("imports a custom field as the Strapi type it is named with, keeping its editor", () => {
+    const customFields = { "plugin::stars.rating": "integer", "plugin::rich.html": "richtext" };
+    expect(
+      irField(
+        "rating",
+        {
+          type: "customField",
+          customField: "plugin::stars.rating",
+          options: { max: 5 },
+          required: true,
+        },
+        loc,
+        { customFields },
+      ),
+    ).toEqual({
+      field: {
+        type: "integer",
+        name: "rating",
+        required: true,
+        editor: { name: "plugin::stars.rating", options: { max: 5 } },
+      },
+    });
+    expect(
+      irField("body", { type: "customField", customField: "plugin::rich.html" }, loc, {
+        customFields,
+      }).field,
+    ).toEqual({ type: "richText", name: "body", editor: { name: "plugin::rich.html" } });
   });
 });
 

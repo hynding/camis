@@ -236,6 +236,26 @@ describe("toAttribute — color", () => {
   });
 });
 
+describe("toAttribute — custom fields", () => {
+  it("writes a field with an editor as that custom field, with its options", () => {
+    expect(
+      toAttribute({
+        type: "integer",
+        name: "rating",
+        required: true,
+        max: 5,
+        editor: { name: "plugin::stars.rating", options: { stars: 5 } },
+      }),
+    ).toEqual({
+      type: "customField",
+      customField: "plugin::stars.rating",
+      options: { stars: 5 },
+      required: true,
+      max: 5,
+    });
+  });
+});
+
 describe("toAttribute — polymorphic relations", () => {
   it("writes a polymorphic relation as morphToOne or morphToMany", () => {
     expect(toAttribute({ type: "polymorphicRelation", name: "subjects", many: true })).toEqual({

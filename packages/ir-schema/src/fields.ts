@@ -46,6 +46,13 @@ const common = {
   localized: z.boolean().optional(),
   /** Kept out of every API answer, filter, sort and populate; still written and still exported. */
   private: z.boolean().optional(),
+  /**
+   * The editor the source project chose for the field (a plugin's input over this type), kept so
+   * the field exports back as it came; a target that has no such editor shows its own.
+   */
+  editor: z
+    .object({ name: z.string().min(1), options: z.record(z.string(), z.unknown()).optional() })
+    .optional(),
 };
 /** A regular expression's source (no delimiters or flags) the whole value must match. */
 const pattern = z

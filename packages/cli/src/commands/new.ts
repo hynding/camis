@@ -40,6 +40,8 @@ export interface NewOptions {
   strapiRoles?: StrapiRolesSource;
   /** With `fromStrapi`: its database (SQLite file or MySQL/PostgreSQL URL), whose admin roles become the project's. */
   strapiAdminRoles?: string;
+  /** With `fromStrapi`: the Strapi type each custom field stores, by its uid. */
+  customFields?: Record<string, string>;
   skipScaffold?: boolean;
   skipBuild?: boolean;
 }
@@ -107,9 +109,11 @@ const exists = async (io: Io, path: string): Promise<boolean> =>
 const importFromStrapi = async (
   io: Io,
   sourceDir: string,
+  customFields: Record<string, string> = {},
 ): Promise<{ ok: true; document: IrDocument } | { ok: false }> => {
   const read = await readStrapiProject(
     isAbsolute(sourceDir) ? sourceDir : resolve(io.cwd, sourceDir),
+    { customFields },
   );
   if (!read.document.ok) {
     for (const e of read.document.errors)
@@ -190,7 +194,7 @@ export const newCommand = async (dir: string, io: Io, options: NewOptions): Prom
   let content: ProjectTemplate;
   let adminRoles: Role[] = [];
   if (options.fromStrapi !== undefined) {
-    const imported = await importFromStrapi(io, options.fromStrapi);
+    const imported = await importFromStrapi(io, options.fromStrapi, options.customFields);
     if (!imported.ok) return 1;
     if (options.strapiRoles === undefined) {
       content = { document: imported.document, roles: strapiDefaultRoles() };

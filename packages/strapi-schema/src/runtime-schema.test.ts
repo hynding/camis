@@ -181,6 +181,25 @@ describe("runtimeSchemas", () => {
 });
 
 describe("runtimeSchemas — custom fields", () => {
+  it("holds a field with an editor as the type it stores, keeping the custom field's uid", () => {
+    const schemas = runtimeSchemas({
+      version: 1,
+      contentTypes: [
+        {
+          name: "Film",
+          kind: "collection",
+          fields: [{ type: "richText", name: "review", editor: { name: "plugin::rich.html" } }],
+        },
+      ],
+      components: [],
+    } as IrDocument);
+    const film = schemas.find((s) => s.uid === "api::film.film")!;
+    expect((film.attributes as Record<string, unknown>).review).toEqual({
+      type: "richtext",
+      customField: "plugin::rich.html",
+    });
+  });
+
   it("holds a color as the string its custom field stores, keeping the custom field's uid", () => {
     const schemas = runtimeSchemas({
       version: 1,

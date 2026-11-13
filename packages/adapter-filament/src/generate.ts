@@ -2,6 +2,7 @@ import {
   buildManifest,
   columnField,
   expandComponents,
+  fieldEditorGaps,
   privateFieldGaps,
   type GenerateAdapter,
   type GeneratedFile,
@@ -123,6 +124,7 @@ export const filamentAdapter: GenerateAdapter = {
       ...guestGaps,
       ...publicActions.gaps,
       ...endpoints.gaps,
+      ...fieldEditorGaps(doc, "the Filament admin"),
       // The Strapi API style keeps private fields out of its answers; the Laravel one cannot.
       ...(apiStyle === "strapi" ? [] : privateFieldGaps(doc, "the Laravel API style")),
     ];
