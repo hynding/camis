@@ -1993,6 +1993,37 @@ Exit: the import tests (the strapi-php fixture's Author holds its files under is
 `media-creator.test.ts`, and AuthorRoleTest's media library case (the author-role fixture gains
 the media library).
 
+
+## Phase 64 — polymorphic relations (`ir-schema`, `ir-core`, `adapter-strapi`, `strapi-schema`, `adapter-filament`)
+
+Strapi's `morphToMany`/`morphToOne` link a document to documents of any type, and `morphMany`/
+`morphOne` read those links back from the other side (as the upload plugin's `related` and
+`tag.taggable` do). camis skipped them.
+
+- **IR.** `polymorphicRelation { many }` (the owner, any target) and `polymorphicInverse
+  { target, via, viaNames?, many }`, whose `via` must name a polymorphic relation of its target
+  (`invalid_polymorphic_inverse`). Components cannot hold either: the import reports a gap.
+- **Strapi.** Imported from and written back to `morphTo*`/`morph{One,Many}` with `morphBy`.
+  Express reports a capability gap; GraphQL leaves them out with a `polymorphicGraphql` gap.
+- **Filament (Strapi API style).** A morphToMany is stored in `<table>_<field>_mph` (owner id,
+  `<field>_id`, `<field>_type`, `field`, `order`); a morphToOne in `<field>_id`/`<field>_type`
+  columns. `StrapiMorphs` reads and writes them: a list or `set`/`connect`/`disconnect` of
+  `{documentId|id, __type}`, deduped, populated with `__type` in link order and counted; a type
+  the caller may not read is refused on write and left out on read. Filters, sort, fields and a
+  dotted populate on a morph field, a write to a morphToOne, and a missing or unknown `__type`
+  answer 400 `Invalid key`, as on Strapi. An inverse reads through the owner's columns, filters
+  and sorts, and ignores writes. A draft keeps its own links until it is published.
+  `strapi:export`/`strapi:import` carry them as `relation.morph` lines. The Content-Type Builder
+  lists them (`Relation with any type (many)`) without offering to edit them, as Strapi's.
+- **Deviations kept on purpose.** `fields` applies inside a morph populate (strapi-php answers
+  null); a nested populate on a morph is ignored; an inverse carries no `locale: null`; an unknown
+  `__type` from a caller who may read everything is 400, not 500; an inverse write is ignored
+  rather than a 500.
+
+Exit: `morph-relations.test.ts`, the import/export and invariant tests, and the
+`morph-relations` boot job's MorphRelationsTest (the morph-relations fixture, checked against
+strapi-php over REST and an export archive).
+
 ---
 
 ## Sequencing rationale (quick reference)
