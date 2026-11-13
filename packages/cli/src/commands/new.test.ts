@@ -148,7 +148,7 @@ describe("newCommand — from an existing Strapi project", () => {
         info: { singularName: "page", pluralName: "pages", displayName: "Page" },
         attributes: {
           title: { type: "string", required: true },
-          related: { type: "relation", relation: "morphToMany" },
+          related: { type: "relation", relation: "morphMany", target: "api::page.page" },
         },
       }),
     );
