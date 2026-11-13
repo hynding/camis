@@ -20,6 +20,41 @@ jobs:
       - run: pnpm -r typecheck
       - run: pnpm -r test
 
+  admin-roles-databases:
+    # `--admin-roles-from` on a Strapi project that runs on MySQL or PostgreSQL: the reader's
+    # tests load strapi-php's recorded admin tables into each server and import them.
+    name: admin roles from MySQL and PostgreSQL
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_DATABASE: camis
+          MYSQL_ROOT_PASSWORD: camis
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=5
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: camis
+          POSTGRES_PASSWORD: camis
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready" --health-interval=10s --health-timeout=5s --health-retries=5
+    env:
+      CAMIS_TEST_MYSQL_URL: mysql://root:camis@127.0.0.1:3306/camis
+      CAMIS_TEST_POSTGRES_URL: postgres://postgres:camis@127.0.0.1:5432/camis
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @camis/adapter-strapi exec vitest run src/import/read-admin-roles.databases.test.ts
+
   # Later phases add jobs here (kept separate so they're additive, not a rewrite):
   #   expr-php-emit   — needs PHP to run emitted PHP against the conformance vectors
   #   adapter-filament — needs PHP + sqlite/mysql/pgsql service containers

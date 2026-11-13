@@ -6,7 +6,7 @@ import type { IrDocument } from "@camis/ir-schema";
 import { CREATED_BY } from "@camis/permissions";
 import { createRequire } from "node:module";
 import { afterEach, describe, expect, it } from "vitest";
-import { readStrapiAdminData, readStrapiAdminRoles } from "./read-admin-roles";
+import { adminSourceLabel, readStrapiAdminData, readStrapiAdminRoles } from "./read-admin-roles";
 
 const { DatabaseSync } = createRequire(import.meta.url)(
   "node:sqlite",
@@ -44,7 +44,7 @@ describe("readStrapiAdminData", () => {
       INSERT INTO admin_permissions VALUES (8, 'p8', 'plugin::upload.read', '{}', NULL, '{}', '[]');
       INSERT INTO admin_permissions_role_lnk (permission_id, role_id, permission_ord) VALUES (8, 2, 2), (7, 2, 1);
     `);
-    expect(readStrapiAdminData(path)).toEqual({
+    expect(await readStrapiAdminData(path)).toEqual({
       roles: [
         { id: 1, name: "Super Admin", code: "strapi-super-admin", description: null },
         { id: 2, name: "Editor", code: "strapi-editor", description: "Edits." },
@@ -64,20 +64,28 @@ describe("readStrapiAdminData", () => {
   });
 
   it("has no locales when the project has no i18n table", async () => {
-    expect(readStrapiAdminData(await database(SCHEMA)).locales).toEqual([]);
+    expect((await readStrapiAdminData(await database(SCHEMA))).locales).toEqual([]);
   });
 
   it("says what it is when it is not a Strapi 5 database", async () => {
     const path = await database("CREATE TABLE other (id INTEGER);");
-    expect(() => readStrapiAdminData(path)).toThrow(
+    await expect(readStrapiAdminData(path)).rejects.toThrow(
       `${path} has no admin_roles table: is it a Strapi 5 database?`,
     );
   });
 
-  it("reads only a SQLite file", () => {
-    expect(() => readStrapiAdminData("mysql://u:p@host/db")).toThrow(
-      "mysql://u:p@host/db is not a SQLite file; the admin roles are read from a Strapi project's SQLite database",
+  it("reads a SQLite file, or a MySQL, MariaDB or PostgreSQL URL", async () => {
+    await expect(readStrapiAdminData("sqlserver://u:p@host/db")).rejects.toThrow(
+      "sqlserver://u:p@host/db is neither a SQLite file nor a mysql:// or postgres:// URL; the admin roles are read from a Strapi project's database",
     );
+  });
+
+  it("shows a database URL without its password", () => {
+    expect(adminSourceLabel("postgres://strapi:s3cr@t@db:5432/strapi")).toBe(
+      "postgres://strapi:***@db:5432/strapi",
+    );
+    expect(adminSourceLabel("mysql://root@db/strapi")).toBe("mysql://root@db/strapi");
+    expect(adminSourceLabel(".tmp/data.db")).toBe(".tmp/data.db");
   });
 });
 
@@ -104,8 +112,8 @@ describe("readStrapiAdminRoles on a strapi-php database", () => {
     components: [],
   };
 
-  it("brings in Editor's grants, Author's on the entries it created, and a custom role's", () => {
-    const imported = readStrapiAdminRoles(FIXTURE, categories, ["public", "authenticated"]);
+  it("brings in Editor's grants, Author's on the entries it created, and a custom role's", async () => {
+    const imported = await readStrapiAdminRoles(FIXTURE, categories, ["public", "authenticated"]);
     expect(imported.superAdmin).toBe(true);
     expect(imported.roles).toEqual([
       {
