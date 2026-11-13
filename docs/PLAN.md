@@ -1957,6 +1957,23 @@ The Roles page showed a grant's condition as a Ring 1 expression (`record.create
 
 Exit: `readable-condition.test.ts`, and the Roles page's golden.
 
+## Phase 62 — Strapi's admin::has-same-role-as-creator (`permissions`, `adapter-strapi`, `adapter-filament`)
+
+A Strapi admin permission held under `admin::has-same-role-as-creator` was withheld on import.
+
+- **`record.creatorSharesRole`** (`CREATOR_SHARES_ROLE`): true when the account that created the
+  entry holds one of the caller's roles. Like `record.createdBy`, only an admin role's condition
+  may name it, on a target that records a creator.
+- **Import.** `admin::has-same-role-as-creator` becomes `record.creatorSharesRole == true`; a
+  permission holding several of Strapi's conditions is granted under their `or`, as Strapi ORs
+  them. Any other condition, and either on the media library, is still withheld.
+- **Filament.** The policy asks whether the creating `AdminUser` holds one of the account's roles;
+  the `forAdmin` scope lists the rows whose `created_by_id` is such an account; the Roles page
+  names it "Has same role as creator".
+
+Exit: the import, policy, scope and readable-condition tests, and AuthorRoleTest's Reviewer (the
+author-role fixture's role that reads and changes the memos an account of its role created).
+
 ---
 
 ## Sequencing rationale (quick reference)
