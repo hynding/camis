@@ -218,3 +218,31 @@ describe("importDocument upsertBy", () => {
     expect(r.ok && r.value.contentTypes[0]?.options?.upsertBy).toBeUndefined();
   });
 });
+
+describe("importDocument customFields", () => {
+  const rating = { type: "customField", customField: "plugin::stars.rating" };
+  const files = [
+    {
+      path: "src/api/film/content-types/film/schema.json",
+      content: JSON.stringify({
+        kind: "collectionType",
+        info: { singularName: "film", pluralName: "films", displayName: "Film" },
+        attributes: { rating },
+      }),
+    },
+    {
+      path: "src/components/shared/review.json",
+      content: JSON.stringify({ attributes: { rating } }),
+    },
+  ];
+  it("imports the named custom fields of content types and components", () => {
+    const r = importDocument(files, { customFields: { "plugin::stars.rating": "integer" } });
+    expect(r.gaps.gaps).toEqual([]);
+    expect(r.document.ok && r.document.value.contentTypes[0]?.fields).toEqual([
+      { type: "integer", name: "rating", editor: { name: "plugin::stars.rating" } },
+    ]);
+    expect(r.document.ok && r.document.value.components[0]?.fields).toEqual([
+      { type: "integer", name: "rating", editor: { name: "plugin::stars.rating" } },
+    ]);
+  });
+});
