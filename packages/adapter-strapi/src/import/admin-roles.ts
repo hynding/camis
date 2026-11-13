@@ -1,6 +1,13 @@
 import type { CapabilityGap, ContentType, IrDocument } from "@camis/ir-schema";
 import type { Expression } from "@camis/expr";
-import { ACTIONS, CREATED_BY, type Action, type Grant, type Role } from "@camis/permissions";
+import {
+  ACTIONS,
+  CREATED_BY,
+  CREATOR_SHARES_ROLE,
+  type Action,
+  type Grant,
+  type Role,
+} from "@camis/permissions";
 import { strapiNames } from "@camis/strapi-schema";
 import { FILE_ADMIN_ACTIONS, PLUGIN_USER_UID, STRAPI_ACTION_UID } from "../permissions/actions";
 import { BUILTIN_USER } from "./import-document";
@@ -33,15 +40,29 @@ export interface ImportedAdminRoles {
 
 const SUPER_ADMIN_CODE = "strapi-super-admin";
 
-/** Strapi's condition limiting a permission to the entries the signed-in admin created. */
-const IS_CREATOR = "admin::is-creator";
-
-/** admin::is-creator as a camis condition: the entry's creator is the caller. */
-const CREATED_BY_CALLER: Expression = {
-  kind: "eq",
-  left: { kind: "var", name: CREATED_BY },
-  right: { kind: "var", name: "user.id" },
-};
+/**
+ * Strapi's admin conditions as camis conditions: admin::is-creator, the entry's creator is the
+ * caller; admin::has-same-role-as-creator, the creator holds one of the caller's roles.
+ */
+const ADMIN_CONDITIONS: ReadonlyMap<string, Expression> = new Map<string, Expression>([
+  [
+    "admin::is-creator",
+    {
+      kind: "eq",
+      left: { kind: "var", name: CREATED_BY },
+      right: { kind: "var", name: "user.id" },
+    },
+  ],
+  [
+    "admin::has-same-role-as-creator",
+    {
+      kind: "eq",
+      left: { kind: "var", name: CREATOR_SHARES_ROLE },
+      right: { kind: "lit", value: true },
+    },
+  ],
+]);
+const ORDER = [...ADMIN_CONDITIONS.keys()];
 
 const BUILTIN_FILE: ContentType = { name: "File", kind: "collection", builtin: "file", fields: [] };
 
@@ -127,9 +148,24 @@ export const importStrapiAdminRoles = (
         for (const a of actions) set.add(a);
       };
       // The actions held only on the entries the account created.
-      const heldCreated = new Map<ContentType, Set<Action>>();
-      const holdCreated = (ct: ContentType, actions: Action[]): void => {
-        const set = heldCreated.get(ct) ?? heldCreated.set(ct, new Set()).get(ct)!;
+      // The actions held under each set of Strapi conditions, which Strapi ORs.
+      const heldUnder = new Map<
+        string,
+        { condition: Expression; holding: Map<ContentType, Set<Action>> }
+      >();
+      const holdUnder = (names: string[], ct: ContentType, actions: Action[]): void => {
+        const key = names.join(",");
+        const conditions = names.map((n) => ADMIN_CONDITIONS.get(n)!);
+        const under =
+          heldUnder.get(key) ??
+          heldUnder
+            .set(key, {
+              condition:
+                conditions.length === 1 ? conditions[0]! : { kind: "or", args: conditions },
+              holding: new Map(),
+            })
+            .get(key)!;
+        const set = under.holding.get(ct) ?? under.holding.set(ct, new Set()).get(ct)!;
         for (const a of actions) set.add(a);
       };
       const fileActions = new Set<string>();
@@ -150,13 +186,16 @@ export const importStrapiAdminRoles = (
           continue;
         }
         const conditions = strings(p.conditions) ?? [];
-        const onlyCreated = conditions.length > 0 && conditions.every((c) => c === IS_CREATOR);
-        if (conditions.length > 0 && !onlyCreated) {
+        if (conditions.some((c) => !ADMIN_CONDITIONS.has(c))) {
           withhold(ct, p.action, `only when ${conditions.join(", ")}; camis has no such condition`);
           continue;
         }
-        if (onlyCreated && isFile) {
-          withhold(ct, p.action, `only when ${IS_CREATOR}; camis records no creator of a file`);
+        if (conditions.length > 0 && isFile) {
+          withhold(
+            ct,
+            p.action,
+            `only when ${conditions.join(", ")}; camis records no creator of a file`,
+          );
           continue;
         }
         const properties = record(p.properties);
@@ -189,7 +228,13 @@ export const importStrapiAdminRoles = (
           continue;
         }
         if (!contentTypes.includes(ct)) contentTypes.push(ct);
-        (onlyCreated ? holdCreated : hold)(ct, [action!]);
+        if (conditions.length === 0) hold(ct, [action!]);
+        else
+          holdUnder(
+            ORDER.filter((c) => conditions.includes(c)),
+            ct,
+            [action!],
+          );
       }
 
       // A media library action is granted once the role holds every upload action it stands for.
@@ -224,9 +269,11 @@ export const importStrapiAdminRoles = (
         );
       }
 
-      // An action held outright makes holding it on the entries the account created moot.
-      for (const [ct, actions] of heldCreated) {
-        for (const a of held.get(ct) ?? []) actions.delete(a);
+      // An action held outright makes holding it under a condition moot.
+      for (const { holding } of heldUnder.values()) {
+        for (const [ct, actions] of holding) {
+          for (const a of held.get(ct) ?? []) actions.delete(a);
+        }
       }
       const grantsOf = (holding: Map<ContentType, Set<Action>>, condition?: Expression): Grant[] =>
         [...holding]
@@ -236,9 +283,10 @@ export const importStrapiAdminRoles = (
             actions: ACTIONS.filter((a) => actions.has(a)),
             ...(condition === undefined ? {} : { condition }),
           }));
-      const grants: Grant[] = [...grantsOf(held), ...grantsOf(heldCreated, CREATED_BY_CALLER)].sort(
-        (a, b) => a.contentType.localeCompare(b.contentType),
-      );
+      const grants: Grant[] = [
+        ...grantsOf(held),
+        ...[...heldUnder.values()].flatMap((u) => grantsOf(u.holding, u.condition)),
+      ].sort((a, b) => a.contentType.localeCompare(b.contentType));
       const description = strapiRole.description ?? "";
       return { name, ...(description === "" ? {} : { description }), admin: true, grants };
     });

@@ -1,9 +1,9 @@
 import { formatExpression, type Expression } from "@camis/expr";
-import { CREATED_BY } from "@camis/permissions";
+import { CREATED_BY, CREATOR_SHARES_ROLE } from "@camis/permissions";
 
 /**
- * A grant's condition as the Roles page says it: Strapi's own condition by the name its admin
- * gives it ("Is creator"), any other as a sentence over the record's fields and the user's values.
+ * A grant's condition as the Roles page says it: Strapi's own conditions by the names its admin
+ * gives them ("Is creator", "Has same role as creator"), any other as a sentence over the record's fields and the user's values.
  */
 
 const COMPARISON = {
@@ -25,6 +25,11 @@ const isCreator = (e: Expression): boolean =>
   ((isVar(e.left, CREATED_BY) && isVar(e.right, "user.id")) ||
     (isVar(e.left, "user.id") && isVar(e.right, CREATED_BY)));
 
+const sharesRole = (e: Expression): boolean =>
+  e.kind === "eq" &&
+  ((isVar(e.left, CREATOR_SHARES_ROLE) && e.right.kind === "lit" && e.right.value === true) ||
+    (isVar(e.right, CREATOR_SHARES_ROLE) && e.left.kind === "lit" && e.left.value === true));
+
 const value = (e: Expression): string => {
   switch (e.kind) {
     case "lit":
@@ -45,6 +50,7 @@ const value = (e: Expression): string => {
 
 const phrase = (e: Expression, inGroup: boolean): string => {
   if (isCreator(e)) return "is creator";
+  if (sharesRole(e)) return "has same role as creator";
   switch (e.kind) {
     case "eq":
     case "ne":

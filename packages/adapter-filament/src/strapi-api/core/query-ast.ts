@@ -1,7 +1,7 @@
 import type { StorageLayout } from "@camis/adapter-kernel";
 import type { Expression } from "@camis/expr";
 import type { ContentType, FieldType } from "@camis/ir-schema";
-import { CREATED_BY } from "@camis/permissions";
+import { CREATED_BY, CREATOR_SHARES_ROLE } from "@camis/permissions";
 import { snakeColumn } from "../../names";
 import { linkColumns, linkTable, strapiTable, type RelationField } from "../storage/names";
 
@@ -28,10 +28,14 @@ export interface LinkInfo {
 
 export type WhereNode =
   | { kind: "eq"; column: string; value: WhereValue; link?: LinkInfo }
+  /** The row's creating admin account holds one of the user's roles (has-same-role-as-creator). */
+  | { kind: "creatorSharesRole" }
   | { kind: "and" | "or"; args: WhereNode[] };
 
 export interface WhereContext {
   columns: Map<string, { column: string; type: FieldType; link?: LinkInfo }>;
+  /** The table records each row's creating admin account. */
+  creators?: boolean;
 }
 
 const NUMERIC = new Set<FieldType>(["integer", "bigInteger", "float", "decimal"]);
@@ -106,7 +110,7 @@ export const whereContext = (
   }
   if (creators) claim(CREATED_BY, { column: "created_by_id", type: "integer" });
   for (const key of collided) columns.delete(key);
-  return { columns };
+  return creators ? { columns, creators } : { columns };
 };
 
 const compatible = (type: FieldType, value: WhereValue): boolean => {
@@ -134,7 +138,21 @@ const isColumn = (o: unknown): o is { column: string; type: FieldType; link?: Li
   typeof o === "object" && o !== null && "column" in o;
 
 /** Ring 1 predicate → WhereNode, or null when it cannot be expressed as SQL with identical semantics. */
+const isSharesRole = (e: Expression, ctx: WhereContext): boolean =>
+  ctx.creators === true &&
+  !ctx.columns.has(CREATOR_SHARES_ROLE) &&
+  e.kind === "eq" &&
+  ((e.left.kind === "var" &&
+    e.left.name === CREATOR_SHARES_ROLE &&
+    e.right.kind === "lit" &&
+    e.right.value === true) ||
+    (e.right.kind === "var" &&
+      e.right.name === CREATOR_SHARES_ROLE &&
+      e.left.kind === "lit" &&
+      e.left.value === true));
+
 export const toWhereNode = (expr: Expression, ctx: WhereContext): WhereNode | null => {
+  if (isSharesRole(expr, ctx)) return { kind: "creatorSharesRole" };
   switch (expr.kind) {
     case "eq": {
       const l = operand(expr.left, ctx);
@@ -171,6 +189,7 @@ export const toWhereNode = (expr: Expression, ctx: WhereContext): WhereNode | nu
  */
 export const withoutUser = (node: WhereNode): WhereNode | boolean => {
   if (node.kind === "eq") return node.value.kind === "userId" ? false : node;
+  if (node.kind === "creatorSharesRole") return false;
   const absorbing = node.kind === "and" ? false : true;
   const args = node.args.map(withoutUser);
   if (args.includes(absorbing)) return absorbing;
