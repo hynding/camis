@@ -1870,6 +1870,43 @@ cannot create).
 
 ---
 
+## Phase 58 — Strapi's custom routes become endpoints (`ir-schema`, `permissions`, `adapter-strapi`, `adapter-filament`, `adapter-express`)
+
+A Strapi project's own routes files (`{ routes: [{ method, path, handler, config }] }`, beside the
+core router) were one `customRoutes` gap each, so a migrated app answered none of them and their
+code had nowhere to go.
+
+- **IR.** `document.endpoints`: a route of its own beside a content type, with hand-written code
+  behind it (`name`, `contentType`, `method`, a Strapi-form `path` such as `/articles/:id/like`, and
+  `public` for `auth: false`). A role's `endpoints` lists those its users may call (Strapi keeps
+  that as the role's permission on the handler); the public role's are a guest's. Names share the
+  hooks' namespace; two endpoints cannot answer one method and path (`duplicate_endpoint_route`);
+  a role naming an unknown endpoint is `unknown_role_endpoint`.
+- **Import.** `camis import strapi` reads each hand-written routes file's literal routes: a handler
+  `<controller>.<action>` names the endpoint (`article.like` is ArticleLike; a `handle` action
+  takes the controller's name alone), `auth: false` makes it public. Reported per route:
+  `endpointRoles` (who may call it lives in Strapi's database), `endpointHook` (its policies and
+  middlewares), `routeAuth` (an auth scope), `endpointPath` (a regex path, an unknown method or a
+  handler that is not a literal), and `endpointContentType` (an API with no content type). A file
+  whose routes are not literals stays a `customRoutes` gap. The controller's code stays a
+  `customController` gap: it is ported into the seeded handler by hand.
+- **Strapi target.** `src/api/<api>/routes/01-endpoints.ts` (generated, ahead of the core router)
+  and a seeded controller per endpoint with one `handle` action; `api-roles.json` gives each listing
+  role `api::<api>.<endpoint>.handle`. The import reads that back unchanged.
+- **Filament (Strapi API style, laravel storage).** Each endpoint's route (`:param` as `{param}`)
+  goes ahead of its type's routes, a public one into the `StrapiPublicRoute` group. The generated
+  `CamisEndpoints` controller asks the caller's role (an API token was checked before the route,
+  and a full-access one calls every endpoint), then the seeded `App\Hooks\<Name>`, which implements
+  the generated `App\Hooks\Contracts\<Name>Endpoint`. Elsewhere, and on Express, each endpoint
+  is an `endpoint` gap.
+
+Exit: the endpoint tests in each adapter, the import's round trip of the Strapi target's routes,
+and `EndpointsTest.php` in the author-role boot job (the fixture's MemoPin, listed by the
+authenticated role, and the public MemoCount: params reach the handler, an unlisted role and a
+read-only token are refused, a fixed path is not taken for an entry's key).
+
+---
+
 ## Sequencing rationale (quick reference)
 
 1. **Strapi first** — mature schema validates the IR fastest, with the thinnest adapter.
