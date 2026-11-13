@@ -235,3 +235,47 @@ describe("toAttribute — color", () => {
     });
   });
 });
+
+describe("toAttribute — polymorphic relations", () => {
+  it("writes a polymorphic relation as morphToOne or morphToMany", () => {
+    expect(toAttribute({ type: "polymorphicRelation", name: "subjects", many: true })).toEqual({
+      type: "relation",
+      relation: "morphToMany",
+    });
+    expect(
+      toAttribute({ type: "polymorphicRelation", name: "pinnedTo", many: false, private: true }),
+    ).toEqual({ type: "relation", relation: "morphToOne", private: true });
+  });
+
+  it("writes a polymorphic inverse as morphOne or morphMany, by the target's API key", () => {
+    expect(
+      toAttribute({
+        type: "polymorphicInverse",
+        name: "notes",
+        target: "Note",
+        via: "pinnedTo",
+        viaNames: { api: "pinned_to" },
+        many: true,
+      }),
+    ).toEqual({
+      type: "relation",
+      relation: "morphMany",
+      target: "api::note.note",
+      morphBy: "pinned_to",
+    });
+    expect(
+      toAttribute({
+        type: "polymorphicInverse",
+        name: "pin",
+        target: "Note",
+        via: "subjects",
+        many: false,
+      }),
+    ).toEqual({
+      type: "relation",
+      relation: "morphOne",
+      target: "api::note.note",
+      morphBy: "subjects",
+    });
+  });
+});

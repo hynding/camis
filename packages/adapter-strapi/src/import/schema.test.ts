@@ -126,3 +126,23 @@ describe("irContentType localization", () => {
     expect(contentTypeSchema.safeParse(contentType).success).toBe(true);
   });
 });
+
+describe("irComponent — polymorphic relations", () => {
+  it("reports one inside a component as a downgrade gap", () => {
+    const { component, gaps } = irComponent("Seo", {
+      attributes: {
+        title: { type: "string" },
+        about: { type: "relation", relation: "morphToMany" },
+      },
+    });
+    expect(component.fields.map((f) => f.name)).toEqual(["title"]);
+    expect(gaps).toEqual([
+      {
+        feature: "morphRelation",
+        location: { component: "Seo", field: "about" },
+        severity: "downgrade",
+        message: `polymorphic relation "about" inside component "Seo" is not representable; skipped.`,
+      },
+    ]);
+  });
+});
