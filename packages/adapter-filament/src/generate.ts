@@ -57,6 +57,7 @@ import { emitResourceFiles } from "./resource";
 import { draftPublishPlan } from "./strapi-api/core/draft-publish";
 import { guestsPlan } from "./strapi-api/core/guests";
 import { publicActionsPlan } from "./strapi-api/core/public-actions";
+import { endpointsPlan } from "./hooks/endpoints";
 import { localizationPlan, sharedAcrossLocalesMethod } from "./strapi-api/i18n/localization";
 import {
   mediaAllowedTypes,
@@ -93,6 +94,7 @@ export const filamentAdapter: GenerateAdapter = {
     const fileModel = media.file === undefined ? undefined : filamentNames(media.file).model;
     const { guests, gaps: guestGaps } = guestsPlan(ir.roles, apiStyle, storage);
     const publicActions = publicActionsPlan(doc, apiStyle, storage);
+    const endpoints = endpointsPlan(doc, apiStyle, storage);
     const rel = resolveRelations(
       doc,
       versioned,
@@ -108,6 +110,7 @@ export const filamentAdapter: GenerateAdapter = {
       ...media.gaps,
       ...guestGaps,
       ...publicActions.gaps,
+      ...endpoints.gaps,
       // The Strapi API style keeps private fields out of its answers; the Laravel one cannot.
       ...(apiStyle === "strapi" ? [] : privateFieldGaps(doc, "the Laravel API style")),
     ];
@@ -181,6 +184,7 @@ export const filamentAdapter: GenerateAdapter = {
       projectName: options.projectName,
       guests,
       publicActions: publicActions.open,
+      endpoints: endpoints.served,
       observedModels: new Set([...hooks.observedModels, ...aiObservedModels]),
       routeHooked: routeHooks.hooked,
     };

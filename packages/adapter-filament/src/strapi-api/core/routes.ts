@@ -3,8 +3,10 @@ import {
   isPublicApiAction,
   servesApiAction,
   type ContentType,
+  type Endpoint,
   type RouteAction,
 } from "@camis/ir-schema";
+import { ENDPOINTS_CONTROLLER, endpointRoute } from "../../hooks/endpoints";
 import { filamentNames } from "../../names";
 import { routePath } from "./names";
 import { adminAuthConfigKeys } from "../admin/admin-api";
@@ -149,6 +151,8 @@ export const emitStrapiRoutes = (
   hooked: ReadonlySet<string> = new Set(),
   /** Types' public actions are routed apart, outside every credential check (`publicActionsPlan`). */
   open = false,
+  /** The IR endpoints the app routes, each ahead of its type's own routes. */
+  endpoints: Endpoint[] = [],
 ): string => {
   const jwt = secured && guard === "strapi-jwt";
   const tokens = usersPermissions && secured;
@@ -183,8 +187,20 @@ export const emitStrapiRoutes = (
       })
       .filter((block) => block !== "")
       .join("\n\n");
-  const resources = routesOf((ct, action) => !isOpen(ct, action));
-  const opened = routesOf(isOpen);
+  // A public endpoint is open as a public action is; ahead of the type's routes, so a fixed path
+  // is not taken for an entry's key.
+  const endpointRoutes = (keep: (e: Endpoint) => boolean): string =>
+    endpoints
+      .filter(keep)
+      .map((e) => `        ${endpointRoute(e)};`)
+      .join("\n");
+  const joined = (...blocks: string[]): string => blocks.filter((b) => b !== "").join("\n\n");
+  const isOpenEndpoint = (e: Endpoint): boolean => secured && open && e.public === true;
+  const resources = joined(
+    endpointRoutes((e) => !isOpenEndpoint(e)),
+    routesOf((ct, action) => !isOpen(ct, action)),
+  );
+  const opened = joined(endpointRoutes(isOpenEndpoint), routesOf(isOpen));
   const uses = [
     "App\\Http\\Controllers\\Api\\AuthController",
     ...(localized ? ["App\\Http\\Controllers\\Api\\LocaleController"] : []),
@@ -203,6 +219,7 @@ export const emitStrapiRoutes = (
       ? ["App\\Http\\Controllers\\Api\\EmailController", "App\\Http\\Middleware\\StrapiApiToken"]
       : []),
     ...sorted.map((ct) => `App\\Http\\Controllers\\Api\\${filamentNames(ct).model}ApiController`),
+    ...(endpoints.length > 0 ? [`App\\Http\\Controllers\\Api\\${ENDPOINTS_CONTROLLER}`] : []),
     "App\\Http\\Middleware\\StrapiErrors",
     ...(hooked.size > 0 ? ["App\\Http\\Middleware\\CamisRouteHooks"] : []),
     ...(usersPermissions

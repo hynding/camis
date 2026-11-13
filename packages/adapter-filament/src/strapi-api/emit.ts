@@ -1,5 +1,5 @@
 import type { GeneratedFile } from "@camis/adapter-kernel";
-import type { CapabilityGap, ContentType, IrDocument } from "@camis/ir-schema";
+import type { CapabilityGap, ContentType, Endpoint, IrDocument } from "@camis/ir-schema";
 import type { IrBundle } from "@camis/permissions";
 import { strapiAdminFiles } from "./admin/admin-api";
 import {
@@ -74,6 +74,7 @@ import { emitStrapiMimeTypes } from "./upload/upload-security";
 import { emitAdminScopeMethod } from "./core/admin-scope";
 import { emitScopeMethod } from "./core/scope";
 import { emitStrapiPublicRoute } from "./core/public-actions";
+import { emitEndpointFiles } from "../hooks/endpoints";
 import {
   emitConnectController,
   emitPasswordlessMigration,
@@ -231,6 +232,8 @@ export interface StrapiApiInput {
   guests?: boolean;
   /** Types' public actions are routed outside every credential check (`publicActionsPlan`). */
   publicActions?: boolean;
+  /** The IR endpoints the app routes (`endpointsPlan`). */
+  endpoints?: Endpoint[];
   /** Serve Strapi's GraphQL content API at /graphql (GenerateOptions). */
   graphql?: boolean;
   /** Write Strapi's OpenAPI document and serve Swagger UI at /documentation (GenerateOptions). */
@@ -268,7 +271,10 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
   const localized = input.localized ?? new Set<string>();
   const secured = bundle.roles.length > 0;
   const guests = input.guests === true;
-  const open = secured && input.publicActions === true;
+  const endpoints = input.endpoints ?? [];
+  // A public endpoint is routed with the public actions, outside every credential check.
+  const open =
+    secured && (input.publicActions === true || endpoints.some((e) => e.public === true));
   // Admin writes record the admin account that made an entry (HasCreatorFields).
   const perm = secured
     ? projectFilamentPermissions(doc, bundle.roles, { creators: true })
@@ -341,6 +347,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
   const linkOrder = linkOrderColumns(shapes.values());
   if (linkOrder.length > 0)
     files.push({ path: LINK_ORDER_MIGRATION_PATH, content: emitLinkOrderMigration(linkOrder) });
+  files.push(...emitEndpointFiles(endpoints, bundle.roles, secured));
   files.push({
     path: "routes/api.php",
     content: emitStrapiRoutes(
@@ -353,6 +360,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
       guests,
       input.routeHooked,
       open,
+      endpoints,
     ),
   });
   files.push({ path: "config/cors.php", content: emitCorsConfig() });
