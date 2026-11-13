@@ -21,6 +21,9 @@ export const customCodeGaps = (doc: IrDocument): CapabilityGap[] => [
     gap("middleware", "route middlewares", r.name, r.contentType),
   ),
   ...(doc.schedules ?? []).map((s) => gap("schedule", "schedules", s.name)),
+  ...(doc.endpoints ?? []).map((e) =>
+    gap("endpoint", "endpoints", e.name, e.contentType, ` (${e.method} ${e.path})`),
+  ),
 ];
 
 const listed = (actions: readonly string[]): string =>
