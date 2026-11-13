@@ -106,20 +106,51 @@ const polymorphic = (
   };
 };
 
+export interface FieldImportOptions {
+  /**
+   * The Strapi type each custom field stores, by its uid: Strapi keeps it in the plugin's code
+   * (`strapi.customFields.register`), not in schema.json, so the project names it.
+   */
+  customFields?: Readonly<Record<string, string>>;
+}
+
+/** A custom field as the type it stores, remembering its plugin's input as the field's editor. */
+const customField = (
+  attribute: string,
+  attr: Record<string, unknown>,
+  location: CapabilityGap["location"],
+  storedAs: string,
+): IrFieldResult => {
+  const { customField: uid, options, ...rest } = attr;
+  const r = irField(attribute, { ...rest, type: storedAs }, location);
+  if (r.field === undefined) return r;
+  const editor = {
+    name: String(uid),
+    ...(options !== null && typeof options === "object"
+      ? { options: options as Record<string, unknown> }
+      : {}),
+  };
+  return { ...r, field: { ...r.field, editor } };
+};
+
 export const irField = (
   attribute: string,
   attr: Record<string, unknown>,
   location: CapabilityGap["location"],
+  opts: FieldImportOptions = {},
 ): IrFieldResult => {
   const strapiType = String(attr.type);
   const { name } = named(attribute);
   if (strapiType === "customField" && attr.customField !== COLOR_PICKER_UID) {
+    const uid = String(attr.customField);
+    const storedAs = opts.customFields?.[uid];
+    if (storedAs !== undefined) return customField(attribute, attr, location, storedAs);
     return {
       gap: {
         feature: "customField",
         location: { ...location, field: name },
         severity: "downgrade",
-        message: `custom field "${attribute}" (${String(attr.customField)}) is not representable; skipped.`,
+        message: `custom field "${attribute}" (${uid}) is not representable; name the type it stores with --custom-field ${uid}=<type>; skipped.`,
       },
     };
   }
