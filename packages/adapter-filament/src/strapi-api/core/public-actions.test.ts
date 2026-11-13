@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { IrBundle } from "@camis/permissions";
 import { filamentAdapter } from "../../generate";
 import { authorRoleBundle } from "../__fixtures__/author-role";
+import { strapiApiBundle } from "../__fixtures__/strapi-api";
 
 // Strapi's route `auth: false`: the action takes no credentials and asks no grant.
 const generate = (apiStyle: "laravel" | "strapi", bundle: IrBundle = authorRoleBundle) =>
@@ -35,7 +36,21 @@ describe("filament public content API actions", () => {
   });
 
   it("holds a public route's list to no row condition", () => {
-    expect(file("app/Models/Memo.php")).toContain("StrapiPublicRoute::active()");
+    const opened = generate("strapi", {
+      ...strapiApiBundle,
+      document: {
+        ...strapiApiBundle.document,
+        contentTypes: strapiApiBundle.document.contentTypes.map((ct) =>
+          ct.name === "Activity"
+            ? { ...ct, options: { ...ct.options, publicApiActions: ["list"] } }
+            : ct,
+        ),
+      },
+    });
+    const model = opened.files.find((f) => f.path === "app/Models/Activity.php")!.content;
+    expect(model).toContain(
+      "if (\\App\\Support\\StrapiApiTokens::active() || \\App\\Http\\Middleware\\StrapiPublicRoute::active()) {",
+    );
   });
 
   it("reports no gap where it serves them", () => {

@@ -14,15 +14,18 @@ export interface ScopeEmit {
   gap?: CapabilityGap;
 }
 
-// An API token reads as Strapi's own tokens do, through no role and so no row condition.
-const TOKEN_BYPASS = `        if (\\App\\Support\\StrapiApiTokens::active()) {
+// An API token reads as Strapi's own tokens do, through no role and so no row condition, and so
+// does a route Strapi opens with auth: false.
+const bypass = (open: boolean): string => `        if (\\App\\Support\\StrapiApiTokens::active()${
+  open ? " || \\App\\Http\\Middleware\\StrapiPublicRoute::active()" : ""
+}) {
             return $q;
         }
 `;
 
-const method = (body: string, guests: boolean, tokens: boolean): string =>
+const method = (body: string, guests: boolean, tokens: boolean, open = false): string =>
   guests || tokens
-    ? `    /** Rows visible to $user (Strapi API style list scope); null is a caller without a session. */\n    public function scopeForUser(Builder $q, ?User $user): Builder\n    {\n${tokens && body.trim() !== "return $q;" ? TOKEN_BYPASS : ""}${body}\n    }`
+    ? `    /** Rows visible to $user (Strapi API style list scope); null is a caller without a session. */\n    public function scopeForUser(Builder $q, ?User $user): Builder\n    {\n${tokens && body.trim() !== "return $q;" ? bypass(open) : ""}${body}\n    }`
     : `    /** Rows visible to $user (Strapi API style list scope). */\n    public function scopeForUser(Builder $q, User $user): Builder\n    {\n${body}\n    }`;
 
 const filtered = (node: WhereNode | boolean, indent: string): string => {
@@ -41,6 +44,7 @@ const body = (node: WhereNode, guests: boolean): string => {
 /**
  * `guests`: the project serves callers without a session, so the scope accepts a null user.
  * `tokens`: API tokens reach the API, which read every row and act for no user.
+ * `open`: types serve public actions (StrapiPublicRoute), whose routes read every row too.
  */
 export const emitScopeMethod = (
   ct: ContentType,
@@ -48,6 +52,7 @@ export const emitScopeMethod = (
   layout: StorageLayout = "laravel",
   guests = false,
   tokens = false,
+  open = false,
 ): ScopeEmit => {
   if (condition === undefined) return { php: method("        return $q;", guests, tokens) };
   const node = toWhereNode(condition, whereContext(ct, layout));
@@ -62,5 +67,5 @@ export const emitScopeMethod = (
       },
     };
   }
-  return { php: method(body(node, guests), guests, tokens) };
+  return { php: method(body(node, guests), guests, tokens, open) };
 };

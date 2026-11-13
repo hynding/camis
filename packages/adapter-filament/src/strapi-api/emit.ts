@@ -73,6 +73,7 @@ import { emitCorsConfig } from "./core/cors";
 import { emitStrapiMimeTypes } from "./upload/upload-security";
 import { emitAdminScopeMethod } from "./core/admin-scope";
 import { emitScopeMethod } from "./core/scope";
+import { emitStrapiPublicRoute } from "./core/public-actions";
 import {
   emitConnectController,
   emitPasswordlessMigration,
@@ -228,6 +229,8 @@ export interface StrapiApiInput {
   alwaysPopulateComponents?: boolean;
   /** Callers without a session act as the IR's public role (`guestsPlan`). */
   guests?: boolean;
+  /** Types' public actions are routed outside every credential check (`publicActionsPlan`). */
+  publicActions?: boolean;
   /** Serve Strapi's GraphQL content API at /graphql (GenerateOptions). */
   graphql?: boolean;
   /** Write Strapi's OpenAPI document and serve Swagger UI at /documentation (GenerateOptions). */
@@ -265,6 +268,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
   const localized = input.localized ?? new Set<string>();
   const secured = bundle.roles.length > 0;
   const guests = input.guests === true;
+  const open = secured && input.publicActions === true;
   // Admin writes record the admin account that made an entry (HasCreatorFields).
   const perm = secured
     ? projectFilamentPermissions(doc, bundle.roles, { creators: true })
@@ -308,7 +312,14 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
       mode: "seed",
     });
     if (secured) {
-      const scope = emitScopeMethod(ct, perm.readConditions.get(ct.name), "laravel", guests, true);
+      const scope = emitScopeMethod(
+        ct,
+        perm.readConditions.get(ct.name),
+        "laravel",
+        guests,
+        true,
+        open,
+      );
       if (scope.gap) gaps.push(scope.gap);
       const adminScope = perm.adminReadScopes.get(ct.name);
       const admin = adminScope === undefined ? undefined : emitAdminScopeMethod(ct, adminScope);
@@ -341,6 +352,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
       true,
       guests,
       input.routeHooked,
+      open,
     ),
   });
   files.push({ path: "config/cors.php", content: emitCorsConfig() });
@@ -445,6 +457,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
           "laravel",
           guests,
           true,
+          open,
         )
       : undefined;
     if (scope?.gap) gaps.push(scope.gap);
@@ -597,6 +610,7 @@ const apiTokenFiles = (
     content: emitStrapiApiTokens({ contentTypes, fileModel, localized }),
   },
   { path: "app/Http/Middleware/StrapiApiToken.php", content: emitStrapiApiTokenMiddleware() },
+  { path: "app/Http/Middleware/StrapiPublicRoute.php", content: emitStrapiPublicRoute() },
   ...emitApiTokenResourceFiles(),
 ];
 
