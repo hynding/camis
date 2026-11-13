@@ -432,3 +432,58 @@ describe("private fields", () => {
     expect(result.gaps.gaps.filter((g) => g.feature === "privateField")).toHaveLength(1);
   });
 });
+
+describe("polymorphic relations", () => {
+  const polymorphic: IrBundle = {
+    document: {
+      version: 1,
+      contentTypes: [
+        {
+          name: "Note",
+          kind: "collection",
+          fields: [
+            { type: "string", name: "title" },
+            { type: "polymorphicRelation", name: "subjects", many: true },
+          ],
+        },
+        {
+          name: "Book",
+          kind: "collection",
+          fields: [
+            {
+              type: "polymorphicInverse",
+              name: "remarks",
+              target: "Note",
+              via: "subjects",
+              many: true,
+            },
+          ],
+        },
+      ],
+      components: [],
+    },
+    roles: [],
+  };
+
+  it("are reported, and leave no column behind", () => {
+    const result = expressAdapter.generate(polymorphic, { projectName: "library" });
+    expect(result.gaps.gaps).toEqual([
+      {
+        feature: "polymorphicRelation",
+        location: { contentType: "Note", field: "subjects" },
+        severity: "downgrade",
+        message: `field type "polymorphicRelation" is not supported by the Express target`,
+      },
+      {
+        feature: "polymorphicInverse",
+        location: { contentType: "Book", field: "remarks" },
+        severity: "downgrade",
+        message: `field type "polymorphicInverse" is not supported by the Express target`,
+      },
+    ]);
+    // The IR snapshot keeps every field; no table, route or admin page holds them.
+    for (const file of result.files.filter((f) => f.path !== "camis.schema.json")) {
+      expect(file.content).not.toMatch(/subjects|remarks/);
+    }
+  });
+});
