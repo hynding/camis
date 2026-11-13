@@ -44,4 +44,17 @@ describe("unique fields inside components", () => {
         .map((g) => g.location.field),
     ).toEqual(["blocks.badge.code", "blocks.seats.code"]);
   });
+
+  // Strapi keeps no database constraint: its check skips an empty value and a nested repeatable's
+  // own items, and a unique index on a component's column would refuse both.
+  it("leaves a component's columns without a unique index", () => {
+    const migrations = result.files.filter((f) => f.path.startsWith("database/migrations/"));
+    const components = migrations.filter((f) => /create_events_\w+_table/.test(f.path));
+    expect(components.map((f) => f.path)).toHaveLength(6);
+    for (const f of [
+      ...components,
+      ...migrations.filter((m) => m.path.endsWith("create_events_table.php")),
+    ])
+      expect(f.content).not.toMatch(/'(?:badge_)?code'\)->nullable\(\)->unique\(\)/);
+  });
 });
