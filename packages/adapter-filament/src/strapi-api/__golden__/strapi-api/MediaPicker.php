@@ -9,10 +9,14 @@ use App\Models\File;
 use App\Support\StrapiFolders;
 use App\Support\StrapiUpload;
 use Closure;
+use Filament\Actions\Action;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 
 final class MediaPicker
@@ -97,6 +101,87 @@ final class MediaPicker
                 'caption' => $data['caption'] ?? null,
                 'folder' => $data['folder_id'] ?? null,
             ]);
+        } finally {
+            $disk->delete($path);
+        }
+    }
+
+    /** The file the edit dialog uploads in place of the one stored: Strapi's "Replace media". */
+    public static function replacement(): FileUpload
+    {
+        return FileUpload::make('replacement')->label('Replace media')->disk('local')->directory('camis-uploads')
+            ->storeFileNamesIn('replacement_name')->imageEditor();
+    }
+
+    /**
+     * Saves the edit dialog: its info and, with a replacement, what the file stores. Strapi's admin
+     * sends the dialog's name with the new file, so a replaced file keeps the name shown.
+     */
+    public static function update(File $file, array $data): File
+    {
+        $file->folder_id = filled($data['folder_id'] ?? null) ? (int) $data['folder_id'] : null;
+        $info = ['name' => $data['name'] ?? null, 'alternativeText' => $data['alternative_text'] ?? '', 'caption' => $data['caption'] ?? ''];
+
+        return self::withUpload($data['replacement'] ?? null, (string) ($data['replacement_name'] ?? $file->name), fn (?UploadedFile $upload) => StrapiUpload::update($file, $info, $upload));
+    }
+
+    /**
+     * Strapi's crop: the image is edited in the browser, then saved over the original ("Crop the
+     * original asset") or as a new file beside it ("Duplicate & crop the asset").
+     */
+    public static function cropAction(): Action
+    {
+        return Action::make('crop')
+            ->icon('heroicon-o-scissors')
+            ->visible(fn (File $record): bool => in_array($record->mime, ['image/jpeg', 'image/png', 'image/webp', 'image/gif'], true))
+            ->fillForm(fn (File $record): array => ['cropped' => self::workingCopy($record), 'copy' => false])
+            ->schema([
+                FileUpload::make('cropped')->label('Image')->disk('local')->directory('camis-uploads')->image()->imageEditor()->required(),
+                Toggle::make('copy')->label('Keep the original and save the crop as a new file'),
+            ])
+            ->action(function (File $record, array $data): void {
+                $copy = (bool) ($data['copy'] ?? false);
+                Gate::authorize($copy ? 'create' : 'update', $copy ? File::class : $record);
+                Storage::disk('local')->delete(self::workingPath($record));
+                self::withUpload($data['cropped'] ?? null, (string) $record->name, fn (?UploadedFile $upload) => $copy && $upload !== null
+                    ? StrapiUpload::store($upload, ['name' => $record->name, 'alternativeText' => $record->alternative_text, 'caption' => $record->caption, 'folder' => $record->folder_id])
+                    : StrapiUpload::update($record, [], $upload));
+            });
+    }
+
+    /** The stored original, copied where the crop dialog's upload field can read and edit it. */
+    private static function workingCopy(File $file): string
+    {
+        $path = self::workingPath($file);
+        $stream = StrapiUpload::disk()->readStream($file->hash.$file->ext);
+        if (is_resource($stream)) {
+            Storage::disk('local')->writeStream($path, $stream);
+        }
+
+        return $path;
+    }
+
+    private static function workingPath(File $file): string
+    {
+        return 'camis-uploads/crop-'.$file->hash.$file->ext;
+    }
+
+    /**
+     * Runs a save with the dialog's upload, if any, as an uploaded file, then removes it from
+     * Filament's temporary disk.
+     *
+     * @template T
+     * @param  Closure(?UploadedFile): T  $save
+     * @return T
+     */
+    private static function withUpload(mixed $path, string $name, Closure $save): mixed
+    {
+        if (! is_string($path) || $path === '') {
+            return $save(null);
+        }
+        $disk = Storage::disk('local');
+        try {
+            return $save(new UploadedFile($disk->path($path), $name, null, null, true));
         } finally {
             $disk->delete($path);
         }
