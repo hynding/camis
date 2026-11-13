@@ -72,6 +72,30 @@ class AdminAccountsTest extends TestCase
         $this->assertFalse(Auth::guard('admin')->validate(['email' => 'reader@example.test', 'password' => 'Reader-pass-1']));
     }
 
+    // Strapi's profile page: an admin picks an interface language among the admin's locales
+    // (CAMIS_ADMIN_LOCALES, Strapi's admin config.locales), and the admin then speaks it.
+    public function test_an_admin_picks_their_interface_language(): void
+    {
+        config(['camis-admin.locales' => ['en', 'fr']]);
+        $admin = $this->admin();
+        $this->actingAs($admin, 'admin');
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+        Livewire::test(\App\Filament\Pages\AdminProfile::class)
+            ->assertFormFieldExists('prefered_language')
+            ->fillForm(['prefered_language' => 'de'])
+            ->call('save')
+            ->assertHasFormErrors(['prefered_language']);
+        Livewire::test(\App\Filament\Pages\AdminProfile::class)
+            ->fillForm(['firstname' => 'Ada', 'prefered_language' => 'fr'])
+            ->call('save')
+            ->assertHasNoFormErrors();
+        $this->assertSame('fr', $admin->refresh()->prefered_language);
+
+        $this->get('/admin/profile')->assertOk()->assertSee('<html lang="fr"', false);
+        $admin->forceFill(['prefered_language' => null])->save();
+        $this->get('/admin/profile')->assertOk()->assertSee('<html lang="'.config('app.locale').'"', false);
+    }
+
     public function test_an_admin_account_is_not_an_api_user(): void
     {
         $this->admin();
