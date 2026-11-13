@@ -1809,7 +1809,8 @@ check, so a caller its role refuses saw "Policy Failed" where Strapi answers "Fo
   `only`/`except` become `apiActions`; each served action's `config.policies` and
   `config.middlewares` naming the project's own (`global::x`, `api::<api>.x`, `x`) become IR policies
   and middlewares (`IsOwner`, prefixed with the type's name when two types use one), whose code
-  stays a `customPolicy`/`customMiddleware` gap. Reported instead: `routeAuth` (`auth: false`),
+  stays a `customPolicy`/`customMiddleware` gap. Reported instead: `routeAuth` (`auth: false`, imported
+  since Phase 57),
   `routePrefix`, `inlinePolicy`/`inlineMiddleware`, `pluginPolicy`/`pluginMiddleware`,
   `routeHookConfig`, and `routeConfig` for a router whose options are not literals. strapi-php's
   getstarted Address router (`only: find, findOne`) now imports with no gap.
@@ -1840,6 +1841,32 @@ Exit: the schema test against strapi-php's printed types (Link, MenuItem and Men
 `graphql-schema.strapi-php.graphql`), and `graphql-component-vectors.json`, recorded from strapi-php
 (embedded, repeatable, nested and zoned relations, a connection, a filtered relation, a list filtered
 by a component's relation, and a create and update), replayed by the `strapi-api` job.
+
+---
+
+## Phase 57 — Strapi's open routes, `auth: false` (`ir-schema`, `adapter-strapi`, `adapter-filament`, `adapter-express`)
+
+Phase 55 reported a core router action's `config.<action>.auth: false` as a `routeAuth` gap, so a
+migrated project's open read routes asked for a session or a public role's grant. Strapi runs no
+auth strategy on such a route: a guest, a bad bearer and a token given nothing all reach it, no
+role's grant is asked, and its policies and middlewares still run.
+
+- **IR.** `contentType.options.publicApiActions` lists the served actions open to anyone
+  (`isPublicApiAction` in ir-schema). Each must be one the type serves (`public_action_not_served`).
+- **Import and the Strapi target.** `camis import strapi` turns `auth: false` into a public action;
+  an auth scope or strategy object stays a `routeAuth` gap. The Strapi target writes
+  `config.<action>.auth: false` back, and `router-config.test.ts` reads it round trip.
+- **Filament (Strapi API style, laravel storage).** A public action's route sits in a group of its
+  own outside every credential middleware, behind the new runtime `StrapiPublicRoute`, which
+  answers every grant the request asks with a `Gate::before` (the route's, a relation's, the
+  `CamisRouteHooks` check) and lets a type's list scope skip its row condition as an API token's
+  does. `StrapiApiToken` passes such a route by. The Laravel API style and the Strapi storage
+  layout report a `publicApiActions` gap, as does Express.
+
+Exit: `public-actions.test.ts` (routes, middleware, scope, gaps), the import and target tests, and
+`PublicActionsTest.php` in the author-role boot job (the fixture's Memo list and read are open: a
+guest, a bad bearer and a custom token given nothing read them; a user without the grant still
+cannot create).
 
 ---
 
