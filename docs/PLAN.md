@@ -2046,6 +2046,25 @@ kept color and skipped the rest.
 Exit: the import, export and runtime-schema tests, `field-editors.test.ts`, and the CLI's
 `--custom-field` cases.
 
+## Phase 66 — replace and crop a media file (`adapter-filament`)
+
+Strapi replaces a file in place (`POST /upload?id=` with a file, and the admin's "Replace media")
+and crops an image in its admin, over the original or as a copy; camis's replace gave the file a
+new hash, so its url and every cached link to it changed, and its admin had neither.
+
+- **REST.** A replacement keeps the file's id, hash and extension (so its url), takes the new
+  file's name unless its `fileInfo` names one, keeps the info it leaves out, and has its formats
+  made again. The media vectors' replace cases are recorded from strapi-php.
+- **Admin.** The file's edit page takes a replacement upload, saved with the dialog's name and
+  info as Strapi's admin sends them. An image's Crop action opens Filament's image editor on a
+  copy of the original; the result replaces it, or with "Keep the original" is stored as a new
+  file with the same name, info and folder (Strapi's "Duplicate & crop", which needs create).
+- Not followed: a non-image replacing an image keeps no width and height (Strapi keeps the old
+  ones), and a replaced image with no formats reads `null` (strapi-php `[]`, Strapi `{}`).
+
+Exit: the media vectors' replace cases on every database, and MediaAdminTest's replace and crop
+cases.
+
 ---
 
 ## Sequencing rationale (quick reference)
