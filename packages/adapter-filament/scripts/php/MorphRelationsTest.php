@@ -148,6 +148,7 @@ class MorphRelationsTest extends TestCase
         $this->api('POST', 'notes', ['title' => 'x', 'subjects' => [$this->ref('nope', 'book')]])->assertStatus(400)
             ->assertJsonPath('error.message', 'Document with id "nope", locale "" not found');
 
+        $this->api('POST', 'notes', ['title' => 'n1', 'subjects' => [$this->ref($dune, 'book')]])->assertCreated();
         $this->assertInvalidKey($this->api('GET', 'notes?filters[subjects][title][$eq]=Dune'), 'subjects', 'query', 'filters');
         $this->assertInvalidKey($this->api('GET', 'notes?sort=subjects'), 'subjects', 'query', 'sort');
         $this->assertInvalidKey($this->api('GET', 'notes?fields[0]=pinned_to'), 'pinned_to', 'query', 'fields');

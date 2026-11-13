@@ -18,7 +18,17 @@ final class StrapiRelations
     {
         $links = [];
         foreach ($fields as $key => $relation) {
-            if (! isset($relation['relation']) || $relation['kind'] === 'localizations') {
+            if (isset($relation['morph'])) {
+                $sent = self::sent($data, (string) $key);
+                if ($sent !== null) {
+                    $links[$key] = StrapiMorphs::instruction((string) $key, $relation, $sent[0], $viewer, $locale);
+                }
+
+                continue;
+            }
+            // A polymorphic inverse is read through the target's links, never written: Strapi
+            // takes the key and changes nothing.
+            if (! isset($relation['relation']) || $relation['kind'] === 'localizations' || ($relation['readOnly'] ?? false)) {
                 continue;
             }
             $sent = self::sent($data, (string) $key);
@@ -166,6 +176,11 @@ final class StrapiRelations
         foreach ($links as $link) {
             $relation = $link['relation'];
             if ($relation['kind'] === 'belongsTo') {
+                continue;
+            }
+            if (isset($relation['morph'])) {
+                StrapiMorphs::write($row, $link);
+
                 continue;
             }
             $eloquent = $row->{$relation['relation']}();
@@ -341,7 +356,7 @@ final class StrapiRelations
      *
      * @return list<int>
      */
-    private static function resolveEach(array $relation, array $references, ?Authenticatable $viewer): array
+    public static function resolveEach(array $relation, array $references, ?Authenticatable $viewer): array
     {
         $documentIds = [];
         $ids = [];

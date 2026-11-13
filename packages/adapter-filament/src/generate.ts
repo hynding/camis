@@ -70,6 +70,7 @@ import {
 import { mediaRelationMethod } from "./strapi-api/upload/media-runtime";
 import { contentManagerSorts, USER_DISPLAY_NAME } from "./strapi-api/admin/admin-navigation";
 import { emitStrapiApi } from "./strapi-api/emit";
+import { emitMorphTableMigration, morphColumns, morphPlan } from "./strapi-api/core/morphs";
 import { linkOrdersConstant } from "./strapi-api/core/link-order";
 import { emitStrapiStorage } from "./strapi-api/storage/emit";
 import { emitAdminAccessFiles } from "./admin-access";
@@ -87,11 +88,19 @@ export const filamentAdapter: GenerateAdapter = {
     // misconfigured build still produces a working app plus a report saying what was ignored.
     const storage =
       requestedStorage === "strapi" && apiStyle !== "strapi" ? "laravel" : requestedStorage;
-    const doc = normalize(ir.document);
-    const draftPublish = draftPublishPlan(doc, apiStyle, storage);
+    const normalized = normalize(ir.document);
+    const draftPublish = draftPublishPlan(normalized, apiStyle, storage);
     const versioned = draftPublish.versioned;
-    const localization = localizationPlan(doc, apiStyle, storage);
+    const localization = localizationPlan(normalized, apiStyle, storage);
     const localized = localization.localized;
+    // Every emitter below reads the document without its polymorphic relations, which only the
+    // Strapi API's own emitters serve, from the plan.
+    const morphs = morphPlan(normalized, apiStyle, storage, {
+      graphql: options.graphql === true,
+      versioned,
+      localized,
+    });
+    const doc = morphs.doc;
     const media = mediaPlan({ ...ir, document: doc }, apiStyle, storage);
     const fileModel = media.file === undefined ? undefined : filamentNames(media.file).model;
     const { guests, gaps: guestGaps } = guestsPlan(ir.roles, apiStyle, storage);
@@ -109,6 +118,7 @@ export const filamentAdapter: GenerateAdapter = {
     const gaps: CapabilityGap[] = [
       ...draftPublish.gaps,
       ...localization.gaps,
+      ...morphs.gaps,
       ...media.gaps,
       ...guestGaps,
       ...publicActions.gaps,
@@ -189,6 +199,7 @@ export const filamentAdapter: GenerateAdapter = {
       endpoints: endpoints.served,
       observedModels: new Set([...hooks.observedModels, ...aiObservedModels]),
       routeHooked: routeHooks.hooked,
+      morphs,
     };
     if (options.graphql === true && (apiStyle !== "strapi" || storage === "strapi")) {
       gaps.push({
@@ -309,6 +320,7 @@ export const filamentAdapter: GenerateAdapter = {
           columns,
           [
             ...(rel.methods.get(ct.name) ?? []),
+            ...(morphs.inverses.get(ct.name) ?? []).map((i) => i.method),
             ...[...ctChildren, ...zoneChildren].map(childRelationMethod),
             ...ownRelations.map(componentRelationMethod),
           ],
@@ -354,6 +366,7 @@ export const filamentAdapter: GenerateAdapter = {
             ),
             // Constrained once every table exists: the target's may come later.
             ...ownKeys.map((k) => k.definition),
+            ...morphColumns(morphs.owners.get(ct.name) ?? []),
           ],
           embeddedEmits,
           {
@@ -509,7 +522,21 @@ export const filamentAdapter: GenerateAdapter = {
           });
         });
 
-      const afterTables = afterChildren + componentPivots.length;
+      // A polymorphic relation's link table names its owner's table only.
+      const morphTables = migrationTypeOrder.flatMap((ct) =>
+        (morphs.owners.get(ct.name) ?? []).flatMap((m) =>
+          m.kind === "morphToMany" ? [{ m, table: filamentNames(ct).table }] : [],
+        ),
+      );
+      const afterPivots = afterChildren + componentPivots.length;
+      morphTables.forEach(({ m, table }, k) => {
+        files.push({
+          path: `database/migrations/0001_01_02_${String(afterPivots + 1 + k).padStart(6, "0")}_create_${m.table}_table.php`,
+          content: emitMorphTableMigration(m, table),
+        });
+      });
+
+      const afterTables = afterPivots + morphTables.length;
       migrationTypeOrder
         .map((ct) => ({
           ct,

@@ -366,6 +366,8 @@ overwrite app/Support/StrapiLinkOrder.php
 overwrite app/Support/StrapiLinkPivot.php
 overwrite app/Support/StrapiLocales.php
 overwrite app/Support/StrapiMimeTypes.php
+overwrite app/Support/StrapiMorphTypes.php
+overwrite app/Support/StrapiMorphs.php
 overwrite app/Support/StrapiOAuth.php
 overwrite app/Support/StrapiPopulate.php
 overwrite app/Support/StrapiProviders.php

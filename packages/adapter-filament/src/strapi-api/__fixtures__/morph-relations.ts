@@ -72,7 +72,8 @@ export const morphRelationsBundle: IrBundle = {
     {
       name: "authenticated",
       grants: [
-        { contentType: "Note", actions: ["create", "read", "update", "delete"] },
+        // Strapi publishes what its content API creates; here that takes the publish grant.
+        { contentType: "Note", actions: ["create", "read", "update", "delete", "publish"] },
         { contentType: "Book", actions: ["create", "read", "update", "delete"] },
         { contentType: "Film", actions: ["create", "read", "update", "delete"] },
       ],
