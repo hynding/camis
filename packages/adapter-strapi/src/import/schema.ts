@@ -6,7 +6,7 @@ import {
   type ContentType,
   type Field,
 } from "@camis/ir-schema";
-import { irField } from "./attributes";
+import { irField, type FieldImportOptions } from "./attributes";
 import { irName } from "./names";
 
 const str = (v: unknown): string => (typeof v === "string" ? v : String(v ?? ""));
@@ -17,12 +17,13 @@ const asRecord = (v: unknown): Record<string, unknown> =>
 const fieldsFromAttributes = (
   attributes: Record<string, unknown>,
   location: CapabilityGap["location"],
+  opts: FieldImportOptions,
 ): { fields: Field[]; gaps: CapabilityGap[]; usesBuiltinUser: boolean } => {
   const fields: Field[] = [];
   const gaps: CapabilityGap[] = [];
   let usesBuiltinUser = false;
   for (const [name, attr] of Object.entries(attributes)) {
-    const r = irField(name, asRecord(attr), location);
+    const r = irField(name, asRecord(attr), location, opts);
     if (r.skip) continue;
     if (r.field) fields.push(r.field);
     if (r.gap) gaps.push(r.gap);
@@ -33,13 +34,16 @@ const fieldsFromAttributes = (
 
 export const irContentType = (
   schema: Record<string, unknown>,
+  opts: FieldImportOptions = {},
 ): { contentType: ContentType; gaps: CapabilityGap[]; usesBuiltinUser: boolean } => {
   const info = asRecord(schema.info);
   const options = asRecord(schema.options);
   const name = irName(str(info.singularName));
-  const { fields, gaps, usesBuiltinUser } = fieldsFromAttributes(asRecord(schema.attributes), {
-    contentType: name,
-  });
+  const { fields, gaps, usesBuiltinUser } = fieldsFromAttributes(
+    asRecord(schema.attributes),
+    { contentType: name },
+    opts,
+  );
   // A schema.json may omit collectionName (Strapi then derives the table itself). Carrying it
   // through as "" would put an empty physical name in the IR, which is not a name at all — omit
   // the key instead, exactly as irComponent already does.
@@ -72,10 +76,13 @@ export const irComponent = (
   componentName: string,
   schema: Record<string, unknown>,
   group?: string,
+  opts: FieldImportOptions = {},
 ): { component: Component; gaps: CapabilityGap[] } => {
-  const { fields: all, gaps } = fieldsFromAttributes(asRecord(schema.attributes), {
-    component: componentName,
-  });
+  const { fields: all, gaps } = fieldsFromAttributes(
+    asRecord(schema.attributes),
+    { component: componentName },
+    opts,
+  );
   // Strapi allows a dynamic zone only on a content type; one in a component has no IR form.
   const fields = all.filter((f) => {
     if (f.type === "dynamicZone") {
