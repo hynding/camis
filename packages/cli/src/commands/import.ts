@@ -27,6 +27,8 @@ export const importCommand = async (
   io: Io,
   opts: {
     upsertBy?: string;
+    /** The Strapi type each custom field stores, by its uid (Strapi keeps it in plugin code). */
+    customFields?: Record<string, string>;
     /** A Strapi export whose roles become the IR's, and where to write them. */
     roles?: StrapiRolesSource & { out: string };
     /** A Strapi project's database (SQLite file or MySQL/PostgreSQL URL), whose admin roles join the roles file. */
@@ -41,10 +43,10 @@ export const importCommand = async (
   let imported: Result<IrDocument>;
   let gaps: CapabilityGap[] = [];
   if (target === "strapi") {
-    const read = await readStrapiProject(
-      dir,
-      opts.upsertBy !== undefined ? { upsertBy: opts.upsertBy } : {},
-    );
+    const read = await readStrapiProject(dir, {
+      ...(opts.upsertBy !== undefined ? { upsertBy: opts.upsertBy } : {}),
+      ...(opts.customFields !== undefined ? { customFields: opts.customFields } : {}),
+    });
     imported = read.document;
     gaps = read.gaps.gaps;
   } else if (opts.roles !== undefined) {

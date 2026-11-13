@@ -210,7 +210,14 @@ describe("run — --custom-field", () => {
       "--skip-build",
     ];
     const named = ["--custom-field", "plugin::stars.rating=integer"];
-    expect(await run([...args, ...named], realIo(tmp)), lines.join("\n")).toBe(0);
+    const io: Io = {
+      ...realIo(tmp),
+      writeFile: async (path, content) => {
+        await mkdir(dirname(path), { recursive: true });
+        await writeFile(path, content);
+      },
+    };
+    expect(await run([...args, ...named], io), lines.join("\n")).toBe(0);
     expect(await fields(join(tmp, "app/camis.json"))).toEqual([
       { type: "integer", name: "rating", editor: { name: "plugin::stars.rating" } },
     ]);
