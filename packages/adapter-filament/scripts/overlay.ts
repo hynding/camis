@@ -5,6 +5,7 @@ import { filamentAdapter } from "../src/generate";
 import { bootBundle } from "../src/__fixtures__/boot";
 import { authorRoleBundle } from "../src/strapi-api/__fixtures__/author-role";
 import { strapiApiBundle } from "../src/strapi-api/__fixtures__/strapi-api";
+import { uniqueComponentsBundle } from "../src/strapi-api/__fixtures__/unique-components";
 import { storageBundle } from "../src/strapi-api/storage/__fixtures__/storage";
 
 const [dest, ...flags] = process.argv.slice(2);
@@ -15,15 +16,19 @@ const flag = (name: string): string | undefined => {
 const style = flag("--style");
 const storage = flag("--storage");
 // A fixture of its own for the Strapi API style, in place of the strapi-api one.
+const BUNDLES = {
+  "author-role": { bundle: authorRoleBundle, projectName: "press" },
+  "unique-components": { bundle: uniqueComponentsBundle, projectName: "fest" },
+} as const;
 const bundle = flag("--bundle");
+const own = bundle === undefined ? undefined : BUNDLES[bundle as keyof typeof BUNDLES];
 if (
   !dest ||
   (storage !== undefined && style !== "strapi") ||
-  (bundle !== undefined &&
-    (bundle !== "author-role" || style !== "strapi" || storage !== undefined))
+  (bundle !== undefined && (own === undefined || style !== "strapi" || storage !== undefined))
 ) {
   console.error(
-    "usage: tsx scripts/overlay.ts <laravel-app-dir> [--style strapi [--storage strapi | --bundle author-role]]",
+    "usage: tsx scripts/overlay.ts <laravel-app-dir> [--style strapi [--storage strapi | --bundle author-role|unique-components]]",
   );
   process.exit(1);
 }
@@ -34,8 +39,8 @@ const result =
         apiStyle: "strapi",
         storageLayout: "strapi",
       })
-    : bundle === "author-role"
-      ? filamentAdapter.generate(authorRoleBundle, { projectName: "press", apiStyle: "strapi" })
+    : own !== undefined
+      ? filamentAdapter.generate(own.bundle, { projectName: own.projectName, apiStyle: "strapi" })
       : style === "strapi"
         ? filamentAdapter.generate(strapiApiBundle, {
             projectName: "oyl",

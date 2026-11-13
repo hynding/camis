@@ -105,6 +105,23 @@ export const childTableEmit = (
   return emit;
 };
 
+/**
+ * A unique field's column without its unique index: Strapi's check skips an empty value and a
+ * nested repeatable's own items, which a database constraint would refuse, so the validator alone
+ * answers for a component's.
+ */
+export const withoutUniqueIndex = (emit: FieldEmit): FieldEmit => ({
+  ...emit,
+  migration: emit.migration.replace("->unique()", ""),
+});
+
+/** The table and every table nested in its items, with no unique index on their columns. */
+export const childWithoutUniqueIndex = (child: ChildTableEmit): ChildTableEmit => ({
+  ...child,
+  emits: child.emits.map(withoutUniqueIndex),
+  children: child.children.map(childWithoutUniqueIndex),
+});
+
 /** The table and every table nested in its items, parents first. */
 export const childTablesWithin = (child: ChildTableEmit): ChildTableEmit[] => [
   child,
