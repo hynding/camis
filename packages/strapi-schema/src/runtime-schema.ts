@@ -1,6 +1,6 @@
 import { normalize } from "@camis/ir-core";
-import type { ContentType, IrDocument } from "@camis/ir-schema";
-import { COLOR_PICKER_UID } from "./attributes";
+import { fieldApiName, type ContentType, type Field, type IrDocument } from "@camis/ir-schema";
+import { storedType } from "./attributes";
 import { componentSchema } from "./component-schema";
 import { componentCategory, componentUids, kebab, strapiNames } from "./names";
 import PLUGIN_SCHEMAS from "./plugin-schemas.json";
@@ -35,13 +35,20 @@ const adminRelation = {
  * Strapi's `convertCustomFieldType`: a running Strapi holds a custom field as the type its plugin
  * stores, keeping the field's uid beside it.
  */
-const storedTypes = (attributes: Record<string, unknown>): Record<string, unknown> =>
-  Object.fromEntries(
+const storedTypes = (
+  attributes: Record<string, unknown>,
+  fields: readonly Field[],
+): Record<string, unknown> => {
+  const byKey = new Map(fields.map((field) => [fieldApiName(field), field]));
+  return Object.fromEntries(
     Object.entries(attributes).map(([name, attribute]) => {
       const a = attribute as Record<string, unknown>;
-      return [name, a.customField === COLOR_PICKER_UID ? { ...a, type: "string" } : a];
+      const field = byKey.get(name);
+      if (a.type !== "customField" || field === undefined) return [name, a];
+      return [name, { ...a, type: storedType(field) }];
     }),
   );
+};
 
 /** What Strapi's loader adds to every content type: timestamps, publication, authors, locale. */
 const systemAttributes = (uid: string, table: string, localized: boolean) => ({
@@ -84,7 +91,7 @@ const contentTypeRuntime = (
     options: { ...(file.options as object), draftAndPublish: ct.options?.draftPublish === true },
     pluginOptions: file.pluginOptions,
     attributes: {
-      ...storedTypes(file.attributes as Record<string, unknown>),
+      ...storedTypes(file.attributes as Record<string, unknown>, ct.fields),
       ...systemAttributes(names.uid, names.collectionName, ct.options?.localized === true),
     },
     kind: file.kind,
@@ -128,7 +135,7 @@ export const runtimeSchemas = (input: IrDocument): RuntimeSchema[] => {
         info: file.info,
         options: file.options,
         pluginOptions: {},
-        attributes: storedTypes(file.attributes as Record<string, unknown>),
+        attributes: storedTypes(file.attributes as Record<string, unknown>, component.fields),
         modelType: "component",
         modelName: kebab(component.name),
         uid,
