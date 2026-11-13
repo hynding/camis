@@ -21,15 +21,20 @@ const bundle: IrBundle = {
     policies: [{ name: "IsOwner", contentType: "Article" }],
     middlewares: [{ name: "AuditTrail", contentType: "Article" }],
     schedules: [{ name: "SendDigest", cron: "0 7 * * *" }],
+    endpoints: [
+      { name: "ArticleLike", contentType: "Article", method: "POST", path: "/articles/:id/like" },
+    ],
   },
   roles: [],
 };
 
 describe("express custom code", () => {
-  it("reports each hook, policy, middleware and schedule it cannot run", () => {
+  it("reports each hook, policy, middleware, schedule and endpoint it cannot run", () => {
     const gaps = expressAdapter.generate(bundle, { projectName: "blog" }).gaps.gaps;
     expect(
-      gaps.filter((g) => ["hook", "policy", "middleware", "schedule"].includes(g.feature)),
+      gaps.filter((g) =>
+        ["hook", "policy", "middleware", "schedule", "endpoint"].includes(g.feature),
+      ),
     ).toEqual([
       {
         feature: "hook",
@@ -54,6 +59,13 @@ describe("express custom code", () => {
         location: { rule: "SendDigest" },
         severity: "downgrade",
         message: 'the Express target runs no schedules; "SendDigest" is not wired',
+      },
+      {
+        feature: "endpoint",
+        location: { contentType: "Article", rule: "ArticleLike" },
+        severity: "downgrade",
+        message:
+          'the Express target runs no endpoints; "ArticleLike" (POST /articles/:id/like) is not wired',
       },
     ]);
   });
