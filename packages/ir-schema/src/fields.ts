@@ -215,6 +215,8 @@ const polymorphicInverseField = z.object({
   ...common,
   target: typeName,
   via: fieldName,
+  /** The key `via` goes by on the target's API when it is not its name: an imported project's own. */
+  viaNames: z.object({ api: apiName }).optional(),
   many: z.boolean(),
 });
 const componentRefField = z.object({

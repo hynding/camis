@@ -78,14 +78,25 @@ export const irComponent = (
   });
   // Strapi allows a dynamic zone only on a content type; one in a component has no IR form.
   const fields = all.filter((f) => {
-    if (f.type !== "dynamicZone") return true;
-    gaps.push({
-      feature: "dynamiczone",
-      location: { component: componentName, field: f.name },
-      severity: "downgrade",
-      message: `dynamic zone "${fieldApiName(f)}" inside component "${componentName}" is not representable; skipped.`,
-    });
-    return false;
+    if (f.type === "dynamicZone") {
+      gaps.push({
+        feature: "dynamiczone",
+        location: { component: componentName, field: f.name },
+        severity: "downgrade",
+        message: `dynamic zone "${fieldApiName(f)}" inside component "${componentName}" is not representable; skipped.`,
+      });
+      return false;
+    }
+    if (f.type === "polymorphicRelation" || f.type === "polymorphicInverse") {
+      gaps.push({
+        feature: "morphRelation",
+        location: { component: componentName, field: f.name },
+        severity: "downgrade",
+        message: `polymorphic relation "${fieldApiName(f)}" inside component "${componentName}" is not representable; skipped.`,
+      });
+      return false;
+    }
+    return true;
   });
   const collection = str(schema.collectionName);
   const names: { collection?: string; group?: string } = {};
@@ -93,7 +104,7 @@ export const irComponent = (
   if (group !== undefined && group !== "") names.group = group;
   const component: Component = {
     name: componentName,
-    // dynamicZone fields were routed to gaps above (components disallow dynamicZone per D6), so
+    // dynamicZone and polymorphic fields were routed to gaps above (components disallow them), so
     // the fields array is safely narrowed to ComponentFieldT at runtime.
     fields: fields as ComponentFieldT[],
     ...(Object.keys(names).length > 0 ? { names } : {}),
