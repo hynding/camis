@@ -15,6 +15,8 @@ import { irName } from "./names";
 export interface RouterImport {
   /** Per type serving only some of its actions, those it serves (in ROUTE_ACTIONS order). */
   apiActions: Map<string, RouteAction[]>;
+  /** Per type, the served actions whose route sets `auth: false` (in ROUTE_ACTIONS order). */
+  publicApiActions: Map<string, RouteAction[]>;
   policies: RouteHook[];
   middlewares: RouteHook[];
   gaps: CapabilityGap[];
@@ -59,6 +61,7 @@ interface Use {
 
 class RouterReader {
   readonly apiActions = new Map<string, RouteAction[]>();
+  readonly publicApiActions = new Map<string, RouteAction[]>();
   readonly uses: Use[] = [];
   readonly gaps: CapabilityGap[] = [];
 
@@ -126,11 +129,12 @@ class RouterReader {
     action: RouteAction,
     route: { [key: string]: Literal },
   ): void {
-    if (route.auth !== undefined && route.auth !== true)
+    if (route.auth === false) this.open(ct.name, action);
+    else if (route.auth !== undefined && route.auth !== true)
       this.gap(
         "routeAuth",
         file,
-        `${ct.name}'s ${coreAction} route sets auth, which camis does not import: it checks the caller's role on every route (grant ${action} to the public role to open it)`,
+        `${ct.name}'s ${coreAction} route sets an auth scope or strategy, which camis does not import: it checks the caller's role's grant`,
         ct.name,
       );
     for (const list of ["policies", "middlewares"] as const) {
@@ -139,6 +143,14 @@ class RouterReader {
       const entries: Literal[] = Array.isArray(named) ? named : [named];
       for (const entry of entries) this.use(file, ct, coreAction, action, list, entry);
     }
+  }
+
+  private open(contentType: string, action: RouteAction): void {
+    const open = [...(this.publicApiActions.get(contentType) ?? []), action];
+    this.publicApiActions.set(
+      contentType,
+      ROUTE_ACTIONS.filter((a) => open.includes(a)),
+    );
   }
 
   private use(
@@ -216,7 +228,7 @@ const routeHooks = (uses: Use[], doc: IrDocument, list: Hooks): RouteHook[] => {
 /**
  * The routes each hand-written core router (`createCoreRouter`) leaves its content type, and the
  * project's own policies and middlewares its actions name, read from the router's literal options:
- * its `only`/`except` and each action's `config`. What the IR cannot hold is a gap located by the
+ * its `only`/`except` and each action's `config` (`auth: false` opens the action to anyone). What the IR cannot hold is a gap located by the
  * router's file; a router whose options are not literals is one `routeConfig` gap. Routers camis
  * generated are passed over (the IR they came from already holds them), as are custom route files.
  */
@@ -228,6 +240,7 @@ export const importRouters = (files: ProjectFile[], doc: IrDocument): RouterImpo
   for (const file of routers) reader.read(file);
   return {
     apiActions: reader.apiActions,
+    publicApiActions: reader.publicApiActions,
     policies: routeHooks(reader.uses, doc, "policies"),
     middlewares: routeHooks(reader.uses, doc, "middlewares"),
     gaps: reader.gaps,
