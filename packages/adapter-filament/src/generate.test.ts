@@ -37,6 +37,30 @@ describe("filamentAdapter", () => {
     expect(result.manifest.files.length).toBe(result.files.length);
     expect(result.gaps).toEqual({ target: "filament", gaps: [] });
   });
+  it("keeps a field with a source editor as its type, reporting the default input it shows", () => {
+    const rated = filamentAdapter.generate(
+      {
+        document: {
+          version: 1,
+          contentTypes: [
+            {
+              name: "Film",
+              kind: "collection",
+              fields: [
+                { type: "integer", name: "rating", editor: { name: "plugin::stars.rating" } },
+              ],
+            },
+          ],
+          components: [],
+        },
+        roles: [],
+      },
+      { projectName: "films" },
+    );
+    expect(rated.gaps.gaps.map((g) => g.feature)).toEqual(["fieldEditor"]);
+    const form = rated.files.find((f) => f.path.endsWith("Schemas/FilmForm.php"));
+    expect(form?.content).toContain("TextInput::make('rating')");
+  });
   it("is deterministic / idempotent", () => {
     expect(filamentAdapter.generate(bundle, { projectName: "blog" })).toEqual(result);
   });
