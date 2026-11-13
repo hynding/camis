@@ -26,6 +26,13 @@ export type Grant = z.infer<typeof grant>;
  */
 export const CREATED_BY = "record.createdBy";
 
+/**
+ * A condition's variable that is true when the account that created the entry holds one of the
+ * caller's roles, on targets that record a creator: `record.creatorSharesRole == true` is Strapi's
+ * admin::has-same-role-as-creator.
+ */
+export const CREATOR_SHARES_ROLE = "record.creatorSharesRole";
+
 /** The role a caller without a session acts as; every target that serves guests reads it. */
 export const PUBLIC_ROLE = "public";
 

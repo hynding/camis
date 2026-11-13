@@ -1,5 +1,5 @@
 import type { Expression } from "@camis/expr";
-import { CREATED_BY } from "@camis/permissions";
+import { CREATED_BY, CREATOR_SHARES_ROLE } from "@camis/permissions";
 import { describe, expect, it } from "vitest";
 import { readableCondition } from "./readable-condition";
 
@@ -8,9 +8,15 @@ const lit = (value: string | number | boolean | null): Expression => ({ kind: "l
 const eq = (left: Expression, right: Expression): Expression => ({ kind: "eq", left, right });
 
 describe("readableCondition", () => {
-  it("names Strapi's own condition as its admin does", () => {
+  it("names Strapi's own conditions as its admin does", () => {
     expect(readableCondition(eq(v(CREATED_BY), v("user.id")))).toBe("Is creator");
     expect(readableCondition(eq(v("user.id"), v(CREATED_BY)))).toBe("Is creator");
+    expect(
+      readableCondition({
+        kind: "or",
+        args: [eq(v(CREATED_BY), v("user.id")), eq(v(CREATOR_SHARES_ROLE), lit(true))],
+      }),
+    ).toBe("Is creator or has same role as creator");
   });
 
   it("says a comparison in words, the record's fields by name and the user's as the user's", () => {

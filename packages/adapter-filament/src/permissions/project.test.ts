@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { IrDocument } from "@camis/ir-schema";
-import { CREATED_BY, type Role } from "@camis/permissions";
+import { CREATED_BY, CREATOR_SHARES_ROLE, type Role } from "@camis/permissions";
 import { projectFilamentPermissions } from "./project";
 import { strapiApiBundle } from "../strapi-api/__fixtures__/strapi-api";
 
@@ -222,6 +222,25 @@ describe("projectFilamentPermissions — the creator of an entry", () => {
     },
     { name: "editor", admin: true, grants: [{ contentType: "Article", actions: ["read"] }] },
   ];
+
+  it("lets an admin role's condition ask whether the creator shares a role", () => {
+    const sharesRole = {
+      kind: "eq",
+      left: { kind: "var", name: CREATOR_SHARES_ROLE },
+      right: { kind: "lit", value: true },
+    } as const;
+    const reviewer: Role = {
+      name: "reviewer",
+      admin: true,
+      grants: [{ contentType: "Article", actions: ["read"], condition: sharesRole }],
+    };
+    expect(projectFilamentPermissions(doc, [reviewer], { creators: true }).gaps).toEqual([]);
+    expect(
+      projectFilamentPermissions(doc, [{ ...reviewer, admin: false }], { creators: true }).gaps.map(
+        (g) => g.feature,
+      ),
+    ).toEqual(["conditionContext"]);
+  });
 
   it("lets an admin role's condition name the entry's creator where the target records one", () => {
     const out = projectFilamentPermissions(doc, roles, { creators: true });

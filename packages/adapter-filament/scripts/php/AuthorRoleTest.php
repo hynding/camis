@@ -121,6 +121,32 @@ class AuthorRoleTest extends TestCase
         $this->assertTrue($author->can('delete', $own));
     }
 
+    /** Strapi's admin::has-same-role-as-creator: a Reviewer lists and changes what a Reviewer made. */
+    public function test_a_reviewer_reads_and_changes_the_memos_an_account_of_its_role_created(): void
+    {
+        $first = $this->admin('first@example.test', 'reviewer');
+        $second = $this->admin('second@example.test', 'reviewer');
+        $editor = $this->admin('editor@example.test', 'editor');
+        $this->actingAs($first, 'admin');
+        $shared = Memo::create(['title' => 'Shared']);
+        $this->actingAs($editor, 'admin');
+        $other = Memo::create(['title' => 'Editor\'s']);
+
+        $this->actingAs($second, 'admin');
+        Livewire::test(ListMemos::class)
+            ->assertCanSeeTableRecords([$shared])
+            ->assertCanNotSeeTableRecords([$other]);
+        $this->get(MemoResource::getUrl('edit', ['record' => $other]))->assertNotFound();
+        $this->assertTrue($second->can('update', $shared));
+        $this->assertFalse($second->can('update', $other));
+        $this->assertFalse($second->can('delete', $shared));
+
+        // A creator who shares no role with the account, or no creator at all, lets nothing through.
+        $orphan = Memo::create(['title' => 'Orphan']);
+        $orphan->forceFill(['created_by_id' => null])->save();
+        $this->assertFalse($second->can('view', $orphan));
+    }
+
     public function test_the_homepage_widgets_show_an_author_only_its_own_entries(): void
     {
         $author = $this->admin('author@example.test', 'author');

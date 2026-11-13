@@ -8,7 +8,7 @@ import { storageBundle } from "../strapi-api/storage/__fixtures__/storage";
 import type { PolicySpec } from "./project";
 import { projectFilamentPermissions } from "./project";
 import { emitPolicy } from "./policy";
-import { CREATED_BY } from "@camis/permissions";
+import { CREATED_BY, CREATOR_SHARES_ROLE } from "@camis/permissions";
 
 const hasPhp = (): boolean => {
   try {
@@ -222,6 +222,40 @@ describe("emitPolicy — the entry's creator", () => {
   it("reads it only where a condition names it", () => {
     const view = php.slice(php.indexOf("public function view"));
     expect(view).not.toContain("record.createdBy");
+    expect(php).not.toContain("record.creatorSharesRole");
+  });
+
+  // Strapi's has-same-role-as-creator: the account that created the entry holds a caller's role.
+  it("asks whether the creator shares a role with an admin account", () => {
+    const shares = emitPolicy(
+      {
+        contentType: "Article",
+        model: "Article",
+        methods: [
+          {
+            method: "view",
+            key: "article.read",
+            record: true,
+            roles: ["reviewer"],
+            conditions: [
+              {
+                roles: ["reviewer"],
+                condition: {
+                  kind: "eq",
+                  left: { kind: "var", name: CREATOR_SHARES_ROLE },
+                  right: { kind: "lit", value: true },
+                },
+              },
+            ],
+          },
+        ],
+      },
+      article,
+    );
+    expect(shares).toContain(
+      "'record.creatorSharesRole' => $user instanceof AdminUser && $record->created_by_id !== null && AdminUser::query()->whereKey($record->created_by_id)->whereHas('roles', fn ($role) => $role->whereKey($user->roles->modelKeys()))->exists(),",
+    );
+    expect(shares).not.toContain("'record.createdBy'");
   });
 });
 
