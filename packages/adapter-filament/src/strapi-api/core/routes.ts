@@ -1,5 +1,10 @@
 import type { StorageLayout } from "@camis/adapter-kernel";
-import { servesApiAction, type ContentType, type RouteAction } from "@camis/ir-schema";
+import {
+  isPublicApiAction,
+  servesApiAction,
+  type ContentType,
+  type RouteAction,
+} from "@camis/ir-schema";
 import { filamentNames } from "../../names";
 import { routePath } from "./names";
 import { adminAuthConfigKeys } from "../admin/admin-api";
@@ -142,10 +147,44 @@ export const emitStrapiRoutes = (
   guests = false,
   /** Content types whose routes run the IR's route policies and middlewares. */
   hooked: ReadonlySet<string> = new Set(),
+  /** Types' public actions are routed apart, outside every credential check (`publicActionsPlan`). */
+  open = false,
 ): string => {
   const jwt = secured && guard === "strapi-jwt";
   const tokens = usersPermissions && secured;
   const sorted = [...cts].sort((a, b) => routePath(a).localeCompare(routePath(b)));
+  const isOpen = (ct: ContentType, action: RouteAction): boolean =>
+    secured && open && isPublicApiAction(ct, action);
+  // Each type's routes that `keep` keeps, a block per type.
+  const routesOf = (keep: (ct: ContentType, action: RouteAction) => boolean): string =>
+    sorted
+      .map((ct) => {
+        const p = routePath(ct);
+        const c = `${filamentNames(ct).model}ApiController::class`;
+        const h = hooked.has(ct.name) ? "->middleware(CamisRouteHooks::class)" : "";
+        const routes: [RouteAction, string][] =
+          ct.kind === "single"
+            ? [
+                ["read", `Route::get('/${p}', [${c}, 'single'])`],
+                ["update", `Route::put('/${p}', [${c}, 'putSingle'])`],
+                ["delete", `Route::delete('/${p}', [${c}, 'destroySingle'])`],
+              ]
+            : [
+                ["list", `Route::get('/${p}', [${c}, 'index'])`],
+                ["create", `Route::post('/${p}', [${c}, 'store'])`],
+                ["read", `Route::get('/${p}/{key}', [${c}, 'show'])`],
+                ["update", `Route::put('/${p}/{key}', [${c}, 'update'])`],
+                ["delete", `Route::delete('/${p}/{key}', [${c}, 'destroy'])`],
+              ];
+        return routes
+          .filter(([action]) => servesApiAction(ct, action) && keep(ct, action))
+          .map(([, route]) => `        ${route}${h};`)
+          .join("\n");
+      })
+      .filter((block) => block !== "")
+      .join("\n\n");
+  const resources = routesOf((ct, action) => !isOpen(ct, action));
+  const opened = routesOf(isOpen);
   const uses = [
     "App\\Http\\Controllers\\Api\\AuthController",
     ...(localized ? ["App\\Http\\Controllers\\Api\\LocaleController"] : []),
@@ -174,36 +213,12 @@ export const emitStrapiRoutes = (
         ]
       : []),
     ...(jwt ? ["App\\Http\\Middleware\\StrapiJwtGuard"] : []),
+    ...(opened !== "" ? ["App\\Http\\Middleware\\StrapiPublicRoute"] : []),
     "Illuminate\\Support\\Facades\\Route",
   ]
     .sort()
     .map((u) => `use ${u};`)
     .join("\n");
-  const resources = sorted
-    .map((ct) => {
-      const p = routePath(ct);
-      const c = `${filamentNames(ct).model}ApiController::class`;
-      const h = hooked.has(ct.name) ? "->middleware(CamisRouteHooks::class)" : "";
-      const routes: [RouteAction, string][] =
-        ct.kind === "single"
-          ? [
-              ["read", `Route::get('/${p}', [${c}, 'single'])`],
-              ["update", `Route::put('/${p}', [${c}, 'putSingle'])`],
-              ["delete", `Route::delete('/${p}', [${c}, 'destroySingle'])`],
-            ]
-          : [
-              ["list", `Route::get('/${p}', [${c}, 'index'])`],
-              ["create", `Route::post('/${p}', [${c}, 'store'])`],
-              ["read", `Route::get('/${p}/{key}', [${c}, 'show'])`],
-              ["update", `Route::put('/${p}/{key}', [${c}, 'update'])`],
-              ["delete", `Route::delete('/${p}/{key}', [${c}, 'destroy'])`],
-            ];
-      return routes
-        .filter(([action]) => servesApiAction(ct, action))
-        .map(([, route]) => `        ${route}${h};`)
-        .join("\n");
-    })
-    .join("\n\n");
   const uploads = upload
     ? `
 
@@ -322,6 +337,15 @@ ${
     // Strapi's email plugin's send: no role it ships holds the action, so a token that does sends.
     Route::post('/email', [EmailController::class, 'send']);`
         : ""
+    }${
+      opened === ""
+        ? ""
+        : `
+
+    // Strapi's route auth: false: no credential is read and no grant asked (StrapiPublicRoute).
+    Route::middleware(StrapiPublicRoute::class)->group(function (): void {
+${opened}
+    });`
     }
 
     ${groups}

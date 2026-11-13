@@ -19,6 +19,10 @@ final class StrapiApiToken
 {
     public function handle(Request $request, Closure $next): Response
     {
+        // Strapi runs no auth strategy on a route that sets auth: false.
+        if (StrapiPublicRoute::opens($request)) {
+            return $next($request);
+        }
         $token = StrapiApiTokens::authenticate($request);
         if ($token !== null && explode('@', (string) $request->route()?->getActionName())[0] === 'App\GraphQL\StrapiGraphql') {
             StrapiApiTokens::actFor($request, $token, null);

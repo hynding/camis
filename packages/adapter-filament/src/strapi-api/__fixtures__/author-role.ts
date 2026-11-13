@@ -10,8 +10,9 @@ const isCreator: Expression = {
 
 /**
  * Strapi's default Editor and Author admin roles over a draft-and-publish type (Story) and a plain
- * one (Memo): the Editor may do everything, the Author only to entries it created. CI's
- * author-role job overlays it (scripts/overlay.ts --bundle author-role) and runs AuthorRoleTest.
+ * one (Memo): the Editor may do everything, the Author only to entries it created. Memo's list and
+ * read are open to anyone, as Strapi's route auth: false opens them. CI's author-role job overlays
+ * it (scripts/overlay.ts --bundle author-role) and runs AuthorRoleTest and PublicActionsTest.
  */
 export const authorRoleBundle: IrBundle = {
   document: {
@@ -37,6 +38,8 @@ export const authorRoleBundle: IrBundle = {
         name: "Memo",
         kind: "collection",
         names: { plural: "Memos" },
+        // Its router's find and findOne set auth: false (PublicActionsTest).
+        options: { publicApiActions: ["list", "read"] },
         fields: [{ type: "string", name: "title", required: true }],
       },
     ],

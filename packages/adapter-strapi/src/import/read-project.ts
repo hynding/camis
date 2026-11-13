@@ -50,7 +50,16 @@ const withRouters = (doc: IrDocument, routers: RouterImport): IrDocument => ({
   ...doc,
   contentTypes: doc.contentTypes.map((ct) => {
     const apiActions = routers.apiActions.get(ct.name);
-    return apiActions === undefined ? ct : { ...ct, options: { ...ct.options, apiActions } };
+    const publicApiActions = routers.publicApiActions.get(ct.name);
+    if (apiActions === undefined && publicApiActions === undefined) return ct;
+    return {
+      ...ct,
+      options: {
+        ...ct.options,
+        ...(apiActions === undefined ? {} : { apiActions }),
+        ...(publicApiActions === undefined ? {} : { publicApiActions }),
+      },
+    };
   }),
   ...(routers.policies.length > 0 ? { policies: routers.policies } : {}),
   ...(routers.middlewares.length > 0 ? { middlewares: routers.middlewares } : {}),

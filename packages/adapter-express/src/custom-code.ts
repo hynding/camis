@@ -46,3 +46,18 @@ export const apiActionGaps = (doc: IrDocument): CapabilityGap[] =>
       },
     ];
   });
+
+/** The Express target checks a caller's grants on every route, so a type's public actions are a gap. */
+export const publicApiActionGaps = (doc: IrDocument): CapabilityGap[] =>
+  doc.contentTypes.flatMap((ct): CapabilityGap[] => {
+    const open = ct.options?.publicApiActions ?? [];
+    if (open.length === 0) return [];
+    return [
+      {
+        feature: "publicApiActions",
+        location: { contentType: ct.name },
+        severity: "downgrade",
+        message: `the Express target checks the caller's grants on every route; ${ct.name} opens ${listed(open)} to anyone, so grant ${open.length === 1 ? "it" : "them"} to its roles instead`,
+      },
+    ];
+  });

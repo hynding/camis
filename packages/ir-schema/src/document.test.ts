@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { component, contentType, irDocument, servesApiAction } from "./document";
+import {
+  component,
+  contentType,
+  irDocument,
+  isPublicApiAction,
+  servesApiAction,
+} from "./document";
 
 const ct = (fields: unknown[]) =>
   contentType.safeParse({ name: "Article", kind: "collection", fields });
@@ -271,6 +277,42 @@ describe("options.apiActions", () => {
     const r = typed("single", ["read", "create"]);
     expect(r.success).toBe(false);
     if (!r.success) expect(r.error.issues[0]!.path).toEqual(["options", "apiActions", 1]);
+  });
+});
+
+describe("options.publicApiActions", () => {
+  const typed = (kind: string, options: object) =>
+    contentType.safeParse({ name: "Address", kind, options, fields: [] });
+
+  it("keeps the actions served to anyone, unauthenticated and with no grant asked", () => {
+    const r = typed("collection", { publicApiActions: ["list", "read"] });
+    expect(r.success && r.data.options?.publicApiActions).toEqual(["list", "read"]);
+  });
+
+  it("rejects a public action the type does not serve", () => {
+    const r = typed("collection", { apiActions: ["list"], publicApiActions: ["list", "read"] });
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      expect(r.error.issues[0]!.path).toEqual(["options", "publicApiActions", 1]);
+      expect((r.error.issues[0] as { params?: unknown }).params).toEqual({
+        irCode: "public_action_not_served",
+      });
+    }
+  });
+
+  it("rejects list and create on a single type", () => {
+    expect(typed("single", { publicApiActions: ["read"] }).success).toBe(true);
+    expect(typed("single", { publicApiActions: ["list"] }).success).toBe(false);
+  });
+});
+
+describe("isPublicApiAction", () => {
+  it("names the actions a type serves without authentication", () => {
+    const ct = { name: "Tag", kind: "collection" as const, fields: [] };
+    expect(isPublicApiAction(ct, "list")).toBe(false);
+    const open = { ...ct, options: { publicApiActions: ["list" as const] } };
+    expect(isPublicApiAction(open, "list")).toBe(true);
+    expect(isPublicApiAction(open, "read")).toBe(false);
   });
 });
 

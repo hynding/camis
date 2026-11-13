@@ -43,7 +43,7 @@ export default (config, { strapi }: { strapi: Core.Strapi }) =>
 
 /**
  * The core router's options for a content type: `only` the actions it serves, when not every one,
- * and each served action's policies and middlewares, as Strapi's global ones. Undefined when the
+ * and each served action's `auth: false` when the type opens it to anyone, its policies and middlewares, as Strapi's global ones. Undefined when the
  * IR puts nothing on it.
  */
 export const routerConfig = (doc: IrDocument, contentType: string): string | undefined => {
@@ -62,6 +62,7 @@ export const routerConfig = (doc: IrDocument, contentType: string): string | und
       const policies = refs(doc.policies, action);
       const middlewares = refs(doc.middlewares, action);
       const parts = [
+        ...((ct.options?.publicApiActions ?? []).includes(action) ? ["auth: false"] : []),
         ...(policies.length > 0 ? [`policies: [${policies.join(", ")}]`] : []),
         ...(middlewares.length > 0 ? [`middlewares: [${middlewares.join(", ")}]`] : []),
       ];

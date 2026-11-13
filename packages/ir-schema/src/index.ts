@@ -9,7 +9,7 @@ export {
   inverseApiName,
 } from "./fields";
 export type { ComponentFieldT, Field, FieldType, RelationKind } from "./fields";
-export { component, contentType, irDocument, servesApiAction } from "./document";
+export { component, contentType, irDocument, isPublicApiAction, servesApiAction } from "./document";
 export type { Component, ContentType, IrDocument } from "./document";
 export { parseDocument } from "./parse";
 export type { CapabilityDescriptor, CapabilityGap, CapabilityGapReport } from "./capability";

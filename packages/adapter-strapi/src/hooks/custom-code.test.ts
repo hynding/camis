@@ -58,6 +58,31 @@ describe("strapi custom code", () => {
     expect(router("src/api/article/routes/article.ts")).not.toContain("update:");
   });
 
+  it("opens a type's public actions with the route's auth: false", () => {
+    const opened = strapiAdapter.generate(
+      {
+        document: {
+          ...customCodeDoc,
+          contentTypes: customCodeDoc.contentTypes.map((ct) => ({
+            ...ct,
+            options: {
+              ...ct.options,
+              publicApiActions: ct.kind === "single" ? ["read"] : ["list", "update"],
+            },
+          })),
+        },
+        roles: [],
+      },
+      { projectName: "blog" },
+    );
+    const router = (p: string) => opened.files.find((f) => f.path === p)!.content;
+    expect(router("src/api/article/routes/article.ts")).toContain("    find: { auth: false },\n");
+    expect(router("src/api/article/routes/article.ts")).toContain(
+      '    update: { auth: false, policies: ["global::is-owner"]',
+    );
+    expect(router("src/api/homepage/routes/homepage.ts")).toContain("    find: { auth: false");
+  });
+
   it("seeds each policy and middleware as Strapi's global ones", async () => {
     expect(file("src/policies/is-owner.ts")!.mode).toBe("seed");
     expect(file("src/middlewares/audit-trail.ts")!.mode).toBe("seed");
