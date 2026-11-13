@@ -18,6 +18,9 @@ const SINGULAR: Record<string, string> = {
   middlewares: "middleware",
 };
 
+/** A single type is one entry: there is no list of them, and nothing to create beside it. */
+const singleLacks = (action: RouteAction): boolean => action === "list" || action === "create";
+
 const nodeRefine = (fields: RefinedField[], ctx: z.RefinementCtx) => {
   const seen = new Set<string>();
   const keys = new Set<string>();
@@ -99,6 +102,11 @@ export const contentType = z
         localized: z.boolean().optional(),
         /** The content API actions the type serves; absent, it serves every one. */
         apiActions: z.array(z.enum(ROUTE_ACTIONS)).optional(),
+        /**
+         * The served actions open to anyone: no caller is authenticated and no grant is asked,
+         * though the type's route policies and middlewares still run.
+         */
+        publicApiActions: z.array(z.enum(ROUTE_ACTIONS)).optional(),
       })
       .optional(),
   })
@@ -107,7 +115,7 @@ export const contentType = z
     if (ct.kind === "single") {
       // A single type is one entry: there is no list of them, and nothing to create beside it.
       (ct.options?.apiActions ?? []).forEach((action, i) => {
-        if (action !== "list" && action !== "create") return;
+        if (!singleLacks(action)) return;
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: `single type "${ct.name}" serves one entry, so it has no "${action}" action`,
@@ -116,6 +124,15 @@ export const contentType = z
         });
       });
     }
+    (ct.options?.publicApiActions ?? []).forEach((action, i) => {
+      if (servesApiAction(ct, action) && !(ct.kind === "single" && singleLacks(action))) return;
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `content type "${ct.name}" opens "${action}" to the public, but does not serve it`,
+        params: { irCode: "public_action_not_served" },
+        path: ["options", "publicApiActions", i],
+      });
+    });
     if (ct.options?.localized === true) return;
     ct.fields.forEach((f, i) => {
       if ("localized" in f && f.localized !== undefined) {
@@ -205,6 +222,10 @@ export const irDocument = z
 export type ContentType = z.infer<typeof contentType>;
 export type Component = z.infer<typeof component>;
 export type IrDocument = z.infer<typeof irDocument>;
+
+/** Whether the type serves the action to anyone, unauthenticated and with no grant asked. */
+export const isPublicApiAction = (ct: ContentType, action: RouteAction): boolean =>
+  (ct.options?.publicApiActions ?? []).includes(action);
 
 /** Whether the type's content API serves the action (a type lists none: it serves every one). */
 export const servesApiAction = (ct: ContentType, action: RouteAction): boolean =>
