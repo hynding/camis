@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Support\StrapiApiTokens;
 use App\Support\StrapiError;
 use App\Support\StrapiRoles;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Models\Role;
@@ -25,7 +26,9 @@ final class RoleController extends Controller
     public function find(): JsonResponse
     {
         self::readable();
-        $roles = self::roles()->map(fn (Role $role): array => [...RoleSerializer::toWire($role), 'nb_users' => self::users($role)]);
+        $roles = self::roles()->get();
+        $users = self::users($roles->modelKeys());
+        $roles = $roles->map(fn (Role $role): array => [...RoleSerializer::toWire($role), 'nb_users' => $users[$role->getKey()] ?? 0]);
 
         return response()->json(['roles' => $roles->values()->all()]);
     }
@@ -33,7 +36,7 @@ final class RoleController extends Controller
     public function findOne(string $role): JsonResponse
     {
         self::readable();
-        $found = self::roles()->first(fn (Role $candidate): bool => (string) $candidate->getKey() === $role);
+        $found = ctype_digit($role) ? self::roles()->with('permissions')->whereKey((int) $role)->first() : null;
         if ($found === null) {
             throw new StrapiError(404, 'NotFoundError', 'Not Found');
         }
@@ -71,18 +74,24 @@ final class RoleController extends Controller
         }
     }
 
-    /** @return \Illuminate\Support\Collection<int, Role> The users' roles: the admin's own are apart, as in Strapi. */
-    private static function roles(): \Illuminate\Support\Collection
+    /** @return Builder<Role> The users' roles: the admin's own are apart, as in Strapi. */
+    private static function roles(): Builder
     {
         $admin = class_exists(AdminUser::class) ? AdminUser::adminRoles() : [];
 
-        return Role::query()->with('permissions')->whereNotIn('name', $admin)->orderBy('id')->get();
+        return Role::query()->whereNotIn('name', $admin)->orderBy('id');
     }
 
-    private static function users(Role $role): int
+    /**
+     * @param list<int|string> $roleIds
+     * @return array<int|string, int> Each role's number of users.
+     */
+    private static function users(array $roleIds): array
     {
         return DB::table(config('permission.table_names.model_has_roles', 'model_has_roles'))
-            ->where('role_id', $role->getKey())->where('model_type', User::class)->count();
+            ->whereIn('role_id', $roleIds)->where('model_type', User::class)
+            ->groupBy('role_id')->selectRaw('role_id, count(*) as users')->pluck('users', 'role_id')
+            ->map(fn (mixed $count): int => (int) $count)->all();
     }
 
     /**

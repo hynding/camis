@@ -715,6 +715,7 @@ describe("timestamps on the Strapi API style", () => {
     expect(cueModel?.content).toContain("use \\App\\Models\\Concerns\\HasMillisecondTimestamps;");
     expect(file(strapi, "create_files_table.php")).toContain("$table->timestamps(3);");
     expect(file(strapi, "app/Models/File.php")).toContain("use HasMillisecondTimestamps;");
+    expect(file(strapi, "app/Models/UploadFolder.php")).toContain("use HasMillisecondTimestamps;");
     expect(file(strapi, "app/Models/Concerns/HasMillisecondTimestamps.php")).toContain(
       "'Y-m-d H:i:s.v'",
     );

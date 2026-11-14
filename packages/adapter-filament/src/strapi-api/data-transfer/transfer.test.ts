@@ -55,7 +55,7 @@ describe("Strapi data import", () => {
 
   it("reads a timestamp as Strapi exports one, its epoch in milliseconds", () => {
     expect(content(IMPORT_ENGINE)).toContain(
-      "'timestamp' => (is_numeric($value) ? CarbonImmutable::createFromTimestampMsUTC((float) $value) : CarbonImmutable::parse((string) $value))->utc()->format('Y-m-d H:i:s.v'),",
+      "'timestamp' => (is_numeric($value) ? CarbonImmutable::createFromTimestampMsUTC((float) $value) : CarbonImmutable::parse((string) $value))->utc()->format($dateFormat),",
     );
   });
 

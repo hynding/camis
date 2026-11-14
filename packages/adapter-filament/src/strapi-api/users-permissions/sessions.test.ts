@@ -107,7 +107,7 @@ describe("users-permissions sessions", () => {
     const tokens = content("app/Support/StrapiApiTokens.php");
     expect(tokens).toContain("'find' => 'plugin::users-permissions.role.find',");
     expect(tokens).toContain("'findOne' => 'plugin::users-permissions.role.findOne',");
-    expect(tokens).toContain("'createRole' => 'plugin::users-permissions.role.createRole',");
+    expect(tokens).not.toContain("plugin::users-permissions.role.createRole");
     expect(tokens).toContain(
       "'getPermissions' => 'plugin::users-permissions.permissions.getPermissions',",
     );

@@ -569,10 +569,10 @@ final class StrapiImport
                 continue;
             }
             if (isset($attribute['column'])) {
-                $row[$attribute['column']] = self::value($value, $attribute['type']);
+                $row[$attribute['column']] = self::value($value, $attribute['type'], $model->getDateFormat());
             } elseif (isset($attribute['component'])) {
                 foreach ($attribute['component'] as $scalar) {
-                    $row[$scalar['column']] = self::value(is_array($value) ? self::at($value, $scalar['key']) : null, $scalar['type']);
+                    $row[$scalar['column']] = self::value(is_array($value) ? self::at($value, $scalar['key']) : null, $scalar['type'], $model->getDateFormat());
                 }
                 foreach ($attribute['children'] ?? [] as $child) {
                     $children[$key . '.' . implode('.', $child['key'])] = [$child, is_array($value) ? self::at($value, $child['key']) : null];
@@ -686,7 +686,7 @@ final class StrapiImport
     {
         $row = [$relation->getForeignKeyName() => $relation->getParentKey()] + $extra;
         foreach ($scalars as $scalar) {
-            $row[$scalar['column']] = self::value(self::at($item, $scalar['key']), $scalar['type']);
+            $row[$scalar['column']] = self::value(self::at($item, $scalar['key']), $scalar['type'], $relation->getRelated()->getDateFormat());
         }
 
         return (int) DB::table($relation->getRelated()->getTable())->insertGetId($row);
@@ -739,11 +739,12 @@ final class StrapiImport
             $data['provider'] = (string) (config('camis.upload.provider') ?? (config('camis.upload.disk') ?? 'local'));
         }
         $row = [];
+        $dateFormat = (new ($type['model'])())->getDateFormat();
         foreach (self::FILE_COLUMNS as $key => $column) {
             $value = $data[$key] ?? null;
             $row[$column] = match ($key) {
                 'focalPoint', 'formats', 'provider_metadata' => self::value($value, 'json'),
-                'createdAt', 'updatedAt', 'publishedAt' => self::value($value, 'dateTime'),
+                'createdAt', 'updatedAt', 'publishedAt' => self::value($value, 'dateTime', $dateFormat),
                 default => $value,
             };
         }
@@ -759,14 +760,15 @@ final class StrapiImport
      */
     private function folder(array $type, int|string $ref, array $data): void
     {
-        $this->rows[self::FOLDER][$ref] = (int) DB::table((new ($type['model'])())->getTable())->insertGetId([
+        $folder = new ($type['model'])();
+        $this->rows[self::FOLDER][$ref] = (int) DB::table($folder->getTable())->insertGetId([
             'document_id' => $data['documentId'] ?? null,
             'name' => $data['name'],
             'path_id' => $data['pathId'],
             'path' => $data['path'],
-            'created_at' => self::value($data['createdAt'] ?? null, 'dateTime'),
-            'updated_at' => self::value($data['updatedAt'] ?? null, 'dateTime'),
-            'published_at' => self::value($data['publishedAt'] ?? null, 'dateTime'),
+            'created_at' => self::value($data['createdAt'] ?? null, 'dateTime', $folder->getDateFormat()),
+            'updated_at' => self::value($data['updatedAt'] ?? null, 'dateTime', $folder->getDateFormat()),
+            'published_at' => self::value($data['publishedAt'] ?? null, 'dateTime', $folder->getDateFormat()),
         ]);
     }
 
@@ -796,13 +798,14 @@ final class StrapiImport
      */
     private function locale(array $type, int|string $ref, array $data): void
     {
-        $this->rows['plugin::i18n.locale'][$ref] = (int) DB::table((new ($type['model'])())->getTable())->insertGetId([
+        $locale = new ($type['model'])();
+        $this->rows['plugin::i18n.locale'][$ref] = (int) DB::table($locale->getTable())->insertGetId([
             'document_id' => $data['documentId'] ?? null,
             'code' => $data['code'],
             'name' => $data['name'] ?? $data['code'],
             'is_default' => false,
-            'created_at' => self::value($data['createdAt'] ?? null, 'dateTime'),
-            'updated_at' => self::value($data['updatedAt'] ?? null, 'dateTime'),
+            'created_at' => self::value($data['createdAt'] ?? null, 'dateTime', $locale->getDateFormat()),
+            'updated_at' => self::value($data['updatedAt'] ?? null, 'dateTime', $locale->getDateFormat()),
         ]);
     }
 
@@ -1114,17 +1117,16 @@ final class StrapiImport
         return $data;
     }
 
-    /** An archived value as this app's column keeps it. */
-    private static function value(mixed $value, string $type): mixed
+    /** An archived value as this app's column keeps it: a datetime in its model's format. */
+    private static function value(mixed $value, string $type, string $dateFormat = 'Y-m-d H:i:s'): mixed
     {
         if ($value === null) {
             return null;
         }
 
         return match ($type) {
-            // Strapi's datetimes keep their milliseconds, and so do this app's columns.
-            'dateTime' => CarbonImmutable::parse((string) $value)->utc()->format('Y-m-d H:i:s.v'),
-            'timestamp' => (is_numeric($value) ? CarbonImmutable::createFromTimestampMsUTC((float) $value) : CarbonImmutable::parse((string) $value))->utc()->format('Y-m-d H:i:s.v'),
+            'dateTime' => CarbonImmutable::parse((string) $value)->utc()->format($dateFormat),
+            'timestamp' => (is_numeric($value) ? CarbonImmutable::createFromTimestampMsUTC((float) $value) : CarbonImmutable::parse((string) $value))->utc()->format($dateFormat),
             'json', 'blocks' => json_encode($value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
             'boolean' => (bool) $value,
             default => is_array($value) ? json_encode($value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE) : $value,

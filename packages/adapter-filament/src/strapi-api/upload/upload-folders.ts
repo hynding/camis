@@ -35,8 +35,8 @@ return new class extends Migration
             $table->unsignedInteger('path_id')->unique();
             $table->string('path')->unique();
             $table->unsignedBigInteger('parent_id')->nullable()->index();
-            $table->timestamps();
-            $table->timestamp('published_at')->nullable();
+            $table->timestamps(3);
+            $table->timestamp('published_at', 3)->nullable();
         });
         Schema::table('files', function (Blueprint $table): void {
             $table->unsignedBigInteger('folder_id')->nullable()->index();
@@ -62,6 +62,7 @@ declare(strict_types=1);
 namespace App\\Models;
 
 use App\\Models\\Concerns\\HasDocumentId;
+use App\\Models\\Concerns\\HasMillisecondTimestamps;
 use Illuminate\\Database\\Eloquent\\Model;
 use Illuminate\\Database\\Eloquent\\Relations\\BelongsTo;
 use Illuminate\\Database\\Eloquent\\Relations\\HasMany;
@@ -70,6 +71,7 @@ use Illuminate\\Database\\Eloquent\\Relations\\HasMany;
 class UploadFolder extends Model
 {
     use HasDocumentId;
+    use HasMillisecondTimestamps;
 
     protected $table = 'upload_folders';
 
