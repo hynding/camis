@@ -17,7 +17,8 @@ use Symfony\Component\Process\PhpExecutableFinder;
  * project "camis develop" names (CAMIS_PROJECT_CONFIG and CAMIS_BUILD_COMMAND): an edit then writes
  * the project's content model (the IR, which stays the source of truth) and its roles, runs
  * "camis build", which validates the model and regenerates every target, and brings the database
- * up to the new schema. A build that fails puts both files back as they were.
+ * of this app, and of every other Strapi-style Filament app the project builds, up to the new
+ * schema. A build that fails puts both files back as they were.
  */
 final class ContentTypeBuilder
 {
@@ -99,15 +100,48 @@ final class ContentTypeBuilder
             throw new RuntimeException("camis build failed, so the content model was left as it was:\n".trim($build->output()."\n".$build->errorOutput()));
         }
 
-        // A fresh PHP process, as the build has just rewritten the app's classes and migrations.
-        $sync = Process::path(base_path())
-            ->timeout((int) config('content-type-builder.timeout', 300))
-            ->run([(new PhpExecutableFinder)->find(false) ?: 'php', 'artisan', 'camis:schema-sync', '--force']);
-        if (! $sync->successful()) {
-            throw new RuntimeException("The project was rebuilt, but the database could not be brought up to it:\n".trim($sync->output()."\n".$sync->errorOutput()));
+        // Every Strapi-style Filament app the project builds has just been rebuilt from the same model,
+        // so each one's database is brought up to it, this app's first.
+        $failed = [];
+        foreach ([base_path(), ...self::otherApps()] as $app) {
+            // A fresh PHP process, as the build has just rewritten the app's classes and migrations.
+            $sync = Process::path($app)
+                ->timeout((int) config('content-type-builder.timeout', 300))
+                ->run([(new PhpExecutableFinder)->find(false) ?: 'php', 'artisan', 'camis:schema-sync', '--force']);
+            if (! $sync->successful()) {
+                $failed[] = ($app === base_path() ? 'this app' : $app).":\n".trim($sync->output()."\n".$sync->errorOutput());
+            }
+        }
+        if ($failed !== []) {
+            throw new RuntimeException("The project was rebuilt, but a database could not be brought up to it, in ".implode("\n", $failed));
         }
 
         return $ir;
+    }
+
+    /**
+     * The project's other Strapi-style Filament apps (the laravel storage layout, as camis develop
+     * wires them), each of which has a builder too and a database of its own.
+     *
+     * @return list<string>
+     */
+    private static function otherApps(): array
+    {
+        $project = (string) self::projectPath();
+        $here = realpath(base_path());
+        $apps = [];
+        foreach ((array) (self::decode($project)['targets'] ?? []) as $target) {
+            if (! is_array($target) || ($target['target'] ?? null) !== 'filament' || ($target['apiStyle'] ?? null) !== 'strapi' || ($target['storageLayout'] ?? 'laravel') === 'strapi') {
+                continue;
+            }
+            $out = (string) ($target['out'] ?? '');
+            $app = realpath(str_starts_with($out, '/') ? $out : dirname($project).'/'.$out);
+            if ($app !== false && $app !== $here && is_file($app.'/artisan') && ! in_array($app, $apps, true)) {
+                $apps[] = $app;
+            }
+        }
+
+        return $apps;
     }
 
     private static function projectPath(): ?string

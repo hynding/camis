@@ -27,9 +27,10 @@ Usage:
                                                  (create the Laravel host app for the overlay)
   camis generate [--config camis.config.json]   (dry-run: lists files + gaps)
   camis build    [--config camis.config.json]   (writes the project to each out)
-  camis develop  [--config camis.config.json] [--no-serve]
-                                                 (build, let the admin's Content-Type Builder edit
-                                                  the content model, and serve the Filament app)`;
+  camis develop  [--config camis.config.json] [--no-serve] [--target <out>]
+                                                 (build, let every Strapi-style Filament app's
+                                                  Content-Type Builder edit the content model, and
+                                                  serve one: --target's, or the first)`;
 
 const flag = (args: string[], name: string, fallback: string): string => {
   const i = args.indexOf(name);
@@ -145,12 +146,15 @@ export const run = async (argv: string[], io: Io): Promise<number> => {
       return generateCommand(flag(rest, "--config", "camis.config.json"), io, { write: false });
     case "build":
       return generateCommand(flag(rest, "--config", "camis.config.json"), io, { write: true });
-    case "develop":
+    case "develop": {
+      const target = optionalFlag(rest, "--target");
       return developCommand(flag(rest, "--config", "camis.config.json"), io, {
         node: process.execPath,
         bin: fileURLToPath(new URL("../bin/camis.mjs", import.meta.url)),
         serve: !rest.includes("--no-serve"),
+        ...(target === undefined ? {} : { target }),
       });
+    }
     default:
       io.out(USAGE);
       return cmd === "help" || cmd === "--help" ? 0 : 1;

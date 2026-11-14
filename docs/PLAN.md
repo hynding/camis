@@ -1614,7 +1614,7 @@ roles.
 Known gaps: a field's type cannot change once made (Strapi allows only a few such changes; here
 only within its card: short and long text, a number's format, a date's type; Phase 71 lifted it); a renamed field or
 type loses its data, as in Strapi; custom fields beyond the color picker are not offered (Phase 72 offers registered ones); the
-builder edits only through the first Strapi-style Filament target. (Phase 69 closed the others.)
+builder edits only through the first Strapi-style Filament target (Phase 73 wires every one). (Phase 69 closed the others.)
 
 Exit: unit and golden tests (`content-type-builder.test.ts`, `develop.test.ts`);
 `ContentTypeBuilderTest.php` in the `strapi-api` boot job (read-only view, denied path, edits
@@ -2236,6 +2236,23 @@ generated views size by the stored type).
 Exit: `fields.test.ts`, `generate.test.ts`, `field-editors.test.ts`, `php-literal.test.ts` and
 `content-type-builder.test.ts` cases; ContentTypeBuilderTest's registration, builder and kept-editor
 cases.
+
+## Phase 73 — the builder edits through every target (`cli`, `adapter-filament`)
+
+`camis develop` wired only the first Strapi-style Filament target, so only that app's
+Content-Type Builder could edit, and an edit made there left every other such app's database
+behind the rebuilt code.
+
+- **`camis develop`** writes `CAMIS_PROJECT_CONFIG` and `CAMIS_BUILD_COMMAND` into the `.env` of
+  every Strapi-style Filament target on the laravel storage layout, syncs each one's database,
+  and serves the first, or the one `--target <out>` names.
+- **An edit** in any of them rebuilds every target, as before, then runs `camis:schema-sync` in
+  this app and in each other Strapi-style Filament app the project config lists (an out with an
+  `artisan` file, this app named once). A sync that fails anywhere is reported with the app it
+  failed in; the others still run.
+
+Exit: `develop.test.ts`'s every-target and `--target` cases; ContentTypeBuilderTest's
+every-app case.
 
 ---
 

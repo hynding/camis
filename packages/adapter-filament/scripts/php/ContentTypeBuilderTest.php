@@ -175,9 +175,9 @@ class ContentTypeBuilderTest extends TestCase
                 ->callAction(TestAction::make('addField')->table(), data: ['kind' => 'boolean', 'name' => 'shown'])
                 ->assertHasNoActionErrors();
 
-            $syncs = fn (string $path): int => Process::recorded(fn (PendingProcess $process): bool => is_array($process->command) && in_array('camis:schema-sync', $process->command, true) && realpath((string) $process->path) === realpath($path))->count();
-            $this->assertSame(1, $syncs(base_path()));
-            $this->assertSame(1, $syncs($other));
+            $syncs = fn (string $path): \Closure => fn (PendingProcess $process): bool => is_array($process->command) && in_array('camis:schema-sync', $process->command, true) && realpath((string) $process->path) === realpath($path);
+            Process::assertRanTimes($syncs(base_path()), 1);
+            Process::assertRanTimes($syncs($other), 1);
         } finally {
             unlink($other.'/artisan');
             rmdir($other);

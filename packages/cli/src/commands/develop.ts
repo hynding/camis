@@ -10,6 +10,8 @@ export interface DevelopOptions {
   bin: string;
   /** Serve the app with `php artisan serve` once it is ready. */
   serve: boolean;
+  /** The out of the Strapi-style Filament target to serve; the first one by default. */
+  target?: string;
 }
 
 // Bare when it can be: phpdotenv reads a value holding single quotes in ways a shell would not.
@@ -43,9 +45,9 @@ export const patchDevelopEnv = (source: string, env: Record<string, string>): st
 };
 
 /**
- * `camis develop`, as `strapi develop`: build the project, let the Strapi-style Filament app's
+ * `camis develop`, as `strapi develop`: build the project, let every Strapi-style Filament app's
  * Content-Type Builder edit the content model (APP_ENV=local, which a new Laravel app has), bring
- * its database up to the build, and serve it.
+ * each one's database up to the build, and serve one of them: `target`, or the first.
  */
 export const developCommand = async (
   configPath: string,
@@ -57,30 +59,39 @@ export const developCommand = async (
     io.out(`✗ config: ${cfg.error}`);
     return 1;
   }
-  const app = cfg.value.targets.find(
+  const apps = cfg.value.targets.filter(
     (t) => t.target === "filament" && t.apiStyle === "strapi" && t.storageLayout !== "strapi",
   );
-  if (app === undefined) {
+  if (apps.length === 0) {
     io.out(
       '✗ develop needs a filament target with apiStyle "strapi" (and the laravel storage layout): its admin has the Content-Type Builder',
     );
     return 1;
   }
+  const served =
+    options.target === undefined
+      ? apps[0]
+      : apps.find((t) => resolve(io.cwd, t.out) === resolve(io.cwd, options.target ?? ""));
+  if (served === undefined) {
+    io.out(`✗ develop: no Strapi-style Filament target is out at "${options.target}"`);
+    return 1;
+  }
   if ((await generateCommand(configPath, io, { write: true })) !== 0) return 1;
 
   const project = isAbsolute(configPath) ? configPath : resolve(io.cwd, configPath);
-  const envPath = join(app.out, ".env");
-  const source = await io.readFile(envPath).catch(() => "");
-  await io.writeFile(
-    envPath,
-    patchDevelopEnv(source, developEnv({ project, node: options.node, bin: options.bin })),
-  );
-  io.out(`✓ the Content-Type Builder in ${app.out} edits ${cfg.value.ir}`);
-
-  if ((await io.exec("php", ["artisan", "camis:schema-sync"], app.out)) !== 0) {
-    io.out("✗ php artisan camis:schema-sync failed");
-    return 1;
+  const env = developEnv({ project, node: options.node, bin: options.bin });
+  for (const app of apps) {
+    const envPath = join(app.out, ".env");
+    const source = await io.readFile(envPath).catch(() => "");
+    await io.writeFile(envPath, patchDevelopEnv(source, env));
+    io.out(`✓ the Content-Type Builder in ${app.out} edits ${cfg.value.ir}`);
+  }
+  for (const app of apps) {
+    if ((await io.exec("php", ["artisan", "camis:schema-sync"], app.out)) !== 0) {
+      io.out(`✗ php artisan camis:schema-sync failed in ${app.out}`);
+      return 1;
+    }
   }
   if (!options.serve) return 0;
-  return io.exec("php", ["artisan", "serve"], app.out);
+  return io.exec("php", ["artisan", "serve"], served.out);
 };
