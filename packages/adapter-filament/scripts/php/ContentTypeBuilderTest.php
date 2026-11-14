@@ -154,6 +154,36 @@ class ContentTypeBuilderTest extends TestCase
         Process::assertRan(fn (PendingProcess $process): bool => is_array($process->command) && in_array('camis:schema-sync', $process->command, true));
     }
 
+    public function test_an_edit_brings_every_strapi_style_filament_app_of_the_project_up_to_it(): void
+    {
+        $this->login(['user.update']);
+        $this->develop();
+        // Another Strapi-style Filament app the project builds, and this one named as a target too.
+        $other = $this->project.'-admin2';
+        mkdir($other);
+        touch($other.'/artisan');
+        file_put_contents($this->project.'/camis.config.json', json_encode(['ir' => './camis.json', 'roles' => './roles.json', 'targets' => [
+            ['target' => 'filament', 'out' => base_path(), 'apiStyle' => 'strapi'],
+            ['target' => 'filament', 'out' => '../'.basename($other), 'apiStyle' => 'strapi'],
+            ['target' => 'filament', 'out' => '../'.basename($other), 'apiStyle' => 'strapi', 'storageLayout' => 'strapi'],
+            ['target' => 'strapi', 'out' => './cms'],
+        ]]));
+        Process::fake();
+
+        try {
+            Livewire::test(ContentTypeBuilder::class, ['type' => 'contentType:Tag'])
+                ->callAction(TestAction::make('addField')->table(), data: ['kind' => 'boolean', 'name' => 'shown'])
+                ->assertHasNoActionErrors();
+
+            $syncs = fn (string $path): int => Process::recorded(fn (PendingProcess $process): bool => is_array($process->command) && in_array('camis:schema-sync', $process->command, true) && realpath((string) $process->path) === realpath($path))->count();
+            $this->assertSame(1, $syncs(base_path()));
+            $this->assertSame(1, $syncs($other));
+        } finally {
+            unlink($other.'/artisan');
+            rmdir($other);
+        }
+    }
+
     public function test_a_failed_build_leaves_the_ir_and_roles_as_they_were(): void
     {
         $this->login(['user.update']);

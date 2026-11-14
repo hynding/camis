@@ -99,6 +99,71 @@ describe("camis develop", () => {
     expect(lines.join("\n")).toContain("Content-Type Builder");
   });
 
+  // Every Strapi-style Filament app the project builds edits the content model, not only the first.
+  it("wires and syncs every Strapi-style Filament target, serving the first", async () => {
+    const files: Record<string, string> = {
+      "/p/camis.config.json": JSON.stringify({
+        ir: "./camis.json",
+        targets: [
+          { target: "filament", out: "./generated/filament", apiStyle: "strapi" },
+          {
+            target: "filament",
+            out: "./generated/storage",
+            apiStyle: "strapi",
+            storageLayout: "strapi",
+          },
+          { target: "filament", out: "./generated/admin2", apiStyle: "strapi" },
+        ],
+      }),
+    };
+    const ran: { cmd: string; args: string[]; cwd: string }[] = [];
+    const lines: string[] = [];
+    const code = await developCommand("camis.config.json", fakeIo(files, ran, lines), {
+      node: "node",
+      bin: "camis.mjs",
+      serve: true,
+    });
+    expect(code).toBe(0);
+    for (const out of ["/p/generated/filament", "/p/generated/admin2"]) {
+      expect(files[`${out}/.env`]).toContain('CAMIS_PROJECT_CONFIG="/p/camis.config.json"');
+    }
+    expect(files["/p/generated/storage/.env"]).toBeUndefined();
+    expect(ran.map((r) => `${r.cwd} ${r.args.join(" ")}`)).toEqual([
+      "/p/generated/filament artisan camis:schema-sync",
+      "/p/generated/admin2 artisan camis:schema-sync",
+      "/p/generated/filament artisan serve",
+    ]);
+  });
+
+  it("serves the target --target names", async () => {
+    const files: Record<string, string> = {
+      "/p/camis.config.json": JSON.stringify({
+        ir: "./camis.json",
+        targets: [
+          { target: "filament", out: "./generated/filament", apiStyle: "strapi" },
+          { target: "filament", out: "./generated/admin2", apiStyle: "strapi" },
+        ],
+      }),
+    };
+    const ran: { cmd: string; args: string[]; cwd: string }[] = [];
+    const lines: string[] = [];
+    const io = fakeIo(files, ran, lines);
+    const options = { node: "node", bin: "camis.mjs", serve: true };
+    expect(
+      await developCommand("camis.config.json", io, { ...options, target: "generated/admin2" }),
+    ).toBe(0);
+    expect(ran.at(-1)).toEqual({
+      cmd: "php",
+      args: ["artisan", "serve"],
+      cwd: "/p/generated/admin2",
+    });
+
+    expect(await developCommand("camis.config.json", io, { ...options, target: "./nowhere" })).toBe(
+      1,
+    );
+    expect(lines.at(-1)).toContain('no Strapi-style Filament target is out at "./nowhere"');
+  });
+
   it("refuses a project with no Strapi-style Filament target to edit from", async () => {
     const lines: string[] = [];
     const io = fakeIo(
