@@ -5,6 +5,8 @@ import { CONTENT_TYPE_BUILDER_PATH, emitContentTypeBuilderRuntime } from "./buil
 import { CONTENT_TYPE_BUILDER_PAGE_PATH, emitContentTypeBuilderPage } from "./page";
 import { CONTENT_TYPE_BUILDER_SCHEMA_PATH, emitContentTypeBuilderSchema } from "./schema-runtime";
 import {
+  COLUMN_CONVERSION_PATH,
+  emitColumnConversion,
   emitSchemaSync,
   emitSchemaSyncCommand,
   SCHEMA_SYNC_COMMAND_PATH,
@@ -47,5 +49,6 @@ export const emitContentTypeBuilder = (document: IrDocument, secured: boolean): 
   { path: CONTENT_TYPE_BUILDER_PATH, content: emitContentTypeBuilderRuntime() },
   { path: CONTENT_TYPE_BUILDER_SCHEMA_PATH, content: emitContentTypeBuilderSchema() },
   { path: SCHEMA_SYNC_PATH, content: emitSchemaSync() },
+  { path: COLUMN_CONVERSION_PATH, content: emitColumnConversion() },
   { path: SCHEMA_SYNC_COMMAND_PATH, content: emitSchemaSyncCommand() },
 ];

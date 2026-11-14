@@ -25,8 +25,9 @@ use Throwable;
  * ones no generated migration declares any more; a table a recorded migration created that none
  * creates now is dropped. Each sync keeps the column types the generated migrations declare, per
  * database (columnTypesPath), so the next one changes a column whose declared type changed since,
- * keeping its values where the database can convert them. Then the migrations table lists exactly the
- * generated migrations, so "migrate" runs only what camis did not generate. Development only: a
+ * keeping its values where the database can convert them, or, changed to another group of types
+ * (text to a number), converting them one by one (see convertColumn). Then the migrations table
+ * lists exactly the generated migrations, so "migrate" runs only what camis did not generate. Development only: a
  * dropped field's or type's data is gone, as in Strapi.
  */
 final class CamisSchemaSync
@@ -299,9 +300,14 @@ final class CamisSchemaSync
                 continue;
             }
             try {
+                if (ColumnConversion::group($before) !== ColumnConversion::group($declared) && in_array('id', $existing, true)) {
+                    $this->convertColumn($table, $definition, $column, $before, $declared);
+                    $this->report[] = "converted {$table}.{$name} from {$before} to {$declared}";
+
+                    continue;
+                }
                 $schema->table($table, function (Blueprint $blueprint) use ($column): void {
-                    $attributes = array_diff_key($column->getAttributes(), array_flip(['type', 'name', ...self::INDEX_MODIFIERS]));
-                    $blueprint->addColumn((string) $column->get('type'), (string) $column->get('name'), $attributes)->nullable()->change();
+                    $blueprint->addColumn((string) $column->get('type'), (string) $column->get('name'), self::typeAttributes($column))->nullable()->change();
                 });
                 $this->report[] = "changed {$table}.{$name} to {$declared}";
             } catch (Throwable $exception) {
@@ -310,6 +316,111 @@ final class CamisSchemaSync
                 $this->report[] = "kept {$table}.{$name} as {$before}: the database cannot change it to {$declared} ({$exception->getMessage()})";
             }
         }
+    }
+
+    /** @return array<string, mixed> */
+    private static function typeAttributes(ColumnDefinition $column): array
+    {
+        return array_diff_key($column->getAttributes(), array_flip(['type', 'name', ...self::INDEX_MODIFIERS]));
+    }
+
+    /**
+     * A column changed to another group of types (text to a number, a number to a date, …), which
+     * no database converts in place alike: a column of the new type takes each value as
+     * ColumnConversion carries it over (emptied where the new type cannot hold it, and where a
+     * unique column would hold it twice), then takes the old column's place and its indexes. The
+     * old column goes only once its values are in the new one; a conversion cut short before that
+     * leaves it as it was, and the next sync starts over.
+     */
+    private function convertColumn(string $table, Blueprint $definition, ColumnDefinition $column, string $before, string $declared): void
+    {
+        $schema = $this->connection->getSchemaBuilder();
+        $name = (string) $column->get('name');
+        $converting = 'camis_converting_'.$name;
+        $replaced = 'camis_replaced_'.$name;
+        foreach ([$converting, $replaced] as $leftover) {
+            if ($schema->hasColumn($table, $leftover)) {
+                $this->dropColumns($table, [$leftover]);
+            }
+        }
+        $schema->table($table, function (Blueprint $blueprint) use ($column, $converting): void {
+            $blueprint->addColumn((string) $column->get('type'), $converting, self::typeAttributes($column))->nullable();
+        });
+        $indexes = self::declaredIndexes($definition, $column);
+        $unique = in_array('unique', array_column($indexes, 'kind'), true);
+        $seen = [];
+        $this->connection->table($table)->select(['id', $name])->whereNotNull($name)
+            ->chunkById(500, function ($rows) use ($table, $name, $converting, $before, $declared, $unique, &$seen): void {
+                // One transaction a chunk, so SQLite does not write each row through to disk alone.
+                $this->connection->transaction(function () use ($rows, $table, $name, $converting, $before, $declared, $unique, &$seen): void {
+                    foreach ($rows as $row) {
+                        $value = ColumnConversion::convert($row->{$name}, $before, $declared);
+                        if ($value === null) {
+                            continue;
+                        }
+                        if ($unique) {
+                            $key = var_export($value, true);
+                            if (isset($seen[$key])) {
+                                continue;
+                            }
+                            $seen[$key] = true;
+                        }
+                        $this->connection->table($table)->where('id', $row->id)->update([$converting => $value]);
+                    }
+                });
+            });
+        $schema->table($table, function (Blueprint $blueprint) use ($name, $replaced): void {
+            $blueprint->renameColumn($name, $replaced);
+        });
+        try {
+            $schema->table($table, function (Blueprint $blueprint) use ($converting, $name): void {
+                $blueprint->renameColumn($converting, $name);
+            });
+        } catch (Throwable $exception) {
+            $schema->table($table, function (Blueprint $blueprint) use ($name, $replaced): void {
+                $blueprint->renameColumn($replaced, $name);
+            });
+            throw $exception;
+        }
+        try {
+            $this->dropColumns($table, [$replaced]);
+        } catch (Throwable) {
+            // The values are converted; the old column, undeclared, goes with the others below.
+        }
+        foreach ($indexes as $index) {
+            try {
+                $schema->table($table, function (Blueprint $blueprint) use ($index, $name): void {
+                    $index['kind'] === 'unique' ? $blueprint->unique([$name], $index['name']) : $blueprint->index([$name], $index['name']);
+                });
+            } catch (Throwable $exception) {
+                $this->report[] = "converted {$table}.{$name} without its {$index['kind']} index: {$exception->getMessage()}";
+            }
+        }
+    }
+
+    /**
+     * The unique and plain indexes a declared table puts on one column alone: as the column's
+     * modifiers, or as commands of its blueprint.
+     *
+     * @return list<array{kind: string, name: string|null}>
+     */
+    private static function declaredIndexes(Blueprint $definition, ColumnDefinition $column): array
+    {
+        $name = (string) $column->get('name');
+        $indexes = [];
+        foreach (['unique', 'index'] as $kind) {
+            $modifier = $column->get($kind);
+            if ($modifier !== null && $modifier !== false) {
+                $indexes[] = ['kind' => $kind, 'name' => is_string($modifier) ? $modifier : null];
+            }
+        }
+        foreach ($definition->getCommands() as $command) {
+            if (in_array($command->get('name'), ['unique', 'index'], true) && (array) $command->get('columns') === [$name]) {
+                $indexes[] = ['kind' => (string) $command->get('name'), 'name' => is_string($command->get('index')) ? $command->get('index') : null];
+            }
+        }
+
+        return $indexes;
     }
 
     /**
@@ -404,19 +515,30 @@ final class CamisSchemaSync
         if ($undeclared === []) {
             return;
         }
-        $touches = fn (array $columns): bool => array_intersect($columns, $undeclared) !== [];
+        $this->dropColumns($table, $undeclared);
+        $this->report[] = "dropped {$table}.".implode(", {$table}.", $undeclared);
+    }
+
+    /**
+     * Drop columns with the foreign keys and indexes on them, which SQLite will not drop a column under.
+     *
+     * @param  list<string>  $columns
+     */
+    private function dropColumns(string $table, array $columns): void
+    {
+        $schema = $this->connection->getSchemaBuilder();
+        $touches = fn (array $keyColumns): bool => array_intersect($keyColumns, $columns) !== [];
         $foreignKeys = array_values(array_filter($schema->getForeignKeys($table), fn (array $key): bool => $touches($key['columns'])));
         $indexes = array_values(array_filter($schema->getIndexes($table), fn (array $index): bool => ! $index['primary'] && $touches($index['columns'])));
-        $schema->table($table, function (Blueprint $blueprint) use ($foreignKeys, $indexes, $undeclared): void {
+        $schema->table($table, function (Blueprint $blueprint) use ($foreignKeys, $indexes, $columns): void {
             foreach ($foreignKeys as $key) {
                 $blueprint->dropForeign($key['name'] ?? $key['columns']);
             }
             foreach ($indexes as $index) {
                 $blueprint->dropIndex($index['name']);
             }
-            $blueprint->dropColumn($undeclared);
+            $blueprint->dropColumn($columns);
         });
-        $this->report[] = "dropped {$table}.".implode(", {$table}.", $undeclared);
     }
 
     /**

@@ -48,6 +48,13 @@ final class ContentTypeBuilderSchema
     ];
 
     /**
+     * The kinds whose field is one column of its type's table. One may change into another, text to
+     * number say, and the schema sync converts the column (see CamisSchemaSync); the others keep their
+     * data in tables of their own, so a field of theirs keeps its kind.
+     */
+    public const COLUMN_KINDS = ['text', 'blocks', 'number', 'date', 'boolean', 'json', 'email', 'enumeration', 'uid', 'richText', 'color'];
+
+    /**
      * Strapi's relation kinds, in its dialog's order, each with the IR relation it makes. One-way
      * and many-way are a relation the other content type does not show: the IR's without an inverse.
      */
@@ -190,6 +197,12 @@ final class ContentTypeBuilderSchema
     private static function cardinality(array $field): string
     {
         return ($field['many'] ?? false) ? 'many' : 'one';
+    }
+
+    /** Whether a field of this IR type may change to a type of another kind (see COLUMN_KINDS). */
+    public static function convertible(string $type): bool
+    {
+        return in_array(self::kindOf($type), self::COLUMN_KINDS, true);
     }
 
     /** The builder kind (Strapi's field card) an IR type belongs to. */
@@ -453,7 +466,8 @@ final class ContentTypeBuilderSchema
     /**
      * Change a field from the field dialog's state. Keys the dialog does not own (an imported
      * field's API name, a validation expression, …) are kept. A renamed field keeps the uid fields
-     * generated from it pointing at it.
+     * generated from it pointing at it. A field of one column may change to a type of another kind
+     * (see COLUMN_KINDS): it keeps only the settings the new type has.
      *
      * @param  array<string, mixed>  $ir
      * @param  array<string, mixed>  $state
@@ -464,13 +478,20 @@ final class ContentTypeBuilderSchema
         return self::mapNode($ir, $ref, function (array $node) use ($ref, $name, $state, $ir): array {
             $index = self::fieldIndex($node, $name);
             $field = self::fieldFromState($node['fields'][$index], $state, $ref, $ir);
-            if ($field['name'] !== $name) {
-                self::assertFieldName($node, $field['name']);
-                foreach ($node['fields'] as $i => $other) {
-                    if (($other['targetField'] ?? null) === $name) {
+            // A uid is made from a text field: one changed from text to another type no longer makes it.
+            $text = ['string', 'text'];
+            $lostUid = in_array($node['fields'][$index]['type'], $text, true) && ! in_array($field['type'], $text, true);
+            foreach ($node['fields'] as $i => $other) {
+                if (($other['targetField'] ?? null) === $name) {
+                    if (! $lostUid) {
                         $node['fields'][$i]['targetField'] = $field['name'];
+                    } else {
+                        unset($node['fields'][$i]['targetField']);
                     }
                 }
+            }
+            if ($field['name'] !== $name) {
+                self::assertFieldName($node, $field['name']);
                 if (($node['options']['upsertBy'] ?? null) === $name) {
                     $node['options']['upsertBy'] = $field['name'];
                 }
@@ -518,8 +539,9 @@ final class ContentTypeBuilderSchema
     {
         $type = self::typeFromState($state, $existing);
         $kind = self::kindOf($type);
-        if (isset($existing['type']) && self::kindOf($existing['type']) !== $kind) {
-            throw new InvalidArgumentException("field \"{$existing['name']}\" is a {$existing['type']} field; its type cannot change to {$type}");
+        if (isset($existing['type']) && self::kindOf($existing['type']) !== $kind && ! (self::convertible($existing['type']) && self::convertible($type))) {
+            $outside = self::convertible($existing['type']) ? $type : $existing['type'];
+            throw new InvalidArgumentException("field \"{$existing['name']}\" cannot change from {$existing['type']} to {$type}: a {$outside} field keeps its data outside its type's table. Delete it and add a new field instead.");
         }
         if ($kind === 'dynamicZone' && str_starts_with($ref, 'component:')) {
             throw new InvalidArgumentException('a component cannot hold a dynamic zone');

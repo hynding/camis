@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 // camis:schema-sync on the served database (the strapi-api job's matrix: sqlite, mysql, pgsql), where
 // the feature tests' in-memory SQLite cannot reach: a dropped column comes back with its foreign key,
-// an undeclared column and its index go, a column whose declared type changed is changed, an
+// an undeclared column and its index go, a column whose declared type changed is changed (and one
+// changed to another group, text to number, converted value by value), an
 // abandoned table goes, a renumbered migration is recorded under its new name, and the rows stay.
 // Run inside the app:
 //   php artisan tinker --execute='require "../packages/adapter-filament/scripts/php/schema-sync-check.php";'
@@ -29,8 +30,14 @@ Schema::table('posts', function ($table): void {
     $table->dropForeign(['author_id']);
 });
 Schema::table('posts', function ($table): void {
-    $table->dropColumn(['author_id', 'views']);
+    $table->dropColumn(['author_id']);
 });
+// As if posts.views had been a short text when the database was last synced.
+Schema::table('posts', function ($table): void {
+    $table->string('views')->nullable()->change();
+});
+$many = Post::create(['title' => 'many', 'views' => 'many']);
+$rounded = Post::create(['title' => 'rounded', 'views' => '7.6']);
 Schema::table('tags', function ($table): void {
     $table->string('obsolete')->nullable()->index();
 });
@@ -40,7 +47,7 @@ Schema::table('tags', function ($table): void {
 });
 $types = \App\Support\CamisSchemaSync::columnTypesPath(DB::connection());
 @mkdir(dirname($types), 0777, true);
-file_put_contents($types, json_encode(['tags' => ['label' => 'text']]));
+file_put_contents($types, json_encode(['tags' => ['label' => 'text'], 'posts' => ['views' => 'string(255)']]));
 Schema::create('widgets', function ($table): void {
     $table->id();
 });
@@ -51,10 +58,15 @@ if (Artisan::call('camis:schema-sync', ['--force' => true]) !== 0) {
     $fail(Artisan::output());
 }
 
-foreach (['author_id', 'views'] as $column) {
-    if (! Schema::hasColumn('posts', $column)) {
-        $fail("posts.{$column} was not added back");
-    }
+if (! Schema::hasColumn('posts', 'author_id')) {
+    $fail('posts.author_id was not added back');
+}
+if (! in_array(Schema::getColumnType('posts', 'views'), ['integer', 'int', 'int4'], true)) {
+    $fail('posts.views was not converted to a number: '.Schema::getColumnType('posts', 'views'));
+}
+$views = DB::table('posts')->whereIn('id', [$post->id, $many->id, $rounded->id])->orderBy('id')->pluck('views')->map(fn ($v) => $v === null ? null : (int) $v)->all();
+if ($views !== [3, null, 8]) {
+    $fail('posts.views did not keep the values a number holds: '.json_encode($views));
 }
 if (DB::connection()->getDriverName() !== 'sqlite'
     && ! collect(Schema::getForeignKeys('posts'))->contains(fn (array $key): bool => $key['columns'] === ['author_id'])) {

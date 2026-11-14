@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Filament\Pages\ContentTypeBuilder;
 use App\Models\AdminUser;
+use App\Models\Post;
 use App\Models\Tag;
 use App\Models\User;
 use App\Support\ContentTypeBuilder as Builder;
@@ -337,6 +338,129 @@ class ContentTypeBuilderTest extends TestCase
         $this->assertSame('oneWay', \App\Support\ContentTypeBuilderSchema::stateFromField($fields['lead'])['relationKind']);
         $this->assertSame('manyWay', \App\Support\ContentTypeBuilderSchema::stateFromField($fields['seen'])['relationKind']);
         $this->assertSame('manyToMany', \App\Support\ContentTypeBuilderSchema::stateFromField($fields['curators'])['relationKind']);
+    }
+
+    public function test_a_field_changes_to_a_type_in_another_group(): void
+    {
+        $this->login(['user.update']);
+        $this->develop();
+        Process::fake();
+
+        // Text to number: a field kept in one column of its table may become any other such field.
+        Livewire::test(ContentTypeBuilder::class, ['type' => 'contentType:Tag'])
+            ->callAction(TestAction::make('editField')->table('label'), data: ['kind' => 'number', 'numberType' => 'integer', 'min' => '0'])
+            ->assertHasNoActionErrors();
+
+        $this->assertSame([['type' => 'integer', 'name' => 'label', 'min' => 0]], $this->type('Tag')['fields']);
+        Process::assertRan(fn (PendingProcess $process): bool => is_array($process->command) && in_array('camis:schema-sync', $process->command, true));
+    }
+
+    public function test_a_type_change_drops_the_settings_and_links_the_new_type_cannot_have(): void
+    {
+        $ir = ['contentTypes' => [['name' => 'Page', 'kind' => 'collection', 'fields' => [
+            ['type' => 'string', 'name' => 'title', 'maxLength' => 80, 'default' => 'Untitled', 'localized' => false],
+            ['type' => 'uid', 'name' => 'slug', 'targetField' => 'title'],
+        ]]], 'components' => []];
+
+        $after = \App\Support\ContentTypeBuilderSchema::updateField($ir, 'contentType:Page', 'title', ['kind' => 'number', 'numberType' => 'integer', 'name' => 'title', 'maxLength' => '80', 'default' => 'Untitled']);
+
+        // A uid made from a field that keeps its type keeps being made from it.
+        $kept = \App\Support\ContentTypeBuilderSchema::updateField(
+            ['contentTypes' => [['name' => 'Page', 'kind' => 'collection', 'fields' => [['type' => 'email', 'name' => 'contact'], ['type' => 'uid', 'name' => 'slug', 'targetField' => 'contact']]]], 'components' => []],
+            'contentType:Page', 'contact', ['kind' => 'email', 'name' => 'contact', 'required' => true],
+        );
+        $this->assertSame('contact', $kept['contentTypes'][0]['fields'][1]['targetField']);
+
+        // A uid is made from a text field only, so it no longer is from a number.
+        $this->assertSame([
+            ['type' => 'integer', 'name' => 'title', 'localized' => false],
+            ['type' => 'uid', 'name' => 'slug'],
+        ], $after['contentTypes'][0]['fields']);
+    }
+
+    public function test_a_field_kept_outside_its_table_cannot_change_type(): void
+    {
+        $ir = ['contentTypes' => [
+            ['name' => 'Page', 'kind' => 'collection', 'fields' => [['type' => 'relation', 'name' => 'author', 'relationKind' => 'manyToOne', 'target' => 'Page']]],
+        ], 'components' => []];
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Delete it and add a new field');
+        \App\Support\ContentTypeBuilderSchema::updateField($ir, 'contentType:Page', 'author', ['kind' => 'text', 'name' => 'author']);
+    }
+
+    public function test_a_column_value_converts_to_another_type_or_is_emptied(): void
+    {
+        $convert = \App\Support\ColumnConversion::convert(...);
+        $this->assertSame(12, $convert('12', 'string(255)', 'integer'));
+        $this->assertSame(8, $convert('7.6', 'string(255)', 'integer'));
+        $this->assertNull($convert('many', 'string(255)', 'integer'));
+        $this->assertSame(9007199254740993, $convert('9007199254740993', 'text', 'bigInteger'));
+        $this->assertNull($convert('92233720368547758070', 'text', 'bigInteger'));
+        $this->assertSame(3.25, $convert('3.25', 'string(255)', 'decimal(8, 2)'));
+        $this->assertSame('true', $convert(1, 'boolean', 'string(255)'));
+        $this->assertSame('false', $convert(false, 'boolean', 'text'));
+        $this->assertTrue($convert('yes', 'string(255)', 'boolean'));
+        $this->assertFalse($convert(0, 'integer', 'boolean'));
+        $this->assertNull($convert('maybe', 'string(255)', 'boolean'));
+        $this->assertSame('2024-03-01', $convert('2024-03-01 10:00:00', 'string(255)', 'date'));
+        $this->assertSame('2024-03-01 10:00:00', $convert('2024-03-01T10:00:00', 'text', 'dateTime'));
+        $this->assertSame('10:30:00', $convert('10:30', 'string(255)', 'time'));
+        $this->assertNull($convert('not a date', 'text', 'dateTime'));
+        $this->assertSame('"hello"', $convert('hello', 'text', 'json'));
+        $this->assertSame('{"a":1}', $convert('{"a":1}', 'text', 'json'));
+        $this->assertSame('{"a":1}', $convert('{"a":1}', 'json', 'text'));
+        $this->assertSame('42', $convert(42, 'integer', 'string(255)'));
+        $this->assertSame('abc', $convert('abcdef', 'text', 'string(3)'));
+        $this->assertNull($convert(null, 'text', 'integer'));
+        // What the new column cannot hold is emptied, never handed to a database that would refuse it.
+        $this->assertNull($convert('1e20', 'text', 'bigInteger'));
+        $this->assertNull($convert('3000000000', 'text', 'integer'));
+        $this->assertSame(3000000000, $convert('3000000000', 'text', 'integer unsigned'));
+        $this->assertNull($convert('-5', 'text', 'integer unsigned'));
+        $this->assertNull($convert('123456789', 'text', 'decimal(8, 2)'));
+        $this->assertSame(1.24, $convert('1.235', 'text', 'decimal(8, 2)'));
+        $this->assertNull($convert(3, 'integer', 'enum(a|b)'));
+        $this->assertSame('b', $convert('b', 'text', 'enum(a|b)'));
+        $this->assertSame('abcdefghij', $convert('abcdefghijkl', 'text', 'char(10)'));
+        // Only a date written as ISO 8601 or SQL write one is read as one.
+        foreach (['2024', 'a', 'tomorrow', 'Monday', '10:30'] as $notADate) {
+            $this->assertNull($convert($notADate, 'text', 'dateTime'), $notADate);
+        }
+        $this->assertSame('2024-03-01 09:00:00', $convert('2024-03-01T10:00:00+01:00', 'text', 'dateTime'));
+        $this->assertSame('2024-03-01 10:00:00', $convert('2024-03-01T10:00:00.000Z', 'text', 'dateTime'));
+        // An empty text is no answer, and a number is true unless it is zero, written or not.
+        $this->assertNull($convert('', 'text', 'boolean'));
+        $this->assertTrue($convert('2', 'text', 'boolean'));
+        $this->assertFalse($convert('0.0', 'text', 'boolean'));
+    }
+
+    public function test_the_schema_sync_converts_a_column_changed_to_another_group(): void
+    {
+        // As if "views" had been a short text when the database was last synced.
+        Schema::table('posts', function ($table): void {
+            $table->string('views')->nullable()->change();
+        });
+        foreach (['twelve' => '12', 'many' => 'many', 'rounded' => '7.6', 'none' => null] as $title => $views) {
+            Post::create(['title' => $title, 'views' => $views]);
+        }
+        $types = \App\Support\CamisSchemaSync::columnTypesPath(DB::connection());
+        @mkdir(dirname($types), 0777, true);
+        file_put_contents($types, json_encode(['posts' => ['views' => 'string(255)']]));
+
+        try {
+            $this->assertSame(0, Artisan::call('camis:schema-sync', ['--force' => true]));
+
+            $this->assertStringContainsString('converted posts.views from string(255) to integer', Artisan::output());
+            $this->assertSame('integer', Schema::getColumnType('posts', 'views'));
+            $this->assertSame(
+                ['many' => null, 'none' => null, 'rounded' => 8, 'twelve' => 12],
+                DB::table('posts')->orderBy('title')->pluck('views', 'title')->map(fn ($views) => $views === null ? null : (int) $views)->all(),
+            );
+            $this->assertNotContains('camis_converting_views', Schema::getColumnListing('posts'));
+        } finally {
+            @unlink($types);
+        }
     }
 
     public function test_the_schema_sync_keeps_the_data_while_columns_and_tables_follow_the_migrations(): void
