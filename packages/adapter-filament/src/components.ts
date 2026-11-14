@@ -276,18 +276,13 @@ export const repeaterComponent = (
 ): RepeaterEmit => {
   const nested = child.children.map((c) => repeaterComponent(c, pickers, depth + 1, components));
   const pad = "    ".repeat(depth - 1);
-  const fields: LaidOutField[] = [
-    ...child.emits.map((e, i) => ({ path: child.emitPaths[i]!, code: e.formComponent })),
-    ...child.media.map((m) => ({
-      path: m.path,
-      code: `MediaPicker::make('${m.method}', multiple: ${m.multiple}${m.allowedTypes === undefined ? "" : `, allowedTypes: [${m.allowedTypes.map((t) => `'${t}'`).join(", ")}]`})`,
-    })),
-    ...child.relations.map((r) => ({
-      path: r.path,
-      code: componentRelationPicker(r, pickers.versioned, pickers.localized, pickers.locale(depth)),
-    })),
-    ...nested.map((n, i) => ({ path: child.children[i]!.path, code: n.component })),
-  ];
+  const fields = childFields(child, {
+    media: (m) =>
+      `MediaPicker::make('${m.method}', multiple: ${m.multiple}${m.allowedTypes === undefined ? "" : `, allowedTypes: [${m.allowedTypes.map((t) => `'${t}'`).join(", ")}]`})`,
+    relation: (r) =>
+      componentRelationPicker(r, pickers.versioned, pickers.localized, pickers.locale(depth)),
+    child: (_, i) => nested[i]!.component,
+  });
   // On the Strapi-style admin the item's own view lays its fields out.
   const schema =
     components === undefined
@@ -305,6 +300,24 @@ export const repeaterComponent = (
     ],
   };
 };
+
+/**
+ * An item's form fields, each with its path in the item: its columns, then its media, relations
+ * and nested repeatables, written by the caller's own components for the last three.
+ */
+export const childFields = (
+  child: ChildTableEmit,
+  write: {
+    media: (m: ChildMedia) => string;
+    relation: (r: ComponentRelation) => string;
+    child: (nested: ChildTableEmit, index: number) => string;
+  },
+): LaidOutField[] => [
+  ...child.emits.map((e, i) => ({ path: child.emitPaths[i]!, code: e.formComponent })),
+  ...child.media.map((m) => ({ path: m.path, code: write.media(m) })),
+  ...child.relations.map((r) => ({ path: r.path, code: write.relation(r) })),
+  ...child.children.map((n, i) => ({ path: n.path, code: write.child(n, i) })),
+];
 
 /** How the admin picks a relation inside a component: what the record's draft and locale narrow. */
 export interface RelationPickers {

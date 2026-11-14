@@ -10,6 +10,8 @@ import { filamentNames, snake, snakeColumn } from "./names";
 /** The field types Strapi's Content Manager lets a relation's entries be titled by. */
 const MAIN_FIELD_TYPES = new Set([
   "string",
+  "boolean",
+  "color",
   "text",
   "uid",
   "email",

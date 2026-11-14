@@ -107,8 +107,8 @@ final class StrapiContentManager
         foreach ($synced['metadatas'] as $name => $metadata) {
             $kept = (array) ($stored['metadatas'][$name] ?? []);
             $metadatas[$name] = [
-                'edit' => array_replace((array) ($kept['edit'] ?? []), $metadata['edit']),
-                'list' => array_replace((array) ($kept['list'] ?? []), $metadata['list']),
+                'edit' => self::keepMainField((array) ($kept['edit'] ?? []), $metadata['edit']),
+                'list' => self::keepMainField((array) ($kept['list'] ?? []), $metadata['list']),
             ];
         }
         StrapiSettings::merge(self::key($view), [
@@ -223,7 +223,7 @@ final class StrapiContentManager
      */
     public static function component(string $uid, array $fields, array $components = []): array
     {
-        $stored = StrapiSettings::get(self::KEY_PREFIX.'components::'.$uid);
+        $stored = self::componentView($uid);
         $rows = (array) ($stored['layouts']['edit'] ?? []);
         if ($rows === []) {
             return array_values(array_merge(...array_values($fields)));
@@ -239,9 +239,8 @@ final class StrapiContentManager
                     continue;
                 }
                 $placed[$name] = true;
-                $size = in_array($cell['size'] ?? null, self::SIZES, true) ? $cell['size'] : self::MAX_ROW_SIZE;
                 $type = in_array($name, $components, true) ? 'component' : 'field';
-                $cells[] = self::field($fields[$name], ['type' => $type], $name, (array) ($metadatas[$name]['edit'] ?? []), $size);
+                $cells[] = self::field($fields[$name], ['type' => $type], $name, (array) ($metadatas[$name]['edit'] ?? []), self::componentCellSize($fields[$name], $type, $cell['size'] ?? null));
             }
             if ($cells !== []) {
                 $laidOut[] = Grid::make(self::MAX_ROW_SIZE)->schema($cells)->columnSpanFull();
@@ -249,13 +248,34 @@ final class StrapiContentManager
         }
         foreach ($fields as $name => $list) {
             if (! isset($placed[$name])) {
-                foreach ($list as $component) {
-                    $laidOut[] = $component->columnSpanFull();
-                }
+                $type = in_array($name, $components, true) ? 'component' : 'field';
+                $laidOut[] = self::field($list, ['type' => $type], $name, [], self::MAX_ROW_SIZE);
             }
         }
 
         return $laidOut;
+    }
+
+    /**
+     * A component's kept view, read once a request: a form asks for it at each use of the
+     * component, every block and item included.
+     */
+    private static function componentView(string $uid): array
+    {
+        return once(fn (): array => StrapiSettings::get(self::KEY_PREFIX.'components::'.$uid));
+    }
+
+    /**
+     * A cell's size in a component's view, as Strapi allows it: a component of its own or a
+     * repeatable takes the full row, a field one of the sizes.
+     *
+     * @param list<Component> $components
+     */
+    private static function componentCellSize(array $components, string $type, mixed $size): int
+    {
+        $whole = $type === 'component' || $components[0] instanceof Repeater || $components[0] instanceof \Filament\Forms\Components\Builder;
+
+        return ! $whole && in_array($size, self::SIZES, true) ? $size : self::MAX_ROW_SIZE;
     }
 
     /**
@@ -317,8 +337,7 @@ final class StrapiContentManager
         $component = $components[0];
         $column = self::mainFieldColumn($attribute, $edit);
         if ($column !== null && $component instanceof Select) {
-            $component->getOptionLabelFromRecordUsing(fn (Model $record): string => (string) ($record->getAttribute($column) ?? $record->getKey()))
-                ->searchable([$column]);
+            $component->getOptionLabelFromRecordUsing(fn (Model $record): string => (string) ($record->getAttribute($column) ?? $record->getKey()));
         }
         if ($label !== $name) {
             $component->label($label);
@@ -490,6 +509,19 @@ final class StrapiContentManager
                 'edit' => $edit !== [] ? $edit : $defaults['layouts']['edit'],
             ],
         ];
+    }
+
+    /**
+     * Saved metadata over the kept: the form does not choose a relation's main field, so the one
+     * Strapi stored stays, even one this admin does not show.
+     */
+    private static function keepMainField(array $kept, array $metadata): array
+    {
+        if (isset($kept['mainField'])) {
+            unset($metadata['mainField']);
+        }
+
+        return array_replace($kept, $metadata);
     }
 
     /** A main field the relation's target no longer has goes back to the default one. */

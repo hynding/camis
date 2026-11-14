@@ -317,10 +317,14 @@ class ContentManagerViewTest extends TestCase
         Livewire::test(ListPosts::class)
             ->assertTableColumnStateSet('author.name', (string) $author->id, $post);
 
-        // A main field the target does not have falls back to its default.
+        // A main field the target does not have falls back to its default here, and saving the view
+        // keeps the one Strapi stored, for the export to give back.
         $stored['metadatas']['author']['edit']['mainField'] = 'gone';
         StrapiSettings::merge(StrapiContentManager::key(PostResource::CONTENT_MANAGER), $stored);
         $this->assertSame('name', StrapiContentManager::configuration(PostResource::CONTENT_MANAGER)['metadatas']['author']['edit']['mainField']);
+        $view = PostResource::CONTENT_MANAGER;
+        StrapiContentManager::save($view, StrapiContentManager::fromFormState($view, StrapiContentManager::formState($view)));
+        $this->assertSame('gone', StrapiSettings::get(StrapiContentManager::key($view))['metadatas']['author']['edit']['mainField']);
     }
 
     public function test_a_components_fields_are_laid_out_by_its_view(): void

@@ -3,6 +3,7 @@ import type { Component, ContentType } from "@camis/ir-schema";
 import { componentLayout } from "../../component-layout";
 import { componentRelationOptions } from "../../component-relations";
 import {
+  childFields,
   childTableEmit,
   NO_PICKERS,
   type ChildContext,
@@ -71,18 +72,12 @@ const blockFields = (
 ): string =>
   componentLayout(
     child.component,
-    [
-      ...child.emits.map((e, i) => ({ path: child.emitPaths[i]!, code: e.formComponent })),
-      ...child.media.map((m) => ({ path: m.path, code: mediaIds(m) })),
-      ...child.relations.map((r) => ({
-        path: r.path,
-        code: componentRelationOptions(r, pickers.versioned, pickers.localized),
-      })),
-      ...child.children.map((n) => ({
-        path: n.path,
-        code: `Repeater::make('${n.relationName}')->schema(${blockFields(n, pickers, components, `${pad}    `)})`,
-      })),
-    ],
+    childFields(child, {
+      media: mediaIds,
+      relation: (r) => componentRelationOptions(r, pickers.versioned, pickers.localized),
+      child: (n) =>
+        `Repeater::make('${n.relationName}')->schema(${blockFields(n, pickers, components, `${pad}    `)})`,
+    }),
     components,
     pad,
   );
