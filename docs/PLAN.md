@@ -2111,7 +2111,10 @@ pass on both runtimes, and an export → `strapi:import` left the REST answers i
 Left as they are, and listed in sitlab's README: after `/auth/logout` camis refuses the session's
 access token at once where Strapi honours it until it expires (deliberate); a project without a
 localized type has no `/api/i18n/locales` (Strapi's i18n plugin always answers with the default
-locale); component ids are renumbered by an import, as Strapi's own import does.
+locale); a type without Draft & Publish answers its `createdAt` as `publishedAt`, where Strapi
+stores its own a millisecond or two apart. After the change sitlab's export → import gives 44 of 46
+paths identical to the millisecond (ids aside): the other two are the roles' user counts (users
+made after the export) and the locales list.
 
 Exit: `migration.test.ts`, `generate.test.ts` and `sessions.test.ts` cases; ApiTokensTest's
 roles, session and millisecond cases in the `strapi-api` boot job.
