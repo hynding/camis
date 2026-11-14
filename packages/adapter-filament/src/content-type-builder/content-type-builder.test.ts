@@ -81,6 +81,21 @@ describe("the Content-Type Builder", () => {
     expect(sync).toContain('$this->report[] = "changed {$table}.{$name} to {$declared}";');
   });
 
+  // Text to number: a field kept in one column may become any other such field, and the sync then
+  // converts the column value by value, emptying what the new type cannot hold.
+  it("changes a field to a type in another group, converting its column", () => {
+    const schema = content("app/Support/ContentTypeBuilderSchema.php");
+    expect(schema).toContain("public static function convertible(string $type): bool");
+    const page = content("app/Filament/Pages/ContentTypeBuilder.php");
+    expect(page).toContain(
+      "->disabled($field !== null && ! ModelSchema::convertible($field['type']))",
+    );
+    expect(paths).toContain("app/Support/ColumnConversion.php");
+    expect(content("app/Support/CamisSchemaSync.php")).toContain(
+      '$this->report[] = "converted {$table}.{$name} from {$before} to {$declared}";',
+    );
+  });
+
   // Strapi's relation dialog offers six kinds; one-way and many-way are the IR's relation without
   // an inverse, which the other content type does not show.
   it("offers Strapi's six relation kinds, a type's description and a component's icon", () => {
@@ -102,6 +117,7 @@ describe("the Content-Type Builder", () => {
       ["app/Support/ContentTypeBuilder.php", "ContentTypeBuilder.php"],
       ["app/Support/ContentTypeBuilderSchema.php", "ContentTypeBuilderSchema.php"],
       ["app/Support/CamisSchemaSync.php", "CamisSchemaSync.php"],
+      ["app/Support/ColumnConversion.php", "ColumnConversion.php"],
       ["app/Console/Commands/CamisSchemaSync.php", "CamisSchemaSyncCommand.php"],
       ["config/content-type-builder.php", "content-type-builder.config.php"],
     ] as const) {
