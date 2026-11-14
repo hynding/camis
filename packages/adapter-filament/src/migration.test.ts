@@ -28,6 +28,22 @@ describe("migration", () => {
     expect(php).toContain("$table->timestamps();");
     expect(php).toContain("Schema::dropIfExists('articles');");
   });
+  it("keeps milliseconds in every datetime column when asked, as Strapi does", () => {
+    const stamped = {
+      ...article,
+      fields: [
+        ...article.fields,
+        { type: "dateTime", name: "airsAt" },
+        { type: "timestamp", name: "seenAt" },
+      ],
+    } as ContentType;
+    const php = emitMigration(stamped, [], [], { draftPublish: true, milliseconds: true });
+    expect(php).toContain("$table->dateTime('airs_at', 3)->nullable();");
+    expect(php).toContain("$table->timestamp('seen_at', 3)->nullable();");
+    expect(php).toContain("$table->timestamp('published_at', 3)->nullable();");
+    expect(php).toContain("$table->timestamps(3);");
+    expect(emitMigration(stamped)).toContain("$table->dateTime('airs_at')->nullable();");
+  });
   it("uses a deterministic ordinal filename (no timestamp)", () => {
     expect(migrationFilename(article, 1)).toBe(
       "database/migrations/0001_01_02_000001_create_articles_table.php",

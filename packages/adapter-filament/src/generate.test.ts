@@ -677,3 +677,51 @@ describe("private fields", () => {
     expect(result.gaps.gaps.filter((g) => g.feature === "privateField")).toHaveLength(1);
   });
 });
+
+describe("timestamps on the Strapi API style", () => {
+  const stampedBundle: IrBundle = {
+    document: {
+      version: 1,
+      contentTypes: [
+        {
+          name: "Episode",
+          kind: "collection",
+          fields: [
+            { type: "dateTime", name: "airsAt" },
+            { type: "media", name: "still", allowedTypes: ["images"] },
+            { type: "component", name: "cues", component: "Cue", repeatable: true },
+          ],
+        },
+      ],
+      components: [{ name: "Cue", fields: [{ type: "dateTime", name: "at" }] }],
+    },
+    roles: [],
+  };
+  const file = (result: ReturnType<typeof filamentAdapter.generate>, end: string): string =>
+    result.files.find((f) => f.path.endsWith(end))?.content ?? "";
+  const strapi = filamentAdapter.generate(stampedBundle, { projectName: "tv", apiStyle: "strapi" });
+
+  // Strapi keeps milliseconds, and a client sorting by updatedAt needs them to tell rows apart.
+  it("keep milliseconds in the columns and models of types, components and files", () => {
+    expect(file(strapi, "create_episodes_table.php")).toContain("$table->timestamps(3);");
+    expect(file(strapi, "create_episodes_table.php")).toContain("$table->dateTime('airs_at', 3)");
+    expect(file(strapi, "app/Models/Episode.php")).toContain("use HasMillisecondTimestamps;");
+    const cues = strapi.files.find((f) => /create_\w*cues\w*_table\.php$/.test(f.path));
+    expect(cues?.content).toContain("$table->timestamps(3);");
+    expect(cues?.content).toContain("$table->dateTime('at', 3)");
+    const cueModel = strapi.files.find(
+      (f) => f.path.startsWith("app/Models/") && f.content.includes("_cues'"),
+    );
+    expect(cueModel?.content).toContain("use \\App\\Models\\Concerns\\HasMillisecondTimestamps;");
+    expect(file(strapi, "create_files_table.php")).toContain("$table->timestamps(3);");
+    expect(file(strapi, "app/Models/File.php")).toContain("use HasMillisecondTimestamps;");
+    expect(file(strapi, "app/Models/Concerns/HasMillisecondTimestamps.php")).toContain(
+      "'Y-m-d H:i:s.v'",
+    );
+  });
+  it("are left to Laravel's defaults on the Laravel API style", () => {
+    const laravel = filamentAdapter.generate(stampedBundle, { projectName: "tv" });
+    expect(file(laravel, "create_episodes_table.php")).toContain("$table->timestamps();");
+    expect(file(laravel, "app/Models/Episode.php")).not.toContain("HasMillisecondTimestamps");
+  });
+});
