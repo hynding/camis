@@ -226,7 +226,7 @@ final class StrapiContentManager
         $stored = self::componentView($uid);
         $rows = (array) ($stored['layouts']['edit'] ?? []);
         if ($rows === []) {
-            return array_values(array_merge(...array_values($fields)));
+            return array_merge(...array_values($fields));
         }
         $metadatas = (array) ($stored['metadatas'] ?? []);
         $laidOut = [];
