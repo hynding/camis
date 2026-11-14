@@ -73,6 +73,27 @@ describe("the Content-Type Builder", () => {
     );
   });
 
+  it("changes a column whose declared type changed since the last sync", () => {
+    const sync = content("app/Support/CamisSchemaSync.php");
+    expect(sync).toContain("public const COLUMN_TYPES = 'app/camis/column-types.json';");
+    expect(sync).toContain('$this->report[] = "changed {$table}.{$name} to {$declared}";');
+  });
+
+  // Strapi's relation dialog offers six kinds; one-way and many-way are the IR's relation without
+  // an inverse, which the other content type does not show.
+  it("offers Strapi's six relation kinds, a type's description and a component's icon", () => {
+    const schema = content("app/Support/ContentTypeBuilderSchema.php");
+    expect(schema).toContain(
+      "'oneWay' => ['label' => 'has one', 'relationKind' => 'oneToOne', 'inverse' => false],",
+    );
+    expect(schema).toContain(
+      "'manyWay' => ['label' => 'has many', 'relationKind' => 'oneToMany', 'inverse' => false],",
+    );
+    const page = content("app/Filament/Pages/ContentTypeBuilder.php");
+    expect(page).toContain("Textarea::make('description')->label('Description')");
+    expect(page).toContain("TextInput::make('icon')->label('Icon')");
+  });
+
   it("emits its PHP as the golden files", async () => {
     for (const [path, golden] of [
       ["app/Filament/Pages/ContentTypeBuilder.php", "ContentTypeBuilderPage.php"],

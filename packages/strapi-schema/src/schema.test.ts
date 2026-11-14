@@ -22,6 +22,15 @@ describe("contentTypeSchema", () => {
     });
   });
 
+  it("writes the type's description into its info, as Strapi's builder does", () => {
+    expect(contentTypeSchema({ ...article, description: "News and opinion" }).info).toEqual({
+      singularName: "article",
+      pluralName: "articles",
+      displayName: "Article",
+      description: "News and opinion",
+    });
+  });
+
   it("omits draftAndPublish when draftPublish is false/absent", () => {
     const s = contentTypeSchema({ ...article, options: {} });
     expect(s.options).toEqual({});

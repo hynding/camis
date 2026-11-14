@@ -146,3 +146,56 @@ describe("irComponent — polymorphic relations", () => {
     ]);
   });
 });
+
+// Strapi's builder writes a description on any type and a display name and icon on a component;
+// the IR keeps them so the round trip and camis's own builder show what Strapi's did.
+describe("a type's info beyond its names", () => {
+  it("keeps a content type's description", () => {
+    const { contentType } = irContentType({
+      kind: "collectionType",
+      collectionName: "articles",
+      info: {
+        singularName: "article",
+        pluralName: "articles",
+        displayName: "Article",
+        description: "News",
+      },
+      attributes: {},
+    });
+    expect(contentType.description).toBe("News");
+  });
+
+  it("keeps a component's display name when it is not its name's, with its icon and description", () => {
+    const { component } = irComponent("SeoMeta", {
+      collectionName: "components_shared_seo_metas",
+      info: { displayName: "SEO", icon: "search", description: "Search engine metadata" },
+      attributes: {},
+    });
+    expect(component).toEqual({
+      name: "SeoMeta",
+      names: { collection: "components_shared_seo_metas", display: "SEO" },
+      description: "Search engine metadata",
+      icon: "search",
+      fields: [],
+    });
+  });
+
+  it("leaves out an empty description and icon", () => {
+    const { contentType } = irContentType({
+      kind: "collectionType",
+      info: {
+        singularName: "article",
+        pluralName: "articles",
+        displayName: "Article",
+        description: "",
+      },
+      attributes: {},
+    });
+    expect("description" in contentType).toBe(false);
+    const { component } = irComponent("Seo", {
+      info: { displayName: "Seo", icon: "" },
+      attributes: {},
+    });
+    expect("icon" in component).toBe(false);
+  });
+});

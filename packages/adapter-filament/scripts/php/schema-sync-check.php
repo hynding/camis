@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 // camis:schema-sync on the served database (the strapi-api job's matrix: sqlite, mysql, pgsql), where
 // the feature tests' in-memory SQLite cannot reach: a dropped column comes back with its foreign key,
-// an undeclared column and its index go, an abandoned table goes, a renumbered migration is
-// recorded under its new name, and the rows stay. Run inside the app:
+// an undeclared column and its index go, a column whose declared type changed is changed, an
+// abandoned table goes, a renumbered migration is recorded under its new name, and the rows stay.
+// Run inside the app:
 //   php artisan tinker --execute='require "../packages/adapter-filament/scripts/php/schema-sync-check.php";'
 
 use App\Models\Author;
@@ -33,6 +34,12 @@ Schema::table('posts', function ($table): void {
 Schema::table('tags', function ($table): void {
     $table->string('obsolete')->nullable()->index();
 });
+// As if tags.label had been a long text when the database was last synced.
+Schema::table('tags', function ($table): void {
+    $table->text('label')->nullable()->change();
+});
+@mkdir(dirname(storage_path(\App\Support\CamisSchemaSync::COLUMN_TYPES)), 0777, true);
+file_put_contents(storage_path(\App\Support\CamisSchemaSync::COLUMN_TYPES), json_encode(['tags' => ['label' => 'text']]));
 Schema::create('widgets', function ($table): void {
     $table->id();
 });
@@ -54,6 +61,9 @@ if (DB::connection()->getDriverName() !== 'sqlite'
 }
 if (Schema::hasColumn('tags', 'obsolete')) {
     $fail('tags.obsolete was not dropped');
+}
+if (! in_array(Schema::getColumnType('tags', 'label'), ['varchar', 'character varying'], true)) {
+    $fail('tags.label kept its old type: '.Schema::getColumnType('tags', 'label'));
 }
 if (Schema::hasTable('widgets')) {
     $fail('the abandoned widgets table was not dropped');
