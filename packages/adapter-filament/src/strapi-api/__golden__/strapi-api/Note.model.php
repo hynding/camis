@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use App\Models\Concerns\EmitsStrapiEvents;
 use App\Models\Concerns\HasCreatorFields;
 use App\Models\Concerns\HasDocumentId;
+use App\Models\Concerns\HasMillisecondTimestamps;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -19,6 +20,8 @@ class Note extends Model
     use HasDocumentId;
 
     use HasCreatorFields;
+
+    use HasMillisecondTimestamps;
 
     protected $table = 'notes';
 

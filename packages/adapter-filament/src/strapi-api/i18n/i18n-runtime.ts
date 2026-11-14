@@ -25,11 +25,13 @@ declare(strict_types=1);
 namespace App\\Models;
 
 use App\\Models\\Concerns\\HasDocumentId;
+use App\\Models\\Concerns\\HasMillisecondTimestamps;
 use Illuminate\\Database\\Eloquent\\Model;
 
 class Locale extends Model
 {
     use HasDocumentId;
+    use HasMillisecondTimestamps;
 
     protected $table = 'i18n_locales';
 
@@ -85,7 +87,7 @@ return new class extends Migration
             $table->string('code', 16)->unique();
             $table->string('name');
             $table->boolean('is_default')->default(false);
-            $table->timestamps();
+            $table->timestamps(3);
         });
         Locale::create([
             'code' => config('camis.i18n.default_locale', 'en'),

@@ -92,6 +92,15 @@ const pluginRoutes = (input: ApiTokensInput): [string, [string, string][]][] => 
       ["destroy", `${USERS_PERMISSIONS}.user.destroy`],
     ],
   ],
+  // A role's writes are not offered: its grants are the IR's, so RoleController refuses them.
+  [
+    "RoleController",
+    [
+      ["find", `${USERS_PERMISSIONS}.role.find`],
+      ["findOne", `${USERS_PERMISSIONS}.role.findOne`],
+      ["getPermissions", `${USERS_PERMISSIONS}.permissions.getPermissions`],
+    ],
+  ],
   ["EmailController", [["send", "plugin::email.email.send"]]],
   ...(input.fileModel === undefined
     ? []

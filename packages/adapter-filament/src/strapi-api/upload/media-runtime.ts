@@ -398,8 +398,8 @@ return new class extends Migration
             // Strapi's createdBy and updatedBy: the admin accounts that uploaded and last changed it.
             $table->foreignId('created_by_id')->nullable()->constrained('admin_users')->nullOnDelete();
             $table->foreignId('updated_by_id')->nullable()->constrained('admin_users')->nullOnDelete();
-            $table->timestamps();
-            $table->timestamp('published_at')->nullable();
+            $table->timestamps(3);
+            $table->timestamp('published_at', 3)->nullable();
         });
         Schema::create('files_related_mph', function (Blueprint $table): void {
             $table->id();
@@ -431,6 +431,7 @@ namespace App\\Models;
 use App\\Models\\Concerns\\EmitsStrapiEvents;
 use App\\Models\\Concerns\\HasCreatorFields;
 use App\\Models\\Concerns\\HasDocumentId;
+use App\\Models\\Concerns\\HasMillisecondTimestamps;
 use App\\Support\\StrapiFolders;
 use App\\Support\\StrapiUpload;${members.length > 0 ? "\nuse Illuminate\\Database\\Eloquent\\Builder;" : ""}
 use Illuminate\\Database\\Eloquent\\Model;
@@ -441,6 +442,7 @@ class ${model} extends Model
     use EmitsStrapiEvents;
     use HasCreatorFields;
     use HasDocumentId;
+    use HasMillisecondTimestamps;
 
     protected $table = 'files';
 

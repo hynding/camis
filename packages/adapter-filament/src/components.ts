@@ -8,6 +8,7 @@ import {
 } from "./component-relations";
 import { emitField, type FieldEmit } from "./fields";
 import { constrainedTo } from "./identifiers";
+import { withMilliseconds } from "./migration";
 import { filamentNames, snake, snakeColumn } from "./names";
 import type { RelationMethod } from "./relations";
 import { mediaAllowedTypes } from "./strapi-api/upload/media";
@@ -135,9 +136,9 @@ export const linksFilesWithin = (child: ChildTableEmit): boolean =>
 export const childMigrationFilename = (child: ChildTableEmit, ordinal: number): string =>
   `database/migrations/0001_01_02_${String(ordinal).padStart(6, "0")}_create_${child.table}_table.php`;
 
-export const emitChildMigration = (child: ChildTableEmit): string => {
+export const emitChildMigration = (child: ChildTableEmit, milliseconds = false): string => {
   const columns = [
-    ...child.emits.map((e) => e.migration),
+    ...child.emits.map((e) => (milliseconds ? withMilliseconds(e.migration) : e.migration)),
     ...child.relations.flatMap((r) =>
       r.foreignKey === null
         ? []
@@ -164,7 +165,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('${child.fk}')${constrainedTo(child.table, child.fk, child.parentTable)}->cascadeOnDelete();${child.ordered === true ? "\n            $table->unsignedInteger('position');" : ""}
 ${columns}
-            $table->timestamps();
+            $table->timestamps(${milliseconds ? "3" : ""});
         });
     }
 
@@ -177,7 +178,12 @@ ${columns}
 };
 
 /** `fileModel` is the media library's model, which an item's media fields link to. */
-export const emitChildModel = (child: ChildTableEmit, fileModel = "File"): string => {
+export const emitChildModel = (
+  child: ChildTableEmit,
+  fileModel = "File",
+  /** Strapi keeps milliseconds in every datetime column. */
+  milliseconds = false,
+): string => {
   const fillable = [
     ...(child.ordered === true ? ["position"] : []),
     ...child.emits.map((e) => e.column),
@@ -211,6 +217,9 @@ export const emitChildModel = (child: ChildTableEmit, fileModel = "File"): strin
     child.media.length > 0 || nestedFiles.length > 0
       ? "\n    use \\App\\Models\\Concerns\\HasMedia;\n"
       : "";
+  const stamps = milliseconds
+    ? "\n    use \\App\\Models\\Concerns\\HasMillisecondTimestamps;\n"
+    : "";
   const mediaComponents =
     nestedFiles.length > 0
       ? `\n    public const MEDIA_COMPONENTS = [${nestedFiles.map((r) => `'${r}'`).join(", ")}];\n`
@@ -224,7 +233,7 @@ namespace App\\Models;
 use Illuminate\\Database\\Eloquent\\Model;${imports}
 
 class ${child.model} extends Model
-{${hasMedia}
+{${hasMedia}${stamps}
     protected $table = '${child.table}';
 
     protected $fillable = [

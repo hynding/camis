@@ -81,19 +81,38 @@ describe("users-permissions sessions", () => {
     );
   });
 
-  it("forbids the roles and permissions routes, which no IR grant can open", () => {
+  // Roles live in the IR, so no grant opens these and nothing writes a role over HTTP. An API token
+  // stands in for a role, though: strapi-php lists the roles and their permissions to a token that
+  // holds those actions (a full-access one, say), and so does camis.
+  it("lets a token read the roles and permissions, and refuses every write", () => {
     const routes = content("routes/api.php");
     expect(routes).toContain(
-      "Route::match(['get', 'post'], '/users-permissions/roles', RoleController::class);",
+      "Route::get('/users-permissions/roles', [RoleController::class, 'find']);",
     );
     expect(routes).toContain(
-      "Route::match(['get', 'put', 'delete'], '/users-permissions/roles/{role}', RoleController::class);",
+      "Route::post('/users-permissions/roles', [RoleController::class, 'createRole']);",
     );
     expect(routes).toContain(
-      "Route::get('/users-permissions/permissions', RoleController::class);",
+      "Route::get('/users-permissions/roles/{role}', [RoleController::class, 'findOne']);",
     );
-    expect(content("app/Http/Controllers/Api/RoleController.php")).toContain(
-      "throw new StrapiError(403, 'ForbiddenError', 'Forbidden');",
+    expect(routes).toContain(
+      "Route::put('/users-permissions/roles/{role}', [RoleController::class, 'updateRole']);",
     );
+    expect(routes).toContain(
+      "Route::delete('/users-permissions/roles/{role}', [RoleController::class, 'deleteRole']);",
+    );
+    expect(routes).toContain(
+      "Route::get('/users-permissions/permissions', [RoleController::class, 'getPermissions']);",
+    );
+    const tokens = content("app/Support/StrapiApiTokens.php");
+    expect(tokens).toContain("'find' => 'plugin::users-permissions.role.find',");
+    expect(tokens).toContain("'findOne' => 'plugin::users-permissions.role.findOne',");
+    expect(tokens).not.toContain("plugin::users-permissions.role.createRole");
+    expect(tokens).toContain(
+      "'getPermissions' => 'plugin::users-permissions.permissions.getPermissions',",
+    );
+    const controller = content("app/Http/Controllers/Api/RoleController.php");
+    expect(controller).toContain("StrapiApiTokens::active()");
+    expect(controller).toContain("throw new StrapiError(403, 'ForbiddenError', 'Forbidden');");
   });
 });

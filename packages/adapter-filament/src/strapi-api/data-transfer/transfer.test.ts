@@ -55,10 +55,17 @@ describe("Strapi data import", () => {
 
   it("reads a timestamp as Strapi exports one, its epoch in milliseconds", () => {
     expect(content(IMPORT_ENGINE)).toContain(
-      "'timestamp' => (is_numeric($value) ? CarbonImmutable::createFromTimestampMsUTC((float) $value) : CarbonImmutable::parse((string) $value))->utc()->format('Y-m-d H:i:s'),",
+      "'timestamp' => (is_numeric($value) ? CarbonImmutable::createFromTimestampMsUTC((float) $value) : CarbonImmutable::parse((string) $value))->utc()->format($dateFormat),",
     );
   });
 
+  it("keeps a role's documentId and times from the archive, so the roles route answers as before", () => {
+    const engine = content(IMPORT_ENGINE);
+    expect(engine).toContain("$role->timestamps = false;");
+    expect(engine).toContain(
+      "'created_at' => self::value($entity['data']['createdAt'] ?? null, 'dateTime') ?? $role->created_at,",
+    );
+  });
   it("knows where every entity type of a Strapi archive goes", () => {
     const map = content("app/Support/StrapiTransferMap.php");
     const types = new Set(lines("entities").map((e) => e.type as string));

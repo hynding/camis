@@ -73,7 +73,7 @@ describe("two rows per document", () => {
   it("lets a draft and its published version share a documentId", () => {
     const posts = content("_create_posts_table.php");
     expect(posts).toContain("$table->string('document_id', 24)->index();");
-    expect(posts).toContain("$table->timestamp('published_at')->nullable();");
+    expect(posts).toContain("$table->timestamp('published_at', 3)->nullable();");
     expect(content("_create_books_table.php")).toContain(
       "$table->string('document_id', 24)->unique();",
     );

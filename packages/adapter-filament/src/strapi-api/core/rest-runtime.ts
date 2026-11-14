@@ -315,13 +315,14 @@ ${scopeBody(secured)}
 
     private static function attribute(Builder $query, string $column, string $type, mixed $value, string $wirePath): void
     {
+        $format = $query->getModel()->getDateFormat();
         if (! is_array($value)) {
-            $value === null ? $query->whereNull($column) : $query->where($column, self::cast($type, $value));
+            $value === null ? $query->whereNull($column) : $query->where($column, self::cast($type, $value, $format));
 
             return;
         }
         if (array_is_list($value)) {
-            $query->whereIn($column, array_map(fn ($v) => self::cast($type, $v), $value));
+            $query->whereIn($column, array_map(fn ($v) => self::cast($type, $v, $format), $value));
 
             return;
         }
@@ -345,24 +346,25 @@ ${scopeBody(secured)}
 
     private static function operator(Builder $query, string $column, string $type, string $operator, mixed $value, string $wirePath): void
     {
+        $format = $query->getModel()->getDateFormat();
         $wrapped = $query->getQuery()->getGrammar()->wrap($column);
         $lower = $query->getConnection()->getDriverName() === 'pgsql' ? "LOWER(CAST({$wrapped} AS VARCHAR))" : "LOWER({$wrapped})";
         // SQLite has no default LIKE escape character; MySQL and Postgres default to a backslash.
         $escape = $query->getConnection()->getDriverName() === 'sqlite' ? " ESCAPE '\\'" : '';
-        $list = fn (mixed $v): array => array_map(fn ($x) => self::cast($type, $x), is_array($v) ? array_values($v) : [$v]);
+        $list = fn (mixed $v): array => array_map(fn ($x) => self::cast($type, $x, $format), is_array($v) ? array_values($v) : [$v]);
 
         match ($operator) {
             '$not' => $query->whereNot(fn (Builder $q) => self::attribute($q, $column, $type, $value, $wirePath)),
             '$in' => $query->whereIn($column, $list($value)),
             '$notIn' => $query->whereNotIn($column, $list($value)),
-            '$eq' => $value === null ? $query->whereNull($column) : $query->where($column, self::cast($type, $value)),
-            '$ne' => $value === null ? $query->whereNotNull($column) : $query->where($column, '<>', self::cast($type, $value)),
+            '$eq' => $value === null ? $query->whereNull($column) : $query->where($column, self::cast($type, $value, $format)),
+            '$ne' => $value === null ? $query->whereNotNull($column) : $query->where($column, '<>', self::cast($type, $value, $format)),
             '$eqi' => $value === null ? $query->whereNull($column) : $query->whereRaw("{$lower} = LOWER(?)", [self::stringify($value)]),
             '$nei' => $value === null ? $query->whereNotNull($column) : $query->whereRaw("{$lower} <> LOWER(?)", [self::stringify($value)]),
-            '$gt' => $query->where($column, '>', self::cast($type, $value)),
-            '$gte' => $query->where($column, '>=', self::cast($type, $value)),
-            '$lt' => $query->where($column, '<', self::cast($type, $value)),
-            '$lte' => $query->where($column, '<=', self::cast($type, $value)),
+            '$gt' => $query->where($column, '>', self::cast($type, $value, $format)),
+            '$gte' => $query->where($column, '>=', self::cast($type, $value, $format)),
+            '$lt' => $query->where($column, '<', self::cast($type, $value, $format)),
+            '$lte' => $query->where($column, '<=', self::cast($type, $value, $format)),
             '$null' => self::truthy($value) ? $query->whereNull($column) : $query->whereNotNull($column),
             '$notNull' => self::truthy($value) ? $query->whereNotNull($column) : $query->whereNull($column),
             '$between' => $query->whereBetween($column, array_slice(array_pad($list($value), 2, null), 0, 2)),
@@ -377,8 +379,11 @@ ${scopeBody(secured)}
         };
     }
 
-    /** A query-string value as the column stores it: the conversion Strapi's database layer does. */
-    private static function cast(string $type, mixed $value): mixed
+    /**
+     * A query-string value as the column stores it: the conversion Strapi's database layer does. A
+     * datetime takes the model's format, as a column keeps milliseconds only where its model does.
+     */
+    private static function cast(string $type, mixed $value, string $dateFormat = 'Y-m-d H:i:s'): mixed
     {
         if (! is_string($value) && ! is_int($value) && ! is_float($value) && ! is_bool($value)) {
             return $value;
@@ -389,7 +394,7 @@ ${scopeBody(secured)}
             'integer' => is_numeric($value) ? (int) $value : $value,
             'float', 'decimal' => is_numeric($value) ? (float) $value : $value,
             'date' => self::parseDate($value)?->format('Y-m-d') ?? $value,
-            'dateTime', 'timestamp' => self::parseDate($value)?->utc()->format('Y-m-d H:i:s') ?? $value,
+            'dateTime', 'timestamp' => self::parseDate($value)?->utc()->format($dateFormat) ?? $value,
             default => $value,
         };
     }
@@ -661,6 +666,10 @@ ${scopeBody(secured)}
 /** A Strapi application error (`@strapi/utils` errors): status, name, message and details. */
 export const emitStrapiError = (): string =>
   runtimePhp(new URL("./php/app/Support/StrapiError.php", import.meta.url));
+
+/** The models' datetime format with milliseconds, which Strapi keeps in every datetime. */
+export const emitHasMillisecondTimestamps = (): string =>
+  runtimePhp(new URL("./php/app/Models/Concerns/HasMillisecondTimestamps.php", import.meta.url));
 
 /**
  * Strapi 5 addresses documents by a 24-character `documentId`. Strapi mints a cuid2; this mints

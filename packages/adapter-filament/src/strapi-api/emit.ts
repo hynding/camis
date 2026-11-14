@@ -67,7 +67,12 @@ import {
   UPLOAD_FOLDERS_MIGRATION_PATH,
 } from "./upload/upload-folders";
 import { emitStrapiPopulate, emitStrapiRelations } from "./core/populate-runtime";
-import { emitHasDocumentId, emitStrapiError, emitStrapiQuery } from "./core/rest-runtime";
+import {
+  emitHasDocumentId,
+  emitHasMillisecondTimestamps,
+  emitStrapiError,
+  emitStrapiQuery,
+} from "./core/rest-runtime";
 import { emitApiConfig, emitStrapiRoutes } from "./core/routes";
 import { emitCorsConfig } from "./core/cors";
 import { emitStrapiMimeTypes } from "./upload/upload-security";
@@ -466,6 +471,10 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
       content: emitStrapiZones(doc.components.map(componentUid).sort()),
     });
   files.push({ path: "app/Models/Concerns/HasDocumentId.php", content: emitHasDocumentId() });
+  files.push({
+    path: "app/Models/Concerns/HasMillisecondTimestamps.php",
+    content: emitHasMillisecondTimestamps(),
+  });
   if (localized.size > 0) files.push(...localeFiles());
   if (input.media !== undefined) {
     const scope = secured
