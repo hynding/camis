@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Filament\Resources\Books\Pages\CreateBook;
 use App\Filament\Resources\Files\Pages\CreateFile;
+use App\Filament\Resources\Files\Pages\EditFile;
 use App\Filament\Resources\Files\Pages\ListFiles;
 use App\Filament\Resources\Storyboards\Pages\CreateStoryboard;
 use App\Http\Serializers\StoryboardSerializer;
@@ -67,6 +68,68 @@ class MediaAdminTest extends TestCase
 
         $file->delete();
         $this->assertFileDoesNotExist(public_path(ltrim($file->url, '/')));
+    }
+
+    // Strapi's replace keeps the file's id, hash and url, so every link and cached url stays good,
+    // and makes its formats again; its admin sends the dialog's name and info with it.
+    public function test_an_admin_replaces_a_file_and_its_url_stays(): void
+    {
+        $this->login(['file.read', 'file.update']);
+        $file = StrapiUpload::store(UploadedFile::fake()->image('wide.png', 1200, 800), ['caption' => 'kept']);
+        $url = $file->url;
+        Livewire::test(EditFile::class, ['record' => $file->getKey()])
+            ->fillForm(['replacement' => UploadedFile::fake()->image('tall.png', 400, 900)])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $file->refresh();
+        $this->assertSame($url, $file->url);
+        $this->assertSame('wide.png', $file->name);
+        $this->assertSame('kept', $file->caption);
+        $this->assertSame([400, 900], [$file->width, $file->height]);
+        $this->assertSame([400, 900], array_slice((array) getimagesize(public_path(ltrim($file->url, '/'))), 0, 2));
+        $this->assertEqualsCanonicalizing(['medium', 'small', 'thumbnail'], array_keys($file->formats));
+        $this->assertSame(1, File::count());
+    }
+
+    // Strapi's admin crops an image in place ("Crop the original asset") or as a new file in the
+    // same folder ("Duplicate & crop the asset"); the editor runs in the browser and sends the result.
+    public function test_an_admin_crops_an_image_in_place_or_as_a_copy(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('local');
+        $this->login(['file.read', 'file.create', 'file.update']);
+        $file = StrapiUpload::store(UploadedFile::fake()->image('wide.png', 1200, 800), ['alternativeText' => 'alt']);
+        $url = $file->url;
+        Livewire::test(EditFile::class, ['record' => $file->getKey()])
+            ->mountAction('crop')
+            ->assertSchemaStateSet(fn (array $state): bool => is_array($state['cropped']) && count($state['cropped']) === 1);
+
+        $this->crop($file, UploadedFile::fake()->image('wide.png', 300, 300), copy: true);
+        $copy = File::whereKeyNot($file->getKey())->sole();
+        $this->assertSame(['wide.png', 'alt', 300], [$copy->name, $copy->alternative_text, $copy->width]);
+        $this->assertNotSame($url, $copy->url);
+        $this->assertSame(1200, $file->refresh()->width);
+
+        $this->crop($file, UploadedFile::fake()->image('wide.png', 600, 400), copy: false);
+        $this->assertSame([$url, 600, 400], [$file->refresh()->url, $file->width, $file->height]);
+        $this->assertSame(2, File::count());
+        $this->assertSame([], \Illuminate\Support\Facades\Storage::disk('local')->files('camis-uploads'));
+    }
+
+    /** As the browser's image editor does: the edited image takes the original's place. */
+    private function crop(File $file, UploadedFile $edited, bool $copy): void
+    {
+        Livewire::test(EditFile::class, ['record' => $file->getKey()])
+            ->mountAction('crop')
+            ->fillForm(['cropped' => [$edited], 'copy' => $copy])
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
+    }
+
+    public function test_only_an_image_offers_the_crop(): void
+    {
+        $this->login(['file.read', 'file.update']);
+        Livewire::test(EditFile::class, ['record' => $this->upload('notes.txt')->getKey()])->assertActionHidden('crop');
     }
 
     // A provider's disk Laravel does not ship (Strapi's cloudinary) comes from config/camis.php's

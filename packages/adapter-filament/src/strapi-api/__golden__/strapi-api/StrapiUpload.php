@@ -62,13 +62,20 @@ final class StrapiUpload
         return self::store(new UploadedFile($path, $originalName, null, null, true), $info);
     }
 
-    /** Edits a file's info and, when given a new upload, replaces what it stores. */
+    /**
+     * Edits a file's info and, when given a new upload, replaces what it stores. As Strapi's
+     * replace, the file keeps its hash and extension, so its url (and every link to it) stays; it
+     * takes the new file's name unless the info names it.
+     */
     public static function update(File $file, array $info, ?UploadedFile $upload): File
     {
+        if ($upload !== null) {
+            $file->name = $upload->getClientOriginalName();
+        }
         self::describe($file, $info);
         if ($upload !== null) {
             self::forget($file);
-            self::put($file, $upload);
+            self::put($file, $upload, ['hash' => (string) $file->hash, 'ext' => (string) $file->ext]);
         }
         $file->save();
 
@@ -116,7 +123,8 @@ final class StrapiUpload
         return Storage::build(['driver' => 'local', 'root' => public_path('uploads'), 'url' => '/uploads', 'visibility' => 'public', 'throw' => true]);
     }
 
-    private static function put(File $file, UploadedFile $upload): void
+    /** @param array{hash: string, ext: string}|null $kept the stored name a replaced file keeps */
+    private static function put(File $file, UploadedFile $upload, ?array $kept = null): void
     {
         if (! $upload->isValid()) {
             throw StrapiError::validation($upload->getErrorMessage());
@@ -136,6 +144,9 @@ final class StrapiUpload
         $ext = pathinfo($original, PATHINFO_EXTENSION) === '' ? '' : '.'.strtolower(pathinfo($original, PATHINFO_EXTENSION));
         $name = (string) ($file->name ?? $original);
         $hash = self::hash($ext !== '' && str_ends_with(strtolower($name), $ext) ? substr($name, 0, -strlen($ext)) : $name);
+        if ($kept !== null) {
+            ['hash' => $hash, 'ext' => $ext] = $kept;
+        }
         $mime = $upload->getMimeType() ?: ($upload->getClientMimeType() ?: 'application/octet-stream');
         $disk = self::disk();
         $settings = self::settings();

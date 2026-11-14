@@ -544,6 +544,48 @@
       "method": "GET",
       "path": "/landings/@landings:Framed",
       "query": "populate[blocks][on][shared.frame][populate][image][fields][0]=name&populate[blocks][on][shared.hero]=true"
+    },
+    {
+      "name": "upload an image to replace",
+      "path": "/upload",
+      "as": "files:Replaced",
+      "upload": [
+        {
+          "file": "tall.png",
+          "info": {
+            "caption": "kept"
+          }
+        }
+      ]
+    },
+    {
+      "name": "upload with an id and a file replaces what it stores, named as the new file",
+      "path": "/upload",
+      "query": "id=#files:Replaced",
+      "upload": [
+        {
+          "file": "wide.png"
+        }
+      ]
+    },
+    {
+      "name": "a replacement keeps the name its info gives",
+      "path": "/upload",
+      "query": "id=#files:Replaced",
+      "upload": [
+        {
+          "file": "wide.png",
+          "info": {
+            "name": "renamed.png",
+            "alternativeText": "alt"
+          }
+        }
+      ]
+    },
+    {
+      "name": "the replaced file reads back",
+      "method": "GET",
+      "path": "/upload/files/#files:Replaced"
     }
   ]
 }
