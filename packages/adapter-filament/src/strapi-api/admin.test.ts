@@ -336,4 +336,26 @@ describe("the Strapi-like admin", () => {
         ?.content,
     ).not.toContain("StrapiNavigation");
   });
+
+  // Strapi labels a linked entry by the relation's main field, which its view can change; the
+  // view names the target's attributes, so the constant says which column each one is.
+  it("tells the view which of the target's fields a relation can be labelled by", () => {
+    expect(content("app/Filament/Resources/Posts/PostResource.php")).toContain(
+      "'author' => ['type' => 'relation', 'relation' => 'manyToOne', 'list' => true, 'sort' => true, 'edit' => true, 'size' => 6, 'resizable' => true, 'mainField' => 'name', 'mainFields' => ['id' => 'id', 'name' => 'name']],",
+    );
+  });
+
+  // A component's own view (Strapi's components::<uid> configuration) lays out its fields: the
+  // form hands each component's fields over by attribute, nested components by theirs.
+  it("hands a component's fields to its view by attribute", () => {
+    const form = content("app/Filament/Resources/Menus/Schemas/MenuForm.php");
+    expect(form).toContain("'cta' => StrapiContentManager::component('shared.link', [");
+    expect(form).toContain(
+      "Repeater::make('items')->relationship()->schema(StrapiContentManager::component('shared.menu-item', [",
+    );
+    expect(form).toContain("'link' => StrapiContentManager::component('shared.link', [");
+    expect(form).toContain(
+      "Block::make('shared.link')->label('Link')->schema(StrapiContentManager::component('shared.link', [",
+    );
+  });
 });
