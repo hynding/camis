@@ -318,7 +318,7 @@ class ContentTypeBuilder extends Page implements HasTable
             ->icon('heroicon-o-plus')
             ->visible(fn (): bool => Builder::editable() && $this->node() !== null)
             ->modalHeading(fn (): string => 'Add a field to '.$this->getTitle())
-            ->schema(fn (): array => $this->fieldSchema(adding: true))
+            ->schema(fn (): array => $this->fieldSchema())
             ->action(fn (array $data, Action $action) => $this->save(
                 $action,
                 fn (array $ir): array => ModelSchema::addField($ir, (string) $this->type, $data),
@@ -334,7 +334,7 @@ class ContentTypeBuilder extends Page implements HasTable
             ->visible(fn (array $record): bool => Builder::editable() && ModelSchema::designable($this->field($record['name'])))
             ->modalHeading(fn (array $record): string => 'Edit '.$record['name'])
             ->fillForm(fn (array $record): array => ModelSchema::stateFromField($this->field($record['name'])))
-            ->schema(fn (): array => $this->fieldSchema(adding: false))
+            ->schema(fn (array $record): array => $this->fieldSchema(field: $this->field($record['name'])))
             ->action(fn (array $record, array $data, Action $action) => $this->save(
                 $action,
                 fn (array $ir): array => ModelSchema::updateField($ir, (string) $this->type, $record['name'], $data),
@@ -359,15 +359,21 @@ class ContentTypeBuilder extends Page implements HasTable
     }
 
     /**
-     * Strapi's field dialog: the field's kind (its cards), then Basic and Advanced settings.
+     * Strapi's field dialog: the field's kind (its cards), then Basic and Advanced settings. Editing
+     * a field of one column, its kind may change to another such kind (text to number), whose column
+     * the schema sync converts.
      *
+     * @param  array<string, mixed>|null  $field  the field edited, or null when adding one
      * @return list<\Filament\Schemas\Components\Component|\Filament\Forms\Components\Field>
      */
-    private function fieldSchema(bool $adding): array
+    private function fieldSchema(?array $field = null): array
     {
         $ir = $this->document();
         $inComponent = str_starts_with((string) $this->type, 'component:');
         $kinds = array_filter(ModelSchema::FIELD_KINDS, fn (string $kind): bool => ! ($inComponent && $kind === 'dynamicZone'), ARRAY_FILTER_USE_KEY);
+        if ($field !== null && ModelSchema::convertible($field['type'])) {
+            $kinds = array_intersect_key($kinds, array_flip(ModelSchema::COLUMN_KINDS));
+        }
         $is = fn (string ...$kinds): \Closure => fn (Get $get): bool => in_array($get('kind'), $kinds, true);
         $contentTypes = [];
         foreach ($ir['contentTypes'] as $type) {
@@ -389,7 +395,8 @@ class ContentTypeBuilder extends Page implements HasTable
                 ->options(array_map(fn (array $kind): string => $kind['label'], $kinds))
                 ->descriptions(array_map(fn (array $kind): string => $kind['description'], $kinds))
                 ->columns(2)
-                ->disabled(! $adding)
+                ->disabled($field !== null && ! ModelSchema::convertible($field['type']))
+                ->helperText($field !== null && ModelSchema::convertible($field['type']) ? 'Changing the type converts the field\'s data: a value the new type cannot hold is emptied.' : null)
                 ->dehydrated(),
             Tabs::make()->visible(fn (Get $get): bool => $get('kind') !== null)->tabs([
                 Tab::make('Basic settings')->schema([

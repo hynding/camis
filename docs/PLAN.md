@@ -1612,7 +1612,7 @@ roles.
   without `--force`.
 
 Known gaps: a field's type cannot change once made (Strapi allows only a few such changes; here
-only within its card: short and long text, a number's format, a date's type); a renamed field or
+only within its card: short and long text, a number's format, a date's type; Phase 71 lifted it); a renamed field or
 type loses its data, as in Strapi; custom fields beyond the color picker are not offered; the
 builder edits only through the first Strapi-style Filament target. (Phase 69 closed the others.)
 
@@ -2178,6 +2178,32 @@ here, and a relation's main field inside a component's view.
 
 Exit: `admin.test.ts` cases; ContentManagerViewTest's main-field and component-view cases in the
 `strapi-api` boot job.
+
+## Phase 71 — a field changes to a type in another group (`adapter-filament`)
+
+Phase 48 let a field change type only within its card (short and long text, a number's format, a
+date's type). Strapi's builder does not change a field's type at all; here, as the IR is the source
+of truth and the sync keeps the data, a field may become a type of another card.
+
+- **The builder's field dialog**, editing a field kept in one column of its type's table (text,
+  rich text, number, date, boolean, JSON, email, enumeration, uid, Markdown, color), offers every
+  such card: text to number, number to text, text to date, and so on. The field keeps its name and
+  the keys the dialog does not own, and only the settings its new type has (a length limit goes
+  with text). A uid made from a field that is no longer text is made from nothing. A field whose
+  data lives in tables of its own (media, relation, component, dynamic zone) keeps its card: it is
+  deleted and added again.
+- **`camis:schema-sync`** converts a column whose recorded type is in another group than its
+  declared one (text, integer, decimal, boolean, date, datetime, time, JSON), which no database
+  converts in place alike (PostgreSQL refuses text to integer; SQLite keeps "abc" in an integer
+  column): a column of the new type takes each value as `ColumnConversion` carries it over, the
+  old column goes with its indexes, the new one takes its name and its unique index. A number is
+  rounded as SQL rounds, a boolean reads and writes true and false, a date is parsed, JSON keeps
+  valid JSON text and quotes the rest; what the new type cannot hold is emptied. A conversion cut
+  short is started over on the next sync. A change within a group still goes through `change()`.
+
+Exit: `content-type-builder.test.ts` cases; ContentTypeBuilderTest's type change, conversion and
+refused-change cases, and `schema-sync-check.php`'s text-to-number conversion on sqlite, mysql and
+pgsql.
 
 ---
 

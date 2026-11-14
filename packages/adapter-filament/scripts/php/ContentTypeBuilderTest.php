@@ -388,7 +388,8 @@ class ContentTypeBuilderTest extends TestCase
         $this->assertSame(12, $convert('12', 'string(255)', 'integer'));
         $this->assertSame(8, $convert('7.6', 'string(255)', 'integer'));
         $this->assertNull($convert('many', 'string(255)', 'integer'));
-        $this->assertSame('9007199254740993', $convert('9007199254740993', 'text', 'bigInteger'));
+        $this->assertSame(9007199254740993, $convert('9007199254740993', 'text', 'bigInteger'));
+        $this->assertNull($convert('92233720368547758070', 'text', 'bigInteger'));
         $this->assertSame(3.25, $convert('3.25', 'string(255)', 'decimal(8, 2)'));
         $this->assertSame('true', $convert(1, 'boolean', 'string(255)'));
         $this->assertSame('false', $convert(false, 'boolean', 'text'));
