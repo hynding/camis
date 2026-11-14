@@ -10,6 +10,9 @@ return [
     // The command that rebuilds every target from it, run in the project's directory.
     'build_command' => env('CAMIS_BUILD_COMMAND'),
 
+    // Every app that rebuild reaches (this one among them), each database brought up to an edit.
+    'apps' => env('CAMIS_DEVELOP_APPS', ''),
+
     // The environments it edits in, as Strapi's builder edits only under "strapi develop".
     'environments' => ['local'],
 

@@ -2243,13 +2243,16 @@ cases.
 Content-Type Builder could edit, and an edit made there left every other such app's database
 behind the rebuilt code.
 
-- **`camis develop`** writes `CAMIS_PROJECT_CONFIG` and `CAMIS_BUILD_COMMAND` into the `.env` of
-  every Strapi-style Filament target on the laravel storage layout, syncs each one's database,
-  and serves the first, or the one `--target <out>` names.
-- **An edit** in any of them rebuilds every target, as before, then runs `camis:schema-sync` in
-  this app and in each other Strapi-style Filament app the project config lists (an out with an
-  `artisan` file, this app named once). A sync that fails anywhere is reported with the app it
-  failed in; the others still run.
+- **`camis develop`** writes `CAMIS_PROJECT_CONFIG`, `CAMIS_BUILD_COMMAND` and
+  `CAMIS_DEVELOP_APPS` (every such app's directory, joined by the path delimiter) into the `.env`
+  of every Strapi-style Filament target on the laravel storage layout (each out once), syncs each
+  one's database, and serves the first, or the one `--target <out>` names (as the config names
+  it, or as a path from where camis runs).
+- **An edit** in any of them rebuilds every target, as before, syncs this app's database (a
+  failure there is the edit's, as before), then runs `camis:schema-sync` in each other app
+  `CAMIS_DEVELOP_APPS` lists, with this app's `.env` variables unset so the other reads its own.
+  An app whose sync fails is named in a warning beside "Saved": the edit stays, and the next apps
+  still run.
 
 Exit: `develop.test.ts`'s every-target and `--target` cases; ContentTypeBuilderTest's
 every-app case.

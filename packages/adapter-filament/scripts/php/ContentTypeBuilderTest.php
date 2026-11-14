@@ -158,29 +158,39 @@ class ContentTypeBuilderTest extends TestCase
     {
         $this->login(['user.update']);
         $this->develop();
-        // Another Strapi-style Filament app the project builds, and this one named as a target too.
-        $other = $this->project.'-admin2';
-        mkdir($other);
-        touch($other.'/artisan');
-        file_put_contents($this->project.'/camis.config.json', json_encode(['ir' => './camis.json', 'roles' => './roles.json', 'targets' => [
-            ['target' => 'filament', 'out' => base_path(), 'apiStyle' => 'strapi'],
-            ['target' => 'filament', 'out' => '../'.basename($other), 'apiStyle' => 'strapi'],
-            ['target' => 'filament', 'out' => '../'.basename($other), 'apiStyle' => 'strapi', 'storageLayout' => 'strapi'],
-            ['target' => 'strapi', 'out' => './cms'],
-        ]]));
-        Process::fake();
+        // The apps camis develop wired: this one, two others (one named twice) and one not built.
+        $others = [$this->project.'-admin2', $this->project.'-admin3'];
+        foreach ($others as $other) {
+            mkdir($other);
+            touch($other.'/artisan');
+        }
+        config(['content-type-builder.apps' => implode(PATH_SEPARATOR, [base_path(), ...$others, $others[0], $this->project.'-gone'])]);
+        Process::fake([
+            '*' => fn (PendingProcess $process) => str_ends_with((string) $process->path, '-admin2') && is_array($process->command)
+                ? Process::result(errorOutput: 'database unreachable', exitCode: 1)
+                : Process::result(),
+        ]);
 
         try {
             Livewire::test(ContentTypeBuilder::class, ['type' => 'contentType:Tag'])
                 ->callAction(TestAction::make('addField')->table(), data: ['kind' => 'boolean', 'name' => 'shown'])
-                ->assertHasNoActionErrors();
+                ->assertHasNoActionErrors()
+                // The edit is kept; the app whose database failed is named.
+                ->assertNotified('Another app\'s database was not updated');
 
             $syncs = fn (string $path): \Closure => fn (PendingProcess $process): bool => is_array($process->command) && in_array('camis:schema-sync', $process->command, true) && realpath((string) $process->path) === realpath($path);
             Process::assertRanTimes($syncs(base_path()), 1);
-            Process::assertRanTimes($syncs($other), 1);
+            // One failing does not stop the next.
+            Process::assertRanTimes($syncs($others[0]), 1);
+            Process::assertRanTimes($syncs($others[1]), 1);
+            // Another app reads its own .env, not this one's.
+            Process::assertRan(fn (PendingProcess $process): bool => realpath((string) $process->path) === realpath($others[1]) && ($process->environment['DB_CONNECTION'] ?? null) === false);
+            $this->assertArrayHasKey('shown', collect($this->type('Tag')['fields'])->keyBy('name')->all());
         } finally {
-            unlink($other.'/artisan');
-            rmdir($other);
+            foreach ($others as $other) {
+                unlink($other.'/artisan');
+                rmdir($other);
+            }
         }
     }
 

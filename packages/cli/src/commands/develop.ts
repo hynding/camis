@@ -1,4 +1,4 @@
-import { isAbsolute, join, resolve } from "node:path";
+import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import type { Io } from "../io";
 import { loadConfig } from "../config";
 import { generateCommand } from "./generate";
@@ -20,15 +20,18 @@ const shellQuoted = (value: string): string =>
 
 /**
  * The `.env` lines that let the admin's Content-Type Builder edit: where the project config is
- * (it names the content model and roles), and the command that rebuilds every target from it.
+ * (it names the content model and roles), the command that rebuilds every target from it, and
+ * every app that rebuild reaches, whose database the edit then brings up to it.
  */
 export const developEnv = (paths: {
   project: string;
   node: string;
   bin: string;
+  apps: readonly string[];
 }): Record<string, string> => ({
   CAMIS_PROJECT_CONFIG: paths.project,
   CAMIS_BUILD_COMMAND: `${shellQuoted(paths.node)} ${shellQuoted(paths.bin)} build --config ${shellQuoted(paths.project)}`,
+  CAMIS_DEVELOP_APPS: paths.apps.join(delimiter),
 });
 
 /** Set each variable in a `.env` source, in place where it is set already. Idempotent. */
@@ -59,27 +62,44 @@ export const developCommand = async (
     io.out(`✗ config: ${cfg.error}`);
     return 1;
   }
-  const apps = cfg.value.targets.filter(
-    (t) => t.target === "filament" && t.apiStyle === "strapi" && t.storageLayout !== "strapi",
-  );
+  // Each out once, however many entries name it (loadConfig resolves outs against the config).
+  const apps = [
+    ...new Map(
+      cfg.value.targets
+        .filter(
+          (t) => t.target === "filament" && t.apiStyle === "strapi" && t.storageLayout !== "strapi",
+        )
+        .map((t) => [t.out, t] as const),
+    ).values(),
+  ];
   if (apps.length === 0) {
     io.out(
       '✗ develop needs a filament target with apiStyle "strapi" (and the laravel storage layout): its admin has the Content-Type Builder',
     );
     return 1;
   }
+  const project = isAbsolute(configPath) ? configPath : resolve(io.cwd, configPath);
+  // As the config names an out, or as a path from where camis runs.
+  const named = (target: string): string[] => [
+    resolve(dirname(project), target),
+    resolve(io.cwd, target),
+  ];
   const served =
     options.target === undefined
       ? apps[0]
-      : apps.find((t) => resolve(io.cwd, t.out) === resolve(io.cwd, options.target ?? ""));
+      : apps.find((t) => named(options.target ?? "").includes(t.out));
   if (served === undefined) {
     io.out(`✗ develop: no Strapi-style Filament target is out at "${options.target}"`);
     return 1;
   }
   if ((await generateCommand(configPath, io, { write: true })) !== 0) return 1;
 
-  const project = isAbsolute(configPath) ? configPath : resolve(io.cwd, configPath);
-  const env = developEnv({ project, node: options.node, bin: options.bin });
+  const env = developEnv({
+    project,
+    node: options.node,
+    bin: options.bin,
+    apps: apps.map((app) => app.out),
+  });
   for (const app of apps) {
     const envPath = join(app.out, ".env");
     const source = await io.readFile(envPath).catch(() => "");

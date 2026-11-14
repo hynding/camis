@@ -1,3 +1,4 @@
+import { delimiter } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Io } from "../io";
 import { developCommand, developEnv, patchDevelopEnv } from "./develop";
@@ -50,16 +51,23 @@ const fakeIo = (
 describe("camis develop", () => {
   it("tells the app where the project is and how to rebuild it", () => {
     expect(
-      developEnv({ project: "/p/camis.config.json", node: "/usr/bin/node", bin: "/c/camis.mjs" }),
+      developEnv({
+        project: "/p/camis.config.json",
+        node: "/usr/bin/node",
+        bin: "/c/camis.mjs",
+        apps: ["/p/generated/filament", "/p/generated/admin2"],
+      }),
     ).toEqual({
       CAMIS_PROJECT_CONFIG: "/p/camis.config.json",
       CAMIS_BUILD_COMMAND: "/usr/bin/node /c/camis.mjs build --config /p/camis.config.json",
+      // Every app an edit rebuilds, so the one it was made in brings each database up to it.
+      CAMIS_DEVELOP_APPS: `/p/generated/filament${delimiter}/p/generated/admin2`,
     });
   });
 
   it("quotes a path a shell would split", () => {
     expect(
-      developEnv({ project: "/my p/c.json", node: "node", bin: "/c/camis.mjs" })
+      developEnv({ project: "/my p/c.json", node: "node", bin: "/c/camis.mjs", apps: [] })
         .CAMIS_BUILD_COMMAND,
     ).toBe('node /c/camis.mjs build --config "/my p/c.json"');
   });
@@ -113,6 +121,7 @@ describe("camis develop", () => {
             storageLayout: "strapi",
           },
           { target: "filament", out: "./generated/admin2", apiStyle: "strapi" },
+          { target: "filament", out: "generated/admin2", apiStyle: "strapi" },
         ],
       }),
     };
@@ -128,6 +137,9 @@ describe("camis develop", () => {
       expect(files[`${out}/.env`]).toContain('CAMIS_PROJECT_CONFIG="/p/camis.config.json"');
     }
     expect(files["/p/generated/storage/.env"]).toBeUndefined();
+    expect(files["/p/generated/admin2/.env"]).toContain(
+      `CAMIS_DEVELOP_APPS="/p/generated/filament${delimiter}/p/generated/admin2"`,
+    );
     expect(ran.map((r) => `${r.cwd} ${r.args.join(" ")}`)).toEqual([
       "/p/generated/filament artisan camis:schema-sync",
       "/p/generated/admin2 artisan camis:schema-sync",
@@ -151,6 +163,20 @@ describe("camis develop", () => {
     const options = { node: "node", bin: "camis.mjs", serve: true };
     expect(
       await developCommand("camis.config.json", io, { ...options, target: "generated/admin2" }),
+    ).toBe(0);
+    expect(ran.at(-1)).toEqual({
+      cmd: "php",
+      args: ["artisan", "serve"],
+      cwd: "/p/generated/admin2",
+    });
+
+    // As the config names it, wherever camis runs from.
+    const fromRoot = { ...fakeIo(files, ran, lines), cwd: "/" };
+    expect(
+      await developCommand("/p/camis.config.json", fromRoot, {
+        ...options,
+        target: "./generated/admin2",
+      }),
     ).toBe(0);
     expect(ran.at(-1)).toEqual({
       cmd: "php",

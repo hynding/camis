@@ -492,6 +492,12 @@ class ContentTypeBuilder extends Page implements HasTable
             return;
         }
         Notification::make()->success()->title('Saved')->body('The content model was updated and the app rebuilt.')->send();
+        $unsynced = Builder::syncOtherApps();
+        if ($unsynced !== []) {
+            Notification::make()->warning()->title('Another app\'s database was not updated')
+                ->body(nl2br(e(mb_strimwidth("The edit is saved, but camis:schema-sync failed in\n".implode("\n", $unsynced), 0, 2000, '…'))))
+                ->persistent()->send();
+        }
         $type = $next === null ? $this->type : $next($after);
         $this->redirect(static::getUrl($type === null ? [] : ['type' => $type]));
     }

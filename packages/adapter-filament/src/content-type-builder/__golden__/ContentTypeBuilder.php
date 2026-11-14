@@ -5,6 +5,8 @@ declare(strict_types=1);
 
 namespace App\Support;
 
+use Dotenv\Dotenv;
+use Illuminate\Contracts\Process\ProcessResult;
 use Illuminate\Support\Facades\Process;
 use RuntimeException;
 use Symfony\Component\Process\PhpExecutableFinder;
@@ -17,8 +19,8 @@ use Symfony\Component\Process\PhpExecutableFinder;
  * project "camis develop" names (CAMIS_PROJECT_CONFIG and CAMIS_BUILD_COMMAND): an edit then writes
  * the project's content model (the IR, which stays the source of truth) and its roles, runs
  * "camis build", which validates the model and regenerates every target, and brings the database
- * of this app, and of every other Strapi-style Filament app the project builds, up to the new
- * schema. A build that fails puts both files back as they were.
+ * up to the new schema (and, with syncOtherApps, every other app camis develop wired). A build that
+ * fails puts both files back as they were.
  */
 final class ContentTypeBuilder
 {
@@ -100,42 +102,64 @@ final class ContentTypeBuilder
             throw new RuntimeException("camis build failed, so the content model was left as it was:\n".trim($build->output()."\n".$build->errorOutput()));
         }
 
-        // Every Strapi-style Filament app the project builds has just been rebuilt from the same model,
-        // so each one's database is brought up to it, this app's first.
-        $failed = [];
-        foreach ([base_path(), ...self::otherApps()] as $app) {
-            // A fresh PHP process, as the build has just rewritten the app's classes and migrations.
-            $sync = Process::path($app)
-                ->timeout((int) config('content-type-builder.timeout', 300))
-                ->run([(new PhpExecutableFinder)->find(false) ?: 'php', 'artisan', 'camis:schema-sync', '--force']);
-            if (! $sync->successful()) {
-                $failed[] = ($app === base_path() ? 'this app' : $app).":\n".trim($sync->output()."\n".$sync->errorOutput());
-            }
-        }
-        if ($failed !== []) {
-            throw new RuntimeException("The project was rebuilt, but a database could not be brought up to it, in ".implode("\n", $failed));
+        // A fresh PHP process, as the build has just rewritten the app's classes and migrations.
+        $sync = self::sync(base_path());
+        if (! $sync->successful()) {
+            throw new RuntimeException("The project was rebuilt, but the database could not be brought up to it:\n".trim($sync->output()."\n".$sync->errorOutput()));
         }
 
         return $ir;
     }
 
     /**
-     * The project's other Strapi-style Filament apps (the laravel storage layout, as camis develop
-     * wires them), each of which has a builder too and a database of its own.
+     * Bring the database of every other app the edit just rebuilt up to it: the Strapi-style
+     * Filament apps "camis develop" wired beside this one, each with its own .env and builder.
+     * Returns what failed, one entry an app; an app that failed leaves the edit in place.
      *
      * @return list<string>
      */
+    public static function syncOtherApps(): array
+    {
+        $failed = [];
+        foreach (self::otherApps() as $app) {
+            $sync = self::sync($app);
+            if (! $sync->successful()) {
+                $failed[] = "{$app}:\n".trim($sync->output()."\n".$sync->errorOutput());
+            }
+        }
+
+        return $failed;
+    }
+
+    /**
+     * "php artisan camis:schema-sync" in an app. Another app reads its own .env, which never
+     * overrides a variable already set, so this app's are unset for it.
+     */
+    private static function sync(string $app): ProcessResult
+    {
+        $process = Process::path($app)->timeout((int) config('content-type-builder.timeout', 300));
+        if ($app !== base_path()) {
+            $process->env(array_fill_keys(self::ownEnvironmentKeys(), false));
+        }
+
+        return $process->run([(new PhpExecutableFinder)->find(false) ?: 'php', 'artisan', 'camis:schema-sync', '--force']);
+    }
+
+    /** @return list<string> the variables this app's .env sets */
+    private static function ownEnvironmentKeys(): array
+    {
+        $env = @file_get_contents(app()->environmentFilePath());
+
+        return $env === false ? [] : array_keys(Dotenv::parse($env));
+    }
+
+    /** @return list<string> */
     private static function otherApps(): array
     {
-        $project = (string) self::projectPath();
         $here = realpath(base_path());
         $apps = [];
-        foreach ((array) (self::decode($project)['targets'] ?? []) as $target) {
-            if (! is_array($target) || ($target['target'] ?? null) !== 'filament' || ($target['apiStyle'] ?? null) !== 'strapi' || ($target['storageLayout'] ?? 'laravel') === 'strapi') {
-                continue;
-            }
-            $out = (string) ($target['out'] ?? '');
-            $app = realpath(str_starts_with($out, '/') ? $out : dirname($project).'/'.$out);
+        foreach (explode(PATH_SEPARATOR, (string) config('content-type-builder.apps', '')) as $path) {
+            $app = $path === '' ? false : realpath($path);
             if ($app !== false && $app !== $here && is_file($app.'/artisan') && ! in_array($app, $apps, true)) {
                 $apps[] = $app;
             }
