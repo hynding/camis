@@ -478,11 +478,12 @@ final class ContentTypeBuilderSchema
         return self::mapNode($ir, $ref, function (array $node) use ($ref, $name, $state, $ir): array {
             $index = self::fieldIndex($node, $name);
             $field = self::fieldFromState($node['fields'][$index], $state, $ref, $ir);
-            // A uid is made from a text field: one changed to another type no longer makes it.
-            $makesUid = in_array($field['type'], ['string', 'text'], true);
+            // A uid is made from a text field: one changed from text to another type no longer makes it.
+            $text = ['string', 'text'];
+            $lostUid = in_array($node['fields'][$index]['type'], $text, true) && ! in_array($field['type'], $text, true);
             foreach ($node['fields'] as $i => $other) {
                 if (($other['targetField'] ?? null) === $name) {
-                    if ($makesUid) {
+                    if (! $lostUid) {
                         $node['fields'][$i]['targetField'] = $field['name'];
                     } else {
                         unset($node['fields'][$i]['targetField']);
@@ -539,7 +540,8 @@ final class ContentTypeBuilderSchema
         $type = self::typeFromState($state, $existing);
         $kind = self::kindOf($type);
         if (isset($existing['type']) && self::kindOf($existing['type']) !== $kind && ! (self::convertible($existing['type']) && self::convertible($type))) {
-            throw new InvalidArgumentException("field \"{$existing['name']}\" is a {$existing['type']} field, whose data is kept outside its type's table, so it cannot change to {$type}. Delete it and add a new field instead.");
+            $outside = self::convertible($existing['type']) ? $type : $existing['type'];
+            throw new InvalidArgumentException("field \"{$existing['name']}\" cannot change from {$existing['type']} to {$type}: a {$outside} field keeps its data outside its type's table. Delete it and add a new field instead.");
         }
         if ($kind === 'dynamicZone' && str_starts_with($ref, 'component:')) {
             throw new InvalidArgumentException('a component cannot hold a dynamic zone');

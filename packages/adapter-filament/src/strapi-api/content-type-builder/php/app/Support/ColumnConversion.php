@@ -5,13 +5,14 @@ declare(strict_types=1);
 namespace App\Support;
 
 use DateTimeImmutable;
-use Throwable;
+use DateTimeZone;
 
 /**
  * A column's values carried over to another group of types, as the schema sync converts a field the
  * Content-Type Builder changed from text to a number (or any other column type to another): what the
- * new type can hold is kept, the rest emptied. Types are written as the sync records them:
- * "string(255)", "decimal(8, 2)", "bigInteger unsigned".
+ * new column can hold is kept, the rest emptied, so no value the database would refuse reaches it.
+ * Types are written as the sync records them: "string(255)", "decimal(8, 2)", "integer unsigned",
+ * "enum(draft|published)".
  */
 final class ColumnConversion
 {
@@ -27,7 +28,21 @@ final class ColumnConversion
         'json' => ['json', 'jsonb'],
     ];
 
+    /** Each integer type's bits, which bound what it holds, signed or not. */
+    private const INTEGER_BITS = ['tinyInteger' => 8, 'smallInteger' => 16, 'mediumInteger' => 24, 'integer' => 32, 'bigInteger' => 64];
+
     private const FORMATS = ['date' => 'Y-m-d', 'dateTime' => 'Y-m-d H:i:s', 'time' => 'H:i:s'];
+
+    /**
+     * The ways a date or a time is written that are read as one: ISO 8601 and SQL's, no more, since
+     * PHP's free-form parsing takes "2024" for a time of day and "a" for a time zone.
+     */
+    private const DATE_FORMATS = [
+        'Y-m-d\TH:i:s.uP', 'Y-m-d\TH:i:sP', 'Y-m-d\TH:i:s.u', 'Y-m-d\TH:i:s', 'Y-m-d\TH:i',
+        'Y-m-d H:i:s.uP', 'Y-m-d H:i:sP', 'Y-m-d H:i:s.u', 'Y-m-d H:i:s', 'Y-m-d H:i', 'Y-m-d',
+    ];
+
+    private const TIME_FORMATS = ['H:i:s.u', 'H:i:s', 'H:i'];
 
     /** The group a recorded column type belongs to: a change within one is the database's to make. */
     public static function group(string $type): string
@@ -54,11 +69,12 @@ final class ColumnConversion
         }
 
         return match (self::group($to)) {
-            'text' => self::text($value, self::length($to)),
-            'integer' => self::integer($value),
-            'decimal' => self::decimal($value),
+            'text' => self::text($value, $to),
+            'integer' => self::integer($value, $to),
+            'decimal' => self::decimal($value, $to),
             'boolean' => self::boolean($value),
-            'date', 'dateTime', 'time' => self::moment($value, self::FORMATS[self::group($to)]),
+            'date', 'time' => self::moment($value, self::group($to)),
+            'dateTime' => self::moment($value, 'dateTime'),
             'json' => self::json($value, $source),
             default => $value,
         };
@@ -69,73 +85,131 @@ final class ColumnConversion
         return (string) preg_replace('/[\s(].*$/', '', $type);
     }
 
-    private static function length(string $type): ?int
+    /** @return list<string> what the type's parentheses hold: its sizes, or an enum's values */
+    private static function parameters(string $type): array
     {
-        return self::name($type) === 'string' && preg_match('/^string\((\d+)\)/', $type, $match) ? (int) $match[1] : null;
+        if (! preg_match('/\((.*)\)/', $type, $match)) {
+            return [];
+        }
+
+        return str_contains($match[1], '|') || self::name($type) === 'enum'
+            ? explode('|', $match[1])
+            : array_map('trim', explode(',', $match[1]));
     }
 
-    private static function text(mixed $value, ?int $length): string
+    private static function text(mixed $value, string $type): ?string
     {
         $text = match (true) {
             is_bool($value) => $value ? 'true' : 'false',
             is_scalar($value) => (string) $value,
             default => (string) json_encode($value),
         };
+        if (self::name($type) === 'enum') {
+            return in_array($text, self::parameters($type), true) ? $text : null;
+        }
+        $length = in_array(self::name($type), ['string', 'char'], true) ? (int) (self::parameters($type)[0] ?? 0) : 0;
 
-        return $length === null ? $text : mb_substr($text, 0, $length);
+        return $length > 0 ? mb_substr($text, 0, $length) : $text;
     }
 
-    /** Rounded, as SQL's casts round; an integer written out keeps every digit, or is too big to hold. */
-    private static function integer(mixed $value): ?int
+    /** Rounded, as SQL's casts round; emptied when the column's type cannot hold it. */
+    private static function integer(mixed $value, string $type): ?int
     {
         if (is_bool($value)) {
             return $value ? 1 : 0;
         }
-        if (is_int($value)) {
-            return $value;
+        $text = is_int($value) ? (string) $value : trim(is_scalar($value) ? (string) $value : '');
+        if (! is_numeric($text)) {
+            return null;
         }
-        $text = trim((string) (is_scalar($value) ? $value : ''));
-        if (preg_match('/^-?\d+$/', $text)) {
+        if (preg_match('/^[+-]?\d+$/', $text)) {
             $integer = 0 + $text;
-
-            return is_int($integer) ? $integer : null;
+        } else {
+            $rounded = round((float) $text);
+            // PHP_INT_MAX as a float is 2^63, one past the largest integer.
+            $integer = $rounded >= PHP_INT_MIN && $rounded < PHP_INT_MAX ? (int) $rounded : null;
+        }
+        if (! is_int($integer)) {
+            return null;
+        }
+        $bits = self::INTEGER_BITS[self::name($type)] ?? 64;
+        $unsigned = str_contains($type, 'unsigned');
+        if ($unsigned && $integer < 0) {
+            return null;
+        }
+        if ($bits < 64) {
+            [$min, $max] = $unsigned ? [0, 2 ** $bits - 1] : [-(2 ** ($bits - 1)), 2 ** ($bits - 1) - 1];
+            if ($integer < $min || $integer > $max) {
+                return null;
+            }
         }
 
-        return is_numeric($text) ? (int) round((float) $text) : null;
+        return $integer;
     }
 
-    private static function decimal(mixed $value): float|null
+    /** A decimal rounded to its places, and emptied when its digits do not fit. */
+    private static function decimal(mixed $value, string $type): float|null
     {
         if (is_bool($value)) {
             return $value ? 1.0 : 0.0;
         }
-        $text = trim((string) (is_scalar($value) ? $value : ''));
+        $text = trim(is_scalar($value) ? (string) $value : '');
+        if (! is_numeric($text) || ! is_finite((float) $text)) {
+            return null;
+        }
+        $number = (float) $text;
+        $sizes = self::parameters($type);
+        if (self::name($type) === 'decimal' && count($sizes) === 2) {
+            [$total, $places] = [(int) $sizes[0], (int) $sizes[1]];
+            $number = round($number, $places);
+            if (abs($number) >= 10 ** ($total - $places)) {
+                return null;
+            }
+        }
+        if (str_contains($type, 'unsigned') && $number < 0) {
+            return null;
+        }
 
-        return is_numeric($text) ? (float) $text : null;
+        return $number;
     }
 
+    /** True and false as text or a number reads them; anything else, or nothing, is emptied. */
     private static function boolean(mixed $value): ?bool
     {
         if (is_bool($value)) {
             return $value;
         }
-        if (is_int($value) || is_float($value)) {
-            return $value != 0;
+        $text = trim(is_scalar($value) ? (string) $value : '');
+        if ($text === '') {
+            return null;
+        }
+        if (is_numeric($text)) {
+            return (float) $text != 0;
         }
 
-        return filter_var(is_scalar($value) ? trim((string) $value) : null, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+        return filter_var($text, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
     }
 
-    private static function moment(mixed $value, string $format): ?string
+    /** A date, a date and time, or a time, read only as ISO 8601 or SQL write one; in UTC when it carries an offset. */
+    private static function moment(mixed $value, string $group): ?string
     {
         if (! is_string($value) || trim($value) === '') {
             return null;
         }
-        try {
-            return (new DateTimeImmutable(trim($value)))->format($format);
-        } catch (Throwable) {
-            return null;
+        $formats = $group === 'time' ? [...self::DATE_FORMATS, ...self::TIME_FORMATS] : self::DATE_FORMATS;
+        foreach ($formats as $format) {
+            $moment = DateTimeImmutable::createFromFormat('!'.$format, trim($value));
+            $errors = DateTimeImmutable::getLastErrors();
+            if ($moment !== false && ($errors === false || ($errors['warning_count'] === 0 && $errors['error_count'] === 0))) {
+                if (str_contains($format, 'P')) {
+                    $moment = $moment->setTimezone(new DateTimeZone('UTC'));
+                }
+
+                return $moment->format(self::FORMATS[$group]);
+            }
         }
+
+        return null;
     }
 
     /** JSON text as it is, anything else as the JSON value it reads as. */

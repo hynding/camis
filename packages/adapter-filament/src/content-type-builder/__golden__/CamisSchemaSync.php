@@ -302,7 +302,7 @@ final class CamisSchemaSync
             }
             try {
                 if (ColumnConversion::group($before) !== ColumnConversion::group($declared) && in_array('id', $existing, true)) {
-                    $this->convertColumn($table, $column, $before, $declared);
+                    $this->convertColumn($table, $definition, $column, $before, $declared);
                     $this->report[] = "converted {$table}.{$name} from {$before} to {$declared}";
 
                     continue;
@@ -328,34 +328,100 @@ final class CamisSchemaSync
     /**
      * A column changed to another group of types (text to a number, a number to a date, …), which
      * no database converts in place alike: a column of the new type takes each value as
-     * ColumnConversion carries it over, emptied where the new type cannot hold it, then the old one.
-     * A conversion cut short is started over by the next sync.
+     * ColumnConversion carries it over (emptied where the new type cannot hold it, and where a
+     * unique column would hold it twice), then takes the old column's place and its indexes. The
+     * old column goes only once its values are in the new one; a conversion cut short before that
+     * leaves it as it was, and the next sync starts over.
      */
-    private function convertColumn(string $table, ColumnDefinition $column, string $before, string $declared): void
+    private function convertColumn(string $table, Blueprint $definition, ColumnDefinition $column, string $before, string $declared): void
     {
         $schema = $this->connection->getSchemaBuilder();
         $name = (string) $column->get('name');
         $converting = 'camis_converting_'.$name;
-        if ($schema->hasColumn($table, $converting)) {
-            $this->dropColumns($table, [$converting]);
+        $replaced = 'camis_replaced_'.$name;
+        foreach ([$converting, $replaced] as $leftover) {
+            if ($schema->hasColumn($table, $leftover)) {
+                $this->dropColumns($table, [$leftover]);
+            }
         }
         $schema->table($table, function (Blueprint $blueprint) use ($column, $converting): void {
             $blueprint->addColumn((string) $column->get('type'), $converting, self::typeAttributes($column))->nullable();
         });
+        $indexes = self::declaredIndexes($definition, $column);
+        $unique = in_array('unique', array_column($indexes, 'kind'), true);
+        $seen = [];
         $this->connection->table($table)->select(['id', $name])->whereNotNull($name)
-            ->chunkById(500, function ($rows) use ($table, $name, $converting, $before, $declared): void {
-                foreach ($rows as $row) {
-                    $this->connection->table($table)->where('id', $row->id)
-                        ->update([$converting => ColumnConversion::convert($row->{$name}, $before, $declared)]);
-                }
+            ->chunkById(500, function ($rows) use ($table, $name, $converting, $before, $declared, $unique, &$seen): void {
+                // One transaction a chunk, so SQLite does not write each row through to disk alone.
+                $this->connection->transaction(function () use ($rows, $table, $name, $converting, $before, $declared, $unique, &$seen): void {
+                    foreach ($rows as $row) {
+                        $value = ColumnConversion::convert($row->{$name}, $before, $declared);
+                        if ($value === null) {
+                            continue;
+                        }
+                        if ($unique) {
+                            $key = var_export($value, true);
+                            if (isset($seen[$key])) {
+                                continue;
+                            }
+                            $seen[$key] = true;
+                        }
+                        $this->connection->table($table)->where('id', $row->id)->update([$converting => $value]);
+                    }
+                });
             });
-        $this->dropColumns($table, [$name]);
-        $schema->table($table, function (Blueprint $blueprint) use ($column, $converting, $name): void {
-            $blueprint->renameColumn($converting, $name);
-            if ($column->get('unique')) {
-                $blueprint->unique($name);
-            }
+        $schema->table($table, function (Blueprint $blueprint) use ($name, $replaced): void {
+            $blueprint->renameColumn($name, $replaced);
         });
+        try {
+            $schema->table($table, function (Blueprint $blueprint) use ($converting, $name): void {
+                $blueprint->renameColumn($converting, $name);
+            });
+        } catch (Throwable $exception) {
+            $schema->table($table, function (Blueprint $blueprint) use ($name, $replaced): void {
+                $blueprint->renameColumn($replaced, $name);
+            });
+            throw $exception;
+        }
+        try {
+            $this->dropColumns($table, [$replaced]);
+        } catch (Throwable) {
+            // The values are converted; the old column, undeclared, goes with the others below.
+        }
+        foreach ($indexes as $index) {
+            try {
+                $schema->table($table, function (Blueprint $blueprint) use ($index, $name): void {
+                    $index['kind'] === 'unique' ? $blueprint->unique([$name], $index['name']) : $blueprint->index([$name], $index['name']);
+                });
+            } catch (Throwable $exception) {
+                $this->report[] = "converted {$table}.{$name} without its {$index['kind']} index: {$exception->getMessage()}";
+            }
+        }
+    }
+
+    /**
+     * The unique and plain indexes a declared table puts on one column alone: as the column's
+     * modifiers, or as commands of its blueprint.
+     *
+     * @return list<array{kind: string, name: string|null}>
+     */
+    private static function declaredIndexes(Blueprint $definition, ColumnDefinition $column): array
+    {
+        $name = (string) $column->get('name');
+        $indexes = [];
+        foreach (['unique', 'index'] as $kind) {
+            $modifier = $column->get($kind);
+            if ($modifier !== null && $modifier !== false) {
+                $indexes[] = ['kind' => $kind, 'name' => is_string($modifier) ? $modifier : null];
+            }
+        }
+        foreach ($definition->getCommands() as $command) {
+            if (in_array($command->get('name'), ['unique', 'index'], true) && (array) $command->get('columns') === [$name]) {
+                $indexes[] = ['kind' => (string) $command->get('name'), 'name' => is_string($command->get('index')) ? $command->get('index') : null];
+            }
+        }
+
+        return $indexes;
     }
 
     /**

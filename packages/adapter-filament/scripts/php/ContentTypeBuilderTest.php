@@ -364,6 +364,13 @@ class ContentTypeBuilderTest extends TestCase
 
         $after = \App\Support\ContentTypeBuilderSchema::updateField($ir, 'contentType:Page', 'title', ['kind' => 'number', 'numberType' => 'integer', 'name' => 'title', 'maxLength' => '80', 'default' => 'Untitled']);
 
+        // A uid made from a field that keeps its type keeps being made from it.
+        $kept = \App\Support\ContentTypeBuilderSchema::updateField(
+            ['contentTypes' => [['name' => 'Page', 'kind' => 'collection', 'fields' => [['type' => 'email', 'name' => 'contact'], ['type' => 'uid', 'name' => 'slug', 'targetField' => 'contact']]]], 'components' => []],
+            'contentType:Page', 'contact', ['kind' => 'email', 'name' => 'contact', 'required' => true],
+        );
+        $this->assertSame('contact', $kept['contentTypes'][0]['fields'][1]['targetField']);
+
         // A uid is made from a text field only, so it no longer is from a number.
         $this->assertSame([
             ['type' => 'integer', 'name' => 'title', 'localized' => false],
@@ -406,6 +413,26 @@ class ContentTypeBuilderTest extends TestCase
         $this->assertSame('42', $convert(42, 'integer', 'string(255)'));
         $this->assertSame('abc', $convert('abcdef', 'text', 'string(3)'));
         $this->assertNull($convert(null, 'text', 'integer'));
+        // What the new column cannot hold is emptied, never handed to a database that would refuse it.
+        $this->assertNull($convert('1e20', 'text', 'bigInteger'));
+        $this->assertNull($convert('3000000000', 'text', 'integer'));
+        $this->assertSame(3000000000, $convert('3000000000', 'text', 'integer unsigned'));
+        $this->assertNull($convert('-5', 'text', 'integer unsigned'));
+        $this->assertNull($convert('123456789', 'text', 'decimal(8, 2)'));
+        $this->assertSame(1.24, $convert('1.235', 'text', 'decimal(8, 2)'));
+        $this->assertNull($convert(3, 'integer', 'enum(a|b)'));
+        $this->assertSame('b', $convert('b', 'text', 'enum(a|b)'));
+        $this->assertSame('abcdefghij', $convert('abcdefghijkl', 'text', 'char(10)'));
+        // Only a date written as ISO 8601 or SQL write one is read as one.
+        foreach (['2024', 'a', 'tomorrow', 'Monday', '10:30'] as $notADate) {
+            $this->assertNull($convert($notADate, 'text', 'dateTime'), $notADate);
+        }
+        $this->assertSame('2024-03-01 09:00:00', $convert('2024-03-01T10:00:00+01:00', 'text', 'dateTime'));
+        $this->assertSame('2024-03-01 10:00:00', $convert('2024-03-01T10:00:00.000Z', 'text', 'dateTime'));
+        // An empty text is no answer, and a number is true unless it is zero, written or not.
+        $this->assertNull($convert('', 'text', 'boolean'));
+        $this->assertTrue($convert('2', 'text', 'boolean'));
+        $this->assertFalse($convert('0.0', 'text', 'boolean'));
     }
 
     public function test_the_schema_sync_converts_a_column_changed_to_another_group(): void
