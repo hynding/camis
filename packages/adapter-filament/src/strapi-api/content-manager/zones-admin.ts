@@ -1,5 +1,6 @@
 import type { ExpandedZone } from "@camis/adapter-kernel";
-import type { ContentType } from "@camis/ir-schema";
+import type { Component, ContentType } from "@camis/ir-schema";
+import { componentLayout } from "../../component-layout";
 import { componentRelationOptions } from "../../component-relations";
 import {
   childTableEmit,
@@ -34,10 +35,11 @@ export const zoneBuilder = (
     member: m,
     child: childTableEmit(ct, m.table, linksMedia, context),
   }));
+  const components = context?.doc.components ?? [];
   const blocks = children
     .map(({ member, child }) => {
-      const schema = blockFields(child, pickers, "                        ");
-      return `                    Block::make('${componentUid(member.component)}')->label(${phpSingleQuoted(componentDisplayName(member.component))})->schema([\n${schema}\n                    ]),`;
+      const schema = blockFields(child, pickers, components, "                    ");
+      return `                    Block::make('${componentUid(member.component)}')->label(${phpSingleQuoted(componentDisplayName(member.component))})->schema(${schema}),`;
     })
     .join("\n");
   return {
@@ -50,6 +52,7 @@ ${blocks}
                 ->saveRelationshipsUsing(fn (Model $record, ?array $state) => StrapiZones::sync($record, '${key}', ${members}, StrapiZones::fromBuilder($state, ${members})))`,
     imports: [
       `App\\Http\\Serializers\\${filamentNames(ct).model}Serializer`,
+      "App\\Support\\StrapiContentManager",
       "App\\Support\\StrapiZones",
       "Filament\\Forms\\Components\\Builder",
       "Filament\\Forms\\Components\\Builder\\Block",
@@ -59,19 +62,30 @@ ${blocks}
   };
 };
 
-/** A block's (or a repeater's in it) fields, one per line at $pad: nested repeaters hold theirs. */
-const blockFields = (child: ChildTableEmit, pickers: RelationPickers, pad: string): string =>
-  [
-    ...child.emits.map((e) => `${pad}${e.formComponent},`),
-    ...child.media.map((m) => `${pad}${mediaIds(m)},`),
-    ...child.relations.map(
-      (r) => `${pad}${componentRelationOptions(r, pickers.versioned, pickers.localized)},`,
-    ),
-    ...child.children.map(
-      (n) =>
-        `${pad}Repeater::make('${n.relationName}')->schema([\n${blockFields(n, pickers, `${pad}    `)}\n${pad}]),`,
-    ),
-  ].join("\n");
+/** A block's (or a repeater's in it) fields, laid out by its component's own view. */
+const blockFields = (
+  child: ChildTableEmit,
+  pickers: RelationPickers,
+  components: readonly Component[],
+  pad: string,
+): string =>
+  componentLayout(
+    child.component,
+    [
+      ...child.emits.map((e, i) => ({ path: child.emitPaths[i]!, code: e.formComponent })),
+      ...child.media.map((m) => ({ path: m.path, code: mediaIds(m) })),
+      ...child.relations.map((r) => ({
+        path: r.path,
+        code: componentRelationOptions(r, pickers.versioned, pickers.localized),
+      })),
+      ...child.children.map((n) => ({
+        path: n.path,
+        code: `Repeater::make('${n.relationName}')->schema(${blockFields(n, pickers, components, `${pad}    `)})`,
+      })),
+    ],
+    components,
+    pad,
+  );
 
 const blockImports = (child: ChildTableEmit): string[] => [
   ...child.emits.map((e) => e.formImport),

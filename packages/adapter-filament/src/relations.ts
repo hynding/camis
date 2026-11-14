@@ -1,5 +1,28 @@
-import type { ContentType, Field, IrDocument, RelationKind } from "@camis/ir-schema";
+import {
+  fieldApiName,
+  type ContentType,
+  type Field,
+  type IrDocument,
+  type RelationKind,
+} from "@camis/ir-schema";
 import { filamentNames, snake, snakeColumn } from "./names";
+
+/** The field types Strapi's Content Manager lets a relation's entries be titled by. */
+const MAIN_FIELD_TYPES = new Set([
+  "string",
+  "text",
+  "uid",
+  "email",
+  "enumeration",
+  "integer",
+  "bigInteger",
+  "float",
+  "decimal",
+  "date",
+  "dateTime",
+  "time",
+  "timestamp",
+]);
 
 const REL_NS = "Illuminate\\Database\\Eloquent\\Relations";
 
@@ -40,6 +63,10 @@ export interface AdminRelation {
   component: string;
   /** The target's main field, which the admin labels a linked entry by. */
   titleAttribute: string;
+  /** The same main field by its key on the API, as Strapi's view names it. */
+  mainField: string;
+  /** Every field of the target a view may label a linked entry by, with its column. */
+  mainFields: Record<string, string>;
   multiple: boolean;
   /** The target keeps drafts, which links go through, so a filter offers its drafts only. */
   drafts: boolean;
@@ -134,6 +161,16 @@ export const resolveRelations = (
     const main = byName.get(n)?.fields.find((f) => f.type === "string");
     return main === undefined ? "id" : snakeColumn(main.name);
   };
+  // The target's fields Strapi's view may label a linked entry by (its "entry title"), by the
+  // keys they go by on the API, with their columns; the default is the one `label` picks.
+  const mainFields = (n: string): Pick<AdminRelation, "mainField" | "mainFields"> => {
+    const columns: Record<string, string> = { id: "id" };
+    for (const f of byName.get(n)?.fields ?? []) {
+      if (MAIN_FIELD_TYPES.has(f.type)) columns[fieldApiName(f)] = snakeColumn(f.name);
+    }
+    const main = Object.entries(columns).find(([, column]) => column === label(n));
+    return { mainField: main?.[0] ?? "id", mainFields: columns };
+  };
 
   for (const ct of doc.contentTypes) {
     for (const rawField of ct.fields) {
@@ -169,6 +206,7 @@ export const resolveRelations = (
           relation: f.name,
           component: fk,
           titleAttribute: label(target),
+          ...mainFields(target),
           multiple: false,
           drafts: versioned.has(target),
         });
@@ -203,6 +241,7 @@ export const resolveRelations = (
             relation: f.inverse,
             component: fk,
             titleAttribute: label(owner),
+            ...mainFields(owner),
             multiple: false,
             drafts: versioned.has(owner),
           });
@@ -238,6 +277,7 @@ export const resolveRelations = (
           relation: f.name,
           component: f.name,
           titleAttribute: label(target),
+          ...mainFields(target),
           multiple: true,
           drafts: versioned.has(target),
         });
@@ -263,6 +303,7 @@ export const resolveRelations = (
             relation: f.inverse,
             component: f.inverse,
             titleAttribute: label(owner),
+            ...mainFields(owner),
             multiple: true,
             drafts: versioned.has(owner),
           });

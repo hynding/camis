@@ -305,9 +305,10 @@ describe("the Strapi-like admin", () => {
     expect(form).toContain(
       "return StrapiContentManager::form($schema, BookResource::CONTENT_MANAGER, [",
     );
-    // An embedded component's columns are edited together, under the component's attribute.
+    // An embedded component's columns are edited together, under the component's attribute, laid
+    // out by the component's own view.
     expect(form).toMatch(
-      /'price' => \[\n\s+TextInput::make\('price_minor'\)->numeric\(\),\n\s+TextInput::make\('price_currency'\),/,
+      /'price' => StrapiContentManager::component\('shared\.money', \[\n\s+'minor' => \[\n\s+TextInput::make\('price_minor'\)->numeric\(\),\n\s+\],\n\s+'currency' => \[\n\s+TextInput::make\('price_currency'\),/,
     );
     expect(content("app/Filament/Resources/Books/Pages/ListBooks.php")).toContain(
       "Action::make('configure')->label('Configure the view')",

@@ -23,6 +23,9 @@ export interface ContentManagerAttribute {
   type: string;
   /** A relation's cardinality, as Strapi words it. */
   relation?: string;
+  /** A relation's default main field, and every field of its target it may be labelled by. */
+  mainField?: string;
+  mainFields?: Record<string, string>;
   /** Its form components: none when the edit view does not show it. */
   components: string[];
   /** Its list column, when Strapi's list can show it. */
@@ -210,7 +213,14 @@ export const contentManagerAttributes = (
 const withConstraint = (constraint: string | undefined): { constraint?: string } =>
   constraint === undefined ? {} : { constraint };
 
-const relationListing = (r: AdminRelation): { column: string; constraint: string } => ({
+const relationListing = (
+  r: AdminRelation,
+): Pick<ContentManagerAttribute, "mainField" | "mainFields"> & {
+  column: string;
+  constraint: string;
+} => ({
+  mainField: r.mainField,
+  mainFields: r.mainFields,
   column: r.multiple
     ? `TextColumn::make('${r.relation}_count')->counts('${r.relation}')`
     : `TextColumn::make('${r.relation}.${r.titleAttribute}')->sortable()`,
@@ -234,6 +244,14 @@ export const contentManagerConstant = (
       `'edit' => ${phpBool(a.components.length > 0)}`,
       `'size' => ${width}`,
       `'resizable' => ${phpBool(resizable)}`,
+      ...(a.mainFields === undefined
+        ? []
+        : [
+            `'mainField' => ${phpSingleQuoted(a.mainField ?? "id")}`,
+            `'mainFields' => [${Object.entries(a.mainFields)
+              .map(([name, column]) => `${phpSingleQuoted(name)} => ${phpSingleQuoted(column)}`)
+              .join(", ")}]`,
+          ]),
     ];
     return `            '${a.name}' => [${parts.join(", ")}],`;
   });
