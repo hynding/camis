@@ -81,5 +81,10 @@ describe("dynamic zones", () => {
       f.path.endsWith("app/Filament/Resources/Landings/Schemas/LandingForm.php"),
     )!.content;
     expect(form).toContain("Block::make('shared.hero')->label('Hero\\'s banner')");
+    // Without one, its name humanized, as Strapi derives a display name.
+    expect(
+      named.files.find((f) => f.path.endsWith("app/Filament/Resources/Menus/Schemas/MenuForm.php"))!
+        .content,
+    ).toContain("Block::make('shared.menu-item')->label('Menu Item')");
   });
 });

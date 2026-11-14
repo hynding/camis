@@ -385,7 +385,8 @@ class ContentTypeBuilderTest extends TestCase
         Schema::table('tags', function ($table): void {
             $table->text('label')->nullable()->change();
         });
-        $types = storage_path(\App\Support\CamisSchemaSync::COLUMN_TYPES);
+        // Kept per database, so another connection's sync (a test's, another driver's) is not taken for this one's.
+        $types = \App\Support\CamisSchemaSync::columnTypesPath(DB::connection());
         @mkdir(dirname($types), 0777, true);
         file_put_contents($types, json_encode(['tags' => ['label' => 'text']]));
 
@@ -396,12 +397,24 @@ class ContentTypeBuilderTest extends TestCase
             $this->assertSame('varchar', Schema::getColumnType('tags', 'label'));
             $this->assertSame('kept', $tag->fresh()?->label);
             // What the sync declared is what the next one compares with.
-            $this->assertSame('string(255)', json_decode((string) file_get_contents($types), true)['tags']['label']);
+            $recorded = json_decode((string) file_get_contents($types), true);
+            $this->assertSame('string(255)', $recorded['tags']['label']);
+            $this->assertSame('bigInteger unsigned', $recorded['posts']['author_id']);
+            // A column a generated alteration adds is recorded too.
+            $this->assertSame('string(255)', $recorded['users']['username']);
             Artisan::call('camis:schema-sync', ['--force' => true]);
             $this->assertStringNotContainsString('changed tags.label', Artisan::output());
         } finally {
             @unlink($types);
         }
+    }
+
+    public function test_a_display_name_is_humanized_as_the_ir_humanizes_it(): void
+    {
+        // As ir-core does, so the builder and the Strapi importer agree on when a display name is
+        // the derived one.
+        $this->assertSame('Seo Meta', \App\Support\ContentTypeBuilderSchema::humanize('SeoMeta'));
+        $this->assertSame('SEOMeta', \App\Support\ContentTypeBuilderSchema::humanize('SEOMeta'));
     }
 
     public function test_the_schema_sync_refuses_to_run_outside_development_unforced(): void

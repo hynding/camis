@@ -75,7 +75,9 @@ describe("the Content-Type Builder", () => {
 
   it("changes a column whose declared type changed since the last sync", () => {
     const sync = content("app/Support/CamisSchemaSync.php");
-    expect(sync).toContain("public const COLUMN_TYPES = 'app/camis/column-types.json';");
+    expect(sync).toContain(
+      "public static function columnTypesPath(Connection $connection): string",
+    );
     expect(sync).toContain('$this->report[] = "changed {$table}.{$name} to {$declared}";');
   });
 

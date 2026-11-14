@@ -38,8 +38,9 @@ Schema::table('tags', function ($table): void {
 Schema::table('tags', function ($table): void {
     $table->text('label')->nullable()->change();
 });
-@mkdir(dirname(storage_path(\App\Support\CamisSchemaSync::COLUMN_TYPES)), 0777, true);
-file_put_contents(storage_path(\App\Support\CamisSchemaSync::COLUMN_TYPES), json_encode(['tags' => ['label' => 'text']]));
+$types = \App\Support\CamisSchemaSync::columnTypesPath(DB::connection());
+@mkdir(dirname($types), 0777, true);
+file_put_contents($types, json_encode(['tags' => ['label' => 'text']]));
 Schema::create('widgets', function ($table): void {
     $table->id();
 });
