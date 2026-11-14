@@ -19,7 +19,10 @@ use RuntimeException;
  * admin then edits it with the registered input, and the Content-Type Builder offers each
  * registered custom field beside Strapi's own cards.
  *
- * @phpstan-type CustomField array{uid: string, name: string, plugin: string|null, type: string, inputSize: array{default: int, isResizable: bool}|null, label: string, description: string, icon: string|null, input: Closure|null, options: Closure|null}
+ * Strapi's inputSize is checked as Strapi checks it, and its icon accepted; neither is used here:
+ * the admin's generated views size a field by the type it stores, and a builder card has no icon.
+ *
+ * @phpstan-type CustomField array{uid: string, name: string, plugin: string|null, type: string, label: string, description: string, input: Closure|null, options: Closure|null}
  */
 final class CustomFields
 {
@@ -67,6 +70,7 @@ final class CustomFields
             }
             $plugin = is_scalar($field['plugin'] ?? null) && (bool) $field['plugin'] ? (string) $field['plugin'] : null;
             $uid = $plugin !== null ? "plugin::{$plugin}.{$name}" : "global::{$name}";
+            self::assertInputSize($field['inputSize'] ?? null);
             if (isset(self::$fields[$uid])) {
                 throw new RuntimeException("Custom field: '{$uid}' has already been registered");
             }
@@ -75,10 +79,8 @@ final class CustomFields
                 'name' => $name,
                 'plugin' => $plugin,
                 'type' => $type,
-                'inputSize' => self::inputSize($field['inputSize'] ?? null),
                 'label' => is_string($field['label'] ?? null) ? $field['label'] : ucfirst(trim((string) preg_replace('/([a-z0-9])([A-Z])/', '$1 $2', $name))),
                 'description' => is_string($field['description'] ?? null) ? $field['description'] : '',
-                'icon' => is_string($field['icon'] ?? null) ? $field['icon'] : null,
                 'input' => ($field['input'] ?? null) instanceof Closure ? $field['input'] : null,
                 'options' => ($field['options'] ?? null) instanceof Closure ? $field['options'] : null,
             ];
@@ -147,16 +149,24 @@ final class CustomFields
         }
         self::$booted = true;
         $registrations = 'App\\CustomFields\\Registrations';
-        if (class_exists($registrations)) {
+        if (! class_exists($registrations)) {
+            return;
+        }
+        try {
             (new $registrations)();
+        } catch (\Throwable $exception) {
+            // Asked again next time, rather than leaving the registrations before the one that failed.
+            self::$fields = [];
+            self::$booted = false;
+
+            throw $exception;
         }
     }
 
-    /** @return array{default: int, isResizable: bool}|null */
-    private static function inputSize(mixed $inputSize): ?array
+    private static function assertInputSize(mixed $inputSize): void
     {
         if ($inputSize === null || $inputSize === false) {
-            return null;
+            return;
         }
         if (! is_array($inputSize) || ! array_key_exists('default', $inputSize) || ! array_key_exists('isResizable', $inputSize)) {
             throw new RuntimeException("inputSize should be an object with 'default' and 'isResizable' keys");
@@ -167,7 +177,5 @@ final class CustomFields
         if (! is_bool($inputSize['isResizable'])) {
             throw new RuntimeException('Custom fields should specify if their input is resizable');
         }
-
-        return ['default' => $inputSize['default'], 'isResizable' => $inputSize['isResizable']];
     }
 }

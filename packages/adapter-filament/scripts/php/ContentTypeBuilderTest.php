@@ -518,13 +518,13 @@ class ContentTypeBuilderTest extends TestCase
 
         // Offered after Strapi's own cards, as its Custom tab lists them.
         $this->assertSame(
-            ['custom:plugin::stars.rating' => ['label' => 'Rating', 'description' => 'From one star to five', 'types' => ['integer']]],
+            ['custom:plugin::stars.rating' => ['label' => 'Rating', 'description' => 'From one star to five']],
             \App\Support\ContentTypeBuilderSchema::customKinds(),
         );
+        $data = ['kind' => 'custom:plugin::stars.rating', 'name' => 'score', 'required' => true];
+        data_set($data, \App\Support\ContentTypeBuilderSchema::optionsKey('plugin::stars.rating'), ['max' => '3']);
         Livewire::test(ContentTypeBuilder::class, ['type' => 'contentType:Tag'])
-            ->callAction(TestAction::make('addField')->table(), data: [
-                'kind' => 'custom:plugin::stars.rating', 'name' => 'score', 'required' => true, 'editorOptions' => ['max' => '3'],
-            ])
+            ->callAction(TestAction::make('addField')->table(), data: $data)
             ->assertHasNoActionErrors();
 
         $score = collect($this->type('Tag')['fields'])->firstWhere('name', 'score');
@@ -537,6 +537,24 @@ class ContentTypeBuilderTest extends TestCase
             ->callAction(TestAction::make('editField')->table('score'), data: ['kind' => 'number', 'numberType' => 'integer', 'name' => 'score'])
             ->assertHasNoActionErrors();
         $this->assertSame(['type' => 'integer', 'name' => 'score', 'required' => true], collect($this->type('Tag')['fields'])->firstWhere('name', 'score'));
+    }
+
+    public function test_a_custom_field_edits_only_a_field_of_the_type_it_stores(): void
+    {
+        $this->registerRating();
+        \App\Support\CustomFields::register(['name' => 'swatch', 'type' => 'string', 'label' => 'Swatch']);
+
+        // A schema's plugin uid finds the one registered without its plugin, and keeps its own name.
+        $swatch = ['type' => 'string', 'name' => 'tone', 'editor' => ['name' => 'plugin::paint.swatch']];
+        $this->assertSame('custom:global::swatch', \App\Support\ContentTypeBuilderSchema::stateFromField($swatch)['kind']);
+        $ir = ['contentTypes' => [['name' => 'Page', 'kind' => 'collection', 'fields' => [$swatch]]], 'components' => []];
+        $after = \App\Support\ContentTypeBuilderSchema::updateField($ir, 'contentType:Page', 'tone', ['kind' => 'custom:global::swatch', 'name' => 'tone', 'required' => true]);
+        $this->assertSame(['type' => 'string', 'name' => 'tone', 'editor' => ['name' => 'plugin::paint.swatch'], 'required' => true], $after['contentTypes'][0]['fields'][0]);
+
+        // Registered as an integer, it does not edit a string field named after it: no retyping.
+        $text = ['type' => 'string', 'name' => 'stars', 'editor' => ['name' => 'plugin::stars.rating']];
+        $this->assertSame('text', \App\Support\ContentTypeBuilderSchema::stateFromField($text)['kind']);
+        $this->assertSame('Text (short)', \App\Support\ContentTypeBuilderSchema::typeLabel($text, $ir));
     }
 
     public function test_an_editor_no_custom_field_here_registers_is_kept(): void

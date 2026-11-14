@@ -462,7 +462,7 @@ class ContentTypeBuilder extends Page implements HasTable
         $groups = [];
         foreach (CustomFields::all() as $uid => $customField) {
             if ($customField['options'] !== null) {
-                $groups[] = Group::make(($customField['options'])())->statePath('editorOptions')
+                $groups[] = Group::make(($customField['options'])())->statePath(ModelSchema::optionsKey($uid))
                     ->visible(fn (Get $get): bool => $get('kind') === ModelSchema::CUSTOM_KIND_PREFIX.$uid);
             }
         }

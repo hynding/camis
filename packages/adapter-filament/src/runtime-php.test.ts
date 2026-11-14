@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -54,8 +54,11 @@ describe("runtimePhp", () => {
         storageLayout: "strapi",
       }),
     ].flatMap((result) => result.files.map((file) => file.content));
+    // A seeded file (hand-written once it is copied) goes without the generated marker.
     const unused = phpSources(strapiDir).filter(
-      (path) => !generated.includes(runtimePhp(pathToFileURL(path))),
+      (path) =>
+        !generated.includes(runtimePhp(pathToFileURL(path))) &&
+        !generated.includes(readFileSync(path, "utf8")),
     );
     expect(unused.map((path) => relative(strapiDir, path))).toEqual([]);
   });
