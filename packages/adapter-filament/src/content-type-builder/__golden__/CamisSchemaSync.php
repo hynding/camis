@@ -24,9 +24,11 @@ use Throwable;
  * recorder: a table it creates that is missing is created; one that exists gains the columns it
  * lacks (nullable, as Strapi's columns are: a required field is checked on write) and loses the
  * ones no generated migration declares any more; a table a recorded migration created that none
- * creates now is dropped. A column whose type changed keeps its type. Then the migrations table
- * lists exactly the generated migrations, so "migrate" runs only what camis did not generate.
- * Development only: a dropped field's or type's data is gone, as in Strapi.
+ * creates now is dropped. Each sync keeps the column types the generated migrations declare
+ * (COLUMN_TYPES), so the next one changes a column whose declared type changed since, keeping its
+ * values where the database can convert them. Then the migrations table lists exactly the
+ * generated migrations, so "migrate" runs only what camis did not generate. Development only: a
+ * dropped field's or type's data is gone, as in Strapi.
  */
 final class CamisSchemaSync
 {
@@ -34,8 +36,17 @@ final class CamisSchemaSync
 
     private const MIGRATIONS_DIRECTORY = 'database/migrations/';
 
+    /** Under storage/: each generated table's columns and their declared types at the last sync. */
+    public const COLUMN_TYPES = 'app/camis/column-types.json';
+
+    /** The modifiers that make an index or a key, which changing a column's type must not repeat. */
+    private const INDEX_MODIFIERS = ['unique', 'index', 'primary', 'fulltext', 'spatialIndex', 'change'];
+
     /** @var list<string> */
     private array $report = [];
+
+    /** @var array<string, array<string, string>> */
+    private array $types = [];
 
     public function __construct(private readonly Connection $connection) {}
 
@@ -47,6 +58,8 @@ final class CamisSchemaSync
     public function run(): array
     {
         $this->report = [];
+        $this->types = [];
+        $previous = $this->previousColumnTypes();
         $files = $this->generatedMigrations();
         $recorded = $this->recordedMigrations();
         $recordedIds = array_map(self::identity(...), $recorded);
@@ -86,6 +99,7 @@ final class CamisSchemaSync
 
                     continue;
                 }
+                $this->changeColumnTypes($table, $create['blueprint'], $previous[$table] ?? []);
                 $this->addMissingColumns($table, $create['blueprint']);
             }
             if ($plan['creates'] === [] && ! in_array(self::identity($file), $recordedIds, true)) {
@@ -101,6 +115,7 @@ final class CamisSchemaSync
         }
         $this->dropAbandonedTables($recorded, array_keys($created));
         $this->recordMigrations($files, $recorded);
+        $this->recordColumnTypes($plans);
 
         return $this->report;
     }
@@ -201,6 +216,82 @@ final class CamisSchemaSync
         }
 
         return $names;
+    }
+
+    /** @return array<string, array<string, string>> */
+    private function previousColumnTypes(): array
+    {
+        $types = json_decode((string) @file_get_contents(storage_path(self::COLUMN_TYPES)), true);
+
+        return is_array($types) ? $types : [];
+    }
+
+    /** A column's declared type with what sizes it: "string(255)", "decimal(10, 2)". */
+    private static function columnType(ColumnDefinition $column): string
+    {
+        $parameters = array_values(array_filter(
+            [$column->get('length'), $column->get('total'), $column->get('places'), $column->get('precision')],
+            fn (mixed $value): bool => $value !== null,
+        ));
+        if (is_array($column->get('allowed'))) {
+            $parameters[] = implode('|', $column->get('allowed'));
+        }
+
+        return $column->get('type').($parameters === [] ? '' : '('.implode(', ', $parameters).')');
+    }
+
+    /**
+     * Change each existing column whose declared type is not the one the last sync recorded. A
+     * column the last sync did not record is left as it is: its type then is unknown.
+     *
+     * @param  array<string, string>  $previous
+     */
+    private function changeColumnTypes(string $table, Blueprint $definition, array $previous): void
+    {
+        $schema = $this->connection->getSchemaBuilder();
+        $existing = $schema->getColumnListing($table);
+        foreach ($definition->getColumns() as $column) {
+            $name = (string) $column->get('name');
+            $declared = self::columnType($column);
+            $before = $previous[$name] ?? null;
+            if ($before === null || $before === $declared || ! in_array($name, $existing, true) || $column->get('autoIncrement')) {
+                continue;
+            }
+            try {
+                $schema->table($table, function (Blueprint $blueprint) use ($column): void {
+                    $attributes = array_diff_key($column->getAttributes(), array_flip(['type', 'name', ...self::INDEX_MODIFIERS]));
+                    $blueprint->addColumn((string) $column->get('type'), (string) $column->get('name'), $attributes)->nullable()->change();
+                });
+                $this->report[] = "changed {$table}.{$name} to {$declared}";
+            } catch (Throwable $exception) {
+                // Asked again next time: the recorded type stays the one the column still has.
+                $this->types[$table][$name] = $before;
+                $this->report[] = "kept {$table}.{$name} as {$before}: the database cannot change it to {$declared} ({$exception->getMessage()})";
+            }
+        }
+    }
+
+    /**
+     * Keep what the generated migrations declare for the next sync to compare with.
+     *
+     * @param  array<string, array{migration: Migration, creates: array<string, array{blueprint: Blueprint, callback: Closure}>, alters: list<array{table: string, blueprint: Blueprint, callback: Closure}>}>  $plans
+     */
+    private function recordColumnTypes(array $plans): void
+    {
+        $types = [];
+        foreach ($plans as $plan) {
+            foreach ($plan['creates'] as $table => $create) {
+                foreach ($create['blueprint']->getColumns() as $column) {
+                    $types[$table][(string) $column->get('name')] = $this->types[$table][(string) $column->get('name')] ?? self::columnType($column);
+                }
+            }
+        }
+        ksort($types);
+        $path = storage_path(self::COLUMN_TYPES);
+        if (! is_dir(dirname($path))) {
+            mkdir(dirname($path), 0777, true);
+        }
+        file_put_contents($path, json_encode($types, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n");
     }
 
     private function addMissingColumns(string $table, Blueprint $declared): void

@@ -92,6 +92,8 @@ export const contentType = z
         collection: collectionName.optional(),
       })
       .optional(),
+    /** What the type is for, as the admin shows it; no name or table is derived from it. */
+    description: z.string().optional(),
     fields: z.array(field),
     options: z
       .object({
@@ -152,10 +154,14 @@ export const component = z
     name: typeName,
     names: z
       .object({
+        display: z.string().optional(),
         collection: collectionName.optional(),
         group: collectionName.optional(),
       })
       .optional(),
+    description: z.string().optional(),
+    /** The name of the icon the admin shows beside the component, from the target's icon set. */
+    icon: z.string().min(1).optional(),
     fields: z.array(componentField),
   })
   .superRefine((c, ctx) => nodeRefine(c.fields as RefinedField[], ctx));

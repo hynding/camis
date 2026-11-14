@@ -9,7 +9,11 @@ export const componentSchema = (
 ): Record<string, unknown> => ({
   collectionName:
     component.names?.collection ?? `components_shared_${snakeCase(pluralize(component.name))}`,
-  info: { displayName: humanize(component.name) },
+  info: {
+    displayName: component.names?.display ?? humanize(component.name),
+    ...(component.icon === undefined ? {} : { icon: component.icon }),
+    ...(component.description === undefined ? {} : { description: component.description }),
+  },
   options: {},
   attributes: toAttributes(component.fields, builtinUsers, componentUids),
 });

@@ -30,6 +30,7 @@ export const contentTypeSchema = (
       singularName: names.singularName,
       pluralName: names.pluralName,
       displayName: names.displayName,
+      ...(ct.description === undefined ? {} : { description: ct.description }),
     },
     options,
     pluginOptions: localized ? { i18n: { localized: true } } : {},
