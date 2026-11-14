@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Filament\Pages\ConfigureComponentView;
 use App\Filament\Resources\Authors\Pages\ListAuthors;
 use App\Filament\Resources\Books\Pages\EditBook;
 use App\Filament\Resources\Posts\Pages\ConfigurePostsView;
@@ -325,6 +326,85 @@ class ContentManagerViewTest extends TestCase
         $view = PostResource::CONTENT_MANAGER;
         StrapiContentManager::save($view, StrapiContentManager::fromFormState($view, StrapiContentManager::formState($view)));
         $this->assertSame('gone', StrapiSettings::get(StrapiContentManager::key($view))['metadatas']['author']['edit']['mainField']);
+    }
+
+    public function test_a_relations_entry_title_is_picked_in_configure_the_view(): void
+    {
+        $this->login(['post.read', 'post.update']);
+        $author = Author::create(['name' => 'Ann']);
+        $post = Post::create(['title' => 'Kept', 'views' => 7, 'author_id' => $author->id]);
+
+        $page = Livewire::test(ConfigurePostsView::class);
+        $editKey = array_keys($page->get('data.edit'))[array_search('author', array_column($page->get('data.edit'), 'name'), true)];
+        $listKey = array_keys($page->get('data.list'))[array_search('author', array_column($page->get('data.list'), 'name'), true)];
+        $this->assertSame('name', $page->get("data.edit.{$editKey}.mainField"));
+        $page->set("data.edit.{$editKey}.mainField", 'id')
+            ->set("data.list.{$listKey}.mainField", 'id')
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $stored = StrapiSettings::get(StrapiContentManager::key(PostResource::CONTENT_MANAGER));
+        $this->assertSame('id', $stored['metadatas']['author']['edit']['mainField']);
+        $this->assertSame('id', $stored['metadatas']['author']['list']['mainField']);
+        // Only a relation has an entry title.
+        $this->assertArrayNotHasKey('mainField', $stored['metadatas']['title']['edit']);
+        Livewire::test(EditPost::class, ['record' => $post->getRouteKey()])
+            ->assertFormFieldExists('author_id', fn (\Filament\Forms\Components\Select $select): bool => $select->getOptionLabel() === (string) $author->id);
+        Livewire::test(ListPosts::class)
+            ->assertTableColumnStateSet('author.name', (string) $author->id, $post);
+
+        // An entry title the target does not have is refused.
+        Livewire::test(ConfigurePostsView::class)
+            ->set("data.edit.{$editKey}.mainField", 'gone')
+            ->call('save');
+        $this->assertSame('id', StrapiSettings::get(StrapiContentManager::key(PostResource::CONTENT_MANAGER))['metadatas']['author']['edit']['mainField']);
+    }
+
+    public function test_a_components_view_is_configured_in_the_admin(): void
+    {
+        $this->login(['menu.read', 'menu.update', 'user.update']);
+        $author = Author::create(['name' => 'Ann']);
+        $menu = \App\Models\Menu::create(['title' => 'Main', 'cta_author_id' => $author->id]);
+        // The menu's view links each component attribute to its component's view.
+        Livewire::test(\App\Filament\Resources\Menus\Pages\ConfigureMenusView::class)
+            ->assertSee(ConfigureComponentView::getUrl(['component' => 'shared.link']), escape: false);
+
+        $page = Livewire::test(ConfigureComponentView::class, ['component' => 'shared.link']);
+        $keys = array_combine(array_column($page->get('data.edit'), 'name'), array_keys($page->get('data.edit')));
+        $this->assertSame(['label', 'author', 'topics'], array_keys($keys));
+        $page->set('data.settings.mainField', 'label')
+            ->set("data.edit.{$keys['label']}.label", 'Link text')
+            ->set("data.edit.{$keys['label']}.description", 'What the link says')
+            ->set("data.edit.{$keys['label']}.editable", false)
+            ->set("data.edit.{$keys['author']}.mainField", 'id')
+            ->set("data.edit.{$keys['topics']}.shown", false)
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $stored = StrapiSettings::get('content-manager.configuration.components::shared.link');
+        $this->assertSame('Link text', $stored['metadatas']['label']['edit']['label']);
+        $this->assertSame('id', $stored['metadatas']['author']['edit']['mainField']);
+        $this->assertSame([[['name' => 'label', 'size' => 6], ['name' => 'author', 'size' => 6]]], $stored['layouts']['edit']);
+
+        // Every use of the component follows it: the relation inside is titled as its view says.
+        Livewire::test(\App\Filament\Resources\Menus\Pages\EditMenu::class, ['record' => $menu->getRouteKey()])
+            ->assertSee('Link text')
+            ->assertSee('What the link says')
+            ->assertFormFieldDisabled('cta_label')
+            ->assertFormFieldExists('cta_author_id', fn (\Filament\Forms\Components\Select $select): bool => $select->getOptionLabel() === (string) $author->id)
+            // What the view leaves out is still edited: hiding it would lose its data.
+            ->assertFormFieldVisible('ctaTopics');
+    }
+
+    public function test_only_a_settings_admin_configures_a_components_view(): void
+    {
+        $this->login(['menu.read', 'menu.update']);
+        Livewire::test(ConfigureComponentView::class, ['component' => 'shared.link'])->assertForbidden();
+        Livewire::test(\App\Filament\Resources\Menus\Pages\ConfigureMenusView::class)
+            ->assertDontSee(ConfigureComponentView::getUrl(['component' => 'shared.link']), escape: false);
+
+        $this->login(['user.update'], 'Settings');
+        Livewire::test(ConfigureComponentView::class, ['component' => 'shared.nothing'])->assertNotFound();
     }
 
     public function test_a_components_fields_are_laid_out_by_its_view(): void

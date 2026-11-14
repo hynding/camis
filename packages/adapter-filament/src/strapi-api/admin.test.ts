@@ -359,4 +359,30 @@ describe("the Strapi-like admin", () => {
       "Block::make('shared.link')->label('Link')->schema(StrapiContentManager::component('shared.link', [",
     );
   });
+
+  // Strapi's "Configure the view" edits a component's view too: the admin has each component's
+  // attributes as a type's CONTENT_MANAGER has them, a relation's entry titles included, and a
+  // type's component attributes name the component whose view lays them out.
+  it("describes each component's view for the admin to configure", async () => {
+    const views = content("app/Support/StrapiComponentViews.php");
+    expect(views).toContain("'shared.link' => [\n            'uid' => 'components::shared.link',");
+    expect(views).toContain(
+      "'author' => ['type' => 'relation', 'relation' => 'manyToOne', 'list' => true, 'sort' => true, 'edit' => true, 'size' => 6, 'resizable' => true, 'mainField' => 'name', 'mainFields' => ['id' => 'id', 'name' => 'name']],",
+    );
+    expect(views).toContain(
+      "'link' => ['type' => 'component', 'list' => false, 'sort' => false, 'edit' => true, 'size' => 12, 'resizable' => false, 'component' => 'shared.link'],",
+    );
+    expect(views).toContain("return auth()->user()?->can('user.update') ?? false;");
+    await expect(views).toMatchFileSnapshot("./__golden__/strapi-api/StrapiComponentViews.php");
+    expect(content("app/Filament/Resources/Menus/MenuResource.php")).toContain(
+      "'cta' => ['type' => 'component', 'list' => false, 'sort' => false, 'edit' => true, 'size' => 12, 'resizable' => false, 'component' => 'shared.link'],",
+    );
+    expect(content("app/Filament/Pages/ConfigureComponentView.php")).toContain(
+      "class ConfigureComponentView extends Page",
+    );
+    const laravel = filamentAdapter.generate(strapiApiBundle, { projectName: "oyl" });
+    expect(laravel.files.some((f) => f.path === "app/Support/StrapiComponentViews.php")).toBe(
+      false,
+    );
+  });
 });
