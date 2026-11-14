@@ -22,6 +22,18 @@ describe("emitField", () => {
     expect(f.column).toBe("published_at");
     expect(f.cast).toBe("'datetime'");
   });
+  it("edits a field with its custom field's registered input, or its type's own", () => {
+    const f = emitField({
+      type: "integer",
+      name: "score",
+      required: true,
+      editor: { name: "plugin::stars.rating", options: { max: 5 } },
+    } as Field);
+    expect(f.migration).toBe("$table->integer('score')");
+    expect(f.formComponent).toBe(
+      "(\\App\\Support\\CustomFields::input('plugin::stars.rating', 'score', ['max' => 5]) ?? TextInput::make('score')->numeric())->required()",
+    );
+  });
   it("maps blocks to a JSON column, an array cast and the blocks editor", () => {
     const f = emitField({ type: "blocks", name: "body" } as Field);
     expect(f.migration).toBe("$table->json('body')->nullable()");

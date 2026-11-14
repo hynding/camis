@@ -1613,7 +1613,7 @@ roles.
 
 Known gaps: a field's type cannot change once made (Strapi allows only a few such changes; here
 only within its card: short and long text, a number's format, a date's type; Phase 71 lifted it); a renamed field or
-type loses its data, as in Strapi; custom fields beyond the color picker are not offered; the
+type loses its data, as in Strapi; custom fields beyond the color picker are not offered (Phase 72 offers registered ones); the
 builder edits only through the first Strapi-style Filament target. (Phase 69 closed the others.)
 
 Exit: unit and golden tests (`content-type-builder.test.ts`, `develop.test.ts`);
@@ -2204,6 +2204,38 @@ of truth and the sync keeps the data, a field may become a type of another card.
 Exit: `content-type-builder.test.ts` cases; ContentTypeBuilderTest's type change, conversion and
 refused-change cases, and `schema-sync-check.php`'s text-to-number conversion on sqlite, mysql and
 pgsql.
+
+## Phase 72 — custom fields registered as Strapi registers them (`adapter-kernel`, `adapter-filament`)
+
+Phase 65 kept a Strapi custom field as its stored type with its uid as the field's `editor`, but
+the admin showed the type's own input and the builder offered only the color picker. Strapi
+registers a custom field in two halves of a plugin's code: `strapi.customFields.register` (name,
+plugin, type, inputSize) and the admin's `app.customFields.register` (label, description, icon,
+its Input, its options).
+
+- **`App\Support\CustomFields`** (static runtime, every Laravel-storage app with the Strapi API
+  style or a field with an editor) takes both halves in one call: Strapi's name, plugin, type and
+  inputSize, with its checks and messages (a type of Strapi's ALLOWED_TYPES, password left out as
+  camis stores none; a name that is an object key; an input size of 4, 6, 8 or 12; a uid
+  registered once), its uid `plugin::<plugin>.<name>` or `global::<name>` (a schema's
+  `plugin::<plugin>.<name>` finding one registered without its plugin, as strapi-php does), and
+  the admin's label, description, icon, `input` (`fn (string $name, array $options): Field`) and
+  `options` (`fn (): array` of the builder's form components). The project registers its own in
+  **`App\CustomFields\Registrations`**, seeded once and never overwritten.
+- **The admin** edits a field whose editor is registered with its input, given the field's editor
+  options; with none registered (or no input) it shows the type's own, and the `fieldEditor` gap
+  says where to register it.
+- **The Content-Type Builder** offers each registered custom field after Strapi's cards, by its
+  label and description; its settings are those of the type it stores, plus its own options, kept
+  as the field's editor options. A field edited with a registered one reads back as its card; the
+  card of Strapi's own type drops the editor; an editor nothing here registers is kept.
+
+Not built: a registered custom field's input size in the Content Manager's default view (the
+generated views size by the stored type).
+
+Exit: `fields.test.ts`, `generate.test.ts`, `field-editors.test.ts`, `php-literal.test.ts` and
+`content-type-builder.test.ts` cases; ContentTypeBuilderTest's registration, builder and kept-editor
+cases.
 
 ---
 

@@ -39,4 +39,21 @@ describe("fieldEditorGaps", () => {
       },
     ]);
   });
+
+  it("says where a target that can show the source editor would have it registered", () => {
+    const doc = {
+      version: 1,
+      contentTypes: [
+        {
+          name: "Film",
+          kind: "collection",
+          fields: [{ type: "integer", name: "rating", editor: { name: "plugin::stars.rating" } }],
+        },
+      ],
+      components: [],
+    } as IrDocument;
+    expect(fieldEditorGaps(doc, "the Filament admin", "app/Custom.php")[0]?.message).toBe(
+      '"rating" was edited with plugin::stars.rating; the Filament admin shows its own integer input unless app/Custom.php registers it',
+    );
+  });
 });

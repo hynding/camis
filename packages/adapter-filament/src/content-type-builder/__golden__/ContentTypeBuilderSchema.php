@@ -167,6 +167,10 @@ final class ContentTypeBuilderSchema
     public static function typeLabel(array $field, array $ir): string
     {
         $type = $field['type'];
+        $customField = self::registeredCustomField($field);
+        if ($customField !== null) {
+            return $customField['label'];
+        }
 
         return match ($type) {
             'string' => 'Text (short)',
@@ -217,6 +221,73 @@ final class ContentTypeBuilderSchema
         throw new InvalidArgumentException("unknown field type \"{$type}\"");
     }
 
+    /** The kind a registered custom field is offered as in the field dialog: "custom:<uid>". */
+    public const CUSTOM_KIND_PREFIX = 'custom:';
+
+    /**
+     * Each registered custom field as the field dialog offers it, after Strapi's own cards: its
+     * label and its description.
+     *
+     * @return array<string, array{label: string, description: string}>
+     */
+    public static function customKinds(): array
+    {
+        $kinds = [];
+        foreach (CustomFields::all() as $uid => $customField) {
+            $kinds[self::CUSTOM_KIND_PREFIX.$uid] = [
+                'label' => $customField['label'],
+                'description' => $customField['description'] !== '' ? $customField['description'] : $uid,
+            ];
+        }
+
+        return $kinds;
+    }
+
+    /**
+     * Where the field dialog keeps a custom field's own options: one key per custom field, so the
+     * settings of one never write over another's of the same name.
+     */
+    public static function optionsKey(string $uid): string
+    {
+        return 'customOptions.'.substr(sha1($uid), 0, 12);
+    }
+
+    /**
+     * The custom field registered here that edits a field: its editor's, found as CustomFields
+     * finds one, and only when it stores the field's type (a field is never retyped by what a
+     * project registered).
+     *
+     * @param  array<string, mixed>  $field
+     * @return array{uid: string, label: string}|null
+     */
+    public static function registeredCustomField(array $field): ?array
+    {
+        $customField = isset($field['editor']['name']) ? CustomFields::find((string) $field['editor']['name']) : null;
+        if ($customField === null || CustomFields::TYPES[$customField['type']] !== $field['type']) {
+            return null;
+        }
+
+        return ['uid' => $customField['uid'], 'label' => $customField['label']];
+    }
+
+    /** The uid a dialog kind names when it is a custom field's, or null. */
+    public static function customFieldOf(mixed $kind): ?string
+    {
+        return is_string($kind) && str_starts_with($kind, self::CUSTOM_KIND_PREFIX) ? substr($kind, strlen(self::CUSTOM_KIND_PREFIX)) : null;
+    }
+
+    /** Strapi's card whose settings a dialog kind shows: a custom field's is its stored type's. */
+    public static function card(mixed $kind): ?string
+    {
+        $uid = self::customFieldOf($kind);
+        if ($uid === null) {
+            return is_string($kind) ? $kind : null;
+        }
+        $type = CustomFields::irType($uid);
+
+        return $type === null ? null : self::kindOf($type);
+    }
+
     /** @param array<string, mixed> $field */
     private static function details(array $field): string
     {
@@ -240,6 +311,9 @@ final class ContentTypeBuilderSchema
         }
         if ($field['type'] === 'uid' && isset($field['targetField'])) {
             $parts[] = 'from '.$field['targetField'];
+        }
+        if (isset($field['editor']['name'])) {
+            $parts[] = 'custom field '.$field['editor']['name'];
         }
 
         return implode(' · ', $parts);
@@ -619,6 +693,32 @@ final class ContentTypeBuilderSchema
             }
         }
 
+        return self::withEditor($field, $existing, $state);
+    }
+
+    /**
+     * A custom field's card makes the field's editor its uid, with the options its settings set;
+     * Strapi's own card, chosen for a field a registered custom field edited, drops it. An editor
+     * no custom field here registers is kept, as the field was imported with it.
+     *
+     * @param  array<string, mixed>  $field
+     * @param  array<string, mixed>  $existing
+     * @param  array<string, mixed>  $state
+     * @return array<string, mixed>
+     */
+    private static function withEditor(array $field, array $existing, array $state): array
+    {
+        $uid = self::customFieldOf($state['kind'] ?? null);
+        if ($uid !== null) {
+            $options = array_filter((array) data_get($state, self::optionsKey($uid), []), fn ($value): bool => $value !== null && $value !== '' && $value !== []);
+            // A uid a schema named that resolved to another registration keeps the schema's name.
+            $kept = self::registeredCustomField($existing);
+            $name = $kept !== null && $kept['uid'] === $uid ? (string) $existing['editor']['name'] : $uid;
+            $field['editor'] = $options === [] ? ['name' => $name] : ['name' => $name, 'options' => $options];
+        } elseif (isset($state['kind']) && self::registeredCustomField($existing) !== null) {
+            unset($field['editor']);
+        }
+
         return $field;
     }
 
@@ -632,6 +732,10 @@ final class ContentTypeBuilderSchema
     public static function typeFromState(array $state, array $existing = []): string
     {
         $kind = $state['kind'] ?? null;
+        $uid = self::customFieldOf($kind);
+        if ($uid !== null) {
+            return CustomFields::irType($uid) ?? throw new InvalidArgumentException("no custom field \"{$uid}\" is registered");
+        }
         if (! is_string($kind) || ! isset(self::FIELD_KINDS[$kind])) {
             return (string) ($state['type'] ?? $existing['type'] ?? throw new InvalidArgumentException('choose a type of field'));
         }
@@ -671,6 +775,11 @@ final class ContentTypeBuilderSchema
         }
         if ($kind === 'media' && ! isset($field['allowedTypes'])) {
             $state['allowedTypes'] = ['image', 'video', 'audio', 'file'];
+        }
+        $customField = self::registeredCustomField($field);
+        if ($customField !== null) {
+            $state['kind'] = self::CUSTOM_KIND_PREFIX.$customField['uid'];
+            data_set($state, self::optionsKey($customField['uid']), $field['editor']['options'] ?? []);
         }
         if ($kind === 'relation' && ! isset($field['inverse'])) {
             $state['relationKind'] = match ($field['relationKind']) {
