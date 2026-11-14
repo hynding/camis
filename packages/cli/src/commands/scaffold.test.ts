@@ -160,11 +160,12 @@ describe("patchAdminPanelProvider", () => {
   // Strapi's profile page sets an admin's interface language, which the whole admin then speaks.
   it("gives the panel the admin's profile page and interface language", () => {
     const patched = patchAdminPanelProvider(STOCK_PANEL);
+    // An app on Strapi's storage layout has neither class, and its panel must still boot.
     expect(patched).toContain(
-      "->profile(\\App\\Filament\\Pages\\AdminProfile::class, isSimple: false)",
+      "->profile(class_exists(\\App\\Filament\\Pages\\AdminProfile::class) ? \\App\\Filament\\Pages\\AdminProfile::class : null, isSimple: false)",
     );
     expect(patched).toContain(
-      "->middleware([\\App\\Http\\Middleware\\AdminLocale::class], isPersistent: true)",
+      "->middleware(class_exists(\\App\\Http\\Middleware\\AdminLocale::class) ? [\\App\\Http\\Middleware\\AdminLocale::class] : [], isPersistent: true)",
     );
   });
 

@@ -34,9 +34,10 @@ const STOCK_PANEL_LOGIN = "            ->login()\n";
 const ADMIN_GUARD = "->authGuard('admin')";
 
 const ADMIN_LOCALE = "AdminLocale::class";
+// Guarded: an app on Strapi's own storage layout has no admin accounts, so camis emits neither.
 const PROFILE_AND_LOCALE =
-  "            ->profile(\\App\\Filament\\Pages\\AdminProfile::class, isSimple: false)\n" +
-  "            ->middleware([\\App\\Http\\Middleware\\AdminLocale::class], isPersistent: true)\n";
+  "            ->profile(class_exists(\\App\\Filament\\Pages\\AdminProfile::class) ? \\App\\Filament\\Pages\\AdminProfile::class : null, isSimple: false)\n" +
+  "            ->middleware(class_exists(\\App\\Http\\Middleware\\AdminLocale::class) ? [\\App\\Http\\Middleware\\AdminLocale::class] : [], isPersistent: true)\n";
 
 /**
  * Sign the admin panel in on the generated `admin` guard, whose accounts are AdminUser rows apart
