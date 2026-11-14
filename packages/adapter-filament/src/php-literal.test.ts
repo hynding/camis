@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { phpSingleQuoted, sqlSingleQuoted } from "./php-literal";
+import { phpSingleQuoted, phpValue, sqlSingleQuoted } from "./php-literal";
 
 describe("phpSingleQuoted", () => {
   it("wraps a plain string in single quotes and changes nothing else", () => {
@@ -26,5 +26,16 @@ describe("sqlSingleQuoted", () => {
 
   it("leaves a backslash alone — it is not an escape character in standard SQL", () => {
     expect(sqlSingleQuoted("a\\b")).toBe("'a\\b'");
+  });
+});
+
+describe("phpValue", () => {
+  it("writes JSON data as a PHP literal: scalars, lists and string-keyed arrays", () => {
+    expect(
+      phpValue({ max: 5, labels: ["low", "high"], strict: true, note: "o'k", none: null }),
+    ).toBe(
+      "['max' => 5, 'labels' => ['low', 'high'], 'strict' => true, 'note' => 'o\\'k', 'none' => null]",
+    );
+    expect(phpValue([])).toBe("[]");
   });
 });

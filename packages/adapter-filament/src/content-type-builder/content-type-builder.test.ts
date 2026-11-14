@@ -96,6 +96,21 @@ describe("the Content-Type Builder", () => {
     );
   });
 
+  // Strapi registers a custom field in a plugin's code; the project registers its own in a seeded
+  // class, and the builder offers each beside Strapi's cards.
+  it("offers the project's registered custom fields", () => {
+    expect(paths).toContain("app/Support/CustomFields.php");
+    expect(strapi.files.find((f) => f.path === "app/CustomFields/Registrations.php")?.mode).toBe(
+      "seed",
+    );
+    expect(content("app/Support/ContentTypeBuilderSchema.php")).toContain(
+      "public static function customKinds(): array",
+    );
+    expect(content("app/Filament/Pages/ContentTypeBuilder.php")).toContain(
+      "...$this->customFieldOptions(),",
+    );
+  });
+
   // Strapi's relation dialog offers six kinds; one-way and many-way are the IR's relation without
   // an inverse, which the other content type does not show.
   it("offers Strapi's six relation kinds, a type's description and a component's icon", () => {

@@ -35,6 +35,7 @@ class ContentTypeBuilderTest extends TestCase
 
     protected function tearDown(): void
     {
+        \App\Support\CustomFields::flush();
         if (isset($this->project)) {
             array_map('unlink', glob($this->project.'/*') ?: []);
             rmdir($this->project);
@@ -461,6 +462,89 @@ class ContentTypeBuilderTest extends TestCase
         } finally {
             @unlink($types);
         }
+    }
+
+    private function registerRating(): void
+    {
+        \App\Support\CustomFields::flush();
+        \App\Support\CustomFields::register([
+            'name' => 'rating',
+            'plugin' => 'stars',
+            'type' => 'integer',
+            'inputSize' => ['default' => 4, 'isResizable' => true],
+            'label' => 'Rating',
+            'description' => 'From one star to five',
+            'input' => fn (string $name, array $options) => \Filament\Forms\Components\Select::make($name)->options(array_combine(range(1, (int) ($options['max'] ?? 5)), range(1, (int) ($options['max'] ?? 5)))),
+            'options' => fn (): array => [\Filament\Forms\Components\TextInput::make('max')->label('Most stars')->numeric()],
+        ]);
+    }
+
+    public function test_a_custom_field_is_registered_as_strapi_registers_one(): void
+    {
+        $this->registerRating();
+        \App\Support\CustomFields::register(['name' => 'swatch', 'type' => 'string']);
+
+        $this->assertSame(['plugin::stars.rating', 'global::swatch'], array_keys(\App\Support\CustomFields::all()));
+        $this->assertSame('integer', \App\Support\CustomFields::irType('plugin::stars.rating'));
+        // As Strapi, a schema's plugin::<plugin>.<name> finds one registered without its plugin.
+        $this->assertSame('global::swatch', \App\Support\CustomFields::find('plugin::paint.swatch')['uid'] ?? null);
+        $this->assertInstanceOf(\Filament\Forms\Components\Select::class, \App\Support\CustomFields::input('plugin::stars.rating', 'score', ['max' => 3]));
+        // Without an input registered, the admin shows the type's own.
+        $this->assertNull(\App\Support\CustomFields::input('global::swatch', 'tone'));
+        $this->assertNull(\App\Support\CustomFields::input('plugin::nothing.here', 'tone'));
+
+        foreach ([
+            [['type' => 'string'], "Custom fields require a 'name' and 'type' key"],
+            [['name' => 'x', 'type' => 'media'], "Custom field type: 'media' is not a valid Strapi type or it can't be used with a Custom Field"],
+            [['name' => '1x', 'type' => 'string'], "Custom field name: '1x' is not a valid object key"],
+            [['name' => 'x', 'type' => 'string', 'inputSize' => ['default' => 5, 'isResizable' => true]], 'Custom fields require a valid default input size'],
+            [['name' => 'rating', 'plugin' => 'stars', 'type' => 'integer'], "Custom field: 'plugin::stars.rating' has already been registered"],
+        ] as [$customField, $message]) {
+            try {
+                \App\Support\CustomFields::register($customField);
+                $this->fail("registered: {$message}");
+            } catch (\RuntimeException $exception) {
+                $this->assertSame($message, $exception->getMessage());
+            }
+        }
+    }
+
+    public function test_the_builder_offers_and_edits_a_registered_custom_field(): void
+    {
+        $this->registerRating();
+        $this->login(['user.update']);
+        $this->develop();
+        Process::fake();
+
+        Livewire::test(ContentTypeBuilder::class, ['type' => 'contentType:Tag'])
+            ->mountAction(TestAction::make('addField')->table())
+            ->assertSee('Rating')
+            ->assertSee('From one star to five');
+        Livewire::test(ContentTypeBuilder::class, ['type' => 'contentType:Tag'])
+            ->callAction(TestAction::make('addField')->table(), data: [
+                'kind' => 'custom:plugin::stars.rating', 'name' => 'score', 'required' => true, 'editorOptions' => ['max' => '3'],
+            ])
+            ->assertHasNoActionErrors();
+
+        $score = collect($this->type('Tag')['fields'])->firstWhere('name', 'score');
+        $this->assertSame(['type' => 'integer', 'name' => 'score', 'required' => true, 'editor' => ['name' => 'plugin::stars.rating', 'options' => ['max' => '3']]], $score);
+        $this->assertSame('custom:plugin::stars.rating', \App\Support\ContentTypeBuilderSchema::stateFromField($score)['kind']);
+        $this->assertSame('Rating', \App\Support\ContentTypeBuilderSchema::typeLabel($score, $this->ir()));
+
+        // Strapi's own card drops the custom field's editor; its stored type stays.
+        Livewire::test(ContentTypeBuilder::class, ['type' => 'contentType:Tag'])
+            ->callAction(TestAction::make('editField')->table('score'), data: ['kind' => 'number', 'numberType' => 'integer', 'name' => 'score'])
+            ->assertHasNoActionErrors();
+        $this->assertSame(['type' => 'integer', 'name' => 'score', 'required' => true], collect($this->type('Tag')['fields'])->firstWhere('name', 'score'));
+    }
+
+    public function test_an_editor_no_custom_field_here_registers_is_kept(): void
+    {
+        $ir = ['contentTypes' => [['name' => 'Page', 'kind' => 'collection', 'fields' => [['type' => 'integer', 'name' => 'score', 'editor' => ['name' => 'plugin::elsewhere.dial']]]]], 'components' => []];
+
+        $after = \App\Support\ContentTypeBuilderSchema::updateField($ir, 'contentType:Page', 'score', ['kind' => 'number', 'numberType' => 'integer', 'name' => 'score', 'required' => true]);
+
+        $this->assertSame(['type' => 'integer', 'name' => 'score', 'editor' => ['name' => 'plugin::elsewhere.dial'], 'required' => true], $after['contentTypes'][0]['fields'][0]);
     }
 
     public function test_the_schema_sync_keeps_the_data_while_columns_and_tables_follow_the_migrations(): void

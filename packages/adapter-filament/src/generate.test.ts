@@ -58,8 +58,18 @@ describe("filamentAdapter", () => {
       { projectName: "films" },
     );
     expect(rated.gaps.gaps.map((g) => g.feature)).toEqual(["fieldEditor"]);
+    expect(rated.gaps.gaps[0]?.message).toContain(
+      "unless app/CustomFields/Registrations.php registers it",
+    );
+    // The project's registered input, as Strapi's admin uses a custom field's; its type's own else.
     const form = rated.files.find((f) => f.path.endsWith("Schemas/FilmForm.php"));
-    expect(form?.content).toContain("TextInput::make('rating')");
+    expect(form?.content).toContain(
+      "(\\App\\Support\\CustomFields::input('plugin::stars.rating', 'rating', []) ?? TextInput::make('rating')->numeric())",
+    );
+    expect(rated.files.map((f) => f.path)).toContain("app/Support/CustomFields.php");
+    const registrations = rated.files.find((f) => f.path === "app/CustomFields/Registrations.php");
+    expect(registrations?.mode).toBe("seed");
+    expect(registrations?.content).toContain("CustomFields::register([");
   });
   it("is deterministic / idempotent", () => {
     expect(filamentAdapter.generate(bundle, { projectName: "blog" })).toEqual(result);
