@@ -81,7 +81,7 @@ final class CamisSchemaSync
             $missing = array_values(array_filter(array_keys($plan['creates']), fn (string $table): bool => ! $schema->hasTable($table)));
             if ($missing !== [] && count($missing) === count($plan['creates'])) {
                 // Run as migrate would, with whatever rows the migration seeds.
-                $plan['migration']->up();
+                self::up($plan['migration']);
                 foreach ($missing as $table) {
                     $this->report[] = "created table {$table}";
                 }
@@ -151,6 +151,14 @@ final class CamisSchemaSync
         }
 
         return $plans;
+    }
+
+    /** A migration's up(), which Laravel's Migrator too calls only where the migration has one. */
+    private static function up(Migration $migration): void
+    {
+        if (method_exists($migration, 'up')) {
+            $migration->up();
+        }
     }
 
     /** A migration's name without its date and number: what stays when the model renumbers it. */
@@ -228,7 +236,7 @@ final class CamisSchemaSync
         // pretending gets no id back, which only the rows' own code minds: the schema is recorded.
         set_error_handler(fn (): bool => true, E_WARNING | E_NOTICE);
         try {
-            $this->connection->pretend(fn () => $migration->up());
+            $this->connection->pretend(fn () => self::up($migration));
         } catch (Throwable) {
         } finally {
             restore_error_handler();
