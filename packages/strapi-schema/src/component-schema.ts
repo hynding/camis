@@ -1,5 +1,6 @@
 import type { Component } from "@camis/ir-schema";
-import { humanize, pluralize, snakeCase } from "@camis/ir-core";
+import { pluralize, snakeCase } from "@camis/ir-core";
+import { componentDisplayName } from "./names";
 import { toAttributes } from "./attributes";
 
 export const componentSchema = (
@@ -10,7 +11,7 @@ export const componentSchema = (
   collectionName:
     component.names?.collection ?? `components_shared_${snakeCase(pluralize(component.name))}`,
   info: {
-    displayName: component.names?.display ?? humanize(component.name),
+    displayName: componentDisplayName(component),
     ...(component.icon === undefined ? {} : { icon: component.icon }),
     ...(component.description === undefined ? {} : { description: component.description }),
   },

@@ -1,4 +1,5 @@
 import { expandComponents, type ExpandedTable } from "@camis/adapter-kernel";
+import { componentDisplayName } from "@camis/strapi-schema";
 import {
   fieldApiName,
   inverseApiName,
@@ -259,7 +260,7 @@ export const wireShape = (
       const child = childTableEmit(ct, m.table, fileModel !== undefined, context);
       return {
         uid: componentUid(m.component),
-        label: m.component.name,
+        label: componentDisplayName(m.component),
         relation: child.relationName,
         model: child.model,
         media:

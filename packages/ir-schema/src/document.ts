@@ -160,7 +160,7 @@ export const component = z
       })
       .optional(),
     description: z.string().optional(),
-    /** The name of the icon the admin shows beside the component, from the target's icon set. */
+    /** An icon's name, which a target with an icon set shows beside the component. */
     icon: z.string().min(1).optional(),
     fields: z.array(componentField),
   })

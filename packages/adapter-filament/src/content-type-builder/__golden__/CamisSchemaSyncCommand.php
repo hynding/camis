@@ -30,8 +30,8 @@ class CamisSchemaSync extends Command
         if (! DB::connection()->getSchemaBuilder()->hasTable('migrations')) {
             $migrated = $this->call('migrate', ['--force' => true]);
             if ($migrated === self::SUCCESS) {
-                // Nothing to bring up to date, but the column types are recorded for the next sync.
-                (new SchemaSync(DB::connection()))->run();
+                // Nothing to bring up to date, but the next sync needs the column types to compare with.
+                (new SchemaSync(DB::connection()))->remember();
             }
 
             return $migrated;

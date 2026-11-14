@@ -6,7 +6,7 @@ import {
   type ContentType,
   type Field,
 } from "@camis/ir-schema";
-import { humanize } from "@camis/ir-core";
+import { componentDisplayName } from "@camis/strapi-schema";
 import { irField, type FieldImportOptions } from "./attributes";
 import { irName } from "./names";
 
@@ -115,7 +115,9 @@ export const irComponent = (
   if (group !== undefined && group !== "") names.group = group;
   // A display name Strapi derived from the name is the one camis derives too; only another is kept.
   const display = str(info.displayName);
-  if (display !== "" && display !== humanize(componentName)) names.display = display;
+  if (display !== "" && display !== componentDisplayName({ name: componentName, fields: [] })) {
+    names.display = display;
+  }
   const description = str(info.description);
   const icon = str(info.icon);
   const component: Component = {

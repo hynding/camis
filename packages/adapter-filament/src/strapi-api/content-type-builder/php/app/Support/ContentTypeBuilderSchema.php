@@ -762,7 +762,7 @@ final class ContentTypeBuilderSchema
     /** "BlogPost" → "Blog Post". */
     public static function humanize(string $name): string
     {
-        return ucfirst(trim((string) preg_replace('/(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])/', ' ', $name)));
+        return ucfirst(trim((string) preg_replace('/([a-z0-9])([A-Z])/', '$1 $2', $name)));
     }
 
     public static function kebab(string $name): string

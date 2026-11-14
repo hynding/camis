@@ -2125,22 +2125,27 @@ Phase 48 left out what Strapi's builder says about a type beside its fields, and
 relation kinds; its schema sync kept a column's old type.
 
 - **The IR** gains a content type's and a component's `description`, a component's display name
-  (`names.display`) and its `icon` (a name from the target's icon set). They are labels: no name,
-  table or route comes from them. The Strapi importer reads them from `info` (a component's display
+  (`names.display`) and its `icon` (a name, which a target with an icon set shows). They are
+  labels: no name, table or route comes from them, and a target without icons ignores the icon. The Strapi importer reads them from `info` (a component's display
   name only when it is not the one its name gives), the Strapi schema emitter writes them back,
-  and a dynamic zone's block in the Filament admin is labelled with its component's display name.
+  and a dynamic zone's block in the Filament admin is labelled with its component's display name
+  (its name humanized when it has none, as Strapi derives one; the builder's PHP humanizes as
+  ir-core does, so the two agree on when a display name is the derived one).
 - **The builder's dialogs** edit a type's description, and a component's display name, icon and
   description beside its category; the page shows the description under the title.
 - **Strapi's six relation kinds**, in its order: one-way and many-way are the IR's one-to-one and
   one-to-many without an inverse (the other content type does not show them, so the dialog hides
   the inverse's name); the other four keep the inverse optional, as the IR does. A relation without
   an inverse reads back as one-way or many-way.
-- **`camis:schema-sync`** records each generated table's declared column types in
-  `storage/app/camis/column-types.json`; the next sync changes a column whose declared type has
+- **`camis:schema-sync`** records each generated table's declared column types (with their
+  sizes and signedness, the columns of generated alterations included) under
+  `storage/app/camis/column-types/`, one file per database, so switching databases by env or a
+  test run's in-memory database is not taken for the project's; the next sync changes a column whose declared type has
   changed since (as Laravel's `change()` does: nullable, as the sync's added columns are, and
   keeping its values where the database converts them). A change the database refuses (text to a
   number on PostgreSQL) is reported and tried again next time. A sync with no record yet only
-  writes one, so the first `camis develop` on an old database changes nothing.
+  writes one (as does the sync of a database `migrate` has just built), so the first `camis develop`
+  on an old database changes nothing.
 
 Exit: `document.test.ts`, `schema.test.ts`, `component-schema.test.ts`, the importer's
 `schema.test.ts`, `dynamic-zones.test.ts` and `content-type-builder.test.ts` cases;

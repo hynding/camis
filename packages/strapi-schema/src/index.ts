@@ -3,6 +3,7 @@ export { componentSchema } from "./component-schema";
 export { fromStrapiMediaKinds, toStrapiMediaKinds } from "./media-kinds";
 export {
   componentCategory,
+  componentDisplayName,
   componentUid,
   componentUids,
   kebab,

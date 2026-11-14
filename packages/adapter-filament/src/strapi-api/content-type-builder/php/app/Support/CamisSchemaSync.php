@@ -23,9 +23,9 @@ use Throwable;
  * recorder: a table it creates that is missing is created; one that exists gains the columns it
  * lacks (nullable, as Strapi's columns are: a required field is checked on write) and loses the
  * ones no generated migration declares any more; a table a recorded migration created that none
- * creates now is dropped. Each sync keeps the column types the generated migrations declare
- * (COLUMN_TYPES), so the next one changes a column whose declared type changed since, keeping its
- * values where the database can convert them. Then the migrations table lists exactly the
+ * creates now is dropped. Each sync keeps the column types the generated migrations declare, per
+ * database (columnTypesPath), so the next one changes a column whose declared type changed since,
+ * keeping its values where the database can convert them. Then the migrations table lists exactly the
  * generated migrations, so "migrate" runs only what camis did not generate. Development only: a
  * dropped field's or type's data is gone, as in Strapi.
  */
@@ -35,8 +35,8 @@ final class CamisSchemaSync
 
     private const MIGRATIONS_DIRECTORY = 'database/migrations/';
 
-    /** Under storage/: each generated table's columns and their declared types at the last sync. */
-    public const COLUMN_TYPES = 'app/camis/column-types.json';
+    /** Under storage/: per database, each generated table's columns and their declared types at its last sync. */
+    private const COLUMN_TYPES_DIRECTORY = 'app/camis/column-types/';
 
     /** The modifiers that make an index or a key, which changing a column's type must not repeat. */
     private const INDEX_MODIFIERS = ['unique', 'index', 'primary', 'fulltext', 'spatialIndex', 'change'];
@@ -62,10 +62,7 @@ final class CamisSchemaSync
         $files = $this->generatedMigrations();
         $recorded = $this->recordedMigrations();
         $recordedIds = array_map(self::identity(...), $recorded);
-        $plans = [];
-        foreach ($files as $file) {
-            $plans[$file] = $this->record($file);
-        }
+        $plans = $this->plans($files);
 
         $declared = [];
         $created = [];
@@ -101,6 +98,11 @@ final class CamisSchemaSync
                 $this->changeColumnTypes($table, $create['blueprint'], $previous[$table] ?? []);
                 $this->addMissingColumns($table, $create['blueprint']);
             }
+            foreach ($plan['alters'] as $alter) {
+                if ($schema->hasTable($alter['table'])) {
+                    $this->changeColumnTypes($alter['table'], $alter['blueprint'], $previous[$alter['table']] ?? []);
+                }
+            }
             if ($plan['creates'] === [] && ! in_array(self::identity($file), $recordedIds, true)) {
                 foreach ($plan['alters'] as $alter) {
                     $this->applyAlteration($alter['table'], $alter['blueprint'], $alter['callback']);
@@ -117,6 +119,38 @@ final class CamisSchemaSync
         $this->recordColumnTypes($plans);
 
         return $this->report;
+    }
+
+    /**
+     * Record the column types the generated migrations declare and change nothing: for a database
+     * "migrate" has just built, so the next sync has what to compare with.
+     */
+    public function remember(): void
+    {
+        $this->types = [];
+        $this->recordColumnTypes($this->plans($this->generatedMigrations()));
+    }
+
+    /** Where this database's column types at its last sync are kept: one file per database, as a project switches between them by env. */
+    public static function columnTypesPath(Connection $connection): string
+    {
+        $database = json_encode([$connection->getDriverName(), $connection->getConfig('host'), $connection->getConfig('port'), $connection->getDatabaseName()]);
+
+        return storage_path(self::COLUMN_TYPES_DIRECTORY.$connection->getDriverName().'-'.substr(sha1((string) $database), 0, 16).'.json');
+    }
+
+    /**
+     * @param  list<string>  $files
+     * @return array<string, array{migration: Migration, creates: array<string, array{blueprint: Blueprint, callback: Closure}>, alters: list<array{table: string, blueprint: Blueprint, callback: Closure}>}>
+     */
+    private function plans(array $files): array
+    {
+        $plans = [];
+        foreach ($files as $file) {
+            $plans[$file] = $this->record($file);
+        }
+
+        return $plans;
     }
 
     /** A migration's name without its date and number: what stays when the model renumbers it. */
@@ -220,12 +254,12 @@ final class CamisSchemaSync
     /** @return array<string, array<string, string>> */
     private function previousColumnTypes(): array
     {
-        $types = json_decode((string) @file_get_contents(storage_path(self::COLUMN_TYPES)), true);
+        $types = json_decode((string) @file_get_contents(self::columnTypesPath($this->connection)), true);
 
         return is_array($types) ? $types : [];
     }
 
-    /** A column's declared type with what sizes it: "string(255)", "decimal(10, 2)". */
+    /** A column's declared type with what sizes it: "string(255)", "decimal(10, 2)", "bigInteger unsigned". */
     private static function columnType(ColumnDefinition $column): string
     {
         $parameters = array_values(array_filter(
@@ -236,7 +270,7 @@ final class CamisSchemaSync
             $parameters[] = implode('|', $column->get('allowed'));
         }
 
-        return $column->get('type').($parameters === [] ? '' : '('.implode(', ', $parameters).')');
+        return $column->get('type').($parameters === [] ? '' : '('.implode(', ', $parameters).')').($column->get('unsigned') ? ' unsigned' : '');
     }
 
     /**
@@ -253,7 +287,7 @@ final class CamisSchemaSync
             $name = (string) $column->get('name');
             $declared = self::columnType($column);
             $before = $previous[$name] ?? null;
-            if ($before === null || $before === $declared || ! in_array($name, $existing, true) || $column->get('autoIncrement')) {
+            if ($before === null || $before === $declared || ! in_array($name, $existing, true) || $column->get('autoIncrement') || $column->get('change')) {
                 continue;
             }
             try {
@@ -279,14 +313,19 @@ final class CamisSchemaSync
     {
         $types = [];
         foreach ($plans as $plan) {
-            foreach ($plan['creates'] as $table => $create) {
-                foreach ($create['blueprint']->getColumns() as $column) {
-                    $types[$table][(string) $column->get('name')] = $this->types[$table][(string) $column->get('name')] ?? self::columnType($column);
+            $definitions = [...array_map(fn (array $create): Blueprint => $create['blueprint'], $plan['creates']), ...array_map(fn (array $alter): Blueprint => $alter['blueprint'], $plan['alters'])];
+            foreach ($definitions as $definition) {
+                $table = $definition->getTable();
+                foreach ($definition->getColumns() as $column) {
+                    if (! $column->get('change')) {
+                        $name = (string) $column->get('name');
+                        $types[$table][$name] = $this->types[$table][$name] ?? self::columnType($column);
+                    }
                 }
             }
         }
         ksort($types);
-        $path = storage_path(self::COLUMN_TYPES);
+        $path = self::columnTypesPath($this->connection);
         if (! is_dir(dirname($path))) {
             mkdir(dirname($path), 0777, true);
         }
