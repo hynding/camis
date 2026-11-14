@@ -48,11 +48,17 @@ final class ContentTypeBuilderSchema
         'dynamicZone' => ['label' => 'Dynamic zone', 'description' => 'Dynamically pick component when editing content', 'types' => ['dynamicZone']],
     ];
 
+    /**
+     * Strapi's relation kinds, in its dialog's order, each with the IR relation it makes. One-way
+     * and many-way are a relation the other content type does not show: the IR's without an inverse.
+     */
     public const RELATION_KINDS = [
-        'oneToOne' => 'has one',
-        'oneToMany' => 'has many',
-        'manyToOne' => 'belongs to one',
-        'manyToMany' => 'has and belongs to many',
+        'oneWay' => ['label' => 'has one', 'relationKind' => 'oneToOne', 'inverse' => false],
+        'oneToOne' => ['label' => 'has one', 'relationKind' => 'oneToOne', 'inverse' => true],
+        'oneToMany' => ['label' => 'has many', 'relationKind' => 'oneToMany', 'inverse' => true],
+        'manyToOne' => ['label' => 'belongs to one', 'relationKind' => 'manyToOne', 'inverse' => true],
+        'manyToMany' => ['label' => 'has and belongs to many', 'relationKind' => 'manyToMany', 'inverse' => true],
+        'manyWay' => ['label' => 'has many', 'relationKind' => 'oneToMany', 'inverse' => false],
     ];
 
     /** The keys the builder's forms own on a field; every other key a field carries is kept. */
@@ -208,7 +214,7 @@ final class ContentTypeBuilderSchema
             }
         }
         if ($field['type'] === 'relation') {
-            array_unshift($parts, self::RELATION_KINDS[$field['relationKind']] ?? $field['relationKind']);
+            array_unshift($parts, self::RELATION_KINDS[$field['relationKind']]['label'] ?? $field['relationKind']);
             if (isset($field['inverse'])) {
                 $parts[] = 'inverse: '.$field['inverse'];
             }
@@ -246,10 +252,11 @@ final class ContentTypeBuilderSchema
 
     /**
      * Strapi's "Create a collection type" (or single type): a display name, the type's name taken
-     * from it, its plural, and the advanced settings Draft & Publish and Internationalization.
+     * from it, its plural and description, and the advanced settings Draft & Publish and
+     * Internationalization.
      *
      * @param  array<string, mixed>  $ir
-     * @param  array{displayName: string, name?: string|null, plural?: string|null, draftPublish?: bool, localized?: bool}  $state
+     * @param  array{displayName: string, name?: string|null, plural?: string|null, description?: string|null, draftPublish?: bool, localized?: bool}  $state
      * @return array<string, mixed>
      */
     public static function createContentType(array $ir, string $kind, array $state): array
@@ -265,6 +272,7 @@ final class ContentTypeBuilderSchema
         if ($names !== []) {
             $type['names'] = $names;
         }
+        $type = self::describe($type, $state);
         $type['fields'] = [];
         $options = self::typeOptions([], $state);
         if ($options !== []) {
@@ -276,11 +284,11 @@ final class ContentTypeBuilderSchema
     }
 
     /**
-     * Strapi's "Edit" on a type: its display name, plural and advanced settings. Its name is its
-     * API ID, which Strapi does not let a type change once made.
+     * Strapi's "Edit" on a type: its display name, plural, description and advanced settings. Its
+     * name is its API ID, which Strapi does not let a type change once made.
      *
      * @param  array<string, mixed>  $ir
-     * @param  array{displayName: string, plural?: string|null, draftPublish?: bool, localized?: bool}  $state
+     * @param  array{displayName: string, plural?: string|null, description?: string|null, draftPublish?: bool, localized?: bool}  $state
      * @return array<string, mixed>
      */
     public static function updateContentType(array $ir, string $name, array $state): array
@@ -296,6 +304,7 @@ final class ContentTypeBuilderSchema
             if ($type['names'] === []) {
                 unset($type['names']);
             }
+            $type = self::describe($type, $state);
             $type['options'] = self::typeOptions($type['options'] ?? [], $state);
             if ($type['options'] === []) {
                 unset($type['options']);
@@ -344,37 +353,48 @@ final class ContentTypeBuilderSchema
     // ---- components ----------------------------------------------------------------------------
 
     /**
-     * Strapi's "Create a component": a display name and a category.
+     * Strapi's "Create a component": a display name, a category, an icon and a description.
      *
      * @param  array<string, mixed>  $ir
-     * @param  array{displayName: string, name?: string|null, category: string}  $state
+     * @param  array{displayName: string, name?: string|null, category: string, icon?: string|null, description?: string|null}  $state
      * @return array<string, mixed>
      */
     public static function createComponent(array $ir, array $state): array
     {
-        $name = trim((string) ($state['name'] ?? '')) ?: self::studly(trim($state['displayName']));
+        $display = trim($state['displayName']);
+        $name = trim((string) ($state['name'] ?? '')) ?: self::studly($display);
         self::assertTypeName($ir, $name);
-        $category = self::assertCategory($state['category']);
-        $ir['components'][] = ['name' => $name, 'names' => ['group' => $category], 'fields' => []];
+        $component = ['name' => $name, 'names' => array_filter([
+            'display' => $display !== self::humanize($name) ? $display : null,
+            'group' => self::assertCategory($state['category']),
+        ]), 'fields' => []];
+        $ir['components'][] = self::describe($component, $state);
 
         return $ir;
     }
 
     /**
-     * A component's category; its name is its uid's, which Strapi does not let change.
+     * A component's display name, category, icon and description; its name is its uid's, which
+     * Strapi does not let change. What the state leaves out stays as it was.
      *
      * @param  array<string, mixed>  $ir
-     * @param  array{category: string}  $state
+     * @param  array{category: string, displayName?: string, icon?: string|null, description?: string|null}  $state
      * @return array<string, mixed>
      */
     public static function updateComponent(array $ir, string $name, array $state): array
     {
         $category = self::assertCategory($state['category']);
 
-        return self::mapComponent($ir, $name, function (array $component) use ($category): array {
-            $component['names'] = [...($component['names'] ?? []), 'group' => $category];
+        return self::mapComponent($ir, $name, function (array $component) use ($category, $state): array {
+            $names = $component['names'] ?? [];
+            if (isset($state['displayName'])) {
+                $display = trim($state['displayName']);
+                $names['display'] = $display !== '' && $display !== self::humanize($component['name']) ? $display : null;
+            }
+            $names['group'] = $category;
+            $component['names'] = array_filter($names, fn ($value): bool => $value !== null);
 
-            return $component;
+            return self::describe($component, $state);
         });
     }
 
@@ -551,11 +571,16 @@ final class ContentTypeBuilderSchema
             $set['targetField'] = $text('targetField');
         }
         if ($kind === 'relation') {
-            $set['relationKind'] = array_key_exists((string) ($state['relationKind'] ?? ''), self::RELATION_KINDS) ? $state['relationKind'] : throw new InvalidArgumentException('choose how the relation links');
+            $relation = self::RELATION_KINDS[(string) ($state['relationKind'] ?? '')] ?? throw new InvalidArgumentException('choose how the relation links');
+            $set['relationKind'] = $relation['relationKind'];
             $set['target'] = self::find($ir, self::ref('contentType', (string) ($state['target'] ?? ''))) !== null ? $state['target'] : throw new InvalidArgumentException('choose the content type the relation points at');
-            $set['inverse'] = $text('inverse');
+            $set['inverse'] = $relation['inverse'] ? $text('inverse') : null;
             if ($set['inverse'] !== null && ! preg_match(self::FIELD_NAME, $set['inverse'])) {
                 throw new InvalidArgumentException("the inverse field name \"{$set['inverse']}\" must be camelCase");
+            }
+            // An imported inverse's own API name goes with the inverse it named.
+            if ($set['inverse'] !== ($existing['inverse'] ?? null)) {
+                unset($field['inverseNames']);
             }
         }
         if ($kind === 'component') {
@@ -624,6 +649,13 @@ final class ContentTypeBuilderSchema
         }
         if ($kind === 'media' && ! isset($field['allowedTypes'])) {
             $state['allowedTypes'] = ['image', 'video', 'audio', 'file'];
+        }
+        if ($kind === 'relation' && ! isset($field['inverse'])) {
+            $state['relationKind'] = match ($field['relationKind']) {
+                'oneToOne' => 'oneWay',
+                'oneToMany' => 'manyWay',
+                default => $field['relationKind'],
+            };
         }
 
         return $state;
@@ -731,12 +763,38 @@ final class ContentTypeBuilderSchema
     /** "BlogPost" → "Blog Post". */
     public static function humanize(string $name): string
     {
-        return ucfirst(trim((string) preg_replace('/(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])/', ' ', $name)));
+        return ucfirst(trim((string) preg_replace('/([a-z0-9])([A-Z])/', '$1 $2', $name)));
     }
 
     public static function kebab(string $name): string
     {
         return strtolower((string) preg_replace('/[_\s]+/', '-', (string) preg_replace('/([a-z0-9])([A-Z])/', '$1-$2', $name)));
+    }
+
+    /**
+     * A type's description and a component's icon from a dialog's state: an empty input clears
+     * one, a missing one leaves it as it was.
+     *
+     * @param  array<string, mixed>  $node
+     * @param  array<string, mixed>  $state
+     * @return array<string, mixed>
+     */
+    private static function describe(array $node, array $state): array
+    {
+        $keys = isset($node['kind']) ? ['description'] : ['icon', 'description'];
+        foreach ($keys as $key) {
+            if (! array_key_exists($key, $state)) {
+                continue;
+            }
+            $value = trim((string) $state[$key]);
+            if ($value === '') {
+                unset($node[$key]);
+            } else {
+                $node[$key] = $value;
+            }
+        }
+
+        return $node;
     }
 
     /** @param array<string, mixed> $state @param array<string, mixed> $options @return array<string, mixed> */

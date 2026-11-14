@@ -264,7 +264,8 @@ class ContentTypeBuilderTest extends TestCase
             ->assertHasNoActionErrors();
 
         $component = collect($this->ir()['components'])->firstWhere('name', 'CallToAction');
-        $this->assertSame(['name' => 'CallToAction', 'names' => ['group' => 'blocks'], 'fields' => [['type' => 'string', 'name' => 'label']]], $component);
+        // The display name typed is kept, as Strapi keeps it beside the uid made from it.
+        $this->assertSame(['name' => 'CallToAction', 'names' => ['display' => 'Call to action', 'group' => 'blocks'], 'fields' => [['type' => 'string', 'name' => 'label']]], $component);
         $this->assertSame([
             ['type' => 'string', 'name' => 'label'],
             ['type' => 'component', 'name' => 'cta', 'component' => 'CallToAction', 'repeatable' => true],
@@ -281,6 +282,61 @@ class ContentTypeBuilderTest extends TestCase
             ['type' => 'string', 'name' => 'label'],
             ['type' => 'dynamicZone', 'name' => 'blocks', 'components' => ['Seo']],
         ], $this->type('Tag')['fields']);
+    }
+
+    public function test_a_type_has_a_description_and_a_component_a_display_name_and_icon(): void
+    {
+        $this->login(['user.update']);
+        $this->develop();
+        Process::fake();
+
+        Livewire::test(ContentTypeBuilder::class)
+            ->callAction('createCollectionType', data: ['displayName' => 'Press release', 'description' => 'What we tell the press'])
+            ->assertHasNoActionErrors();
+        $this->assertSame('What we tell the press', $this->type('PressRelease')['description']);
+
+        Livewire::test(ContentTypeBuilder::class, ['type' => 'contentType:PressRelease'])
+            ->assertSee('What we tell the press')
+            ->callAction('editType', data: ['displayName' => 'Press release', 'description' => ''])
+            ->assertHasNoActionErrors();
+        $this->assertArrayNotHasKey('description', $this->type('PressRelease'));
+
+        Livewire::test(ContentTypeBuilder::class)
+            ->callAction('createComponent', data: ['displayName' => 'Call to action', 'category' => 'blocks', 'icon' => 'cursor'])
+            ->assertHasNoActionErrors();
+        Livewire::test(ContentTypeBuilder::class, ['type' => 'component:CallToAction'])
+            ->mountAction('editType')
+            ->assertSchemaStateSet(['displayName' => 'Call to action', 'icon' => 'cursor', 'category' => 'blocks']);
+        Livewire::test(ContentTypeBuilder::class, ['type' => 'component:CallToAction'])
+            ->callAction('editType', data: ['displayName' => 'Button', 'icon' => 'hand', 'description' => 'A link that looks like a button', 'category' => 'links'])
+            ->assertHasNoActionErrors();
+
+        $this->assertSame(
+            ['name' => 'CallToAction', 'names' => ['display' => 'Button', 'group' => 'links'], 'fields' => [], 'icon' => 'hand', 'description' => 'A link that looks like a button'],
+            collect($this->ir()['components'])->firstWhere('name', 'CallToAction'),
+        );
+    }
+
+    public function test_a_relation_is_one_of_strapis_six_kinds(): void
+    {
+        $this->login(['user.update']);
+        $this->develop();
+        Process::fake();
+
+        Livewire::test(ContentTypeBuilder::class, ['type' => 'contentType:Tag'])
+            ->callAction(TestAction::make('addField')->table(), data: ['kind' => 'relation', 'name' => 'lead', 'relationKind' => 'oneWay', 'target' => 'Author', 'inverse' => 'ignored'])
+            ->callAction(TestAction::make('addField')->table(), data: ['kind' => 'relation', 'name' => 'seen', 'relationKind' => 'manyWay', 'target' => 'Author'])
+            ->callAction(TestAction::make('addField')->table(), data: ['kind' => 'relation', 'name' => 'curators', 'relationKind' => 'manyToMany', 'target' => 'Author', 'inverse' => 'curated'])
+            ->assertHasNoActionErrors();
+
+        $fields = collect($this->type('Tag')['fields'])->keyBy('name');
+        // One-way and many-way are Strapi's names for a relation the other type does not show.
+        $this->assertSame(['type' => 'relation', 'name' => 'lead', 'relationKind' => 'oneToOne', 'target' => 'Author'], $fields['lead']);
+        $this->assertSame(['type' => 'relation', 'name' => 'seen', 'relationKind' => 'oneToMany', 'target' => 'Author'], $fields['seen']);
+        $this->assertSame(['type' => 'relation', 'name' => 'curators', 'relationKind' => 'manyToMany', 'target' => 'Author', 'inverse' => 'curated'], $fields['curators']);
+        $this->assertSame('oneWay', \App\Support\ContentTypeBuilderSchema::stateFromField($fields['lead'])['relationKind']);
+        $this->assertSame('manyWay', \App\Support\ContentTypeBuilderSchema::stateFromField($fields['seen'])['relationKind']);
+        $this->assertSame('manyToMany', \App\Support\ContentTypeBuilderSchema::stateFromField($fields['curators'])['relationKind']);
     }
 
     public function test_the_schema_sync_keeps_the_data_while_columns_and_tables_follow_the_migrations(): void
@@ -320,6 +376,45 @@ class ContentTypeBuilderTest extends TestCase
         $this->assertTrue(Schema::hasColumn('tags', 'label'));
         $this->assertSame(1, Tag::query()->count());
         $this->assertStringContainsString('added tags.label', Artisan::output());
+    }
+
+    public function test_the_schema_sync_changes_a_column_whose_declared_type_changed(): void
+    {
+        $tag = Tag::create(['label' => 'kept']);
+        // As if "label" had been a long text when the database was last synced.
+        Schema::table('tags', function ($table): void {
+            $table->text('label')->nullable()->change();
+        });
+        // Kept per database, so another connection's sync (a test's, another driver's) is not taken for this one's.
+        $types = \App\Support\CamisSchemaSync::columnTypesPath(DB::connection());
+        @mkdir(dirname($types), 0777, true);
+        file_put_contents($types, json_encode(['tags' => ['label' => 'text']]));
+
+        try {
+            $this->assertSame(0, Artisan::call('camis:schema-sync', ['--force' => true]));
+
+            $this->assertStringContainsString('changed tags.label', Artisan::output());
+            $this->assertSame('varchar', Schema::getColumnType('tags', 'label'));
+            $this->assertSame('kept', $tag->fresh()?->label);
+            // What the sync declared is what the next one compares with.
+            $recorded = json_decode((string) file_get_contents($types), true);
+            $this->assertSame('string(255)', $recorded['tags']['label']);
+            $this->assertSame('bigInteger unsigned', $recorded['posts']['author_id']);
+            // A column a generated alteration adds is recorded too.
+            $this->assertSame('string(255)', $recorded['users']['username']);
+            Artisan::call('camis:schema-sync', ['--force' => true]);
+            $this->assertStringNotContainsString('changed tags.label', Artisan::output());
+        } finally {
+            @unlink($types);
+        }
+    }
+
+    public function test_a_display_name_is_humanized_as_the_ir_humanizes_it(): void
+    {
+        // As ir-core does, so the builder and the Strapi importer agree on when a display name is
+        // the derived one.
+        $this->assertSame('Seo Meta', \App\Support\ContentTypeBuilderSchema::humanize('SeoMeta'));
+        $this->assertSame('SEOMeta', \App\Support\ContentTypeBuilderSchema::humanize('SEOMeta'));
     }
 
     public function test_the_schema_sync_refuses_to_run_outside_development_unforced(): void

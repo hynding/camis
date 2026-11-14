@@ -13,4 +13,16 @@ describe("componentSchema", () => {
       attributes: { metaTitle: { type: "string" } },
     });
   });
+
+  // Strapi keeps a component's display name, icon and description in its info.
+  it("writes the display name, icon and description the component has", () => {
+    expect(
+      componentSchema({
+        ...seo,
+        names: { display: "SEO" },
+        icon: "search",
+        description: "Search engine metadata",
+      }).info,
+    ).toEqual({ displayName: "SEO", icon: "search", description: "Search engine metadata" });
+  });
 });

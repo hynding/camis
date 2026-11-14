@@ -28,7 +28,13 @@ class CamisSchemaSync extends Command
             return self::FAILURE;
         }
         if (! DB::connection()->getSchemaBuilder()->hasTable('migrations')) {
-            return $this->call('migrate', ['--force' => true]);
+            $migrated = $this->call('migrate', ['--force' => true]);
+            if ($migrated === self::SUCCESS) {
+                // Nothing to bring up to date, but the next sync needs the column types to compare with.
+                (new SchemaSync(DB::connection()))->remember();
+            }
+
+            return $migrated;
         }
         foreach ((new SchemaSync(DB::connection()))->run() as $line) {
             $this->line($line);

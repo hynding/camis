@@ -41,3 +41,14 @@ describe("strapiNames", () => {
     expect(n.uid).toBe("api::blog-post.blog-post");
   });
 });
+
+// One display name per component, for the schema, the importer and the admin alike.
+describe("componentDisplayName", () => {
+  it("is the component's own, or its name humanized", async () => {
+    const { componentDisplayName } = await import("./names");
+    expect(componentDisplayName({ name: "MenuItem", fields: [] })).toBe("Menu Item");
+    expect(componentDisplayName({ name: "MenuItem", names: { display: "Link" }, fields: [] })).toBe(
+      "Link",
+    );
+  });
+});

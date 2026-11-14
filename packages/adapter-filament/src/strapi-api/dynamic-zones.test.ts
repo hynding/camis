@@ -63,4 +63,28 @@ describe("dynamic zones", () => {
     expect(form).toContain("Block::make('shared.hero')->label('Hero')");
     expect(form).toContain("StrapiZones::sync($record, 'blocks'");
   });
+
+  it("labels a zone's block with its component's display name, as Strapi's picker does", () => {
+    const named = filamentAdapter.generate(
+      {
+        ...strapiApiBundle,
+        document: {
+          ...strapiApiBundle.document,
+          components: strapiApiBundle.document.components.map((c) =>
+            c.name === "Hero" ? { ...c, names: { ...c.names, display: "Hero's banner" } } : c,
+          ),
+        },
+      },
+      { projectName: "oyl", apiStyle: "strapi" },
+    );
+    const form = named.files.find((f) =>
+      f.path.endsWith("app/Filament/Resources/Landings/Schemas/LandingForm.php"),
+    )!.content;
+    expect(form).toContain("Block::make('shared.hero')->label('Hero\\'s banner')");
+    // Without one, its name humanized, as Strapi derives a display name.
+    expect(
+      named.files.find((f) => f.path.endsWith("app/Filament/Resources/Menus/Schemas/MenuForm.php"))!
+        .content,
+    ).toContain("Block::make('shared.menu-item')->label('Menu Item')");
+  });
 });

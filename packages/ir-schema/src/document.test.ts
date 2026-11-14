@@ -347,3 +347,38 @@ describe("servesApiAction", () => {
     expect(servesApiAction(some, "delete")).toBe(false);
   });
 });
+
+// What Strapi's builder says of a type beside its name: a description, and a component's display
+// name and icon. Labels only: no target derives a name, a table or a route from them.
+describe("a type's description and a component's display name and icon", () => {
+  it("keeps a content type's description", () => {
+    const r = contentType.safeParse({
+      name: "Article",
+      kind: "collection",
+      description: "News and opinion",
+      fields: [],
+    });
+    expect(r.success && r.data.description).toBe("News and opinion");
+  });
+
+  it("keeps a component's display name, description and icon", () => {
+    const r = component.safeParse({
+      name: "Money",
+      names: { display: "Amount of money", group: "finance" },
+      description: "A sum in minor units",
+      icon: "coins",
+      fields: [{ type: "bigInteger", name: "minor" }],
+    });
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.names).toEqual({ display: "Amount of money", group: "finance" });
+      expect(r.data.description).toBe("A sum in minor units");
+      expect(r.data.icon).toBe("coins");
+    }
+  });
+
+  it("rejects an empty icon", () => {
+    const r = component.safeParse({ name: "Money", icon: "", fields: [] });
+    expect(r.success).toBe(false);
+  });
+});

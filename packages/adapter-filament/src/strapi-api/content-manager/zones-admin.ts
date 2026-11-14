@@ -9,7 +9,9 @@ import {
   type RelationPickers,
   type RepeaterEmit,
 } from "../../components";
+import { componentDisplayName } from "@camis/strapi-schema";
 import { filamentNames } from "../../names";
+import { phpSingleQuoted } from "../../php-literal";
 import { componentUid } from "../core/names";
 
 /**
@@ -35,7 +37,7 @@ export const zoneBuilder = (
   const blocks = children
     .map(({ member, child }) => {
       const schema = blockFields(child, pickers, "                        ");
-      return `                    Block::make('${componentUid(member.component)}')->label('${member.component.name}')->schema([\n${schema}\n                    ]),`;
+      return `                    Block::make('${componentUid(member.component)}')->label(${phpSingleQuoted(componentDisplayName(member.component))})->schema([\n${schema}\n                    ]),`;
     })
     .join("\n");
   return {

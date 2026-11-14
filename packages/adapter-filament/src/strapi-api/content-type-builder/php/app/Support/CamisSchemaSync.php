@@ -1,0 +1,478 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Support;
+
+use Closure;
+use Illuminate\Database\Connection;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Database\Schema\Builder;
+use Illuminate\Database\Schema\ColumnDefinition;
+use Illuminate\Support\Facades\Schema;
+use Throwable;
+
+/**
+ * Brings the database up to the generated migrations after the content model changed, keeping the
+ * data, as Strapi's schema sync does when its Content-Type Builder restarts the server.
+ *
+ * camis generates one create migration per table, numbered in the model's order, so a new type
+ * renumbers the ones after it and "php artisan migrate" would create tables that exist. Here a
+ * migration is known by its name without its number. Each generated migration is replayed into a
+ * recorder: a table it creates that is missing is created; one that exists gains the columns it
+ * lacks (nullable, as Strapi's columns are: a required field is checked on write) and loses the
+ * ones no generated migration declares any more; a table a recorded migration created that none
+ * creates now is dropped. Each sync keeps the column types the generated migrations declare, per
+ * database (columnTypesPath), so the next one changes a column whose declared type changed since,
+ * keeping its values where the database can convert them. Then the migrations table lists exactly the
+ * generated migrations, so "migrate" runs only what camis did not generate. Development only: a
+ * dropped field's or type's data is gone, as in Strapi.
+ */
+final class CamisSchemaSync
+{
+    private const MANIFEST = '.camis/manifest.json';
+
+    private const MIGRATIONS_DIRECTORY = 'database/migrations/';
+
+    /** Under storage/: per database, each generated table's columns and their declared types at its last sync. */
+    private const COLUMN_TYPES_DIRECTORY = 'app/camis/column-types/';
+
+    /** The modifiers that make an index or a key, which changing a column's type must not repeat. */
+    private const INDEX_MODIFIERS = ['unique', 'index', 'primary', 'fulltext', 'spatialIndex', 'change'];
+
+    /** @var list<string> */
+    private array $report = [];
+
+    /** @var array<string, array<string, string>> */
+    private array $types = [];
+
+    public function __construct(private readonly Connection $connection) {}
+
+    /**
+     * Sync the schema; returns what changed, one line each.
+     *
+     * @return list<string>
+     */
+    public function run(): array
+    {
+        $this->report = [];
+        $this->types = [];
+        $previous = $this->previousColumnTypes();
+        $files = $this->generatedMigrations();
+        $recorded = $this->recordedMigrations();
+        $recordedIds = array_map(self::identity(...), $recorded);
+        $plans = $this->plans($files);
+
+        $declared = [];
+        $created = [];
+        foreach ($plans as $plan) {
+            foreach ($plan['creates'] as $table => $create) {
+                $created[$table] = true;
+                $declared[$table] = [...($declared[$table] ?? []), ...self::columnNames($create['blueprint'])];
+            }
+            foreach ($plan['alters'] as $alter) {
+                $declared[$alter['table']] = [...($declared[$alter['table']] ?? []), ...self::columnNames($alter['blueprint'])];
+            }
+        }
+
+        $schema = $this->connection->getSchemaBuilder();
+        foreach ($plans as $file => $plan) {
+            $missing = array_values(array_filter(array_keys($plan['creates']), fn (string $table): bool => ! $schema->hasTable($table)));
+            if ($missing !== [] && count($missing) === count($plan['creates'])) {
+                // Run as migrate would, with whatever rows the migration seeds.
+                self::up($plan['migration']);
+                foreach ($missing as $table) {
+                    $this->report[] = "created table {$table}";
+                }
+
+                continue;
+            }
+            foreach ($plan['creates'] as $table => $create) {
+                if (in_array($table, $missing, true)) {
+                    $schema->create($table, $create['callback']);
+                    $this->report[] = "created table {$table}";
+
+                    continue;
+                }
+                $this->changeColumnTypes($table, $create['blueprint'], $previous[$table] ?? []);
+                $this->addMissingColumns($table, $create['blueprint']);
+            }
+            foreach ($plan['alters'] as $alter) {
+                if ($schema->hasTable($alter['table'])) {
+                    $this->changeColumnTypes($alter['table'], $alter['blueprint'], $previous[$alter['table']] ?? []);
+                }
+            }
+            if ($plan['creates'] === [] && ! in_array(self::identity($file), $recordedIds, true)) {
+                foreach ($plan['alters'] as $alter) {
+                    $this->applyAlteration($alter['table'], $alter['blueprint'], $alter['callback']);
+                }
+            }
+        }
+        foreach ($declared as $table => $columns) {
+            if (isset($created[$table])) {
+                $this->dropUndeclaredColumns($table, array_values(array_unique($columns)));
+            }
+        }
+        $this->dropAbandonedTables($recorded, array_keys($created));
+        $this->recordMigrations($files, $recorded);
+        $this->recordColumnTypes($plans);
+
+        return $this->report;
+    }
+
+    /**
+     * Record the column types the generated migrations declare and change nothing: for a database
+     * "migrate" has just built, so the next sync has what to compare with.
+     */
+    public function remember(): void
+    {
+        $this->types = [];
+        $this->recordColumnTypes($this->plans($this->generatedMigrations()));
+    }
+
+    /** Where this database's column types at its last sync are kept: one file per database, as a project switches between them by env. */
+    public static function columnTypesPath(Connection $connection): string
+    {
+        $database = json_encode([$connection->getDriverName(), $connection->getConfig('host'), $connection->getConfig('port'), $connection->getDatabaseName()]);
+
+        return storage_path(self::COLUMN_TYPES_DIRECTORY.$connection->getDriverName().'-'.substr(sha1((string) $database), 0, 16).'.json');
+    }
+
+    /**
+     * @param  list<string>  $files
+     * @return array<string, array{migration: Migration, creates: array<string, array{blueprint: Blueprint, callback: Closure}>, alters: list<array{table: string, blueprint: Blueprint, callback: Closure}>}>
+     */
+    private function plans(array $files): array
+    {
+        $plans = [];
+        foreach ($files as $file) {
+            $plans[$file] = $this->record($file);
+        }
+
+        return $plans;
+    }
+
+    /** A migration's up(), which Laravel's Migrator too calls only where the migration has one. */
+    private static function up(Migration $migration): void
+    {
+        if (method_exists($migration, 'up')) {
+            $migration->up();
+        }
+    }
+
+    /** A migration's name without its date and number: what stays when the model renumbers it. */
+    public static function identity(string $migration): string
+    {
+        return (string) preg_replace('/^\d{4}_\d{2}_\d{2}_\d{6}_/', '', $migration);
+    }
+
+    /** @return list<string> the generated migrations' names, in the order migrate runs them */
+    private function generatedMigrations(): array
+    {
+        $manifest = json_decode((string) @file_get_contents(base_path(self::MANIFEST)), true);
+        $names = [];
+        foreach ((is_array($manifest) ? $manifest['files'] ?? [] : []) as $entry) {
+            $path = (string) ($entry['path'] ?? '');
+            if (str_starts_with($path, self::MIGRATIONS_DIRECTORY) && str_ends_with($path, '.php') && is_file(base_path($path))) {
+                $names[] = basename($path, '.php');
+            }
+        }
+        sort($names);
+
+        return $names;
+    }
+
+    /** @return list<string> */
+    private function recordedMigrations(): array
+    {
+        if (! $this->connection->getSchemaBuilder()->hasTable('migrations')) {
+            return [];
+        }
+
+        return $this->connection->table('migrations')->orderBy('id')->pluck('migration')->all();
+    }
+
+    /**
+     * What a migration's up() would do to the schema, without doing it.
+     *
+     * @return array{migration: Migration, creates: array<string, array{blueprint: Blueprint, callback: Closure}>, alters: list<array{table: string, blueprint: Blueprint, callback: Closure}>}
+     */
+    private function record(string $name): array
+    {
+        $recorder = new class($this->connection) extends Builder
+        {
+            /** @var array<string, array{blueprint: Blueprint, callback: Closure}> */
+            public array $creates = [];
+
+            /** @var list<array{table: string, blueprint: Blueprint, callback: Closure}> */
+            public array $alters = [];
+
+            public function create($table, Closure $callback): void
+            {
+                $blueprint = $this->createBlueprint($table);
+                $blueprint->create();
+                $callback($blueprint);
+                $this->creates[$table] = ['blueprint' => $blueprint, 'callback' => $callback];
+            }
+
+            public function table($table, Closure $callback): void
+            {
+                $blueprint = $this->createBlueprint($table);
+                $callback($blueprint);
+                $this->alters[] = ['table' => $table, 'blueprint' => $blueprint, 'callback' => $callback];
+            }
+
+            public function drop($table): void {}
+
+            public function dropIfExists($table): void {}
+        };
+
+        /** @var Migration $migration */
+        $migration = require base_path(self::MIGRATIONS_DIRECTORY.$name.'.php');
+        $real = Schema::getFacadeRoot();
+        Schema::swap($recorder);
+        // Pretending, so the rows a migration seeds are not written twice. A model saved while
+        // pretending gets no id back, which only the rows' own code minds: the schema is recorded.
+        set_error_handler(fn (): bool => true, E_WARNING | E_NOTICE);
+        try {
+            $this->connection->pretend(fn () => self::up($migration));
+        } catch (Throwable) {
+        } finally {
+            restore_error_handler();
+            Schema::swap($real);
+        }
+
+        return ['migration' => $migration, 'creates' => $recorder->creates, 'alters' => $recorder->alters];
+    }
+
+    /** @return list<string> */
+    private static function columnNames(Blueprint $blueprint): array
+    {
+        $names = [];
+        foreach ($blueprint->getColumns() as $column) {
+            if (! ($column->get('change') ?? false)) {
+                $names[] = (string) $column->get('name');
+            }
+        }
+
+        return $names;
+    }
+
+    /** @return array<string, array<string, string>> */
+    private function previousColumnTypes(): array
+    {
+        $types = json_decode((string) @file_get_contents(self::columnTypesPath($this->connection)), true);
+
+        return is_array($types) ? $types : [];
+    }
+
+    /** A column's declared type with what sizes it: "string(255)", "decimal(10, 2)", "bigInteger unsigned". */
+    private static function columnType(ColumnDefinition $column): string
+    {
+        $parameters = array_values(array_filter(
+            [$column->get('length'), $column->get('total'), $column->get('places'), $column->get('precision')],
+            fn (mixed $value): bool => $value !== null,
+        ));
+        if (is_array($column->get('allowed'))) {
+            $parameters[] = implode('|', $column->get('allowed'));
+        }
+
+        return $column->get('type').($parameters === [] ? '' : '('.implode(', ', $parameters).')').($column->get('unsigned') ? ' unsigned' : '');
+    }
+
+    /**
+     * Change each existing column whose declared type is not the one the last sync recorded. A
+     * column the last sync did not record is left as it is: its type then is unknown.
+     *
+     * @param  array<string, string>  $previous
+     */
+    private function changeColumnTypes(string $table, Blueprint $definition, array $previous): void
+    {
+        $schema = $this->connection->getSchemaBuilder();
+        $existing = $schema->getColumnListing($table);
+        foreach ($definition->getColumns() as $column) {
+            $name = (string) $column->get('name');
+            $declared = self::columnType($column);
+            $before = $previous[$name] ?? null;
+            if ($before === null || $before === $declared || ! in_array($name, $existing, true) || $column->get('autoIncrement') || $column->get('change')) {
+                continue;
+            }
+            try {
+                $schema->table($table, function (Blueprint $blueprint) use ($column): void {
+                    $attributes = array_diff_key($column->getAttributes(), array_flip(['type', 'name', ...self::INDEX_MODIFIERS]));
+                    $blueprint->addColumn((string) $column->get('type'), (string) $column->get('name'), $attributes)->nullable()->change();
+                });
+                $this->report[] = "changed {$table}.{$name} to {$declared}";
+            } catch (Throwable $exception) {
+                // Asked again next time: the recorded type stays the one the column still has.
+                $this->types[$table][$name] = $before;
+                $this->report[] = "kept {$table}.{$name} as {$before}: the database cannot change it to {$declared} ({$exception->getMessage()})";
+            }
+        }
+    }
+
+    /**
+     * Keep what the generated migrations declare for the next sync to compare with.
+     *
+     * @param  array<string, array{migration: Migration, creates: array<string, array{blueprint: Blueprint, callback: Closure}>, alters: list<array{table: string, blueprint: Blueprint, callback: Closure}>}>  $plans
+     */
+    private function recordColumnTypes(array $plans): void
+    {
+        $types = [];
+        foreach ($plans as $plan) {
+            $definitions = [...array_map(fn (array $create): Blueprint => $create['blueprint'], $plan['creates']), ...array_map(fn (array $alter): Blueprint => $alter['blueprint'], $plan['alters'])];
+            foreach ($definitions as $definition) {
+                $table = $definition->getTable();
+                foreach ($definition->getColumns() as $column) {
+                    if (! $column->get('change')) {
+                        $name = (string) $column->get('name');
+                        $types[$table][$name] = $this->types[$table][$name] ?? self::columnType($column);
+                    }
+                }
+            }
+        }
+        ksort($types);
+        $path = self::columnTypesPath($this->connection);
+        if (! is_dir(dirname($path))) {
+            mkdir(dirname($path), 0777, true);
+        }
+        file_put_contents($path, json_encode($types, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n");
+    }
+
+    private function addMissingColumns(string $table, Blueprint $declared): void
+    {
+        $existing = $this->connection->getSchemaBuilder()->getColumnListing($table);
+        $missing = array_values(array_filter(
+            $declared->getColumns(),
+            fn (ColumnDefinition $column): bool => ! in_array($column->get('name'), $existing, true),
+        ));
+        if ($missing === []) {
+            return;
+        }
+        $names = array_map(fn (ColumnDefinition $column): string => (string) $column->get('name'), $missing);
+        $this->connection->getSchemaBuilder()->table($table, function (Blueprint $blueprint) use ($missing): void {
+            foreach ($missing as $column) {
+                $attributes = $column->getAttributes();
+                $blueprint->addColumn((string) $attributes['type'], (string) $attributes['name'], array_diff_key($attributes, ['type' => true, 'name' => true]))->nullable();
+            }
+        });
+        $this->report[] = "added {$table}.".implode(", {$table}.", $names);
+        $this->addForeignKeys($table, $declared, $names);
+    }
+
+    /** The foreign keys a declared table has on the columns just added; SQLite cannot add one to a table. */
+    private function addForeignKeys(string $table, Blueprint $declared, array $columns): void
+    {
+        $keys = array_filter(
+            $declared->getCommands(),
+            fn ($command): bool => $command->get('name') === 'foreign' && array_diff((array) $command->get('columns'), $columns) === [],
+        );
+        if ($keys === [] || $this->connection->getDriverName() === 'sqlite') {
+            return;
+        }
+        $this->connection->getSchemaBuilder()->table($table, function (Blueprint $blueprint) use ($keys): void {
+            foreach ($keys as $key) {
+                $foreign = $blueprint->foreign($key->get('columns'))->references($key->get('references'))->on($key->get('on'));
+                if ($key->get('onDelete') !== null) {
+                    $foreign->onDelete($key->get('onDelete'));
+                }
+            }
+        });
+    }
+
+    /** A generated alteration that never ran: run it, unless what it adds is there already. */
+    private function applyAlteration(string $table, Blueprint $blueprint, Closure $callback): void
+    {
+        $schema = $this->connection->getSchemaBuilder();
+        if (! $schema->hasTable($table)) {
+            return;
+        }
+        $added = self::columnNames($blueprint);
+        if ($added !== [] && array_diff($added, $schema->getColumnListing($table)) === []) {
+            return;
+        }
+        $schema->table($table, $callback);
+        $this->report[] = "altered table {$table}";
+    }
+
+    /** @param list<string> $declared */
+    private function dropUndeclaredColumns(string $table, array $declared): void
+    {
+        $schema = $this->connection->getSchemaBuilder();
+        $undeclared = array_values(array_diff($schema->getColumnListing($table), $declared));
+        if ($undeclared === []) {
+            return;
+        }
+        $touches = fn (array $columns): bool => array_intersect($columns, $undeclared) !== [];
+        $foreignKeys = array_values(array_filter($schema->getForeignKeys($table), fn (array $key): bool => $touches($key['columns'])));
+        $indexes = array_values(array_filter($schema->getIndexes($table), fn (array $index): bool => ! $index['primary'] && $touches($index['columns'])));
+        $schema->table($table, function (Blueprint $blueprint) use ($foreignKeys, $indexes, $undeclared): void {
+            foreach ($foreignKeys as $key) {
+                $blueprint->dropForeign($key['name'] ?? $key['columns']);
+            }
+            foreach ($indexes as $index) {
+                $blueprint->dropIndex($index['name']);
+            }
+            $blueprint->dropColumn($undeclared);
+        });
+        $this->report[] = "dropped {$table}.".implode(", {$table}.", $undeclared);
+    }
+
+    /**
+     * @param  list<string>  $recorded
+     * @param  list<string>  $created
+     */
+    private function dropAbandonedTables(array $recorded, array $created): void
+    {
+        $schema = $this->connection->getSchemaBuilder();
+        $abandoned = [];
+        foreach ($recorded as $migration) {
+            if (! str_starts_with($migration, '0001_01_02_') && ! str_starts_with($migration, '0001_01_03_')) {
+                continue;
+            }
+            if (preg_match('/^create_(.+)_table$/', self::identity($migration), $match) && ! in_array($match[1], $created, true) && $schema->hasTable($match[1])) {
+                $abandoned[] = $match[1];
+            }
+        }
+        if ($abandoned === []) {
+            return;
+        }
+        $schema->withoutForeignKeyConstraints(function () use ($schema, $abandoned): void {
+            foreach (array_reverse($abandoned) as $table) {
+                $schema->drop($table);
+                $this->report[] = "dropped table {$table}";
+            }
+        });
+    }
+
+    /**
+     * The migrations table lists every generated migration under its current name, and none it no
+     * longer generates.
+     *
+     * @param  list<string>  $files
+     * @param  list<string>  $recorded
+     */
+    private function recordMigrations(array $files, array $recorded): void
+    {
+        $repository = fn () => $this->connection->table('migrations');
+        $current = array_flip($files);
+        $stale = array_values(array_filter(
+            $recorded,
+            fn (string $migration): bool => ! isset($current[$migration])
+                && (str_starts_with($migration, '0001_01_02_') || str_starts_with($migration, '0001_01_03_')),
+        ));
+        if ($stale !== []) {
+            $repository()->whereIn('migration', $stale)->delete();
+        }
+        $missing = array_values(array_diff($files, $recorded));
+        if ($missing === []) {
+            return;
+        }
+        $batch = (int) $repository()->max('batch') + 1;
+        $repository()->insert(array_map(
+            fn (string $migration): array => ['migration' => $migration, 'batch' => $batch],
+            $missing,
+        ));
+    }
+}

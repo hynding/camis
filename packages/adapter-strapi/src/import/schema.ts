@@ -6,6 +6,7 @@ import {
   type ContentType,
   type Field,
 } from "@camis/ir-schema";
+import { componentDisplayName } from "@camis/strapi-schema";
 import { irField, type FieldImportOptions } from "./attributes";
 import { irName } from "./names";
 
@@ -58,6 +59,8 @@ export const irContentType = (
     },
     fields,
   };
+  const description = str(info.description);
+  if (description !== "") contentType.description = description;
   if (options.draftAndPublish) contentType.options = { draftPublish: true };
   if (asRecord(asRecord(schema.pluginOptions).i18n).localized === true) {
     contentType.options = { ...contentType.options, localized: true };
@@ -105,16 +108,26 @@ export const irComponent = (
     }
     return true;
   });
+  const info = asRecord(schema.info);
   const collection = str(schema.collectionName);
-  const names: { collection?: string; group?: string } = {};
+  const names: NonNullable<Component["names"]> = {};
   if (collection !== "") names.collection = collection;
   if (group !== undefined && group !== "") names.group = group;
+  // A display name Strapi derived from the name is the one camis derives too; only another is kept.
+  const display = str(info.displayName);
+  if (display !== "" && display !== componentDisplayName({ name: componentName, fields: [] })) {
+    names.display = display;
+  }
+  const description = str(info.description);
+  const icon = str(info.icon);
   const component: Component = {
     name: componentName,
     // dynamicZone and polymorphic fields were routed to gaps above (components disallow them), so
     // the fields array is safely narrowed to ComponentFieldT at runtime.
     fields: fields as ComponentFieldT[],
     ...(Object.keys(names).length > 0 ? { names } : {}),
+    ...(description === "" ? {} : { description }),
+    ...(icon === "" ? {} : { icon }),
   };
   return { component, gaps };
 };

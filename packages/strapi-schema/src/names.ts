@@ -1,3 +1,4 @@
+import { humanize } from "@camis/ir-core";
 import type { Component, ContentType } from "@camis/ir-schema";
 
 export interface StrapiNames {
@@ -32,6 +33,10 @@ export const strapiNames = (ct: ContentType): StrapiNames => {
 // a reference resolvable.
 export const componentCategory = (component: Component): string =>
   component.names?.group ?? "shared";
+
+/** What the admin calls a component: its own display name, or its name humanized as Strapi derives one. */
+export const componentDisplayName = (component: Component): string =>
+  component.names?.display ?? humanize(component.name);
 
 export const componentUid = (component: Component): string =>
   `${componentCategory(component)}.${kebab(component.name)}`;

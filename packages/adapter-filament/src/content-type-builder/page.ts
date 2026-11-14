@@ -99,11 +99,11 @@ class ContentTypeBuilder extends Page implements HasTable
         if ($node === null) {
             return 'Build the data architecture of your content';
         }
-        if (str_starts_with((string) $this->type, 'component:')) {
-            return 'Component · '.ModelSchema::componentUid($node);
-        }
+        $kind = str_starts_with((string) $this->type, 'component:')
+            ? 'Component · '.ModelSchema::componentUid($node)
+            : ($node['kind'] === 'single' ? 'Single type' : 'Collection type').' · '.$this->contentTypeUid($node);
 
-        return ($node['kind'] === 'single' ? 'Single type' : 'Collection type').' · '.$this->contentTypeUid($node);
+        return isset($node['description']) ? $kind.' · '.$node['description'] : $kind;
     }
 
     /** @return array<NavigationItem> */
@@ -189,6 +189,7 @@ class ContentTypeBuilder extends Page implements HasTable
                             ->regex(ModelSchema::TYPE_NAME),
                         TextInput::make('plural')->label('API ID (plural)')->visible($kind === 'collection')
                             ->helperText('Left empty, the name is pluralized.'),
+                        $this->descriptionInput(),
                     ]),
                     Tab::make('Advanced settings')->schema($this->typeOptionsSchema()),
                 ]),
@@ -212,6 +213,8 @@ class ContentTypeBuilder extends Page implements HasTable
                 TextInput::make('name')->label('Name')->regex(ModelSchema::TYPE_NAME)
                     ->helperText('PascalCase, taken from the display name when left empty. It cannot change later.'),
                 $this->categoryInput(),
+                $this->iconInput(),
+                $this->descriptionInput(),
             ])
             ->action(fn (array $data, Action $action) => $this->save(
                 $action,
@@ -237,14 +240,22 @@ class ContentTypeBuilder extends Page implements HasTable
                     'draftPublish' => ($node['options']['draftPublish'] ?? false) === true,
                     'localized' => ($node['options']['localized'] ?? false) === true,
                     'category' => isset($node['kind']) ? null : ModelSchema::category($node),
+                    'icon' => $node['icon'] ?? null,
+                    'description' => $node['description'] ?? null,
                 ];
             })
             ->schema(fn (): array => str_starts_with((string) $this->type, 'component:')
-                ? [$this->categoryInput()]
+                ? [
+                    TextInput::make('displayName')->label('Display name')->required(),
+                    $this->categoryInput(),
+                    $this->iconInput(),
+                    $this->descriptionInput(),
+                ]
                 : [
                     TextInput::make('displayName')->label('Display name')->required(),
                     TextInput::make('plural')->label('API ID (plural)')
                         ->visible(fn (): bool => ($this->node()['kind'] ?? null) === 'collection' && ! isset($this->node()['builtin'])),
+                    $this->descriptionInput(),
                     ...$this->typeOptionsSchema(),
                 ])
             ->action(function (array $data, Action $action): void {
@@ -288,6 +299,17 @@ class ContentTypeBuilder extends Page implements HasTable
             Toggle::make('localized')->label('Internationalization')
                 ->helperText('Allows translating an entry into different languages'),
         ];
+    }
+
+    private function descriptionInput(): Textarea
+    {
+        return Textarea::make('description')->label('Description')->rows(2);
+    }
+
+    private function iconInput(): TextInput
+    {
+        return TextInput::make('icon')->label('Icon')
+            ->helperText('The name of an icon in Strapi\'s set, such as "alien" or "apps", which Strapi\'s admin and schema keep.');
     }
 
     private function categoryInput(): TextInput
@@ -394,11 +416,12 @@ class ContentTypeBuilder extends Page implements HasTable
                     Select::make('dateType')->label('Type')->visible($is('date'))->required($is('date'))
                         ->options(['date' => 'date (ex: 01/01/2024)', 'dateTime' => 'datetime (ex: 01/01/2024 00:00 AM)', 'time' => 'time (ex: 00:00 AM)', 'timestamp' => 'timestamp']),
                     Toggle::make('multiple')->label('Multiple media')->visible($is('media')),
-                    Select::make('relationKind')->label('Relation')->visible($is('relation'))->required($is('relation'))
-                        ->options(array_map(fn (string $label): string => ucfirst($label), ModelSchema::RELATION_KINDS)),
+                    Select::make('relationKind')->label('Relation')->visible($is('relation'))->required($is('relation'))->live()
+                        ->options(array_map(fn (array $relation): string => ucfirst($relation['label']).($relation['inverse'] ? '' : ' (one-way)'), ModelSchema::RELATION_KINDS)),
                     Select::make('target')->label('Content type')->visible($is('relation'))->required($is('relation'))->options($contentTypes),
-                    TextInput::make('inverse')->label('Field name on the other content type')->visible($is('relation'))
-                        ->regex(ModelSchema::FIELD_NAME)->helperText('Leave empty for a one-way relation.'),
+                    TextInput::make('inverse')->label('Field name on the other content type')
+                        ->visible(fn (Get $get): bool => $get('kind') === 'relation' && (ModelSchema::RELATION_KINDS[(string) $get('relationKind')]['inverse'] ?? true))
+                        ->regex(ModelSchema::FIELD_NAME)->helperText('Left empty, the other content type does not show the relation.'),
                     Textarea::make('values')->label('Values (one line per value)')->visible($is('enumeration'))->required($is('enumeration'))->rows(4),
                     Select::make('targetField')->label('Attached field')->visible($is('uid'))->options($textFields),
                     Select::make('component')->label('Component')->visible($is('component'))->required($is('component'))->options($components),
