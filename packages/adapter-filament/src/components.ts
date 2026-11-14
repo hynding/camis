@@ -1,5 +1,6 @@
 import { columnField, type ExpandedScalar, type ExpandedTable } from "@camis/adapter-kernel";
-import type { ContentType, IrDocument } from "@camis/ir-schema";
+import type { Component, ContentType, IrDocument } from "@camis/ir-schema";
+import { componentLayout, type LaidOutField } from "./component-layout";
 import {
   componentRelationMethod,
   componentRelationPicker,
@@ -27,7 +28,12 @@ export interface ChildTableEmit {
   /** The table the foreign key points at: the entry's, or the item's this one is nested in. */
   parentTable: string;
   relationName: string;
+  /** The component its rows are items of, and the field-name path to it from the row holding it. */
+  component: Component;
+  path: string[];
   emits: FieldEmit[];
+  /** The field-name path within the item to each of `emits`. */
+  emitPaths: string[][];
   /** A dynamic zone member's rows: they keep the item's place in the zone. */
   ordered?: boolean;
   /** Its media fields, when the project has a media library: links to its files, not columns. */
@@ -80,9 +86,12 @@ export const childTableEmit = (
     fk: parent === undefined ? `${snake(ct.name)}_id` : `${snake(parent.model)}_id`,
     parentTable: name,
     relationName: camelPath(table.path),
+    component: table.component,
+    path: table.path,
     emits: table.scalars
       .filter((s) => !isLink(s))
       .map((s) => emitField(columnField(s), s.path.map(snakeColumn).join("_"))),
+    emitPaths: table.scalars.filter((s) => !isLink(s)).map((s) => s.path),
     media: table.scalars.filter(isLink).map((s) => ({
       path: s.path,
       apiPath: s.apiPath,
@@ -263,26 +272,27 @@ export const repeaterComponent = (
   child: ChildTableEmit,
   pickers: RelationPickers = NO_PICKERS,
   depth = 1,
+  components?: readonly Component[],
 ): RepeaterEmit => {
-  const nested = child.children.map((c) => repeaterComponent(c, pickers, depth + 1));
+  const nested = child.children.map((c) => repeaterComponent(c, pickers, depth + 1, components));
   const pad = "    ".repeat(depth - 1);
-  const inner = [
-    ...child.emits.map((e) => e.formComponent),
-    ...child.media.map(
-      (m) =>
-        `MediaPicker::make('${m.method}', multiple: ${m.multiple}${m.allowedTypes === undefined ? "" : `, allowedTypes: [${m.allowedTypes.map((t) => `'${t}'`).join(", ")}]`})`,
-    ),
-    ...child.relations.map((r) =>
+  const fields = childFields(child, {
+    media: (m) =>
+      `MediaPicker::make('${m.method}', multiple: ${m.multiple}${m.allowedTypes === undefined ? "" : `, allowedTypes: [${m.allowedTypes.map((t) => `'${t}'`).join(", ")}]`})`,
+    relation: (r) =>
       componentRelationPicker(r, pickers.versioned, pickers.localized, pickers.locale(depth)),
-    ),
-    ...nested.map((n) => n.component),
-  ]
-    .map((c) => `${pad}                ${c},`)
-    .join("\n");
+    child: (_, i) => nested[i]!.component,
+  });
+  // On the Strapi-style admin the item's own view lays its fields out.
+  const schema =
+    components === undefined
+      ? `[\n${fields.map((f) => `${pad}                ${f.code},`).join("\n")}\n${pad}            ]`
+      : componentLayout(child.component, fields, components, `${pad}            `);
   return {
-    component: `Repeater::make('${child.relationName}')->relationship()->schema([\n${inner}\n${pad}            ])`,
+    component: `Repeater::make('${child.relationName}')->relationship()->schema(${schema})`,
     imports: [
       "Filament\\Forms\\Components\\Repeater",
+      ...(components === undefined ? [] : ["App\\Support\\StrapiContentManager"]),
       ...child.emits.map((e) => e.formImport),
       ...(child.media.length > 0 ? ["App\\Filament\\Support\\MediaPicker"] : []),
       ...(child.relations.length > 0 ? ["Filament\\Forms\\Components\\Select"] : []),
@@ -290,6 +300,24 @@ export const repeaterComponent = (
     ],
   };
 };
+
+/**
+ * An item's form fields, each with its path in the item: its columns, then its media, relations
+ * and nested repeatables, written by the caller's own components for the last three.
+ */
+export const childFields = (
+  child: ChildTableEmit,
+  write: {
+    media: (m: ChildMedia) => string;
+    relation: (r: ComponentRelation) => string;
+    child: (nested: ChildTableEmit, index: number) => string;
+  },
+): LaidOutField[] => [
+  ...child.emits.map((e, i) => ({ path: child.emitPaths[i]!, code: e.formComponent })),
+  ...child.media.map((m) => ({ path: m.path, code: write.media(m) })),
+  ...child.relations.map((r) => ({ path: r.path, code: write.relation(r) })),
+  ...child.children.map((n, i) => ({ path: n.path, code: write.child(n, i) })),
+];
 
 /** How the admin picks a relation inside a component: what the record's draft and locale narrow. */
 export interface RelationPickers {

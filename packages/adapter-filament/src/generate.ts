@@ -392,7 +392,14 @@ export const filamentAdapter: GenerateAdapter = {
           ],
           embeddedEmits,
           [
-            ...ctChildren.map((c) => repeaterComponent(c, pickers)),
+            ...ctChildren.map((c) =>
+              repeaterComponent(
+                c,
+                pickers,
+                1,
+                contentManager === undefined ? undefined : doc.components,
+              ),
+            ),
             ...(apiStyle === "strapi"
               ? expansion.zones.map((z) =>
                   zoneBuilder(ct, z, fileModel !== undefined, context, pickers),
@@ -414,7 +421,7 @@ export const filamentAdapter: GenerateAdapter = {
                 field: camelPath(s.path),
                 multiple: s.field.type === "media" && s.field.multiple === true,
                 ...mediaAllowedTypes(s.field),
-                attribute: s.path[0]!,
+                path: s.path,
               })),
             ],
             ...(contentManager === undefined
@@ -423,14 +430,15 @@ export const filamentAdapter: GenerateAdapter = {
                   contentManager: {
                     fields: ct.fields,
                     relations: rel.adminRelations.get(ct.name) ?? [],
-                    componentRelationAttributes: ownRelations.map((r) => r.path[0]!),
-                    extraAttributes: expansion.scalars
+                    componentRelationPaths: ownRelations.map((r) => r.path),
+                    extraPaths: expansion.scalars
                       .filter((s) => !embeddedMedia.includes(s))
-                      .map((s) => s.path[0]!),
-                    repeaterAttributes: [
-                      ...expansion.tables.map((t) => t.path[0]!),
-                      ...(apiStyle === "strapi" ? expansion.zones.map((z) => z.name) : []),
+                      .map((s) => s.path),
+                    repeaterPaths: [
+                      ...expansion.tables.map((t) => t.path),
+                      ...(apiStyle === "strapi" ? expansion.zones.map((z) => [z.name]) : []),
                     ],
+                    components: doc.components,
                     prohibited: prohibitedCloningFields(doc, ct),
                   },
                 }),

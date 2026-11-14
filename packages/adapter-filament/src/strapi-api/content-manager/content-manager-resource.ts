@@ -1,4 +1,5 @@
-import { fieldApiName, type ContentType, type Field } from "@camis/ir-schema";
+import { fieldApiName, type Component, type ContentType, type Field } from "@camis/ir-schema";
+import { componentLayout } from "../../component-layout";
 import { strapiNames } from "@camis/strapi-schema";
 import type { FieldEmit } from "../../fields";
 import { filamentNames, snakeColumn } from "../../names";
@@ -21,23 +22,30 @@ export interface ContentManagerInput {
   fields: readonly Field[];
   /** Each relation form field's attribute, in the order of the resource's relation fields. */
   relations: readonly AdminRelation[];
-  /** The attribute each embedded component column belongs to, in the order of its emits. */
-  extraAttributes: readonly string[];
-  /** The attribute each picker for a relation inside an embedded component belongs to, in the
-   * order of the relation fields that follow the type's own. */
-  componentRelationAttributes: readonly string[];
-  /** The attribute each repeater or zone builder edits, in the order of the repeaters. */
-  repeaterAttributes: readonly string[];
+  /** The field-name path to each embedded component column, in the order of its emits. */
+  extraPaths: readonly (readonly string[])[];
+  /** The path to each picker for a relation inside an embedded component, in the order of the
+   * relation fields that follow the type's own. */
+  componentRelationPaths: readonly (readonly string[])[];
+  /** The path to the field each repeater or zone builder edits, in the order of the repeaters. */
+  repeaterPaths: readonly (readonly string[])[];
+  /** The project's components, which an embedded component's own view lays out. */
+  components: readonly Component[];
   /** The fields that keep an entry from being duplicated directly. */
   prohibited: readonly string[];
 }
 
 type Names = ReturnType<typeof filamentNames>;
 
-/** A form component as the Content Manager's form lists it under its attribute. */
+/**
+ * A form component as the Content Manager's form lists it under its attribute; `path` leads to
+ * the field it edits. An embedded component's are one `layout`: its own view lays them out.
+ */
 interface Placed {
   attribute: string;
+  path: readonly string[];
   component: string;
+  layout?: true;
 }
 
 const UID_IMPORTS = [
@@ -95,7 +103,7 @@ export const contentManagerForm = (
   own: { fields: readonly Field[]; emits: readonly FieldEmit[] },
   extraEmits: readonly FieldEmit[],
   relationFields: readonly string[],
-  media: readonly { component: string; attribute: string }[],
+  media: readonly { component: string; path: readonly string[] }[],
   repeaters: readonly string[],
   options: { localized: boolean; formComponent: (e: FieldEmit) => string },
 ): ContentManagerForm => {
@@ -132,22 +140,37 @@ export const contentManagerForm = (
         targeting.map((u) => ({ column: u.column, generate: generateFor(u) })),
       );
     }
-    placed.push({ attribute: f.name, component });
+    placed.push({ attribute: f.name, path: [f.name], component });
   });
-  extraEmits.forEach((e, i) =>
-    placed.push({ attribute: input.extraAttributes[i]!, component: options.formComponent(e) }),
-  );
-  const relationAttributes = [
-    ...input.relations.map((r) => r.attribute),
-    ...input.componentRelationAttributes,
+  const at = (path: readonly string[], component: string): Placed => ({
+    attribute: path[0]!,
+    path,
+    component,
+  });
+  extraEmits.forEach((e, i) => placed.push(at(input.extraPaths[i]!, options.formComponent(e))));
+  const relationPaths = [
+    ...input.relations.map((r) => [r.attribute]),
+    ...input.componentRelationPaths,
   ];
-  relationFields.forEach((s, i) =>
-    placed.push({ attribute: relationAttributes[i]!, component: s }),
-  );
-  media.forEach((m) => placed.push(m));
-  repeaters.forEach((r, i) =>
-    placed.push({ attribute: input.repeaterAttributes[i]!, component: r }),
-  );
+  relationFields.forEach((s, i) => placed.push(at(relationPaths[i]!, s)));
+  media.forEach((m) => placed.push(at(m.path, m.component)));
+  repeaters.forEach((r, i) => placed.push(at(input.repeaterPaths[i]!, r)));
+  // An embedded component's fields go to its own view, which lays them out.
+  for (const f of input.fields) {
+    if (f.type !== "component" || f.repeatable === true) continue;
+    const component = input.components.find((c) => c.name === f.component);
+    const inside = placed.filter((p) => p.attribute === f.name && p.path.length > 1);
+    if (component === undefined || inside.length === 0) continue;
+    const layout = componentLayout(
+      component,
+      inside.map((p) => ({ path: p.path.slice(1), code: p.component })),
+      input.components,
+      "            ",
+    );
+    const first = placed.indexOf(inside[0]!);
+    placed.splice(first, 0, { attribute: f.name, path: [f.name], component: layout, layout: true });
+    for (const p of inside) placed.splice(placed.indexOf(p), 1);
+  }
 
   const componentsOf = (name: string): string[] =>
     placed.filter((p) => p.attribute === name).map((p) => p.component);
@@ -184,8 +207,10 @@ export const contentManagerFormBody = (
   const components = form.attributes
     .filter((a) => form.placed.some((p) => p.attribute === a.name))
     .map((a) => {
-      const list = form.placed
-        .filter((p) => p.attribute === a.name)
+      const placed = form.placed.filter((p) => p.attribute === a.name);
+      const layout = placed.find((p) => p.layout === true);
+      if (layout !== undefined) return `            '${a.name}' => ${layout.component},`;
+      const list = placed
         .map((p) => `                ${p.component.replace(/\n/g, "\n    ")},`)
         .join("\n");
       return `            '${a.name}' => [\n${list}\n            ],`;

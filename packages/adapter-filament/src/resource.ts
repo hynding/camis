@@ -53,7 +53,7 @@ export const emitResourceFiles = (
       multiple: boolean;
       allowedTypes?: readonly string[];
       /** The attribute it belongs to: the field, or the embedded component holding it. */
-      attribute?: string;
+      path?: readonly string[];
     }[];
     /** Its place in a Strapi-like menu, which also words the list's create button as Strapi's. */
     navigation?: Navigation;
@@ -106,7 +106,7 @@ export const emitResourceFiles = (
           relationFields,
           (options.media ?? []).map((m) => ({
             component: mediaComponent(m),
-            attribute: m.attribute ?? m.field,
+            path: m.path ?? [m.field],
           })),
           repeaters.map((r) => r.component),
           { localized, formComponent: formComponentOf },

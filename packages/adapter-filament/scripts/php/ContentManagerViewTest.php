@@ -300,6 +300,53 @@ class ContentManagerViewTest extends TestCase
         $this->assertSame(7, (int) $post->fresh()->views);
     }
 
+    public function test_a_relation_is_labelled_by_the_main_field_its_view_names(): void
+    {
+        $this->login(['post.read', 'post.update']);
+        $author = Author::create(['name' => 'Ann']);
+        $post = Post::create(['title' => 'Kept', 'views' => 7, 'author_id' => $author->id]);
+        $this->assertSame('name', StrapiContentManager::configuration(PostResource::CONTENT_MANAGER)['metadatas']['author']['edit']['mainField']);
+        // As Strapi's "Configure the view" saves a relation's entry title, for the form and the list.
+        $stored = StrapiContentManager::defaults(PostResource::CONTENT_MANAGER);
+        $stored['metadatas']['author']['edit']['mainField'] = 'id';
+        $stored['metadatas']['author']['list']['mainField'] = 'id';
+        StrapiSettings::merge(StrapiContentManager::key(PostResource::CONTENT_MANAGER), $stored);
+
+        Livewire::test(EditPost::class, ['record' => $post->getRouteKey()])
+            ->assertFormFieldExists('author_id', fn (\Filament\Forms\Components\Select $select): bool => $select->getOptionLabel() === (string) $author->id);
+        Livewire::test(ListPosts::class)
+            ->assertTableColumnStateSet('author.name', (string) $author->id, $post);
+
+        // A main field the target does not have falls back to its default here, and saving the view
+        // keeps the one Strapi stored, for the export to give back.
+        $stored['metadatas']['author']['edit']['mainField'] = 'gone';
+        StrapiSettings::merge(StrapiContentManager::key(PostResource::CONTENT_MANAGER), $stored);
+        $this->assertSame('name', StrapiContentManager::configuration(PostResource::CONTENT_MANAGER)['metadatas']['author']['edit']['mainField']);
+        $view = PostResource::CONTENT_MANAGER;
+        StrapiContentManager::save($view, StrapiContentManager::fromFormState($view, StrapiContentManager::formState($view)));
+        $this->assertSame('gone', StrapiSettings::get(StrapiContentManager::key($view))['metadatas']['author']['edit']['mainField']);
+    }
+
+    public function test_a_components_fields_are_laid_out_by_its_view(): void
+    {
+        $this->login(['menu.read', 'menu.update']);
+        $menu = \App\Models\Menu::create(['title' => 'Main']);
+        // Link's view as Strapi keeps it: author before label, label renamed and locked, topics left out.
+        StrapiSettings::merge('content-manager.configuration.components::shared.link', [
+            'settings' => ['mainField' => 'label'],
+            'metadatas' => ['label' => ['edit' => ['label' => 'Link text', 'description' => 'What the link says', 'placeholder' => '', 'visible' => true, 'editable' => false]]],
+            'layouts' => ['edit' => [[['name' => 'author', 'size' => 6], ['name' => 'label', 'size' => 6]]]],
+        ]);
+
+        Livewire::test(\App\Filament\Resources\Menus\Pages\EditMenu::class, ['record' => $menu->getRouteKey()])
+            ->assertSee('Link text')
+            ->assertSee('What the link says')
+            ->assertFormFieldDisabled('cta_label')
+            // What the view leaves out is still edited, after what it lays out: hiding it would lose its data.
+            ->assertFormFieldVisible('ctaTopics')
+            ->assertFormFieldVisible('cta_author_id');
+    }
+
     public function test_a_saved_view_follows_the_type_as_it_changes(): void
     {
         $view = PostResource::CONTENT_MANAGER;

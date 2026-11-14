@@ -1775,8 +1775,8 @@ they had configured. Strapi's `strapi export` carries every view in its configur
 - **Saving a view** in "Configure the view" keeps what Strapi stored beyond what this admin uses
   (`relationOpenMode`, a relation's `mainField`, the uid), so it goes back to Strapi whole.
 
-Not built: laying out a component's fields by its view (they stay boxed together), and a relation's
-`mainField` changing the admin's pickers and list column. Both views are kept for an export.
+Not built here: laying out a component's fields by its view, and a relation's `mainField` changing
+the admin's pickers and list column (both done in Phase 70). Both views are kept for an export.
 
 Exit: `ContentManagerViewTest.php` imports `transfer/view-config-export.tar.gz` (strapi-php's
 archive with Post's and Hero's views configured) and checks the list, the edit form and a later
@@ -2151,6 +2151,33 @@ Exit: `document.test.ts`, `schema.test.ts`, `component-schema.test.ts`, the impo
 `schema.test.ts`, `dynamic-zones.test.ts` and `content-type-builder.test.ts` cases;
 ContentTypeBuilderTest's description, relation-kind and column-type cases, and
 `schema-sync-check.php`'s type change on sqlite, mysql and pgsql.
+
+## Phase 70 — a component's view and a relation's main field in the admin (`adapter-filament`)
+
+Phase 54 brought Strapi's views over but applied only a type's own: a component's fields stayed
+boxed together in schema order, and a relation's entries were always labelled by the target's
+first text field.
+
+- **A relation's main field.** Each relation attribute of a resource's `CONTENT_MANAGER` names its
+  default `mainField` and the target's fields a view may title its entries by (`mainFields`, each
+  with its column: id and the scalar fields Strapi offers). The view's defaults and sync keep
+  `metadatas.<relation>.edit.mainField` and `.list.mainField`, a field the target no longer has
+  falling back to the default. Another main field than the default labels the form's picker by
+  that column (and searches it), and a to-one relation's list column shows it (not sortable then).
+- **A component's own view.** The Strapi-style form hands an embedded component's fields, a
+  repeatable's items and a dynamic zone's blocks to `StrapiContentManager::component(uid, fields)`,
+  keyed by each field's key on the API (a component embedded in it handed over the same way).
+  With a view kept under `content-manager.configuration.components::<uid>` (as `strapi:import`
+  keeps Strapi's), its edit layout's rows become grids of 12, each field sized, labelled,
+  described and locked as configured; a field the view does not lay out follows full width rather
+  than being hidden, since a component's view is not synced here. Without one, its fields keep
+  their schema order.
+
+Not built: choosing a relation's main field in "Configure the view", configuring a component's view
+here, and a relation's main field inside a component's view.
+
+Exit: `admin.test.ts` cases; ContentManagerViewTest's main-field and component-view cases in the
+`strapi-api` boot job.
 
 ---
 

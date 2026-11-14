@@ -305,9 +305,10 @@ describe("the Strapi-like admin", () => {
     expect(form).toContain(
       "return StrapiContentManager::form($schema, BookResource::CONTENT_MANAGER, [",
     );
-    // An embedded component's columns are edited together, under the component's attribute.
+    // An embedded component's columns are edited together, under the component's attribute, laid
+    // out by the component's own view.
     expect(form).toMatch(
-      /'price' => \[\n\s+TextInput::make\('price_minor'\)->numeric\(\),\n\s+TextInput::make\('price_currency'\),/,
+      /'price' => StrapiContentManager::component\('shared\.money', \[\n\s+'minor' => \[\n\s+TextInput::make\('price_minor'\)->numeric\(\),\n\s+\],\n\s+'currency' => \[\n\s+TextInput::make\('price_currency'\),/,
     );
     expect(content("app/Filament/Resources/Books/Pages/ListBooks.php")).toContain(
       "Action::make('configure')->label('Configure the view')",
@@ -335,5 +336,27 @@ describe("the Strapi-like admin", () => {
       laravel.files.find((f) => f.path === "app/Filament/Resources/Articles/ArticleResource.php")
         ?.content,
     ).not.toContain("StrapiNavigation");
+  });
+
+  // Strapi labels a linked entry by the relation's main field, which its view can change; the
+  // view names the target's attributes, so the constant says which column each one is.
+  it("tells the view which of the target's fields a relation can be labelled by", () => {
+    expect(content("app/Filament/Resources/Posts/PostResource.php")).toContain(
+      "'author' => ['type' => 'relation', 'relation' => 'manyToOne', 'list' => true, 'sort' => true, 'edit' => true, 'size' => 6, 'resizable' => true, 'mainField' => 'name', 'mainFields' => ['id' => 'id', 'name' => 'name']],",
+    );
+  });
+
+  // A component's own view (Strapi's components::<uid> configuration) lays out its fields: the
+  // form hands each component's fields over by attribute, nested components by theirs.
+  it("hands a component's fields to its view by attribute", () => {
+    const form = content("app/Filament/Resources/Menus/Schemas/MenuForm.php");
+    expect(form).toContain("'cta' => StrapiContentManager::component('shared.link', [");
+    expect(form).toContain(
+      "Repeater::make('items')->relationship()->schema(StrapiContentManager::component('shared.menu-item', [",
+    );
+    expect(form).toContain("'link' => StrapiContentManager::component('shared.link', [");
+    expect(form).toContain(
+      "Block::make('shared.link')->label('Link')->schema(StrapiContentManager::component('shared.link', [",
+    );
   });
 });
