@@ -7,6 +7,7 @@ namespace App\Filament\Pages;
 
 use App\Support\ContentTypeBuilder as Builder;
 use App\Support\ContentTypeBuilderSchema as ModelSchema;
+use App\Support\CustomFields;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -21,6 +22,7 @@ use Filament\Notifications\Notification;
 use Filament\Pages\Enums\SubNavigationPosition;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\EmbeddedTable;
+use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
@@ -374,7 +376,12 @@ class ContentTypeBuilder extends Page implements HasTable
         if ($field !== null && ModelSchema::convertible($field['type'])) {
             $kinds = array_intersect_key($kinds, array_flip(ModelSchema::COLUMN_KINDS));
         }
-        $is = fn (string ...$kinds): \Closure => fn (Get $get): bool => in_array($get('kind'), $kinds, true);
+        // The project's registered custom fields follow Strapi's cards, as its Custom tab does.
+        $customKinds = ModelSchema::customKinds();
+        $kinds += $field === null || ModelSchema::convertible($field['type']) ? $customKinds : [];
+        // A custom field shows the settings of the type it stores; only Strapi's cards choose one.
+        $is = fn (string ...$kinds): \Closure => fn (Get $get): bool => in_array(ModelSchema::card($get('kind')), $kinds, true);
+        $exactly = fn (string $kind): \Closure => fn (Get $get): bool => $get('kind') === $kind;
         $contentTypes = [];
         foreach ($ir['contentTypes'] as $type) {
             $contentTypes[$type['name']] = ModelSchema::displayName($type);
@@ -402,12 +409,12 @@ class ContentTypeBuilder extends Page implements HasTable
                 Tab::make('Basic settings')->schema([
                     TextInput::make('name')->label('Name')->required()->regex(ModelSchema::FIELD_NAME)
                         ->helperText('camelCase: a lowercase letter, then letters and digits. Renaming a field deletes its data.'),
-                    Radio::make('textType')->label('Type')->visible($is('text'))->default('string')
+                    Radio::make('textType')->label('Type')->visible($exactly('text'))->default('string')
                         ->options(['string' => 'Short text', 'text' => 'Long text'])
                         ->descriptions(['string' => 'Best for titles, names, links (URL)', 'text' => 'Best for descriptions, biography']),
-                    Select::make('numberType')->label('Number format')->visible($is('number'))->required($is('number'))
+                    Select::make('numberType')->label('Number format')->visible($exactly('number'))->required($exactly('number'))
                         ->options(['integer' => 'integer (ex: 10)', 'bigInteger' => 'big integer (ex: 123456789)', 'decimal' => 'decimal (ex: 2.22)', 'float' => 'float (ex: 3.3333333)']),
-                    Select::make('dateType')->label('Type')->visible($is('date'))->required($is('date'))
+                    Select::make('dateType')->label('Type')->visible($exactly('date'))->required($exactly('date'))
                         ->options(['date' => 'date (ex: 01/01/2024)', 'dateTime' => 'datetime (ex: 01/01/2024 00:00 AM)', 'time' => 'time (ex: 00:00 AM)', 'timestamp' => 'timestamp']),
                     Toggle::make('multiple')->label('Multiple media')->visible($is('media')),
                     Select::make('relationKind')->label('Relation')->visible($is('relation'))->required($is('relation'))->live()
@@ -421,6 +428,7 @@ class ContentTypeBuilder extends Page implements HasTable
                     Select::make('component')->label('Component')->visible($is('component'))->required($is('component'))->options($components),
                     Radio::make('repeatable')->label('Type')->visible($is('component'))->boolean('Repeatable component', 'Single component')->default(false),
                     CheckboxList::make('components')->label('Components')->visible($is('dynamicZone'))->required($is('dynamicZone'))->options($components),
+                    ...$this->customFieldOptions(),
                 ]),
                 Tab::make('Advanced settings')->schema([
                     TextInput::make('default')->label('Default value')
@@ -441,6 +449,25 @@ class ContentTypeBuilder extends Page implements HasTable
                 ]),
             ]),
         ];
+    }
+
+    /**
+     * Each registered custom field's own settings (its admin registration's options), shown when
+     * its card is chosen; what they hold is kept as the field's editor options.
+     *
+     * @return list<Group>
+     */
+    private function customFieldOptions(): array
+    {
+        $groups = [];
+        foreach (CustomFields::all() as $uid => $customField) {
+            if ($customField['options'] !== null) {
+                $groups[] = Group::make(($customField['options'])())->statePath('editorOptions')
+                    ->visible(fn (Get $get): bool => $get('kind') === ModelSchema::CUSTOM_KIND_PREFIX.$uid);
+            }
+        }
+
+        return $groups;
     }
 
     // ---- saving --------------------------------------------------------------------------------

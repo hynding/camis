@@ -11,6 +11,7 @@ import {
 import { normalize } from "@camis/ir-core";
 import { strapiNames } from "@camis/strapi-schema";
 import type { CapabilityGap } from "@camis/ir-schema";
+import { CUSTOM_FIELD_REGISTRATIONS_PATH, emitCustomFields } from "./custom-fields";
 import { aiFieldContentTypes, aiProviderFile, emitAiObserver, hasAiField } from "./ai";
 import {
   childMigrationFilename,
@@ -115,7 +116,8 @@ export const filamentAdapter: GenerateAdapter = {
     );
     const hooks = emitHookFiles(doc);
     const routeHooks = emitRouteHookFiles(doc, apiStyle === "strapi");
-    const files: GeneratedFile[] = [];
+    const files: GeneratedFile[] =
+      storage === "strapi" ? [] : emitCustomFields(doc, apiStyle === "strapi");
     const gaps: CapabilityGap[] = [
       ...draftPublish.gaps,
       ...localization.gaps,
@@ -124,7 +126,9 @@ export const filamentAdapter: GenerateAdapter = {
       ...guestGaps,
       ...publicActions.gaps,
       ...endpoints.gaps,
-      ...fieldEditorGaps(doc, "the Filament admin"),
+      ...(storage === "strapi"
+        ? fieldEditorGaps(doc, "the Filament admin")
+        : fieldEditorGaps(doc, "the Filament admin", CUSTOM_FIELD_REGISTRATIONS_PATH)),
       // The Strapi API style keeps private fields out of its answers; the Laravel one cannot.
       ...(apiStyle === "strapi" ? [] : privateFieldGaps(doc, "the Laravel API style")),
     ];

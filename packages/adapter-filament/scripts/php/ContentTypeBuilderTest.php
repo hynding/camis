@@ -516,10 +516,11 @@ class ContentTypeBuilderTest extends TestCase
         $this->develop();
         Process::fake();
 
-        Livewire::test(ContentTypeBuilder::class, ['type' => 'contentType:Tag'])
-            ->mountAction(TestAction::make('addField')->table())
-            ->assertSee('Rating')
-            ->assertSee('From one star to five');
+        // Offered after Strapi's own cards, as its Custom tab lists them.
+        $this->assertSame(
+            ['custom:plugin::stars.rating' => ['label' => 'Rating', 'description' => 'From one star to five', 'types' => ['integer']]],
+            \App\Support\ContentTypeBuilderSchema::customKinds(),
+        );
         Livewire::test(ContentTypeBuilder::class, ['type' => 'contentType:Tag'])
             ->callAction(TestAction::make('addField')->table(), data: [
                 'kind' => 'custom:plugin::stars.rating', 'name' => 'score', 'required' => true, 'editorOptions' => ['max' => '3'],
@@ -527,7 +528,7 @@ class ContentTypeBuilderTest extends TestCase
             ->assertHasNoActionErrors();
 
         $score = collect($this->type('Tag')['fields'])->firstWhere('name', 'score');
-        $this->assertSame(['type' => 'integer', 'name' => 'score', 'required' => true, 'editor' => ['name' => 'plugin::stars.rating', 'options' => ['max' => '3']]], $score);
+        $this->assertSame(['type' => 'integer', 'name' => 'score', 'required' => true, 'editor' => ['name' => 'plugin::stars.rating', 'options' => ['max' => 3]]], $score);
         $this->assertSame('custom:plugin::stars.rating', \App\Support\ContentTypeBuilderSchema::stateFromField($score)['kind']);
         $this->assertSame('Rating', \App\Support\ContentTypeBuilderSchema::typeLabel($score, $this->ir()));
 

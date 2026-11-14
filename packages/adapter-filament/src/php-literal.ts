@@ -17,3 +17,14 @@ export const phpSingleQuoted = (s: string): string =>
  * backslash is not an escape character in standard SQL, so it must pass through untouched).
  */
 export const sqlSingleQuoted = (s: string): string => `'${s.replace(/'/g, "''")}'`;
+
+/** JSON data (an IR field's editor options, say) as a PHP literal: lists and string-keyed arrays. */
+export const phpValue = (value: unknown): string => {
+  if (value === null || value === undefined) return "null";
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "number") return JSON.stringify(value);
+  if (typeof value === "string") return phpSingleQuoted(value);
+  if (Array.isArray(value)) return `[${value.map(phpValue).join(", ")}]`;
+  const entries = Object.entries(value as Record<string, unknown>);
+  return `[${entries.map(([key, item]) => `${phpSingleQuoted(key)} => ${phpValue(item)}`).join(", ")}]`;
+};

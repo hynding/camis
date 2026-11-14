@@ -1,6 +1,6 @@
 import type { Field } from "@camis/ir-schema";
 import { snakeColumn } from "./names";
-import { phpSingleQuoted } from "./php-literal";
+import { phpSingleQuoted, phpValue } from "./php-literal";
 
 export interface FieldEmit {
   column: string;
@@ -225,8 +225,14 @@ export const emitField = (field: Field, columnOverride?: string): FieldEmit => {
     (f.default !== undefined ? `->default(${phpDefault(f.default)})` : "");
   const pattern =
     typeof f.pattern === "string" ? `->regex(${phpSingleQuoted(pcre(f.pattern))})` : "";
+  // A custom field's input when the project registers one under the editor's uid (see
+  // App\Support\CustomFields), as Strapi's admin edits a custom field with its plugin's input.
+  const input =
+    field.editor === undefined
+      ? b.formComponent
+      : `(\\App\\Support\\CustomFields::input(${phpSingleQuoted(field.editor.name)}, '${column}', ${phpValue(field.editor.options ?? [])}) ?? ${b.formComponent})`;
   const formComponent =
-    b.formComponent + (required ? "->required()" : "") + (unique ? "->unique()" : "") + pattern;
+    input + (required ? "->required()" : "") + (unique ? "->unique()" : "") + pattern;
   return {
     column,
     migration,
