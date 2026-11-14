@@ -8,6 +8,7 @@ overwrite app/Console/Commands/StrapiImportTokens.php
 overwrite app/Filament/Forms/BlocksEditor.php
 overwrite app/Filament/Forms/BlocksStateCast.php
 overwrite app/Filament/Forms/JsonEditor.php
+overwrite app/Filament/Pages/AdminProfile.php
 overwrite app/Filament/Pages/ContentTypeBuilder.php
 overwrite app/Filament/Pages/DataTransfer.php
 overwrite app/Filament/Pages/EmailSettings.php
@@ -240,6 +241,7 @@ overwrite app/Http/Controllers/Api/RoleController.php
 overwrite app/Http/Controllers/Api/SessionController.php
 overwrite app/Http/Controllers/Api/UploadController.php
 overwrite app/Http/Controllers/Api/UserController.php
+overwrite app/Http/Middleware/AdminLocale.php
 overwrite app/Http/Middleware/StrapiActiveUser.php
 overwrite app/Http/Middleware/StrapiApiToken.php
 overwrite app/Http/Middleware/StrapiCredentials.php
@@ -389,6 +391,7 @@ overwrite app/Support/StrapiValidator.php
 overwrite app/Support/StrapiWebhooks.php
 overwrite app/Support/StrapiZones.php
 overwrite config/auth.php
+overwrite config/camis-admin.php
 overwrite config/camis.php
 overwrite config/content-type-builder.php
 overwrite config/cors.php

@@ -148,13 +148,32 @@ describe("patchAdminPanelProvider", () => {
   // Admin accounts are AdminUser rows on the generated admin guard, apart from the API's users.
   it("signs the admin panel in on the admin guard", () => {
     expect(patchAdminPanelProvider(STOCK_PANEL)).toContain(
-      "            ->login()\n            ->authGuard('admin')\n            ->colors([",
+      "            ->login()\n            ->authGuard('admin')\n            ->profile(",
     );
   });
 
   it("is idempotent", () => {
     const once = patchAdminPanelProvider(STOCK_PANEL);
     expect(patchAdminPanelProvider(once)).toBe(once);
+  });
+
+  // Strapi's profile page sets an admin's interface language, which the whole admin then speaks.
+  it("gives the panel the admin's profile page and interface language", () => {
+    const patched = patchAdminPanelProvider(STOCK_PANEL);
+    expect(patched).toContain(
+      "->profile(\\App\\Filament\\Pages\\AdminProfile::class, isSimple: false)",
+    );
+    expect(patched).toContain(
+      "->middleware([\\App\\Http\\Middleware\\AdminLocale::class], isPersistent: true)",
+    );
+  });
+
+  it("adds them to a panel an earlier camis already put on the admin guard", () => {
+    const earlier = STOCK_PANEL.replace(
+      "            ->login()\n",
+      "            ->login()\n            ->authGuard('admin')\n",
+    );
+    expect(patchAdminPanelProvider(earlier)).toBe(patchAdminPanelProvider(STOCK_PANEL));
   });
 });
 

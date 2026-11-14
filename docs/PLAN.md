@@ -2065,6 +2065,24 @@ new hash, so its url and every cached link to it changed, and its admin had neit
 Exit: the media vectors' replace cases on every database, and MediaAdminTest's replace and crop
 cases.
 
+## Phase 67 — admin interface languages (`adapter-filament`, `cli`)
+
+Strapi's admin speaks each admin's interface language (`preferedLanguage`, picked on the profile
+page among the admin's `config.locales`). camis kept the column and imported it with the admin
+accounts, but its admin had no profile page and always spoke the app's locale.
+
+- **Panel.** `camis scaffold` (and `patchAdminPanelProvider`, which completes a panel an earlier
+  camis put on the admin guard) gives the admin panel `AdminProfile` and the persistent
+  `AdminLocale` middleware.
+- **Profile.** Names, username, email, password (with the current one), and an interface language
+  among `CAMIS_ADMIN_LOCALES` (`config/camis-admin.php`, default `en`), each by its own name.
+- **Locale.** Each admin request speaks the signed-in admin's language when it is one of those
+  locales, else the app's; Filament ships its own strings in most of Strapi's admin languages.
+- Not imported: Strapi keeps `config.locales` in `src/admin/app.(js|tsx)`, code rather than a
+  declarative file, so a project names its languages in `CAMIS_ADMIN_LOCALES`.
+
+Exit: the scaffold patch tests and AdminAccountsTest's interface-language case.
+
 ---
 
 ## Sequencing rationale (quick reference)

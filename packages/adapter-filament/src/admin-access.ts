@@ -19,6 +19,9 @@ export const ADMIN_USER_MODEL_PATH = "app/Models/AdminUser.php";
 export const ADMIN_USERS_MIGRATION_PATH =
   "database/migrations/0001_01_01_000003_create_admin_users_table.php";
 export const AUTH_CONFIG_PATH = "config/auth.php";
+export const ADMIN_PROFILE_PATH = "app/Filament/Pages/AdminProfile.php";
+export const ADMIN_LOCALE_PATH = "app/Http/Middleware/AdminLocale.php";
+export const ADMIN_LOCALES_CONFIG_PATH = "config/camis-admin.php";
 
 const adminPhp = (path: string): string =>
   runtimePhp(new URL(`./strapi-api/admin/php/${path}`, import.meta.url));
@@ -80,6 +83,9 @@ export const emitAdminAccessFiles = (
     { path: ADMIN_USER_MODEL_PATH, content: adminPhp(ADMIN_USER_MODEL_PATH) },
     { path: ADMIN_USERS_MIGRATION_PATH, content: adminPhp(ADMIN_USERS_MIGRATION_PATH) },
     { path: AUTH_CONFIG_PATH, content: adminPhp(AUTH_CONFIG_PATH) },
+    { path: ADMIN_PROFILE_PATH, content: adminPhp(ADMIN_PROFILE_PATH) },
+    { path: ADMIN_LOCALE_PATH, content: adminPhp(ADMIN_LOCALE_PATH) },
+    { path: ADMIN_LOCALES_CONFIG_PATH, content: adminPhp(ADMIN_LOCALES_CONFIG_PATH) },
   ],
   gaps: noAdminRole(roles),
 });
