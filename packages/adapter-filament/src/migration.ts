@@ -15,6 +15,10 @@ export const foreignKeysMigrationFilename = (ct: ContentType, ordinal: number): 
 export const pivotMigrationFilename = (pivot: PivotTable, ordinal: number): string =>
   `database/migrations/0001_01_02_${String(ordinal).padStart(6, "0")}_create_${pivot.table}_table.php`;
 
+/** A datetime column, `$table->dateTime('x')` or `$table->timestamp('x')`, with millisecond precision. */
+export const withMilliseconds = (column: string): string =>
+  column.replace(/^(\$table->(?:dateTime|timestamp)\('[^']+')\)/, "$1, 3)");
+
 export const emitMigration = (
   ct: ContentType,
   fkColumns: string[] = [],
@@ -25,6 +29,8 @@ export const emitMigration = (
     localized?: boolean;
     /** Strapi's createdBy and updatedBy: the users who made and last changed the row. */
     creatorFields?: boolean;
+    /** Strapi keeps milliseconds in every datetime column, its own timestamps included. */
+    milliseconds?: boolean;
   } = {},
 ): string => {
   const names = filamentNames(ct);
@@ -37,8 +43,11 @@ export const emitMigration = (
     : "";
   // A document's rows can carry the same values, so a unique field cannot be unique per row (a
   // reported gap).
-  const migration = (e: FieldEmit): string =>
-    manyRows ? e.migration.replace("->unique()", "") : e.migration;
+  const milliseconds = options.milliseconds === true;
+  const migration = (e: FieldEmit): string => {
+    const column = manyRows ? e.migration.replace("->unique()", "") : e.migration;
+    return milliseconds ? withMilliseconds(column) : column;
+  };
   const fieldCols = [
     ...ct.fields
       .filter((f) => f.type !== "relation" && f.type !== "component")
@@ -46,7 +55,9 @@ export const emitMigration = (
     ...extraEmits,
   ].map((e) => `            ${migration(e)};`);
   const publishedAtCol = [
-    ...(options.draftPublish ? ["            $table->timestamp('published_at')->nullable();"] : []),
+    ...(options.draftPublish
+      ? [`            $table->timestamp('published_at'${milliseconds ? ", 3" : ""})->nullable();`]
+      : []),
     ...(options.localized ? ["            $table->string('locale', 16)->index();"] : []),
   ];
   const fkCols = [
@@ -74,7 +85,7 @@ return new class extends Migration
         Schema::create('${names.table}', function (Blueprint $table): void {
             $table->id();${documentIdCol}
 ${columns}
-            $table->timestamps();
+            $table->timestamps(${milliseconds ? "3" : ""});
         });
     }
 

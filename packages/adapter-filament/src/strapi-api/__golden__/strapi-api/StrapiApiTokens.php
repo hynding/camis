@@ -89,6 +89,14 @@ final class StrapiApiTokens
             'update' => 'plugin::users-permissions.user.update',
             'destroy' => 'plugin::users-permissions.user.destroy',
         ],
+        'App\Http\Controllers\Api\RoleController' => [
+            'find' => 'plugin::users-permissions.role.find',
+            'findOne' => 'plugin::users-permissions.role.findOne',
+            'createRole' => 'plugin::users-permissions.role.createRole',
+            'updateRole' => 'plugin::users-permissions.role.updateRole',
+            'deleteRole' => 'plugin::users-permissions.role.deleteRole',
+            'getPermissions' => 'plugin::users-permissions.permissions.getPermissions',
+        ],
         'App\Http\Controllers\Api\EmailController' => [
             'send' => 'plugin::email.email.send',
         ],

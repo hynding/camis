@@ -358,7 +358,7 @@ final class StrapiQuery
             'integer' => is_numeric($value) ? (int) $value : $value,
             'float', 'decimal' => is_numeric($value) ? (float) $value : $value,
             'date' => self::parseDate($value)?->format('Y-m-d') ?? $value,
-            'dateTime', 'timestamp' => self::parseDate($value)?->utc()->format('Y-m-d H:i:s') ?? $value,
+            'dateTime', 'timestamp' => self::parseDate($value)?->utc()->format('Y-m-d H:i:s.v') ?? $value,
             default => $value,
         };
     }

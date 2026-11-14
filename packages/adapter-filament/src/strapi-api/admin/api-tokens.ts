@@ -92,6 +92,17 @@ const pluginRoutes = (input: ApiTokensInput): [string, [string, string][]][] => 
       ["destroy", `${USERS_PERMISSIONS}.user.destroy`],
     ],
   ],
+  [
+    "RoleController",
+    [
+      ["find", `${USERS_PERMISSIONS}.role.find`],
+      ["findOne", `${USERS_PERMISSIONS}.role.findOne`],
+      ["createRole", `${USERS_PERMISSIONS}.role.createRole`],
+      ["updateRole", `${USERS_PERMISSIONS}.role.updateRole`],
+      ["deleteRole", `${USERS_PERMISSIONS}.role.deleteRole`],
+      ["getPermissions", `${USERS_PERMISSIONS}.permissions.getPermissions`],
+    ],
+  ],
   ["EmailController", [["send", "plugin::email.email.send"]]],
   ...(input.fileModel === undefined
     ? []

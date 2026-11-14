@@ -338,6 +338,7 @@ export const filamentAdapter: GenerateAdapter = {
                   "App\\Models\\Concerns\\EmitsStrapiEvents",
                   "App\\Models\\Concerns\\HasDocumentId",
                   "App\\Models\\Concerns\\HasCreatorFields",
+                  "App\\Models\\Concerns\\HasMillisecondTimestamps",
                 ]
               : []),
             ...(versioned.has(ct.name) ? ["App\\Models\\Concerns\\HasDraftAndPublish"] : []),
@@ -376,6 +377,7 @@ export const filamentAdapter: GenerateAdapter = {
             draftPublish: versioned.has(ct.name),
             localized: localized.has(ct.name),
             creatorFields: apiStyle === "strapi",
+            milliseconds: apiStyle === "strapi",
           },
         ),
       });
@@ -447,7 +449,7 @@ export const filamentAdapter: GenerateAdapter = {
       allChildren.forEach((child) => {
         files.push({
           path: `app/Models/${child.model}.php`,
-          content: emitChildModel(child, fileModel),
+          content: emitChildModel(child, fileModel, apiStyle === "strapi"),
         });
       });
       if (apiStyle === "laravel") {
@@ -509,7 +511,7 @@ export const filamentAdapter: GenerateAdapter = {
         .forEach(({ child }, k) => {
           files.push({
             path: childMigrationFilename(child, emitted.length + rel.pivots.length + 1 + k),
-            content: emitChildMigration(child),
+            content: emitChildMigration(child, apiStyle === "strapi"),
           });
         });
 

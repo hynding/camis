@@ -2083,6 +2083,39 @@ accounts, but its admin had no profile page and always spoke the app's locale.
 
 Exit: the scaffold patch tests and AdminAccountsTest's interface-language case.
 
+## Phase 68 — what a second sitlab migration found (`adapter-filament`)
+
+A fresh end-to-end run of sitlab (strapi-php → camis, after Phases 64–67): re-imported
+`camis.json`, `roles.json` and `deployment.env` came out unchanged, its seven conformance fixtures
+pass on both runtimes, and an export → `strapi:import` left the REST answers identical except for:
+
+- **Milliseconds.** Strapi keeps them in every datetime; the Laravel storage layout kept seconds,
+  so the PWA's `sort=updatedAt:desc` could not order two writes in one second, and every imported
+  time lost its milliseconds. On the Strapi API style, a content type's, a component table's and
+  the media library's `created_at`, `updated_at` and `published_at`, and every `dateTime` and
+  `timestamp` field, are `(…, 3)` columns; their models use `HasMillisecondTimestamps`
+  (`Y-m-d H:i:s.v`); filters and `strapi:import` write the same form. An app migrated before keeps
+  its second-precision columns until they are rebuilt (writes round to the column), and on SQLite
+  an `$eq` filter misses rows stored without milliseconds.
+- **Roles over the content API.** strapi-php lists the users-permissions roles
+  (`GET /users-permissions/roles`, `/roles/:id` with the permission tree, `/permissions`) to an API
+  token holding the action; camis forbade them to everyone. They are now served to such a token
+  (full access; read-only for find/findOne; custom tokens that hold `plugin::users-permissions.role.*`
+  or `permissions.getPermissions`, which the API Tokens page now offers). The admin's own roles are
+  left out, as Strapi keeps them apart; a session still gets 403, and so does every write, as the
+  grants are the IR's. The tree lists the actions the API Tokens page knows (Strapi also lists the
+  Content-Type Builder's and a few others camis does not serve).
+- **Role times.** `strapi:import` gives a role the archive's `createdAt` and `updatedAt` beside its
+  documentId (Spatie's roles table keeps seconds).
+
+Left as they are, and listed in sitlab's README: after `/auth/logout` camis refuses the session's
+access token at once where Strapi honours it until it expires (deliberate); a project without a
+localized type has no `/api/i18n/locales` (Strapi's i18n plugin always answers with the default
+locale); component ids are renumbered by an import, as Strapi's own import does.
+
+Exit: `migration.test.ts`, `generate.test.ts` and `sessions.test.ts` cases; ApiTokensTest's
+roles, session and millisecond cases in the `strapi-api` boot job.
+
 ---
 
 ## Sequencing rationale (quick reference)

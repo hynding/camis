@@ -417,8 +417,8 @@ final class StrapiImport
     }
 
     /**
-     * A role keeps the documentId the archive gave it, as Strapi's import keeps every entry's; the
-     * role itself, and what it grants, stay the IR's.
+     * A role keeps the documentId and times the archive gave it, as Strapi's import keeps every
+     * entry's; the role itself, and what it grants, stay the IR's.
      *
      * @param list<array<string, mixed>> $entities
      */
@@ -439,7 +439,12 @@ final class StrapiImport
             }
             // Another role may hold it from an earlier import, and the column is unique.
             Role::query()->where('document_id', $documentId)->whereKeyNot($role->getKey())->update(['document_id' => null]);
-            $role->forceFill(['document_id' => $documentId])->saveQuietly();
+            $role->timestamps = false;
+            $role->forceFill([
+                'document_id' => $documentId,
+                'created_at' => self::value($entity['data']['createdAt'] ?? null, 'dateTime') ?? $role->created_at,
+                'updated_at' => self::value($entity['data']['updatedAt'] ?? null, 'dateTime') ?? $role->updated_at,
+            ])->saveQuietly();
         }
     }
 
@@ -1117,8 +1122,9 @@ final class StrapiImport
         }
 
         return match ($type) {
-            'dateTime' => CarbonImmutable::parse((string) $value)->utc()->format('Y-m-d H:i:s'),
-            'timestamp' => (is_numeric($value) ? CarbonImmutable::createFromTimestampMsUTC((float) $value) : CarbonImmutable::parse((string) $value))->utc()->format('Y-m-d H:i:s'),
+            // Strapi's datetimes keep their milliseconds, and so do this app's columns.
+            'dateTime' => CarbonImmutable::parse((string) $value)->utc()->format('Y-m-d H:i:s.v'),
+            'timestamp' => (is_numeric($value) ? CarbonImmutable::createFromTimestampMsUTC((float) $value) : CarbonImmutable::parse((string) $value))->utc()->format('Y-m-d H:i:s.v'),
             'json', 'blocks' => json_encode($value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
             'boolean' => (bool) $value,
             default => is_array($value) ? json_encode($value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE) : $value,

@@ -389,7 +389,7 @@ ${scopeBody(secured)}
             'integer' => is_numeric($value) ? (int) $value : $value,
             'float', 'decimal' => is_numeric($value) ? (float) $value : $value,
             'date' => self::parseDate($value)?->format('Y-m-d') ?? $value,
-            'dateTime', 'timestamp' => self::parseDate($value)?->utc()->format('Y-m-d H:i:s') ?? $value,
+            'dateTime', 'timestamp' => self::parseDate($value)?->utc()->format('Y-m-d H:i:s.v') ?? $value,
             default => $value,
         };
     }
@@ -668,5 +668,8 @@ export const emitStrapiError = (): string =>
  * which keeps the generated app free of a dependency for it. Filled on create unless the caller
  * set one, so an import can carry ids across from Strapi.
  */
+export const emitHasMillisecondTimestamps = (): string =>
+  runtimePhp(new URL("./php/app/Models/Concerns/HasMillisecondTimestamps.php", import.meta.url));
+
 export const emitHasDocumentId = (): string =>
   runtimePhp(new URL("./php/app/Models/Concerns/HasDocumentId.php", import.meta.url));

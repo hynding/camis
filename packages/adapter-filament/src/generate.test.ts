@@ -688,7 +688,7 @@ describe("timestamps on the Strapi API style", () => {
           kind: "collection",
           fields: [
             { type: "dateTime", name: "airsAt" },
-            { type: "media", name: "still", allowedTypes: ["images"] },
+            { type: "media", name: "still", allowedTypes: ["image"] },
             { type: "component", name: "cues", component: "Cue", repeatable: true },
           ],
         },

@@ -172,4 +172,68 @@ class ApiTokensTest extends TestCase
 
         $this->asClient($jwt)->getJson('/api/users/me')->assertOk()->assertJsonPath('username', 'reader');
     }
+
+    public function test_a_token_holding_the_actions_reads_the_roles_and_their_permissions(): void
+    {
+        $this->seed(\Database\Seeders\RolePermissionSeeder::class);
+        User::factory()->create(['username' => 'member'])->assignRole('authenticated');
+        $full = StrapiApiTokens::create(['name' => 'full', 'type' => 'full-access']);
+
+        $roles = $this->asClient($full['accessKey'])->getJson('/api/users-permissions/roles')->assertOk()->json('roles');
+        $types = array_column($roles, 'type');
+        $this->assertContains('authenticated', $types);
+        $this->assertContains('public', $types);
+        $this->assertSame([], array_values(array_intersect($types, AdminUser::adminRoles())), 'the admin\'s roles are apart, as in Strapi');
+        $authenticated = $roles[array_search('authenticated', $types, true)];
+        $this->assertSame(['Authenticated', 'Default role given to authenticated user.', 1], [$authenticated['name'], $authenticated['description'], $authenticated['nb_users']]);
+
+        $role = $this->asClient($full['accessKey'])->getJson('/api/users-permissions/roles/'.$authenticated['id'])->assertOk()->json('role');
+        $this->assertSame(['enabled' => true, 'policy' => ''], $role['permissions']['api::book']['controllers']['book']['find']);
+        $public = $roles[array_search('public', $types, true)];
+        $this->asClient($full['accessKey'])->getJson('/api/users-permissions/roles/'.$public['id'])
+            ->assertOk()->assertJsonPath('role.permissions.api::book.controllers.book.create.enabled', false);
+        $this->asClient($full['accessKey'])->getJson('/api/users-permissions/roles/999999')->assertNotFound();
+        $this->asClient($full['accessKey'])->getJson('/api/users-permissions/permissions')
+            ->assertOk()->assertJsonPath('permissions.plugin::users-permissions.controllers.role.find.enabled', false);
+
+        // The grants are the IR's, rebuilt on every build: no write is taken, whatever the token.
+        $this->asClient($full['accessKey'])->postJson('/api/users-permissions/roles', ['name' => 'Editor'])->assertForbidden();
+        $this->asClient($full['accessKey'])->deleteJson('/api/users-permissions/roles/'.$public['id'])->assertForbidden();
+
+        $reader = StrapiApiTokens::create(['name' => 'reader', 'type' => 'read-only']);
+        $this->asClient($reader['accessKey'])->getJson('/api/users-permissions/roles')->assertOk();
+        $this->asClient($reader['accessKey'])->getJson('/api/users-permissions/permissions')->assertForbidden();
+        $books = StrapiApiTokens::create(['name' => 'books', 'type' => 'custom', 'permissions' => ['api::book.book.find']]);
+        $this->asClient($books['accessKey'])->getJson('/api/users-permissions/roles')->assertForbidden();
+    }
+
+    public function test_a_session_cannot_read_the_roles(): void
+    {
+        $this->seed(\Database\Seeders\RolePermissionSeeder::class);
+        $user = User::factory()->create(['username' => 'reader']);
+        $user->assignRole('authenticated');
+
+        $this->asClient($user->createToken('api')->plainTextToken)->getJson('/api/users-permissions/roles')->assertForbidden();
+        $this->app['auth']->forgetGuards();
+        $this->withHeaders(['Authorization' => ''])->getJson('/api/users-permissions/roles')->assertForbidden();
+    }
+
+    /** Strapi keeps milliseconds, so two writes within a second still sort apart by updatedAt. */
+    public function test_timestamps_keep_their_milliseconds(): void
+    {
+        $this->seed(\Database\Seeders\RolePermissionSeeder::class);
+        $full = StrapiApiTokens::create(['name' => 'full', 'type' => 'full-access']);
+        \Illuminate\Support\Carbon::setTestNow('2026-03-04 05:06:07.120');
+        $this->asClient($full['accessKey'])->postJson('/api/books', ['data' => ['title' => 'First']])
+            ->assertCreated()->assertJsonPath('data.createdAt', '2026-03-04T05:06:07.120Z');
+        \Illuminate\Support\Carbon::setTestNow('2026-03-04 05:06:07.450');
+        $this->asClient($full['accessKey'])->postJson('/api/books', ['data' => ['title' => 'Second', 'releasedAt' => '2026-01-02T03:04:05.678Z']])
+            ->assertCreated()->assertJsonPath('data.releasedAt', '2026-01-02T03:04:05.678Z');
+        \Illuminate\Support\Carbon::setTestNow();
+
+        $this->asClient($full['accessKey'])->getJson('/api/books?sort=updatedAt:desc&fields[0]=title')
+            ->assertOk()->assertJsonPath('data.0.title', 'Second')->assertJsonPath('data.1.title', 'First');
+        $this->asClient($full['accessKey'])->getJson('/api/books?filters[createdAt][$eq]=2026-03-04T05:06:07.120Z&fields[0]=title')
+            ->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.title', 'First');
+    }
 }

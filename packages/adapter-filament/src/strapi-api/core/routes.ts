@@ -274,11 +274,14 @@ export const emitStrapiRoutes = (
         Route::get('/auth/{provider}/callback', [ConnectController::class, 'signIn']);
     });
 
-    // Roles live in the IR, so no grant opens these: Strapi forbids them to the roles it ships.
+    // Roles live in the IR, so no grant opens these: an API token that holds the action reads them.
     Route::middleware([StrapiCredentials::class.':optional', StrapiActiveUser::class])->group(function (): void {
-        Route::match(['get', 'post'], '/users-permissions/roles', RoleController::class);
-        Route::match(['get', 'put', 'delete'], '/users-permissions/roles/{role}', RoleController::class);
-        Route::get('/users-permissions/permissions', RoleController::class);
+        Route::get('/users-permissions/roles', [RoleController::class, 'find']);
+        Route::post('/users-permissions/roles', [RoleController::class, 'createRole']);
+        Route::get('/users-permissions/roles/{role}', [RoleController::class, 'findOne']);
+        Route::put('/users-permissions/roles/{role}', [RoleController::class, 'updateRole']);
+        Route::delete('/users-permissions/roles/{role}', [RoleController::class, 'deleteRole']);
+        Route::get('/users-permissions/permissions', [RoleController::class, 'getPermissions']);
     });`
     : "";
   // Without roles nothing would guard who lists or makes accounts, so the routes are left out.
