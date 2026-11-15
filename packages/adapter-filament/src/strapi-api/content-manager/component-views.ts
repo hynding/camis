@@ -3,7 +3,13 @@ import { relationMainFields } from "../../relations";
 import { componentUid } from "../core/names";
 import { runtimePhp } from "../../runtime-php";
 import { PHP_MARKER } from "../../hooks/names";
-import { sortsBy, strapiType, viewAttributeRow, type ViewAttribute } from "./content-manager";
+import {
+  componentOf,
+  sortsBy,
+  strapiType,
+  viewAttributeRow,
+  type ViewAttribute,
+} from "./content-manager";
 
 export const STRAPI_COMPONENT_VIEWS_PATH = "app/Support/StrapiComponentViews.php";
 export const CONFIGURE_COMPONENT_VIEW_PATH = "app/Filament/Pages/ConfigureComponentView.php";
@@ -16,8 +22,8 @@ const componentAttribute = (
 ): ViewAttribute => {
   const type = strapiType(field);
   const name = fieldApiName(field);
+  // Strapi sorts a component by neither a relation nor its id, so neither may be its entry title.
   if (field.type === "relation") {
-    const multiple = field.relationKind === "manyToMany" || field.relationKind === "oneToMany";
     const titled = doc.contentTypes.some((c) => c.name === field.target)
       ? relationMainFields(doc, field.target)
       : {};
@@ -26,24 +32,22 @@ const componentAttribute = (
       type,
       relation: field.relationKind,
       list: true,
-      sort: !multiple,
+      sort: false,
       edit: true,
       ...titled,
     };
   }
-  const component =
-    field.type === "component" ? components.find((c) => c.name === field.component) : undefined;
   return {
     name,
     type,
     list: sortsBy(type),
     sort: sortsBy(type),
     edit: true,
-    ...(component === undefined ? {} : { component: componentUid(component) }),
+    ...componentOf(field, components),
   };
 };
 
-const ID: ViewAttribute = { name: "id", type: "integer", list: true, sort: true, edit: false };
+const ID: ViewAttribute = { name: "id", type: "integer", list: true, sort: false, edit: false };
 
 /**
  * Each component's view as the admin configures it (Strapi's "Configure the view" for a

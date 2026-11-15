@@ -103,13 +103,12 @@ final class StrapiContentManager
     {
         $synced = self::sync($view, $configuration);
         $stored = StrapiSettings::get(self::key($view));
-        $shown = self::sync($view, $stored)['metadatas'];
         $metadatas = [];
         foreach ($synced['metadatas'] as $name => $metadata) {
             $kept = (array) ($stored['metadatas'][$name] ?? []);
             $metadatas[$name] = [
-                'edit' => self::keepMainField((array) ($kept['edit'] ?? []), $metadata['edit'], $shown[$name]['edit']['mainField'] ?? null),
-                'list' => self::keepMainField((array) ($kept['list'] ?? []), $metadata['list'], $shown[$name]['list']['mainField'] ?? null),
+                'edit' => self::keepMainField($view['attributes'][$name], (array) ($kept['edit'] ?? []), $metadata['edit']),
+                'list' => self::keepMainField($view['attributes'][$name], (array) ($kept['list'] ?? []), $metadata['list']),
             ];
         }
         StrapiSettings::merge(self::key($view), [
@@ -231,7 +230,7 @@ final class StrapiContentManager
             return array_merge(...array_values($fields));
         }
         if ($view !== null) {
-            ['metadatas' => $metadatas, 'layouts' => ['edit' => $rows]] = self::componentConfiguration($view);
+            ['metadatas' => $metadatas, 'layouts' => ['edit' => $rows]] = self::componentConfiguration($uid);
         } else {
             $metadatas = (array) ($stored['metadatas'] ?? []);
         }
@@ -256,7 +255,9 @@ final class StrapiContentManager
         }
         foreach ($fields as $name => $list) {
             if (! isset($placed[$name])) {
-                $laidOut[] = self::field($list, $attribute($name), $name, (array) ($metadatas[$name]['edit'] ?? []), self::MAX_ROW_SIZE);
+                // Never locked: a disabled field is not written, and the view does not show it.
+                $edit = array_diff_key((array) ($metadatas[$name]['edit'] ?? []), ['editable' => true]);
+                $laidOut[] = self::field($list, $attribute($name), $name, $edit, self::MAX_ROW_SIZE);
             }
         }
 
@@ -273,9 +274,9 @@ final class StrapiContentManager
     }
 
     /** A component's kept view synced with the component as it is now, once a request. */
-    private static function componentConfiguration(array $view): array
+    private static function componentConfiguration(string $uid): array
     {
-        return once(fn (): array => self::configuration($view));
+        return once(fn (): array => self::configuration(StrapiComponentViews::VIEWS[$uid]));
     }
 
     /**
@@ -525,12 +526,13 @@ final class StrapiContentManager
     }
 
     /**
-     * Saved metadata over the kept. A relation's main field left as the form showed it keeps the
-     * one Strapi stored, even one this admin does not have (and so showed its default for).
+     * Saved metadata over the kept. A main field Strapi stored that the relation's target does not
+     * have here is shown as the default, so the default saved over it keeps it, for the export.
      */
-    private static function keepMainField(array $kept, array $metadata, ?string $shown): array
+    private static function keepMainField(array $attribute, array $kept, array $metadata): array
     {
-        if (isset($kept['mainField']) && ($metadata['mainField'] ?? null) === $shown) {
+        $unknown = isset($kept['mainField']) && ! isset($attribute['mainFields'][$kept['mainField']]);
+        if ($unknown && ($metadata['mainField'] ?? null) === ($attribute['mainField'] ?? null)) {
             unset($metadata['mainField']);
         }
 

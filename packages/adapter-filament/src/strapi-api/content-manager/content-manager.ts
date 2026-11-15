@@ -157,7 +157,7 @@ export const contentManagerAttributes = (
   fields: readonly FieldAdmin[],
   inverses: readonly AdminRelation[],
   relations: readonly AdminRelation[],
-  projectComponents: readonly Component[] = [],
+  projectComponents: readonly Component[],
 ): ContentManagerAttribute[] => {
   const relationOf = (name: string): AdminRelation | undefined =>
     relations.find((r) => r.attribute === name);
@@ -218,7 +218,8 @@ export const contentManagerAttributes = (
   ];
 };
 
-const componentOf = (
+/** A component attribute's component, by its uid; nothing for another field. */
+export const componentOf = (
   field: Field,
   components: readonly Component[],
 ): Pick<ContentManagerAttribute, "component"> => {

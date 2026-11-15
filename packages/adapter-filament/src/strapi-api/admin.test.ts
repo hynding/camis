@@ -367,7 +367,7 @@ describe("the Strapi-like admin", () => {
     const views = content("app/Support/StrapiComponentViews.php");
     expect(views).toContain("'shared.link' => [\n            'uid' => 'components::shared.link',");
     expect(views).toContain(
-      "'author' => ['type' => 'relation', 'relation' => 'oneToOne', 'list' => true, 'sort' => true, 'edit' => true, 'size' => 6, 'resizable' => true, 'mainField' => 'name', 'mainFields' => ['id' => 'id', 'name' => 'name']],",
+      "'author' => ['type' => 'relation', 'relation' => 'oneToOne', 'list' => true, 'sort' => false, 'edit' => true, 'size' => 6, 'resizable' => true, 'mainField' => 'name', 'mainFields' => ['id' => 'id', 'name' => 'name']],",
     );
     expect(views).toContain(
       "'link' => ['type' => 'component', 'list' => false, 'sort' => false, 'edit' => true, 'size' => 12, 'resizable' => false, 'component' => 'shared.link'],",

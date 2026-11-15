@@ -2264,12 +2264,12 @@ admin could set neither.
 
 - **A relation's entry title.** "Configure the view" offers an "Entry title" for each relation in
   the edit view and in the list, among the target's fields `mainFields` names (one it does not name
-  is refused). Saving a relation's entry title left as the form showed it keeps the one Strapi
-  stored, even one this admin does not have.
+  is refused). One Strapi stored that the target does not have here shows as the default, and
+  saving the default keeps it, for the export.
 - **A component's view.** `app/Support/StrapiComponentViews.php` (generated) holds each component's
   attributes as a type's `CONTENT_MANAGER` has them (`id`, then its fields, a relation's entry
-  titles and a nested component's uid included), and a type's component attribute names its
-  component's uid. The page `ConfigureComponentView` (`?component=<uid>`, out of the navigation)
+  titles and a nested component's uid included; as Strapi's, neither its id nor a relation sorts,
+  so neither is its entry title), and a type's component attribute names its component's uid. The page `ConfigureComponentView` (`?component=<uid>`, out of the navigation)
   edits the component's entry title and its edit view, saved under
   `content-manager.configuration.components::<uid>`; the edit view of a type that uses the
   component links to it. Configuring one takes the Settings grant (`user.update`), as Strapi gives

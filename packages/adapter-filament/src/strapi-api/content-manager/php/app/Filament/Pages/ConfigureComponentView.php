@@ -47,7 +47,8 @@ class ConfigureComponentView extends Page
     public function mount(): void
     {
         abort_unless(static::canAccess(), 403);
-        $this->component = (string) request()->query('component', $this->component);
+        $query = request()->query('component');
+        $this->component = is_string($query) ? $query : $this->component;
         abort_unless(isset(StrapiComponentViews::VIEWS[$this->component]), 404);
         $state = StrapiContentManager::formState($this->view());
         unset($state['list']);

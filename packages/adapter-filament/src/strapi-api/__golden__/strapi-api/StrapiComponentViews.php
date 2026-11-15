@@ -12,7 +12,7 @@ final class StrapiComponentViews
         'shared.line' => [
             'uid' => 'components::shared.line',
             'attributes' => [
-                'id' => ['type' => 'integer', 'list' => true, 'sort' => true, 'edit' => false, 'size' => 4, 'resizable' => true],
+                'id' => ['type' => 'integer', 'list' => true, 'sort' => false, 'edit' => false, 'size' => 4, 'resizable' => true],
                 'label' => ['type' => 'string', 'list' => true, 'sort' => true, 'edit' => true, 'size' => 6, 'resizable' => true],
                 'quantity' => ['type' => 'integer', 'list' => true, 'sort' => true, 'edit' => true, 'size' => 4, 'resizable' => true],
             ],
@@ -20,7 +20,7 @@ final class StrapiComponentViews
         'shared.frame' => [
             'uid' => 'components::shared.frame',
             'attributes' => [
-                'id' => ['type' => 'integer', 'list' => true, 'sort' => true, 'edit' => false, 'size' => 4, 'resizable' => true],
+                'id' => ['type' => 'integer', 'list' => true, 'sort' => false, 'edit' => false, 'size' => 4, 'resizable' => true],
                 'caption' => ['type' => 'string', 'list' => true, 'sort' => true, 'edit' => true, 'size' => 6, 'resizable' => true],
                 'image' => ['type' => 'media', 'list' => false, 'sort' => false, 'edit' => true, 'size' => 6, 'resizable' => true],
             ],
@@ -28,16 +28,16 @@ final class StrapiComponentViews
         'shared.link' => [
             'uid' => 'components::shared.link',
             'attributes' => [
-                'id' => ['type' => 'integer', 'list' => true, 'sort' => true, 'edit' => false, 'size' => 4, 'resizable' => true],
+                'id' => ['type' => 'integer', 'list' => true, 'sort' => false, 'edit' => false, 'size' => 4, 'resizable' => true],
                 'label' => ['type' => 'string', 'list' => true, 'sort' => true, 'edit' => true, 'size' => 6, 'resizable' => true],
-                'author' => ['type' => 'relation', 'relation' => 'oneToOne', 'list' => true, 'sort' => true, 'edit' => true, 'size' => 6, 'resizable' => true, 'mainField' => 'name', 'mainFields' => ['id' => 'id', 'name' => 'name']],
+                'author' => ['type' => 'relation', 'relation' => 'oneToOne', 'list' => true, 'sort' => false, 'edit' => true, 'size' => 6, 'resizable' => true, 'mainField' => 'name', 'mainFields' => ['id' => 'id', 'name' => 'name']],
                 'topics' => ['type' => 'relation', 'relation' => 'oneToMany', 'list' => true, 'sort' => false, 'edit' => true, 'size' => 6, 'resizable' => true, 'mainField' => 'name', 'mainFields' => ['id' => 'id', 'name' => 'name']],
             ],
         ],
         'shared.menu-item' => [
             'uid' => 'components::shared.menu-item',
             'attributes' => [
-                'id' => ['type' => 'integer', 'list' => true, 'sort' => true, 'edit' => false, 'size' => 4, 'resizable' => true],
+                'id' => ['type' => 'integer', 'list' => true, 'sort' => false, 'edit' => false, 'size' => 4, 'resizable' => true],
                 'label' => ['type' => 'string', 'list' => true, 'sort' => true, 'edit' => true, 'size' => 6, 'resizable' => true],
                 'link' => ['type' => 'component', 'list' => false, 'sort' => false, 'edit' => true, 'size' => 12, 'resizable' => false, 'component' => 'shared.link'],
                 'icon' => ['type' => 'component', 'list' => false, 'sort' => false, 'edit' => true, 'size' => 12, 'resizable' => false, 'component' => 'shared.frame'],
@@ -47,7 +47,7 @@ final class StrapiComponentViews
         'shared.seo' => [
             'uid' => 'components::shared.seo',
             'attributes' => [
-                'id' => ['type' => 'integer', 'list' => true, 'sort' => true, 'edit' => false, 'size' => 4, 'resizable' => true],
+                'id' => ['type' => 'integer', 'list' => true, 'sort' => false, 'edit' => false, 'size' => 4, 'resizable' => true],
                 'metaTitle' => ['type' => 'string', 'list' => true, 'sort' => true, 'edit' => true, 'size' => 6, 'resizable' => true],
                 'metaImage' => ['type' => 'media', 'list' => false, 'sort' => false, 'edit' => true, 'size' => 6, 'resizable' => true],
             ],
@@ -55,7 +55,7 @@ final class StrapiComponentViews
         'shared.hero' => [
             'uid' => 'components::shared.hero',
             'attributes' => [
-                'id' => ['type' => 'integer', 'list' => true, 'sort' => true, 'edit' => false, 'size' => 4, 'resizable' => true],
+                'id' => ['type' => 'integer', 'list' => true, 'sort' => false, 'edit' => false, 'size' => 4, 'resizable' => true],
                 'heading' => ['type' => 'string', 'list' => true, 'sort' => true, 'edit' => true, 'size' => 6, 'resizable' => true],
                 'subheading' => ['type' => 'text', 'list' => true, 'sort' => true, 'edit' => true, 'size' => 6, 'resizable' => true],
                 'price' => ['type' => 'component', 'list' => false, 'sort' => false, 'edit' => true, 'size' => 12, 'resizable' => false, 'component' => 'shared.money'],
@@ -64,7 +64,7 @@ final class StrapiComponentViews
         'shared.panel' => [
             'uid' => 'components::shared.panel',
             'attributes' => [
-                'id' => ['type' => 'integer', 'list' => true, 'sort' => true, 'edit' => false, 'size' => 4, 'resizable' => true],
+                'id' => ['type' => 'integer', 'list' => true, 'sort' => false, 'edit' => false, 'size' => 4, 'resizable' => true],
                 'heading' => ['type' => 'string', 'list' => true, 'sort' => true, 'edit' => true, 'size' => 6, 'resizable' => true],
                 'items' => ['type' => 'component', 'list' => false, 'sort' => false, 'edit' => true, 'size' => 12, 'resizable' => false, 'component' => 'shared.quantity'],
             ],
@@ -72,14 +72,14 @@ final class StrapiComponentViews
         'shared.code' => [
             'uid' => 'components::shared.code',
             'attributes' => [
-                'id' => ['type' => 'integer', 'list' => true, 'sort' => true, 'edit' => false, 'size' => 4, 'resizable' => true],
+                'id' => ['type' => 'integer', 'list' => true, 'sort' => false, 'edit' => false, 'size' => 4, 'resizable' => true],
                 'value' => ['type' => 'string', 'list' => true, 'sort' => true, 'edit' => true, 'size' => 6, 'resizable' => true],
             ],
         ],
         'shared.money' => [
             'uid' => 'components::shared.money',
             'attributes' => [
-                'id' => ['type' => 'integer', 'list' => true, 'sort' => true, 'edit' => false, 'size' => 4, 'resizable' => true],
+                'id' => ['type' => 'integer', 'list' => true, 'sort' => false, 'edit' => false, 'size' => 4, 'resizable' => true],
                 'minor' => ['type' => 'biginteger', 'list' => true, 'sort' => true, 'edit' => true, 'size' => 4, 'resizable' => true],
                 'currency' => ['type' => 'string', 'list' => true, 'sort' => true, 'edit' => true, 'size' => 6, 'resizable' => true],
             ],
@@ -87,7 +87,7 @@ final class StrapiComponentViews
         'shared.quantity' => [
             'uid' => 'components::shared.quantity',
             'attributes' => [
-                'id' => ['type' => 'integer', 'list' => true, 'sort' => true, 'edit' => false, 'size' => 4, 'resizable' => true],
+                'id' => ['type' => 'integer', 'list' => true, 'sort' => false, 'edit' => false, 'size' => 4, 'resizable' => true],
                 'amount' => ['type' => 'decimal', 'list' => true, 'sort' => true, 'edit' => true, 'size' => 4, 'resizable' => true],
                 'unit' => ['type' => 'string', 'list' => true, 'sort' => true, 'edit' => true, 'size' => 6, 'resizable' => true],
             ],

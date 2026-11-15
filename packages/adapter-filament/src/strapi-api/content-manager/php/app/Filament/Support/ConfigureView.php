@@ -20,6 +20,7 @@ use Filament\Schemas\Components\EmbeddedSchema;
 use Filament\Schemas\Components\Form;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 
 abstract class ConfigureView extends Page
@@ -62,7 +63,9 @@ abstract class ConfigureView extends Page
             ]),
             Section::make('List view')->schema([
                 Repeater::make('list')->hiddenLabel()->reorderable()->addActionLabel('Add a field')->columns(4)->schema([
-                    Select::make('name')->label('Field')->options($listable)->distinct()->required()->live(),
+                    Select::make('name')->label('Field')->options($listable)->distinct()->required()->live()
+                        // Another field's entry title is its target's, from its default.
+                        ->afterStateUpdated(fn (Set $set, ?string $state) => $set('mainField', $view['attributes'][$state]['mainField'] ?? null)),
                     TextInput::make('label')->required(),
                     Toggle::make('sortable')->label('Enable sort on this field'),
                     self::mainFieldSelect($view),
@@ -104,10 +107,12 @@ abstract class ConfigureView extends Page
     /** A relation's entry title: one of the fields of its target that Strapi lets title an entry. */
     private static function mainFieldSelect(array $view): Select
     {
+        $titled = fn (Get $get): bool => isset($view['attributes'][(string) $get('name')]['mainFields']);
+
         return Select::make('mainField')->label('Entry title')
             ->options(fn (Get $get): array => StrapiContentManager::mainFieldOptions($view, (string) $get('name')))
-            ->visible(fn (Get $get): bool => StrapiContentManager::mainFieldOptions($view, (string) $get('name')) !== [])
-            ->required(fn (Get $get): bool => StrapiContentManager::mainFieldOptions($view, (string) $get('name')) !== []);
+            ->visible($titled)
+            ->required($titled);
     }
 
     /** Where a component attribute's own view is configured, for who may; null for another attribute. */

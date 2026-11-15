@@ -23,6 +23,7 @@ use App\Models\Post;
 use App\Models\Submission;
 use App\Models\Topic;
 use App\Models\User;
+use App\Support\StrapiComponentViews;
 use App\Support\StrapiContentManager;
 use App\Support\StrapiDocuments;
 use App\Support\StrapiSettings;
@@ -381,6 +382,7 @@ class ContentManagerViewTest extends TestCase
             ->set("data.edit.{$keys['label']}.editable", false)
             ->set("data.edit.{$keys['author']}.mainField", 'id')
             ->set("data.edit.{$keys['topics']}.shown", false)
+            ->set("data.edit.{$keys['topics']}.editable", false)
             ->call('save')
             ->assertHasNoFormErrors();
 
@@ -395,8 +397,11 @@ class ContentManagerViewTest extends TestCase
             ->assertSee('What the link says')
             ->assertFormFieldDisabled('cta_label')
             ->assertFormFieldExists('cta_author_id', fn (\Filament\Forms\Components\Select $select): bool => $select->getOptionLabel() === (string) $author->id)
-            // What the view leaves out is still edited: hiding it would lose its data.
-            ->assertFormFieldVisible('ctaTopics');
+            // What the view leaves out is still edited, never locked: hiding it would lose its data.
+            ->assertFormFieldVisible('ctaTopics')
+            ->assertFormFieldEnabled('ctaTopics');
+        // Strapi titles a component by neither a relation nor its id.
+        $this->assertSame(['label'], StrapiContentManager::sortable(StrapiComponentViews::VIEWS['shared.link']));
     }
 
     public function test_only_a_settings_admin_configures_a_components_view(): void

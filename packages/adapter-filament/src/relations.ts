@@ -46,7 +46,8 @@ export const relationMainFields = (
   for (const f of ct?.fields ?? []) {
     if (MAIN_FIELD_TYPES.has(f.type)) columns[fieldApiName(f)] = snakeColumn(f.name);
   }
-  const main = Object.entries(columns).find(([, column]) => column === defaultMainColumn(ct));
+  const fallback = defaultMainColumn(ct);
+  const main = Object.entries(columns).find(([, column]) => column === fallback);
   return { mainField: main?.[0] ?? "id", mainFields: columns };
 };
 
