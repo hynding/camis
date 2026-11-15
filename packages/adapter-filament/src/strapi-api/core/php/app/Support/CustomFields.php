@@ -19,10 +19,11 @@ use RuntimeException;
  * admin then edits it with the registered input, and the Content-Type Builder offers each
  * registered custom field beside Strapi's own cards.
  *
- * Strapi's inputSize is checked as Strapi checks it, and its icon accepted; neither is used here:
- * the admin's generated views size a field by the type it stores, and a builder card has no icon.
+ * Strapi's inputSize is checked as Strapi checks it and sizes the field in the Content Manager's
+ * edit view (StrapiContentManager), as Strapi's does; its icon is accepted but unused, as a builder
+ * card has no icon.
  *
- * @phpstan-type CustomField array{uid: string, name: string, plugin: string|null, type: string, label: string, description: string, input: Closure|null, options: Closure|null}
+ * @phpstan-type CustomField array{uid: string, name: string, plugin: string|null, type: string, label: string, description: string, inputSize: array{size: int, resizable: bool}|null, input: Closure|null, options: Closure|null}
  */
 final class CustomFields
 {
@@ -70,7 +71,7 @@ final class CustomFields
             }
             $plugin = is_scalar($field['plugin'] ?? null) && (bool) $field['plugin'] ? (string) $field['plugin'] : null;
             $uid = $plugin !== null ? "plugin::{$plugin}.{$name}" : "global::{$name}";
-            self::assertInputSize($field['inputSize'] ?? null);
+            $inputSize = self::inputSize($field['inputSize'] ?? null);
             if (isset(self::$fields[$uid])) {
                 throw new RuntimeException("Custom field: '{$uid}' has already been registered");
             }
@@ -81,6 +82,7 @@ final class CustomFields
                 'type' => $type,
                 'label' => is_string($field['label'] ?? null) ? $field['label'] : ucfirst(trim((string) preg_replace('/([a-z0-9])([A-Z])/', '$1 $2', $name))),
                 'description' => is_string($field['description'] ?? null) ? $field['description'] : '',
+                'inputSize' => $inputSize,
                 'input' => ($field['input'] ?? null) instanceof Closure ? $field['input'] : null,
                 'options' => ($field['options'] ?? null) instanceof Closure ? $field['options'] : null,
             ];
@@ -163,10 +165,16 @@ final class CustomFields
         }
     }
 
-    private static function assertInputSize(mixed $inputSize): void
+    /**
+     * Strapi's inputSize, checked as Strapi checks it: the size the edit view gives the field, and
+     * whether it may be given another.
+     *
+     * @return array{size: int, resizable: bool}|null
+     */
+    private static function inputSize(mixed $inputSize): ?array
     {
         if ($inputSize === null || $inputSize === false) {
-            return;
+            return null;
         }
         if (! is_array($inputSize) || ! array_key_exists('default', $inputSize) || ! array_key_exists('isResizable', $inputSize)) {
             throw new RuntimeException("inputSize should be an object with 'default' and 'isResizable' keys");
@@ -177,5 +185,7 @@ final class CustomFields
         if (! is_bool($inputSize['isResizable'])) {
             throw new RuntimeException('Custom fields should specify if their input is resizable');
         }
+
+        return ['size' => $inputSize['default'], 'resizable' => $inputSize['isResizable']];
     }
 }

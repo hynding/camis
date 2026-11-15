@@ -29,6 +29,8 @@ export interface ContentManagerAttribute {
   mainFields?: Record<string, string>;
   /** A component attribute's component, by the uid its own view is kept under. */
   component?: string;
+  /** The custom field it is edited with, by its uid: its registration sizes it in the edit view. */
+  customField?: string;
   /** Its form components: none when the edit view does not show it. */
   components: string[];
   /** Its list column, when Strapi's list can show it. */
@@ -180,6 +182,7 @@ export const contentManagerAttributes = (
       name: fieldApiName(field),
       type,
       ...componentOf(field, projectComponents),
+      ...customFieldOf(field),
       components,
       ...(tableColumn === undefined || column === undefined
         ? {}
@@ -217,6 +220,10 @@ export const contentManagerAttributes = (
     creator("updatedBy", "updatedBy"),
   ];
 };
+
+/** The custom field a field is edited with, by its uid; nothing for one edited with its type's input. */
+export const customFieldOf = (field: Field): Pick<ContentManagerAttribute, "customField"> =>
+  field.editor === undefined ? {} : { customField: field.editor.name };
 
 /** A component attribute's component, by its uid; nothing for another field. */
 export const componentOf = (
@@ -258,6 +265,7 @@ export interface ViewAttribute {
   mainField?: string;
   mainFields?: Record<string, string>;
   component?: string;
+  customField?: string;
 }
 
 const viewAttribute = (a: ContentManagerAttribute): ViewAttribute => ({
@@ -271,12 +279,13 @@ const viewAttribute = (a: ContentManagerAttribute): ViewAttribute => ({
     ? {}
     : { mainField: a.mainField ?? "id", mainFields: a.mainFields }),
   ...(a.component === undefined ? {} : { component: a.component }),
+  ...(a.customField === undefined ? {} : { customField: a.customField }),
 });
 
 /**
  * One attribute of a view as `StrapiContentManager` reads it: its Strapi type, whether the list
- * shows and sorts by it and the edit view shows it, its default size, a relation's entry titles
- * and a component's uid.
+ * shows and sorts by it and the edit view shows it, its default size, a relation's entry titles,
+ * a component's uid and the custom field it is edited with (whose registration may size it).
  */
 export const viewAttributeRow = (a: ViewAttribute): string => {
   const { size: width, resizable } = size(a.type);
@@ -297,6 +306,7 @@ export const viewAttributeRow = (a: ViewAttribute): string => {
             .join(", ")}]`,
         ]),
     ...(a.component === undefined ? [] : [`'component' => ${phpSingleQuoted(a.component)}`]),
+    ...(a.customField === undefined ? [] : [`'customField' => ${phpSingleQuoted(a.customField)}`]),
   ];
   return `'${a.name}' => [${parts.join(", ")}],`;
 };

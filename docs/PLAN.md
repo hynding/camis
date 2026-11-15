@@ -2230,8 +2230,7 @@ its Input, its options).
   as the field's editor options. A field edited with a registered one reads back as its card; the
   card of Strapi's own type drops the editor; an editor nothing here registers is kept.
 
-Not built: a registered custom field's input size in the Content Manager's default view (the
-generated views size by the stored type).
+A registered custom field's input size in the Content Manager's view came in Phase 75.
 
 Exit: `fields.test.ts`, `generate.test.ts`, `field-editors.test.ts`, `php-literal.test.ts` and
 `content-type-builder.test.ts` cases; ContentTypeBuilderTest's registration, builder and kept-editor
@@ -2280,6 +2279,24 @@ admin could set neither.
 
 Exit: `admin.test.ts`'s component-views case; ContentManagerViewTest's entry-title,
 component-view and settings-grant cases in the `strapi-api` boot job.
+
+## Phase 75 — a custom field sized by its registration (`adapter-filament`)
+
+Strapi sizes a custom field in the Content Manager's edit view by the `inputSize` its
+registration gives (`getDefaultFieldSize`), and one that is not resizable keeps that size
+(`isAllowedFieldSize`). Phase 72 checked `inputSize` but sized the field by its stored type.
+
+- **The views** (a type's `CONTENT_MANAGER`, a component's `StrapiComponentViews` entry) name the
+  custom field an attribute is edited with (`customField`, its uid), as only the running app knows
+  what is registered.
+- **`StrapiContentManager`** sizes such an attribute by the registered `inputSize` (its default
+  size, and whether "Configure the view" offers other sizes), wherever it used the type's: the
+  default edit layout, fields appended to it, a saved size the attribute no longer allows (sent to
+  the end at its default), and the sizes the form offers. Unregistered, or registered without an
+  `inputSize`, it keeps its type's size.
+
+Exit: `content-manager.test.ts`; ContentManagerViewTest's custom-field size case in the
+`strapi-api` boot job.
 
 ---
 

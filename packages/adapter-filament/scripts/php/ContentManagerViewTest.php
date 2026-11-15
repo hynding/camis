@@ -449,6 +449,36 @@ class ContentManagerViewTest extends TestCase
     }
 
     /**
+     * As Strapi sizes a custom field: its registration's inputSize gives the default size in the
+     * edit view, and one that is not resizable keeps that size whatever a saved view says.
+     */
+    public function test_a_custom_field_is_sized_as_its_registration_says(): void
+    {
+        $view = PostResource::CONTENT_MANAGER;
+        $view['attributes']['views']['customField'] = 'plugin::meter.gauge';
+        \App\Support\CustomFields::flush();
+        try {
+            // Unregistered here, it takes its type's size.
+            $this->assertContains(['name' => 'views', 'size' => 4], array_merge(...StrapiContentManager::defaults($view)['layouts']['edit']));
+
+            \App\Support\CustomFields::register(['name' => 'gauge', 'plugin' => 'meter', 'type' => 'integer', 'inputSize' => ['default' => 8, 'isResizable' => false]]);
+            $this->assertContains(['name' => 'views', 'size' => 8], array_merge(...StrapiContentManager::defaults($view)['layouts']['edit']));
+            $this->assertSame([8 => 'Large (2/3)'], StrapiContentManager::sizes($view['attributes']['views']));
+            $stored = StrapiContentManager::defaults($view);
+            $stored['layouts']['edit'] = [[['name' => 'title', 'size' => 6], ['name' => 'views', 'size' => 4]]];
+            $edit = StrapiContentManager::sync($view, $stored)['layouts']['edit'];
+            $this->assertSame(['name' => 'views', 'size' => 8], $edit[1][0] ?? null);
+
+            \App\Support\CustomFields::flush();
+            \App\Support\CustomFields::register(['name' => 'gauge', 'plugin' => 'meter', 'type' => 'integer', 'inputSize' => ['default' => 12, 'isResizable' => true]]);
+            $this->assertContains(['name' => 'views', 'size' => 12], array_merge(...StrapiContentManager::defaults($view)['layouts']['edit']));
+            $this->assertSame([4, 6, 8, 12], array_keys(StrapiContentManager::sizes($view['attributes']['views'])));
+        } finally {
+            \App\Support\CustomFields::flush();
+        }
+    }
+
+    /**
      * transfer/view-config-export.tar.gz is strapi-php's archive (strapi-php-export.tar.gz) with
      * Post's view configured as Strapi's "Configure the view" saves it: twenty a page by views,
      * newest first, no bulk actions; title (labelled Headline), views and createdAt listed; views
