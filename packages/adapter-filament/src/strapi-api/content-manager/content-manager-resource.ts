@@ -186,7 +186,12 @@ export const contentManagerForm = (
     };
   });
   const inverses = input.relations.filter((r) => !input.fields.some((f) => f.name === r.attribute));
-  const attributes = contentManagerAttributes(fieldAdmins, inverses, input.relations);
+  const attributes = contentManagerAttributes(
+    fieldAdmins,
+    inverses,
+    input.relations,
+    input.components,
+  );
   // The form keys components by the attribute's API name, as the configuration names it.
   const apiName = new Map<string, string>([
     ...input.fields.map((f) => [f.name, fieldApiName(f)] as [string, string]),

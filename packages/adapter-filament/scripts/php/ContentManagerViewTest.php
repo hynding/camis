@@ -48,6 +48,9 @@ class ContentManagerViewTest extends TestCase
     private function login(array $permissions, string $name = 'Admin'): AdminUser
     {
         $this->seed(\Database\Seeders\RolePermissionSeeder::class);
+        foreach ($permissions as $permission) {
+            \Spatie\Permission\Models\Permission::findOrCreate($permission, 'web');
+        }
         $user = AdminUser::forceCreate(['firstname' => $name, 'email' => strtolower($name).'@example.test', 'is_active' => true]);
         $user->givePermissionTo($permissions);
         $this->actingAs($user, 'admin');
