@@ -2298,6 +2298,18 @@ registration gives (`getDefaultFieldSize`), and one that is not resizable keeps 
 Exit: `content-manager.test.ts`; ContentManagerViewTest's custom-field size case in the
 `strapi-api` boot job.
 
+## Phase 76 — a repeatable component's items titled by its main field (`adapter-filament`)
+
+Strapi's edit view titles each item of a repeatable component by the value of the component's
+main field (its view's `settings.mainField`: the first string attribute unless "Configure the
+view" names another), and an item without one by nothing. The admin showed every item untitled.
+
+- **`StrapiContentManager`** gives every repeater of a component attribute an item label: the
+  item's value of the main field the component's view names (synced with the component as it is
+  now), at the top level and inside components, laid out by a saved view or not.
+
+Exit: ContentManagerViewTest's item-title case in the `strapi-api` boot job.
+
 ---
 
 ## Sequencing rationale (quick reference)

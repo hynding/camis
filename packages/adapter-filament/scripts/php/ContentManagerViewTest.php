@@ -435,6 +435,31 @@ class ContentManagerViewTest extends TestCase
             ->assertFormFieldVisible('cta_author_id');
     }
 
+    /**
+     * Strapi titles each item of a repeatable component by its component's main field (the first
+     * string attribute unless the component's view names another), and an item without one by
+     * nothing.
+     */
+    public function test_a_repeatable_components_items_are_titled_by_its_main_field(): void
+    {
+        $this->login(['book.read', 'book.update']);
+        $book = Book::create(['title' => 'Dune', 'price_minor' => 999, 'price_currency' => 'USD']);
+        $book->editions()->createMany([['amount' => 1, 'unit' => 'hardcover'], ['amount' => 2, 'unit' => null]]);
+        $labels = function () use ($book): array {
+            $editions = Livewire::test(EditBook::class, ['record' => $book->getRouteKey()])->instance()->form
+                ->getComponent(fn ($component): bool => $component instanceof \Filament\Forms\Components\Repeater && $component->getName() === 'editions');
+            $this->assertNotNull($editions);
+
+            return array_map(fn (string $key): ?string => $editions->getItemLabel($key) === null ? null : (string) $editions->getItemLabel($key), array_keys($editions->getState()));
+        };
+
+        $this->assertSame(['hardcover', null], $labels());
+
+        StrapiSettings::merge('content-manager.configuration.components::shared.quantity', ['settings' => ['mainField' => 'amount']]);
+        \Illuminate\Support\Once::flush();
+        $this->assertSame(['1', '2'], array_map(fn (?string $label): ?string => $label === null ? null : (string) (float) $label, $labels()));
+    }
+
     public function test_a_saved_view_follows_the_type_as_it_changes(): void
     {
         $view = PostResource::CONTENT_MANAGER;
