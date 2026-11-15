@@ -228,6 +228,12 @@ final class StrapiContentManager
         $stored = self::componentView($uid);
         $rows = (array) ($stored['layouts']['edit'] ?? []);
         if ($rows === []) {
+            foreach ($fields as $name => $list) {
+                if (isset($list[0])) {
+                    self::titleItems($list[0], $view['attributes'][$name] ?? []);
+                }
+            }
+
             return array_merge(...array_values($fields));
         }
         if ($view !== null) {
@@ -350,6 +356,7 @@ final class StrapiContentManager
             return Fieldset::make(self::label($name, $label))->schema($components)->columnSpan($size);
         }
         $component = $components[0];
+        self::titleItems($component, $attribute);
         $column = self::mainFieldColumn($attribute, $edit);
         if ($column !== null && $component instanceof Select) {
             $component->getOptionLabelFromRecordUsing(fn (Model $record): string => (string) ($record->getAttribute($column) ?? $record->getKey()));
@@ -365,6 +372,32 @@ final class StrapiContentManager
         }
 
         return $component->columnSpan($size);
+    }
+
+    /** A repeatable component's items titled by its component's main field. */
+    private static function titleItems(Component $component, array $attribute): void
+    {
+        if ($component instanceof Repeater && isset($attribute['component'])) {
+            $uid = $attribute['component'];
+            $component->itemLabel(fn (array $state): ?string => self::itemLabel($uid, $state));
+        }
+    }
+
+    /**
+     * A repeatable component's item titled as Strapi's edit view titles it: by the value of the
+     * main field the component's view names (by default its first string attribute), or nothing.
+     *
+     * @param array<string, mixed> $state
+     */
+    private static function itemLabel(string $uid, array $state): ?string
+    {
+        if (! isset(StrapiComponentViews::VIEWS[$uid])) {
+            return null;
+        }
+        $main = (string) self::componentConfiguration($uid)['settings']['mainField'];
+        $value = $state[Str::snake($main)] ?? $state[$main] ?? null;
+
+        return is_scalar($value) && $value !== '' ? (string) $value : null;
     }
 
     /** The column of a relation's main field when its metadata names another than the default; else null. */
