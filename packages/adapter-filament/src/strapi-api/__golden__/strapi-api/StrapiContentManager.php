@@ -587,7 +587,7 @@ final class StrapiContentManager
             $layout[$row][] = ['name' => $name, 'size' => $size];
         }
 
-        return array_values(array_filter($layout, fn (array $cells): bool => $cells !== []));
+        return array_values(array_filter($layout));
     }
 
     /** The configuration as the "Configure the view" form edits it. */
