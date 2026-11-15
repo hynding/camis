@@ -352,6 +352,7 @@ overwrite app/Support/ColumnConversion.php
 overwrite app/Support/ContentTypeBuilder.php
 overwrite app/Support/ContentTypeBuilderSchema.php
 overwrite app/Support/CustomFields.php
+overwrite app/Support/InverseLinks.php
 overwrite app/Support/JsonText.php
 overwrite app/Support/PublicRole.php
 overwrite app/Support/Ring1.php

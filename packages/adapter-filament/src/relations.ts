@@ -107,6 +107,8 @@ export interface ResolvedRelations {
   fkColumns: Map<string, ForeignKeyColumn[]>;
   fkNames: Map<string, string[]>; // plain FK column names (for $fillable)
   pivots: PivotTable[];
+  /** Some type picks the side of a relation holding no key, which `InverseLinks` writes. */
+  inverseLinks: boolean;
 }
 
 const push = <V>(m: Map<string, V[]>, k: string, v: V): void => {
@@ -157,6 +159,47 @@ const pickable = (
 };
 
 /**
+ * The rows `InverseLinks` reads and writes for a picker on the side of a relation that holds no
+ * key: a draft-and-publish target's drafts (its published rows keep their links until the next
+ * publish), and a localized target's rows in the record's locale.
+ */
+const narrowing = (
+  targetVersioned: boolean,
+  targetLocalized: boolean,
+  sourceLocalized: boolean,
+): string => {
+  const narrow = [
+    ...(targetVersioned ? ["->whereNull('published_at')"] : []),
+    ...(targetLocalized
+      ? [
+          sourceLocalized
+            ? "->where('locale', $record->getAttribute('locale'))"
+            : "->where('locale', \\App\\Support\\StrapiLocales::default())",
+        ]
+      : []),
+  ];
+  return narrow.length === 0 ? "" : `, fn ($query) => $query${narrow.join("")}`;
+};
+
+/**
+ * A picker for the side of a relation that holds no key (a one-to-many's many, a one-to-one's
+ * inverse), as Strapi's edit view shows a relation from both sides: `InverseLinks` reads the
+ * linked rows (in link order) and writes their keys one by one.
+ */
+const inversePicker = (
+  name: string,
+  multiple: boolean,
+  titleAttribute: string,
+  picker: string,
+  narrow: string,
+  required: boolean,
+): string =>
+  `Select::make('${name}')${multiple ? "->multiple()" : ""}->relationship(name: '${name}', titleAttribute: '${titleAttribute}'${picker})` +
+  `->loadStateFromRelationshipsUsing(fn (Select $component, $record) => $component->state(\\App\\Support\\InverseLinks::linked($record->${name}()${narrow})))` +
+  `->saveRelationshipsUsing(fn (Select $component, $record, $state) => \\App\\Support\\InverseLinks::sync($component, $record->${name}(), $state${narrow}${required ? ", required: true" : ""}))` +
+  "->dehydrated(false)";
+
+/**
  * `versioned` names the draft-and-publish content types: their published versions come and go
  * (unpublish deletes one), so a nullable foreign key to such a row unlinks rather than blocks.
  * `linkOrder` says the pivots keep Strapi's link order (the Strapi API style's `*_ord` columns).
@@ -178,6 +221,7 @@ export const resolveRelations = (
     fkColumns: new Map(),
     fkNames: new Map(),
     pivots: [],
+    inverseLinks: false,
   };
   const byName = new Map(doc.contentTypes.map((ct) => [ct.name, ct]));
   const seenPivot = new Set<string>();
@@ -186,6 +230,37 @@ export const resolveRelations = (
   const label = (n: string): string => defaultMainColumn(byName.get(n));
   const mainFields = (n: string): Pick<AdminRelation, "mainField" | "mainFields"> =>
     relationMainFields(doc, n);
+  // The side of a relation holding no key, picked on `holder` among the `rows` type's entries.
+  const pickInverse = (
+    holder: string,
+    rows: string,
+    name: string,
+    multiple: boolean,
+    required: boolean,
+  ): void => {
+    out.inverseLinks = true;
+    push(
+      out.formFields,
+      holder,
+      inversePicker(
+        name,
+        multiple,
+        label(rows),
+        picker(rows, holder),
+        narrowing(versioned.has(rows), localized.has(rows), localized.has(holder)),
+        required,
+      ),
+    );
+    push(out.adminRelations, holder, {
+      attribute: name,
+      relation: name,
+      component: name,
+      titleAttribute: label(rows),
+      ...mainFields(rows),
+      multiple,
+      drafts: versioned.has(rows),
+    });
+  };
 
   for (const ct of doc.contentTypes) {
     for (const rawField of ct.fields) {
@@ -231,11 +306,13 @@ export const resolveRelations = (
             target,
             method(kind === "oneToOne" ? "HasOne" : "HasMany", f.inverse, ownerN.model, `'${fk}'`),
           );
+          pickInverse(target, owner, f.inverse, kind === "manyToOne", required);
         }
       } else if (kind === "oneToMany") {
         const inverseName = f.inverse ?? snake(owner);
         const fk = `${snakeColumn(inverseName)}_id`;
         push(out.methods, owner, method("HasMany", f.name, targetN.model, `'${fk}'`));
+        pickInverse(owner, target, f.name, true, false);
         push(out.fkColumns, target, {
           column: fk,
           references: owner,
