@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Filament\Resources\Authors\Pages\EditAuthor;
 use App\Filament\Resources\Books\Pages\CreateBook;
 use App\Filament\Resources\Books\Pages\EditBook;
 use App\Models\AdminUser;
@@ -36,7 +37,7 @@ class LinkOrderAdminTest extends TestCase
         parent::setUp();
         $this->seed(\Database\Seeders\RolePermissionSeeder::class);
         $this->admin = AdminUser::forceCreate(['firstname' => 'Admin', 'email' => 'admin@example.test', 'is_active' => true]);
-        $this->admin->givePermissionTo(['book.read', 'book.create', 'book.update', 'author.read', 'genre.read']);
+        $this->admin->givePermissionTo(['book.read', 'book.create', 'book.update', 'author.read', 'author.update', 'genre.read']);
         $caller = User::factory()->create(['username' => 'caller']);
         $caller->assignRole('authenticated');
         $this->jwt = $caller->createToken('api')->plainTextToken;
@@ -91,5 +92,49 @@ class LinkOrderAdminTest extends TestCase
 
         $read = $this->api('GET', "/authors/{$ann->document_id}?populate=books");
         $this->assertSame(['One', 'Two', 'Three'], array_column($read['books'], 'title'));
+    }
+
+    /**
+     * Strapi's edit view shows a relation's other side too: an author's books are picked on the
+     * author, each one picked going to the end of its list, and one taken off is unlinked.
+     */
+    public function test_an_authors_books_are_picked_on_the_author_in_the_order_picked(): void
+    {
+        $ann = Author::create(['name' => 'Ann']);
+        $bob = Author::create(['name' => 'Bob']);
+        $this->api('POST', '/books', ['data' => ['title' => 'One', 'author' => $ann->document_id]]);
+        $two = Book::create(['title' => 'Two']);
+        $three = Book::create(['title' => 'Three', 'author_id' => $bob->getKey()]);
+        $one = Book::query()->where('title', 'One')->sole();
+        $this->inAdmin();
+
+        Livewire::test(EditAuthor::class, ['record' => $ann->getRouteKey()])
+            ->assertFormSet(['books' => [$one->getKey()]])
+            ->fillForm(['books' => [$one->getKey(), $three->getKey(), $two->getKey()]])
+            ->call('save')
+            ->assertHasNoFormErrors();
+        $read = $this->api('GET', "/authors/{$ann->document_id}?populate=books");
+        // A book picked from another author moves, as a one-to-many link does in Strapi.
+        $this->assertSame(['One', 'Three', 'Two'], array_column($read['books'], 'title'));
+        $this->assertSame([], $this->api('GET', "/authors/{$bob->document_id}?populate=books")['books']);
+
+        $this->inAdmin();
+        Livewire::test(EditAuthor::class, ['record' => $ann->getRouteKey()])
+            ->assertFormSet(['books' => [$one->getKey(), $three->getKey(), $two->getKey()]])
+            ->fillForm(['books' => [$three->getKey()]])
+            ->call('save')
+            ->assertHasNoFormErrors();
+        $this->assertSame(['Three'], array_column($this->api('GET', "/authors/{$ann->document_id}?populate=books")['books'], 'title'));
+        $this->assertNull($one->fresh()->author_id);
+        // Linking from the author changes the link, not the book.
+        $this->assertSame($two->updated_at?->toJSON(), $two->fresh()->updated_at?->toJSON());
+    }
+
+    public function test_an_authors_books_are_not_linked_without_the_authors_update_grant(): void
+    {
+        $this->admin->revokePermissionTo('author.update');
+        $ann = Author::create(['name' => 'Ann']);
+        $this->inAdmin();
+        Livewire::test(EditAuthor::class, ['record' => $ann->getRouteKey()])->assertForbidden();
     }
 }

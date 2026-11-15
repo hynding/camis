@@ -155,6 +155,90 @@ describe("resolveRelations — oneToOne and oneToMany", () => {
   });
 });
 
+// Strapi's edit view shows a relation on both of its sides, the side holding many included, and
+// links an entry from either.
+describe("resolveRelations — the side holding many in the admin", () => {
+  const r = resolveRelations(doc);
+  const form = (name: string): string => (r.formFields.get(name) ?? []).join("\n");
+  const admin = (name: string, attribute: string) =>
+    r.adminRelations.get(name)?.find((a) => a.attribute === attribute);
+
+  it("picks a many-to-one's entries on its inverse, linked one by one in the order picked", () => {
+    expect(form("Author")).toContain(
+      "Select::make('articles')->multiple()->relationship(name: 'articles', titleAttribute: 'id')" +
+        "->loadStateFromRelationshipsUsing(fn (Select $component, $record) => $component->state(\\App\\Support\\InverseLinks::linked($record->articles())))" +
+        "->saveRelationshipsUsing(fn (Select $component, $record, $state) => \\App\\Support\\InverseLinks::sync($component, $record->articles(), $state))",
+    );
+    expect(admin("Author", "articles")).toMatchObject({
+      relation: "articles",
+      component: "articles",
+      multiple: true,
+    });
+  });
+
+  it("picks a one-to-many's entries on the side that declares it", () => {
+    const r2 = resolveRelations({
+      version: 1,
+      contentTypes: [
+        {
+          name: "Author",
+          kind: "collection",
+          fields: [{ type: "relation", name: "posts", relationKind: "oneToMany", target: "Post" }],
+        },
+        { name: "Post", kind: "collection", fields: [] },
+      ],
+      components: [],
+    });
+    expect(r2.formFields.get("Author")!.join("\n")).toContain(
+      "Select::make('posts')->multiple()->relationship(name: 'posts', titleAttribute: 'id')",
+    );
+    expect(r2.adminRelations.get("Author")![0]).toMatchObject({
+      attribute: "posts",
+      multiple: true,
+    });
+  });
+
+  it("picks a one-to-one's entry on its inverse", () => {
+    const r2 = resolveRelations({
+      version: 1,
+      contentTypes: [
+        {
+          name: "Article",
+          kind: "collection",
+          fields: [
+            {
+              type: "relation",
+              name: "profile",
+              relationKind: "oneToOne",
+              target: "Profile",
+              inverse: "article",
+            },
+          ],
+        },
+        { name: "Profile", kind: "collection", fields: [] },
+      ],
+      components: [],
+    });
+    expect(r2.formFields.get("Profile")!.join("\n")).toContain(
+      "Select::make('article')->relationship(name: 'article', titleAttribute: 'id')",
+    );
+    expect(r2.adminRelations.get("Profile")![0]).toMatchObject({
+      attribute: "article",
+      multiple: false,
+    });
+  });
+
+  it("offers a draft-and-publish target's drafts only, and keeps the published rows' links", () => {
+    const versioned = resolveRelations(doc, new Set(["Article"]));
+    expect(versioned.formFields.get("Author")!.join("\n")).toContain(
+      "InverseLinks::linked($record->articles(), fn ($query) => $query->whereNull('published_at'))",
+    );
+    expect(versioned.formFields.get("Author")!.join("\\n")).toContain(
+      "InverseLinks::sync($component, $record->articles(), $state, fn ($query) => $query->whereNull('published_at'))",
+    );
+  });
+});
+
 // Strapi's content manager labels a relation's entries by the target's main field, by default its
 // first string attribute, else its id.
 describe("resolveRelations — the picker's label", () => {
