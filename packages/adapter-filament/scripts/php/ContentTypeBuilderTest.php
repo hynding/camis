@@ -154,6 +154,46 @@ class ContentTypeBuilderTest extends TestCase
         Process::assertRan(fn (PendingProcess $process): bool => is_array($process->command) && in_array('camis:schema-sync', $process->command, true));
     }
 
+    public function test_an_edit_brings_every_strapi_style_filament_app_of_the_project_up_to_it(): void
+    {
+        $this->login(['user.update']);
+        $this->develop();
+        // The apps camis develop wired: this one, two others (one named twice) and one not built.
+        $others = [$this->project.'-admin2', $this->project.'-admin3'];
+        foreach ($others as $other) {
+            mkdir($other);
+            touch($other.'/artisan');
+        }
+        config(['content-type-builder.apps' => implode(PATH_SEPARATOR, [base_path(), ...$others, $others[0], $this->project.'-gone'])]);
+        Process::fake([
+            '*' => fn (PendingProcess $process) => str_ends_with((string) $process->path, '-admin2') && is_array($process->command)
+                ? Process::result(errorOutput: 'database unreachable', exitCode: 1)
+                : Process::result(),
+        ]);
+
+        try {
+            Livewire::test(ContentTypeBuilder::class, ['type' => 'contentType:Tag'])
+                ->callAction(TestAction::make('addField')->table(), data: ['kind' => 'boolean', 'name' => 'shown'])
+                ->assertHasNoActionErrors()
+                // The edit is kept; the app whose database failed is named.
+                ->assertNotified('Another app\'s database was not updated');
+
+            $syncs = fn (string $path): \Closure => fn (PendingProcess $process): bool => is_array($process->command) && in_array('camis:schema-sync', $process->command, true) && realpath((string) $process->path) === realpath($path);
+            Process::assertRanTimes($syncs(base_path()), 1);
+            // One failing does not stop the next.
+            Process::assertRanTimes($syncs($others[0]), 1);
+            Process::assertRanTimes($syncs($others[1]), 1);
+            // Another app reads its own .env, not this one's.
+            Process::assertRan(fn (PendingProcess $process): bool => realpath((string) $process->path) === realpath($others[1]) && ($process->environment['DB_CONNECTION'] ?? null) === false);
+            $this->assertArrayHasKey('shown', collect($this->type('Tag')['fields'])->keyBy('name')->all());
+        } finally {
+            foreach ($others as $other) {
+                unlink($other.'/artisan');
+                rmdir($other);
+            }
+        }
+    }
+
     public function test_a_failed_build_leaves_the_ir_and_roles_as_they_were(): void
     {
         $this->login(['user.update']);
