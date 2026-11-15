@@ -2310,6 +2310,27 @@ view" names another), and an item without one by nothing. The admin showed every
 
 Exit: ContentManagerViewTest's item-title case in the `strapi-api` boot job.
 
+## Phase 77 — a relation picked on the side that holds no key (`adapter-filament`)
+
+Strapi's edit view shows a relation on both of its sides. The admin offered a many-to-one's,
+a one-to-one's and a many-to-many's owning side, and a many-to-many's inverse, but neither a
+many-to-one's inverse (an author's books), a one-to-many's own side, nor a one-to-one's inverse,
+whose keys sit on the other type's rows.
+
+- **The picker** (`relations.ts`): a multiple select for a one-to-many's many (a one-to-one's
+  inverse picks one), among the other type's entries as its other pickers offer them (a
+  draft-and-publish type's drafts, a localized type's rows in the entry's locale), in the view as
+  the type's other relations are.
+- **`App\Support\InverseLinks`** (static runtime, any Laravel-storage app with such a relation)
+  reads the linked rows in link order, and writes the picked ones' keys one by one: a row not yet
+  linked joins the end of the list (its `<field>_ord`, where the type keeps Strapi's link order),
+  a row from another entry moves, a row taken off is unlinked. Only the link changes: the rows'
+  timestamps and events are left alone. A required key is never emptied: taking a row off is
+  refused, naming the field.
+
+Exit: `relations.test.ts`'s side-holding-many cases; LinkOrderAdminTest's author's-books cases in
+the `strapi-api` boot job.
+
 ---
 
 ## Sequencing rationale (quick reference)

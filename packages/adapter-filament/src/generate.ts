@@ -12,6 +12,7 @@ import { normalize } from "@camis/ir-core";
 import { strapiNames } from "@camis/strapi-schema";
 import type { CapabilityGap } from "@camis/ir-schema";
 import { CUSTOM_FIELD_REGISTRATIONS_PATH, emitCustomFields } from "./custom-fields";
+import { emitInverseLinks } from "./inverse-links";
 import { aiFieldContentTypes, aiProviderFile, emitAiObserver, hasAiField } from "./ai";
 import {
   childMigrationFilename,
@@ -117,7 +118,9 @@ export const filamentAdapter: GenerateAdapter = {
     const hooks = emitHookFiles(doc);
     const routeHooks = emitRouteHookFiles(doc, apiStyle === "strapi");
     const files: GeneratedFile[] =
-      storage === "strapi" ? [] : emitCustomFields(doc, apiStyle === "strapi");
+      storage === "strapi"
+        ? []
+        : [...emitCustomFields(doc, apiStyle === "strapi"), ...emitInverseLinks(rel.inverseLinks)];
     const gaps: CapabilityGap[] = [
       ...draftPublish.gaps,
       ...localization.gaps,
