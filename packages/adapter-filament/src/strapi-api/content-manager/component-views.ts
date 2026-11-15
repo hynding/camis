@@ -5,6 +5,7 @@ import { runtimePhp } from "../../runtime-php";
 import { PHP_MARKER } from "../../hooks/names";
 import {
   componentOf,
+  customFieldOf,
   sortsBy,
   strapiType,
   viewAttributeRow,
@@ -44,6 +45,7 @@ const componentAttribute = (
     sort: sortsBy(type),
     edit: true,
     ...componentOf(field, components),
+    ...customFieldOf(field),
   };
 };
 

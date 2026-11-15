@@ -22,7 +22,8 @@ use Illuminate\Support\Str;
 /**
  * $view is a resource's CONTENT_MANAGER: the type's uid, and for each attribute in schema order
  * its Strapi type, whether the list shows it (list), sorts by it (sort), the edit view shows it
- * (edit), and its default size in a row of 12 (size, resizable).
+ * (edit), and its default size in a row of 12 (size, resizable). A field edited with a custom field
+ * names it (customField): as in Strapi, the inputSize the custom field registered overrides that size.
  */
 final class StrapiContentManager
 {
@@ -555,7 +556,8 @@ final class StrapiContentManager
         if (! is_int($size)) {
             return false;
         }
-        if (! $attribute['resizable'] && $size !== $attribute['size']) {
+        ['size' => $default, 'resizable' => $resizable] = self::fieldSize($attribute);
+        if (! $resizable && $size !== $default) {
             return false;
         }
 
@@ -578,7 +580,7 @@ final class StrapiContentManager
         $row = max(count($layout) - 1, 0);
         $layout[$row] ??= [];
         foreach ($names as $name) {
-            $size = $sizes[$name] ?? $view['attributes'][$name]['size'];
+            $size = $sizes[$name] ?? self::fieldSize($view['attributes'][$name])['size'];
             if (array_sum(array_column($layout[$row], 'size')) + $size > self::MAX_ROW_SIZE) {
                 $layout[++$row] = [];
             }
@@ -605,7 +607,7 @@ final class StrapiContentManager
         $placed = array_column($edit, 'name');
         foreach (self::editable($view) as $name) {
             if (! in_array($name, $placed, true)) {
-                $edit[] = self::editState($metadatas[$name]['edit'], $name, $view['attributes'][$name]['size'], false);
+                $edit[] = self::editState($metadatas[$name]['edit'], $name, self::fieldSize($view['attributes'][$name])['size'], false);
             }
         }
 
@@ -682,7 +684,8 @@ final class StrapiContentManager
     /** The sizes an attribute may take in the edit layout. */
     public static function sizes(array $attribute): array
     {
-        $sizes = $attribute['resizable'] ? self::SIZES : [$attribute['size']];
+        ['size' => $size, 'resizable' => $resizable] = self::fieldSize($attribute);
+        $sizes = $resizable ? self::SIZES : [$size];
 
         return array_combine($sizes, array_map(fn (int $size): string => match ($size) {
             4 => 'Small (1/3)',
@@ -690,5 +693,18 @@ final class StrapiContentManager
             8 => 'Large (2/3)',
             default => 'Full width',
         }, $sizes));
+    }
+
+    /**
+     * An attribute's default size and whether it may take another, as Strapi's getDefaultFieldSize
+     * and isAllowedFieldSize have them: a registered custom field's inputSize, else its type's.
+     *
+     * @return array{size: int, resizable: bool}
+     */
+    private static function fieldSize(array $attribute): array
+    {
+        $inputSize = isset($attribute['customField']) ? (CustomFields::find($attribute['customField'])['inputSize'] ?? null) : null;
+
+        return $inputSize ?? ['size' => (int) $attribute['size'], 'resizable' => (bool) $attribute['resizable']];
     }
 }
