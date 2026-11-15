@@ -22,6 +22,8 @@ use Livewire\Attributes\Locked;
  * Strapi's "Configure the view" for a component (its components::<uid> configuration): the entry
  * title, and the edit view every use of the component is laid out by. Opened from the view of a
  * type that uses it; not in the navigation.
+ *
+ * @property-read Schema $form
  */
 class ConfigureComponentView extends Page
 {
