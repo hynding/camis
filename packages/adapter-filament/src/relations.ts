@@ -26,6 +26,31 @@ const MAIN_FIELD_TYPES = new Set([
   "timestamp",
 ]);
 
+// Strapi's default main field: the first string attribute, else the id.
+const defaultMainColumn = (ct: ContentType | undefined): string => {
+  const main = ct?.fields.find((f) => f.type === "string");
+  return main === undefined ? "id" : snakeColumn(main.name);
+};
+
+/**
+ * The fields of a relation's target Strapi's view may label a linked entry by (its "entry
+ * title"), by the keys they go by on the API, with their columns; the default is the first
+ * string field, else the id.
+ */
+export const relationMainFields = (
+  doc: IrDocument,
+  target: string,
+): Pick<AdminRelation, "mainField" | "mainFields"> => {
+  const ct = doc.contentTypes.find((c) => c.name === target);
+  const columns: Record<string, string> = { id: "id" };
+  for (const f of ct?.fields ?? []) {
+    if (MAIN_FIELD_TYPES.has(f.type)) columns[fieldApiName(f)] = snakeColumn(f.name);
+  }
+  const fallback = defaultMainColumn(ct);
+  const main = Object.entries(columns).find(([, column]) => column === fallback);
+  return { mainField: main?.[0] ?? "id", mainFields: columns };
+};
+
 const REL_NS = "Illuminate\\Database\\Eloquent\\Relations";
 
 export interface RelationMethod {
@@ -158,21 +183,9 @@ export const resolveRelations = (
   const seenPivot = new Set<string>();
   const names = (n: string): ReturnType<typeof filamentNames> =>
     filamentNames(byName.get(n) as ContentType);
-  // Strapi's default main field: the first string attribute, else the id.
-  const label = (n: string): string => {
-    const main = byName.get(n)?.fields.find((f) => f.type === "string");
-    return main === undefined ? "id" : snakeColumn(main.name);
-  };
-  // The target's fields Strapi's view may label a linked entry by (its "entry title"), by the
-  // keys they go by on the API, with their columns; the default is the one `label` picks.
-  const mainFields = (n: string): Pick<AdminRelation, "mainField" | "mainFields"> => {
-    const columns: Record<string, string> = { id: "id" };
-    for (const f of byName.get(n)?.fields ?? []) {
-      if (MAIN_FIELD_TYPES.has(f.type)) columns[fieldApiName(f)] = snakeColumn(f.name);
-    }
-    const main = Object.entries(columns).find(([, column]) => column === label(n));
-    return { mainField: main?.[0] ?? "id", mainFields: columns };
-  };
+  const label = (n: string): string => defaultMainColumn(byName.get(n));
+  const mainFields = (n: string): Pick<AdminRelation, "mainField" | "mainFields"> =>
+    relationMainFields(doc, n);
 
   for (const ct of doc.contentTypes) {
     for (const rawField of ct.fields) {

@@ -2174,7 +2174,7 @@ first text field.
   their schema order.
 
 Not built: choosing a relation's main field in "Configure the view", configuring a component's view
-here, and a relation's main field inside a component's view.
+here, and a relation's main field inside a component's view (all three in Phase 74).
 
 Exit: `admin.test.ts` cases; ContentManagerViewTest's main-field and component-view cases in the
 `strapi-api` boot job.
@@ -2256,6 +2256,30 @@ behind the rebuilt code.
 
 Exit: `develop.test.ts`'s every-target and `--target` cases; ContentTypeBuilderTest's
 every-app case.
+
+## Phase 74 — "Configure the view" for relations and components (`adapter-filament`)
+
+Phase 70 applied a relation's main field and a component's view as Strapi stored them, but the
+admin could set neither.
+
+- **A relation's entry title.** "Configure the view" offers an "Entry title" for each relation in
+  the edit view and in the list, among the target's fields `mainFields` names (one it does not name
+  is refused). One Strapi stored that the target does not have here shows as the default, and
+  saving the default keeps it, for the export.
+- **A component's view.** `app/Support/StrapiComponentViews.php` (generated) holds each component's
+  attributes as a type's `CONTENT_MANAGER` has them (`id`, then its fields, a relation's entry
+  titles and a nested component's uid included; as Strapi's, neither its id nor a relation sorts,
+  so neither is its entry title), and a type's component attribute names its component's uid. The page `ConfigureComponentView` (`?component=<uid>`, out of the navigation)
+  edits the component's entry title and its edit view, saved under
+  `content-manager.configuration.components::<uid>`; the edit view of a type that uses the
+  component links to it. Configuring one takes the Settings grant (`user.update`), as Strapi gives
+  components.configure-layout to its admins.
+- **Inside a component.** With a kept view, `StrapiContentManager::component` lays the component
+  out by that view synced with the component as it is now, and a relation inside it is titled by
+  the main field its view names. A field the view leaves out still follows, full width.
+
+Exit: `admin.test.ts`'s component-views case; ContentManagerViewTest's entry-title,
+component-view and settings-grant cases in the `strapi-api` boot job.
 
 ---
 

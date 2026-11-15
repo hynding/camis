@@ -107,8 +107,8 @@ final class StrapiContentManager
         foreach ($synced['metadatas'] as $name => $metadata) {
             $kept = (array) ($stored['metadatas'][$name] ?? []);
             $metadatas[$name] = [
-                'edit' => self::keepMainField((array) ($kept['edit'] ?? []), $metadata['edit']),
-                'list' => self::keepMainField((array) ($kept['list'] ?? []), $metadata['list']),
+                'edit' => self::keepMainField($view['attributes'][$name], (array) ($kept['edit'] ?? []), $metadata['edit']),
+                'list' => self::keepMainField($view['attributes'][$name], (array) ($kept['list'] ?? []), $metadata['list']),
             ];
         }
         StrapiSettings::merge(self::key($view), [
@@ -213,9 +213,9 @@ final class StrapiContentManager
     /**
      * A component's fields laid out by its own view (Strapi's components::<uid> configuration):
      * each row of its edit layout a grid of 12, each field sized, labelled, described and locked
-     * as configured. A field the view does not lay out follows, full width: a component's view is
-     * not synced with it here, and hiding the field would lose its data. Without a saved view, its
-     * fields in schema order.
+     * as configured, and a relation's entries titled by the main field it names. A field the view
+     * does not lay out follows, full width: hiding it would lose its data. Without a saved view,
+     * its fields in schema order.
      *
      * @param array<string, list<Component>> $fields each attribute's components, in schema order
      * @param list<string> $components the attributes that are components of their own
@@ -223,12 +223,19 @@ final class StrapiContentManager
      */
     public static function component(string $uid, array $fields, array $components = []): array
     {
+        $view = StrapiComponentViews::VIEWS[$uid] ?? null;
         $stored = self::componentView($uid);
         $rows = (array) ($stored['layouts']['edit'] ?? []);
         if ($rows === []) {
             return array_merge(...array_values($fields));
         }
-        $metadatas = (array) ($stored['metadatas'] ?? []);
+        if ($view !== null) {
+            ['metadatas' => $metadatas, 'layouts' => ['edit' => $rows]] = self::componentConfiguration($uid);
+        } else {
+            $metadatas = (array) ($stored['metadatas'] ?? []);
+        }
+        $attribute = fn (string $name): array => $view['attributes'][$name]
+            ?? ['type' => in_array($name, $components, true) ? 'component' : 'field'];
         $laidOut = [];
         $placed = [];
         foreach ($rows as $row) {
@@ -239,8 +246,8 @@ final class StrapiContentManager
                     continue;
                 }
                 $placed[$name] = true;
-                $type = in_array($name, $components, true) ? 'component' : 'field';
-                $cells[] = self::field($fields[$name], ['type' => $type], $name, (array) ($metadatas[$name]['edit'] ?? []), self::componentCellSize($fields[$name], $type, $cell['size'] ?? null));
+                $type = $attribute($name)['type'] === 'component' ? 'component' : 'field';
+                $cells[] = self::field($fields[$name], $attribute($name), $name, (array) ($metadatas[$name]['edit'] ?? []), self::componentCellSize($fields[$name], $type, $cell['size'] ?? null));
             }
             if ($cells !== []) {
                 $laidOut[] = Grid::make(self::MAX_ROW_SIZE)->schema($cells)->columnSpanFull();
@@ -248,8 +255,9 @@ final class StrapiContentManager
         }
         foreach ($fields as $name => $list) {
             if (! isset($placed[$name])) {
-                $type = in_array($name, $components, true) ? 'component' : 'field';
-                $laidOut[] = self::field($list, ['type' => $type], $name, [], self::MAX_ROW_SIZE);
+                // Never locked: a disabled field is not written, and the view does not show it.
+                $edit = array_diff_key((array) ($metadatas[$name]['edit'] ?? []), ['editable' => true]);
+                $laidOut[] = self::field($list, $attribute($name), $name, $edit, self::MAX_ROW_SIZE);
             }
         }
 
@@ -263,6 +271,12 @@ final class StrapiContentManager
     private static function componentView(string $uid): array
     {
         return once(fn (): array => StrapiSettings::get(self::KEY_PREFIX.'components::'.$uid));
+    }
+
+    /** A component's kept view synced with the component as it is now, once a request. */
+    private static function componentConfiguration(string $uid): array
+    {
+        return once(fn (): array => self::configuration(StrapiComponentViews::VIEWS[$uid]));
     }
 
     /**
@@ -512,12 +526,13 @@ final class StrapiContentManager
     }
 
     /**
-     * Saved metadata over the kept: the form does not choose a relation's main field, so the one
-     * Strapi stored stays, even one this admin does not show.
+     * Saved metadata over the kept. A main field Strapi stored that the relation's target does not
+     * have here is shown as the default, so the default saved over it keeps it, for the export.
      */
-    private static function keepMainField(array $kept, array $metadata): array
+    private static function keepMainField(array $attribute, array $kept, array $metadata): array
     {
-        if (isset($kept['mainField'])) {
+        $unknown = isset($kept['mainField']) && ! isset($attribute['mainFields'][$kept['mainField']]);
+        if ($unknown && ($metadata['mainField'] ?? null) === ($attribute['mainField'] ?? null)) {
             unset($metadata['mainField']);
         }
 
@@ -580,6 +595,7 @@ final class StrapiContentManager
             'name' => $name,
             'label' => $metadatas[$name]['list']['label'],
             'sortable' => (bool) $metadatas[$name]['list']['sortable'],
+            'mainField' => $metadatas[$name]['list']['mainField'] ?? null,
         ], $layouts['list']);
         $edit = [];
         foreach (array_merge(...$layouts['edit']) as $cell) {
@@ -605,7 +621,26 @@ final class StrapiContentManager
             'description' => $metadata['description'],
             'placeholder' => $metadata['placeholder'],
             'editable' => (bool) $metadata['editable'],
+            'mainField' => $metadata['mainField'] ?? null,
         ];
+    }
+
+    /** @return array<string, string> the fields a relation's entries may be titled by, each by itself; none for another attribute */
+    public static function mainFieldOptions(array $view, string $name): array
+    {
+        $fields = array_keys($view['attributes'][$name]['mainFields'] ?? []);
+
+        return array_combine($fields, $fields);
+    }
+
+    /** A metadata with the main field the form chose, when the relation's target has it. */
+    private static function withMainField(array $view, string $name, array $metadata, mixed $mainField): array
+    {
+        if (is_string($mainField) && isset($view['attributes'][$name]['mainFields'][$mainField])) {
+            $metadata['mainField'] = $mainField;
+        }
+
+        return $metadata;
     }
 
     /** The configuration the "Configure the view" form describes. */
@@ -613,22 +648,23 @@ final class StrapiContentManager
     {
         $configuration = self::configuration($view);
         $metadatas = $configuration['metadatas'];
-        $list = [];
+        // A component's view has no list to configure: its own is kept.
+        $list = array_key_exists('list', $state) ? [] : $configuration['layouts']['list'];
         foreach ($state['list'] ?? [] as $column) {
             $name = (string) $column['name'];
-            $metadatas[$name]['list'] = array_replace($metadatas[$name]['list'], ['label' => (string) $column['label'], 'sortable' => (bool) $column['sortable']]);
+            $metadatas[$name]['list'] = self::withMainField($view, $name, array_replace($metadatas[$name]['list'], ['label' => (string) $column['label'], 'sortable' => (bool) $column['sortable']]), $column['mainField'] ?? null);
             $list[] = $name;
         }
         $shown = [];
         $sizes = [];
         foreach ($state['edit'] ?? [] as $field) {
             $name = (string) $field['name'];
-            $metadatas[$name]['edit'] = array_replace($metadatas[$name]['edit'], [
+            $metadatas[$name]['edit'] = self::withMainField($view, $name, array_replace($metadatas[$name]['edit'], [
                 'label' => (string) $field['label'],
                 'description' => (string) ($field['description'] ?? ''),
                 'placeholder' => (string) ($field['placeholder'] ?? ''),
                 'editable' => (bool) $field['editable'],
-            ]);
+            ]), $field['mainField'] ?? null);
             if ((bool) $field['shown']) {
                 $shown[] = $name;
                 $sizes[$name] = (int) $field['size'];

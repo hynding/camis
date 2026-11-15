@@ -37,6 +37,12 @@ import {
   STRAPI_UID_PATH,
 } from "./content-manager/content-manager-runtime";
 import {
+  CONFIGURE_COMPONENT_VIEW_PATH,
+  emitConfigureComponentView,
+  emitStrapiComponentViews,
+  STRAPI_COMPONENT_VIEWS_PATH,
+} from "./content-manager/component-views";
+import {
   emitHasLocale,
   emitLocaleController,
   emitLocaleModel,
@@ -508,6 +514,11 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     files.push(
       { path: STRAPI_CONTENT_MANAGER_PATH, content: emitStrapiContentManager() },
       { path: CONFIGURE_VIEW_PATH, content: emitConfigureView() },
+      {
+        path: STRAPI_COMPONENT_VIEWS_PATH,
+        content: emitStrapiComponentViews(bundle.document, secured),
+      },
+      { path: CONFIGURE_COMPONENT_VIEW_PATH, content: emitConfigureComponentView() },
       { path: STRAPI_UID_PATH, content: emitStrapiUid() },
       { path: HAS_CREATOR_FIELDS_PATH, content: emitHasCreatorFields() },
     );

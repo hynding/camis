@@ -9,6 +9,7 @@ import {
 import { strapiNames } from "@camis/strapi-schema";
 import { phpSingleQuoted } from "../../php-literal";
 import type { AdminRelation } from "../../relations";
+import { componentUid } from "../core/names";
 
 /**
  * Strapi's Content Manager view of a content type: each attribute in schema order (`id` first,
@@ -26,6 +27,8 @@ export interface ContentManagerAttribute {
   /** A relation's default main field, and every field of its target it may be labelled by. */
   mainField?: string;
   mainFields?: Record<string, string>;
+  /** A component attribute's component, by the uid its own view is kept under. */
+  component?: string;
   /** Its form components: none when the edit view does not show it. */
   components: string[];
   /** Its list column, when Strapi's list can show it. */
@@ -46,6 +49,9 @@ export const strapiType = (field: Field): string => STRAPI_TYPES[field.type] ?? 
 
 // The Content Manager's NON_SORTABLES; a to-many relation does not sort either.
 const NOT_SORTED = new Set(["component", "json", "media", "richtext", "dynamiczone", "blocks"]);
+
+/** Whether Strapi's Content Manager sorts by an attribute of this type. */
+export const sortsBy = (type: string): boolean => !NOT_SORTED.has(type);
 // Its field sizes: a full row, not resizable; small; and the default, half a row.
 const FULL_ROW = new Set(["dynamiczone", "component", "json", "richtext", "blocks"]);
 const SMALL = new Set(["boolean", "date", "time", "biginteger", "decimal", "float", "integer"]);
@@ -151,6 +157,7 @@ export const contentManagerAttributes = (
   fields: readonly FieldAdmin[],
   inverses: readonly AdminRelation[],
   relations: readonly AdminRelation[],
+  projectComponents: readonly Component[],
 ): ContentManagerAttribute[] => {
   const relationOf = (name: string): AdminRelation | undefined =>
     relations.find((r) => r.attribute === name);
@@ -172,6 +179,7 @@ export const contentManagerAttributes = (
     return {
       name: fieldApiName(field),
       type,
+      ...componentOf(field, projectComponents),
       components,
       ...(tableColumn === undefined || column === undefined
         ? {}
@@ -210,6 +218,16 @@ export const contentManagerAttributes = (
   ];
 };
 
+/** A component attribute's component, by its uid; nothing for another field. */
+export const componentOf = (
+  field: Field,
+  components: readonly Component[],
+): Pick<ContentManagerAttribute, "component"> => {
+  const component =
+    field.type === "component" ? components.find((c) => c.name === field.component) : undefined;
+  return component === undefined ? {} : { component: componentUid(component) };
+};
+
 const withConstraint = (constraint: string | undefined): { constraint?: string } =>
   constraint === undefined ? {} : { constraint };
 
@@ -229,32 +247,66 @@ const relationListing = (
 
 const phpBool = (b: boolean): string => (b ? "true" : "false");
 
+/** An attribute as a view lists it: what the admin offers for it, by Strapi's view's names. */
+export interface ViewAttribute {
+  name: string;
+  type: string;
+  relation?: string;
+  list: boolean;
+  sort: boolean;
+  edit: boolean;
+  mainField?: string;
+  mainFields?: Record<string, string>;
+  component?: string;
+}
+
+const viewAttribute = (a: ContentManagerAttribute): ViewAttribute => ({
+  name: a.name,
+  type: a.type,
+  ...(a.relation === undefined ? {} : { relation: a.relation }),
+  list: a.column !== undefined,
+  sort: a.sortable,
+  edit: a.components.length > 0,
+  ...(a.mainFields === undefined
+    ? {}
+    : { mainField: a.mainField ?? "id", mainFields: a.mainFields }),
+  ...(a.component === undefined ? {} : { component: a.component }),
+});
+
+/**
+ * One attribute of a view as `StrapiContentManager` reads it: its Strapi type, whether the list
+ * shows and sorts by it and the edit view shows it, its default size, a relation's entry titles
+ * and a component's uid.
+ */
+export const viewAttributeRow = (a: ViewAttribute): string => {
+  const { size: width, resizable } = size(a.type);
+  const parts = [
+    `'type' => '${a.type}'`,
+    ...(a.relation === undefined ? [] : [`'relation' => '${a.relation}'`]),
+    `'list' => ${phpBool(a.list)}`,
+    `'sort' => ${phpBool(a.sort)}`,
+    `'edit' => ${phpBool(a.edit)}`,
+    `'size' => ${width}`,
+    `'resizable' => ${phpBool(resizable)}`,
+    ...(a.mainFields === undefined
+      ? []
+      : [
+          `'mainField' => ${phpSingleQuoted(a.mainField ?? "id")}`,
+          `'mainFields' => [${Object.entries(a.mainFields)
+            .map(([name, column]) => `${phpSingleQuoted(name)} => ${phpSingleQuoted(column)}`)
+            .join(", ")}]`,
+        ]),
+    ...(a.component === undefined ? [] : [`'component' => ${phpSingleQuoted(a.component)}`]),
+  ];
+  return `'${a.name}' => [${parts.join(", ")}],`;
+};
+
 /** The resource's CONTENT_MANAGER constant: what `StrapiContentManager` lays the views out by. */
 export const contentManagerConstant = (
   ct: ContentType,
   attributes: readonly ContentManagerAttribute[],
 ): string => {
-  const rows = attributes.map((a) => {
-    const { size: width, resizable } = size(a.type);
-    const parts = [
-      `'type' => '${a.type}'`,
-      ...(a.relation === undefined ? [] : [`'relation' => '${a.relation}'`]),
-      `'list' => ${phpBool(a.column !== undefined)}`,
-      `'sort' => ${phpBool(a.sortable)}`,
-      `'edit' => ${phpBool(a.components.length > 0)}`,
-      `'size' => ${width}`,
-      `'resizable' => ${phpBool(resizable)}`,
-      ...(a.mainFields === undefined
-        ? []
-        : [
-            `'mainField' => ${phpSingleQuoted(a.mainField ?? "id")}`,
-            `'mainFields' => [${Object.entries(a.mainFields)
-              .map(([name, column]) => `${phpSingleQuoted(name)} => ${phpSingleQuoted(column)}`)
-              .join(", ")}]`,
-          ]),
-    ];
-    return `            '${a.name}' => [${parts.join(", ")}],`;
-  });
+  const rows = attributes.map((a) => `            ${viewAttributeRow(viewAttribute(a))}`);
   return `
 
     /** Strapi's Content Manager view of this type: its uid and each attribute, in schema order. */

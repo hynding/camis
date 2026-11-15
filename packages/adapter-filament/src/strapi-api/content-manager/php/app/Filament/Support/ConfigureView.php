@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Filament\Support;
 
+use App\Filament\Pages\ConfigureComponentView;
+use App\Support\StrapiComponentViews;
 use App\Support\StrapiContentManager;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Hidden;
@@ -18,6 +20,7 @@ use Filament\Schemas\Components\EmbeddedSchema;
 use Filament\Schemas\Components\Form;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 
 abstract class ConfigureView extends Page
@@ -59,26 +62,68 @@ abstract class ConfigureView extends Page
                 Select::make('defaultSortOrder')->label('Default sort order')->options(['ASC' => 'Ascending', 'DESC' => 'Descending'])->required(),
             ]),
             Section::make('List view')->schema([
-                Repeater::make('list')->hiddenLabel()->reorderable()->addActionLabel('Add a field')->columns(3)->schema([
-                    Select::make('name')->label('Field')->options($listable)->distinct()->required(),
+                Repeater::make('list')->hiddenLabel()->reorderable()->addActionLabel('Add a field')->columns(4)->schema([
+                    Select::make('name')->label('Field')->options($listable)->distinct()->required()->live()
+                        // Another field's entry title is its target's, from its default.
+                        ->afterStateUpdated(fn (Set $set, ?string $state) => $set('mainField', $view['attributes'][$state]['mainField'] ?? null)),
                     TextInput::make('label')->required(),
                     Toggle::make('sortable')->label('Enable sort on this field'),
+                    self::mainFieldSelect($view),
                 ]),
             ]),
-            Section::make('Edit view')->schema([
-                Repeater::make('edit')->hiddenLabel()->reorderable()->addable(false)->deletable(false)->columns(3)
-                    ->itemLabel(fn (array $state): string => (string) ($state['name'] ?? ''))
-                    ->schema([
-                        Hidden::make('name'),
-                        Toggle::make('shown')->label('Show in the edit view'),
-                        Toggle::make('editable')->label('Editable field'),
-                        Select::make('size')->options(fn (Get $get): array => StrapiContentManager::sizes($view['attributes'][$get('name')] ?? ['resizable' => true, 'size' => 6]))->required(),
-                        TextInput::make('label')->required(),
-                        TextInput::make('description'),
-                        TextInput::make('placeholder'),
-                    ]),
-            ]),
+            self::editSection($view),
         ])->statePath('data');
+    }
+
+    /**
+     * The edit view's fields, each shown or not, sized, labelled, described and locked, and a
+     * relation's entries titled by one of its target's fields; a component's links to its own view.
+     */
+    public static function editSection(array $view): Section
+    {
+        return Section::make('Edit view')->schema([
+            Repeater::make('edit')->hiddenLabel()->reorderable()->addable(false)->deletable(false)->columns(3)
+                ->itemLabel(fn (array $state): string => (string) ($state['name'] ?? ''))
+                ->extraItemActions([
+                    Action::make('configureComponent')
+                        ->label('Configure the component')
+                        ->icon('heroicon-m-cog-6-tooth')
+                        ->url(fn (array $arguments, Repeater $component): ?string => self::componentViewUrl($view, $component->getRawItemState($arguments['item'])['name'] ?? null))
+                        ->visible(fn (array $arguments, Repeater $component): bool => self::componentViewUrl($view, $component->getRawItemState($arguments['item'])['name'] ?? null) !== null),
+                ])
+                ->schema([
+                    Hidden::make('name'),
+                    Toggle::make('shown')->label('Show in the edit view'),
+                    Toggle::make('editable')->label('Editable field'),
+                    Select::make('size')->options(fn (Get $get): array => StrapiContentManager::sizes($view['attributes'][$get('name')] ?? ['resizable' => true, 'size' => 6]))->required(),
+                    TextInput::make('label')->required(),
+                    TextInput::make('description'),
+                    TextInput::make('placeholder'),
+                    self::mainFieldSelect($view),
+                ]),
+        ]);
+    }
+
+    /** A relation's entry title: one of the fields of its target that Strapi lets title an entry. */
+    private static function mainFieldSelect(array $view): Select
+    {
+        $titled = fn (Get $get): bool => isset($view['attributes'][(string) $get('name')]['mainFields']);
+
+        return Select::make('mainField')->label('Entry title')
+            ->options(fn (Get $get): array => StrapiContentManager::mainFieldOptions($view, (string) $get('name')))
+            ->visible($titled)
+            ->required($titled);
+    }
+
+    /** Where a component attribute's own view is configured, for who may; null for another attribute. */
+    private static function componentViewUrl(array $view, mixed $name): ?string
+    {
+        $component = is_string($name) ? ($view['attributes'][$name]['component'] ?? null) : null;
+        if ($component === null || ! isset(StrapiComponentViews::VIEWS[$component]) || ! StrapiComponentViews::canConfigure()) {
+            return null;
+        }
+
+        return ConfigureComponentView::getUrl(['component' => $component]);
     }
 
     public function content(Schema $schema): Schema

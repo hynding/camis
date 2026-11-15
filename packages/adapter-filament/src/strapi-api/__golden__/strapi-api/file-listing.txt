@@ -9,6 +9,7 @@ overwrite app/Filament/Forms/BlocksEditor.php
 overwrite app/Filament/Forms/BlocksStateCast.php
 overwrite app/Filament/Forms/JsonEditor.php
 overwrite app/Filament/Pages/AdminProfile.php
+overwrite app/Filament/Pages/ConfigureComponentView.php
 overwrite app/Filament/Pages/ContentTypeBuilder.php
 overwrite app/Filament/Pages/DataTransfer.php
 overwrite app/Filament/Pages/EmailSettings.php
@@ -358,6 +359,7 @@ overwrite app/Support/StrapiAdminAuth.php
 overwrite app/Support/StrapiAdminImport.php
 overwrite app/Support/StrapiApiTokens.php
 overwrite app/Support/StrapiBlocks.php
+overwrite app/Support/StrapiComponentViews.php
 overwrite app/Support/StrapiContentManager.php
 overwrite app/Support/StrapiDocuments.php
 overwrite app/Support/StrapiEmail.php
