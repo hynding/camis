@@ -149,6 +149,10 @@ camis build                 # write every target into generated/
 \`\`\`
 `;
 
+/** A word a shell reads back as `word`, for a next step the user copies. */
+const shellWord = (word: string): string =>
+  /^[A-Za-z0-9_./-]+$/.test(word) ? word : `'${word.replace(/'/g, "'\\''")}'`;
+
 const GITIGNORE = "generated/\nnode_modules/\n.env\n";
 
 const writeProject = async (
@@ -236,9 +240,11 @@ export const newCommand = async (dir: string, io: Io, options: NewOptions): Prom
   const pending: string[] = [];
   if (plan.targets.includes("filament")) {
     if (options.skipScaffold === true) {
-      pending.push("camis scaffold filament generated/filament");
+      pending.push(`camis scaffold filament generated/filament --name ${shellWord(name)}`);
     } else if (
-      (await scaffoldCommand("filament", join(projectDir, "generated/filament"), io)) !== 0
+      (await scaffoldCommand("filament", join(projectDir, "generated/filament"), io, {
+        appName: name,
+      })) !== 0
     ) {
       return 1;
     }

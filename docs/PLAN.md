@@ -2331,6 +2331,17 @@ whose keys sit on the other type's rows.
 Exit: `relations.test.ts`'s side-holding-many cases; LinkOrderAdminTest's author's-books cases in
 the `strapi-api` boot job.
 
+## Phase 78 — the app named after the project (`cli`)
+
+Laravel's skeleton names every app "Laravel", and Filament's panel brand, the admin's page titles
+and mail's sender name all read that name, so a project's admin said "Laravel" where Strapi's
+shows the project. `camis new` passes the project's name to the scaffold, which writes it as
+`APP_NAME` in the app's `.env` and `.env.example` (quoted when a bare value cannot hold it);
+`camis scaffold filament <dir> --name <name>` does the same on its own. An app scaffolded before
+this keeps "Laravel" until its `.env` is edited.
+
+Exit: `scaffold.test.ts`'s setAppName and naming cases; `new.test.ts`'s project-name case.
+
 ---
 
 ## Sequencing rationale (quick reference)
