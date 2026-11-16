@@ -228,13 +228,9 @@ final class StrapiContentManager
         $view = StrapiComponentViews::VIEWS[$uid] ?? null;
         $stored = self::componentView($uid);
         $rows = (array) ($stored['layouts']['edit'] ?? []);
-        if ($rows === []) {
-            foreach ($fields as $name => $list) {
-                if (isset($list[0])) {
-                    self::titleItems($list[0], $view['attributes'][$name] ?? []);
-                }
-            }
-
+        // Strapi makes every component's view when it starts, so one never configured is laid out
+        // by the default view; only a component this app does not know goes in schema order.
+        if ($view === null && $rows === []) {
             return array_merge(...array_values($fields));
         }
         if ($view !== null) {
@@ -709,15 +705,20 @@ final class StrapiContentManager
         $sizes = [];
         foreach ($state['edit'] ?? [] as $field) {
             $name = (string) $field['name'];
-            $metadatas[$name]['edit'] = self::withMainField($view, $name, array_replace($metadatas[$name]['edit'], [
-                'label' => (string) $field['label'],
+            // A setting the field's type does not offer keeps what it was.
+            $offered = array_flip(self::editSettings((string) $view['attributes'][$name]['type']));
+            $changed = array_intersect_key([
+                'label' => (string) ($field['label'] ?? ''),
                 'description' => (string) ($field['description'] ?? ''),
                 'placeholder' => (string) ($field['placeholder'] ?? ''),
-                'editable' => (bool) $field['editable'],
-            ]), $field['mainField'] ?? null);
+                'editable' => (bool) ($field['editable'] ?? true),
+            ], $offered, $field);
+            $metadatas[$name]['edit'] = self::withMainField($view, $name, array_replace($metadatas[$name]['edit'], $changed), $field['mainField'] ?? null);
             if ((bool) $field['shown']) {
                 $shown[] = $name;
-                $sizes[$name] = (int) $field['size'];
+                if (isset($offered['size'], $field['size'])) {
+                    $sizes[$name] = (int) $field['size'];
+                }
             }
         }
 
@@ -726,6 +727,26 @@ final class StrapiContentManager
             'metadatas' => $metadatas,
             'layouts' => ['list' => $list, 'edit' => self::appendToEditLayout($view, [], $shown, $sizes)],
         ];
+    }
+
+    /**
+     * What "Configure the view" lets an edit view's field of this type set, as Strapi's
+     * EditFieldForm offers it (filterFieldsBasedOnAttributeType): a component only its label and
+     * whether it may be edited, a field that always takes the full row no size, and only a
+     * relation its entry title.
+     *
+     * @return list<string>
+     */
+    public static function editSettings(string $type): array
+    {
+        return match ($type) {
+            'blocks', 'richtext' => ['label', 'description', 'placeholder', 'editable'],
+            'boolean', 'media' => ['label', 'description', 'editable', 'size'],
+            'component' => ['label', 'editable'],
+            'dynamiczone', 'json' => ['label', 'description', 'editable'],
+            'relation' => ['label', 'description', 'placeholder', 'editable', 'mainField', 'size'],
+            default => ['label', 'description', 'placeholder', 'editable', 'size'],
+        };
     }
 
     /** The sizes an attribute may take in the edit layout. */
