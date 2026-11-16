@@ -404,6 +404,59 @@ class ContentManagerViewTest extends TestCase
         $this->assertSame(['label'], StrapiContentManager::sortable(StrapiComponentViews::VIEWS['shared.link']));
     }
 
+    /**
+     * Strapi's "Configure the view" offers each field only what its type may set: a component its
+     * label and whether it may be edited, a dynamic zone no size or placeholder, a media field no
+     * placeholder. What a field is not offered keeps what it was, whatever the form sends.
+     */
+    public function test_configure_the_view_offers_each_field_what_strapi_offers_its_type(): void
+    {
+        $this->login(['menu.read', 'menu.update', 'post.read', 'post.update', 'user.update']);
+        $view = \App\Filament\Resources\Menus\MenuResource::CONTENT_MANAGER;
+        $stored = StrapiContentManager::defaults($view);
+        $stored['metadatas']['cta']['edit']['description'] = 'Kept';
+        StrapiSettings::merge(StrapiContentManager::key($view), $stored);
+        $page = Livewire::test(\App\Filament\Resources\Menus\Pages\ConfigureMenusView::class);
+        $this->assertSame(['shown', 'editable', 'size', 'label', 'description', 'placeholder'], $this->offered($page, 'title'));
+        $this->assertSame(['shown', 'editable', 'label'], $this->offered($page, 'cta'));
+        $this->assertSame(['shown', 'editable', 'label', 'description'], $this->offered($page, 'sections'));
+        $this->assertSame(['shown', 'editable', 'size', 'label', 'description'], $this->offered(Livewire::test(ConfigurePostsView::class), 'image'));
+        $this->assertSame(['shown', 'editable', 'size', 'label', 'description', 'placeholder', 'mainField'], $this->offered(Livewire::test(ConfigureComponentView::class, ['component' => 'shared.link']), 'author'));
+
+        $keys = array_combine(array_column($page->get('data.edit'), 'name'), array_keys($page->get('data.edit')));
+        $page->set("data.edit.{$keys['cta']}.label", 'Call to action')
+            ->set("data.edit.{$keys['cta']}.description", 'Sent anyway')
+            ->call('save')
+            ->assertHasNoFormErrors();
+        $edit = StrapiSettings::get(StrapiContentManager::key($view))['metadatas']['cta']['edit'];
+        $this->assertSame(['Call to action', 'Kept'], [$edit['label'], $edit['description']]);
+    }
+
+    /** The settings an edit view's field is offered on a "Configure the view" page, in form order. */
+    private function offered(\Livewire\Features\SupportTesting\Testable $page, string $name): array
+    {
+        $edit = $page->instance()->form->getComponent(fn ($component): bool => $component instanceof \Filament\Forms\Components\Repeater && $component->getName() === 'edit');
+        $this->assertNotNull($edit);
+        foreach ($edit->getItems() as $item) {
+            $fields = array_values(array_filter($item->getComponents(), fn ($component): bool => $component instanceof \Filament\Forms\Components\Field && ! $component instanceof \Filament\Forms\Components\Hidden));
+            if ($item->getRawState()['name'] === $name) {
+                return array_map(fn ($field): string => $field->getName(), $fields);
+            }
+        }
+        $this->fail("No edit field {$name}");
+    }
+
+    /** Strapi makes each component's default view when it starts: two half-width fields share a row. */
+    public function test_a_component_never_configured_is_laid_out_by_its_default_view(): void
+    {
+        $this->login(['menu.read', 'menu.update']);
+        $menu = \App\Models\Menu::create(['title' => 'Main']);
+
+        Livewire::test(\App\Filament\Resources\Menus\Pages\EditMenu::class, ['record' => $menu->getRouteKey()])
+            ->assertFormFieldExists('cta_label', fn ($field): bool => $field->getColumnSpan('lg') === 6)
+            ->assertFormFieldExists('cta_author_id', fn ($field): bool => $field->getColumnSpan('lg') === 6);
+    }
+
     public function test_only_a_settings_admin_configures_a_components_view(): void
     {
         $this->login(['menu.read', 'menu.update']);
