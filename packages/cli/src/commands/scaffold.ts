@@ -102,6 +102,37 @@ export const patchBootstrapMiddleware = (source: string): string => {
   return source.replace(STOCK_WITH_MIDDLEWARE, STRAPI_ERRORS_FIRST);
 };
 
+/**
+ * The .env with APP_NAME set to `name`: Filament's panel brand, the page title and mail's sender
+ * name all read it, and the skeleton's is "Laravel". Double quotes, with what phpdotenv would
+ * expand escaped, hold any name a bare value cannot.
+ */
+export const setAppName = (env: string, name: string): string => {
+  const value = /^[A-Za-z0-9_.-]+$/.test(name)
+    ? name
+    : `"${name.replace(/[\\"$]/g, (character) => `\\${character}`)}"`;
+  const assignment = `APP_NAME=${value}`;
+  return /^APP_NAME=.*$/m.test(env)
+    ? env.replace(/^APP_NAME=.*$/m, () => assignment)
+    : `${assignment}\n${env}`;
+};
+
+const nameApp = async (appDir: string, io: Io, name: string): Promise<void> => {
+  const named: string[] = [];
+  for (const file of [".env", ".env.example"]) {
+    const path = join(appDir, file);
+    let source: string;
+    try {
+      source = await io.readFile(path);
+    } catch {
+      continue;
+    }
+    await io.writeFile(path, setAppName(source, name));
+    named.push(file);
+  }
+  if (named.length > 0) io.out(`✓ named the app ${name} in ${named.join(" and ")}`);
+};
+
 const STOCK_WITH_EXCEPTIONS = `->withExceptions(function (Exceptions $exceptions): void {
         //
     })`;
@@ -305,7 +336,7 @@ export const scaffoldCommand = async (
   target: string,
   dir: string,
   io: Io,
-  options?: { storage?: StorageLayout; graphql?: boolean },
+  options?: { storage?: StorageLayout; graphql?: boolean; appName?: string },
 ): Promise<number> => {
   if (target !== "filament") {
     io.out(`✗ "${target}" has no scaffold; only the filament target needs a host app`);
@@ -350,6 +381,7 @@ export const scaffoldCommand = async (
 
   if (!(await patchBootstrap(appDir, io, storage, graphql))) return 1;
   await patchConsole(appDir, io);
+  if (options?.appName !== undefined) await nameApp(appDir, io, options.appName);
 
   if (storage === "strapi") {
     io.out(`✓ scaffolded Laravel 12 (Strapi storage) at ${dir}`);
