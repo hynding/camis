@@ -2331,18 +2331,6 @@ whose keys sit on the other type's rows.
 Exit: `relations.test.ts`'s side-holding-many cases; LinkOrderAdminTest's author's-books cases in
 the `strapi-api` boot job.
 
-## Phase 80 — an inverse relation's kind as Strapi names it (`adapter-filament`)
-
-A type's view (its `CONTENT_MANAGER`, what "Configure the view" and the list and edit layouts
-read) named the side of a relation holding no key by how many entries it holds, not by the
-relation it is: an author's books (a many-to-one's inverse) said `manyToMany`, a profile's article
-(a one-to-one's inverse) `manyToOne`. Strapi's schema names each side as that side sees it:
-`oneToMany` and `oneToOne`. Each `AdminRelation` now carries that `kind` (a many-to-one's inverse
-is one-to-many, a one-to-many's is many-to-one, a one-to-one and a many-to-many are themselves),
-and the view takes it from there.
-
-Exit: `relations.test.ts`'s kind cases; `admin.test.ts`'s inverse-kind case.
-
 ## Phase 78 — the app named after the project (`cli`)
 
 Laravel's skeleton names every app "Laravel", and Filament's panel brand, the admin's page titles
@@ -2366,6 +2354,18 @@ block picker, which has no state, offers the display name alone. The Builder num
 
 Exit: `dynamic-zones.test.ts`'s titling case; DynamicZonesTest's main-field case in the
 `strapi-api` boot job.
+
+## Phase 80 — an inverse relation's kind as Strapi names it (`adapter-filament`)
+
+A type's view (its `CONTENT_MANAGER`, what "Configure the view" and the list and edit layouts
+read) named the side of a relation holding no key by how many entries it holds, not by the
+relation it is: an author's books (a many-to-one's inverse) said `manyToMany`, a profile's article
+(a one-to-one's inverse) `manyToOne`. Strapi's schema names each side as that side sees it:
+`oneToMany` and `oneToOne`. Each `AdminRelation` now carries that `kind` (a many-to-one's inverse
+is one-to-many, a one-to-many's is many-to-one, a one-to-one and a many-to-many are themselves),
+and the view takes it from there.
+
+Exit: `relations.test.ts`'s kind cases; `admin.test.ts`'s inverse-kind case.
 
 ---
 
