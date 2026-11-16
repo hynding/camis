@@ -381,6 +381,79 @@ class ContentTypeBuilderTest extends TestCase
         $this->assertSame('manyToMany', \App\Support\ContentTypeBuilderSchema::stateFromField($fields['curators'])['relationKind']);
     }
 
+    public function test_a_relation_with_an_inverse_is_listed_on_both_types_as_in_strapi(): void
+    {
+        $this->login(['user.update']);
+
+        // Book holds "author" (many-to-one); Author shows its inverse "books", one-to-many from there.
+        Livewire::test(ContentTypeBuilder::class, ['type' => 'contentType:Author'])
+            ->assertSee('books')
+            ->assertSee('Relation with Book');
+        $books = \App\Support\ContentTypeBuilderSchema::fields(Builder::document(), 'contentType:Author')['books'];
+        $this->assertSame(['type' => 'relation', 'name' => 'books', 'relationKind' => 'oneToMany', 'target' => 'Book', 'inverse' => 'author'], array_diff_key($books, ['heldBy' => true]));
+        $this->assertSame('oneToMany', \App\Support\ContentTypeBuilderSchema::stateFromField($books)['relationKind']);
+        $this->assertStringStartsWith('has many', \App\Support\ContentTypeBuilderSchema::fieldRow($books, Builder::document())['details']);
+        // A relation without an inverse stays on its own type, as Strapi's one-way relations do.
+        $this->assertArrayNotHasKey('flaggedBy', \App\Support\ContentTypeBuilderSchema::fields(Builder::document(), 'contentType:Author'));
+    }
+
+    public function test_a_relation_edited_on_its_inverse_side_changes_the_side_that_holds_it(): void
+    {
+        $this->login(['user.update']);
+        $this->develop();
+        Process::fake();
+
+        Livewire::test(ContentTypeBuilder::class, ['type' => 'contentType:Author'])
+            ->callAction(TestAction::make('editField')->table('books'), data: ['name' => 'writings', 'relationKind' => 'manyToMany', 'inverse' => 'writers'])
+            ->assertHasNoActionErrors();
+
+        $this->assertSame(['name'], array_column($this->type('Author')['fields'], 'name'));
+        $writers = collect($this->type('Book')['fields'])->firstWhere('name', 'writers');
+        $this->assertSame(['type' => 'relation', 'name' => 'writers', 'relationKind' => 'manyToMany', 'target' => 'Author', 'inverse' => 'writings'], $writers);
+        $this->assertNull(collect($this->type('Book')['fields'])->firstWhere('name', 'author'));
+    }
+
+    public function test_an_inverse_made_one_way_becomes_its_own_types_relation(): void
+    {
+        $this->login(['user.update']);
+        $this->develop();
+        Process::fake();
+
+        Livewire::test(ContentTypeBuilder::class, ['type' => 'contentType:Author'])
+            ->callAction(TestAction::make('editField')->table('books'), data: ['relationKind' => 'manyWay'])
+            ->assertHasNoActionErrors();
+
+        $this->assertNull(collect($this->type('Book')['fields'])->firstWhere('name', 'author'));
+        $books = collect($this->type('Author')['fields'])->firstWhere('name', 'books');
+        $this->assertSame(['type' => 'relation', 'name' => 'books', 'relationKind' => 'oneToMany', 'target' => 'Book'], $books);
+    }
+
+    public function test_deleting_an_inverse_deletes_the_relation_on_both_types(): void
+    {
+        $this->login(['user.update']);
+        $this->develop();
+        Process::fake();
+
+        Livewire::test(ContentTypeBuilder::class, ['type' => 'contentType:Author'])
+            ->callAction(TestAction::make('deleteField')->table('books'))
+            ->assertHasNoActionErrors();
+
+        $this->assertNull(collect($this->type('Book')['fields'])->firstWhere('name', 'author'));
+        $this->assertSame(['name'], array_column($this->type('Author')['fields'], 'name'));
+    }
+
+    public function test_a_field_cannot_take_the_name_of_an_inverse_its_type_shows(): void
+    {
+        $this->login(['user.update']);
+        $this->develop();
+        Process::fake();
+
+        Livewire::test(ContentTypeBuilder::class, ['type' => 'contentType:Author'])
+            ->callAction(TestAction::make('addField')->table(), data: ['kind' => 'text', 'name' => 'books']);
+
+        $this->assertSame(['name'], array_column($this->type('Author')['fields'], 'name'));
+    }
+
     public function test_a_field_changes_to_a_type_in_another_group(): void
     {
         $this->login(['user.update']);
