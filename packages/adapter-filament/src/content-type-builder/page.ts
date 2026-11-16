@@ -404,11 +404,13 @@ class ContentTypeBuilder extends Page implements HasTable
             $components[$component['name']] = ModelSchema::componentUid($component);
         }
         $textFields = [];
-        foreach ((array) ($this->node()['fields'] ?? []) as $field) {
-            if (in_array($field['type'], ['string', 'text'], true)) {
-                $textFields[$field['name']] = $field['name'];
+        foreach ((array) ($this->node()['fields'] ?? []) as $own) {
+            if (in_array($own['type'], ['string', 'text'], true)) {
+                $textFields[$own['name']] = $own['name'];
             }
         }
+        // The other side of a relation another type holds has no settings of its own there.
+        $ownSettings = fn (): bool => ! isset($field['heldBy']);
 
         return [
             Radio::make('kind')->label('Select a field')->required()->live()
@@ -449,10 +451,10 @@ class ContentTypeBuilder extends Page implements HasTable
                     Select::make('default')->label('Default value')->visible($is('boolean'))
                         ->options(['true' => 'TRUE', 'false' => 'FALSE']),
                     TextInput::make('pattern')->label('RegExp pattern')->visible($is('text', 'richText', 'uid', 'color')),
-                    Toggle::make('required')->label('Required field')->helperText('You won\'t be able to create an entry if this field is empty'),
+                    Toggle::make('required')->label('Required field')->visible($ownSettings)->helperText('You won\'t be able to create an entry if this field is empty'),
                     Toggle::make('unique')->label('Unique field')->visible($is('text', 'richText', 'email', 'uid', 'number'))
                         ->helperText('You won\'t be able to create an entry if there is an existing entry with identical content'),
-                    Toggle::make('private')->label('Private field')->helperText('This field will not show up in the API response'),
+                    Toggle::make('private')->label('Private field')->visible($ownSettings)->helperText('This field will not show up in the API response'),
                     TextInput::make('minLength')->label('Minimum length')->numeric()->visible($is('text', 'richText', 'email', 'uid')),
                     TextInput::make('maxLength')->label('Maximum length')->numeric()->visible($is('text', 'richText', 'email', 'uid')),
                     TextInput::make('min')->label('Minimum value')->numeric()->visible($is('number')),
@@ -532,20 +534,15 @@ class ContentTypeBuilder extends Page implements HasTable
     /** @return array<string, mixed> */
     private function field(string $name): array
     {
-        foreach ((array) ($this->node()['fields'] ?? []) as $field) {
-            if ($field['name'] === $name) {
-                return $field;
-            }
-        }
-        throw new RuntimeException("no field named \"{$name}\"");
+        return ModelSchema::fields($this->document(), (string) $this->type)[$name] ?? throw new RuntimeException("no field named \"{$name}\"");
     }
 
     /** @return array<string, array{name: string, type: string, details: string}> */
     private function fieldRows(): array
     {
         $rows = [];
-        foreach ((array) ($this->node()['fields'] ?? []) as $field) {
-            $rows[$field['name']] = ModelSchema::fieldRow($field, $this->document());
+        foreach (ModelSchema::fields($this->document(), (string) $this->type) as $name => $field) {
+            $rows[$name] = ModelSchema::fieldRow($field, $this->document());
         }
 
         return $rows;

@@ -67,6 +67,9 @@ final class ContentTypeBuilderSchema
         'manyWay' => ['label' => 'has many', 'relationKind' => 'oneToMany', 'inverse' => false],
     ];
 
+    /** A relation's kind as its inverse side sees it: a book's many-to-one author is an author's one-to-many books. */
+    private const INVERSE_KINDS = ['oneToOne' => 'oneToOne', 'oneToMany' => 'manyToOne', 'manyToOne' => 'oneToMany', 'manyToMany' => 'manyToMany'];
+
     /** The keys the builder's forms own on a field; every other key a field carries is kept. */
     private const MANAGED_FIELD_KEYS = [
         'type', 'name', 'required', 'unique', 'private', 'minLength', 'maxLength', 'min', 'max',
@@ -147,6 +150,69 @@ final class ContentTypeBuilderSchema
     public static function componentUid(array $component): string
     {
         return self::category($component).'.'.self::kebab($component['name']);
+    }
+
+    /**
+     * A type's fields as the builder lists them: its own, then the inverse side of each relation
+     * another type holds to it, as Strapi's schemas carry a relation on both its types.
+     *
+     * @param  array<string, mixed>  $ir
+     * @return array<string, array<string, mixed>> by name
+     */
+    public static function fields(array $ir, string $ref): array
+    {
+        $fields = [];
+        foreach ((array) (self::find($ir, $ref)['fields'] ?? []) as $field) {
+            $fields[$field['name']] = $field;
+        }
+
+        return $fields + self::inverseFields($ir, $ref);
+    }
+
+    /**
+     * The inverse sides a content type shows: each relation with an inverse that points at it, as
+     * a relation back to the type holding it, of the kind it is from this side. Its "heldBy" names
+     * the holder and the holder's field, which an edit or delete here changes.
+     *
+     * @param  array<string, mixed>  $ir
+     * @return array<string, array<string, mixed>> by name
+     */
+    private static function inverseFields(array $ir, string $ref): array
+    {
+        [$kind, $name] = array_pad(explode(':', $ref, 2), 2, '');
+        if ($kind !== 'contentType') {
+            return [];
+        }
+        $inverses = [];
+        foreach ($ir['contentTypes'] as $holder) {
+            foreach ($holder['fields'] as $field) {
+                if ($field['type'] === 'relation' && $field['target'] === $name && isset($field['inverse'])) {
+                    $inverses[$field['inverse']] = [
+                        'type' => 'relation',
+                        'name' => $field['inverse'],
+                        'relationKind' => self::INVERSE_KINDS[$field['relationKind']],
+                        'target' => $holder['name'],
+                        'inverse' => $field['name'],
+                        'heldBy' => ['contentType' => $holder['name'], 'field' => $field['name']],
+                    ];
+                }
+            }
+        }
+
+        return $inverses;
+    }
+
+    /**
+     * The inverse side a type shows under this name, when the name is not a field of its own.
+     *
+     * @param  array<string, mixed>  $ir
+     * @return array<string, mixed>|null
+     */
+    private static function inverseNamed(array $ir, string $ref, string $name): ?array
+    {
+        $field = self::fields($ir, $ref)[$name] ?? null;
+
+        return isset($field['heldBy']) ? $field : null;
     }
 
     /**
@@ -531,6 +597,7 @@ final class ContentTypeBuilderSchema
         return self::mapNode($ir, $ref, function (array $node) use ($ref, $state, $ir): array {
             $field = self::fieldFromState([], $state, $ref, $ir);
             self::assertFieldName($node, $field['name']);
+            self::assertNoInverseNamed($ir, $ref, $node, $field['name']);
             $node['fields'][] = $field;
 
             return $node;
@@ -549,6 +616,11 @@ final class ContentTypeBuilderSchema
      */
     public static function updateField(array $ir, string $ref, string $name, array $state): array
     {
+        $inverse = self::inverseNamed($ir, $ref, $name);
+        if ($inverse !== null) {
+            return self::updateInverse($ir, $ref, $inverse, $state);
+        }
+
         return self::mapNode($ir, $ref, function (array $node) use ($ref, $name, $state, $ir): array {
             $index = self::fieldIndex($node, $name);
             $field = self::fieldFromState($node['fields'][$index], $state, $ref, $ir);
@@ -566,6 +638,7 @@ final class ContentTypeBuilderSchema
             }
             if ($field['name'] !== $name) {
                 self::assertFieldName($node, $field['name']);
+                self::assertNoInverseNamed($ir, $ref, $node, $field['name']);
                 if (($node['options']['upsertBy'] ?? null) === $name) {
                     $node['options']['upsertBy'] = $field['name'];
                 }
@@ -584,6 +657,12 @@ final class ContentTypeBuilderSchema
      */
     public static function deleteField(array $ir, string $ref, string $name): array
     {
+        // Deleting either side of a relation deletes the relation, as in Strapi.
+        $inverse = self::inverseNamed($ir, $ref, $name);
+        if ($inverse !== null) {
+            return self::deleteField($ir, self::ref('contentType', $inverse['heldBy']['contentType']), $inverse['heldBy']['field']);
+        }
+
         return self::mapNode($ir, $ref, function (array $node) use ($name): array {
             $index = self::fieldIndex($node, $name);
             array_splice($node['fields'], $index, 1);
@@ -598,6 +677,39 @@ final class ContentTypeBuilderSchema
 
             return $node;
         });
+    }
+
+    /**
+     * The field dialog on a relation's inverse side, which edits the relation as seen from there.
+     * Still linking both ways to the type holding it, it changes the holder's field: the kind seen
+     * from the holder, the two names swapped, the holder's own settings kept. Made one-way or
+     * pointed at another type, it becomes this type's own relation and the holder's field goes.
+     *
+     * @param  array<string, mixed>  $ir
+     * @param  array<string, mixed>  $inverse
+     * @param  array<string, mixed>  $state
+     * @return array<string, mixed>
+     */
+    private static function updateInverse(array $ir, string $ref, array $inverse, array $state): array
+    {
+        $holderRef = self::ref('contentType', $inverse['heldBy']['contentType']);
+        $holderName = $inverse['heldBy']['field'];
+        $relation = self::RELATION_KINDS[(string) ($state['relationKind'] ?? '')] ?? null;
+        $otherName = trim((string) ($state['inverse'] ?? ''));
+        if ($relation === null || ! $relation['inverse'] || ($state['target'] ?? null) !== $inverse['target'] || $otherName === '') {
+            return self::addField(self::deleteField($ir, $holderRef, $holderName), $ref, $state);
+        }
+        $held = self::fields($ir, $holderRef)[$holderName];
+
+        return self::updateField($ir, $holderRef, $holderName, [
+            ...$state,
+            'name' => $otherName,
+            'inverse' => trim((string) ($state['name'] ?? '')),
+            'relationKind' => self::INVERSE_KINDS[$relation['relationKind']],
+            'target' => explode(':', $ref, 2)[1] ?? '',
+            'required' => $held['required'] ?? false,
+            'private' => $held['private'] ?? false,
+        ]);
     }
 
     /**
@@ -977,6 +1089,20 @@ final class ContentTypeBuilderSchema
             if ($field['name'] === $name) {
                 throw new InvalidArgumentException("\"{$node['name']}\" already has a field named \"{$name}\"");
             }
+        }
+    }
+
+    /**
+     * A field name is free only where no relation of another type shows its inverse under it.
+     *
+     * @param  array<string, mixed>  $ir
+     * @param  array<string, mixed>  $node
+     */
+    private static function assertNoInverseNamed(array $ir, string $ref, array $node, string $name): void
+    {
+        $inverse = self::inverseFields($ir, $ref)[$name] ?? null;
+        if ($inverse !== null) {
+            throw new InvalidArgumentException("\"{$node['name']}\" already shows \"{$name}\", the other side of {$inverse['heldBy']['contentType']}.{$inverse['heldBy']['field']}");
         }
     }
 
