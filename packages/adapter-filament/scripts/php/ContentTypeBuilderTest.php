@@ -454,6 +454,22 @@ class ContentTypeBuilderTest extends TestCase
         $this->assertSame(['name'], array_column($this->type('Author')['fields'], 'name'));
     }
 
+    public function test_the_field_dialog_offers_every_kind_whatever_field_the_type_ends_with(): void
+    {
+        $this->login(['user.update']);
+        $this->develop();
+
+        // Book's last field is media, kept outside its table: a new field may still be of any kind.
+        Livewire::test(ContentTypeBuilder::class, ['type' => 'contentType:Book'])
+            ->mountAction(TestAction::make('addField')->table())
+            ->assertFormFieldEnabled('kind');
+        // An inverse has no settings of its own on its side; its holder's are kept.
+        Livewire::test(ContentTypeBuilder::class, ['type' => 'contentType:Author'])
+            ->mountAction(TestAction::make('editField')->table('books'))
+            ->assertFormFieldHidden('required')
+            ->assertFormFieldHidden('private');
+    }
+
     public function test_a_field_changes_to_a_type_in_another_group(): void
     {
         $this->login(['user.update']);
