@@ -60,8 +60,17 @@ describe("dynamic zones", () => {
   it("edits a zone in the admin with a builder of its components", () => {
     const form = content("app/Filament/Resources/Landings/Schemas/LandingForm.php");
     expect(form).toContain("Builder::make('blocks')");
-    expect(form).toContain("Block::make('shared.hero')->label('Hero')");
+    expect(form).toContain(
+      "Block::make('shared.hero')->label(fn (?array $state): string => StrapiContentManager::blockLabel('shared.hero', 'Hero', $state))",
+    );
     expect(form).toContain("StrapiZones::sync($record, 'blocks'");
+  });
+
+  // Strapi titles a zone's item by its component's display name and the value of the component's
+  // main field ("Hero - Welcome"), and numbers none of them.
+  it("titles a zone's items by their component's main field and numbers none", () => {
+    const form = content("app/Filament/Resources/Landings/Schemas/LandingForm.php");
+    expect(form).toContain("->blockNumbers(false)");
   });
 
   it("labels a zone's block with its component's display name, as Strapi's picker does", () => {
@@ -80,11 +89,13 @@ describe("dynamic zones", () => {
     const form = named.files.find((f) =>
       f.path.endsWith("app/Filament/Resources/Landings/Schemas/LandingForm.php"),
     )!.content;
-    expect(form).toContain("Block::make('shared.hero')->label('Hero\\'s banner')");
+    expect(form).toContain(
+      "Block::make('shared.hero')->label(fn (?array $state): string => StrapiContentManager::blockLabel('shared.hero', 'Hero\\'s banner', $state))",
+    );
     // Without one, its name humanized, as Strapi derives a display name.
     expect(
       named.files.find((f) => f.path.endsWith("app/Filament/Resources/Menus/Schemas/MenuForm.php"))!
         .content,
-    ).toContain("Block::make('shared.menu-item')->label('Menu Item')");
+    ).toContain("StrapiContentManager::blockLabel('shared.menu-item', 'Menu Item', $state)");
   });
 });
