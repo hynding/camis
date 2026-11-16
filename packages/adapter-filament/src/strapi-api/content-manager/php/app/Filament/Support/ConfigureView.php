@@ -7,6 +7,7 @@ namespace App\Filament\Support;
 use App\Filament\Pages\ConfigureComponentView;
 use App\Support\StrapiComponentViews;
 use App\Support\StrapiContentManager;
+use Closure;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Repeater;
@@ -95,13 +96,20 @@ abstract class ConfigureView extends Page
                     Hidden::make('name'),
                     Toggle::make('shown')->label('Show in the edit view'),
                     Toggle::make('editable')->label('Editable field'),
-                    Select::make('size')->options(fn (Get $get): array => StrapiContentManager::sizes($view['attributes'][$get('name')] ?? ['resizable' => true, 'size' => 6]))->required(),
+                    Select::make('size')->options(fn (Get $get): array => StrapiContentManager::sizes($view['attributes'][$get('name')] ?? ['resizable' => true, 'size' => 6]))->required()
+                        ->visible(self::offers($view, 'size')),
                     TextInput::make('label')->required(),
-                    TextInput::make('description'),
-                    TextInput::make('placeholder'),
+                    TextInput::make('description')->visible(self::offers($view, 'description')),
+                    TextInput::make('placeholder')->visible(self::offers($view, 'placeholder')),
                     self::mainFieldSelect($view),
                 ]),
         ]);
+    }
+
+    /** Whether an edit view's field may set this, as Strapi offers it for the field's type. */
+    private static function offers(array $view, string $setting): Closure
+    {
+        return fn (Get $get): bool => in_array($setting, StrapiContentManager::editSettings((string) ($view['attributes'][(string) $get('name')]['type'] ?? '')), true);
     }
 
     /** A relation's entry title: one of the fields of its target that Strapi lets title an entry. */
