@@ -447,6 +447,18 @@ describe("newCommand — scaffold and build", () => {
     expect(materialized).toEqual(["/work/p/generated/filament"]);
   });
 
+  it("names the Laravel app after the project, not the skeleton's Laravel", async () => {
+    const { io, files } = memoryIo();
+    files["/work/p/generated/filament/.env"] = "APP_NAME=Laravel\nAPP_ENV=local\n";
+    files["/work/p/generated/filament/app/Models/User.php"] =
+      "class User extends Authenticatable\n{\n    use HasFactory, Notifiable;\n}\n";
+    files["/work/p/generated/filament/bootstrap/app.php"] = STOCK_BOOTSTRAP;
+    files["/work/p/generated/filament/app/Providers/Filament/AdminPanelProvider.php"] =
+      "        return $panel\n            ->login()\n            ->colors([]);\n";
+    expect(await newCommand("p", io, { targets: ["filament"] })).toBe(0);
+    expect(files["/work/p/generated/filament/.env"]).toBe("APP_NAME=p\nAPP_ENV=local\n");
+  });
+
   it("stops before building when the scaffold fails", async () => {
     const { io, materialized, lines } = memoryIo({ execResults: [1] });
     expect(await newCommand("p", io, { targets: ["filament"] })).toBe(1);
@@ -464,7 +476,7 @@ describe("newCommand — scaffold and build", () => {
     expect(code).toBe(0);
     expect(calls).toEqual([]);
     expect(materialized).toEqual([]);
-    expect(lines.join("\n")).toContain("camis scaffold filament generated/filament");
+    expect(lines.join("\n")).toContain("camis scaffold filament generated/filament --name p");
   });
 
   // The scaffold refuses a non-empty directory, so building first would block the next step.
@@ -475,7 +487,7 @@ describe("newCommand — scaffold and build", () => {
     expect(calls).toEqual([]);
     expect(materialized).toEqual([]);
     expect(lines.join("\n")).toContain(
-      "next: cd p && camis scaffold filament generated/filament && camis build",
+      "next: cd p && camis scaffold filament generated/filament --name p && camis build",
     );
   });
 

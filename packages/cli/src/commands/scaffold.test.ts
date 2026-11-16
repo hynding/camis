@@ -11,6 +11,7 @@ import {
   patchAdminPanelProvider,
   patchUserModel,
   scaffoldCommand,
+  setAppName,
 } from "./scaffold";
 
 interface ExecCall {
@@ -358,7 +359,56 @@ describe("patchConsoleRoutes", () => {
   });
 });
 
+describe("setAppName", () => {
+  const STOCK_ENV = "APP_NAME=Laravel\nAPP_ENV=local\n";
+
+  it("replaces the skeleton's Laravel name, which the admin shows as its brand", () => {
+    expect(setAppName(STOCK_ENV, "sitlab")).toBe("APP_NAME=sitlab\nAPP_ENV=local\n");
+  });
+
+  it("quotes a name a bare .env value cannot hold, escaping what would expand", () => {
+    expect(setAppName(STOCK_ENV, 'My "$HOME" site')).toBe(
+      'APP_NAME="My \\"\\$HOME\\" site"\nAPP_ENV=local\n',
+    );
+  });
+
+  it("adds the line to an env file without one", () => {
+    expect(setAppName("APP_ENV=local\n", "sitlab")).toBe("APP_NAME=sitlab\nAPP_ENV=local\n");
+  });
+});
+
 describe("scaffoldCommand", () => {
+  it("names the app in .env and .env.example, on either storage layout", async () => {
+    for (const storage of ["laravel", "strapi"] as const) {
+      const { io, written, lines } = fakeIo({
+        files: {
+          "/proj/app/.env": "APP_NAME=Laravel\n",
+          "/proj/app/.env.example": "APP_NAME=Laravel\n",
+          "/proj/app/app/Models/User.php": STOCK_USER,
+          "/proj/app/app/Providers/Filament/AdminPanelProvider.php": STOCK_PANEL,
+          "/proj/app/bootstrap/app.php": STOCK_BOOTSTRAP,
+        },
+      });
+      expect(await scaffoldCommand("filament", "app", io, { storage, appName: "sitlab" })).toBe(0);
+      expect(written["/proj/app/.env"]).toBe("APP_NAME=sitlab\n");
+      expect(written["/proj/app/.env.example"]).toBe("APP_NAME=sitlab\n");
+      expect(lines).toContain("✓ named the app sitlab in .env and .env.example");
+    }
+  });
+
+  it("keeps the skeleton's name when none is given", async () => {
+    const { io, written } = fakeIo({
+      files: {
+        "/proj/app/.env": "APP_NAME=Laravel\n",
+        "/proj/app/app/Models/User.php": STOCK_USER,
+        "/proj/app/app/Providers/Filament/AdminPanelProvider.php": STOCK_PANEL,
+        "/proj/app/bootstrap/app.php": STOCK_BOOTSTRAP,
+      },
+    });
+    expect(await scaffoldCommand("filament", "app", io)).toBe(0);
+    expect(written["/proj/app/.env"]).toBeUndefined();
+  });
+
   it("loads the IR's schedules from routes/console.php, on either storage layout", async () => {
     for (const storage of ["laravel", "strapi"] as const) {
       const { io, written } = fakeIo({
