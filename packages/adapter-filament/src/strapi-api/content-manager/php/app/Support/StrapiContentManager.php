@@ -384,6 +384,20 @@ final class StrapiContentManager
     }
 
     /**
+     * A dynamic zone's item titled as Strapi's edit view titles it: its component's display name,
+     * then " - " and its main field's value when there is one. Without state (the block picker),
+     * the display name alone.
+     *
+     * @param array<string, mixed>|null $state
+     */
+    public static function blockLabel(string $uid, string $name, ?array $state): string
+    {
+        $title = $state === null ? null : self::itemLabel($uid, $state);
+
+        return $title === null ? $name : "{$name} - {$title}";
+    }
+
+    /**
      * A repeatable component's item titled as Strapi's edit view titles it: by the value of the
      * main field the component's view names (by default its first string attribute), or nothing.
      *

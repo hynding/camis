@@ -21,7 +21,8 @@ import { componentUid } from "../core/names";
  * written to the zone's rows through `StrapiZones`, as the REST API reads and writes them. With
  * a media library an item's media fields pick files by id, which `StrapiZones` links; an
  * item's relations pick targets by id, and the repeatables inside it are plain repeaters, all
- * written with the item.
+ * written with the item. Each item is titled as Strapi titles it: its component's display name
+ * and its main field's value, unnumbered.
  */
 export const zoneBuilder = (
   ct: ContentType,
@@ -40,7 +41,9 @@ export const zoneBuilder = (
   const blocks = children
     .map(({ member, child }) => {
       const schema = blockFields(child, pickers, components, "                    ");
-      return `                    Block::make('${componentUid(member.component)}')->label(${phpSingleQuoted(componentDisplayName(member.component))})->schema(${schema}),`;
+      const uid = componentUid(member.component);
+      const label = `StrapiContentManager::blockLabel('${uid}', ${phpSingleQuoted(componentDisplayName(member.component))}, $state)`;
+      return `                    Block::make('${uid}')->label(fn (?array $state): string => ${label})->schema(${schema}),`;
     })
     .join("\n");
   return {
@@ -48,6 +51,7 @@ export const zoneBuilder = (
                 ->blocks([
 ${blocks}
                 ])
+                ->blockNumbers(false)
                 ->afterStateHydrated(fn (Builder $component, ?Model $record) => $component->state(StrapiZones::builder($record, ${members})))
                 ->dehydrated(false)
                 ->saveRelationshipsUsing(fn (Model $record, ?array $state) => StrapiZones::sync($record, '${key}', ${members}, StrapiZones::fromBuilder($state, ${members})))`,
