@@ -197,7 +197,7 @@ export const contentManagerAttributes = (
     (r): ContentManagerAttribute => ({
       name: r.attribute,
       type: "relation",
-      relation: r.multiple ? "manyToMany" : "manyToOne",
+      relation: r.kind,
       components: [r.component],
       ...relationListing(r),
       sortable: !r.multiple,

@@ -95,6 +95,8 @@ export interface AdminRelation {
   /** Every field of the target a view may label a linked entry by, with its column. */
   mainFields: Record<string, string>;
   multiple: boolean;
+  /** The relation's kind as Strapi's schema names it on this side: an inverse sees it reversed. */
+  kind: RelationKind;
   /** The target keeps drafts, which links go through, so a filter offers its drafts only. */
   drafts: boolean;
 }
@@ -235,10 +237,11 @@ export const resolveRelations = (
     holder: string,
     rows: string,
     name: string,
-    multiple: boolean,
+    kind: "oneToMany" | "oneToOne",
     required: boolean,
   ): void => {
     out.inverseLinks = true;
+    const multiple = kind === "oneToMany";
     push(
       out.formFields,
       holder,
@@ -258,6 +261,7 @@ export const resolveRelations = (
       titleAttribute: label(rows),
       ...mainFields(rows),
       multiple,
+      kind,
       drafts: versioned.has(rows),
     });
   };
@@ -298,6 +302,7 @@ export const resolveRelations = (
           titleAttribute: label(target),
           ...mainFields(target),
           multiple: false,
+          kind,
           drafts: versioned.has(target),
         });
         if (f.inverse !== undefined) {
@@ -306,13 +311,19 @@ export const resolveRelations = (
             target,
             method(kind === "oneToOne" ? "HasOne" : "HasMany", f.inverse, ownerN.model, `'${fk}'`),
           );
-          pickInverse(target, owner, f.inverse, kind === "manyToOne", required);
+          pickInverse(
+            target,
+            owner,
+            f.inverse,
+            kind === "manyToOne" ? "oneToMany" : "oneToOne",
+            required,
+          );
         }
       } else if (kind === "oneToMany") {
         const inverseName = f.inverse ?? snake(owner);
         const fk = `${snakeColumn(inverseName)}_id`;
         push(out.methods, owner, method("HasMany", f.name, targetN.model, `'${fk}'`));
-        pickInverse(owner, target, f.name, true, false);
+        pickInverse(owner, target, f.name, "oneToMany", false);
         push(out.fkColumns, target, {
           column: fk,
           references: owner,
@@ -335,6 +346,7 @@ export const resolveRelations = (
             titleAttribute: label(owner),
             ...mainFields(owner),
             multiple: false,
+            kind: "manyToOne",
             drafts: versioned.has(owner),
           });
         }
@@ -371,6 +383,7 @@ export const resolveRelations = (
           titleAttribute: label(target),
           ...mainFields(target),
           multiple: true,
+          kind,
           drafts: versioned.has(target),
         });
         if (f.inverse !== undefined) {
@@ -397,6 +410,7 @@ export const resolveRelations = (
             titleAttribute: label(owner),
             ...mainFields(owner),
             multiple: true,
+            kind,
             drafts: versioned.has(owner),
           });
         }
