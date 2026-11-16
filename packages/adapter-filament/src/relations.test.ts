@@ -173,6 +173,7 @@ describe("resolveRelations — the side holding many in the admin", () => {
       relation: "articles",
       component: "articles",
       multiple: true,
+      kind: "oneToMany",
     });
   });
 
@@ -195,6 +196,7 @@ describe("resolveRelations — the side holding many in the admin", () => {
     expect(r2.adminRelations.get("Author")![0]).toMatchObject({
       attribute: "posts",
       multiple: true,
+      kind: "oneToMany",
     });
   });
 
@@ -225,7 +227,16 @@ describe("resolveRelations — the side holding many in the admin", () => {
     expect(r2.adminRelations.get("Profile")![0]).toMatchObject({
       attribute: "article",
       multiple: false,
+      kind: "oneToOne",
     });
+  });
+
+  // Each side names its kind as Strapi's schema names it on that side.
+  it("names each side's relation kind as that side sees it", () => {
+    expect(admin("Article", "author")?.kind).toBe("manyToOne");
+    expect(r.adminRelations.get("Tag")?.find((a) => a.attribute === "articles")?.kind).toBe(
+      "manyToMany",
+    );
   });
 
   it("offers a draft-and-publish target's drafts only, and keeps the published rows' links", () => {

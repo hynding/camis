@@ -338,6 +338,14 @@ describe("the Strapi-like admin", () => {
     ).not.toContain("StrapiNavigation");
   });
 
+  // Strapi's view names the kind of a relation's side that holds no key as that side sees it: a
+  // many-to-one's inverse is one-to-many (an author's books), a one-to-one's is one-to-one.
+  it("names an inverse relation's kind as Strapi's view does", () => {
+    expect(content("app/Filament/Resources/Authors/AuthorResource.php")).toContain(
+      "'books' => ['type' => 'relation', 'relation' => 'oneToMany',",
+    );
+  });
+
   // Strapi labels a linked entry by the relation's main field, which its view can change; the
   // view names the target's attributes, so the constant says which column each one is.
   it("tells the view which of the target's fields a relation can be labelled by", () => {
