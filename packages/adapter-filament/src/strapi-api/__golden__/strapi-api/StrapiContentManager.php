@@ -231,12 +231,6 @@ final class StrapiContentManager
         // Strapi makes every component's view when it starts, so one never configured is laid out
         // by the default view; only a component this app does not know goes in schema order.
         if ($view === null && $rows === []) {
-            foreach ($fields as $name => $list) {
-                if (isset($list[0])) {
-                    self::titleItems($list[0], $view['attributes'][$name] ?? []);
-                }
-            }
-
             return array_merge(...array_values($fields));
         }
         if ($view !== null) {
