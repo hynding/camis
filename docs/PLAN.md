@@ -2342,6 +2342,19 @@ this keeps "Laravel" until its `.env` is edited.
 
 Exit: `scaffold.test.ts`'s setAppName and naming cases; `new.test.ts`'s project-name case.
 
+## Phase 79 — a dynamic zone's items titled by their main field (`adapter-filament`)
+
+Phase 76 titled a repeatable component's items; a dynamic zone's items still said only their
+component's name, numbered ("Hero 1", "Quantity 2"). Strapi's edit view titles each one by its
+component's display name and the value of the component's main field ("Hero - Welcome"), and
+numbers none. Each block of the zone's Builder takes its label from
+`StrapiContentManager::blockLabel(uid, display name, state)`, which reads the main field as
+Phase 76's item titles do (the component's saved view, else its first string attribute); the
+block picker, which has no state, offers the display name alone. The Builder numbers no block.
+
+Exit: `dynamic-zones.test.ts`'s titling case; DynamicZonesTest's main-field case in the
+`strapi-api` boot job.
+
 ---
 
 ## Sequencing rationale (quick reference)

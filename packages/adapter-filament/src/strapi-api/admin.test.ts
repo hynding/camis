@@ -356,7 +356,7 @@ describe("the Strapi-like admin", () => {
     );
     expect(form).toContain("'link' => StrapiContentManager::component('shared.link', [");
     expect(form).toContain(
-      "Block::make('shared.link')->label('Link')->schema(StrapiContentManager::component('shared.link', [",
+      "Block::make('shared.link')->label(fn (?array $state): string => StrapiContentManager::blockLabel('shared.link', 'Link', $state))->schema(StrapiContentManager::component('shared.link', [",
     );
   });
 

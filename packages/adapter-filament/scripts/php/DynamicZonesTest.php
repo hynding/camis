@@ -72,6 +72,35 @@ class DynamicZonesTest extends TestCase
         $this->assertSame(['shared.hero', 'shared.quantity'], $this->components($published));
     }
 
+    /**
+     * Strapi's edit view titles a zone's item by its component's display name and the value of the
+     * component's main field (by default its first string attribute), and numbers none of them;
+     * the block picker offers the display name alone.
+     */
+    public function test_a_zones_items_are_titled_by_their_components_main_field(): void
+    {
+        $this->login(['landing.create', 'landing.read', 'landing.update']);
+        Livewire::test(CreateLanding::class)
+            ->fillForm(['title' => 'Home', 'blocks' => [
+                'a' => ['type' => 'shared.quantity', 'data' => ['amount' => 2, 'unit' => 'kg']],
+                'b' => ['type' => 'shared.hero', 'data' => ['heading' => 'Hi', 'price_minor' => 5, 'price_currency' => 'EUR']],
+                'c' => ['type' => 'shared.quantity', 'data' => ['amount' => 3, 'unit' => null]],
+            ]])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $blocks = Livewire::test(EditLanding::class, ['record' => Landing::sole()->getRouteKey()])->instance()->form
+            ->getComponent(fn ($component): bool => $component instanceof \Filament\Forms\Components\Builder && $component->getName() === 'blocks');
+        $this->assertNotNull($blocks);
+        $labels = array_map(
+            fn (\Filament\Schemas\Schema $item): string => (string) $item->getParentComponent()->getLabel($item->getRawState()),
+            array_values($blocks->getItems()),
+        );
+        $this->assertSame(['Quantity - kg', 'Hero - Hi', 'Quantity'], $labels);
+        $this->assertFalse($blocks->hasBlockNumbers());
+        $this->assertSame('Hero', (string) $blocks->getBlock('shared.hero')->getLabel());
+    }
+
     public function test_an_items_image_is_picked_kept_and_published_with_it(): void
     {
         $this->login(['landing.create', 'landing.read', 'landing.update', 'landing.publish', 'file.read']);
