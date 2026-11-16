@@ -2367,6 +2367,22 @@ and the view takes it from there.
 
 Exit: `relations.test.ts`'s kind cases; `admin.test.ts`'s inverse-kind case.
 
+## Phase 81 — the Content-Type Builder lists a relation on both its types (`adapter-filament`)
+
+Strapi's builder lists a relation with an inverse on both content types ("Relation with Book" on
+Author as well as "Relation with Author" on Book); camis's listed it only on the type holding the
+field. `ContentTypeBuilderSchema::fields(ir, ref)` lists a type's own fields, then the inverse
+side of each relation another type holds to it, of the kind it is from there (Phase 80's flip),
+naming its holder (`heldBy`). Its dialog edits the relation as seen from that side: still linking
+both ways to its holder, the edit goes to the holder's field (kind flipped back, the two names
+swapped, the holder's required and private kept, neither shown); made one-way or pointed at
+another type, it becomes this type's own relation and the holder's field goes. Deleting either
+side deletes the relation. A new or renamed field may not take an inverse's name. The field
+dialog also stopped mistaking the type's last field for the field being edited, which had locked
+the kind cards of a new field on a type ending in a media, relation or component field.
+
+Exit: ContentTypeBuilderTest's inverse cases and field-dialog case in the `strapi-api` boot job.
+
 ---
 
 ## Sequencing rationale (quick reference)
