@@ -259,7 +259,7 @@ class AdminTokensTest extends TestCase
             CREATE TABLE admin_permissions_api_token_lnk (id INTEGER PRIMARY KEY, permission_id INTEGER, api_token_id INTEGER);
             INSERT INTO admin_permissions_api_token_lnk VALUES (1, 1, 1), (2, 2, 1);
             CREATE TABLE strapi_api_token_permissions (id INTEGER PRIMARY KEY, action TEXT);
-            CREATE TABLE strapi_api_token_permissions_token_lnk (id INTEGER PRIMARY KEY, api_token_permission_id INTEGER, api_token_id INTEGER);
+            CREATE TABLE strapi_api_token_permissions_token_lnk (id INTEGER PRIMARY KEY, api_token_permission_id INTEGER, api_token_id INTEGER, api_token_permission_ord REAL);
             CREATE TABLE strapi_transfer_tokens (id INTEGER PRIMARY KEY, name TEXT, description TEXT, access_key TEXT, last_used_at TEXT, expires_at TEXT, lifespan INTEGER, created_at TEXT, updated_at TEXT);
             SQL);
 

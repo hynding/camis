@@ -113,12 +113,12 @@ class TokenImportTest extends TestCase
         $this->assertSame('full-access', StrapiApiToken::query()->where('name', 'seeder')->sole()->type);
     }
 
-    public function test_an_admin_token_is_reported_rather_than_made_a_content_api_one(): void
+    public function test_an_admin_token_without_its_owner_here_is_reported_rather_than_made_a_content_api_one(): void
     {
         (new \PDO('sqlite:'.$this->database))->exec("UPDATE strapi_api_tokens SET kind = 'admin' WHERE name = 'books'");
 
         $this->artisan('strapi:import-tokens', ['--database' => $this->database, '--force' => true])
-            ->expectsOutputToContain('Not imported: API token books (an admin token')
+            ->expectsOutputToContain('Not imported: Admin token books (no admin account here has its owner')
             ->assertSuccessful();
         $this->assertFalse(StrapiApiToken::query()->where('name', 'books')->exists());
     }

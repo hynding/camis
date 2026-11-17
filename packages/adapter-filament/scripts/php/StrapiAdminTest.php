@@ -74,7 +74,7 @@ class StrapiAdminTest extends TestCase
         $this->assertSame(['Article', 'Book', 'Note', 'User'], array_values(array_intersect($types, ['Article', 'Book', 'Note', 'User'])));
         $this->assertContains('Media Library', $menu['']);
         $this->assertSame(
-            ['Overview', 'API Tokens', 'Internationalization', 'Media Library', 'Transfer Tokens', 'Webhooks', 'Data transfer', 'Admin users', 'Email', 'Roles', 'Providers', 'Email templates', 'Advanced settings'],
+            ['Overview', 'API Tokens', 'Internationalization', 'Media Library', 'Transfer Tokens', 'Webhooks', 'Data transfer', 'Admin users', 'Admin Tokens', 'Email', 'Roles', 'Providers', 'Email templates', 'Advanced settings'],
             $menu['Settings'],
         );
     }
