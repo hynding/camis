@@ -7,8 +7,9 @@
 // steps made) or `bearer`; `headers` replaces the MCP request headers, `method` and `raw` send
 // something else. An `admin` step calls the admin API as the signed-in admin and `keep`s response
 // values (`{ "key": "data.accessKey" }`) as `$name`s (`rows`: permission rows, as a token takes them). A `hook` step runs the runtime's hook
-// command (`--hook`, given the step's words) on camis, and its `oracle` request on strapi-php,
-// for what only the database or an admin-only route can change.
+// command (`--hook`, given the step's words) on camis, and its `oracle` request on strapi-php
+// (an `upload` there being a text file sent to the Media Library), for what only the database or
+// an admin-only route can change.
 //
 // An SSE answer is compared as its messages; a tool result's text, which is its structured
 // content as JSON, as that. Document ids and times differ between runtimes and runs, so a
@@ -66,15 +67,23 @@ const signIn = async () => {
   if (jwt === undefined) throw new Error("could not sign the admin in");
 };
 
-const adminCall = async ({ method = "GET", path, body }) => {
-  const response = await fetch(`${origin}${fill(path)}`, {
-    method,
+/** An `upload` sends a text file as the admin's Media Library does: multipart, to POST /upload. */
+const uploadForm = ({ name, type, text }) => {
+  const form = new FormData();
+  form.append("files", new Blob([text], { type }), name);
+  return form;
+};
+
+const adminCall = async ({ method = "GET", path, body, upload }) => {
+  const json = body !== undefined;
+  const response = await fetch(`${origin}${fill(path ?? "/upload")}`, {
+    method: upload === undefined ? method : "POST",
     headers: {
       Authorization: `Bearer ${jwt}`,
       Accept: "application/json",
-      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+      ...(json ? { "Content-Type": "application/json" } : {}),
     },
-    body: body === undefined ? undefined : JSON.stringify(fill(body)),
+    body: upload !== undefined ? uploadForm(upload) : json ? JSON.stringify(fill(body)) : undefined,
   });
   const text = await response.text();
   return { status: response.status, body: text === "" ? null : JSON.parse(text) };
@@ -122,6 +131,7 @@ const mcpCall = async (step) => {
 // --- masking ----------------------------------------------------------------------------------
 
 const documents = new Map();
+const HASH = /_[0-9a-f]{10}(\.[A-Za-z0-9]+)?$/;
 const TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 const documentId = (id) => {
   if (!documents.has(id)) documents.set(id, `<document ${documents.size + 1}>`);
@@ -137,6 +147,8 @@ const mask = (value, key, inResult = false) => {
     );
   if (inResult && key === "id" && typeof value === "number") return "<id>";
   if (typeof value === "string" && key === "documentId") return documentId(value);
+  // A stored file's name ends in a random hash.
+  if (typeof value === "string" && key === "url") return value.replace(HASH, "_<hash>$1");
   if (typeof value === "string" && TIME.test(value)) return "<time>";
   return value;
 };

@@ -23,6 +23,7 @@ describe("the MCP server", () => {
         "app/Support/StrapiMcpServer.php",
         "app/Support/StrapiMcpSchema.php",
         "app/Support/StrapiMcpContentManager.php",
+        "app/Support/StrapiMcpMedia.php",
       ]),
     );
   });
@@ -61,6 +62,19 @@ describe("the MCP server", () => {
       flaggedBy: { kind: "relation", private: true },
     });
     expect(types["api::review.review"]!.populate).not.toHaveProperty("flaggedBy");
+  });
+
+  it("lists the Media Library's tools first, as Strapi registers them first", () => {
+    const { types, tools } = JSON.parse(content("resources/strapi/mcp.json")) as {
+      types: Record<string, Record<string, unknown>>;
+      tools: { name: string; uid: string; operation: string }[];
+    };
+    expect(tools[0]).toMatchObject({
+      name: "media_list_assets",
+      uid: "plugin::upload.file",
+      operation: "list_assets",
+    });
+    expect(types["plugin::upload.file"]).toEqual({ model: "App\\Models\\File" });
   });
 
   it("is left out of an app without roles, which has no admin tokens to sign in with", () => {

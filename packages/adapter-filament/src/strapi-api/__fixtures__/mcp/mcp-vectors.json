@@ -1058,6 +1058,664 @@
           }
         }
       }
+    },
+    {
+      "name": "no folders yet",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 901,
+        "method": "tools/call",
+        "params": {
+          "name": "media_list_folders",
+          "arguments": {}
+        }
+      }
+    },
+    {
+      "name": "create a folder",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 902,
+        "method": "tools/call",
+        "params": {
+          "name": "media_create_folder",
+          "arguments": {
+            "name": "Photos"
+          }
+        }
+      },
+      "keep": {
+        "photos": "result.structuredContent.data.id"
+      }
+    },
+    {
+      "name": "create a folder inside it",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 903,
+        "method": "tools/call",
+        "params": {
+          "name": "media_create_folder",
+          "arguments": {
+            "name": "2024",
+            "parent": "$photos"
+          }
+        }
+      },
+      "keep": {
+        "year": "result.structuredContent.data.id"
+      }
+    },
+    {
+      "name": "a sibling's name is taken",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 904,
+        "method": "tools/call",
+        "params": {
+          "name": "media_create_folder",
+          "arguments": {
+            "name": "Photos",
+            "parent": null
+          }
+        }
+      }
+    },
+    {
+      "name": "a folder name has no slashes",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 905,
+        "method": "tools/call",
+        "params": {
+          "name": "media_create_folder",
+          "arguments": {
+            "name": "a/b"
+          }
+        }
+      }
+    },
+    {
+      "name": "nor surrounding spaces, nor an unknown key",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 906,
+        "method": "tools/call",
+        "params": {
+          "name": "media_create_folder",
+          "arguments": {
+            "name": " a",
+            "colour": "red"
+          }
+        }
+      }
+    },
+    {
+      "name": "the parent must exist",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 907,
+        "method": "tools/call",
+        "params": {
+          "name": "media_create_folder",
+          "arguments": {
+            "name": "Elsewhere",
+            "parent": 999
+          }
+        }
+      }
+    },
+    {
+      "name": "create a second root folder",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 908,
+        "method": "tools/call",
+        "params": {
+          "name": "media_create_folder",
+          "arguments": {
+            "name": "Archive"
+          }
+        }
+      },
+      "keep": {
+        "archive": "result.structuredContent.data.id"
+      }
+    },
+    {
+      "name": "the folder tree",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 909,
+        "method": "tools/call",
+        "params": {
+          "name": "media_list_folders",
+          "arguments": {}
+        }
+      }
+    },
+    {
+      "name": "renaming does not move",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 910,
+        "method": "tools/call",
+        "params": {
+          "name": "media_rename_folder",
+          "arguments": {
+            "id": "$year",
+            "name": "Y",
+            "parent": null
+          }
+        }
+      }
+    },
+    {
+      "name": "rename a folder",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 911,
+        "method": "tools/call",
+        "params": {
+          "name": "media_rename_folder",
+          "arguments": {
+            "id": "$year",
+            "name": "Twenty"
+          }
+        }
+      }
+    },
+    {
+      "name": "rename a folder that is not there",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 912,
+        "method": "tools/call",
+        "params": {
+          "name": "media_rename_folder",
+          "arguments": {
+            "id": 999,
+            "name": "X"
+          }
+        }
+      }
+    },
+    {
+      "name": "a folder cannot move into itself",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 913,
+        "method": "tools/call",
+        "params": {
+          "name": "media_move_folder",
+          "arguments": {
+            "id": "$photos",
+            "parent": "$year"
+          }
+        }
+      }
+    },
+    {
+      "name": "moving needs its parent named",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 914,
+        "method": "tools/call",
+        "params": {
+          "name": "media_move_folder",
+          "arguments": {
+            "id": "$year"
+          }
+        }
+      }
+    },
+    {
+      "name": "move a folder to the root",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 915,
+        "method": "tools/call",
+        "params": {
+          "name": "media_move_folder",
+          "arguments": {
+            "id": "$year",
+            "parent": null
+          }
+        }
+      }
+    },
+    {
+      "name": "move it back",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 916,
+        "method": "tools/call",
+        "params": {
+          "name": "media_move_folder",
+          "arguments": {
+            "id": "$year",
+            "parent": "$photos"
+          }
+        }
+      }
+    },
+    {
+      "hook": [
+        "file",
+        "hello.txt",
+        "hello world"
+      ],
+      "oracle": {
+        "upload": {
+          "name": "hello.txt",
+          "type": "text/plain",
+          "text": "hello world"
+        }
+      }
+    },
+    {
+      "hook": [
+        "file",
+        "notes.txt",
+        "some notes for later"
+      ],
+      "oracle": {
+        "upload": {
+          "name": "notes.txt",
+          "type": "text/plain",
+          "text": "some notes for later"
+        }
+      }
+    },
+    {
+      "name": "list the assets by name",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 917,
+        "method": "tools/call",
+        "params": {
+          "name": "media_list_assets",
+          "arguments": {
+            "sort": "name:ASC"
+          }
+        }
+      },
+      "keep": {
+        "hello": "result.structuredContent.results.0.id",
+        "notes": "result.structuredContent.results.1.id"
+      }
+    },
+    {
+      "name": "filter by mime type and name",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 918,
+        "method": "tools/call",
+        "params": {
+          "name": "media_list_assets",
+          "arguments": {
+            "mime": "TEXT",
+            "name": "NOT"
+          }
+        }
+      }
+    },
+    {
+      "name": "an exact mime type",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 919,
+        "method": "tools/call",
+        "params": {
+          "name": "media_list_assets",
+          "arguments": {
+            "mime": "image/png"
+          }
+        }
+      }
+    },
+    {
+      "name": "a page of one",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 920,
+        "method": "tools/call",
+        "params": {
+          "name": "media_list_assets",
+          "arguments": {
+            "sort": "name:DESC",
+            "page": 2,
+            "pageSize": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a sort Strapi does not offer",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 921,
+        "method": "tools/call",
+        "params": {
+          "name": "media_list_assets",
+          "arguments": {
+            "sort": "size:ASC"
+          }
+        }
+      }
+    },
+    {
+      "name": "get an asset",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 922,
+        "method": "tools/call",
+        "params": {
+          "name": "media_get_asset",
+          "arguments": {
+            "id": "$hello"
+          }
+        }
+      }
+    },
+    {
+      "name": "get an asset that is not there",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 923,
+        "method": "tools/call",
+        "params": {
+          "name": "media_get_asset",
+          "arguments": {
+            "id": 9999
+          }
+        }
+      }
+    },
+    {
+      "name": "update with nothing to change",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 924,
+        "method": "tools/call",
+        "params": {
+          "name": "media_update_asset",
+          "arguments": {
+            "id": "$hello"
+          }
+        }
+      }
+    },
+    {
+      "name": "update cannot move",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 925,
+        "method": "tools/call",
+        "params": {
+          "name": "media_update_asset",
+          "arguments": {
+            "id": "$hello",
+            "folder": "$photos"
+          }
+        }
+      }
+    },
+    {
+      "name": "update an asset's texts",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 926,
+        "method": "tools/call",
+        "params": {
+          "name": "media_update_asset",
+          "arguments": {
+            "id": "$hello",
+            "name": "greeting.txt",
+            "alternativeText": "A greeting",
+            "caption": null
+          }
+        }
+      }
+    },
+    {
+      "name": "move assets by one id",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 927,
+        "method": "tools/call",
+        "params": {
+          "name": "media_move_assets",
+          "arguments": {
+            "id": "$hello",
+            "folder": null
+          }
+        }
+      }
+    },
+    {
+      "name": "move assets to a folder that is not there",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 928,
+        "method": "tools/call",
+        "params": {
+          "name": "media_move_assets",
+          "arguments": {
+            "ids": [
+              "$hello"
+            ],
+            "folder": 999
+          }
+        }
+      }
+    },
+    {
+      "name": "move assets, one of them missing",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 929,
+        "method": "tools/call",
+        "params": {
+          "name": "media_move_assets",
+          "arguments": {
+            "ids": [
+              "$hello",
+              9999,
+              "$hello"
+            ],
+            "folder": "$year"
+          }
+        }
+      }
+    },
+    {
+      "name": "the assets in a folder",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 930,
+        "method": "tools/call",
+        "params": {
+          "name": "media_list_assets",
+          "arguments": {
+            "folderId": "$year"
+          }
+        }
+      }
+    },
+    {
+      "name": "the assets at the root",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 931,
+        "method": "tools/call",
+        "params": {
+          "name": "media_list_assets",
+          "arguments": {
+            "folderId": null
+          }
+        }
+      }
+    },
+    {
+      "name": "preview deleting an asset",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 932,
+        "method": "tools/call",
+        "params": {
+          "name": "media_delete_assets",
+          "arguments": {
+            "ids": [
+              "$notes",
+              9999
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "delete an asset",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 933,
+        "method": "tools/call",
+        "params": {
+          "name": "media_delete_assets",
+          "arguments": {
+            "ids": [
+              "$notes"
+            ],
+            "dryRun": false
+          }
+        }
+      }
+    },
+    {
+      "name": "delete folders, one not a folder",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 934,
+        "method": "tools/call",
+        "params": {
+          "name": "media_delete_folder",
+          "arguments": {
+            "ids": [
+              "$photos",
+              999
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "preview deleting a folder",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 935,
+        "method": "tools/call",
+        "params": {
+          "name": "media_delete_folder",
+          "arguments": {
+            "ids": [
+              "$photos"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "delete a folder and what it holds",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 936,
+        "method": "tools/call",
+        "params": {
+          "name": "media_delete_folder",
+          "arguments": {
+            "ids": [
+              "$photos",
+              "$year"
+            ],
+            "dryRun": false
+          }
+        }
+      }
+    },
+    {
+      "name": "what is left",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 937,
+        "method": "tools/call",
+        "params": {
+          "name": "media_list_assets",
+          "arguments": {}
+        }
+      }
+    },
+    {
+      "name": "and the tree",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 938,
+        "method": "tools/call",
+        "params": {
+          "name": "media_list_folders",
+          "arguments": {}
+        }
+      }
+    },
+    {
+      "name": "a token without the Media Library sees none of it",
+      "token": "tags",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 939,
+        "method": "tools/call",
+        "params": {
+          "name": "media_list_folders",
+          "arguments": {}
+        }
+      }
     }
   ]
 }

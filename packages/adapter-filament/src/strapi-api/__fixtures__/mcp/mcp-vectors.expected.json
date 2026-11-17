@@ -2648,5 +2648,1277 @@
         }
       }
     ]
+  },
+  {
+    "step": "no folders yet",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": []
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 901
+        }
+      }
+    ]
+  },
+  {
+    "step": "create a folder",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "name": "Photos",
+                "parent": null,
+                "createdAt": "<time>",
+                "updatedAt": "<time>"
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 902
+        }
+      }
+    ]
+  },
+  {
+    "step": "create a folder inside it",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "name": "2024",
+                "parent": {
+                  "id": "<id>",
+                  "name": "Photos"
+                },
+                "createdAt": "<time>",
+                "updatedAt": "<time>"
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 903
+        }
+      }
+    ]
+  },
+  {
+    "step": "a sibling's name is taken",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Tool \"media_create_folder\" execution failed: A folder with this name already exists in the same parent folder. Folder names must be unique among siblings."
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 904
+        }
+      }
+    ]
+  },
+  {
+    "step": "a folder name has no slashes",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Input validation error: Invalid arguments for tool media_create_folder: name: Folder name cannot contain slashes."
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 905
+        }
+      }
+    ]
+  },
+  {
+    "step": "nor surrounding spaces, nor an unknown key",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Input validation error: Invalid arguments for tool media_create_folder: name: Folder name cannot start or end with a whitespace., Unrecognized key: \"colour\""
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 906
+        }
+      }
+    ]
+  },
+  {
+    "step": "the parent must exist",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Tool \"media_create_folder\" execution failed: The parent folder does not exist. Use media_list_folders to discover valid folder ids, or pass null for the media library root."
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 907
+        }
+      }
+    ]
+  },
+  {
+    "step": "create a second root folder",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "name": "Archive",
+                "parent": null,
+                "createdAt": "<time>",
+                "updatedAt": "<time>"
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 908
+        }
+      }
+    ]
+  },
+  {
+    "step": "the folder tree",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": [
+                {
+                  "id": "<id>",
+                  "name": "Archive",
+                  "children": []
+                },
+                {
+                  "id": "<id>",
+                  "name": "Photos",
+                  "children": [
+                    {
+                      "id": "<id>",
+                      "name": "2024",
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 909
+        }
+      }
+    ]
+  },
+  {
+    "step": "renaming does not move",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Input validation error: Invalid arguments for tool media_rename_folder: media_rename_folder only changes a folder name. Use media_move_folder to change a folder location."
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 910
+        }
+      }
+    ]
+  },
+  {
+    "step": "rename a folder",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "name": "Twenty",
+                "parent": {
+                  "id": "<id>",
+                  "name": "Photos"
+                },
+                "createdAt": "<time>",
+                "updatedAt": "<time>"
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 911
+        }
+      }
+    ]
+  },
+  {
+    "step": "rename a folder that is not there",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Tool \"media_rename_folder\" execution failed: Media folder not found."
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 912
+        }
+      }
+    ]
+  },
+  {
+    "step": "a folder cannot move into itself",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Tool \"media_move_folder\" execution failed: A folder cannot be moved into itself or into one of its own descendants."
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 913
+        }
+      }
+    ]
+  },
+  {
+    "step": "moving needs its parent named",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Input validation error: Invalid arguments for tool media_move_folder: parent: Invalid input: expected number, received undefined"
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 914
+        }
+      }
+    ]
+  },
+  {
+    "step": "move a folder to the root",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "name": "Twenty",
+                "parent": null,
+                "createdAt": "<time>",
+                "updatedAt": "<time>"
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 915
+        }
+      }
+    ]
+  },
+  {
+    "step": "move it back",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "name": "Twenty",
+                "parent": {
+                  "id": "<id>",
+                  "name": "Photos"
+                },
+                "createdAt": "<time>",
+                "updatedAt": "<time>"
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 916
+        }
+      }
+    ]
+  },
+  {
+    "step": "list the assets by name",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "results": [
+                {
+                  "id": "<id>",
+                  "name": "hello.txt",
+                  "alternativeText": null,
+                  "caption": null,
+                  "url": "/uploads/hello_<hash>.txt",
+                  "mime": "text/plain",
+                  "size": 0.01,
+                  "width": null,
+                  "height": null,
+                  "ext": ".txt",
+                  "folder": null,
+                  "createdAt": "<time>",
+                  "updatedAt": "<time>"
+                },
+                {
+                  "id": "<id>",
+                  "name": "notes.txt",
+                  "alternativeText": null,
+                  "caption": null,
+                  "url": "/uploads/notes_<hash>.txt",
+                  "mime": "text/plain",
+                  "size": 0.02,
+                  "width": null,
+                  "height": null,
+                  "ext": ".txt",
+                  "folder": null,
+                  "createdAt": "<time>",
+                  "updatedAt": "<time>"
+                }
+              ],
+              "pagination": {
+                "page": 1,
+                "pageSize": 25,
+                "pageCount": 1,
+                "total": 2
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 917
+        }
+      }
+    ]
+  },
+  {
+    "step": "filter by mime type and name",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "results": [
+                {
+                  "id": "<id>",
+                  "name": "notes.txt",
+                  "alternativeText": null,
+                  "caption": null,
+                  "url": "/uploads/notes_<hash>.txt",
+                  "mime": "text/plain",
+                  "size": 0.02,
+                  "width": null,
+                  "height": null,
+                  "ext": ".txt",
+                  "folder": null,
+                  "createdAt": "<time>",
+                  "updatedAt": "<time>"
+                }
+              ],
+              "pagination": {
+                "page": 1,
+                "pageSize": 25,
+                "pageCount": 1,
+                "total": 1
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 918
+        }
+      }
+    ]
+  },
+  {
+    "step": "an exact mime type",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "results": [],
+              "pagination": {
+                "page": 1,
+                "pageSize": 25,
+                "pageCount": 0,
+                "total": 0
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 919
+        }
+      }
+    ]
+  },
+  {
+    "step": "a page of one",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "results": [
+                {
+                  "id": "<id>",
+                  "name": "hello.txt",
+                  "alternativeText": null,
+                  "caption": null,
+                  "url": "/uploads/hello_<hash>.txt",
+                  "mime": "text/plain",
+                  "size": 0.01,
+                  "width": null,
+                  "height": null,
+                  "ext": ".txt",
+                  "folder": null,
+                  "createdAt": "<time>",
+                  "updatedAt": "<time>"
+                }
+              ],
+              "pagination": {
+                "page": 2,
+                "pageSize": 1,
+                "pageCount": 2,
+                "total": 2
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 920
+        }
+      }
+    ]
+  },
+  {
+    "step": "a sort Strapi does not offer",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Input validation error: Invalid arguments for tool media_list_assets: sort: Invalid option: expected one of \"createdAt:DESC\"|\"createdAt:ASC\"|\"name:ASC\"|\"name:DESC\"|\"updatedAt:DESC\"|\"updatedAt:ASC\""
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 921
+        }
+      }
+    ]
+  },
+  {
+    "step": "get an asset",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "name": "hello.txt",
+                "alternativeText": null,
+                "caption": null,
+                "url": "/uploads/hello_<hash>.txt",
+                "mime": "text/plain",
+                "size": 0.01,
+                "width": null,
+                "height": null,
+                "ext": ".txt",
+                "folder": null,
+                "createdAt": "<time>",
+                "updatedAt": "<time>"
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 922
+        }
+      }
+    ]
+  },
+  {
+    "step": "get an asset that is not there",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Tool \"media_get_asset\" execution failed: Media asset not found."
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 923
+        }
+      }
+    ]
+  },
+  {
+    "step": "update with nothing to change",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Tool \"media_update_asset\" execution failed: Provide at least one field to update: name, alternativeText or caption. To move an asset between folders use media_move_assets; url, mime, size and the file contents are owned by the upload provider and cannot be edited over MCP."
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 924
+        }
+      }
+    ]
+  },
+  {
+    "step": "update cannot move",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Input validation error: Invalid arguments for tool media_update_asset: Folder changes are not supported by media_update_asset. Use media_move_assets to move an asset between folders."
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 925
+        }
+      }
+    ]
+  },
+  {
+    "step": "update an asset's texts",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "name": "greeting.txt",
+                "alternativeText": "A greeting",
+                "caption": "",
+                "url": "/uploads/hello_<hash>.txt",
+                "mime": "text/plain",
+                "size": 0.01,
+                "width": null,
+                "height": null,
+                "ext": ".txt",
+                "folder": null,
+                "createdAt": "<time>",
+                "updatedAt": "<time>"
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 926
+        }
+      }
+    ]
+  },
+  {
+    "step": "move assets by one id",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Input validation error: Invalid arguments for tool media_move_assets: ids: Invalid input: expected array, received undefined, media_move_assets moves assets in bulk: pass `ids` as an array of numeric asset ids, even for a single asset."
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 927
+        }
+      }
+    ]
+  },
+  {
+    "step": "move assets to a folder that is not there",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Tool \"media_move_assets\" execution failed: The destination folder does not exist. Use media_list_folders to discover valid folder ids, or pass null for the media library root."
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 928
+        }
+      }
+    ]
+  },
+  {
+    "step": "move assets, one of them missing",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "destinationFolder": {
+                "id": "<id>",
+                "name": "Twenty"
+              },
+              "moved": [
+                {
+                  "id": "<id>",
+                  "name": "greeting.txt",
+                  "alternativeText": "A greeting",
+                  "caption": "",
+                  "url": "/uploads/hello_<hash>.txt",
+                  "mime": "text/plain",
+                  "size": 0.01,
+                  "width": null,
+                  "height": null,
+                  "ext": ".txt",
+                  "folder": {
+                    "id": "<id>",
+                    "name": "Twenty"
+                  },
+                  "createdAt": "<time>",
+                  "updatedAt": "<time>"
+                }
+              ],
+              "failed": [
+                {
+                  "id": "<id>",
+                  "reason": "No media asset has this id, so nothing was moved for it. If this is a folder id, use media_move_folder — and note that a folder id only fails like this when no asset happens to share the number; when one does, media_move_assets moves that asset instead. Otherwise the asset may already be deleted — use media_list_assets to discover valid asset ids."
+                }
+              ]
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 929
+        }
+      }
+    ]
+  },
+  {
+    "step": "the assets in a folder",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "results": [
+                {
+                  "id": "<id>",
+                  "name": "greeting.txt",
+                  "alternativeText": "A greeting",
+                  "caption": "",
+                  "url": "/uploads/hello_<hash>.txt",
+                  "mime": "text/plain",
+                  "size": 0.01,
+                  "width": null,
+                  "height": null,
+                  "ext": ".txt",
+                  "folder": {
+                    "id": "<id>",
+                    "name": "Twenty"
+                  },
+                  "createdAt": "<time>",
+                  "updatedAt": "<time>"
+                }
+              ],
+              "pagination": {
+                "page": 1,
+                "pageSize": 25,
+                "pageCount": 1,
+                "total": 1
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 930
+        }
+      }
+    ]
+  },
+  {
+    "step": "the assets at the root",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "results": [
+                {
+                  "id": "<id>",
+                  "name": "notes.txt",
+                  "alternativeText": null,
+                  "caption": null,
+                  "url": "/uploads/notes_<hash>.txt",
+                  "mime": "text/plain",
+                  "size": 0.02,
+                  "width": null,
+                  "height": null,
+                  "ext": ".txt",
+                  "folder": null,
+                  "createdAt": "<time>",
+                  "updatedAt": "<time>"
+                }
+              ],
+              "pagination": {
+                "page": 1,
+                "pageSize": 25,
+                "pageCount": 1,
+                "total": 1
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 931
+        }
+      }
+    ]
+  },
+  {
+    "step": "preview deleting an asset",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "dryRun": true,
+              "deleted": [
+                {
+                  "id": "<id>",
+                  "name": "notes.txt",
+                  "alternativeText": null,
+                  "caption": null,
+                  "url": "/uploads/notes_<hash>.txt",
+                  "mime": "text/plain",
+                  "size": 0.02,
+                  "width": null,
+                  "height": null,
+                  "ext": ".txt",
+                  "folder": null,
+                  "createdAt": "<time>",
+                  "updatedAt": "<time>"
+                }
+              ],
+              "failed": [
+                {
+                  "id": "<id>",
+                  "reason": "No media asset has this id, so nothing was deleted for it. If this is a folder id, use media_delete_folder — and note that a folder id only fails like this when no asset happens to share the number; when one does, media_delete_assets deletes that asset instead. Otherwise the asset may already be deleted; use media_list_assets to discover valid asset ids."
+                }
+              ],
+              "totalFileNumber": 1
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 932
+        }
+      }
+    ]
+  },
+  {
+    "step": "delete an asset",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "dryRun": false,
+              "deleted": [
+                {
+                  "id": "<id>",
+                  "name": "notes.txt",
+                  "alternativeText": null,
+                  "caption": null,
+                  "url": "/uploads/notes_<hash>.txt",
+                  "mime": "text/plain",
+                  "size": 0.02,
+                  "width": null,
+                  "height": null,
+                  "ext": ".txt",
+                  "folder": null,
+                  "createdAt": "<time>",
+                  "updatedAt": "<time>"
+                }
+              ],
+              "failed": [],
+              "totalFileNumber": 1
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 933
+        }
+      }
+    ]
+  },
+  {
+    "step": "delete folders, one not a folder",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Tool \"media_delete_folder\" execution failed: These ids do not match any media folder: 999. Nothing was deleted — media_delete_folder rejects the whole request rather than deleting the folders that did match, because folder ids and asset ids are indistinguishable integers. If these are asset ids, use media_delete_assets instead; otherwise the folders may already be gone. Use media_list_folders to discover valid folder ids."
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 934
+        }
+      }
+    ]
+  },
+  {
+    "step": "preview deleting a folder",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "dryRun": true,
+              "folders": [
+                {
+                  "id": "<id>",
+                  "name": "Photos",
+                  "createdAt": null,
+                  "updatedAt": null
+                }
+              ],
+              "totalFolderNumber": 2,
+              "totalFileNumber": 1
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 935
+        }
+      }
+    ]
+  },
+  {
+    "step": "delete a folder and what it holds",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "dryRun": false,
+              "folders": [
+                {
+                  "id": "<id>",
+                  "name": "Photos",
+                  "createdAt": null,
+                  "updatedAt": null
+                },
+                {
+                  "id": "<id>",
+                  "name": "Twenty",
+                  "createdAt": null,
+                  "updatedAt": null
+                }
+              ],
+              "totalFolderNumber": 2,
+              "totalFileNumber": 1
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 936
+        }
+      }
+    ]
+  },
+  {
+    "step": "what is left",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "results": [],
+              "pagination": {
+                "page": 1,
+                "pageSize": 25,
+                "pageCount": 0,
+                "total": 0
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 937
+        }
+      }
+    ]
+  },
+  {
+    "step": "and the tree",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": [
+                {
+                  "id": "<id>",
+                  "name": "Archive",
+                  "children": []
+                }
+              ]
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 938
+        }
+      }
+    ]
+  },
+  {
+    "step": "a token without the Media Library sees none of it",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "jsonrpc": "2.0",
+          "id": 939,
+          "error": {
+            "code": -32602,
+            "message": "Tool media_list_folders disabled"
+          }
+        }
+      }
+    ]
   }
 ]
