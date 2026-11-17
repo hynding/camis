@@ -34,6 +34,12 @@ describe("the MCP server", () => {
     );
   });
 
+  it("tells the operator how to turn it on and sign a client in", () => {
+    const deploy = content("DEPLOY.md");
+    expect(deploy).toContain("## MCP server");
+    expect(deploy).toContain("CAMIS_MCP_ENABLED=true");
+  });
+
   it("lists the content-manager's tools with what their handlers read", () => {
     const { types, tools } = JSON.parse(content("resources/strapi/mcp.json")) as {
       types: Record<string, Record<string, unknown>>;
@@ -83,5 +89,6 @@ describe("the MCP server", () => {
       { projectName: "oyl", apiStyle: "strapi" },
     );
     expect(open.files.map((f) => f.path)).not.toContain("resources/strapi/mcp.json");
+    expect(open.files.find((f) => f.path === "DEPLOY.md")!.content).not.toContain("MCP");
   });
 });
