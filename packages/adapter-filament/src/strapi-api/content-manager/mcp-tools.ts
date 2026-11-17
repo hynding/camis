@@ -31,6 +31,9 @@ export interface McpTool {
   policies: McpPolicy[];
   /** True when the input's `locale` is the installed locales' enum, filled in at runtime. */
   localized: boolean;
+  /** The content type the tool works on, and what it does to it. */
+  uid: string;
+  operation: string;
 }
 
 const EXPLORER = "plugin::content-manager.explorer.";
@@ -583,6 +586,12 @@ const formattedAttributes = (schema: RuntimeSchema): Attributes =>
     ),
   );
 
+/** The attributes a token may read and write: the formatted ones but the system's. */
+export const contentAttributes = (schema: RuntimeSchema): Attributes =>
+  Object.fromEntries(
+    Object.entries(formattedAttributes(schema)).filter(([key]) => !SYSTEM_FIELDS.has(key)),
+  );
+
 const contentTypeTools = (schema: RuntimeSchema, components: Components): McpTool[] => {
   const uid = schema.uid;
   const slug = slugifyUidForMcpToolName(uid);
@@ -610,6 +619,8 @@ const contentTypeTools = (schema: RuntimeSchema, components: Components): McpToo
     outputSchema: toJson(output, "output"),
     policies: actions.map((a) => ({ action: ACTIONS[a], subject: uid })),
     localized,
+    uid,
+    operation,
   });
   const documentLocale = z.object({ documentId: documentIdSchema(), locale });
   const unpublishInput = (shape: Record<string, z.ZodType>) =>
@@ -701,18 +712,25 @@ const byApiFolder = (a: RuntimeSchema, b: RuntimeSchema): number => {
   return folder(a) < folder(b) ? -1 : folder(a) > folder(b) ? 1 : 0;
 };
 
-/** The content-manager's MCP tools, in Strapi's order: Strapi's user, then the project's APIs. */
-export const contentManagerMcpTools = (doc: IrDocument): McpTool[] => {
+/** The content types the content-manager displays, in Strapi's order: its user, then the APIs. */
+export const displayedContentTypes = (doc: IrDocument): RuntimeSchema[] => {
   const schemas = runtimeSchemas(doc);
-  const components = new Map(
-    schemas.filter((s) => s.modelType === "component").map((s) => [s.uid, s]),
-  );
   const hasUsers = doc.contentTypes.some((ct) => ct.builtin === "user");
   const user = schemas.filter((s) => s.uid === USER_UID && hasUsers);
   const project = schemas
     .filter((s) => s.modelType === "contentType" && s.uid.startsWith("api::"))
     .sort(byApiFolder);
-  return [...user, ...project].flatMap((s) => contentTypeTools(s, components));
+  return [...user, ...project];
+};
+
+/** The content-manager's MCP tools, in Strapi's order. */
+export const contentManagerMcpTools = (doc: IrDocument): McpTool[] => {
+  const components = new Map(
+    runtimeSchemas(doc)
+      .filter((s) => s.modelType === "component")
+      .map((s) => [s.uid, s]),
+  );
+  return displayedContentTypes(doc).flatMap((s) => contentTypeTools(s, components));
 };
 
 export { LOCALE_PLACEHOLDER };

@@ -15,6 +15,7 @@ import { transferTokensConfigKeys } from "../admin/transfer-tokens";
 import { webhooksConfigKeys } from "./webhooks";
 import { usersPermissionsConfigKeys } from "../users-permissions/users-permissions";
 import { emailConfigKeys } from "../email/email";
+import { mcpConfigKeys } from "./mcp";
 
 /** Default requests per minute allowed on the unauthenticated credential endpoints. */
 const AUTH_THROTTLE_PER_MINUTE = 10;
@@ -127,7 +128,7 @@ declare(strict_types=1);
 return [
     // Requests per minute allowed on the unauthenticated credential endpoints
     // (POST /auth/local and /auth/local/register), keyed by client address.
-    'auth_throttle_per_minute' => max(1, (int) env('CAMIS_AUTH_THROTTLE_PER_MINUTE', ${AUTH_THROTTLE_PER_MINUTE})),${strapiKeys}${i18nKeys}${uploadKeys}${usersPermissions ? usersPermissionsConfigKeys() + emailConfigKeys() : ""}${apiTokens ? apiTokensConfigKeys() + transferTokensConfigKeys() + adminAuthConfigKeys() : ""}${webhooks ? webhooksConfigKeys() : ""}${graphqlKeys}
+    'auth_throttle_per_minute' => max(1, (int) env('CAMIS_AUTH_THROTTLE_PER_MINUTE', ${AUTH_THROTTLE_PER_MINUTE})),${strapiKeys}${i18nKeys}${uploadKeys}${usersPermissions ? usersPermissionsConfigKeys() + emailConfigKeys() : ""}${apiTokens ? apiTokensConfigKeys() + transferTokensConfigKeys() + adminAuthConfigKeys() + mcpConfigKeys() : ""}${webhooks ? webhooksConfigKeys() : ""}${graphqlKeys}
 ];
 `;
 };

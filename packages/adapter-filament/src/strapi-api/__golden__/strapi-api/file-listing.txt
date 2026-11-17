@@ -247,6 +247,7 @@ overwrite app/Http/Controllers/Api/RoleController.php
 overwrite app/Http/Controllers/Api/SessionController.php
 overwrite app/Http/Controllers/Api/UploadController.php
 overwrite app/Http/Controllers/Api/UserController.php
+overwrite app/Http/Controllers/StrapiMcpController.php
 overwrite app/Http/Middleware/AdminLocale.php
 overwrite app/Http/Middleware/StrapiActiveUser.php
 overwrite app/Http/Middleware/StrapiApiToken.php
@@ -381,6 +382,10 @@ overwrite app/Support/StrapiItems.php
 overwrite app/Support/StrapiLinkOrder.php
 overwrite app/Support/StrapiLinkPivot.php
 overwrite app/Support/StrapiLocales.php
+overwrite app/Support/StrapiMcpContentManager.php
+overwrite app/Support/StrapiMcpError.php
+overwrite app/Support/StrapiMcpSchema.php
+overwrite app/Support/StrapiMcpServer.php
 overwrite app/Support/StrapiMimeTypes.php
 overwrite app/Support/StrapiMorphTypes.php
 overwrite app/Support/StrapiMorphs.php
@@ -472,6 +477,7 @@ overwrite database/migrations/0001_01_03_000001_create_upload_folders_table.php
 overwrite database/migrations/9999_12_31_000000_add_document_id_to_roles_table.php
 overwrite database/seeders/RolePermissionSeeder.php
 overwrite resources/camis/schema.json
+overwrite resources/strapi/mcp.json
 overwrite resources/strapi/schemas.jsonl
 overwrite routes/admin.php
 overwrite routes/api.php

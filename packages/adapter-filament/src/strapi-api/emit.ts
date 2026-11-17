@@ -176,6 +176,8 @@ import {
   TRANSFER_DOWNLOAD_PATH,
 } from "./data-transfer/transfer-page";
 import { runtimeSchemas, strapiNames } from "@camis/strapi-schema";
+import { mcpServerFiles } from "./core/mcp";
+import { contentManagerMcpFiles } from "./content-manager/mcp";
 import {
   EMAIL_SETTINGS_PAGE_PATH,
   emitEmailSettingsPage,
@@ -440,6 +442,8 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
       ),
       ...transferTokenFiles(),
       ...strapiAdminFiles(),
+      ...mcpServerFiles(),
+      ...contentManagerMcpFiles(doc, emitted),
       ...adminTokenFiles({
         emitted,
         versioned,

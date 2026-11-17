@@ -31,7 +31,10 @@ class StrapiErrors
     {
         $this->registerRenderer();
 
-        $request->headers->set('Accept', 'application/json');
+        // The MCP endpoint reads the client's Accept: it must name event streams.
+        if (! $request->is('mcp')) {
+            $request->headers->set('Accept', 'application/json');
+        }
 
         return $next($request);
     }

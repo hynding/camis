@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Controllers\Admin\StrapiAdminApiTokens;
 use App\Http\Controllers\Admin\StrapiAdminController;
 use App\Http\Controllers\Admin\StrapiAdminTokensController;
+use App\Http\Controllers\StrapiMcpController;
 use App\Http\Middleware\StrapiErrors;
 use Illuminate\Support\Facades\Route;
 
@@ -31,3 +32,7 @@ Route::middleware([StrapiErrors::class])->group(function (): void {
     Route::post('/admin/admin-tokens/{id}/regenerate', [StrapiAdminTokensController::class, 'regenerate'])->whereNumber('id');
     Route::get('/admin/admin-tokens/{id}/owner-permissions', [StrapiAdminTokensController::class, 'ownerPermissions'])->whereNumber('id');
 });
+
+// Strapi's MCP server: its own JSON-RPC errors, and an admin token as its only credential.
+Route::post('/mcp', [StrapiMcpController::class, 'handle']);
+Route::match(['GET', 'PUT', 'PATCH', 'DELETE'], '/mcp', [StrapiMcpController::class, 'notAllowed']);
