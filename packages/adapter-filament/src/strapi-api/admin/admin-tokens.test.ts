@@ -46,6 +46,10 @@ describe("admin tokens", () => {
       "Route::get('/admin/admin-tokens/{id}/owner-permissions', [StrapiAdminTokensController::class, 'ownerPermissions'])",
     );
     expect(paths).toContain("app/Http/Controllers/Admin/StrapiAdminTokensController.php");
+    // Their refusals are answered with Strapi's error body, as the API tokens' are.
+    expect(content("app/Http/Middleware/StrapiErrors.php")).toContain(
+      "'admin/admin-tokens', 'admin/admin-tokens/*'",
+    );
     expect(paths).toContain("app/Support/StrapiAdminTokens.php");
     expect(content("app/Filament/Resources/AdminTokens/AdminTokenResource.php")).toContain(
       "protected static ?string $slug = 'settings/admin-tokens';",
