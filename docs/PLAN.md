@@ -2385,6 +2385,40 @@ Exit: ContentTypeBuilderTest's inverse cases and field-dialog case in the `strap
 
 ---
 
+## Phase 83 — Strapi's Admin Tokens (`adapter-filament`)
+
+Strapi 5 signs its MCP server's clients in with an admin token (`kind: 'admin'` in
+`strapi_api_tokens`): a key that acts in the admin as the admin account that made it, with only the
+admin permissions it was given, never more than its owner holds. camis had content API tokens only.
+
+- **Storage.** A migration adds `kind` (`content-api` unless said otherwise, so tokens made before
+  it stay content API tokens), `admin_user_owner_id` (the owning admin account; its tokens go with
+  it, as Strapi deletes them) and `admin_permissions` (the camis permissions the token was given)
+  to `strapi_api_tokens`. `StrapiApiToken` reads only content API tokens, `StrapiAdminToken` only
+  admin ones; a name is unique across both, as Strapi's column is.
+- **What a token may do** (`StrapiAdminTokens`): a permission it was given that its owner still
+  holds. Strapi clamps a token to its owner's permissions whenever a role or account changes; the
+  check at use gives the same answer without the sync. An expired token, a token whose owner is
+  inactive or blocked, and a content API token presented as one are refused.
+- **Settings › Admin Tokens** (Strapi's Administration Panel › Admin Tokens, beside Admin users):
+  name, description, created, last used and owner; the create form takes a name, description,
+  duration and the permissions, offered as the Roles page groups them and only among the
+  signed-in account's own. The key is shown once made and regenerated, to its owner only; an
+  account sees its own tokens, a super-admin every one (Strapi's owner-or-super-admin rule).
+  Managing them takes `user.update`, as the API Tokens page does.
+- **Strapi's admin API** `/admin/admin-tokens` (list, create, get, update, regenerate, revoke,
+  `owner-permissions`) with its bodies and errors: `adminPermissions` read and written as Strapi's
+  `{ action, subject, properties, conditions }` (content-manager actions on a type's uid; the
+  media library's upload actions on the file type), what this app has no permission for dropped as
+  Strapi's ceiling drops what the owner lacks; `type` and `permissions` refused.
+- **`strapi:import-tokens`** brings a Strapi project's admin tokens over too, owned by the admin
+  account of the same email (`strapi:import-admins` first), their permissions translated.
+
+Exit: `AdminTokensTest.php` (the page, the admin API, the owner ceiling, revoked owners, the
+import) in the `strapi-api` boot job; golden for the generated permission map.
+
+---
+
 ## Sequencing rationale (quick reference)
 
 1. **Strapi first** — mature schema validates the IR fastest, with the thinnest adapter.
