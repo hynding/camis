@@ -1,0 +1,1063 @@
+{
+  "admin": {
+    "email": "admin@example.test",
+    "password": "Admin1234",
+    "firstname": "Ad",
+    "lastname": "Min"
+  },
+  "steps": [
+    {
+      "hook": [
+        "locale",
+        "fr"
+      ],
+      "oracle": {
+        "method": "POST",
+        "path": "/i18n/locales",
+        "body": {
+          "code": "fr",
+          "name": "French (fr)",
+          "isDefault": false
+        }
+      }
+    },
+    {
+      "admin": {
+        "method": "POST",
+        "path": "/admin/admin-tokens",
+        "body": {
+          "name": "all",
+          "description": "",
+          "lifespan": null,
+          "adminPermissions": []
+        }
+      },
+      "keep": {
+        "allId": "data.id"
+      }
+    },
+    {
+      "admin": {
+        "path": "/admin/admin-tokens/$allId/owner-permissions"
+      },
+      "keep": {
+        "ownerPermissions": "data"
+      },
+      "rows": true
+    },
+    {
+      "admin": {
+        "method": "PUT",
+        "path": "/admin/admin-tokens/$allId",
+        "body": {
+          "adminPermissions": "$ownerPermissions"
+        }
+      }
+    },
+    {
+      "admin": {
+        "path": "/admin/admin-tokens/$allId"
+      },
+      "keep": {
+        "all": "data.accessKey"
+      }
+    },
+    {
+      "admin": {
+        "method": "POST",
+        "path": "/admin/admin-tokens",
+        "body": {
+          "name": "tags",
+          "description": "",
+          "lifespan": null,
+          "adminPermissions": [
+            {
+              "action": "plugin::content-manager.explorer.read",
+              "subject": "api::tag.tag",
+              "properties": {},
+              "conditions": []
+            }
+          ]
+        }
+      },
+      "keep": {
+        "tags": "data.accessKey"
+      }
+    },
+    {
+      "name": "GET is not allowed",
+      "method": "GET",
+      "token": "all"
+    },
+    {
+      "name": "no token",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "ping"
+      }
+    },
+    {
+      "name": "a token that does not verify",
+      "bearer": "nope",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "ping"
+      }
+    },
+    {
+      "name": "a content API token is not an admin token",
+      "bearer": "0123456789abcdef",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "ping"
+      }
+    },
+    {
+      "name": "initialize",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+          "protocolVersion": "2025-06-18",
+          "capabilities": {},
+          "clientInfo": {
+            "name": "vectors",
+            "version": "1"
+          }
+        }
+      }
+    },
+    {
+      "name": "initialize with a version the server does not speak",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "initialize",
+        "params": {
+          "protocolVersion": "1999-01-01",
+          "capabilities": {},
+          "clientInfo": {
+            "name": "vectors",
+            "version": "1"
+          }
+        }
+      }
+    },
+    {
+      "name": "a notification is accepted",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "method": "notifications/initialized"
+      }
+    },
+    {
+      "name": "ping",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "ping"
+      }
+    },
+    {
+      "name": "a batch",
+      "token": "all",
+      "rpc": [
+        {
+          "jsonrpc": "2.0",
+          "id": 4,
+          "method": "ping"
+        },
+        {
+          "jsonrpc": "2.0",
+          "method": "notifications/initialized"
+        },
+        {
+          "jsonrpc": "2.0",
+          "id": 5,
+          "method": "ping"
+        }
+      ]
+    },
+    {
+      "name": "an unknown method",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 6,
+        "method": "prompts/list"
+      }
+    },
+    {
+      "name": "logging/setLevel",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 7,
+        "method": "logging/setLevel",
+        "params": {
+          "level": "info"
+        }
+      }
+    },
+    {
+      "name": "Accept without event streams",
+      "token": "all",
+      "headers": {
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "ping"
+      }
+    },
+    {
+      "name": "a body that is not JSON's type",
+      "token": "all",
+      "headers": {
+        "Content-Type": "text/plain",
+        "Accept": "application/json, text/event-stream"
+      },
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "ping"
+      }
+    },
+    {
+      "name": "a body that is not JSON",
+      "token": "all",
+      "raw": "not json"
+    },
+    {
+      "name": "tools a token holding only Tag's read sees",
+      "token": "tags",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 8,
+        "method": "tools/list"
+      },
+      "list": []
+    },
+    {
+      "name": "a tool its token may not use",
+      "token": "tags",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 9,
+        "method": "tools/call",
+        "params": {
+          "name": "create_tag",
+          "arguments": {
+            "data": {
+              "label": "x"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "an unknown tool",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 10,
+        "method": "tools/call",
+        "params": {
+          "name": "zzz",
+          "arguments": {}
+        }
+      }
+    },
+    {
+      "name": "the development-only log tool",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 11,
+        "method": "tools/call",
+        "params": {
+          "name": "log",
+          "arguments": {}
+        }
+      }
+    },
+    {
+      "name": "tools every content action sees",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 12,
+        "method": "tools/list"
+      },
+      "list": [
+        "create_page.properties.locale",
+        "create_tag.properties.locale",
+        "list_page.properties.locale"
+      ]
+    },
+    {
+      "name": "create a tag",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 20,
+        "method": "tools/call",
+        "params": {
+          "name": "create_tag",
+          "arguments": {
+            "data": {
+              "label": "blue"
+            }
+          }
+        }
+      },
+      "keep": {
+        "blue": "result.structuredContent.data.documentId"
+      }
+    },
+    {
+      "name": "create another",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 21,
+        "method": "tools/call",
+        "params": {
+          "name": "create_tag",
+          "arguments": {
+            "data": {
+              "label": "amber"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "a tag the schema refuses",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 22,
+        "method": "tools/call",
+        "params": {
+          "name": "create_tag",
+          "arguments": {
+            "data": {
+              "label": 5,
+              "nope": 1
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "no data",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 23,
+        "method": "tools/call",
+        "params": {
+          "name": "create_tag",
+          "arguments": {}
+        }
+      }
+    },
+    {
+      "name": "list tags",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 24,
+        "method": "tools/call",
+        "params": {
+          "name": "list_tag",
+          "arguments": {}
+        }
+      }
+    },
+    {
+      "name": "list tags sorted and paged",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 25,
+        "method": "tools/call",
+        "params": {
+          "name": "list_tag",
+          "arguments": {
+            "sort": "label:desc",
+            "page": 2,
+            "pageSize": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "list tags filtered",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 26,
+        "method": "tools/call",
+        "params": {
+          "name": "list_tag",
+          "arguments": {
+            "filters": {
+              "label": {
+                "$contains": "lu"
+              }
+            },
+            "sort": [
+              {
+                "label": "asc"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a sort field the type has not",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 27,
+        "method": "tools/call",
+        "params": {
+          "name": "list_tag",
+          "arguments": {
+            "sort": "nope:asc"
+          }
+        }
+      }
+    },
+    {
+      "name": "a page size over the most",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 28,
+        "method": "tools/call",
+        "params": {
+          "name": "list_tag",
+          "arguments": {
+            "pageSize": 500
+          }
+        }
+      }
+    },
+    {
+      "name": "get a tag",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 29,
+        "method": "tools/call",
+        "params": {
+          "name": "get_tag",
+          "arguments": {
+            "documentId": "$blue"
+          }
+        }
+      }
+    },
+    {
+      "name": "get a tag that is not there",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 30,
+        "method": "tools/call",
+        "params": {
+          "name": "get_tag",
+          "arguments": {
+            "documentId": "nope"
+          }
+        }
+      }
+    },
+    {
+      "name": "update a tag",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 31,
+        "method": "tools/call",
+        "params": {
+          "name": "update_tag",
+          "arguments": {
+            "documentId": "$blue",
+            "data": {
+              "label": "navy"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "update a tag that is not there",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 32,
+        "method": "tools/call",
+        "params": {
+          "name": "update_tag",
+          "arguments": {
+            "documentId": "nope",
+            "data": {
+              "label": "x"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "delete a tag",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 33,
+        "method": "tools/call",
+        "params": {
+          "name": "delete_tag",
+          "arguments": {
+            "documentId": "$blue"
+          }
+        }
+      }
+    },
+    {
+      "name": "delete it again",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 34,
+        "method": "tools/call",
+        "params": {
+          "name": "delete_tag",
+          "arguments": {
+            "documentId": "$blue"
+          }
+        }
+      }
+    },
+    {
+      "name": "the token holding only Tag's read lists them",
+      "token": "tags",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 35,
+        "method": "tools/call",
+        "params": {
+          "name": "list_tag",
+          "arguments": {}
+        }
+      }
+    },
+    {
+      "name": "create an author",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 40,
+        "method": "tools/call",
+        "params": {
+          "name": "create_author",
+          "arguments": {
+            "data": {
+              "name": "Ann"
+            }
+          }
+        }
+      },
+      "keep": {
+        "ann": "result.structuredContent.data.documentId"
+      }
+    },
+    {
+      "name": "create a topic",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 41,
+        "method": "tools/call",
+        "params": {
+          "name": "create_topic",
+          "arguments": {
+            "data": {
+              "name": "News"
+            }
+          }
+        }
+      },
+      "keep": {
+        "news": "result.structuredContent.data.documentId"
+      }
+    },
+    {
+      "name": "create a post with links",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 42,
+        "method": "tools/call",
+        "params": {
+          "name": "create_post",
+          "arguments": {
+            "data": {
+              "title": "Hello",
+              "views": 3,
+              "author": "$ann",
+              "topics": {
+                "connect": [
+                  "$news"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "keep": {
+        "post": "result.structuredContent.data.documentId"
+      }
+    },
+    {
+      "name": "get the post's draft",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 43,
+        "method": "tools/call",
+        "params": {
+          "name": "get_post",
+          "arguments": {
+            "documentId": "$post"
+          }
+        }
+      }
+    },
+    {
+      "name": "its published version is not there yet",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 44,
+        "method": "tools/call",
+        "params": {
+          "name": "get_post",
+          "arguments": {
+            "documentId": "$post",
+            "status": "published"
+          }
+        }
+      }
+    },
+    {
+      "name": "publish the post",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 45,
+        "method": "tools/call",
+        "params": {
+          "name": "publish_post",
+          "arguments": {
+            "documentId": "$post"
+          }
+        }
+      }
+    },
+    {
+      "name": "change the draft",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 46,
+        "method": "tools/call",
+        "params": {
+          "name": "update_post",
+          "arguments": {
+            "documentId": "$post",
+            "data": {
+              "title": "Hello again",
+              "topics": {
+                "set": []
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "list posts",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 47,
+        "method": "tools/call",
+        "params": {
+          "name": "list_post",
+          "arguments": {}
+        }
+      }
+    },
+    {
+      "name": "list published posts",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 48,
+        "method": "tools/call",
+        "params": {
+          "name": "list_post",
+          "arguments": {
+            "status": "published"
+          }
+        }
+      }
+    },
+    {
+      "name": "discard the draft",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 49,
+        "method": "tools/call",
+        "params": {
+          "name": "discard_post_draft",
+          "arguments": {
+            "documentId": "$post"
+          }
+        }
+      }
+    },
+    {
+      "name": "unpublish the post",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 50,
+        "method": "tools/call",
+        "params": {
+          "name": "unpublish_post",
+          "arguments": {
+            "documentId": "$post"
+          }
+        }
+      }
+    },
+    {
+      "name": "unpublish what is not published",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 51,
+        "method": "tools/call",
+        "params": {
+          "name": "unpublish_post",
+          "arguments": {
+            "documentId": "$post"
+          }
+        }
+      }
+    },
+    {
+      "name": "a relation to a document that is not there",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 52,
+        "method": "tools/call",
+        "params": {
+          "name": "update_post",
+          "arguments": {
+            "documentId": "$post",
+            "data": {
+              "title": "Hello",
+              "author": "nope"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "set and connect together",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 53,
+        "method": "tools/call",
+        "params": {
+          "name": "update_post",
+          "arguments": {
+            "documentId": "$post",
+            "data": {
+              "title": "Hello",
+              "topics": {
+                "set": [],
+                "connect": [
+                  "$news"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "delete the post",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 54,
+        "method": "tools/call",
+        "params": {
+          "name": "delete_post",
+          "arguments": {
+            "documentId": "$post"
+          }
+        }
+      }
+    },
+    {
+      "name": "a private field is not written",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 60,
+        "method": "tools/call",
+        "params": {
+          "name": "create_review",
+          "arguments": {
+            "data": {
+              "title": "R",
+              "moderatorNote": "secret"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "create a review",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 61,
+        "method": "tools/call",
+        "params": {
+          "name": "create_review",
+          "arguments": {
+            "data": {
+              "title": "R"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "a single type with no document",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 70,
+        "method": "tools/call",
+        "params": {
+          "name": "get_homepage",
+          "arguments": {}
+        }
+      }
+    },
+    {
+      "name": "write the homepage",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 71,
+        "method": "tools/call",
+        "params": {
+          "name": "write_homepage",
+          "arguments": {
+            "data": {
+              "title": "Home"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "write it again",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 72,
+        "method": "tools/call",
+        "params": {
+          "name": "write_homepage",
+          "arguments": {
+            "data": {
+              "title": "Home 2"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "publish the homepage",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 73,
+        "method": "tools/call",
+        "params": {
+          "name": "publish_homepage",
+          "arguments": {}
+        }
+      }
+    },
+    {
+      "name": "get the published homepage",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 74,
+        "method": "tools/call",
+        "params": {
+          "name": "get_homepage",
+          "arguments": {
+            "status": "published"
+          }
+        }
+      }
+    },
+    {
+      "name": "delete the homepage",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 75,
+        "method": "tools/call",
+        "params": {
+          "name": "delete_homepage",
+          "arguments": {}
+        }
+      }
+    },
+    {
+      "name": "write the global settings in French",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 80,
+        "method": "tools/call",
+        "params": {
+          "name": "write_global",
+          "arguments": {
+            "data": {
+              "siteName": "Site"
+            },
+            "locale": "fr"
+          }
+        }
+      }
+    },
+    {
+      "name": "the English ones are not there",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 81,
+        "method": "tools/call",
+        "params": {
+          "name": "get_global",
+          "arguments": {}
+        }
+      }
+    },
+    {
+      "name": "a locale that is not installed",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 82,
+        "method": "tools/call",
+        "params": {
+          "name": "get_global",
+          "arguments": {
+            "locale": "de"
+          }
+        }
+      }
+    },
+    {
+      "name": "create a page with a component",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 83,
+        "method": "tools/call",
+        "params": {
+          "name": "create_page",
+          "arguments": {
+            "data": {
+              "title": "P",
+              "panel": {
+                "heading": "H",
+                "items": [
+                  {
+                    "amount": 2,
+                    "unit": "kg"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "keep": {
+        "page": "result.structuredContent.data.documentId"
+      }
+    },
+    {
+      "name": "get the page",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 84,
+        "method": "tools/call",
+        "params": {
+          "name": "get_page",
+          "arguments": {
+            "documentId": "$page"
+          }
+        }
+      }
+    },
+    {
+      "name": "list French pages",
+      "token": "all",
+      "rpc": {
+        "jsonrpc": "2.0",
+        "id": 85,
+        "method": "tools/call",
+        "params": {
+          "name": "list_page",
+          "arguments": {
+            "locale": "fr"
+          }
+        }
+      }
+    }
+  ]
+}
