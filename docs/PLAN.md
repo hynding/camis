@@ -2419,6 +2419,53 @@ import) in the `strapi-api` boot job; golden for the generated permission map.
 
 ---
 
+## Phase 84 — Strapi's MCP server and the Content Manager's tools (`adapter-filament`)
+
+Strapi 5 serves an MCP server at `POST /mcp` (`server.mcp.enabled`) for admin tokens (Phase 83).
+camis serves the same, off until `CAMIS_MCP_ENABLED=true`, in every Strapi-style app with roles.
+
+- **Transport.** Strapi's stateless streamable HTTP: each JSON-RPC message answered as an SSE
+  `message` event, notifications with 202, other methods 405 (`Allow: POST`), and Strapi's order of
+  refusals (malformed JSON 400, then a missing or unknown admin token 401 with JSON-RPC -32000,
+  then `Accept` 406 and `Content-Type` 415). No session is kept.
+- **Methods.** `initialize` (the protocol versions Strapi speaks), `ping`, `logging/setLevel`,
+  `tools/list` (the tools whose every policy the token holds and its owner still holds),
+  `tools/call` (unknown and disallowed tools refused with -32602, as the development-only `log`).
+- **Tools.** Generated in TypeScript with Zod 4 and converted as the MCP SDK converts them, so each
+  schema is Strapi's own: per displayed content type list/get/create/update/delete (a single
+  type get/write/delete) and publish/unpublish/discard_draft under draft & publish, written to
+  `resources/strapi/mcp.json` with what the handlers need (model, serializer, fields, populate).
+  A localized type's `locale` lists the installed locales when served.
+- **Arguments** (`StrapiMcpSchema`) are checked against the listed JSON Schema with Zod 4's
+  messages and order (unions, unrecognized keys, sizes, enums) and Strapi's refinements (a sort's
+  field, a relation's `set` alone), defaults filled in.
+- **Handlers** (`StrapiMcpContentManager`) answer in the Content Manager's document format:
+  fields in Strapi's order, relations as `{documentId, locale?}` on reads and empty on writes,
+  creators, localizations, status, and `meta.availableStatus` / `meta.availableLocales`;
+  Strapi's "Document not found." and its empty data for a missing version.
+
+Exit: `strapi-mcp-vectors.mjs` replays the recorded strapi-php session (protocol, token
+visibility, CRUD, sort/filter/paging, draft & publish, private fields, single and localized
+types, components) in the `strapi-api` boot job; vitest compares every tool to strapi-php's
+`tools/list`.
+
+---
+
+## Phase 85 — Strapi's MCP Media Library tools (`adapter-filament`)
+
+The upload plugin's ten tools, listed before the content tools as Strapi registers them, for a
+token holding the Media Library's actions: `media_list_assets` (folder, mime prefix, name, the
+admin's sorts, pages), `media_get_asset`, `media_list_folders` (the tree, siblings by name),
+`media_update_asset` (name, alternative text and caption only; null clears), `media_move_assets`
+and `media_delete_assets` (per-id `moved`/`deleted` and `failed` reports, deletion a dry run unless
+told otherwise), and the folder tools (`create`, `rename`, `move`, `delete`, the last all or
+nothing and a cascade). An asset is shown through Strapi's allowlist, and a refused key or folder
+name in Strapi's words rather than Zod's.
+
+Exit: the same vectors upload files and drive every media tool against strapi-php's recording.
+
+---
+
 ## Sequencing rationale (quick reference)
 
 1. **Strapi first** — mature schema validates the IR fastest, with the thinnest adapter.

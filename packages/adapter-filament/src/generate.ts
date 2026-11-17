@@ -593,6 +593,7 @@ export const filamentAdapter: GenerateAdapter = {
           options.documentation === true && apiStyle === "strapi" && storage !== "strapi",
         transfer: apiStyle === "strapi" && storage !== "strapi",
         schedules: (doc.schedules ?? []).length > 0,
+        mcp: apiStyle === "strapi" && storage !== "strapi" && ir.roles.length > 0,
       }),
     ];
     return {

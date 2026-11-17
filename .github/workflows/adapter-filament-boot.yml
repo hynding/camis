@@ -919,6 +919,16 @@ jobs:
           node ../packages/adapter-filament/scripts/strapi-auth-vectors.mjs http://127.0.0.1:8765/api \
             --hook "bash ../packages/adapter-filament/scripts/strapi-auth-hook.sh" \
             --vectors $F/session-vectors.json --expected $F/session-vectors.expected.json
+      - name: Strapi's MCP server for admin tokens, content-manager and Media Library tools (recorded from strapi-php)
+        run: |
+          cd app
+          sed -i '/^CAMIS_JWT_MANAGEMENT=/d' .env
+          echo "CAMIS_MCP_ENABLED=true" >> .env
+          php artisan config:cache
+          php artisan migrate:fresh --force
+          php artisan db:seed --class="Database\\Seeders\\RolePermissionSeeder" --force
+          node ../packages/adapter-filament/scripts/strapi-mcp-vectors.mjs http://127.0.0.1:8765 \
+            --hook "bash ../packages/adapter-filament/scripts/strapi-mcp-hook.sh"
       - name: Strapi's OpenAPI document at /documentation lists only routes the app serves
         run: node packages/adapter-filament/scripts/strapi-openapi-routes.mjs app http://127.0.0.1:8765
       - name: Filament admin publishes drafts, translates, keeps the media library and its folders, manages users, API and transfer tokens, exports and imports Strapi archives, builds dynamic zones, links inside components and nested repeatables, keeps link order, imports Strapi's tokens, searches, sorts, filters, deletes, duplicates and bulk-publishes lists, makes uids, records creators and lays views out as configured, sends email for a token holding the action, shows and (in development) edits the content model in the Content-Type Builder, keeps admin accounts apart and signs them in through Strapi's admin API, makes admin tokens; GraphQL refuses what REST refuses
