@@ -126,7 +126,7 @@ class AdminTokenResource extends Resource
     /** A new token's owner is whoever makes it. */
     private static function owner(?StrapiAdminToken $record): ?AdminUser
     {
-        $owner = $record?->owner ?? auth()->user();
+        $owner = $record->owner ?? auth()->user();
 
         return $owner instanceof AdminUser ? $owner : null;
     }
