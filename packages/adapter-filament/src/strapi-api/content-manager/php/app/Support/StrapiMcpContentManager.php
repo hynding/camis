@@ -46,6 +46,7 @@ final class StrapiMcpContentManager
             'publish' => $handler->publish($args),
             'unpublish' => $handler->unpublish($args),
             'discard_draft' => $handler->discard($args),
+            default => throw new StrapiMcpError(0, "Unknown content-manager operation {$tool['operation']}"),
         });
     }
 
