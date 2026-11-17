@@ -20,6 +20,9 @@ final class StrapiMcpServer
 
     private const DEFINITIONS = 'strapi/mcp.json';
 
+    /** The Media Library's tools work on its files and folders, not on documents. */
+    private const MEDIA = 'plugin::upload.file';
+
     /** Strapi's own tool a client may only use while Strapi runs in development. */
     private const DEVELOPMENT_TOOLS = ['log'];
 
@@ -87,12 +90,15 @@ final class StrapiMcpServer
             throw new StrapiMcpError(-32602, "Tool {$name} disabled");
         }
         $tool = $this->served($tool);
-        [$arguments, $issues] = StrapiMcpSchema::validate($tool['inputSchema'], $params['arguments'] ?? []);
+        [$arguments, $issues] = StrapiMcpSchema::validate($tool['inputSchema'], $params['arguments'] ?? [], $tool['messages'] ?? []);
         if ($issues !== []) {
             return self::failed("Input validation error: Invalid arguments for tool {$name}: ".implode(', ', $issues));
         }
         try {
-            $structured = StrapiMcpContentManager::call($tool, self::definitions()['types'][$tool['uid']], $arguments, $this->owner);
+            $type = self::definitions()['types'][$tool['uid']];
+            $structured = $tool['uid'] === self::MEDIA
+                ? StrapiMcpMedia::call($tool, $type, $arguments)
+                : StrapiMcpContentManager::call($tool, $type, $arguments, $this->owner);
         } catch (StrapiMcpError|StrapiError $error) {
             return self::failed("Tool \"{$name}\" execution failed: {$error->getMessage()}");
         } catch (Throwable $error) {

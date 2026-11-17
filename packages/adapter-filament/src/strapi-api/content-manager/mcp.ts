@@ -3,6 +3,8 @@ import type { ContentType, IrDocument } from "@camis/ir-schema";
 import { runtimeSchemas, strapiNames, type RuntimeSchema } from "@camis/strapi-schema";
 import { filamentNames } from "../../names";
 import { runtimePhp } from "../../runtime-php";
+import { FILE_UID } from "../upload/media-runtime";
+import { mediaMcpTools } from "../upload/mcp-tools";
 import { contentAttributes, contentManagerMcpTools, displayedContentTypes } from "./mcp-tools";
 
 /**
@@ -75,12 +77,19 @@ const populateOf = (
 
 const USER_UID = "plugin::users-permissions.user";
 
-/** The tools, and each content type's model, serializer and fields as the handlers read them. */
-export const emitMcpDefinitions = (doc: IrDocument, emitted: readonly ContentType[]): string => {
+/**
+ * The tools, and each content type's model, serializer and fields as the handlers read them; the
+ * Media Library's first, when the project keeps one ($fileModel), as Strapi registers them first.
+ */
+export const emitMcpDefinitions = (
+  doc: IrDocument,
+  emitted: readonly ContentType[],
+  fileModel?: string,
+): string => {
   const schemas = new Map(runtimeSchemas(doc).map((s) => [s.uid, s]));
   const byUid = new Map(emitted.map((ct) => [strapiNames(ct).uid, ct]));
   const served = displayedContentTypes(doc).filter((s) => s.uid === USER_UID || byUid.has(s.uid));
-  const types = Object.fromEntries(
+  const types: Record<string, Record<string, unknown>> = Object.fromEntries(
     served.map((s) => {
       const ct = byUid.get(s.uid);
       const model = ct === undefined ? "User" : filamentNames(ct).model;
@@ -101,18 +110,32 @@ export const emitMcpDefinitions = (doc: IrDocument, emitted: readonly ContentTyp
       ];
     }),
   );
-  const tools = contentManagerMcpTools(doc).filter((t) => t.uid in types);
+  const media = fileModel === undefined ? [] : mediaMcpTools();
+  if (fileModel !== undefined) types[FILE_UID] = { model: `App\\Models\\${fileModel}` };
+  const tools = [...media, ...contentManagerMcpTools(doc).filter((t) => t.uid in types)];
   return `${JSON.stringify({ types, tools })}\n`;
 };
 
 const php = (path: string): string => runtimePhp(new URL(`./php/${path}`, import.meta.url));
 
-const RUNTIME_FILES = ["app/Support/StrapiMcpContentManager.php"];
-
 export const contentManagerMcpFiles = (
   doc: IrDocument,
   emitted: readonly ContentType[],
+  fileModel?: string,
 ): GeneratedFile[] => [
-  { path: MCP_PATH, content: emitMcpDefinitions(doc, emitted) },
-  ...RUNTIME_FILES.map((path) => ({ path, content: php(path) })),
+  { path: MCP_PATH, content: emitMcpDefinitions(doc, emitted, fileModel) },
+  {
+    path: "app/Support/StrapiMcpContentManager.php",
+    content: php("app/Support/StrapiMcpContentManager.php"),
+  },
+  ...(fileModel === undefined
+    ? []
+    : [
+        {
+          path: "app/Support/StrapiMcpMedia.php",
+          content: runtimePhp(
+            new URL("../upload/php/app/Support/StrapiMcpMedia.php", import.meta.url),
+          ),
+        },
+      ]),
 ];

@@ -443,7 +443,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
       ...transferTokenFiles(),
       ...strapiAdminFiles(),
       ...mcpServerFiles(),
-      ...contentManagerMcpFiles(doc, emitted),
+      ...contentManagerMcpFiles(doc, emitted, fileModel),
       ...adminTokenFiles({
         emitted,
         versioned,

@@ -384,6 +384,7 @@ overwrite app/Support/StrapiLinkPivot.php
 overwrite app/Support/StrapiLocales.php
 overwrite app/Support/StrapiMcpContentManager.php
 overwrite app/Support/StrapiMcpError.php
+overwrite app/Support/StrapiMcpMedia.php
 overwrite app/Support/StrapiMcpSchema.php
 overwrite app/Support/StrapiMcpServer.php
 overwrite app/Support/StrapiMimeTypes.php

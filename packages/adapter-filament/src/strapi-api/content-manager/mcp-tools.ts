@@ -18,7 +18,14 @@ type Attributes = Record<string, Attribute>;
 
 export interface McpPolicy {
   action: string;
-  subject: string;
+  /** Left out for an action on no content type, as the Media Library's are. */
+  subject?: string;
+}
+
+/** Strapi's own words where Zod's would differ: for a refused key, and a failed pattern. */
+export interface McpMessages {
+  keys?: { keys: string[]; message: string }[];
+  patterns?: Record<string, string>;
 }
 
 export interface McpTool {
@@ -34,6 +41,7 @@ export interface McpTool {
   /** The content type the tool works on, and what it does to it. */
   uid: string;
   operation: string;
+  messages?: McpMessages;
 }
 
 const EXPLORER = "plugin::content-manager.explorer.";
@@ -559,7 +567,10 @@ const discriminatedAsOneOf = (context: {
 };
 
 /** The MCP SDK's `standardSchemaToJsonSchema`: an input schema is stamped `type: "object"`. */
-const toJson = (schema: z.ZodType, io: "input" | "output"): Record<string, unknown> => {
+export const mcpJsonSchema = (
+  schema: z.ZodType,
+  io: "input" | "output",
+): Record<string, unknown> => {
   const json = z.toJSONSchema(schema, {
     target: "draft-2020-12",
     io,
@@ -615,8 +626,8 @@ const contentTypeTools = (schema: RuntimeSchema, components: Components): McpToo
     name,
     title: `Content: ${apiID} — ${operation}`,
     description: `Content-manager ${operation} for ${uid}.${OPERATION_NOTES[operation] ?? ""}`,
-    inputSchema: toJson(input, "input"),
-    outputSchema: toJson(output, "output"),
+    inputSchema: mcpJsonSchema(input, "input"),
+    outputSchema: mcpJsonSchema(output, "output"),
     policies: actions.map((a) => ({ action: ACTIONS[a], subject: uid })),
     localized,
     uid,

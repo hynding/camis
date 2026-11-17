@@ -16,8 +16,13 @@ final class StrapiMcpSchema
     /** @var list<array{path: list<int|string>, message: string, abort: bool}> */
     private array $issues = [];
 
-    /** @param array<string, mixed> $root */
-    private function __construct(private readonly array $root)
+    /**
+     * $messages: Strapi's words for a refused key and a failed pattern, where Zod's would differ.
+     *
+     * @param  array<string, mixed>  $root
+     * @param  array{keys?: list<array{keys: list<string>, message: string}>, patterns?: array<string, string>}  $messages
+     */
+    private function __construct(private readonly array $root, private readonly array $messages = [])
     {
     }
 
@@ -26,11 +31,12 @@ final class StrapiMcpSchema
      * "<path>: <message>, …".
      *
      * @param  array<string, mixed>  $schema
+     * @param  array{keys?: list<array{keys: list<string>, message: string}>, patterns?: array<string, string>}  $messages
      * @return array{0: mixed, 1: list<string>}
      */
-    public static function validate(array $schema, mixed $value): array
+    public static function validate(array $schema, mixed $value, array $messages = []): array
     {
-        $validator = new self($schema);
+        $validator = new self($schema, $messages);
         $value = $validator->check($schema, $value, [], true);
 
         return [$value, array_map(
@@ -100,8 +106,7 @@ final class StrapiMcpSchema
         if (($schema['additionalProperties'] ?? null) === false) {
             $unknown = array_values(array_diff(array_map('strval', array_keys($value)), array_map('strval', array_keys($properties))));
             if ($unknown !== []) {
-                $keys = implode(', ', array_map(fn (string $k): string => json_encode($k), $unknown));
-                $this->issue($path, (count($unknown) === 1 ? 'Unrecognized key: ' : 'Unrecognized keys: ').$keys);
+                $this->issue($path, $this->unrecognized($unknown, $path));
             }
         }
         if (! $this->abortedSince($before) && self::isRelationEdit($properties) && array_key_exists('set', $value)
@@ -146,6 +151,13 @@ final class StrapiMcpSchema
         }
         if (($schema['format'] ?? null) === 'email' && isset($schema['pattern']) && preg_match('/'.$schema['pattern'].'/u', $value) !== 1) {
             $this->issue($path, 'Invalid email address', false);
+        } else {
+            $patterns = [...(isset($schema['pattern']) ? [$schema['pattern']] : []), ...array_column($schema['allOf'] ?? [], 'pattern')];
+            foreach ($patterns as $pattern) {
+                if (preg_match('#'.str_replace('#', '\\#', (string) $pattern).'#suD', $value) !== 1) {
+                    $this->issue($path, $this->messages['patterns'][$pattern] ?? "Invalid string: must match pattern /{$pattern}/", false);
+                }
+            }
         }
         $this->sortField($path, $value);
 
@@ -194,9 +206,14 @@ final class StrapiMcpSchema
      */
     private function union(array $options, mixed $value, array $path, bool $present): mixed
     {
+        // Zod's nullable, which JSON Schema can only write as a union with null.
+        $other = array_values(array_filter($options, fn (array $option): bool => $option !== ['type' => 'null']));
+        if (count($options) === 2 && count($other) === 1) {
+            return $value === null && $present ? null : $this->check($other[0], $value, $path, $present);
+        }
         $outcomes = [];
         foreach ($options as $option) {
-            $validator = new self($this->root);
+            $validator = new self($this->root, $this->messages);
             $checked = $validator->check($option, $value, $path, $present);
             if ($validator->issues === []) {
                 return $checked;
@@ -246,6 +263,24 @@ final class StrapiMcpSchema
         if (! in_array($match[1], $names, true)) {
             $this->issue($path, 'Sort field must be one of: '.implode(', ', $names), false);
         }
+    }
+
+    /**
+     * Zod's message for keys the object does not take, or the tool's own when it names one of them.
+     *
+     * @param  list<string>  $unknown
+     * @param  list<int|string>  $path
+     */
+    private function unrecognized(array $unknown, array $path): string
+    {
+        foreach ($path === [] ? ($this->messages['keys'] ?? []) : [] as $refused) {
+            if (array_intersect($refused['keys'], $unknown) !== []) {
+                return $refused['message'];
+            }
+        }
+        $keys = implode(', ', array_map(fn (string $k): string => (string) json_encode($k), $unknown));
+
+        return (count($unknown) === 1 ? 'Unrecognized key: ' : 'Unrecognized keys: ').$keys;
     }
 
     /** @param array<string, mixed> $properties */
