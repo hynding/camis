@@ -15,7 +15,7 @@ final class StrapiImportTokens extends Command
         {--encryption-key= : The Strapi project\'s ENCRYPTION_KEY, so the admin can show its API tokens\' keys again}
         {--force : Replace tokens named as ones this app has without asking}';
 
-    protected $description = 'Import the API and transfer tokens of a Strapi project, keeping their keys';
+    protected $description = 'Import the API, admin and transfer tokens of a Strapi project, keeping their keys';
 
     public function handle(): int
     {
@@ -39,7 +39,7 @@ final class StrapiImportTokens extends Command
 
             return self::FAILURE;
         }
-        $this->table(['Tokens', 'Count'], [['API tokens', $counts['api']], ['Transfer tokens', $counts['transfer']]]);
+        $this->table(['Tokens', 'Count'], [['API tokens', $counts['api']], ['Admin tokens', $counts['admin']], ['Transfer tokens', $counts['transfer']]]);
         foreach ($import->skipped() as $token => $reason) {
             $this->line("Not imported: {$token} ({$reason})");
         }

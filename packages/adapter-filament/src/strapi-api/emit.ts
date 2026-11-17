@@ -2,6 +2,7 @@ import type { GeneratedFile } from "@camis/adapter-kernel";
 import type { CapabilityGap, ContentType, Endpoint, IrDocument } from "@camis/ir-schema";
 import type { IrBundle } from "@camis/permissions";
 import { strapiAdminFiles } from "./admin/admin-api";
+import { adminTokenFiles } from "./admin/admin-tokens";
 import {
   emitStrapiImportTokensCommand,
   emitStrapiTokenImport,
@@ -439,6 +440,12 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
       ),
       ...transferTokenFiles(),
       ...strapiAdminFiles(),
+      ...adminTokenFiles({
+        emitted,
+        versioned,
+        fileType: input.media?.name,
+        userType: doc.contentTypes.find((ct) => ct.builtin === "user")?.name,
+      }),
     );
   }
   files.push(

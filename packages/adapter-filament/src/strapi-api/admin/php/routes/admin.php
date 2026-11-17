@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\Admin\StrapiAdminApiTokens;
 use App\Http\Controllers\Admin\StrapiAdminController;
+use App\Http\Controllers\Admin\StrapiAdminTokensController;
 use App\Http\Middleware\StrapiErrors;
 use Illuminate\Support\Facades\Route;
 
@@ -21,4 +22,12 @@ Route::middleware([StrapiErrors::class])->group(function (): void {
     Route::put('/admin/api-tokens/{id}', [StrapiAdminApiTokens::class, 'update'])->whereNumber('id');
     Route::delete('/admin/api-tokens/{id}', [StrapiAdminApiTokens::class, 'revoke'])->whereNumber('id');
     Route::post('/admin/api-tokens/{id}/regenerate', [StrapiAdminApiTokens::class, 'regenerate'])->whereNumber('id');
+
+    Route::get('/admin/admin-tokens', [StrapiAdminTokensController::class, 'list']);
+    Route::post('/admin/admin-tokens', [StrapiAdminTokensController::class, 'create']);
+    Route::get('/admin/admin-tokens/{id}', [StrapiAdminTokensController::class, 'get'])->whereNumber('id');
+    Route::put('/admin/admin-tokens/{id}', [StrapiAdminTokensController::class, 'update'])->whereNumber('id');
+    Route::delete('/admin/admin-tokens/{id}', [StrapiAdminTokensController::class, 'revoke'])->whereNumber('id');
+    Route::post('/admin/admin-tokens/{id}/regenerate', [StrapiAdminTokensController::class, 'regenerate'])->whereNumber('id');
+    Route::get('/admin/admin-tokens/{id}/owner-permissions', [StrapiAdminTokensController::class, 'ownerPermissions'])->whereNumber('id');
 });

@@ -10,6 +10,7 @@ use App\Support\StrapiApiTokens;
 use App\Support\StrapiError;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 /**
@@ -30,7 +31,7 @@ final class StrapiAdminApiTokens
     {
         $this->authorize($request);
         $attributes = $this->attributes($request);
-        if (StrapiApiToken::query()->where('name', $attributes['name'])->exists()) {
+        if (DB::table('strapi_api_tokens')->where('name', $attributes['name'])->exists()) {
             throw new StrapiError(400, 'ApplicationError', 'Name already taken');
         }
         try {
@@ -57,7 +58,7 @@ final class StrapiAdminApiTokens
         if (! is_string($name) || trim($name) === '') {
             throw new StrapiError(400, 'ValidationError', 'name is a required field');
         }
-        if (StrapiApiToken::query()->where('name', trim($name))->whereKeyNot($token->id)->exists()) {
+        if (DB::table('strapi_api_tokens')->where('name', trim($name))->where('id', '!=', $token->id)->exists()) {
             throw new StrapiError(400, 'ApplicationError', 'Name already taken');
         }
         $type = $request->input('type', $token->type);

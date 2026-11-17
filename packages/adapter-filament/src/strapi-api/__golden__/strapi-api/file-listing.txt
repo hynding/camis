@@ -32,6 +32,10 @@ overwrite app/Filament/Resources/ActivitySessions/Pages/EditActivitySession.php
 overwrite app/Filament/Resources/ActivitySessions/Pages/ListActivitySessions.php
 overwrite app/Filament/Resources/ActivitySessions/Schemas/ActivitySessionForm.php
 overwrite app/Filament/Resources/ActivitySessions/Schemas/ActivitySessionsTable.php
+overwrite app/Filament/Resources/AdminTokens/AdminTokenResource.php
+overwrite app/Filament/Resources/AdminTokens/Pages/CreateAdminToken.php
+overwrite app/Filament/Resources/AdminTokens/Pages/EditAdminToken.php
+overwrite app/Filament/Resources/AdminTokens/Pages/ListAdminTokens.php
 overwrite app/Filament/Resources/AdminUsers/AdminUserResource.php
 overwrite app/Filament/Resources/AdminUsers/Pages/CreateAdminUser.php
 overwrite app/Filament/Resources/AdminUsers/Pages/EditAdminUser.php
@@ -211,6 +215,7 @@ overwrite app/Filament/Widgets/StrapiLastPublishedEntries.php
 overwrite app/Filament/Widgets/StrapiProjectStatistics.php
 overwrite app/Http/Controllers/Admin/StrapiAdminApiTokens.php
 overwrite app/Http/Controllers/Admin/StrapiAdminController.php
+overwrite app/Http/Controllers/Admin/StrapiAdminTokensController.php
 overwrite app/Http/Controllers/Admin/StrapiTransferDownload.php
 overwrite app/Http/Controllers/Admin/StrapiTransferRunner.php
 overwrite app/Http/Controllers/Api/AuthController.php
@@ -312,6 +317,7 @@ overwrite app/Models/Post.php
 overwrite app/Models/Review.php
 overwrite app/Models/Storyboard.php
 overwrite app/Models/StoryboardFrames.php
+overwrite app/Models/StrapiAdminToken.php
 overwrite app/Models/StrapiApiToken.php
 overwrite app/Models/StrapiTransferToken.php
 overwrite app/Models/StrapiWebhook.php
@@ -358,6 +364,8 @@ overwrite app/Support/PublicRole.php
 overwrite app/Support/Ring1.php
 overwrite app/Support/StrapiAdminAuth.php
 overwrite app/Support/StrapiAdminImport.php
+overwrite app/Support/StrapiAdminPermissions.php
+overwrite app/Support/StrapiAdminTokens.php
 overwrite app/Support/StrapiApiTokens.php
 overwrite app/Support/StrapiBlocks.php
 overwrite app/Support/StrapiComponentViews.php
@@ -419,6 +427,7 @@ overwrite database/migrations/0001_01_02_000006_create_strapi_webhooks_table.php
 overwrite database/migrations/0001_01_02_000006_create_topics_table.php
 overwrite database/migrations/0001_01_02_000007_create_categories_table.php
 overwrite database/migrations/0001_01_02_000007_create_strapi_transfer_tokens_table.php
+overwrite database/migrations/0001_01_02_000008_add_admin_tokens_to_strapi_api_tokens_table.php
 overwrite database/migrations/0001_01_02_000008_create_articles_table.php
 overwrite database/migrations/0001_01_02_000009_create_pages_table.php
 overwrite database/migrations/0001_01_02_000010_create_landings_table.php
