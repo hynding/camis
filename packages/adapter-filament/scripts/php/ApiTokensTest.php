@@ -236,11 +236,17 @@ class ApiTokensTest extends TestCase
         $this->asClient($full['accessKey'])->getJson('/api/books?filters[createdAt][$eq]=2026-03-04T05:06:07.120Z&fields[0]=title')
             ->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.title', 'First');
 
-        // Laravel's own users table keeps seconds, so a filter on it is written in seconds too.
+        // Users and roles keep them too, as Strapi's up_users and up_roles do.
         \Illuminate\Support\Carbon::setTestNow('2026-03-04 05:06:07.450');
         User::factory()->create(['username' => 'stamped']);
+        $role = \App\Models\Role::create(['name' => 'stamped', 'guard_name' => 'web']);
         \Illuminate\Support\Carbon::setTestNow();
-        $this->asClient($full['accessKey'])->getJson('/api/users?filters[createdAt][$gte]=2026-03-04T05:06:07.000Z')
-            ->assertOk()->assertJsonCount(1)->assertJsonPath('0.username', 'stamped');
+        $this->asClient($full['accessKey'])->getJson('/api/users?filters[createdAt][$eq]=2026-03-04T05:06:07.450Z')
+            ->assertOk()->assertJsonCount(1)->assertJsonPath('0.username', 'stamped')
+            ->assertJsonPath('0.createdAt', '2026-03-04T05:06:07.450Z');
+        $this->asClient($full['accessKey'])->getJson('/api/users-permissions/roles/'.$role->getKey())
+            ->assertOk()->assertJsonPath('role.createdAt', '2026-03-04T05:06:07.450Z');
+        // Spatie hands out the same model, so a role reached through a user keeps them as well.
+        $this->assertInstanceOf(\App\Models\Role::class, User::query()->firstOrFail()->roles()->getRelated());
     }
 }

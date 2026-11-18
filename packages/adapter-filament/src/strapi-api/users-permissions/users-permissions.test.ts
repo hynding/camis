@@ -168,6 +168,35 @@ describe("users-permissions register and /users queries", () => {
         migration.path > "database/migrations/2999_12_31_235959_create_permission_tables.php",
     ).toBe(true);
   });
+  // Strapi keeps every timestamp to the millisecond, its users' and roles' too.
+  it("keeps users' and roles' timestamps to the millisecond, on columns widened after Spatie's", () => {
+    const migration = result.files.find((f) =>
+      f.path.endsWith("_millisecond_timestamps_on_users_and_roles.php"),
+    );
+    expect(
+      migration !== undefined &&
+        migration.path > "database/migrations/9999_12_31_000000_add_document_id_to_roles_table.php",
+    ).toBe(true);
+    expect(migration?.content).toContain(
+      "$table->timestamp('created_at', 3)->nullable()->change();",
+    );
+    expect(migration?.content).toContain("config('permission.table_names.roles', 'roles')");
+    // SQLite keeps a datetime as the text written: nothing to widen there.
+    expect(migration?.content).toContain("=== 'sqlite'");
+
+    const role = content("app/Models/Role.php");
+    expect(role).toContain("class Role extends SpatieRole");
+    expect(role).toContain("use HasMillisecondTimestamps;");
+    // Spatie hands out its configured role model, so every role read or written is this one.
+    const config = content("config/permission.php");
+    expect(config).toContain("'role' => App\\Models\\Role::class,");
+    expect(config).toContain("'permission' => Spatie\\Permission\\Models\\Permission::class,");
+  });
+  it("brings a role's archived timestamps over to the millisecond", () => {
+    expect(content("app/Support/StrapiImport.php")).toContain(
+      "self::value($entity['data']['createdAt'] ?? null, 'dateTime', $role->getDateFormat())",
+    );
+  });
   it("user-query-vectors: every step has a unique name and a recorded strapi-php outcome", () => {
     const read = (file: string): unknown =>
       JSON.parse(readFileSync(join(__dirname, "..", "__fixtures__", file), "utf8"));
