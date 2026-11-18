@@ -114,6 +114,7 @@ describe("importStrapiRoles", () => {
           name: "public",
           description: "The public role.",
           grants: [{ contentType: "Book", actions: ["read"] }],
+          services: ["locales.list"],
         },
         {
           name: "authenticated",
@@ -122,6 +123,7 @@ describe("importStrapiRoles", () => {
             { contentType: "Book", actions: ["create", "read", "update", "delete"] },
             { contentType: "Homepage", actions: ["read", "update"] },
           ],
+          services: ["locales.list"],
         },
       ],
     });
@@ -162,7 +164,7 @@ describe("importStrapiRoles", () => {
         {
           id: 1,
           type: "authenticated",
-          actions: ["api::magazine.magazine.find", "plugin::email.email.send"],
+          actions: ["api::magazine.magazine.find", "plugin::documentation.documentation.index"],
         },
       ]),
       doc,
@@ -170,7 +172,34 @@ describe("importStrapiRoles", () => {
     expect(result.roles.roles[0]?.grants).toEqual([]);
     expect(result.gaps.map((g) => g.message)).toEqual([
       'role "authenticated": api::magazine.magazine.find: this project has no such type or plugin route, so it is not granted',
-      'role "authenticated": plugin::email.email.send: this project has no such type or plugin route, so it is not granted',
+      'role "authenticated": plugin::documentation.documentation.index: this project has no such type or plugin route, so it is not granted',
+    ]);
+  });
+
+  it("carries the plugin services a role holds: the locales list, sending email, reading roles", () => {
+    const result = importStrapiRoles(
+      archiveOf([
+        {
+          id: 1,
+          type: "authenticated",
+          actions: [
+            "plugin::i18n.locales.listLocales",
+            "plugin::email.email.send",
+            "plugin::users-permissions.role.find",
+            "plugin::users-permissions.role.findOne",
+            "plugin::users-permissions.permissions.getPermissions",
+          ],
+        },
+        { id: 2, type: "public", actions: ["plugin::users-permissions.role.find"] },
+      ]),
+      doc,
+    );
+    expect(result.roles.roles.map((r) => [r.name, r.services])).toEqual([
+      ["public", undefined],
+      ["authenticated", ["email.send", "locales.list", "roles.read"]],
+    ]);
+    expect(result.gaps.map((g) => g.message)).toEqual([
+      'role "public": plugin::users-permissions.role.find: reading roles stands for plugin::users-permissions.role.find + plugin::users-permissions.role.findOne + plugin::users-permissions.permissions.getPermissions, so a role holding only part of it is not granted it',
     ]);
   });
 

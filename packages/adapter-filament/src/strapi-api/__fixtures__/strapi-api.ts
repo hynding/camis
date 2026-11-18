@@ -457,6 +457,8 @@ export const strapiApiBundle: IrBundle = {
         { contentType: "Global", actions: ["read", "update", "delete"] },
         { contentType: "Review", actions: ["create", "read", "update", "delete"] },
       ],
+      // i18n-vectors.json lists the locales as a signed-in user, whose role strapi-php granted it.
+      services: ["locales.list"],
     },
     {
       // What a caller without a session may do (auth-vectors.json's public role, and the smoke).
@@ -467,6 +469,8 @@ export const strapiApiBundle: IrBundle = {
         { contentType: "Activity", actions: ["read"], condition: publicOrMine },
         { contentType: "Review", actions: ["create", "read", "update", "delete"] },
       ],
+      // graphql-plugin-vectors.json: "the public role reads books and locales".
+      services: ["locales.list"],
     },
   ],
 };
