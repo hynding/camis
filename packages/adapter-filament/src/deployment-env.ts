@@ -4,6 +4,7 @@ import {
   type CorsSettings,
   type PageSizes,
   type RestSettings,
+  type ServerSettings,
   type EmailSettings,
   type ErrorReportingSettings,
   type DeploymentSettings,
@@ -31,9 +32,10 @@ export const deploymentEnv = (
   if (settings.errorReporting !== undefined)
     sections.push(errorReportingLines(settings.errorReporting, packages));
   if (settings.cors !== undefined) sections.push(corsLines(settings.cors));
+  if (settings.server !== undefined) sections.push(serverLines(settings.server));
   if (sections.length === 0) return { env: "", packages: [] };
   const header = [
-    "# From the Strapi project's config/plugins, config/api and config/middlewares.",
+    "# From the Strapi project's config/plugins, api, middlewares, server and admin.",
     "# ${NAME} reads the variable the Strapi project read: copy it from that project's .env.",
   ];
   return {
@@ -58,7 +60,8 @@ const line = (name: string, value: Setting | undefined): string[] => {
     value.default === undefined
       ? []
       : [`# The Strapi project falls back to ${String(value.default)} when ${value.env} is unset.`];
-  if (value.env === name) return [`# ${name}: the Strapi project reads the same variable.`];
+  if (value.env === name)
+    return [...fallback, `# ${name}: the Strapi project reads the same variable.`];
   return [...fallback, `${name}=\${${value.env}}`];
 };
 
@@ -208,6 +211,8 @@ const accountLines = (accounts: AccountSettings): string[] => {
     ...line("CAMIS_SESSIONS_COOKIE_SECURE", accounts.cookie?.secure),
     // config/camis.php splits the list on commas.
     ...line("CAMIS_REGISTER_ALLOWED_FIELDS", Array.isArray(allowed) ? allowed.join(",") : allowed),
+    ...line("JWT_SECRET", accounts.jwtSecret),
+    ...line("CAMIS_AUTH_THROTTLE_PER_MINUTE", accounts.authRequestsPerMinute),
   ];
 };
 
@@ -243,3 +248,23 @@ const corsLines = (cors: CorsSettings): string[] => [
   ...line("CAMIS_CORS_MAX_AGE", cors.maxAge),
   ...line("CAMIS_CORS_CREDENTIALS", cors.credentials),
 ];
+
+const serverLines = (server: ServerSettings): string[] => {
+  const salts = [
+    ...line("API_TOKEN_SALT", server.apiTokenSalt),
+    ...line("TRANSFER_TOKEN_SALT", server.transferTokenSalt),
+  ];
+  return [
+    "# Server and admin (config/server, config/admin)",
+    ...line("APP_URL", server.url),
+    ...line("CAMIS_MCP_ENABLED", server.mcpEnabled),
+    ...(salts.length === 0
+      ? []
+      : [
+          "# Tokens imported with strapi:import-tokens verify only with the Strapi project's salts.",
+          ...salts,
+        ]),
+    ...line("ADMIN_JWT_SECRET", server.adminTokenSecret),
+    ...line("CAMIS_ADMIN_ACCESS_TOKEN_LIFESPAN", server.adminAccessTokenLifespan),
+  ];
+};

@@ -37,6 +37,7 @@ export type {
   PageSizes,
   RestSettings,
   DeploymentSettings,
+  ServerSettings,
   Setting,
   UploadSettings,
 } from "./deployment-settings";

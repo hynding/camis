@@ -2466,6 +2466,31 @@ Exit: the same vectors upload files and drive every media tool against strapi-ph
 
 ---
 
+## Phase 86 — config/server and config/admin become the app's env (`adapter-kernel`, `adapter-strapi`, `adapter-filament`, `cli`)
+
+`camis import strapi` read config/plugins, config/api and config/middlewares (Phases 41, 50); what a
+migrated app most often needs from the other two files was set by hand. It now reads them too, as
+before keeping each `env()` read a reference to the variable, never its value.
+
+- **config/server**: `url` → `APP_URL` (only an absolute address or a variable; a path is a
+  `serverUrl` gap), `mcp.enabled` → `CAMIS_MCP_ENABLED` (Phase 84).
+- **config/admin**: `apiToken.salt` → `API_TOKEN_SALT` and `transfer.token.salt` →
+  `TRANSFER_TOKEN_SALT`, which `strapi:import-tokens`' keys need to verify; `auth.secret` →
+  `ADMIN_JWT_SECRET`; `auth.sessions.accessTokenLifespan` → `CAMIS_ADMIN_ACCESS_TOKEN_LIFESPAN`,
+  now read by the admin API's access tokens (30 minutes unless set). A `url` other than `/admin` is
+  an `adminPath` gap.
+- **users-permissions**: `jwtSecret` → `JWT_SECRET` (end users' tokens stay valid);
+  `ratelimit` `{ interval, max }` → `CAMIS_AUTH_THROTTLE_PER_MINUTE`, converted to a minute; a
+  limit turned off or an interval read at run time is an `authRateLimit` gap.
+- A variable the Strapi project reads under camis's own name now keeps its fallback's note, so a
+  project still on `example-salt` is told so. config/server often requires the project's own
+  modules (cron tasks): one that cannot run here is warned about and costs only its own keys.
+
+Exit: vitest for the reader, the env lines and the CLI; `AdminAccountsTest.php` checks a configured
+access token lifespan.
+
+---
+
 ## Sequencing rationale (quick reference)
 
 1. **Strapi first** — mature schema validates the IR fastest, with the thinnest adapter.

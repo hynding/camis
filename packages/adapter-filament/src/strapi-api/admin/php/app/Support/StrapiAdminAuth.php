@@ -9,18 +9,25 @@ use Illuminate\Http\Request;
 
 /**
  * Strapi's admin access tokens: an HS256 JWT naming the admin account, signed with the project's
- * ADMIN_JWT_SECRET (Strapi's admin.auth.secret; unset, the app key) and good for 30 minutes, as
- * Strapi's admin sessions issue one. The content API never takes one: it is the admin API's only.
+ * ADMIN_JWT_SECRET (Strapi's admin.auth.secret; unset, the app key) and good for 30 minutes unless
+ * CAMIS_ADMIN_ACCESS_TOKEN_LIFESPAN says otherwise, as Strapi's admin sessions issue one. The content API never takes one: it is the admin API's only.
  */
 final class StrapiAdminAuth
 {
-    private const LIFESPAN = 1800;
+    private const DEFAULT_LIFESPAN = 1800;
 
     public static function issue(AdminUser $admin): string
     {
         $now = now()->getTimestamp();
 
-        return self::sign(['userId' => (string) $admin->id, 'type' => 'access', 'iat' => $now, 'exp' => $now + self::LIFESPAN]);
+        return self::sign(['userId' => (string) $admin->id, 'type' => 'access', 'iat' => $now, 'exp' => $now + self::lifespan()]);
+    }
+
+    private static function lifespan(): int
+    {
+        $configured = config('camis.admin_auth.access_token_lifespan');
+
+        return is_numeric($configured) && (int) $configured > 0 ? (int) $configured : self::DEFAULT_LIFESPAN;
     }
 
     /** The request's admin account, or why there is none, as Strapi's admin strategy says it. */

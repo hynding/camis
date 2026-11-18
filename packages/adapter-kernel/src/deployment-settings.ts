@@ -93,6 +93,26 @@ export interface AccountSettings {
   };
   /** The user fields sign-up accepts beyond username, email and password. */
   registerAllowedFields?: Setting | string[];
+  /** What end users' tokens are signed with: the source's keeps their tokens valid here. */
+  jwtSecret?: Setting;
+  /** How many sign-in, sign-up and password requests one client may make a minute. */
+  authRequestsPerMinute?: Setting;
+}
+
+/** The app itself: where it is reached, which optional servers answer, what signs its tokens. */
+export interface ServerSettings {
+  /** The absolute address the app is reached at. */
+  url?: Setting;
+  /** Whether the MCP server answers. */
+  mcpEnabled?: Setting;
+  /** What API token keys are hashed with: tokens brought from the source verify only with its salt. */
+  apiTokenSalt?: Setting;
+  /** What transfer token keys are hashed with. */
+  transferTokenSalt?: Setting;
+  /** What admin access tokens are signed with. */
+  adminTokenSecret?: Setting;
+  /** How long an admin access token lasts, in seconds. */
+  adminAccessTokenLifespan?: Setting;
 }
 
 /** Where the app reports the errors it throws. */
@@ -130,6 +150,7 @@ export interface DeploymentSettings {
   accounts?: AccountSettings;
   errorReporting?: ErrorReportingSettings;
   cors?: CorsSettings;
+  server?: ServerSettings;
 }
 
 export const isEnvReference = (value: unknown): value is EnvReference =>
