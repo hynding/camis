@@ -151,6 +151,10 @@ describe("users-permissions register and /users queries", () => {
     expect(content("app/Support/StrapiApiTokens.php")).toContain(
       "\\Spatie\\Permission\\Models\\Role::class => 'plugin::users-permissions.role'",
     );
+    // A populated role is Spatie's configured model, which a token reads with the role's find.
+    expect(content("app/Support/StrapiApiTokens.php")).toContain(
+      "\\App\\Models\\StrapiRole::class => 'plugin::users-permissions.role'",
+    );
   });
   it("keeps a role's own documentId, on a column added after Spatie made the roles table", () => {
     expect(content("app/Http/Serializers/RoleSerializer.php")).toContain(
@@ -185,12 +189,12 @@ describe("users-permissions register and /users queries", () => {
     // SQLite keeps a datetime as the text written: nothing to widen there.
     expect(migration?.content).toContain("=== 'sqlite'");
 
-    const role = content("app/Models/Role.php");
-    expect(role).toContain("class Role extends SpatieRole");
+    const role = content("app/Models/StrapiRole.php");
+    expect(role).toContain("class StrapiRole extends SpatieRole");
     expect(role).toContain("use HasMillisecondTimestamps;");
     // Spatie hands out its configured role model, so every role read or written is this one.
     const config = content("config/permission.php");
-    expect(config).toContain("'role' => App\\Models\\Role::class,");
+    expect(config).toContain("'role' => App\\Models\\StrapiRole::class,");
     expect(config).toContain("'permission' => Spatie\\Permission\\Models\\Permission::class,");
   });
   it("brings a role's archived timestamps over to the millisecond", () => {

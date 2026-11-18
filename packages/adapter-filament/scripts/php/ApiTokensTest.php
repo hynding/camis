@@ -239,7 +239,7 @@ class ApiTokensTest extends TestCase
         // Users and roles keep them too, as Strapi's up_users and up_roles do.
         \Illuminate\Support\Carbon::setTestNow('2026-03-04 05:06:07.450');
         User::factory()->create(['username' => 'stamped']);
-        $role = \App\Models\Role::create(['name' => 'stamped', 'guard_name' => 'web']);
+        $role = \App\Models\StrapiRole::create(['name' => 'stamped', 'guard_name' => 'web']);
         \Illuminate\Support\Carbon::setTestNow();
         $this->asClient($full['accessKey'])->getJson('/api/users?filters[createdAt][$eq]=2026-03-04T05:06:07.450Z')
             ->assertOk()->assertJsonCount(1)->assertJsonPath('0.username', 'stamped')
@@ -247,6 +247,6 @@ class ApiTokensTest extends TestCase
         $this->asClient($full['accessKey'])->getJson('/api/users-permissions/roles/'.$role->getKey())
             ->assertOk()->assertJsonPath('role.createdAt', '2026-03-04T05:06:07.450Z');
         // Spatie hands out the same model, so a role reached through a user keeps them as well.
-        $this->assertInstanceOf(\App\Models\Role::class, User::query()->firstOrFail()->roles()->getRelated());
+        $this->assertInstanceOf(\App\Models\StrapiRole::class, User::query()->firstOrFail()->roles()->getRelated());
     }
 }

@@ -2501,7 +2501,7 @@ between strapi-php and camis on `/api/users` and `/api/users-permissions/roles`.
   `getDateFormat()` with milliseconds when the app has `HasMillisecondTimestamps`, which only a
   Strapi API style app does; any other app keeps Laravel's format. A User model patched before gets
   the method once. An app scaffolded earlier keeps seconds on users until its User model has it.
-- **Roles.** A generated `App\Models\Role` extends Spatie's with the concern, and a generated
+- **Roles.** A generated `App\Models\StrapiRole` (named so a content type called Role keeps its model) extends Spatie's with the concern, and a generated
   `config/permission.php` names it Spatie's role model (only `models`: Spatie merges its defaults
   under every other key), so a role reached through a user, the seeder (now creating roles with
   the configured class), `strapi:import` and the admin are all the one model.

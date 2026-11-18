@@ -316,11 +316,11 @@ overwrite app/Models/Page.php
 overwrite app/Models/PagePanelItems.php
 overwrite app/Models/Post.php
 overwrite app/Models/Review.php
-overwrite app/Models/Role.php
 overwrite app/Models/Storyboard.php
 overwrite app/Models/StoryboardFrames.php
 overwrite app/Models/StrapiAdminToken.php
 overwrite app/Models/StrapiApiToken.php
+overwrite app/Models/StrapiRole.php
 overwrite app/Models/StrapiTransferToken.php
 overwrite app/Models/StrapiWebhook.php
 overwrite app/Models/Submission.php

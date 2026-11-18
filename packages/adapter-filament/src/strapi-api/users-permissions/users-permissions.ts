@@ -42,7 +42,7 @@ export const emitMillisecondTimestampsMigration = (): string =>
 
 /** Spatie's role model, with Strapi's millisecond timestamps, and the config that makes it Spatie's. */
 export const millisecondRoleFiles = (): GeneratedFile[] =>
-  ["app/Models/Role.php", "config/permission.php"].map((path) => ({
+  ["app/Models/StrapiRole.php", "config/permission.php"].map((path) => ({
     path,
     content: runtimePhp(new URL(`./php/${path}`, import.meta.url)),
   }));

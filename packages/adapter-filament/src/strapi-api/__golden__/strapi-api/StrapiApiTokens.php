@@ -127,6 +127,7 @@ final class StrapiApiTokens
         \App\Models\Post::class => 'api::post.post',
         \App\Models\Review::class => 'api::review.review',
         \App\Models\Storyboard::class => 'api::storyboard.storyboard',
+        \App\Models\StrapiRole::class => 'plugin::users-permissions.role',
         \App\Models\Submission::class => 'api::submission.submission',
         \App\Models\Tag::class => 'api::tag.tag',
         \App\Models\Ticket::class => 'api::ticket.ticket',
