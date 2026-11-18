@@ -8,7 +8,7 @@ export const emitSeeder = (
   const roles = roleGrants
     .map(
       (r) =>
-        `        Role::firstOrCreate(['name' => '${r.role}'])->givePermissionTo([${r.keys.map((k) => `'${k}'`).join(", ")}]);`,
+        `        $role::firstOrCreate(['name' => '${r.role}'])->givePermissionTo([${r.keys.map((k) => `'${k}'`).join(", ")}]);`,
     )
     .join("\n");
   return `<?php
@@ -19,7 +19,6 @@ namespace Database\\Seeders;
 
 use Illuminate\\Database\\Seeder;
 use Spatie\\Permission\\Models\\Permission;
-use Spatie\\Permission\\Models\\Role;
 use Spatie\\Permission\\PermissionRegistrar;
 
 class RolePermissionSeeder extends Seeder
@@ -27,6 +26,8 @@ class RolePermissionSeeder extends Seeder
     public function run(): void
     {
         app(PermissionRegistrar::class)->forgetCachedPermissions();
+        // The configured role model: a Strapi API style app's keeps Strapi's millisecond timestamps.
+        $role = app(PermissionRegistrar::class)->getRoleClass();
 
 ${perms}
 

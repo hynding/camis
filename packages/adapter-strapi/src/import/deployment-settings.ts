@@ -4,6 +4,7 @@ import {
   type CorsSettings,
   type PageSizes,
   type RestSettings,
+  type ServerSettings,
   type EmailSettings,
   type ErrorReportingSettings,
   type FileStorage,
@@ -246,7 +247,38 @@ const graphql = (config: Options): PageSizes =>
     ["maxLimit", config.maxLimit],
   ]);
 
-const accounts = (config: Options): AccountSettings => {
+// Strapi's users-permissions limits each client to `max` requests per `interval` milliseconds.
+const STRAPI_RATE_INTERVAL = 60000;
+
+/** users-permissions' ratelimit as requests per minute, or undefined (reported) when it can't be. */
+const authRequestsPerMinute = (config: Options, gaps: CapabilityGap[]): Setting | undefined => {
+  if (config.ratelimit === undefined) return undefined;
+  const ratelimit = object(config.ratelimit);
+  if (ratelimit.enabled === false) {
+    gaps.push(
+      gap(
+        "authRateLimit",
+        "users-permissions' rate limit is turned off; sign-in requests are still limited here, so raise CAMIS_AUTH_THROTTLE_PER_MINUTE.",
+      ),
+    );
+    return undefined;
+  }
+  const interval = ratelimit.interval ?? STRAPI_RATE_INTERVAL;
+  const max = setting(ratelimit.max);
+  if (max === undefined) return undefined;
+  if (interval === STRAPI_RATE_INTERVAL) return max;
+  if (typeof interval === "number" && interval > 0 && typeof max === "number")
+    return Math.max(1, Math.round((max * STRAPI_RATE_INTERVAL) / interval));
+  gaps.push(
+    gap(
+      "authRateLimit",
+      "users-permissions' rate limit interval is read at run time; set CAMIS_AUTH_THROTTLE_PER_MINUTE by hand.",
+    ),
+  );
+  return undefined;
+};
+
+const accounts = (config: Options, gaps: CapabilityGap[]): AccountSettings => {
   const sessions = object(config.sessions);
   const cookie = object(sessions.cookie);
   const allowed = object(config.register).allowedFields;
@@ -267,6 +299,8 @@ const accounts = (config: Options): AccountSettings => {
       ["maxRefreshTokenLifespan", sessions.maxRefreshTokenLifespan],
       ["idleRefreshTokenLifespan", sessions.idleRefreshTokenLifespan],
       ["httpOnly", sessions.httpOnly],
+      ["jwtSecret", config.jwtSecret],
+      ["authRequestsPerMinute", authRequestsPerMinute(config, gaps)],
     ]),
     ...(Object.keys(cookieSettings).length > 0 ? { cookie: cookieSettings } : {}),
     ...(registerAllowedFields === undefined ? {} : { registerAllowedFields }),
@@ -354,9 +388,55 @@ const cors = (middlewares: unknown[], gaps: CapabilityGap[]): CorsSettings | und
   return Object.keys(read).length > 0 ? read : undefined;
 };
 
+// Strapi serves its admin at /admin unless config/admin's url says otherwise; so does camis.
+const ADMIN_PATHS = ["", "/admin", "/admin/"];
+
+/** A public address Laravel's APP_URL can hold: absolute, or read from a variable. */
+const publicUrl = (value: unknown, gaps: CapabilityGap[]): Setting | undefined => {
+  if (value === undefined || value === "") return undefined;
+  if (typeof value === "string" && !/^https?:\/\//.test(value)) {
+    gaps.push(
+      gap(
+        "serverUrl",
+        `config/server's url "${value}" is a path, not an address; set APP_URL to the address the app is reached at.`,
+      ),
+    );
+    return undefined;
+  }
+  return setting(value);
+};
+
+/**
+ * config/server (its public address and MCP server) and config/admin (the token salts, and the
+ * admin access token's key and lifespan).
+ */
+const server = (
+  serverConfig: Options,
+  adminConfig: Options,
+  gaps: CapabilityGap[],
+): ServerSettings => {
+  const auth = object(adminConfig.auth);
+  if (typeof adminConfig.url === "string" && !ADMIN_PATHS.includes(adminConfig.url))
+    gaps.push(
+      gap(
+        "adminPath",
+        `config/admin's url "${adminConfig.url}" has no counterpart; the admin is served at /admin.`,
+      ),
+    );
+  return settings([
+    ["url", publicUrl(serverConfig.url, gaps)],
+    ["mcpEnabled", object(serverConfig.mcp).enabled],
+    ["apiTokenSalt", object(adminConfig.apiToken).salt],
+    ["transferTokenSalt", object(object(adminConfig.transfer).token).salt],
+    ["adminTokenSecret", auth.secret],
+    ["adminAccessTokenLifespan", object(auth.sessions).accessTokenLifespan],
+  ]);
+};
+
 /**
  * How a Strapi project is run, from its config/plugins (the upload, email, graphql,
- * users-permissions and sentry plugins), config/api and config/middlewares (strapi::cors), each
+ * users-permissions and sentry plugins), config/api, config/middlewares (strapi::cors),
+ * config/server and config/admin, each
  * `env()` read kept as a reference to the variable, never its value. Options with no counterpart
  * are gaps.
  */
@@ -364,6 +444,8 @@ export const deploymentSettings = (
   plugins: unknown,
   api?: unknown,
   middlewares?: unknown,
+  serverConfig?: unknown,
+  adminConfig?: unknown,
 ): { settings: DeploymentSettings; gaps: CapabilityGap[] } => {
   const gaps: CapabilityGap[] = [];
   const config = object(plugins);
@@ -384,7 +466,7 @@ export const deploymentSettings = (
     if (Object.keys(read).length > 0) out.graphql = read;
   }
   if (config["users-permissions"] !== undefined) {
-    const read = accounts(pluginConfig("users-permissions"));
+    const read = accounts(pluginConfig("users-permissions"), gaps);
     if (Object.keys(read).length > 0) out.accounts = read;
   }
   // Strapi's sentry plugin is on unless the project turns it off.
@@ -394,5 +476,7 @@ export const deploymentSettings = (
     const read = cors(middlewares, gaps);
     if (read !== undefined) out.cors = read;
   }
+  const serverRead = server(object(serverConfig), object(adminConfig), gaps);
+  if (Object.keys(serverRead).length > 0) out.server = serverRead;
   return { settings: out, gaps };
 };

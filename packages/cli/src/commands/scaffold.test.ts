@@ -75,6 +75,13 @@ class User extends Authenticatable
 
 const FULL_TRAIT_USE =
   "use HasFactory, Notifiable, \\Spatie\\Permission\\Traits\\HasRoles, \\Laravel\\Sanctum\\HasApiTokens;";
+const MILLISECOND_DATE_FORMAT = `
+    /** Strapi keeps a user's timestamps to the millisecond, as a Strapi API style app does. */
+    public function getDateFormat(): string
+    {
+        return trait_exists(\\App\\Models\\Concerns\\HasMillisecondTimestamps::class) ? 'Y-m-d H:i:s.v' : parent::getDateFormat();
+    }
+`;
 // The shape an app scaffolded between admin roles and separate admin accounts has.
 const ADMIN_TRAIT_USE = FULL_TRAIT_USE.replace(";", ", \\App\\Models\\Concerns\\AdminAccess;");
 // The shape left by the non-strapi boot workflow, which adds HasRoles but not HasApiTokens.
@@ -114,13 +121,26 @@ describe("patchUserModel", () => {
   });
 
   // The generated AdminAccess still exists, and lets no User in, so an older app keeps booting.
-  it("leaves a User model patched with the admin access before as it is", () => {
+  it("leaves the traits of a User model patched with the admin access before as they are", () => {
     const before = STOCK_USER.replace("use HasFactory, Notifiable;", ADMIN_TRAIT_USE).replace(
       "class User extends Authenticatable\n",
       "class User extends Authenticatable implements \\Filament\\Models\\Contracts\\FilamentUser\n",
     );
-    expect(patchUserModel(before)).toBe(before);
+    const patched = patchUserModel(before);
+    expect(patched).toContain(`    ${ADMIN_TRAIT_USE}\n${MILLISECOND_DATE_FORMAT}`);
+    expect(patchUserModel(patched)).toBe(patched);
     expect(isPatchedUserModel(before)).toBe(true);
+  });
+
+  // Strapi keeps a user's timestamps to the millisecond. The concern exists only in a Strapi API
+  // style app, whose migration widens the columns; any other app keeps Laravel's format.
+  it("keeps a user's timestamps to the millisecond where the app has the concern for it", () => {
+    const patched = patchUserModel(STOCK_USER);
+    expect(patched).toContain(`    ${FULL_TRAIT_USE}\n${MILLISECOND_DATE_FORMAT}`);
+    expect(patchUserModel(ROLES_ONLY_USER)).toContain(MILLISECOND_DATE_FORMAT);
+    // A model patched before the date format gets it once.
+    const traitsOnly = STOCK_USER.replace("use HasFactory, Notifiable;", FULL_TRAIT_USE);
+    expect(patchUserModel(traitsOnly)).toBe(patched);
   });
 });
 

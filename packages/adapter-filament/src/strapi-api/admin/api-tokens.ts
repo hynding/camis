@@ -149,7 +149,9 @@ export const emitStrapiApiTokens = (input: ApiTokensInput): string => {
   const models = [
     ...contentTypes.map((ct) => [appModel(ct.model), ct.uid]),
     [appModel("User"), `${USERS_PERMISSIONS}.user`],
-    // A user's populated role, which a token reads with the role's find.
+    // A user's populated role, which a token reads with the role's find: Spatie's configured
+    // role model (StrapiRole on the Strapi API style), or its own.
+    [appModel("StrapiRole"), `${USERS_PERMISSIONS}.role`],
     ["\\Spatie\\Permission\\Models\\Role", `${USERS_PERMISSIONS}.role`],
     ...(input.fileModel === undefined
       ? []

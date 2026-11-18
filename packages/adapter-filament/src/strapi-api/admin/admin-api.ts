@@ -16,8 +16,10 @@ export const ADMIN_ROUTES_PATH = "routes/admin.php";
 export const adminAuthConfigKeys = (): string => `
 
     // What an admin's access token is signed with (Strapi's admin.auth.secret); unset, the app key.
+    // How long it lasts, in seconds (Strapi's admin.auth.sessions.accessTokenLifespan).
     'admin_auth' => [
         'secret' => env('ADMIN_JWT_SECRET'),
+        'access_token_lifespan' => (int) env('CAMIS_ADMIN_ACCESS_TOKEN_LIFESPAN', 1800),
     ],`;
 
 const RUNTIME_FILES = [

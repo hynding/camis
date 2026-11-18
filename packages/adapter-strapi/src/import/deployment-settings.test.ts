@@ -473,3 +473,85 @@ describe("deploymentSettings — strapi::cors in config/middlewares", () => {
     expect(gaps.map((g) => g.feature)).toEqual(["corsMiddleware"]);
   });
 });
+
+describe("deploymentSettings — config/server and config/admin", () => {
+  // strapi-php's examples/getstarted config/server and config/admin, as the CLI reads them.
+  const server = {
+    host: env("HOST", "0.0.0.0"),
+    port: env("PORT", 1337),
+    url: env("PUBLIC_URL"),
+    app: { keys: env("APP_KEYS") },
+    mcp: { enabled: true },
+  };
+  const admin = {
+    auth: {
+      secret: env("ADMIN_JWT_SECRET", "example-token"),
+      sessions: { accessTokenLifespan: 3600, maxRefreshTokenLifespan: 2592000 },
+    },
+    apiToken: { salt: env("API_TOKEN_SALT", "example-salt") },
+    transfer: { token: { salt: env("TRANSFER_TOKEN_SALT", "example-salt") } },
+    secrets: { encryptionKey: env("ENCRYPTION_KEY", "example-key") },
+  };
+
+  it("reads the public address, the MCP server, the token salts and the admin token's key and lifespan", () => {
+    const { settings, gaps } = deploymentSettings({}, undefined, undefined, server, admin);
+    expect(settings.server).toEqual({
+      url: env("PUBLIC_URL"),
+      mcpEnabled: true,
+      apiTokenSalt: env("API_TOKEN_SALT", "example-salt"),
+      transferTokenSalt: env("TRANSFER_TOKEN_SALT", "example-salt"),
+      adminTokenSecret: env("ADMIN_JWT_SECRET", "example-token"),
+      adminAccessTokenLifespan: 3600,
+    });
+    expect(gaps).toEqual([]);
+  });
+
+  it("reads nothing from a project with neither file", () => {
+    expect(deploymentSettings({}).settings.server).toBeUndefined();
+    expect(deploymentSettings({}, undefined, undefined, {}, {}).settings.server).toBeUndefined();
+  });
+
+  // A relative url ("/cms") is a path behind a proxy, not an address Laravel can be given.
+  it("keeps only an absolute public address", () => {
+    expect(
+      deploymentSettings({}, undefined, undefined, { url: "https://cms.example.com" }).settings
+        .server,
+    ).toEqual({ url: "https://cms.example.com" });
+    const { settings, gaps } = deploymentSettings({}, undefined, undefined, { url: "/cms" });
+    expect(settings.server).toBeUndefined();
+    expect(gaps.map((g) => g.feature)).toEqual(["serverUrl"]);
+  });
+
+  // camis serves its admin at /admin, where Filament's panel lives.
+  it("reports an admin served at another path", () => {
+    const { gaps } = deploymentSettings({}, undefined, undefined, undefined, { url: "/dashboard" });
+    expect(gaps.map((g) => g.feature)).toEqual(["adminPath"]);
+    expect(deploymentSettings({}, undefined, undefined, undefined, { url: "/admin" }).gaps).toEqual(
+      [],
+    );
+  });
+
+  it("reads users-permissions' JWT secret and its sign-in rate limit, per minute", () => {
+    const read = (config: object) =>
+      deploymentSettings({ "users-permissions": { config } }).settings.accounts;
+    expect(read({ jwtSecret: env("JWT_SECRET") })).toEqual({ jwtSecret: env("JWT_SECRET") });
+    expect(read({ ratelimit: { interval: 60000, max: 25 } })).toEqual({
+      authRequestsPerMinute: 25,
+    });
+    expect(read({ ratelimit: { interval: 30000, max: 5 } })).toEqual({
+      authRequestsPerMinute: 10,
+    });
+    expect(read({ ratelimit: { max: env("RATE_MAX", 10) } })).toEqual({
+      authRequestsPerMinute: env("RATE_MAX", 10),
+    });
+  });
+
+  it("reports a sign-in rate limit it cannot say per minute, or one turned off", () => {
+    const gapsOf = (ratelimit: object) =>
+      deploymentSettings({ "users-permissions": { config: { ratelimit } } }).gaps.map(
+        (g) => g.feature,
+      );
+    expect(gapsOf({ enabled: false })).toEqual(["authRateLimit"]);
+    expect(gapsOf({ interval: env("RATE_INTERVAL"), max: 10 })).toEqual(["authRateLimit"]);
+  });
+});

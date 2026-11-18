@@ -13,7 +13,12 @@ describe("emitSeeder", () => {
     expect(php).toContain("Permission::firstOrCreate(['name' => 'article.read']);");
     expect(php).toContain("Permission::firstOrCreate(['name' => 'article.update']);");
     expect(php).toContain(
-      "Role::firstOrCreate(['name' => 'Editor'])->givePermissionTo(['article.read', 'article.update']);",
+      "$role::firstOrCreate(['name' => 'Editor'])->givePermissionTo(['article.read', 'article.update']);",
     );
+  });
+  // A Strapi API style app's role model keeps Strapi's millisecond timestamps.
+  it("creates roles with the role model Spatie is configured with", () => {
+    expect(php).toContain("$role = app(PermissionRegistrar::class)->getRoleClass();");
+    expect(php).not.toContain("use Spatie\\Permission\\Models\\Role;");
   });
 });

@@ -21,7 +21,7 @@ Usage:
   camis import <strapi|express> <projectDir> [--out ir.json] [--upsert-by <field>]
                [--roles-from <strapiExport.tar.gz[.enc]> [--key <key>]]
                [--admin-roles-from <strapi .tmp/data.db | mysql:// | postgres:// URL>] [--roles-out roles.json]
-               [--env-out deployment.env]  (Strapi: the Laravel env for its upload/email providers)
+               [--env-out deployment.env]  (Strapi: the Laravel env for its config/*)
                [--custom-field <uid>=<strapi type> ...]  (Strapi: the type a plugin's custom field stores)
   camis scaffold filament <dir> [--storage laravel|strapi] [--graphql] [--name <app name>]
                                                  (create the Laravel host app for the overlay)

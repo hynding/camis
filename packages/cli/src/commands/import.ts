@@ -122,9 +122,10 @@ export const importCommand = async (
 };
 
 /**
- * The Laravel .env lines for how a Strapi project is run (config/plugins, config/api and
- * config/middlewares: its upload and email providers, API page sizes, sessions and CORS), written for the Filament app; the
- * gaps are the options that have no counterpart there.
+ * The Laravel .env lines for how a Strapi project is run (config/plugins, config/api,
+ * config/middlewares, config/server and config/admin: its upload and email providers, API page
+ * sizes, sessions, CORS, public address, MCP server and token salts), written for the Filament
+ * app; the gaps are the options that have no counterpart there.
  */
 const writeDeploymentEnv = async (
   io: Io,
@@ -142,9 +143,22 @@ const writeDeploymentEnv = async (
     }
     configs.push(read.config);
   }
-  const [pluginsConfig, apiConfig, middlewaresConfig] = configs;
+  // config/server often requires the project's own modules (its cron tasks): one that cannot run
+  // here costs only its own keys.
+  for (const name of ["server", "admin"]) {
+    const read = await readStrapiConfig(dir, name, capture);
+    if (!read.ok) io.out(`  ⚠ ${read.message}; its settings are left out of ${shown}`);
+    configs.push(read.ok ? read.config : undefined);
+  }
+  const [pluginsConfig, apiConfig, middlewaresConfig, serverConfig, adminConfig] = configs;
   if (configs.every((config) => config === undefined)) return [];
-  const { settings, gaps } = deploymentSettings(pluginsConfig ?? {}, apiConfig, middlewaresConfig);
+  const { settings, gaps } = deploymentSettings(
+    pluginsConfig ?? {},
+    apiConfig,
+    middlewaresConfig,
+    serverConfig,
+    adminConfig,
+  );
   const { env, packages } = deploymentEnv(settings);
   if (env !== "") {
     await io.writeFile(path, env);
