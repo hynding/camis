@@ -87,6 +87,9 @@ importers:
       '@camis/strapi-schema':
         specifier: workspace:*
         version: link:../strapi-schema
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
     devDependencies:
       tsx:
         specifier: ^4.22.4

@@ -1,0 +1,3924 @@
+[
+  {
+    "step": "GET is not allowed",
+    "status": 405,
+    "type": "application/json",
+    "allow": "POST",
+    "body": {
+      "jsonrpc": "2.0",
+      "error": {
+        "code": -32601,
+        "message": "Method not allowed"
+      },
+      "id": null
+    }
+  },
+  {
+    "step": "no token",
+    "status": 401,
+    "type": "application/json",
+    "body": {
+      "jsonrpc": "2.0",
+      "error": {
+        "code": -32000,
+        "message": "Authentication required"
+      },
+      "id": null
+    }
+  },
+  {
+    "step": "a token that does not verify",
+    "status": 401,
+    "type": "application/json",
+    "body": {
+      "jsonrpc": "2.0",
+      "error": {
+        "code": -32000,
+        "message": "Authentication required"
+      },
+      "id": null
+    }
+  },
+  {
+    "step": "a content API token is not an admin token",
+    "status": 401,
+    "type": "application/json",
+    "body": {
+      "jsonrpc": "2.0",
+      "error": {
+        "code": -32000,
+        "message": "Authentication required"
+      },
+      "id": null
+    }
+  },
+  {
+    "step": "initialize",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "protocolVersion": "2025-06-18",
+            "capabilities": {
+              "logging": {},
+              "tools": {
+                "listChanged": true
+              }
+            },
+            "serverInfo": {
+              "name": "strapi-mcp-server",
+              "version": "1.0.0"
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 1
+        }
+      }
+    ]
+  },
+  {
+    "step": "initialize with a version the server does not speak",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "protocolVersion": "2025-11-25",
+            "capabilities": {
+              "logging": {},
+              "tools": {
+                "listChanged": true
+              }
+            },
+            "serverInfo": {
+              "name": "strapi-mcp-server",
+              "version": "1.0.0"
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 2
+        }
+      }
+    ]
+  },
+  {
+    "step": "a notification is accepted",
+    "status": 202,
+    "type": "text/html"
+  },
+  {
+    "step": "ping",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {},
+          "jsonrpc": "2.0",
+          "id": 3
+        }
+      }
+    ]
+  },
+  {
+    "step": "a batch",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {},
+          "jsonrpc": "2.0",
+          "id": 4
+        }
+      },
+      {
+        "event": "message",
+        "data": {
+          "result": {},
+          "jsonrpc": "2.0",
+          "id": 5
+        }
+      }
+    ]
+  },
+  {
+    "step": "an unknown method",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "jsonrpc": "2.0",
+          "id": 6,
+          "error": {
+            "code": -32601,
+            "message": "Method not found"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "step": "logging/setLevel",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {},
+          "jsonrpc": "2.0",
+          "id": 7
+        }
+      }
+    ]
+  },
+  {
+    "step": "Accept without event streams",
+    "status": 406,
+    "type": "application/json",
+    "body": {
+      "jsonrpc": "2.0",
+      "error": {
+        "code": -32000,
+        "message": "Not Acceptable: Client must accept both application/json and text/event-stream"
+      },
+      "id": null
+    }
+  },
+  {
+    "step": "a body that is not JSON's type",
+    "status": 415,
+    "type": "application/json",
+    "body": {
+      "jsonrpc": "2.0",
+      "error": {
+        "code": -32000,
+        "message": "Unsupported Media Type: Content-Type must be application/json"
+      },
+      "id": null
+    }
+  },
+  {
+    "step": "a body that is not JSON",
+    "status": 400,
+    "type": "application/json",
+    "body": {
+      "data": null,
+      "error": {
+        "status": 400,
+        "name": "BadRequestError",
+        "message": "Unexpected token in JSON: Syntax error",
+        "details": {}
+      }
+    }
+  },
+  {
+    "step": "tools a token holding only Tag's read sees",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "names": [
+              "list_tag",
+              "get_tag"
+            ],
+            "inputs": {}
+          },
+          "jsonrpc": "2.0",
+          "id": 8
+        }
+      }
+    ]
+  },
+  {
+    "step": "a tool its token may not use",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "jsonrpc": "2.0",
+          "id": 9,
+          "error": {
+            "code": -32602,
+            "message": "Tool create_tag disabled"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "step": "an unknown tool",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "jsonrpc": "2.0",
+          "id": 10,
+          "error": {
+            "code": -32602,
+            "message": "Tool zzz not found"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "step": "the development-only log tool",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "jsonrpc": "2.0",
+          "id": 11,
+          "error": {
+            "code": -32602,
+            "message": "Tool log disabled"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "step": "tools every content action sees",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "names": [
+              "media_list_assets",
+              "media_get_asset",
+              "media_list_folders",
+              "media_update_asset",
+              "media_move_assets",
+              "media_delete_assets",
+              "media_create_folder",
+              "media_rename_folder",
+              "media_move_folder",
+              "media_delete_folder",
+              "list_plugin-users-permissions_user",
+              "get_plugin-users-permissions_user",
+              "create_plugin-users-permissions_user",
+              "update_plugin-users-permissions_user",
+              "delete_plugin-users-permissions_user",
+              "list_activity",
+              "get_activity",
+              "create_activity",
+              "update_activity",
+              "delete_activity",
+              "list_activity-session",
+              "get_activity-session",
+              "create_activity-session",
+              "update_activity-session",
+              "delete_activity-session",
+              "list_article",
+              "get_article",
+              "create_article",
+              "update_article",
+              "delete_article",
+              "list_author",
+              "get_author",
+              "create_author",
+              "update_author",
+              "delete_author",
+              "list_book",
+              "get_book",
+              "create_book",
+              "update_book",
+              "delete_book",
+              "list_category",
+              "get_category",
+              "create_category",
+              "update_category",
+              "delete_category",
+              "list_genre",
+              "get_genre",
+              "create_genre",
+              "update_genre",
+              "delete_genre",
+              "get_global",
+              "write_global",
+              "delete_global",
+              "get_homepage",
+              "write_homepage",
+              "delete_homepage",
+              "publish_homepage",
+              "unpublish_homepage",
+              "discard_homepage_draft",
+              "list_landing",
+              "get_landing",
+              "create_landing",
+              "update_landing",
+              "delete_landing",
+              "publish_landing",
+              "unpublish_landing",
+              "discard_landing_draft",
+              "list_menu",
+              "get_menu",
+              "create_menu",
+              "update_menu",
+              "delete_menu",
+              "publish_menu",
+              "unpublish_menu",
+              "discard_menu_draft",
+              "list_note",
+              "get_note",
+              "create_note",
+              "update_note",
+              "delete_note",
+              "list_page",
+              "get_page",
+              "create_page",
+              "update_page",
+              "delete_page",
+              "publish_page",
+              "unpublish_page",
+              "discard_page_draft",
+              "list_post",
+              "get_post",
+              "create_post",
+              "update_post",
+              "delete_post",
+              "publish_post",
+              "unpublish_post",
+              "discard_post_draft",
+              "list_review",
+              "get_review",
+              "create_review",
+              "update_review",
+              "delete_review",
+              "list_storyboard",
+              "get_storyboard",
+              "create_storyboard",
+              "update_storyboard",
+              "delete_storyboard",
+              "list_submission",
+              "get_submission",
+              "create_submission",
+              "update_submission",
+              "delete_submission",
+              "list_tag",
+              "get_tag",
+              "create_tag",
+              "update_tag",
+              "delete_tag",
+              "list_ticket",
+              "get_ticket",
+              "create_ticket",
+              "update_ticket",
+              "delete_ticket",
+              "list_topic",
+              "get_topic",
+              "create_topic",
+              "update_topic",
+              "delete_topic",
+              "publish_topic",
+              "unpublish_topic",
+              "discard_topic_draft",
+              "list_transaction",
+              "get_transaction",
+              "create_transaction",
+              "update_transaction",
+              "delete_transaction"
+            ],
+            "inputs": {
+              "create_page.properties.locale": {
+                "default": "en",
+                "description": "Locale code. Available: en, fr. Defaults to \"en\".",
+                "type": "string",
+                "enum": [
+                  "en",
+                  "fr"
+                ]
+              },
+              "create_tag.properties.locale": {
+                "description": "This content type is not localized. Locale is ignored.",
+                "type": "string"
+              },
+              "list_page.properties.locale": {
+                "default": "en",
+                "description": "Locale code. Available: en, fr. Defaults to \"en\".",
+                "type": "string",
+                "enum": [
+                  "en",
+                  "fr"
+                ]
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 12
+        }
+      }
+    ]
+  },
+  {
+    "step": "create a tag",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "documentId": "<document 1>",
+                "label": "blue",
+                "createdAt": "<time>",
+                "updatedAt": "<time>",
+                "publishedAt": "<time>",
+                "locale": null,
+                "createdBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "updatedBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "localizations": []
+              },
+              "meta": {
+                "availableLocales": [],
+                "availableStatus": []
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 20
+        }
+      }
+    ]
+  },
+  {
+    "step": "create another",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "documentId": "<document 2>",
+                "label": "amber",
+                "createdAt": "<time>",
+                "updatedAt": "<time>",
+                "publishedAt": "<time>",
+                "locale": null,
+                "createdBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "updatedBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "localizations": []
+              },
+              "meta": {
+                "availableLocales": [],
+                "availableStatus": []
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 21
+        }
+      }
+    ]
+  },
+  {
+    "step": "a tag the schema refuses",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Input validation error: Invalid arguments for tool create_tag: data.label: Invalid input: expected string, received number, data: Unrecognized key: \"nope\""
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 22
+        }
+      }
+    ]
+  },
+  {
+    "step": "no data",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Input validation error: Invalid arguments for tool create_tag: data: Invalid input: expected object, received undefined"
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 23
+        }
+      }
+    ]
+  },
+  {
+    "step": "list tags",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "results": [
+                {
+                  "id": "<id>",
+                  "documentId": "<document 1>",
+                  "label": "blue",
+                  "createdAt": "<time>",
+                  "updatedAt": "<time>",
+                  "publishedAt": "<time>",
+                  "locale": null,
+                  "createdBy": {
+                    "id": "<id>",
+                    "firstname": "Ad",
+                    "lastname": "Min",
+                    "username": null,
+                    "email": "admin@example.test",
+                    "isActive": true
+                  },
+                  "updatedBy": {
+                    "id": "<id>",
+                    "firstname": "Ad",
+                    "lastname": "Min",
+                    "username": null,
+                    "email": "admin@example.test",
+                    "isActive": true
+                  },
+                  "localizations": [],
+                  "status": "published"
+                },
+                {
+                  "id": "<id>",
+                  "documentId": "<document 2>",
+                  "label": "amber",
+                  "createdAt": "<time>",
+                  "updatedAt": "<time>",
+                  "publishedAt": "<time>",
+                  "locale": null,
+                  "createdBy": {
+                    "id": "<id>",
+                    "firstname": "Ad",
+                    "lastname": "Min",
+                    "username": null,
+                    "email": "admin@example.test",
+                    "isActive": true
+                  },
+                  "updatedBy": {
+                    "id": "<id>",
+                    "firstname": "Ad",
+                    "lastname": "Min",
+                    "username": null,
+                    "email": "admin@example.test",
+                    "isActive": true
+                  },
+                  "localizations": [],
+                  "status": "published"
+                }
+              ],
+              "pagination": {
+                "page": 1,
+                "pageSize": 10,
+                "pageCount": 1,
+                "total": 2
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 24
+        }
+      }
+    ]
+  },
+  {
+    "step": "list tags sorted and paged",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "results": [
+                {
+                  "id": "<id>",
+                  "documentId": "<document 2>",
+                  "label": "amber",
+                  "createdAt": "<time>",
+                  "updatedAt": "<time>",
+                  "publishedAt": "<time>",
+                  "locale": null,
+                  "createdBy": {
+                    "id": "<id>",
+                    "firstname": "Ad",
+                    "lastname": "Min",
+                    "username": null,
+                    "email": "admin@example.test",
+                    "isActive": true
+                  },
+                  "updatedBy": {
+                    "id": "<id>",
+                    "firstname": "Ad",
+                    "lastname": "Min",
+                    "username": null,
+                    "email": "admin@example.test",
+                    "isActive": true
+                  },
+                  "localizations": [],
+                  "status": "published"
+                }
+              ],
+              "pagination": {
+                "page": 2,
+                "pageSize": 1,
+                "pageCount": 2,
+                "total": 2
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 25
+        }
+      }
+    ]
+  },
+  {
+    "step": "list tags filtered",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "results": [
+                {
+                  "id": "<id>",
+                  "documentId": "<document 1>",
+                  "label": "blue",
+                  "createdAt": "<time>",
+                  "updatedAt": "<time>",
+                  "publishedAt": "<time>",
+                  "locale": null,
+                  "createdBy": {
+                    "id": "<id>",
+                    "firstname": "Ad",
+                    "lastname": "Min",
+                    "username": null,
+                    "email": "admin@example.test",
+                    "isActive": true
+                  },
+                  "updatedBy": {
+                    "id": "<id>",
+                    "firstname": "Ad",
+                    "lastname": "Min",
+                    "username": null,
+                    "email": "admin@example.test",
+                    "isActive": true
+                  },
+                  "localizations": [],
+                  "status": "published"
+                }
+              ],
+              "pagination": {
+                "page": 1,
+                "pageSize": 10,
+                "pageCount": 1,
+                "total": 1
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 26
+        }
+      }
+    ]
+  },
+  {
+    "step": "a sort field the type has not",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Input validation error: Invalid arguments for tool list_tag: sort: Sort field must be one of: label"
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 27
+        }
+      }
+    ]
+  },
+  {
+    "step": "a page size over the most",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Input validation error: Invalid arguments for tool list_tag: pageSize: Too big: expected number to be <=100"
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 28
+        }
+      }
+    ]
+  },
+  {
+    "step": "get a tag",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "documentId": "<document 1>",
+                "label": "blue",
+                "createdAt": "<time>",
+                "updatedAt": "<time>",
+                "publishedAt": "<time>",
+                "locale": null,
+                "createdBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "updatedBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "localizations": []
+              },
+              "meta": {
+                "availableLocales": [],
+                "availableStatus": []
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 29
+        }
+      }
+    ]
+  },
+  {
+    "step": "get a tag that is not there",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Tool \"get_tag\" execution failed: Document not found."
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 30
+        }
+      }
+    ]
+  },
+  {
+    "step": "update a tag",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "documentId": "<document 1>",
+                "label": "navy",
+                "createdAt": "<time>",
+                "updatedAt": "<time>",
+                "publishedAt": "<time>",
+                "locale": null,
+                "createdBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "updatedBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "localizations": []
+              },
+              "meta": {
+                "availableLocales": [],
+                "availableStatus": []
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 31
+        }
+      }
+    ]
+  },
+  {
+    "step": "update a tag that is not there",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Tool \"update_tag\" execution failed: Document not found."
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 32
+        }
+      }
+    ]
+  },
+  {
+    "step": "delete a tag",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {}
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 33
+        }
+      }
+    ]
+  },
+  {
+    "step": "delete it again",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Tool \"delete_tag\" execution failed: Document not found."
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 34
+        }
+      }
+    ]
+  },
+  {
+    "step": "the token holding only Tag's read lists them",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "results": [
+                {
+                  "id": "<id>",
+                  "documentId": "<document 2>",
+                  "label": "amber",
+                  "createdAt": "<time>",
+                  "updatedAt": "<time>",
+                  "publishedAt": "<time>",
+                  "locale": null,
+                  "createdBy": {
+                    "id": "<id>",
+                    "firstname": "Ad",
+                    "lastname": "Min",
+                    "username": null,
+                    "email": "admin@example.test",
+                    "isActive": true
+                  },
+                  "updatedBy": {
+                    "id": "<id>",
+                    "firstname": "Ad",
+                    "lastname": "Min",
+                    "username": null,
+                    "email": "admin@example.test",
+                    "isActive": true
+                  },
+                  "localizations": [],
+                  "status": "published"
+                }
+              ],
+              "pagination": {
+                "page": 1,
+                "pageSize": 10,
+                "pageCount": 1,
+                "total": 1
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 35
+        }
+      }
+    ]
+  },
+  {
+    "step": "create an author",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "documentId": "<document 3>",
+                "name": "Ann",
+                "createdAt": "<time>",
+                "updatedAt": "<time>",
+                "publishedAt": "<time>",
+                "locale": null,
+                "books": [],
+                "createdBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "updatedBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "localizations": []
+              },
+              "meta": {
+                "availableLocales": [],
+                "availableStatus": []
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 40
+        }
+      }
+    ]
+  },
+  {
+    "step": "create a topic",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "documentId": "<document 4>",
+                "name": "News",
+                "createdAt": "<time>",
+                "updatedAt": "<time>",
+                "publishedAt": null,
+                "locale": null,
+                "createdBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "updatedBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "localizations": [],
+                "status": "draft"
+              },
+              "meta": {
+                "availableLocales": [],
+                "availableStatus": []
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 41
+        }
+      }
+    ]
+  },
+  {
+    "step": "create a post with links",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "documentId": "<document 5>",
+                "title": "Hello",
+                "views": 3,
+                "createdAt": "<time>",
+                "updatedAt": "<time>",
+                "publishedAt": null,
+                "locale": null,
+                "author": null,
+                "topics": [],
+                "image": null,
+                "createdBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "updatedBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "localizations": [],
+                "status": "draft"
+              },
+              "meta": {
+                "availableLocales": [],
+                "availableStatus": []
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 42
+        }
+      }
+    ]
+  },
+  {
+    "step": "get the post's draft",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "documentId": "<document 5>",
+                "title": "Hello",
+                "views": 3,
+                "createdAt": "<time>",
+                "updatedAt": "<time>",
+                "publishedAt": null,
+                "locale": null,
+                "author": {
+                  "documentId": "<document 3>"
+                },
+                "topics": [
+                  {
+                    "documentId": "<document 4>"
+                  }
+                ],
+                "image": null,
+                "createdBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "updatedBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "localizations": [],
+                "status": "draft"
+              },
+              "meta": {
+                "availableLocales": [],
+                "availableStatus": []
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 43
+        }
+      }
+    ]
+  },
+  {
+    "step": "its published version is not there yet",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {},
+              "meta": {
+                "availableLocales": [],
+                "availableStatus": []
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 44
+        }
+      }
+    ]
+  },
+  {
+    "step": "publish the post",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "documentId": "<document 5>",
+                "title": "Hello",
+                "views": 3,
+                "createdAt": "<time>",
+                "updatedAt": "<time>",
+                "publishedAt": "<time>",
+                "locale": null,
+                "author": null,
+                "topics": [],
+                "image": null,
+                "createdBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "updatedBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "localizations": [],
+                "status": "published"
+              },
+              "meta": {
+                "availableLocales": [],
+                "availableStatus": [
+                  {
+                    "id": "<id>",
+                    "documentId": "<document 5>",
+                    "locale": null,
+                    "updatedAt": "<time>",
+                    "createdAt": "<time>",
+                    "publishedAt": null,
+                    "createdBy": {
+                      "id": "<id>",
+                      "firstname": "Ad",
+                      "lastname": "Min",
+                      "email": "admin@example.test"
+                    },
+                    "updatedBy": {
+                      "id": "<id>",
+                      "firstname": "Ad",
+                      "lastname": "Min",
+                      "email": "admin@example.test"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 45
+        }
+      }
+    ]
+  },
+  {
+    "step": "change the draft",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "documentId": "<document 5>",
+                "title": "Hello again",
+                "views": 3,
+                "createdAt": "<time>",
+                "updatedAt": "<time>",
+                "publishedAt": null,
+                "locale": null,
+                "author": null,
+                "topics": [],
+                "image": null,
+                "createdBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "updatedBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "localizations": [],
+                "status": "modified"
+              },
+              "meta": {
+                "availableLocales": [],
+                "availableStatus": [
+                  {
+                    "id": "<id>",
+                    "documentId": "<document 5>",
+                    "locale": null,
+                    "updatedAt": "<time>",
+                    "createdAt": "<time>",
+                    "publishedAt": "<time>",
+                    "createdBy": {
+                      "id": "<id>",
+                      "firstname": "Ad",
+                      "lastname": "Min",
+                      "email": "admin@example.test"
+                    },
+                    "updatedBy": {
+                      "id": "<id>",
+                      "firstname": "Ad",
+                      "lastname": "Min",
+                      "email": "admin@example.test"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 46
+        }
+      }
+    ]
+  },
+  {
+    "step": "list posts",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "results": [
+                {
+                  "id": "<id>",
+                  "documentId": "<document 5>",
+                  "title": "Hello again",
+                  "views": 3,
+                  "createdAt": "<time>",
+                  "updatedAt": "<time>",
+                  "publishedAt": null,
+                  "locale": null,
+                  "author": {
+                    "documentId": "<document 3>"
+                  },
+                  "topics": [],
+                  "image": null,
+                  "createdBy": {
+                    "id": "<id>",
+                    "firstname": "Ad",
+                    "lastname": "Min",
+                    "username": null,
+                    "email": "admin@example.test",
+                    "isActive": true
+                  },
+                  "updatedBy": {
+                    "id": "<id>",
+                    "firstname": "Ad",
+                    "lastname": "Min",
+                    "username": null,
+                    "email": "admin@example.test",
+                    "isActive": true
+                  },
+                  "localizations": [],
+                  "status": "modified"
+                }
+              ],
+              "pagination": {
+                "page": 1,
+                "pageSize": 10,
+                "pageCount": 1,
+                "total": 1
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 47
+        }
+      }
+    ]
+  },
+  {
+    "step": "list published posts",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "results": [
+                {
+                  "id": "<id>",
+                  "documentId": "<document 5>",
+                  "title": "Hello",
+                  "views": 3,
+                  "createdAt": "<time>",
+                  "updatedAt": "<time>",
+                  "publishedAt": "<time>",
+                  "locale": null,
+                  "author": {
+                    "documentId": "<document 3>"
+                  },
+                  "topics": [],
+                  "image": null,
+                  "createdBy": {
+                    "id": "<id>",
+                    "firstname": "Ad",
+                    "lastname": "Min",
+                    "username": null,
+                    "email": "admin@example.test",
+                    "isActive": true
+                  },
+                  "updatedBy": {
+                    "id": "<id>",
+                    "firstname": "Ad",
+                    "lastname": "Min",
+                    "username": null,
+                    "email": "admin@example.test",
+                    "isActive": true
+                  },
+                  "localizations": [],
+                  "status": "modified"
+                }
+              ],
+              "pagination": {
+                "page": 1,
+                "pageSize": 10,
+                "pageCount": 1,
+                "total": 1
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 48
+        }
+      }
+    ]
+  },
+  {
+    "step": "discard the draft",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "documentId": "<document 5>",
+                "title": "Hello",
+                "views": 3,
+                "createdAt": "<time>",
+                "updatedAt": "<time>",
+                "publishedAt": null,
+                "locale": null,
+                "author": null,
+                "topics": [],
+                "image": null,
+                "createdBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "updatedBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "localizations": [],
+                "status": "published"
+              },
+              "meta": {
+                "availableLocales": [],
+                "availableStatus": [
+                  {
+                    "id": "<id>",
+                    "documentId": "<document 5>",
+                    "locale": null,
+                    "updatedAt": "<time>",
+                    "createdAt": "<time>",
+                    "publishedAt": "<time>",
+                    "createdBy": {
+                      "id": "<id>",
+                      "firstname": "Ad",
+                      "lastname": "Min",
+                      "email": "admin@example.test"
+                    },
+                    "updatedBy": {
+                      "id": "<id>",
+                      "firstname": "Ad",
+                      "lastname": "Min",
+                      "email": "admin@example.test"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 49
+        }
+      }
+    ]
+  },
+  {
+    "step": "unpublish the post",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "documentId": "<document 5>",
+                "title": "Hello",
+                "views": 3,
+                "createdAt": "<time>",
+                "updatedAt": "<time>",
+                "publishedAt": "<time>",
+                "locale": null,
+                "author": null,
+                "topics": [],
+                "image": null,
+                "createdBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "updatedBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "localizations": [
+                  {
+                    "documentId": "<document 5>",
+                    "status": "draft"
+                  }
+                ],
+                "status": "published"
+              },
+              "meta": {
+                "availableLocales": [],
+                "availableStatus": [
+                  {
+                    "id": "<id>",
+                    "documentId": "<document 5>",
+                    "locale": null,
+                    "updatedAt": "<time>",
+                    "createdAt": "<time>",
+                    "publishedAt": null,
+                    "createdBy": {
+                      "id": "<id>",
+                      "firstname": "Ad",
+                      "lastname": "Min",
+                      "email": "admin@example.test"
+                    },
+                    "updatedBy": {
+                      "id": "<id>",
+                      "firstname": "Ad",
+                      "lastname": "Min",
+                      "email": "admin@example.test"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 50
+        }
+      }
+    ]
+  },
+  {
+    "step": "unpublish what is not published",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Tool \"unpublish_post\" execution failed: Document not found."
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 51
+        }
+      }
+    ]
+  },
+  {
+    "step": "a relation to a document that is not there",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Tool \"update_post\" execution failed: Document with id \"nope\", locale \"\" not found"
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 52
+        }
+      }
+    ]
+  },
+  {
+    "step": "set and connect together",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Input validation error: Invalid arguments for tool update_post: data.topics.set: set is mutually exclusive with connect and disconnect"
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 53
+        }
+      }
+    ]
+  },
+  {
+    "step": "delete the post",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {}
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 54
+        }
+      }
+    ]
+  },
+  {
+    "step": "a private field is not written",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Input validation error: Invalid arguments for tool create_review: data: Unrecognized key: \"moderatorNote\""
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 60
+        }
+      }
+    ]
+  },
+  {
+    "step": "create a review",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "documentId": "<document 6>",
+                "title": "R",
+                "moderatorNote": null,
+                "createdAt": "<time>",
+                "updatedAt": "<time>",
+                "publishedAt": "<time>",
+                "locale": null,
+                "reviewer": null,
+                "readers": [],
+                "flaggedBy": null,
+                "createdBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "updatedBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "localizations": []
+              },
+              "meta": {
+                "availableLocales": [],
+                "availableStatus": []
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 61
+        }
+      }
+    ]
+  },
+  {
+    "step": "a single type with no document",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Tool \"get_homepage\" execution failed: Document not found."
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 70
+        }
+      }
+    ]
+  },
+  {
+    "step": "write the homepage",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "documentId": "<document 7>",
+                "title": "Home",
+                "body": null,
+                "createdAt": "<time>",
+                "updatedAt": "<time>",
+                "publishedAt": null,
+                "locale": null,
+                "featured": null,
+                "price": null,
+                "createdBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "updatedBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "localizations": [],
+                "status": "draft"
+              },
+              "meta": {
+                "availableLocales": [],
+                "availableStatus": []
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 71
+        }
+      }
+    ]
+  },
+  {
+    "step": "write it again",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "documentId": "<document 7>",
+                "title": "Home 2",
+                "body": null,
+                "createdAt": "<time>",
+                "updatedAt": "<time>",
+                "publishedAt": null,
+                "locale": null,
+                "featured": null,
+                "price": null,
+                "createdBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "updatedBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "localizations": [],
+                "status": "draft"
+              },
+              "meta": {
+                "availableLocales": [],
+                "availableStatus": []
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 72
+        }
+      }
+    ]
+  },
+  {
+    "step": "publish the homepage",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "documentId": "<document 7>",
+                "title": "Home 2",
+                "body": null,
+                "createdAt": "<time>",
+                "updatedAt": "<time>",
+                "publishedAt": "<time>",
+                "locale": null,
+                "featured": null,
+                "price": null,
+                "createdBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "updatedBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "localizations": [],
+                "status": "published"
+              },
+              "meta": {
+                "availableLocales": [],
+                "availableStatus": [
+                  {
+                    "id": "<id>",
+                    "documentId": "<document 7>",
+                    "locale": null,
+                    "updatedAt": "<time>",
+                    "createdAt": "<time>",
+                    "publishedAt": null,
+                    "createdBy": {
+                      "id": "<id>",
+                      "firstname": "Ad",
+                      "lastname": "Min",
+                      "email": "admin@example.test"
+                    },
+                    "updatedBy": {
+                      "id": "<id>",
+                      "firstname": "Ad",
+                      "lastname": "Min",
+                      "email": "admin@example.test"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 73
+        }
+      }
+    ]
+  },
+  {
+    "step": "get the published homepage",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "documentId": "<document 7>",
+                "title": "Home 2",
+                "body": null,
+                "createdAt": "<time>",
+                "updatedAt": "<time>",
+                "publishedAt": "<time>",
+                "locale": null,
+                "featured": null,
+                "price": null,
+                "createdBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "updatedBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "localizations": [],
+                "status": "published"
+              },
+              "meta": {
+                "availableLocales": [],
+                "availableStatus": [
+                  {
+                    "id": "<id>",
+                    "documentId": "<document 7>",
+                    "locale": null,
+                    "updatedAt": "<time>",
+                    "createdAt": "<time>",
+                    "publishedAt": null,
+                    "createdBy": {
+                      "id": "<id>",
+                      "firstname": "Ad",
+                      "lastname": "Min",
+                      "email": "admin@example.test"
+                    },
+                    "updatedBy": {
+                      "id": "<id>",
+                      "firstname": "Ad",
+                      "lastname": "Min",
+                      "email": "admin@example.test"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 74
+        }
+      }
+    ]
+  },
+  {
+    "step": "delete the homepage",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {}
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 75
+        }
+      }
+    ]
+  },
+  {
+    "step": "write the global settings in French",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "documentId": "<document 8>",
+                "siteName": "Site",
+                "contact": null,
+                "createdAt": "<time>",
+                "updatedAt": "<time>",
+                "publishedAt": "<time>",
+                "locale": "fr",
+                "createdBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "updatedBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "localizations": []
+              },
+              "meta": {
+                "availableLocales": [],
+                "availableStatus": []
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 80
+        }
+      }
+    ]
+  },
+  {
+    "step": "the English ones are not there",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {},
+              "meta": {
+                "availableLocales": [
+                  {
+                    "id": "<id>",
+                    "documentId": "<document 8>",
+                    "locale": "fr",
+                    "updatedAt": "<time>",
+                    "createdAt": "<time>",
+                    "publishedAt": "<time>",
+                    "contact": null,
+                    "createdBy": {
+                      "id": "<id>",
+                      "firstname": "Ad",
+                      "lastname": "Min",
+                      "username": null,
+                      "email": "admin@example.test",
+                      "isActive": true
+                    },
+                    "updatedBy": {
+                      "id": "<id>",
+                      "firstname": "Ad",
+                      "lastname": "Min",
+                      "username": null,
+                      "email": "admin@example.test",
+                      "isActive": true
+                    }
+                  }
+                ],
+                "availableStatus": []
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 81
+        }
+      }
+    ]
+  },
+  {
+    "step": "a locale that is not installed",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Input validation error: Invalid arguments for tool get_global: locale: Invalid option: expected one of \"en\"|\"fr\""
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 82
+        }
+      }
+    ]
+  },
+  {
+    "step": "create a page with a component",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "documentId": "<document 9>",
+                "title": "P",
+                "createdAt": "<time>",
+                "updatedAt": "<time>",
+                "publishedAt": null,
+                "locale": "en",
+                "panel": {
+                  "id": "<id>",
+                  "heading": "H",
+                  "items": [
+                    {
+                      "id": "<id>",
+                      "amount": 2,
+                      "unit": "kg"
+                    }
+                  ]
+                },
+                "createdBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "updatedBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "localizations": [],
+                "status": "draft"
+              },
+              "meta": {
+                "availableLocales": [],
+                "availableStatus": []
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 83
+        }
+      }
+    ]
+  },
+  {
+    "step": "get the page",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "documentId": "<document 9>",
+                "title": "P",
+                "createdAt": "<time>",
+                "updatedAt": "<time>",
+                "publishedAt": null,
+                "locale": "en",
+                "panel": {
+                  "id": "<id>",
+                  "heading": "H",
+                  "items": [
+                    {
+                      "id": "<id>",
+                      "amount": 2,
+                      "unit": "kg"
+                    }
+                  ]
+                },
+                "createdBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "updatedBy": {
+                  "id": "<id>",
+                  "firstname": "Ad",
+                  "lastname": "Min",
+                  "username": null,
+                  "email": "admin@example.test",
+                  "isActive": true
+                },
+                "localizations": [],
+                "status": "draft"
+              },
+              "meta": {
+                "availableLocales": [],
+                "availableStatus": []
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 84
+        }
+      }
+    ]
+  },
+  {
+    "step": "list French pages",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "results": [],
+              "pagination": {
+                "page": 1,
+                "pageSize": 10,
+                "pageCount": 0,
+                "total": 0
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 85
+        }
+      }
+    ]
+  },
+  {
+    "step": "no folders yet",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": []
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 901
+        }
+      }
+    ]
+  },
+  {
+    "step": "create a folder",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "name": "Photos",
+                "parent": null,
+                "createdAt": "<time>",
+                "updatedAt": "<time>"
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 902
+        }
+      }
+    ]
+  },
+  {
+    "step": "create a folder inside it",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "name": "2024",
+                "parent": {
+                  "id": "<id>",
+                  "name": "Photos"
+                },
+                "createdAt": "<time>",
+                "updatedAt": "<time>"
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 903
+        }
+      }
+    ]
+  },
+  {
+    "step": "a sibling's name is taken",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Tool \"media_create_folder\" execution failed: A folder with this name already exists in the same parent folder. Folder names must be unique among siblings."
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 904
+        }
+      }
+    ]
+  },
+  {
+    "step": "a folder name has no slashes",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Input validation error: Invalid arguments for tool media_create_folder: name: Folder name cannot contain slashes."
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 905
+        }
+      }
+    ]
+  },
+  {
+    "step": "nor surrounding spaces, nor an unknown key",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Input validation error: Invalid arguments for tool media_create_folder: name: Folder name cannot start or end with a whitespace., Unrecognized key: \"colour\""
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 906
+        }
+      }
+    ]
+  },
+  {
+    "step": "the parent must exist",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Tool \"media_create_folder\" execution failed: The parent folder does not exist. Use media_list_folders to discover valid folder ids, or pass null for the media library root."
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 907
+        }
+      }
+    ]
+  },
+  {
+    "step": "create a second root folder",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "name": "Archive",
+                "parent": null,
+                "createdAt": "<time>",
+                "updatedAt": "<time>"
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 908
+        }
+      }
+    ]
+  },
+  {
+    "step": "the folder tree",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": [
+                {
+                  "id": "<id>",
+                  "name": "Archive",
+                  "children": []
+                },
+                {
+                  "id": "<id>",
+                  "name": "Photos",
+                  "children": [
+                    {
+                      "id": "<id>",
+                      "name": "2024",
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 909
+        }
+      }
+    ]
+  },
+  {
+    "step": "renaming does not move",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Input validation error: Invalid arguments for tool media_rename_folder: media_rename_folder only changes a folder name. Use media_move_folder to change a folder location."
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 910
+        }
+      }
+    ]
+  },
+  {
+    "step": "rename a folder",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "name": "Twenty",
+                "parent": {
+                  "id": "<id>",
+                  "name": "Photos"
+                },
+                "createdAt": "<time>",
+                "updatedAt": "<time>"
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 911
+        }
+      }
+    ]
+  },
+  {
+    "step": "rename a folder that is not there",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Tool \"media_rename_folder\" execution failed: Media folder not found."
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 912
+        }
+      }
+    ]
+  },
+  {
+    "step": "a folder cannot move into itself",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Tool \"media_move_folder\" execution failed: A folder cannot be moved into itself or into one of its own descendants."
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 913
+        }
+      }
+    ]
+  },
+  {
+    "step": "moving needs its parent named",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Input validation error: Invalid arguments for tool media_move_folder: parent: Invalid input: expected number, received undefined"
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 914
+        }
+      }
+    ]
+  },
+  {
+    "step": "move a folder to the root",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "name": "Twenty",
+                "parent": null,
+                "createdAt": "<time>",
+                "updatedAt": "<time>"
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 915
+        }
+      }
+    ]
+  },
+  {
+    "step": "move it back",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "name": "Twenty",
+                "parent": {
+                  "id": "<id>",
+                  "name": "Photos"
+                },
+                "createdAt": "<time>",
+                "updatedAt": "<time>"
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 916
+        }
+      }
+    ]
+  },
+  {
+    "step": "list the assets by name",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "results": [
+                {
+                  "id": "<id>",
+                  "name": "hello.txt",
+                  "alternativeText": null,
+                  "caption": null,
+                  "url": "/uploads/hello_<hash>.txt",
+                  "mime": "text/plain",
+                  "size": 0.01,
+                  "width": null,
+                  "height": null,
+                  "ext": ".txt",
+                  "folder": null,
+                  "createdAt": "<time>",
+                  "updatedAt": "<time>"
+                },
+                {
+                  "id": "<id>",
+                  "name": "notes.txt",
+                  "alternativeText": null,
+                  "caption": null,
+                  "url": "/uploads/notes_<hash>.txt",
+                  "mime": "text/plain",
+                  "size": 0.02,
+                  "width": null,
+                  "height": null,
+                  "ext": ".txt",
+                  "folder": null,
+                  "createdAt": "<time>",
+                  "updatedAt": "<time>"
+                }
+              ],
+              "pagination": {
+                "page": 1,
+                "pageSize": 25,
+                "pageCount": 1,
+                "total": 2
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 917
+        }
+      }
+    ]
+  },
+  {
+    "step": "filter by mime type and name",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "results": [
+                {
+                  "id": "<id>",
+                  "name": "notes.txt",
+                  "alternativeText": null,
+                  "caption": null,
+                  "url": "/uploads/notes_<hash>.txt",
+                  "mime": "text/plain",
+                  "size": 0.02,
+                  "width": null,
+                  "height": null,
+                  "ext": ".txt",
+                  "folder": null,
+                  "createdAt": "<time>",
+                  "updatedAt": "<time>"
+                }
+              ],
+              "pagination": {
+                "page": 1,
+                "pageSize": 25,
+                "pageCount": 1,
+                "total": 1
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 918
+        }
+      }
+    ]
+  },
+  {
+    "step": "an exact mime type",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "results": [],
+              "pagination": {
+                "page": 1,
+                "pageSize": 25,
+                "pageCount": 0,
+                "total": 0
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 919
+        }
+      }
+    ]
+  },
+  {
+    "step": "a page of one",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "results": [
+                {
+                  "id": "<id>",
+                  "name": "hello.txt",
+                  "alternativeText": null,
+                  "caption": null,
+                  "url": "/uploads/hello_<hash>.txt",
+                  "mime": "text/plain",
+                  "size": 0.01,
+                  "width": null,
+                  "height": null,
+                  "ext": ".txt",
+                  "folder": null,
+                  "createdAt": "<time>",
+                  "updatedAt": "<time>"
+                }
+              ],
+              "pagination": {
+                "page": 2,
+                "pageSize": 1,
+                "pageCount": 2,
+                "total": 2
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 920
+        }
+      }
+    ]
+  },
+  {
+    "step": "a sort Strapi does not offer",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Input validation error: Invalid arguments for tool media_list_assets: sort: Invalid option: expected one of \"createdAt:DESC\"|\"createdAt:ASC\"|\"name:ASC\"|\"name:DESC\"|\"updatedAt:DESC\"|\"updatedAt:ASC\""
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 921
+        }
+      }
+    ]
+  },
+  {
+    "step": "get an asset",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "name": "hello.txt",
+                "alternativeText": null,
+                "caption": null,
+                "url": "/uploads/hello_<hash>.txt",
+                "mime": "text/plain",
+                "size": 0.01,
+                "width": null,
+                "height": null,
+                "ext": ".txt",
+                "folder": null,
+                "createdAt": "<time>",
+                "updatedAt": "<time>"
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 922
+        }
+      }
+    ]
+  },
+  {
+    "step": "get an asset that is not there",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Tool \"media_get_asset\" execution failed: Media asset not found."
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 923
+        }
+      }
+    ]
+  },
+  {
+    "step": "update with nothing to change",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Tool \"media_update_asset\" execution failed: Provide at least one field to update: name, alternativeText or caption. To move an asset between folders use media_move_assets; url, mime, size and the file contents are owned by the upload provider and cannot be edited over MCP."
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 924
+        }
+      }
+    ]
+  },
+  {
+    "step": "update cannot move",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Input validation error: Invalid arguments for tool media_update_asset: Folder changes are not supported by media_update_asset. Use media_move_assets to move an asset between folders."
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 925
+        }
+      }
+    ]
+  },
+  {
+    "step": "update an asset's texts",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": {
+                "id": "<id>",
+                "name": "greeting.txt",
+                "alternativeText": "A greeting",
+                "caption": "",
+                "url": "/uploads/hello_<hash>.txt",
+                "mime": "text/plain",
+                "size": 0.01,
+                "width": null,
+                "height": null,
+                "ext": ".txt",
+                "folder": null,
+                "createdAt": "<time>",
+                "updatedAt": "<time>"
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 926
+        }
+      }
+    ]
+  },
+  {
+    "step": "move assets by one id",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Input validation error: Invalid arguments for tool media_move_assets: ids: Invalid input: expected array, received undefined, media_move_assets moves assets in bulk: pass `ids` as an array of numeric asset ids, even for a single asset."
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 927
+        }
+      }
+    ]
+  },
+  {
+    "step": "move assets to a folder that is not there",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Tool \"media_move_assets\" execution failed: The destination folder does not exist. Use media_list_folders to discover valid folder ids, or pass null for the media library root."
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 928
+        }
+      }
+    ]
+  },
+  {
+    "step": "move assets, one of them missing",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "destinationFolder": {
+                "id": "<id>",
+                "name": "Twenty"
+              },
+              "moved": [
+                {
+                  "id": "<id>",
+                  "name": "greeting.txt",
+                  "alternativeText": "A greeting",
+                  "caption": "",
+                  "url": "/uploads/hello_<hash>.txt",
+                  "mime": "text/plain",
+                  "size": 0.01,
+                  "width": null,
+                  "height": null,
+                  "ext": ".txt",
+                  "folder": {
+                    "id": "<id>",
+                    "name": "Twenty"
+                  },
+                  "createdAt": "<time>",
+                  "updatedAt": "<time>"
+                }
+              ],
+              "failed": [
+                {
+                  "id": "<id>",
+                  "reason": "No media asset has this id, so nothing was moved for it. If this is a folder id, use media_move_folder — and note that a folder id only fails like this when no asset happens to share the number; when one does, media_move_assets moves that asset instead. Otherwise the asset may already be deleted — use media_list_assets to discover valid asset ids."
+                }
+              ]
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 929
+        }
+      }
+    ]
+  },
+  {
+    "step": "the assets in a folder",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "results": [
+                {
+                  "id": "<id>",
+                  "name": "greeting.txt",
+                  "alternativeText": "A greeting",
+                  "caption": "",
+                  "url": "/uploads/hello_<hash>.txt",
+                  "mime": "text/plain",
+                  "size": 0.01,
+                  "width": null,
+                  "height": null,
+                  "ext": ".txt",
+                  "folder": {
+                    "id": "<id>",
+                    "name": "Twenty"
+                  },
+                  "createdAt": "<time>",
+                  "updatedAt": "<time>"
+                }
+              ],
+              "pagination": {
+                "page": 1,
+                "pageSize": 25,
+                "pageCount": 1,
+                "total": 1
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 930
+        }
+      }
+    ]
+  },
+  {
+    "step": "the assets at the root",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "results": [
+                {
+                  "id": "<id>",
+                  "name": "notes.txt",
+                  "alternativeText": null,
+                  "caption": null,
+                  "url": "/uploads/notes_<hash>.txt",
+                  "mime": "text/plain",
+                  "size": 0.02,
+                  "width": null,
+                  "height": null,
+                  "ext": ".txt",
+                  "folder": null,
+                  "createdAt": "<time>",
+                  "updatedAt": "<time>"
+                }
+              ],
+              "pagination": {
+                "page": 1,
+                "pageSize": 25,
+                "pageCount": 1,
+                "total": 1
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 931
+        }
+      }
+    ]
+  },
+  {
+    "step": "preview deleting an asset",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "dryRun": true,
+              "deleted": [
+                {
+                  "id": "<id>",
+                  "name": "notes.txt",
+                  "alternativeText": null,
+                  "caption": null,
+                  "url": "/uploads/notes_<hash>.txt",
+                  "mime": "text/plain",
+                  "size": 0.02,
+                  "width": null,
+                  "height": null,
+                  "ext": ".txt",
+                  "folder": null,
+                  "createdAt": "<time>",
+                  "updatedAt": "<time>"
+                }
+              ],
+              "failed": [
+                {
+                  "id": "<id>",
+                  "reason": "No media asset has this id, so nothing was deleted for it. If this is a folder id, use media_delete_folder — and note that a folder id only fails like this when no asset happens to share the number; when one does, media_delete_assets deletes that asset instead. Otherwise the asset may already be deleted; use media_list_assets to discover valid asset ids."
+                }
+              ],
+              "totalFileNumber": 1
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 932
+        }
+      }
+    ]
+  },
+  {
+    "step": "delete an asset",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "dryRun": false,
+              "deleted": [
+                {
+                  "id": "<id>",
+                  "name": "notes.txt",
+                  "alternativeText": null,
+                  "caption": null,
+                  "url": "/uploads/notes_<hash>.txt",
+                  "mime": "text/plain",
+                  "size": 0.02,
+                  "width": null,
+                  "height": null,
+                  "ext": ".txt",
+                  "folder": null,
+                  "createdAt": "<time>",
+                  "updatedAt": "<time>"
+                }
+              ],
+              "failed": [],
+              "totalFileNumber": 1
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 933
+        }
+      }
+    ]
+  },
+  {
+    "step": "delete folders, one not a folder",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Tool \"media_delete_folder\" execution failed: These ids do not match any media folder: 999. Nothing was deleted — media_delete_folder rejects the whole request rather than deleting the folders that did match, because folder ids and asset ids are indistinguishable integers. If these are asset ids, use media_delete_assets instead; otherwise the folders may already be gone. Use media_list_folders to discover valid folder ids."
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 934
+        }
+      }
+    ]
+  },
+  {
+    "step": "preview deleting a folder",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "dryRun": true,
+              "folders": [
+                {
+                  "id": "<id>",
+                  "name": "Photos",
+                  "createdAt": null,
+                  "updatedAt": null
+                }
+              ],
+              "totalFolderNumber": 2,
+              "totalFileNumber": 1
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 935
+        }
+      }
+    ]
+  },
+  {
+    "step": "delete a folder and what it holds",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "dryRun": false,
+              "folders": [
+                {
+                  "id": "<id>",
+                  "name": "Photos",
+                  "createdAt": null,
+                  "updatedAt": null
+                },
+                {
+                  "id": "<id>",
+                  "name": "Twenty",
+                  "createdAt": null,
+                  "updatedAt": null
+                }
+              ],
+              "totalFolderNumber": 2,
+              "totalFileNumber": 1
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 936
+        }
+      }
+    ]
+  },
+  {
+    "step": "what is left",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "results": [],
+              "pagination": {
+                "page": 1,
+                "pageSize": 25,
+                "pageCount": 0,
+                "total": 0
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 937
+        }
+      }
+    ]
+  },
+  {
+    "step": "and the tree",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "<structuredContent>"
+              }
+            ],
+            "structuredContent": {
+              "data": [
+                {
+                  "id": "<id>",
+                  "name": "Archive",
+                  "children": []
+                }
+              ]
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 938
+        }
+      }
+    ]
+  },
+  {
+    "step": "a token without the Media Library sees none of it",
+    "status": 200,
+    "type": "text/event-stream",
+    "messages": [
+      {
+        "event": "message",
+        "data": {
+          "jsonrpc": "2.0",
+          "id": 939,
+          "error": {
+            "code": -32602,
+            "message": "Tool media_list_folders disabled"
+          }
+        }
+      }
+    ]
+  }
+]

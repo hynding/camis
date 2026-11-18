@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Support;
 
+use App\Models\AdminUser;
+use App\Models\StrapiAdminToken;
 use App\Models\StrapiApiToken;
 use App\Models\StrapiTransferToken;
 use Carbon\CarbonImmutable;
@@ -48,7 +50,7 @@ final class StrapiTokenImport
     public function replaced(): array
     {
         $names = [
-            ...StrapiApiToken::query()->whereIn('name', $this->apiTokens()->pluck('name'))->pluck('name')->all(),
+            ...DB::table('strapi_api_tokens')->whereIn('name', $this->apiTokens()->pluck('name'))->pluck('name')->all(),
             ...StrapiTransferToken::query()->whereIn('name', $this->transferTokens()->pluck('name'))->pluck('name')->all(),
         ];
         sort($names);
@@ -56,20 +58,37 @@ final class StrapiTokenImport
         return $names;
     }
 
-    /** @return array{api: int, transfer: int} */
+    /** @return array{api: int, admin: int, transfer: int} */
     public function run(): array
     {
-        $counts = ['api' => 0, 'transfer' => 0];
+        $counts = ['api' => 0, 'admin' => 0, 'transfer' => 0];
         DB::transaction(function () use (&$counts): void {
             $actions = $this->actions('strapi_api_token_permissions', 'api_token');
+            $owners = $this->owners();
+            $adminPermissions = $this->adminPermissions();
             foreach ($this->apiTokens() as $row) {
-                // An admin token (Strapi 5.40's kind) acts in the admin, which this app's tokens do not.
-                if (($row->kind ?? 'content-api') !== 'content-api') {
-                    $this->skipped["API token {$row->name}"] = 'an admin token: this app\'s API tokens reach the Content API only';
+                // An admin token (Strapi 5.40's kind) acts as its owner, the admin account of the same email here.
+                if (($row->kind ?? 'content-api') === 'admin') {
+                    $owner = AdminUser::query()->where('email', $owners[$row->id] ?? '')->first();
+                    if ($owner === null) {
+                        $this->skipped["Admin token {$row->name}"] = 'no admin account here has its owner\'s email: import the accounts first (strapi:import-admins)';
+
+                        continue;
+                    }
+                    DB::table('strapi_api_tokens')->where('name', $row->name)->delete();
+                    (new StrapiAdminToken())->forceFill([
+                        'name' => $row->name,
+                        'description' => (string) ($row->description ?? ''),
+                        'admin_user_owner_id' => $owner->id,
+                        'admin_permissions' => StrapiAdminPermissions::fromStrapi($adminPermissions[$row->id] ?? []),
+                        'access_key' => $row->access_key,
+                        'encrypted_key' => $this->reencrypt($row->name, $row->encrypted_key ?? null),
+                    ] + self::times($row))->saveQuietly();
+                    $counts['admin']++;
 
                     continue;
                 }
-                StrapiApiToken::query()->where('name', $row->name)->delete();
+                DB::table('strapi_api_tokens')->where('name', $row->name)->delete();
                 (new StrapiApiToken())->forceFill([
                     'name' => $row->name,
                     'description' => (string) ($row->description ?? ''),
@@ -147,6 +166,40 @@ final class StrapiTokenImport
         }
 
         return array_map(fn (array $list): array => array_values(array_unique($list)), $actions);
+    }
+
+    /** @return array<int|string, string> admin token id → its owner's email */
+    private function owners(): array
+    {
+        $link = 'strapi_api_tokens_admin_user_owner_lnk';
+        if (! $this->source->getSchemaBuilder()->hasTable($link)) {
+            return [];
+        }
+
+        return $this->source->table($link)
+            ->join('admin_users', 'admin_users.id', '=', "{$link}.user_id")
+            ->pluck('admin_users.email', "{$link}.api_token_id")
+            ->map(fn (mixed $email): string => mb_strtolower((string) $email))
+            ->all();
+    }
+
+    /** @return array<int|string, list<array{action: string, subject: string|null}>> admin token id → its permission rows */
+    private function adminPermissions(): array
+    {
+        $link = 'admin_permissions_api_token_lnk';
+        if (! $this->source->getSchemaBuilder()->hasTable($link)) {
+            return [];
+        }
+        $rows = $this->source->table($link)
+            ->join('admin_permissions', 'admin_permissions.id', '=', "{$link}.permission_id")
+            ->orderBy("{$link}.api_token_id")->orderBy("{$link}.id")
+            ->get(["{$link}.api_token_id as token", 'admin_permissions.action as action', 'admin_permissions.subject as subject']);
+        $permissions = [];
+        foreach ($rows as $row) {
+            $permissions[$row->token][] = ['action' => (string) $row->action, 'subject' => $row->subject === null ? null : (string) $row->subject];
+        }
+
+        return $permissions;
     }
 
     /** Strapi's `v1:<iv>:<ciphertext>:<tag>` (AES-256-GCM under a SHA-256 of its ENCRYPTION_KEY), kept under this app's key. */

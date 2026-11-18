@@ -218,7 +218,19 @@ export interface DeployExtras {
   transfer?: boolean;
   /** The IR declares schedules (routes/schedule.php). */
   schedules?: boolean;
+  /** Strapi's MCP server: the Strapi API style with roles, so admin tokens to sign in with. */
+  mcp?: boolean;
 }
+
+const mcpSection = `
+
+## MCP server
+
+Strapi's MCP server answers at \`POST /mcp\`, off until \`CAMIS_MCP_ENABLED=true\` (Strapi's
+\`server.mcp.enabled\`). A client signs in with an admin token from Settings › Admin Tokens and
+sees the Content Manager's and the Media Library's tools its permissions reach, never more than
+the token's owner holds. Each request is answered on its own, so it needs no sticky sessions
+behind a load balancer; set \`CAMIS_MCP_ENABLED\` before \`php artisan config:cache\`.`;
 
 const schedulesSection = `
 
@@ -245,6 +257,7 @@ export const deployFile = (
     documentation = false,
     transfer = false,
     schedules = false,
+    mcp = false,
   }: DeployExtras = {},
 ): GeneratedFile => ({
   path: "DEPLOY.md",
@@ -284,7 +297,7 @@ DB_PASSWORD=secret
 
 ${firstDeploy(layout)}
 
-${layout === "strapi" ? "" : adminSection}${graphql ? graphqlSection.slice(2) + "\n\n" : ""}${documentation ? documentationSection.slice(2) + "\n\n" : ""}${transfer ? transferSection.slice(2) + "\n\n" : ""}${schedules ? schedulesSection.slice(2) + "\n\n" : ""}## Shared hosting (no shell)
+${layout === "strapi" ? "" : adminSection}${graphql ? graphqlSection.slice(2) + "\n\n" : ""}${documentation ? documentationSection.slice(2) + "\n\n" : ""}${transfer ? transferSection.slice(2) + "\n\n" : ""}${schedules ? schedulesSection.slice(2) + "\n\n" : ""}${mcp ? mcpSection.slice(2) + "\n\n" : ""}## Shared hosting (no shell)
 
 Build locally (scaffold + \`camis build\` + \`composer install\`), upload the whole app
 directory, and point the document root at \`public/\`. Laravel's \`.htaccess\` ships in

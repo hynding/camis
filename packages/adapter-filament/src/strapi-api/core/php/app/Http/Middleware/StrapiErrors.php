@@ -20,7 +20,7 @@ use Throwable;
 class StrapiErrors
 {
     /** Strapi's admin API routes (routes/admin.php), among Filament's own /admin pages. */
-    private const ADMIN_API = ['admin/init', 'admin/login', 'admin/register-admin', 'admin/users/me', 'admin/api-tokens', 'admin/api-tokens/*'];
+    private const ADMIN_API = ['admin/init', 'admin/login', 'admin/register-admin', 'admin/users/me', 'admin/api-tokens', 'admin/api-tokens/*', 'admin/admin-tokens', 'admin/admin-tokens/*'];
 
     public function __construct(private readonly ExceptionHandler $handler)
     {
@@ -30,7 +30,10 @@ class StrapiErrors
     {
         $this->registerRenderer();
 
-        $request->headers->set('Accept', 'application/json');
+        // The MCP endpoint reads the client's Accept: it must name event streams.
+        if (! $request->is('mcp')) {
+            $request->headers->set('Accept', 'application/json');
+        }
 
         return $next($request);
     }

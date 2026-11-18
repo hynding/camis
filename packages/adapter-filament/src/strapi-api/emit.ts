@@ -2,6 +2,7 @@ import type { GeneratedFile } from "@camis/adapter-kernel";
 import type { CapabilityGap, ContentType, Endpoint, IrDocument } from "@camis/ir-schema";
 import type { IrBundle } from "@camis/permissions";
 import { strapiAdminFiles } from "./admin/admin-api";
+import { adminTokenFiles } from "./admin/admin-tokens";
 import {
   emitStrapiImportTokensCommand,
   emitStrapiTokenImport,
@@ -175,6 +176,8 @@ import {
   TRANSFER_DOWNLOAD_PATH,
 } from "./data-transfer/transfer-page";
 import { runtimeSchemas, strapiNames } from "@camis/strapi-schema";
+import { mcpServerFiles } from "./core/mcp";
+import { contentManagerMcpFiles } from "./content-manager/mcp";
 import {
   EMAIL_SETTINGS_PAGE_PATH,
   emitEmailSettingsPage,
@@ -439,6 +442,14 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
       ),
       ...transferTokenFiles(),
       ...strapiAdminFiles(),
+      ...mcpServerFiles(),
+      ...contentManagerMcpFiles(doc, emitted, fileModel),
+      ...adminTokenFiles({
+        emitted,
+        versioned,
+        fileType: input.media?.name,
+        userType: doc.contentTypes.find((ct) => ct.builtin === "user")?.name,
+      }),
     );
   }
   files.push(
