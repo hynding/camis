@@ -2507,12 +2507,15 @@ between strapi-php and camis on `/api/users` and `/api/users-permissions/roles`.
   the configured class), `strapi:import` and the admin are all the one model.
 - **Columns.** `9999_12_31_000001_millisecond_timestamps_on_users_and_roles` widens both tables'
   `created_at`/`updated_at` to `timestamp(3)` on MySQL and PostgreSQL, after Spatie's migration;
-  SQLite stores the text written, so it skips. A role's archived times import with milliseconds.
+  SQLite stores the text written, so it skips. A role's and a user's archived times import with
+  milliseconds (the importer writes them in the User model's and Spatie's configured role model's
+  formats; until Phase 88's fix it used seconds for both, which the sitlab rerun found).
 - Filters on users follow the User's format (Phase 68), so `filters[createdAt][$eq]` with
   milliseconds matches.
 
 Exit: vitest for the patch, the generated files and the seeder; `ApiTokensTest.php` reads a user
-and a role back with their milliseconds on sqlite, mysql and pgsql.
+and a role back with their milliseconds on sqlite, mysql and pgsql; `TransferTimestampsTest.php`
+imports strapi-php's archive and reads its user's and role's milliseconds back.
 
 ---
 
