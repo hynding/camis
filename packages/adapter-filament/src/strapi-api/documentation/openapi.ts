@@ -331,7 +331,6 @@ class DocumentBuilder {
     for (const ct of this.input.emitted) Object.assign(paths, this.routes(ct));
     for (const [path, item] of Object.entries(plugins.paths as Record<string, unknown>)) {
       if (path.startsWith("/upload") && !this.input.media) continue;
-      if (path.startsWith("/i18n/") && this.input.localized.size === 0) continue;
       if (path === "/email" && !this.input.email) continue;
       paths[path] = item;
     }

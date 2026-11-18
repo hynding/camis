@@ -719,10 +719,7 @@ export const buildGraphqlSchema = (input: GraphqlSchemaInput): GraphqlSchema => 
       zones: [],
     });
   }
-  const plugins = definePluginApis(b, {
-    media: input.media,
-    localized: types.some((t) => t.localized),
-  });
+  const plugins = definePluginApis(b, { media: input.media });
   queryFields.unshift(...plugins.queries);
   mutationFields.push(...plugins.mutations);
   if (input.media) b.define(genericMorph(b, types));

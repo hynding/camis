@@ -2516,6 +2516,28 @@ and a role back with their milliseconds on sqlite, mysql and pgsql.
 
 ---
 
+## Phase 88 — Strapi's i18n plugin is always there (`adapter-filament`)
+
+Strapi installs its i18n plugin in every project, so `GET /api/i18n/locales` lists the default
+locale, Settings › Internationalization manages locales, and the Content-Type Builder's
+localization switch has locales to use, before any type is localized. A camis app on the Strapi API
+style kept locales only when a type was localized: a migrated project with none (sitlab) answered
+`/api/i18n/locales` with a 404.
+
+- The locales table (with its default locale), `App\Models\Locale`, `LocaleController`, the
+  Internationalization resource and the `i18n` config keys are generated for every Strapi API style
+  app on the laravel storage layout, as are the route, the API token action
+  (`plugin::i18n.locales.listLocales`), the transfer map's `plugin::i18n.locale` entry, the
+  homepage's locale count, the GraphQL `i18NLocale(s)` queries and the OpenAPI `/i18n/locales` path.
+- A content type is still localized only when its `options.localized` says so; nothing else changes
+  for one that is not. The Strapi storage layout keeps no locales, as before.
+
+Exit: `i18n.test.ts` generates a project with no localized type and finds every piece above;
+`openapi.test.ts` lists `/i18n/locales` for it; `LocalesWithoutLocalizedTypesTest.php` (author-role
+boot job, a fixture with no localized type) lists `en`, then a locale added after it.
+
+---
+
 ## Sequencing rationale (quick reference)
 
 1. **Strapi first** — mature schema validates the IR fastest, with the thinnest adapter.

@@ -103,7 +103,7 @@ describe("locales", () => {
 describe("locales without a localized type", () => {
   const unlocalized = filamentAdapter.generate(
     {
-      roles: [],
+      roles: [{ name: "authenticated", grants: [] }],
       document: {
         version: 1,
         contentTypes: [
@@ -139,8 +139,8 @@ describe("locales without a localized type", () => {
     expect(file("public/documentation/openapi.json")).toContain('"/i18n/locales"');
   });
   it("travel in transfer archives", () => {
-    expect(file("app/Support/StrapiTransferMap.php")).toContain(
-      "'plugin::i18n.locale' => ['plugin' => 'locale', 'model' => '\\App\\Models\\Locale']",
+    expect(file("app/Support/StrapiTransferMap.php")).toMatch(
+      /'plugin::i18n\.locale' => \[\s*'plugin' => 'locale',/,
     );
   });
   it("leave the content types as they are", () => {

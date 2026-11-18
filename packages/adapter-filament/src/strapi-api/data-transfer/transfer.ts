@@ -37,7 +37,6 @@ export interface TransferMapInput {
   /** The builtin user type's name, whose relations hold a user (`assign: { owner: … }`). */
   userType: string | undefined;
   media: boolean;
-  localized: boolean;
   /** The role a Strapi `authenticated` user gets here (`bundle.defaultRole`). */
   defaultRole: string | undefined;
   /** The builtin file type's name, whose grants are the upload plugin's actions. */
@@ -280,9 +279,7 @@ export const emitStrapiTransferMap = (input: TransferMapInput): string => {
     [FOLDER_UID]: input.media
       ? { plugin: "folder", model: "\\App\\Models\\UploadFolder" }
       : { skip: "this project keeps no media library" },
-    "plugin::i18n.locale": input.localized
-      ? { plugin: "locale", model: "\\App\\Models\\Locale" }
-      : { skip: "this project keeps no locales" },
+    "plugin::i18n.locale": { plugin: "locale", model: "\\App\\Models\\Locale" },
   };
   for (const ct of insertOrder(input.emitted, input.shapes)) {
     const shape = input.shapes.get(ct.name);

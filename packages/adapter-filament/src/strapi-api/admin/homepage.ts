@@ -34,7 +34,6 @@ export interface HomepageInput {
   /** Strapi counts its components' categories. */
   componentCategories: number;
   fileModel: string | undefined;
-  localized: boolean;
 }
 
 const phpBool = (value: boolean): string => (value ? "true" : "false");
@@ -55,7 +54,7 @@ const statistics = (input: HomepageInput): string =>
       : [`'assets' => \\App\\Models\\${input.fileModel}::query()->count(),`]),
     `'contentTypes' => count(self::TYPES),`,
     `'components' => ${input.componentCategories},`,
-    ...(input.localized ? ["'locales' => \\App\\Models\\Locale::query()->count(),"] : []),
+    "'locales' => \\App\\Models\\Locale::query()->count(),",
     `'admins' => ${adminCount(input)},`,
     "'webhooks' => \\App\\Models\\StrapiWebhook::query()->count(),",
     ...(input.secured ? ["'apiTokens' => \\App\\Models\\StrapiApiToken::query()->count(),"] : []),

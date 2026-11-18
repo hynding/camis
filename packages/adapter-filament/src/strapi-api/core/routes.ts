@@ -36,7 +36,7 @@ const AUTH_THROTTLE_PER_MINUTE = 10;
 export const emitApiConfig = (
   layout: StorageLayout = "laravel",
   alwaysPopulateComponents = false,
-  localized = false,
+  locales = false,
   upload = false,
   usersPermissions = false,
   apiTokens = false,
@@ -83,7 +83,7 @@ export const emitApiConfig = (
     ],`
     : "";
   // The locale the locales table starts with, which reads and writes use when a request names none.
-  const i18nKeys = localized
+  const i18nKeys = locales
     ? `
 
     'i18n' => [
@@ -144,7 +144,7 @@ export const emitStrapiRoutes = (
   cts: ContentType[],
   secured: boolean,
   guard: RouteGuard = "auth:sanctum",
-  localized = false,
+  locales = false,
   upload = false,
   usersPermissions = false,
   guests = false,
@@ -204,7 +204,7 @@ export const emitStrapiRoutes = (
   const opened = joined(endpointRoutes(isOpenEndpoint), routesOf(isOpen));
   const uses = [
     "App\\Http\\Controllers\\Api\\AuthController",
-    ...(localized ? ["App\\Http\\Controllers\\Api\\LocaleController"] : []),
+    ...(locales ? ["App\\Http\\Controllers\\Api\\LocaleController"] : []),
     ...(upload ? ["App\\Http\\Controllers\\Api\\UploadController"] : []),
     ...(usersPermissions
       ? [
@@ -345,7 +345,7 @@ ${
     Route::get('/_health', fn () => response()->noContent());
     Route::post('/auth/local', [AuthController::class, 'login'])->middleware(${throttled});
     Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware(${throttled});${accountRoutes}${
-      localized
+      locales
         ? `
 
     // Strapi's i18n plugin lists the locales to anyone: they name no content.

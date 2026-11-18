@@ -30,7 +30,6 @@ export interface PluginApis {
 
 export interface PluginApisInput {
   media: boolean;
-  localized: boolean;
 }
 
 /** One attribute of a plugin's content type: a scalar, or a relation to another of its types. */
@@ -343,7 +342,7 @@ const files = (b: DefinitionSink, apis: PluginApis): void => {
 export const definePluginApis = (b: DefinitionSink, options: PluginApisInput): PluginApis => {
   const apis: PluginApis = { queries: [], mutations: [], fields: [] };
   if (options.media) files(b, apis);
-  if (options.localized) locales(b, apis);
+  locales(b, apis);
   usersPermissions(b, apis);
   return apis;
 };
