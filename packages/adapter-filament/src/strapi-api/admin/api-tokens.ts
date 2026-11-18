@@ -25,7 +25,6 @@ export interface ApiTokensInput {
   contentTypes: TokenContentType[];
   /** The media library's file model, when the project keeps one. */
   fileModel: string | undefined;
-  localized: boolean;
 }
 
 /** Strapi's own key: a project moving off Strapi keeps its salt, and so its tokens' hashes. */
@@ -115,12 +114,7 @@ const pluginRoutes = (input: ApiTokensInput): [string, [string, string][]][] => 
           ],
         ],
       ] as [string, [string, string][]][])),
-  ...(input.localized
-    ? ([["LocaleController", [["index", "plugin::i18n.locales.listLocales"]]]] as [
-        string,
-        [string, string][],
-      ][])
-    : []),
+  ["LocaleController", [["index", "plugin::i18n.locales.listLocales"]]],
 ];
 
 const controllerClass = (name: string): string => `'App\\Http\\Controllers\\Api\\${name}'`;

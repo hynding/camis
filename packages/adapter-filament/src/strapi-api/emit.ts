@@ -378,7 +378,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
       emitted,
       secured,
       "auth:sanctum",
-      localized.size > 0,
+      true,
       input.media !== undefined,
       true,
       guests,
@@ -393,7 +393,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     content: emitApiConfig(
       "laravel",
       input.alwaysPopulateComponents === true,
-      localized.size > 0,
+      true,
       input.media !== undefined,
       true,
       secured,
@@ -441,7 +441,6 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
           single: ct.kind === "single",
         })),
         fileModel,
-        localized.size > 0,
       ),
       ...transferTokenFiles(),
       ...strapiAdminFiles(),
@@ -495,7 +494,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     path: "app/Models/Concerns/HasMillisecondTimestamps.php",
     content: emitHasMillisecondTimestamps(),
   });
-  if (localized.size > 0) files.push(...localeFiles());
+  files.push(...localeFiles());
   if (input.media !== undefined) {
     const scope = secured
       ? emitScopeMethod(
@@ -586,7 +585,6 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     shapes,
     userType: doc.contentTypes.find((ct) => ct.builtin === "user")?.name,
     media: input.media !== undefined,
-    localized: localized.size > 0,
     defaultRole: bundle.defaultRole,
     fileType: input.media?.name,
   });
@@ -667,13 +665,12 @@ const usersPermissionsFiles = (
 const apiTokenFiles = (
   contentTypes: TokenContentType[],
   fileModel: string | undefined,
-  localized: boolean,
 ): GeneratedFile[] => [
   { path: API_TOKENS_MIGRATION_PATH, content: emitApiTokensMigration() },
   { path: "app/Models/StrapiApiToken.php", content: emitApiTokenModel() },
   {
     path: "app/Support/StrapiApiTokens.php",
-    content: emitStrapiApiTokens({ contentTypes, fileModel, localized }),
+    content: emitStrapiApiTokens({ contentTypes, fileModel }),
   },
   { path: "app/Http/Middleware/StrapiApiToken.php", content: emitStrapiApiTokenMiddleware() },
   { path: "app/Http/Middleware/StrapiPublicRoute.php", content: emitStrapiPublicRoute() },
@@ -757,7 +754,7 @@ const mediaLibraryFiles = (
   ];
 };
 
-/** The locales a localized project keeps, with their admin resource (a plain Filament resource). */
+/** Strapi's i18n plugin is always installed: its locales and their admin (a plain Filament resource). */
 const LOCALE: ContentType = {
   name: "Locale",
   kind: "collection",
@@ -819,7 +816,6 @@ const homeFiles = (input: StrapiApiInput, secured: boolean): GeneratedFile[] => 
         adminRoles: input.bundle.roles.filter((r) => r.admin === true).map((r) => r.name),
         componentCategories: new Set(doc.components.map((c) => componentUid(c).split(".")[0])).size,
         fileModel: input.media === undefined ? undefined : filamentNames(input.media).model,
-        localized: localized.size > 0,
       }),
     },
     ...emitHomepageWidgets(),

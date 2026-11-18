@@ -98,6 +98,57 @@ describe("locales", () => {
   });
 });
 
+// Strapi's i18n plugin is always installed: a project with no localized type still lists its
+// locales, manages them under Settings › Internationalization and lets a token hold the action.
+describe("locales without a localized type", () => {
+  const unlocalized = filamentAdapter.generate(
+    {
+      roles: [{ name: "authenticated", grants: [] }],
+      document: {
+        version: 1,
+        contentTypes: [
+          { name: "Story", kind: "collection", fields: [{ type: "string", name: "slug" }] },
+        ],
+        components: [],
+      },
+    },
+    { projectName: "x", apiStyle: "strapi", documentation: true, graphql: true },
+  );
+  const file = (p: string): string =>
+    unlocalized.files.find((f) => f.path === p || f.path.endsWith(p))?.content ?? "";
+  it("are kept, with the default locale, and managed in the admin", () => {
+    expect(file("_create_i18n_locales_table.php")).toContain("Schema::create('i18n_locales'");
+    expect(file("app/Models/Locale.php")).toContain("protected $table = 'i18n_locales';");
+    expect(file("app/Filament/Resources/Locales/LocaleResource.php")).toContain(
+      "protected static ?string $model = Locale::class;",
+    );
+    expect(file("config/camis.php")).toContain(
+      "'default_locale' => env('CAMIS_DEFAULT_LOCALE', 'en'),",
+    );
+  });
+  it("are listed at Strapi's route, to tokens holding the action", () => {
+    expect(file("routes/api.php")).toContain(
+      "Route::get('i18n/locales', [LocaleController::class, 'index']);",
+    );
+    expect(file("app/Support/StrapiApiTokens.php")).toContain(
+      "'index' => 'plugin::i18n.locales.listLocales',",
+    );
+  });
+  it("are read through GraphQL and described in the API documentation", () => {
+    expect(file("graphql/schema.graphql")).toContain("i18NLocales(");
+    expect(file("public/documentation/openapi.json")).toContain('"/i18n/locales"');
+  });
+  it("travel in transfer archives", () => {
+    expect(file("app/Support/StrapiTransferMap.php")).toMatch(
+      /'plugin::i18n\.locale' => \[\s*'plugin' => 'locale',/,
+    );
+  });
+  it("leave the content types as they are", () => {
+    expect(file("app/Models/Story.php")).not.toContain("HasLocale");
+    expect(unlocalized.gaps.gaps.filter((g) => g.feature === "localized")).toEqual([]);
+  });
+});
+
 describe("one row per document and locale", () => {
   it("lets every locale of a document share its documentId", () => {
     const articles = content("_create_articles_table.php");

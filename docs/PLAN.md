@@ -2507,12 +2507,41 @@ between strapi-php and camis on `/api/users` and `/api/users-permissions/roles`.
   the configured class), `strapi:import` and the admin are all the one model.
 - **Columns.** `9999_12_31_000001_millisecond_timestamps_on_users_and_roles` widens both tables'
   `created_at`/`updated_at` to `timestamp(3)` on MySQL and PostgreSQL, after Spatie's migration;
-  SQLite stores the text written, so it skips. A role's archived times import with milliseconds.
+  SQLite stores the text written, so it skips. A role's and a user's archived times import with
+  milliseconds (the importer writes them in the User model's and Spatie's configured role model's
+  formats; until Phase 88's fix it used seconds for both, which the sitlab rerun found).
 - Filters on users follow the User's format (Phase 68), so `filters[createdAt][$eq]` with
   milliseconds matches.
 
 Exit: vitest for the patch, the generated files and the seeder; `ApiTokensTest.php` reads a user
-and a role back with their milliseconds on sqlite, mysql and pgsql.
+and a role back with their milliseconds on sqlite, mysql and pgsql; `TransferTimestampsTest.php`
+imports strapi-php's archive and reads its user's and role's milliseconds back.
+
+---
+
+## Phase 88 — Strapi's i18n plugin is always there (`adapter-filament`)
+
+Strapi installs its i18n plugin in every project, so `GET /api/i18n/locales` lists the default
+locale, Settings › Internationalization manages locales, and the Content-Type Builder's
+localization switch has locales to use, before any type is localized. A camis app on the Strapi API
+style kept locales only when a type was localized: a migrated project with none (sitlab) answered
+`/api/i18n/locales` with a 404.
+
+- The locales table (with its default locale), `App\Models\Locale`, `LocaleController`, the
+  Internationalization resource and the `i18n` config keys are generated for every Strapi API style
+  app on the laravel storage layout, as are the route, the API token action
+  (`plugin::i18n.locales.listLocales`), the transfer map's `plugin::i18n.locale` entry, the
+  homepage's locale count, the GraphQL `i18NLocale(s)` queries and the OpenAPI `/i18n/locales` path.
+- A content type is still localized only when its `options.localized` says so; nothing else changes
+  for one that is not. The Strapi storage layout keeps no locales, as before.
+- The list stays open to anyone, as it was for localized projects. strapi-php asks for
+  `plugin::i18n.locales.listLocales`, which no role it ships holds, but projects grant it to their
+  public or authenticated role so a site can read its locales, and the IR's grants cannot name a
+  plugin action; refusing it would break those sites after a migration.
+
+Exit: `i18n.test.ts` generates a project with no localized type and finds every piece above;
+`openapi.test.ts` lists `/i18n/locales` for it; `LocalesWithoutLocalizedTypesTest.php` (author-role
+boot job, a fixture with no localized type) lists `en`, then a locale added after it.
 
 ---
 

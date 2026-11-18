@@ -143,6 +143,8 @@ describe("OpenAPI document", () => {
     const paths = Object.keys(document.paths ?? {});
     expect(paths).toContain("/tags");
     expect(paths).toContain("/auth/local");
-    expect(paths.filter((p) => p.startsWith("/upload") || p.startsWith("/i18n"))).toEqual([]);
+    expect(paths.filter((p) => p.startsWith("/upload"))).toEqual([]);
+    // Strapi's i18n plugin is always installed, localized types or not.
+    expect(paths).toContain("/i18n/locales");
   });
 });

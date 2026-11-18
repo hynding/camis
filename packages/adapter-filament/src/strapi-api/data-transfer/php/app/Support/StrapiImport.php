@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
 
 final class StrapiImport
 {
@@ -433,7 +434,10 @@ final class StrapiImport
             if ($entity['type'] !== 'plugin::users-permissions.role' || $documentId === '') {
                 continue;
             }
-            $role = Role::query()->where('name', (string) ($entity['data']['type'] ?? ''))->first();
+            // Spatie's configured role model keeps the archive's milliseconds (StrapiRole).
+            /** @var class-string<Role> $roleClass */
+            $roleClass = app(PermissionRegistrar::class)->getRoleClass();
+            $role = $roleClass::query()->where('name', (string) ($entity['data']['type'] ?? ''))->first();
             if ($role === null) {
                 continue;
             }
@@ -696,6 +700,7 @@ final class StrapiImport
     private function user(int|string $ref, array $data): void
     {
         $email = mb_strtolower((string) ($data['email'] ?? ''));
+        $dateFormat = (new User())->getDateFormat();
         $values = [
             'name' => (string) ($data['username'] ?? $email),
             'username' => $data['username'] ?? null,
@@ -707,8 +712,8 @@ final class StrapiImport
             'confirmed' => (bool) ($data['confirmed'] ?? false),
             'blocked' => (bool) ($data['blocked'] ?? false),
             'document_id' => $data['documentId'] ?? null,
-            'created_at' => self::value($data['createdAt'] ?? null, 'dateTime'),
-            'updated_at' => self::value($data['updatedAt'] ?? null, 'dateTime'),
+            'created_at' => self::value($data['createdAt'] ?? null, 'dateTime', $dateFormat),
+            'updated_at' => self::value($data['updatedAt'] ?? null, 'dateTime', $dateFormat),
         ];
         $table = (new User())->getTable();
         $id = DB::table($table)->where('email', $email)->value('id');
