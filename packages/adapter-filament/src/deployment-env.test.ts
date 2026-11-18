@@ -283,6 +283,15 @@ CAMIS_ADMIN_ACCESS_TOKEN_LIFESPAN=3600
 `);
   });
 
+  it("writes the admin panel's path", () => {
+    expect(deploymentEnv({ server: { adminPath: "dashboard" } }).env).toContain(
+      "CAMIS_ADMIN_PATH=dashboard\n",
+    );
+    expect(deploymentEnv({ server: { adminPath: { env: "ADMIN_PATH" } } }).env).toContain(
+      "CAMIS_ADMIN_PATH=${ADMIN_PATH}\n",
+    );
+  });
+
   it("writes users-permissions' JWT secret and sign-in rate limit", () => {
     const { env } = deploymentEnv({
       accounts: { jwtSecret: { env: "UP_JWT" }, authRequestsPerMinute: 25 },

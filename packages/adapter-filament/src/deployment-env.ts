@@ -266,5 +266,6 @@ const serverLines = (server: ServerSettings): string[] => {
         ]),
     ...line("ADMIN_JWT_SECRET", server.adminTokenSecret),
     ...line("CAMIS_ADMIN_ACCESS_TOKEN_LIFESPAN", server.adminAccessTokenLifespan),
+    ...line("CAMIS_ADMIN_PATH", server.adminPath),
   ];
 };

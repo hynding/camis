@@ -54,6 +54,9 @@ const patchUserDateFormat = (source: string): string => {
 export const isPatchedUserModel = (source: string): boolean => source.includes(PATCHED_TRAITS);
 
 const STOCK_PANEL_LOGIN = "            ->login()\n";
+const STOCK_PANEL_PATH = "->path('admin')";
+// Strapi's config/admin url, imported as CAMIS_ADMIN_PATH; an app without the config keeps /admin.
+const CONFIGURED_PANEL_PATH = "->path(config('camis-admin.path', 'admin'))";
 const ADMIN_GUARD = "->authGuard('admin')";
 
 const ADMIN_LOCALE = "AdminLocale::class";
@@ -74,9 +77,11 @@ export const patchAdminPanelProvider = (source: string): string => {
     ? source
     : source.replace(STOCK_PANEL_LOGIN, `${STOCK_PANEL_LOGIN}            ${ADMIN_GUARD}\n`);
   const guardLine = `            ${ADMIN_GUARD}\n`;
-  return guarded.includes(ADMIN_LOCALE) || !guarded.includes(guardLine)
-    ? guarded
-    : guarded.replace(guardLine, `${guardLine}${PROFILE_AND_LOCALE}`);
+  const completed =
+    guarded.includes(ADMIN_LOCALE) || !guarded.includes(guardLine)
+      ? guarded
+      : guarded.replace(guardLine, `${guardLine}${PROFILE_AND_LOCALE}`);
+  return completed.replace(STOCK_PANEL_PATH, CONFIGURED_PANEL_PATH);
 };
 
 const STOCK_ROUTING_CONSOLE = "commands: __DIR__.'/../routes/console.php',";

@@ -522,13 +522,33 @@ describe("deploymentSettings — config/server and config/admin", () => {
     expect(gaps.map((g) => g.feature)).toEqual(["serverUrl"]);
   });
 
-  // camis serves its admin at /admin, where Filament's panel lives.
-  it("reports an admin served at another path", () => {
-    const { gaps } = deploymentSettings({}, undefined, undefined, undefined, { url: "/dashboard" });
-    expect(gaps.map((g) => g.feature)).toEqual(["adminPath"]);
-    expect(deploymentSettings({}, undefined, undefined, undefined, { url: "/admin" }).gaps).toEqual(
-      [],
-    );
+  const adminUrl = (url: unknown) =>
+    deploymentSettings({}, undefined, undefined, undefined, { url });
+
+  // config/admin's url moves Strapi's admin panel; its admin API stays at /admin, as camis's does.
+  it("serves the admin at the path config/admin's url names", () => {
+    expect(adminUrl("/dashboard/").settings.server).toEqual({ adminPath: "dashboard" });
+    expect(adminUrl("/cms/admin").settings.server).toEqual({ adminPath: "cms/admin" });
+    expect(adminUrl({ env: "ADMIN_PATH", default: "/dashboard" }).settings.server).toEqual({
+      adminPath: { env: "ADMIN_PATH", default: "/dashboard" },
+    });
+    expect(adminUrl("/dashboard").gaps).toEqual([]);
+  });
+
+  it("keeps the default admin path out of the settings", () => {
+    for (const url of ["", "/admin", "/admin/"]) {
+      expect(adminUrl(url).settings.server).toBeUndefined();
+      expect(adminUrl(url).gaps).toEqual([]);
+    }
+  });
+
+  // An admin on its own host, or at the site's root, where the app's own routes are.
+  it("reports an admin url that is not a path under the app", () => {
+    for (const url of ["https://admin.example.com", "/"]) {
+      const { settings, gaps } = adminUrl(url);
+      expect(settings.server).toBeUndefined();
+      expect(gaps.map((g) => g.feature)).toEqual(["adminPath"]);
+    }
   });
 
   it("reads users-permissions' JWT secret and its sign-in rate limit, per minute", () => {

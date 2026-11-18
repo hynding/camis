@@ -391,6 +391,24 @@ const cors = (middlewares: unknown[], gaps: CapabilityGap[]): CorsSettings | und
 // Strapi serves its admin at /admin unless config/admin's url says otherwise; so does camis.
 const ADMIN_PATHS = ["", "/admin", "/admin/"];
 
+/**
+ * The admin panel's path from config/admin's url: a path under the app, kept without its slashes,
+ * or a variable naming one. An admin on its own host, or at the app's root, is a gap.
+ */
+const adminPath = (url: unknown, gaps: CapabilityGap[]): Setting | undefined => {
+  if (isEnvReference(url)) return url;
+  if (typeof url !== "string" || ADMIN_PATHS.includes(url)) return undefined;
+  const path = url.replace(/^\/+|\/+$/g, "");
+  if (url.startsWith("/") && path !== "") return path;
+  gaps.push(
+    gap(
+      "adminPath",
+      `config/admin's url "${url}" is not a path under the app; the admin is served at /admin.`,
+    ),
+  );
+  return undefined;
+};
+
 /** A public address Laravel's APP_URL can hold: absolute, or read from a variable. */
 const publicUrl = (value: unknown, gaps: CapabilityGap[]): Setting | undefined => {
   if (value === undefined || value === "") return undefined;
@@ -416,13 +434,6 @@ const server = (
   gaps: CapabilityGap[],
 ): ServerSettings => {
   const auth = object(adminConfig.auth);
-  if (typeof adminConfig.url === "string" && !ADMIN_PATHS.includes(adminConfig.url))
-    gaps.push(
-      gap(
-        "adminPath",
-        `config/admin's url "${adminConfig.url}" has no counterpart; the admin is served at /admin.`,
-      ),
-    );
   return settings([
     ["url", publicUrl(serverConfig.url, gaps)],
     ["mcpEnabled", object(serverConfig.mcp).enabled],
@@ -430,6 +441,7 @@ const server = (
     ["transferTokenSalt", object(object(adminConfig.transfer).token).salt],
     ["adminTokenSecret", auth.secret],
     ["adminAccessTokenLifespan", object(auth.sessions).accessTokenLifespan],
+    ["adminPath", adminPath(adminConfig.url, gaps)],
   ]);
 };
 

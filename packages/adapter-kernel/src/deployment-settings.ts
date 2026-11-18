@@ -113,6 +113,8 @@ export interface ServerSettings {
   adminTokenSecret?: Setting;
   /** How long an admin access token lasts, in seconds. */
   adminAccessTokenLifespan?: Setting;
+  /** Where the admin panel is served, a path under the app without its slashes ("admin" if unset). */
+  adminPath?: Setting;
 }
 
 /** Where the app reports the errors it throws. */

@@ -2574,6 +2574,26 @@ full-access token; the strapi-api job's i18n, token and transfer vectors replay 
 
 ---
 
+## Phase 90 — the admin panel at config/admin's url (`adapter-kernel`, `adapter-strapi`, `adapter-filament`, `cli`)
+
+Strapi serves its admin panel wherever config/admin's `url` says (`/dashboard`), while its admin
+API stays at `/admin`. Phase 86 only reported such a url as an `adminPath` gap.
+
+- Import keeps a url that is a path under the app as `server.adminPath`, without its slashes, or
+  the variable it reads. A url on another host, or `/` (the app's root, where its own routes are),
+  is still an `adminPath` gap. `/admin` is the default and is left out.
+- The Filament target writes it as `CAMIS_ADMIN_PATH`; `config/camis-admin.php` reads it as
+  `path`, with its slashes trimmed, and an empty one (an unset variable) keeps `admin`.
+- `camis scaffold` serves the panel at `config('camis-admin.path', 'admin')` instead of the stock
+  `->path('admin')`; an app without that config (the Strapi storage layout) keeps `/admin`.
+  Strapi's admin API (`/admin/login`, `/admin/api-tokens`, the transfer runner) does not move.
+
+Exit: vitest for the import, the env, the config and the panel patch; the author-role boot job
+lists Filament's login at `admin/login`, at `dashboard/login` with `CAMIS_ADMIN_PATH=/dashboard/`,
+and Strapi's `POST admin/login` either way.
+
+---
+
 ## Sequencing rationale (quick reference)
 
 1. **Strapi first** — mature schema validates the IR fastest, with the thinnest adapter.

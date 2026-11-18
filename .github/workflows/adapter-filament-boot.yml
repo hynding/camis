@@ -315,6 +315,15 @@ jobs:
           php artisan migrate --force
           cp ../packages/adapter-filament/scripts/php/AuthorRoleTest.php ../packages/adapter-filament/scripts/php/PublicActionsTest.php ../packages/adapter-filament/scripts/php/EndpointsTest.php ../packages/adapter-filament/scripts/php/LocalesWithoutLocalizedTypesTest.php tests/Feature/
           php artisan test tests/Feature/AuthorRoleTest.php tests/Feature/PublicActionsTest.php tests/Feature/EndpointsTest.php tests/Feature/LocalesWithoutLocalizedTypesTest.php
+      - name: The admin panel is served at CAMIS_ADMIN_PATH (Strapi's config/admin url), /admin by default, and Strapi's admin API stays at /admin
+        run: |
+          cd app
+          php artisan route:list --name=filament.admin.auth.login | tee routes.txt
+          grep -q ' admin/login ' routes.txt
+          CAMIS_ADMIN_PATH=/dashboard/ php artisan route:list --name=filament.admin.auth.login | tee routes.txt
+          grep -q ' dashboard/login ' routes.txt
+          CAMIS_ADMIN_PATH=/dashboard/ php artisan route:list --path=admin/login | tee routes.txt
+          grep -q 'POST *admin/login' routes.txt
   unique-components:
     # Unique fields inside components and dynamic zones, checked as strapi-php checks them. The
     # nested lookups are Eloquent whereHas, the same SQL builder on every database, so sqlite is enough.
