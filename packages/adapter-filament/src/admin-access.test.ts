@@ -40,7 +40,7 @@ describe("admin access", () => {
   // Strapi's config/admin url, without its slashes; the panel provider reads it.
   it("reads the admin panel's path from CAMIS_ADMIN_PATH, /admin by default", () => {
     expect(file(result, "config/camis-admin.php")).toContain(
-      "'path' => trim((string) env('CAMIS_ADMIN_PATH', 'admin'), '/'),",
+      "'path' => trim((string) env('CAMIS_ADMIN_PATH'), '/') ?: 'admin',",
     );
   });
 
