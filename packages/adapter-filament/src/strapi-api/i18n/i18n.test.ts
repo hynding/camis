@@ -83,7 +83,7 @@ describe("locales", () => {
   });
   it("are listed at Strapi's route", () => {
     expect(content("routes/api.php")).toContain(
-      "Route::get('i18n/locales', [LocaleController::class, 'index']);",
+      "Route::get('i18n/locales', [LocaleController::class, 'index'])->middleware(StrapiTokenOnly::class);",
     );
   });
   it("are managed in the admin", () => {

@@ -60,7 +60,8 @@ Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle):
         Route::get('/users-permissions/permissions', [RoleController::class, 'getPermissions']);
     });
 
-    // Strapi's i18n plugin lists the locales to anyone: they name no content.
+    // Strapi's i18n plugin lists the locales to a caller holding its action, which no role it ships
+    // does: so a token that does, where the app keeps tokens.
     Route::get('i18n/locales', [LocaleController::class, 'index']);
 
     Route::middleware([])->group(function (): void {

@@ -397,6 +397,9 @@ ${models}
 export const emitStrapiApiTokenMiddleware = (): string =>
   runtimePhp(new URL("./php/app/Http/Middleware/StrapiApiToken.php", import.meta.url));
 
+export const emitStrapiTokenOnlyMiddleware = (): string =>
+  runtimePhp(new URL("./php/app/Http/Middleware/StrapiTokenOnly.php", import.meta.url));
+
 const page = (cls: string, base: string, uses: string[], body: string): string => `<?php
 
 declare(strict_types=1);
