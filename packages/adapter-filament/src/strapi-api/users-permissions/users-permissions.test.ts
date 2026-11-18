@@ -177,8 +177,9 @@ describe("users-permissions register and /users queries", () => {
       migration !== undefined &&
         migration.path > "database/migrations/9999_12_31_000000_add_document_id_to_roles_table.php",
     ).toBe(true);
+    expect(migration?.content).toContain("$this->precision(3);");
     expect(migration?.content).toContain(
-      "$table->timestamp('created_at', 3)->nullable()->change();",
+      "$table->timestamp('created_at', $precision)->nullable()->change();",
     );
     expect(migration?.content).toContain("config('permission.table_names.roles', 'roles')");
     // SQLite keeps a datetime as the text written: nothing to widen there.

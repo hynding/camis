@@ -1,3 +1,4 @@
+import type { GeneratedFile } from "@camis/adapter-kernel";
 import { PHP_MARKER } from "../../hooks/names";
 import { sessionsConfigKeys } from "./sessions";
 import { runtimePhp } from "../../runtime-php";
@@ -12,6 +13,8 @@ export const USERS_PERMISSIONS_MIGRATION_PATH =
   "database/migrations/0001_01_02_000001_add_users_permissions_to_users_table.php";
 export const ROLE_DOCUMENT_ID_MIGRATION_PATH =
   "database/migrations/9999_12_31_000000_add_document_id_to_roles_table.php";
+export const MILLISECOND_TIMESTAMPS_MIGRATION_PATH =
+  "database/migrations/9999_12_31_000001_millisecond_timestamps_on_users_and_roles.php";
 export const SETTINGS_MIGRATION_PATH =
   "database/migrations/0001_01_02_000002_create_strapi_settings_table.php";
 
@@ -32,6 +35,17 @@ export const emitRoleDocumentIdMigration = (): string =>
       import.meta.url,
     ),
   );
+
+/** Strapi's millisecond timestamps on Laravel's users table and Spatie's roles table. */
+export const emitMillisecondTimestampsMigration = (): string =>
+  runtimePhp(new URL(`./php/${MILLISECOND_TIMESTAMPS_MIGRATION_PATH}`, import.meta.url));
+
+/** Spatie's role model, with Strapi's millisecond timestamps, and the config that makes it Spatie's. */
+export const millisecondRoleFiles = (): GeneratedFile[] =>
+  ["app/Models/Role.php", "config/permission.php"].map((path) => ({
+    path,
+    content: runtimePhp(new URL(`./php/${path}`, import.meta.url)),
+  }));
 
 export const emitSettingsMigration = (): string =>
   runtimePhp(

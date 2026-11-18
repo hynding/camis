@@ -442,8 +442,8 @@ final class StrapiImport
             $role->timestamps = false;
             $role->forceFill([
                 'document_id' => $documentId,
-                'created_at' => self::value($entity['data']['createdAt'] ?? null, 'dateTime') ?? $role->created_at,
-                'updated_at' => self::value($entity['data']['updatedAt'] ?? null, 'dateTime') ?? $role->updated_at,
+                'created_at' => self::value($entity['data']['createdAt'] ?? null, 'dateTime', $role->getDateFormat()) ?? $role->created_at,
+                'updated_at' => self::value($entity['data']['updatedAt'] ?? null, 'dateTime', $role->getDateFormat()) ?? $role->updated_at,
             ])->saveQuietly();
         }
     }

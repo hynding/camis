@@ -12,19 +12,42 @@ const PATCHED_TRAITS = TOKENS_TRAIT_USE.slice(0, -1);
 
 /**
  * Add Spatie's HasRoles and Sanctum's HasApiTokens to the Laravel User model: the API's users hold
- * the IR's roles and Sanctum tokens. Idempotent. The User is not a Filament user: the admin's
+ * the IR's roles and Sanctum tokens; and keep its timestamps to the millisecond in a Strapi API
+ * style app, as Strapi keeps its users'. Idempotent. The User is not a Filament user: the admin's
  * accounts are the generated AdminUser, apart from the API's users, as Strapi keeps them.
  *
  * Handles the stock form and the roles-only one the non-strapi boot path left (HasRoles but no
  * HasApiTokens, which would leave an app that cannot issue Sanctum tokens). A model patched before
- * admin accounts were separate (with AdminAccess and FilamentUser) is left as it is: the trait is
+ * admin accounts were separate (with AdminAccess and FilamentUser) keeps its traits: the trait is
  * still generated, and lets no User into the admin. A source matching none is returned unchanged;
  * the caller treats that as a failure rather than reporting a patch that never happened.
  */
 export const patchUserModel = (source: string): string => {
-  if (source.includes(PATCHED_TRAITS)) return source;
   const from = [ROLES_ONLY_TRAIT_USE, STOCK_TRAIT_USE].find((form) => source.includes(form));
-  return from === undefined ? source : source.replace(from, TOKENS_TRAIT_USE);
+  const traits =
+    source.includes(PATCHED_TRAITS) || from === undefined
+      ? source
+      : source.replace(from, TOKENS_TRAIT_USE);
+  return patchUserDateFormat(traits);
+};
+
+// The concern exists only in a Strapi API style app, whose migration widens the users table's
+// timestamps; any other app keeps Laravel's own format.
+const USER_DATE_FORMAT = `
+    /** Strapi keeps a user's timestamps to the millisecond, as a Strapi API style app does. */
+    public function getDateFormat(): string
+    {
+        return trait_exists(\\App\\Models\\Concerns\\HasMillisecondTimestamps::class) ? 'Y-m-d H:i:s.v' : parent::getDateFormat();
+    }
+`;
+
+/** Strapi's millisecond timestamps on a User model patched with the traits, after their line. */
+const patchUserDateFormat = (source: string): string => {
+  if (source.includes("function getDateFormat(")) return source;
+  const start = source.indexOf(PATCHED_TRAITS);
+  if (start === -1) return source;
+  const end = source.indexOf(";\n", start) + 2;
+  return source.slice(0, end) + USER_DATE_FORMAT + source.slice(end);
 };
 
 /** Whether the User model carries HasRoles and HasApiTokens. */

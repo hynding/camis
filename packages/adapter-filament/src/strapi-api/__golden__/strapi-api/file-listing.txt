@@ -316,6 +316,7 @@ overwrite app/Models/Page.php
 overwrite app/Models/PagePanelItems.php
 overwrite app/Models/Post.php
 overwrite app/Models/Review.php
+overwrite app/Models/Role.php
 overwrite app/Models/Storyboard.php
 overwrite app/Models/StoryboardFrames.php
 overwrite app/Models/StrapiAdminToken.php
@@ -415,6 +416,7 @@ overwrite config/camis-admin.php
 overwrite config/camis.php
 overwrite config/content-type-builder.php
 overwrite config/cors.php
+overwrite config/permission.php
 overwrite database/migrations/0001_01_01_000003_create_admin_users_table.php
 overwrite database/migrations/0001_01_02_000000_add_username_to_users_table.php
 overwrite database/migrations/0001_01_02_000000_create_files_table.php
@@ -476,6 +478,7 @@ overwrite database/migrations/0001_01_02_000046_add_menus_foreign_keys.php
 overwrite database/migrations/0001_01_03_000000_add_link_order_columns.php
 overwrite database/migrations/0001_01_03_000001_create_upload_folders_table.php
 overwrite database/migrations/9999_12_31_000000_add_document_id_to_roles_table.php
+overwrite database/migrations/9999_12_31_000001_millisecond_timestamps_on_users_and_roles.php
 overwrite database/seeders/RolePermissionSeeder.php
 overwrite resources/camis/schema.json
 overwrite resources/strapi/mcp.json

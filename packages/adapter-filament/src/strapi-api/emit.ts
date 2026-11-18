@@ -228,6 +228,9 @@ import {
   USERS_PERMISSIONS_MIGRATION_PATH,
   ROLE_DOCUMENT_ID_MIGRATION_PATH,
   emitRoleDocumentIdMigration,
+  MILLISECOND_TIMESTAMPS_MIGRATION_PATH,
+  emitMillisecondTimestampsMigration,
+  millisecondRoleFiles,
 } from "./users-permissions/users-permissions";
 
 export interface StrapiApiInput {
@@ -635,8 +638,10 @@ const usersPermissionsFiles = (
     ? [
         { path: "app/Http/Serializers/RoleSerializer.php", content: emitRoleSerializer() },
         { path: ROLE_DOCUMENT_ID_MIGRATION_PATH, content: emitRoleDocumentIdMigration() },
+        ...millisecondRoleFiles(),
       ]
     : []),
+  { path: MILLISECOND_TIMESTAMPS_MIGRATION_PATH, content: emitMillisecondTimestampsMigration() },
   { path: "app/Support/StrapiSettings.php", content: emitStrapiSettings() },
   {
     path: "app/Http/Controllers/Api/UserController.php",

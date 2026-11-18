@@ -63,7 +63,7 @@ describe("Strapi data import", () => {
     const engine = content(IMPORT_ENGINE);
     expect(engine).toContain("$role->timestamps = false;");
     expect(engine).toContain(
-      "'created_at' => self::value($entity['data']['createdAt'] ?? null, 'dateTime') ?? $role->created_at,",
+      "'created_at' => self::value($entity['data']['createdAt'] ?? null, 'dateTime', $role->getDateFormat()) ?? $role->created_at,",
     );
   });
   it("knows where every entity type of a Strapi archive goes", () => {
