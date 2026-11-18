@@ -36,7 +36,8 @@ describe("deploymentEnv", () => {
         defaultReplyTo: { env: "REPLY_TO" },
       },
     });
-    expect(env).toBe(`# From the Strapi project's config/plugins, config/api and config/middlewares.
+    expect(env)
+      .toBe(`# From the Strapi project's config/plugins, api, middlewares, server and admin.
 # \${NAME} reads the variable the Strapi project read: copy it from that project's .env.
 
 # Upload: aws-s3
@@ -255,5 +256,37 @@ CAMIS_CORS_CREDENTIALS=\${CORS_CREDENTIALS}
   // Strapi answers a preflight with the headers it asks for when the list is empty.
   it("writes an empty headers list as *, which echoes the requested headers", () => {
     expect(deploymentEnv({ cors: { headers: [] } }).env).toContain('CAMIS_CORS_HEADERS="*"\n');
+  });
+});
+
+describe("deploymentEnv — the server, its tokens and the admin", () => {
+  it("writes the public address, the MCP switch, the token salts and the admin token's key", () => {
+    const { env } = deploymentEnv({
+      server: {
+        url: { env: "PUBLIC_URL" },
+        mcpEnabled: true,
+        apiTokenSalt: { env: "API_TOKEN_SALT", default: "example-salt" },
+        transferTokenSalt: { env: "STRAPI_TRANSFER_SALT" },
+        adminTokenSecret: { env: "ADMIN_JWT_SECRET" },
+        adminAccessTokenLifespan: 3600,
+      },
+    });
+    expect(env).toContain(`# Server and admin (config/server, config/admin)
+APP_URL=\${PUBLIC_URL}
+CAMIS_MCP_ENABLED=true
+# Tokens imported with strapi:import-tokens verify only with the Strapi project's salts.
+# The Strapi project falls back to example-salt when API_TOKEN_SALT is unset.
+# API_TOKEN_SALT: the Strapi project reads the same variable.
+TRANSFER_TOKEN_SALT=\${STRAPI_TRANSFER_SALT}
+# ADMIN_JWT_SECRET: the Strapi project reads the same variable.
+CAMIS_ADMIN_ACCESS_TOKEN_LIFESPAN=3600
+`);
+  });
+
+  it("writes users-permissions' JWT secret and sign-in rate limit", () => {
+    const { env } = deploymentEnv({
+      accounts: { jwtSecret: { env: "UP_JWT" }, authRequestsPerMinute: 25 },
+    });
+    expect(env).toContain("JWT_SECRET=${UP_JWT}\nCAMIS_AUTH_THROTTLE_PER_MINUTE=25\n");
   });
 });

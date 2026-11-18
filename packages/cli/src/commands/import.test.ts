@@ -143,6 +143,74 @@ describe("importCommand", () => {
     const env = written[join(dir, "deployment.env")];
     expect(env).toContain("CAMIS_CORS_ORIGIN=${FRONTEND_URL}\nCAMIS_CORS_MAX_AGE=600\n");
   });
+  // config/server and config/admin carry the MCP switch, the public address and the token salts.
+  it("writes what a Strapi project's config/server and config/admin map to", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "camis-cli-strapi-server-"));
+    const ctDir = join(dir, "src/api/article/content-types/article");
+    await mkdir(ctDir, { recursive: true });
+    await writeFile(
+      join(ctDir, "schema.json"),
+      JSON.stringify({
+        kind: "collectionType",
+        info: { singularName: "article", pluralName: "articles", displayName: "Article" },
+        attributes: { title: { type: "string" } },
+      }),
+    );
+    await mkdir(join(dir, "config"));
+    await writeFile(join(dir, "config/server.php"), "<?php return [];\n");
+    await writeFile(join(dir, "config/admin.js"), "module.exports = {};\n");
+    const configs: Record<string, unknown> = {
+      "server.php": { url: "https://cms.example.com", mcp: { enabled: true } },
+      "admin.js": { apiToken: { salt: { env: "API_SALT" } } },
+    };
+    const lines: string[] = [];
+    const written: Record<string, string> = {};
+    const io: Io = {
+      ...memIo({}, lines, written),
+      capture: (_cmd, args) =>
+        Promise.resolve({
+          code: 0,
+          stdout: JSON.stringify(configs[String(args.at(-1)).split("/").pop() ?? ""] ?? {}),
+        }),
+    };
+    const code = await importCommand("strapi", dir, join(dir, "ir.json"), io);
+    expect(code).toBe(0);
+    const env = written[join(dir, "deployment.env")];
+    expect(env).toContain("APP_URL=https://cms.example.com\nCAMIS_MCP_ENABLED=true\n");
+    expect(env).toContain("API_TOKEN_SALT=${API_SALT}\n");
+  });
+  // A config/server that cannot run (a module it requires is missing here) costs only its own keys.
+  it("writes the other settings when config/server cannot be read", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "camis-cli-strapi-server-fails-"));
+    const ctDir = join(dir, "src/api/article/content-types/article");
+    await mkdir(ctDir, { recursive: true });
+    await writeFile(
+      join(ctDir, "schema.json"),
+      JSON.stringify({
+        kind: "collectionType",
+        info: { singularName: "article", pluralName: "articles", displayName: "Article" },
+        attributes: { title: { type: "string" } },
+      }),
+    );
+    await mkdir(join(dir, "config"));
+    await writeFile(join(dir, "config/server.js"), "module.exports = require('./missing');\n");
+    await writeFile(join(dir, "config/api.js"), "module.exports = {};\n");
+    const lines: string[] = [];
+    const written: Record<string, string> = {};
+    const io: Io = {
+      ...memIo({}, lines, written),
+      capture: (_cmd, args) =>
+        Promise.resolve(
+          String(args.at(-1)).endsWith("server.js")
+            ? { code: 1, stdout: "" }
+            : { code: 0, stdout: JSON.stringify({ rest: { defaultLimit: 10 } }) },
+        ),
+    };
+    const code = await importCommand("strapi", dir, join(dir, "ir.json"), io);
+    expect(code).toBe(0);
+    expect(written[join(dir, "deployment.env")]).toContain("CAMIS_REST_DEFAULT_LIMIT=10\n");
+    expect(lines.join("\n")).toContain("config/server.js could not be read (exit 1)");
+  });
   // Strapi's upload plugin is always there: a project with media fields gets the media library's
   // type, as `camis new --from-strapi` gives it, or no role could ever be granted its files.
   it("declares the media library when a Strapi project uses media", async () => {

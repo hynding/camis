@@ -158,6 +158,19 @@ class AdminAccountsTest extends TestCase
         $this->asAdmin($token, 'GET', '/admin/users/me')->assertStatus(401);
     }
 
+    public function test_an_admin_access_token_lasts_as_long_as_the_project_says(): void
+    {
+        // Strapi's admin.auth.sessions.accessTokenLifespan, imported as CAMIS_ADMIN_ACCESS_TOKEN_LIFESPAN.
+        config(['camis.admin_auth.access_token_lifespan' => 3600]);
+        $this->admin();
+        $token = (string) $this->postJson('/admin/login', ['email' => 'admin@example.test', 'password' => 'Admin-pass-1'])->json('data.token');
+
+        $this->travel(45)->minutes();
+        $this->asAdmin($token, 'GET', '/admin/users/me')->assertOk();
+        $this->travel(16)->minutes();
+        $this->asAdmin($token, 'GET', '/admin/users/me')->assertStatus(401);
+    }
+
     public function test_the_first_admin_registers_only_while_there_is_none(): void
     {
         $this->postJson('/admin/register-admin', ['email' => 'first@example.test', 'firstname' => 'First', 'password' => 'short'])

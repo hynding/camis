@@ -43,12 +43,16 @@ describe("Strapi's admin accounts and admin API", () => {
     );
   });
 
-  it("signs an admin's access token with Strapi's ADMIN_JWT_SECRET, for 30 minutes", () => {
+  it("signs an admin's access token with Strapi's ADMIN_JWT_SECRET, for 30 minutes unless configured", () => {
     const auth = content("app/Support/StrapiAdminAuth.php");
     expect(auth).toContain("config('camis.admin_auth.secret')");
-    expect(auth).toContain("private const LIFESPAN = 1800;");
+    expect(auth).toContain("config('camis.admin_auth.access_token_lifespan')");
     expect(auth).toContain("'type' => 'access'");
     expect(content("config/camis.php")).toContain("'secret' => env('ADMIN_JWT_SECRET'),");
+    // Strapi's admin.auth.sessions.accessTokenLifespan, in seconds.
+    expect(content("config/camis.php")).toContain(
+      "'access_token_lifespan' => (int) env('CAMIS_ADMIN_ACCESS_TOKEN_LIFESPAN', 1800),",
+    );
   });
 
   it("refuses a sign-in as Strapi's local strategy does, and returns its body", () => {
