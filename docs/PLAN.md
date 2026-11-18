@@ -2491,6 +2491,31 @@ access token lifespan.
 
 ---
 
+## Phase 87 — users and roles keep milliseconds (`adapter-filament`, `cli`)
+
+Phase 68 gave every content type Strapi's millisecond timestamps, but users (Laravel's `users`
+table) and roles (Spatie's `roles`) kept seconds: the last differences a sitlab migration found
+between strapi-php and camis on `/api/users` and `/api/users-permissions/roles`.
+
+- **Users.** `patchUserModel` (camis scaffold, and the CI boot jobs) gives the User model a
+  `getDateFormat()` with milliseconds when the app has `HasMillisecondTimestamps`, which only a
+  Strapi API style app does; any other app keeps Laravel's format. A User model patched before gets
+  the method once. An app scaffolded earlier keeps seconds on users until its User model has it.
+- **Roles.** A generated `App\Models\Role` extends Spatie's with the concern, and a generated
+  `config/permission.php` names it Spatie's role model (only `models`: Spatie merges its defaults
+  under every other key), so a role reached through a user, the seeder (now creating roles with
+  the configured class), `strapi:import` and the admin are all the one model.
+- **Columns.** `9999_12_31_000001_millisecond_timestamps_on_users_and_roles` widens both tables'
+  `created_at`/`updated_at` to `timestamp(3)` on MySQL and PostgreSQL, after Spatie's migration;
+  SQLite stores the text written, so it skips. A role's archived times import with milliseconds.
+- Filters on users follow the User's format (Phase 68), so `filters[createdAt][$eq]` with
+  milliseconds matches.
+
+Exit: vitest for the patch, the generated files and the seeder; `ApiTokensTest.php` reads a user
+and a role back with their milliseconds on sqlite, mysql and pgsql.
+
+---
+
 ## Sequencing rationale (quick reference)
 
 1. **Strapi first** — mature schema validates the IR fastest, with the thinnest adapter.
