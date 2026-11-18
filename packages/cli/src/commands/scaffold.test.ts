@@ -190,6 +190,13 @@ describe("patchAdminPanelProvider", () => {
     );
   });
 
+  // Strapi's config/admin url, imported as CAMIS_ADMIN_PATH; the admin API stays at /admin.
+  it("serves the panel at the configured admin path", () => {
+    const patched = patchAdminPanelProvider(STOCK_PANEL);
+    expect(patched).toContain("            ->path(config('camis-admin.path', 'admin'))\n");
+    expect(patched).not.toContain("->path('admin')");
+  });
+
   it("adds them to a panel an earlier camis already put on the admin guard", () => {
     const earlier = STOCK_PANEL.replace(
       "            ->login()\n",

@@ -37,6 +37,13 @@ const AUTH_CONFIG = "config/auth.php";
 describe("admin access", () => {
   const result = filamentAdapter.generate(bundle([editor, reader]), { projectName: "blog" });
 
+  // Strapi's config/admin url, without its slashes; the panel provider reads it.
+  it("reads the admin panel's path from CAMIS_ADMIN_PATH, /admin by default", () => {
+    expect(file(result, "config/camis-admin.php")).toContain(
+      "'path' => trim((string) env('CAMIS_ADMIN_PATH', 'admin'), '/'),",
+    );
+  });
+
   it("lets in only active accounts holding an admin role, and never a blocked one", () => {
     const trait = file(result, TRAIT);
     expect(trait).toContain("trait AdminAccess");
