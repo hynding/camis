@@ -151,6 +151,20 @@ describe("grants on the builtin file type", () => {
     ]);
   });
 
+  it("are joined by the plugin actions of the services a role holds", () => {
+    const withServices: Role = {
+      ...uploader,
+      grants: [],
+      services: ["email.send", "locales.list"],
+    };
+    expect(projectApiRoles(withFile, [withServices]).roles).toEqual([
+      {
+        type: "authenticated",
+        actions: ["plugin::email.email.send", "plugin::i18n.locales.listLocales"],
+      },
+    ]);
+  });
+
   it("become the media library's admin actions, which take no subject", () => {
     const out = projectPermissions(withFile, [uploader]);
     expect(out.roles[0]!.permissions).toEqual([

@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@camis/ir-core": "workspace:*",
-    "@camis/ir-schema": "workspace:*"
+    "@camis/ir-schema": "workspace:*",
+    "@camis/permissions": "workspace:*"
   }
 }

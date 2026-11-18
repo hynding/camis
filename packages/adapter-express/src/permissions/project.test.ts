@@ -128,3 +128,14 @@ describe("projectExpressPermissions — ownership conditions", () => {
     expect(result.gaps).toEqual([]);
   });
 });
+
+describe("plugin services", () => {
+  it("are reported, as the Express target serves none", () => {
+    const p = projectExpressPermissions(doc, [
+      { name: "public", grants: [], services: ["locales.list"] },
+    ]);
+    expect(p.gaps).toContainEqual(
+      expect.objectContaining({ feature: "service", location: { rule: "public" } }),
+    );
+  });
+});

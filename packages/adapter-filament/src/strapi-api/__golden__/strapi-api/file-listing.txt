@@ -398,6 +398,7 @@ overwrite app/Support/StrapiQuery.php
 overwrite app/Support/StrapiRelations.php
 overwrite app/Support/StrapiRelationsOrderer.php
 overwrite app/Support/StrapiRoles.php
+overwrite app/Support/StrapiServices.php
 overwrite app/Support/StrapiSessions.php
 overwrite app/Support/StrapiSettings.php
 overwrite app/Support/StrapiTokenImport.php

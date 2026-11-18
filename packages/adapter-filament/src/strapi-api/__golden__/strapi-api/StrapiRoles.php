@@ -148,6 +148,31 @@ final class StrapiRoles
                 'publish' => ['page.publish'],
             ],
         ],
+        'plugin::email.email' => [
+            'label' => 'plugin::email.email',
+            'actions' => [
+                'send' => ['service.email.send'],
+            ],
+        ],
+        'plugin::i18n.locales' => [
+            'label' => 'plugin::i18n.locales',
+            'actions' => [
+                'listLocales' => ['service.locales.list'],
+            ],
+        ],
+        'plugin::users-permissions.permissions' => [
+            'label' => 'plugin::users-permissions.permissions',
+            'actions' => [
+                'getPermissions' => ['service.roles.read'],
+            ],
+        ],
+        'plugin::users-permissions.role' => [
+            'label' => 'plugin::users-permissions.role',
+            'actions' => [
+                'find' => ['service.roles.read'],
+                'findOne' => ['service.roles.read'],
+            ],
+        ],
         'api::post.post' => [
             'label' => 'Post',
             'actions' => [

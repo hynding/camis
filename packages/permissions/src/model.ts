@@ -33,6 +33,14 @@ export const CREATED_BY = "record.createdBy";
  */
 export const CREATOR_SHARES_ROLE = "record.creatorSharesRole";
 
+/**
+ * Services a plugin offers beside any content type, which a role may be given: listing the
+ * locales, sending email, reading the roles. A target serving none of them reports a gap.
+ */
+export const SERVICES = ["email.send", "locales.list", "roles.read"] as const;
+export type Service = (typeof SERVICES)[number];
+export const service = z.enum(SERVICES);
+
 /** The role a caller without a session acts as; every target that serves guests reads it. */
 export const PUBLIC_ROLE = "public";
 
@@ -44,6 +52,8 @@ export const role = z.object({
   grants: z.array(grant),
   /** The IR endpoints its users may call (the public role's: anyone without a session). */
   endpoints: z.array(z.string().min(1)).optional(),
+  /** The plugin services its users may use (the public role's: anyone without a session). */
+  services: z.array(service).optional(),
 });
 export type Role = z.infer<typeof role>;
 

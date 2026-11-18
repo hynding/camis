@@ -2545,6 +2545,35 @@ boot job, a fixture with no localized type) lists `en`, then a locale added afte
 
 ---
 
+## Phase 89 — a role's plugin services (`permissions`, `strapi-schema`, `adapter-strapi`, `adapter-express`, `adapter-filament`)
+
+Phase 88 left the locales list open to anyone because the IR's grants could not name a plugin
+action. A role now carries `services`: `locales.list`, `email.send` and `roles.read`, the plugin
+routes a Strapi project grants to its users' roles.
+
+- `@camis/strapi-schema`'s `SERVICE_ACTIONS` names each service's Strapi actions:
+  `plugin::i18n.locales.listLocales`; `plugin::email.email.send`; and
+  `plugin::users-permissions.role.find` + `role.findOne` + `permissions.getPermissions`.
+- Import gives a role a service whose actions it holds in full; one held in part is a
+  `strapiPermission` gap, as half of a content type's read is. `listLocales` is no longer taken as
+  built in.
+- The Strapi target grants a service's actions to the role. The Express target reports a `service`
+  gap. The Filament target seeds a `service.<name>` permission for every service, grants the
+  role's, and on the Strapi API style `App\Support\StrapiServices` asks for it on
+  `GET /api/i18n/locales`, `POST /api/email` and the roles routes: a token holding the action (checked by
+  `StrapiApiToken`), a caller whose role holds the service, or the public role for a guest. Any
+  other caller is answered 403, as strapi-php does. The Roles page lists the services' actions.
+- Behaviour change: a project whose roles name no service no longer lists its locales to
+  anyone. Re-import it from Strapi (whose roles hold `listLocales`), or add `services` to the
+  roles.
+
+Exit: vitest for the model, import (whole and partial services), each target's projection, the
+generated `StrapiServices`, routes and goldens; `LocalesWithoutLocalizedTypesTest.php` (author-role
+boot job, whose roles hold no service) answers an anonymous caller 403 and lists `en` to a
+full-access token; the strapi-api job's i18n, token and transfer vectors replay against strapi-php's.
+
+---
+
 ## Sequencing rationale (quick reference)
 
 1. **Strapi first** — mature schema validates the IR fastest, with the thinnest adapter.

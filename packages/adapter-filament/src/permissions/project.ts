@@ -1,9 +1,9 @@
 import type { Expression } from "@camis/expr";
 import { freeVars } from "@camis/expr";
 import type { CapabilityGap, ContentType, IrDocument } from "@camis/ir-schema";
-import { CREATED_BY, CREATOR_SHARES_ROLE, type Role } from "@camis/permissions";
+import { CREATED_BY, CREATOR_SHARES_ROLE, SERVICES, type Role } from "@camis/permissions";
 import { filamentNames } from "../names";
-import { permissionKey, POLICY_METHODS, USER_CONTEXT } from "./keys";
+import { permissionKey, POLICY_METHODS, serviceKey, USER_CONTEXT } from "./keys";
 
 /** Roles that hold an action only where `condition` holds. */
 export interface ConditionGroup {
@@ -51,6 +51,8 @@ export interface FilamentPermissions {
 export interface ProjectionOptions {
   /** The target records who created an entry, which an admin role's condition may name. */
   creators?: boolean;
+  /** The target serves the plugin services a role may hold (locales list, email, roles). */
+  services?: boolean;
 }
 
 const recordVars = (ct: ContentType): Set<string> =>
@@ -176,8 +178,20 @@ export const projectFilamentPermissions = (
         assigns.set(grant.contentType, cur);
       }
     }
+    for (const service of role.services ?? []) {
+      if (options.services === true) roleKeys.add(serviceKey(service));
+      else
+        gaps.push({
+          feature: "service",
+          location: { rule: role.name },
+          severity: "downgrade",
+          message: `role "${role.name}" may use ${service}, which this target does not serve`,
+        });
+    }
     roleGrants.push({ role: role.name, keys: [...roleKeys].sort() });
   }
+  // Every service is seeded, as Strapi lists each on every role's page, held or not.
+  if (options.services === true) for (const service of SERVICES) keys.add(serviceKey(service));
 
   const rolesByKey = new Map<string, string[]>();
   for (const { role, keys } of roleGrants) {

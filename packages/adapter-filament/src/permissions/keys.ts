@@ -1,10 +1,13 @@
-import type { Action } from "@camis/permissions";
+import type { Action, Service } from "@camis/permissions";
 import { snake } from "../names";
 
 export const USER_CONTEXT = ["user.id", "user.email", "user.role"] as const;
 
 export const permissionKey = (contentType: string, action: Action): string =>
   `${snake(contentType)}.${action}`;
+
+/** A plugin service's permission: prefixed, so no content type's key can take its name. */
+export const serviceKey = (service: Service): string => `service.${service}`;
 
 export interface PolicyMethod {
   method: string;

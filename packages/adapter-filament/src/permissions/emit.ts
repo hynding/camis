@@ -25,11 +25,14 @@ export const emitPermissions = (
   guests = false,
   /** The target records who created an entry (the Strapi API style's createdBy). */
   creators = false,
+  /** The target serves Strapi's plugin services (the Strapi API style's locales, email, roles). */
+  services = false,
 ): PermissionEmission => {
   if (roles.length === 0) return { files: [], gaps: [] };
   const byName = new Map(doc.contentTypes.map((ct) => [ct.name, ct]));
   const { permissionKeys, roleGrants, policies, gaps } = projectFilamentPermissions(doc, roles, {
     creators,
+    services,
   });
   const files: GeneratedFile[] =
     layout === "strapi"

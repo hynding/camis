@@ -579,6 +579,7 @@ export const filamentAdapter: GenerateAdapter = {
       storage,
       guests,
       apiStyle === "strapi" && storage !== "strapi",
+      apiStyle === "strapi" && storage !== "strapi",
     );
     const allFiles = [
       ...files,

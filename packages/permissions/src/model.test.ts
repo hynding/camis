@@ -2,6 +2,17 @@ import { describe, expect, it } from "vitest";
 import { grant, parseRolesFile, role } from "./model";
 
 describe("role schema", () => {
+  it("keeps the plugin services a role's users may use", () => {
+    const parsed = role.safeParse({
+      name: "a",
+      grants: [],
+      services: ["locales.list", "email.send", "roles.read"],
+    });
+    expect(parsed.success).toBe(true);
+    expect(role.safeParse({ name: "a", grants: [], services: ["admin.everything"] }).success).toBe(
+      false,
+    );
+  });
   it("keeps the endpoints a role's users may call", () => {
     const r = role.safeParse({ name: "Ed", grants: [], endpoints: ["ArticleLike"] });
     expect(r.success && r.data.endpoints).toEqual(["ArticleLike"]);

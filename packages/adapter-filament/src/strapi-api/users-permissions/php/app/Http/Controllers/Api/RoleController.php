@@ -11,15 +11,16 @@ use App\Models\User;
 use App\Support\StrapiApiTokens;
 use App\Support\StrapiError;
 use App\Support\StrapiRoles;
+use App\Support\StrapiServices;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Models\Role;
 
 /**
- * Strapi's roles and permissions routes. No IR grant names their actions, so only an API token
- * holding them (full access, or read-only for the reads) gets past StrapiApiToken to read them.
- * A role's grants are the IR's, rebuilt on every build, so no write is taken.
+ * Strapi's roles and permissions routes: read by an API token holding their actions, or by a
+ * caller whose role holds the roles.read service. A role's grants are the IR's, rebuilt on every
+ * build, so no write is taken.
  */
 final class RoleController extends Controller
 {
@@ -66,12 +67,10 @@ final class RoleController extends Controller
         throw new StrapiError(403, 'ForbiddenError', 'Forbidden');
     }
 
-    /** A user's session never holds these actions: only a token StrapiApiToken let through does. */
+    /** A token holding the actions, already checked by StrapiApiToken, or a role holding the service. */
     private static function readable(): void
     {
-        if (! class_exists(StrapiApiTokens::class) || ! StrapiApiTokens::active()) {
-            throw new StrapiError(403, 'ForbiddenError', 'Forbidden');
-        }
+        StrapiServices::authorize(request(), 'roles.read');
     }
 
     /** @return Builder<Role> The users' roles: the admin's own are apart, as in Strapi. */
@@ -103,7 +102,8 @@ final class RoleController extends Controller
     private static function permissions(?Role $role): array
     {
         $tree = [];
-        foreach (array_keys(StrapiApiTokens::actions()) as $action) {
+        // An app without roles keeps no tokens, so it lists no action.
+        foreach (class_exists(StrapiApiTokens::class) ? array_keys(StrapiApiTokens::actions()) : [] as $action) {
             $at = (int) strrpos($action, '.');
             $owner = substr($action, 0, $at);
             [$prefix, $controller] = explode('.', $owner, 2) + [1 => ''];

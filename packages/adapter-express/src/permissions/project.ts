@@ -60,6 +60,14 @@ export const projectExpressPermissions = (doc: IrDocument, roles: Role[]): Expre
   };
 
   for (const role of [...roles].sort((a, b) => a.name.localeCompare(b.name))) {
+    for (const service of role.services ?? []) {
+      gaps.push({
+        feature: "service",
+        location: { rule: role.name },
+        severity: "downgrade",
+        message: `role "${role.name}" may use ${service}, which the Express target does not serve`,
+      });
+    }
     for (const grant of role.grants) {
       const ct = byName.get(grant.contentType);
       if (!ct) continue;

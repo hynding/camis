@@ -60,8 +60,10 @@ Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle):
         Route::get('/users-permissions/permissions', [RoleController::class, 'getPermissions']);
     });
 
-    // Strapi's i18n plugin lists the locales to anyone: they name no content.
-    Route::get('i18n/locales', [LocaleController::class, 'index']);
+    // Strapi's plugin services, checked against the caller's role: its session is read when sent.
+    Route::middleware([StrapiCredentials::class.':optional', StrapiActiveUser::class])->group(function (): void {
+        Route::get('i18n/locales', [LocaleController::class, 'index']);
+    });
 
     Route::middleware([])->group(function (): void {
         Route::get('/users/me', [UserController::class, 'me'])->middleware(['auth:sanctum', StrapiActiveUser::class]);

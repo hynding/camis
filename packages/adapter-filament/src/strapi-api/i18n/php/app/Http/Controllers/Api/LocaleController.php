@@ -6,12 +6,16 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Locale;
+use App\Support\StrapiServices;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class LocaleController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
+        StrapiServices::authorize($request, 'locales.list');
+
         return response()->json(Locale::query()->orderBy('id')->get()->map(fn (Locale $l): array => [
             'id' => $l->id,
             'documentId' => $l->document_id,

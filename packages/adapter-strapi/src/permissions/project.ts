@@ -2,7 +2,7 @@ import type { Expression } from "@camis/expr";
 import { freeVars } from "@camis/expr";
 import type { CapabilityGap, IrDocument } from "@camis/ir-schema";
 import type { Action, Role } from "@camis/permissions";
-import { strapiNames } from "@camis/strapi-schema";
+import { SERVICE_ACTIONS, strapiNames } from "@camis/strapi-schema";
 import {
   API_ACTION_SUFFIXES,
   FIELD_ACCESS_ACTIONS,
@@ -229,6 +229,8 @@ export const projectApiRoles = (doc: IrDocument, roles: Role[]): ApiRoleProjecti
       const ct = endpoint === undefined ? undefined : byName.get(endpoint.contentType);
       if (endpoint !== undefined && ct !== undefined) actions.add(endpointHandler(endpoint, ct));
     }
+    for (const service of role.services ?? [])
+      for (const action of SERVICE_ACTIONS[service]) actions.add(action);
     return { type: role.name, actions: [...actions].sort() };
   });
 

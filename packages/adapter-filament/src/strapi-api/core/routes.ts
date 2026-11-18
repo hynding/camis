@@ -285,6 +285,24 @@ export const emitStrapiRoutes = (
         Route::get('/users-permissions/permissions', [RoleController::class, 'getPermissions']);
     });`
     : "";
+  // Plugin services (StrapiServices): a token holding the action, or a role holding the service.
+  const services = [
+    ...(locales ? ["Route::get('i18n/locales', [LocaleController::class, 'index']);"] : []),
+    ...(tokens ? ["Route::post('/email', [EmailController::class, 'send']);"] : []),
+  ];
+  const serviceRoutes =
+    services.length === 0
+      ? ""
+      : usersPermissions
+        ? `
+
+    // Strapi's plugin services, checked against the caller's role: its session is read when sent.
+    Route::middleware([StrapiCredentials::class.':optional', StrapiActiveUser::class])->group(function (): void {
+${services.map((r) => `        ${r}`).join("\n")}
+    });`
+        : `
+
+${services.map((r) => `    ${r}`).join("\n")}`;
   // Without roles nothing would guard who lists or makes accounts, so the routes are left out.
   const userRoutes = `
         Route::get('/users/count', [UserController::class, 'count']);
@@ -344,21 +362,7 @@ ${
 }Route::middleware([StrapiErrors::class${tokens ? ", StrapiApiToken::class" : ""}])->group(function () use ($authThrottle): void {
     Route::get('/_health', fn () => response()->noContent());
     Route::post('/auth/local', [AuthController::class, 'login'])->middleware(${throttled});
-    Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware(${throttled});${accountRoutes}${
-      locales
-        ? `
-
-    // Strapi's i18n plugin lists the locales to anyone: they name no content.
-    Route::get('i18n/locales', [LocaleController::class, 'index']);`
-        : ""
-    }${
-      tokens
-        ? `
-
-    // Strapi's email plugin's send: no role it ships holds the action, so a token that does sends.
-    Route::post('/email', [EmailController::class, 'send']);`
-        : ""
-    }${
+    Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware(${throttled});${accountRoutes}${serviceRoutes}${
       opened === ""
         ? ""
         : `
