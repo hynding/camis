@@ -5,21 +5,44 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Models\Locale;
+use App\Support\StrapiApiTokens;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
 /**
  * Strapi's i18n plugin is always installed, so a project none of whose types is localized (the
  * author-role fixture) still lists its locales, starting with the default one, as strapi-php
- * does. CI's author-role job copies this into tests/Feature.
+ * does. Listing them is plugin::i18n.locales.listLocales, which this fixture's roles do not hold:
+ * only a token holding it lists them. CI's author-role job copies this into tests/Feature.
  */
 class LocalesWithoutLocalizedTypesTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_anyone_lists_the_default_locale(): void
+    protected function setUp(): void
     {
-        $this->getJson('/api/i18n/locales')
+        parent::setUp();
+        $this->seed(\Database\Seeders\RolePermissionSeeder::class);
+    }
+
+    /** @return TestResponse<\Illuminate\Http\JsonResponse> */
+    private function listWithToken(): TestResponse
+    {
+        $key = StrapiApiTokens::create(['name' => 'all', 'type' => 'full-access'])['accessKey'];
+        $this->app['auth']->forgetGuards();
+
+        return $this->getJson('/api/i18n/locales', ['Authorization' => 'Bearer '.$key]);
+    }
+
+    public function test_a_caller_whose_role_does_not_hold_the_list_is_forbidden(): void
+    {
+        $this->getJson('/api/i18n/locales')->assertForbidden();
+    }
+
+    public function test_a_full_access_token_lists_the_default_locale(): void
+    {
+        $this->listWithToken()
             ->assertOk()
             ->assertJsonCount(1)
             ->assertJsonPath('0.code', 'en')
@@ -31,6 +54,6 @@ class LocalesWithoutLocalizedTypesTest extends TestCase
     {
         Locale::query()->create(['code' => 'fr', 'name' => 'French (fr)', 'is_default' => false]);
 
-        $this->getJson('/api/i18n/locales')->assertOk()->assertJsonPath('1.code', 'fr');
+        $this->listWithToken()->assertOk()->assertJsonPath('1.code', 'fr');
     }
 }

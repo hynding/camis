@@ -13,3 +13,4 @@ export {
 export { dual, synthesizedInverses } from "./relations";
 export { contentTypeSchema } from "./schema";
 export { runtimeSchemas, type RuntimeSchema } from "./runtime-schema";
+export { SERVICE_ACTIONS } from "./service-actions";

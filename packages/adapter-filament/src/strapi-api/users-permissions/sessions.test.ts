@@ -84,7 +84,7 @@ describe("users-permissions sessions", () => {
   // Roles live in the IR, so no grant opens these and nothing writes a role over HTTP. An API token
   // stands in for a role, though: strapi-php lists the roles and their permissions to a token that
   // holds those actions (a full-access one, say), and so does camis.
-  it("lets a token read the roles and permissions, and refuses every write", () => {
+  it("lets a token or a role holding roles.read read the roles and permissions, and refuses every write", () => {
     const routes = content("routes/api.php");
     expect(routes).toContain(
       "Route::get('/users-permissions/roles', [RoleController::class, 'find']);",
@@ -112,7 +112,7 @@ describe("users-permissions sessions", () => {
       "'getPermissions' => 'plugin::users-permissions.permissions.getPermissions',",
     );
     const controller = content("app/Http/Controllers/Api/RoleController.php");
-    expect(controller).toContain("StrapiApiTokens::active()");
+    expect(controller).toContain("StrapiServices::authorize(request(), 'roles.read');");
     expect(controller).toContain("throw new StrapiError(403, 'ForbiddenError', 'Forbidden');");
   });
 });

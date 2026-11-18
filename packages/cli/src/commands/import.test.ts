@@ -472,6 +472,8 @@ describe("importCommand", () => {
             { contentType: "Topic", actions: [...CRUD, "publish"] },
             { contentType: "User", actions: ["read"] },
           ],
+          // strapi-php's authenticated role was given the locales list.
+          services: ["locales.list"],
         },
         {
           name: "editor",

@@ -27,10 +27,9 @@ describe("Strapi's email send route", () => {
     );
   });
 
-  it("sends through Strapi's email service only for a token holding the action", async () => {
+  it("sends through Strapi's email service for a token holding the action or a role holding the service", async () => {
     const controller = content("app/Http/Controllers/Api/EmailController.php");
-    expect(controller).toContain("if (! StrapiApiTokens::active()) {");
-    expect(controller).toContain("throw new StrapiError(403, 'ForbiddenError', 'Forbidden');");
+    expect(controller).toContain("StrapiServices::authorize($request, 'email.send');");
     expect(controller).toContain("StrapiEmail::send($options);");
     expect(controller).toContain("return response()->json(new \\stdClass());");
     await expect(controller).toMatchFileSnapshot("../__golden__/strapi-api/EmailController.php");

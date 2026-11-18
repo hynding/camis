@@ -6,9 +6,9 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Support\StrapiApiTokens;
 use App\Support\StrapiEmail;
 use App\Support\StrapiError;
+use App\Support\StrapiServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use RuntimeException;
@@ -18,9 +18,7 @@ final class EmailController extends Controller
 {
     public function send(Request $request): JsonResponse
     {
-        if (! StrapiApiTokens::active()) {
-            throw new StrapiError(403, 'ForbiddenError', 'Forbidden');
-        }
+        StrapiServices::authorize($request, 'email.send');
         $options = $request->json()->all();
         try {
             StrapiEmail::send($options);

@@ -1,6 +1,14 @@
 import type { CapabilityGap, ContentType, IrDocument } from "@camis/ir-schema";
-import { ACTIONS, type Action, type Grant, type Role, type RolesFile } from "@camis/permissions";
-import { strapiNames } from "@camis/strapi-schema";
+import {
+  ACTIONS,
+  SERVICES,
+  type Action,
+  type Grant,
+  type Role,
+  type RolesFile,
+  type Service,
+} from "@camis/permissions";
+import { SERVICE_ACTIONS, strapiNames } from "@camis/strapi-schema";
 import {
   API_ACTION_SUFFIXES,
   FILE_API_ACTIONS,
@@ -16,10 +24,18 @@ const UPLOAD_API = "plugin::upload.content-api";
 
 /**
  * Actions every camis target serves to every role, as Strapi grants them by default: signing in
- * and out, the caller's own account, and the locales list.
+ * and out, and the caller's own account.
  */
-const BUILT_IN =
-  /^plugin::users-permissions\.auth\.|^plugin::users-permissions\.user\.me$|^plugin::i18n\.locales\.listLocales$/;
+const BUILT_IN = /^plugin::users-permissions\.auth\.|^plugin::users-permissions\.user\.me$/;
+
+/** Every plugin service's actions, so a role's are read as services rather than as subjects. */
+const SERVICE_ACTION_SET = new Set(Object.values(SERVICE_ACTIONS).flat());
+
+const SERVICE_NAMES: Record<Service, string> = {
+  "email.send": "sending email",
+  "locales.list": "listing the locales",
+  "roles.read": "reading roles",
+};
 
 /** The media library a role's upload actions grant, when the document declares none. */
 const BUILTIN_FILE: ContentType = { name: "File", kind: "collection", builtin: "file", fields: [] };
@@ -114,7 +130,7 @@ export const importStrapiRoles = (archive: StrapiArchive, input: IrDocument): Im
     const actions = granted.get(String(e.id)) ?? new Set<string>();
     const bySubject = new Map<string, Set<string>>();
     for (const action of actions) {
-      if (BUILT_IN.test(action)) continue;
+      if (BUILT_IN.test(action) || SERVICE_ACTION_SET.has(action)) continue;
       const at = action.lastIndexOf(".");
       const prefix = action.slice(0, at);
       (bySubject.get(prefix) ?? bySubject.set(prefix, new Set()).get(prefix)!).add(
@@ -162,8 +178,14 @@ export const importStrapiRoles = (archive: StrapiArchive, input: IrDocument): Im
       grants.push({ contentType: ct.name, actions: given });
     }
     grants.sort((a, b) => a.contentType.localeCompare(b.contentType));
+    const services = servicesOf(name, actions, gaps);
     const description = textOf(e.data.description);
-    return { name, ...(description === "" ? {} : { description }), grants };
+    return {
+      name,
+      ...(description === "" ? {} : { description }),
+      grants,
+      ...(services.length === 0 ? {} : { services }),
+    };
   });
 
   const defaultRole = defaultRoleOf(archive);
@@ -201,6 +223,22 @@ const subjectOf = (
     ? undefined
     : { contentType: ct, prefix, actions: contentTypeActions(ct) };
 };
+
+/** The services a role holds every action of; one held in part is reported, not granted. */
+const servicesOf = (role: string, held: ReadonlySet<string>, gaps: CapabilityGap[]): Service[] =>
+  SERVICES.filter((service) => {
+    const needs = SERVICE_ACTIONS[service];
+    const holding = needs.filter((a) => held.has(a));
+    if (holding.length === needs.length) return true;
+    if (holding.length > 0)
+      gaps.push(
+        gap(
+          role,
+          `${holding.join(", ")}: ${SERVICE_NAMES[service]} stands for ${needs.join(" + ")}, so a role holding only part of it is not granted it`,
+        ),
+      );
+    return false;
+  });
 
 const describe = (subject: Subject): string =>
   ACTIONS.flatMap((action) => {

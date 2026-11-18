@@ -232,6 +232,7 @@ import {
   emitMillisecondTimestampsMigration,
   millisecondRoleFiles,
 } from "./users-permissions/users-permissions";
+import { emitStrapiServices, STRAPI_SERVICES_PATH } from "./users-permissions/services";
 
 export interface StrapiApiInput {
   doc: IrDocument;
@@ -297,7 +298,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     secured && (input.publicActions === true || endpoints.some((e) => e.public === true));
   // Admin writes record the admin account that made an entry (HasCreatorFields).
   const perm = secured
-    ? projectFilamentPermissions(doc, bundle.roles, { creators: true })
+    ? projectFilamentPermissions(doc, bundle.roles, { creators: true, services: true })
     : {
         readConditions: new Map<string, never>(),
         adminReadScopes: new Map<string, never>(),
@@ -652,6 +653,7 @@ const usersPermissionsFiles = (
   { path: "app/Support/StrapiSessions.php", content: emitStrapiSessions() },
   { path: "app/Http/Controllers/Api/SessionController.php", content: emitSessionController() },
   { path: "app/Http/Controllers/Api/RoleController.php", content: emitRoleController() },
+  { path: STRAPI_SERVICES_PATH, content: emitStrapiServices(secured, guests) },
   { path: SESSIONS_MIGRATION_PATH, content: emitSessionsMigration() },
   { path: "app/Support/StrapiProviders.php", content: emitStrapiProviders(defaultRole) },
   { path: "app/Support/StrapiOAuth.php", content: emitStrapiOAuth() },

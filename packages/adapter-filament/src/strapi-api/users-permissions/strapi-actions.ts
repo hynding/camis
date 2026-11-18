@@ -1,5 +1,7 @@
 import type { ContentType } from "@camis/ir-schema";
-import { permissionKey } from "../../permissions/keys";
+import { SERVICES } from "@camis/permissions";
+import { SERVICE_ACTIONS } from "@camis/strapi-schema";
+import { permissionKey, serviceKey } from "../../permissions/keys";
 import { kebab } from "../core/names";
 
 export interface StrapiActionsInput {
@@ -38,5 +40,6 @@ export const strapiActions = (input: StrapiActionsInput): Record<string, string[
     const user = "plugin::users-permissions.user.";
     out[permissionKey(input.userType, "read")] = [`${user}find`, `${user}findOne`, `${user}count`];
   }
+  for (const service of SERVICES) out[serviceKey(service)] = SERVICE_ACTIONS[service];
   return out;
 };
