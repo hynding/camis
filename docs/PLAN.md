@@ -2571,6 +2571,9 @@ Exit: vitest for the model, import (whole and partial services), each target's p
 generated `StrapiServices`, routes and goldens; `LocalesWithoutLocalizedTypesTest.php` (author-role
 boot job, whose roles hold no service) answers an anonymous caller 403 and lists `en` to a
 full-access token; the strapi-api job's i18n, token and transfer vectors replay against strapi-php's.
+
+---
+
 ## Phase 90 — the admin panel at config/admin's url (`adapter-kernel`, `adapter-strapi`, `adapter-filament`, `cli`)
 
 Strapi serves its admin panel wherever config/admin's `url` says (`/dashboard`), while its admin
