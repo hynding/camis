@@ -2534,14 +2534,14 @@ style kept locales only when a type was localized: a migrated project with none 
   homepage's locale count, the GraphQL `i18NLocale(s)` queries and the OpenAPI `/i18n/locales` path.
 - A content type is still localized only when its `options.localized` says so; nothing else changes
   for one that is not. The Strapi storage layout keeps no locales, as before.
-- Who may list them follows strapi-php: the action is `plugin::i18n.locales.listLocales`, which no
-  role Strapi ships holds, so the route (`StrapiTokenOnly`) answers only a token holding it and
-  refuses everyone else 403. It had been open to anyone, on localized projects too.
+- The list stays open to anyone, as it was for localized projects. strapi-php asks for
+  `plugin::i18n.locales.listLocales`, which no role it ships holds, but projects grant it to their
+  public or authenticated role so a site can read its locales, and the IR's grants cannot name a
+  plugin action; refusing it would break those sites after a migration.
 
 Exit: `i18n.test.ts` generates a project with no localized type and finds every piece above;
 `openapi.test.ts` lists `/i18n/locales` for it; `LocalesWithoutLocalizedTypesTest.php` (author-role
-boot job, a fixture with no localized type) lists `en` to a full-access token, then a locale added
-after it, and refuses a caller with no session and an authenticated user.
+boot job, a fixture with no localized type) lists `en`, then a locale added after it.
 
 ---
 

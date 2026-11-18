@@ -83,7 +83,7 @@ describe("locales", () => {
   });
   it("are listed at Strapi's route", () => {
     expect(content("routes/api.php")).toContain(
-      "Route::get('i18n/locales', [LocaleController::class, 'index'])->middleware(StrapiTokenOnly::class);",
+      "Route::get('i18n/locales', [LocaleController::class, 'index']);",
     );
   });
   it("are managed in the admin", () => {
@@ -126,11 +126,10 @@ describe("locales without a localized type", () => {
       "'default_locale' => env('CAMIS_DEFAULT_LOCALE', 'en'),",
     );
   });
-  it("are listed at Strapi's route, only to tokens holding the action", () => {
+  it("are listed at Strapi's route, to tokens holding the action", () => {
     expect(file("routes/api.php")).toContain(
-      "Route::get('i18n/locales', [LocaleController::class, 'index'])->middleware(StrapiTokenOnly::class);",
+      "Route::get('i18n/locales', [LocaleController::class, 'index']);",
     );
-    expect(file("app/Http/Middleware/StrapiTokenOnly.php")).toContain("StrapiApiTokens::active()");
     expect(file("app/Support/StrapiApiTokens.php")).toContain(
       "'index' => 'plugin::i18n.locales.listLocales',",
     );

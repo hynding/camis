@@ -17,7 +17,6 @@ import {
   emitApiTokenResourceFiles,
   emitApiTokensMigration,
   emitStrapiApiTokenMiddleware,
-  emitStrapiTokenOnlyMiddleware,
   emitStrapiApiTokens,
   type TokenContentType,
 } from "./admin/api-tokens";
@@ -674,7 +673,6 @@ const apiTokenFiles = (
     content: emitStrapiApiTokens({ contentTypes, fileModel }),
   },
   { path: "app/Http/Middleware/StrapiApiToken.php", content: emitStrapiApiTokenMiddleware() },
-  { path: "app/Http/Middleware/StrapiTokenOnly.php", content: emitStrapiTokenOnlyMiddleware() },
   { path: "app/Http/Middleware/StrapiPublicRoute.php", content: emitStrapiPublicRoute() },
   ...emitApiTokenResourceFiles(),
 ];

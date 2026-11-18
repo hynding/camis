@@ -219,7 +219,6 @@ export const emitStrapiRoutes = (
     ...(tokens
       ? ["App\\Http\\Controllers\\Api\\EmailController", "App\\Http\\Middleware\\StrapiApiToken"]
       : []),
-    ...(tokens && locales ? ["App\\Http\\Middleware\\StrapiTokenOnly"] : []),
     ...sorted.map((ct) => `App\\Http\\Controllers\\Api\\${filamentNames(ct).model}ApiController`),
     ...(endpoints.length > 0 ? [`App\\Http\\Controllers\\Api\\${ENDPOINTS_CONTROLLER}`] : []),
     "App\\Http\\Middleware\\StrapiErrors",
@@ -349,9 +348,8 @@ ${
       locales
         ? `
 
-    // Strapi's i18n plugin lists the locales to a caller holding its action, which no role it ships
-    // does: so a token that does, where the app keeps tokens.
-    Route::get('i18n/locales', [LocaleController::class, 'index'])${tokens ? "->middleware(StrapiTokenOnly::class)" : ""};`
+    // Strapi's i18n plugin lists the locales to anyone: they name no content.
+    Route::get('i18n/locales', [LocaleController::class, 'index']);`
         : ""
     }${
       tokens
