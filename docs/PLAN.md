@@ -2002,7 +2002,8 @@ Strapi's `morphToMany`/`morphToOne` link a document to documents of any type, an
   { target, via, viaNames?, many }`, whose `via` must name a polymorphic relation of its target
   (`invalid_polymorphic_inverse`). Components cannot hold either: the import reports a gap.
 - **Strapi.** Imported from and written back to `morphTo*`/`morph{One,Many}` with `morphBy`.
-  Express reports a capability gap; GraphQL leaves them out with a `polymorphicGraphql` gap.
+  Express reports a capability gap; GraphQL leaves them out with a `polymorphicGraphql` gap
+  (served since Phase 91).
 - **Filament (Strapi API style).** A morphToMany is stored in `<table>_<field>_mph` (owner id,
   `<field>_id`, `<field>_type`, `field`, `order`); a morphToOne in `<field>_id`/`<field>_type`
   columns. `StrapiMorphs` reads and writes them: a list or `set`/`connect`/`disconnect` of
@@ -2591,6 +2592,30 @@ API stays at `/admin`. Phase 86 only reported such a url as an `adminPath` gap.
 Exit: vitest for the import, the env, the config and the panel patch; the author-role boot job
 lists Filament's login at `admin/login`, at `dashboard/login` with `CAMIS_ADMIN_PATH=/dashboard/`,
 and Strapi's `POST admin/login` either way.
+
+---
+
+## Phase 91 — polymorphic relations over GraphQL (`adapter-filament`)
+
+Phase 64 served Strapi's polymorphic relations over REST only; the GraphQL schema left them out with
+a `polymorphicGraphql` gap.
+
+- **Schema.** As Strapi's graphql plugin types them (`graphql-morph-schema.strapi-php.graphql`, printed
+  from strapi-php for the morph-relations fixture, is the oracle): a morphToMany is `[GenericMorph]`
+  and a morphToOne `GenericMorph`, where the type's schema declares it (`MorphPlan.order`); neither is
+  in the type's filters or input. A morphMany or morphOne inverse is not on the type at all, as on
+  Strapi. `GenericMorph` is defined whenever a file or a link can name entries.
+- **Runtime.** `StrapiGraphqlTypes` names each type's links (`'morphs' => [key => many]`);
+  `StrapiGraphql` populates a selected link through REST (`populate[<key>]=true`), or fetches it for
+  a row whose populate did not, and resolves each entry's member by its `__type`. A type the caller
+  may not read is left out, as REST leaves it out.
+- **Deviation kept on purpose.** strapi-php answers every link with an internal error ("Missing
+  schema in validateQuery", as upstream's association resolver has no target schema for a morph);
+  here each link answers the entries REST populates.
+
+Exit: `graphql.test.ts`'s polymorphic cases; `morph-relations.test.ts` reports no gap; the
+morph-relations boot job (overlaid with GraphQL) reads a note's links over GraphQL, through a note's
+own populate and fetched for a linked note.
 
 ---
 

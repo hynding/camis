@@ -209,6 +209,9 @@ final class StrapiGraphql
         if (isset($type['relations'][$key])) {
             return self::related($source, $parent, $key, $key !== $name, $args, $request, $info);
         }
+        if (array_key_exists($name, $type['morphs'] ?? [])) {
+            return self::linked($source, $parent, $name, $request);
+        }
         if ($type['components'][$name]['repeatable'] ?? false) {
             if (($args['filters'] ?? null) !== null || ($args['sort'] ?? []) !== []) {
                 throw StrapiError::validation('Filters and sort on a repeatable component are not supported');
@@ -323,7 +326,28 @@ final class StrapiGraphql
         $target = $type['relations'][$key]['type'];
         $nodes = $connection ? self::nodes($info->fieldNodes, Type::getNamedType($info->returnType)->name, $info) : $info->fieldNodes;
         [$populate, $claims] = self::populate($target, $nodes, $info);
-        $params = ['populate' => [$key => array_filter($fetch, fn ($v) => $v !== null && $v !== []) + ($populate === [] ? [] : ['populate' => $populate])]];
+        $value = self::shown($source, $type, [$key => array_filter($fetch, fn ($v) => $v !== null && $v !== []) + ($populate === [] ? [] : ['populate' => $populate])], $request)[$key] ?? null;
+        $context = ['status' => $meta['status'] ?? null, 'locale' => $meta['locale'] ?? null, 'cohort' => $meta['cohort'] ?? null];
+        if (! is_array($value)) {
+            return $value;
+        }
+
+        return $type['relations'][$key]['many']
+            ? array_map(fn (array $wire) => self::annotate($wire, $target, $claims, $context), $value)
+            : self::annotate($value, $target, $claims, $context);
+    }
+
+    /**
+     * The row again, through its own type's REST show with this populate, in the status, locale and
+     * cohort it was read in; null when its type has no REST show.
+     */
+    private static function shown(array $source, array $type, array $populate, Request $request): ?array
+    {
+        $meta = $source[self::META] ?? [];
+        if ($type['controller'] === null || ! isset($source['documentId'])) {
+            return null;
+        }
+        $params = ['populate' => $populate];
         if ($type['draftPublish'] && ($meta['status'] ?? null) !== null) {
             $params['status'] = $meta['status'];
         }
@@ -336,15 +360,25 @@ final class StrapiGraphql
         }
         $id = self::routeKey($type, (string) $source['documentId'], $params, $request);
         $body = $id === null ? null : self::found(fn () => self::call($type, 'show', $params, $request, null, $id));
-        $value = $body['data'][$key] ?? null;
-        $context = ['status' => $meta['status'] ?? null, 'locale' => $meta['locale'] ?? null, 'cohort' => $meta['cohort'] ?? null];
-        if (! is_array($value)) {
-            return $value;
+
+        return is_array($body['data'] ?? null) ? $body['data'] : null;
+    }
+
+    /**
+     * A polymorphic link's entries as the REST populate reads them (each with its __type, a type the
+     * caller may not read left out), from the row's own populate or fetched for the row. Strapi's
+     * resolver answers these with an internal error; a GenericMorph member is resolved by __type.
+     */
+    private static function linked(array $source, string $parent, string $key, Request $request): mixed
+    {
+        $type = StrapiGraphqlTypes::TYPES[$parent];
+        $value = array_key_exists($key, $source) ? $source[$key] : (self::shown($source, $type, [$key => true], $request)[$key] ?? null);
+        $known = fn (mixed $entry): bool => is_array($entry) && isset(StrapiGraphqlTypes::MORPHS[$entry['__type'] ?? '']);
+        if (($type['morphs'] ?? [])[$key] !== true) {
+            return $known($value) ? $value : null;
         }
 
-        return $type['relations'][$key]['many']
-            ? array_map(fn (array $wire) => self::annotate($wire, $target, $claims, $context), $value)
-            : self::annotate($value, $target, $claims, $context);
+        return array_values(array_filter(is_array($value) ? $value : [], $known));
     }
 
     // -------------------------------------------------------------------- selection → populate
@@ -382,6 +416,8 @@ final class StrapiGraphql
                     $populate[$key]['populate'] = array_replace_recursive($populate[$key]['populate'] ?? [], $inner);
                     $claims['children'][$key] = array_replace_recursive($claims['children'][$key], $innerClaims);
                 }
+            } elseif (array_key_exists($name, $meta['morphs'] ?? [])) {
+                $populate[$name] = true;
             } elseif (isset($meta['components'][$name])) {
                 $populate[$name] = ['populate' => self::inside($meta['components'][$name]['type'], [$field], $info)];
             } elseif (in_array($name, $meta['zones'] ?? [], true)) {

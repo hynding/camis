@@ -239,9 +239,14 @@ class MorphRelationsTest extends TestCase
                 ['title' => 'n1', 'subjects' => [['__typename' => 'Book', 'documentId' => $dune, 'title' => 'Dune'], ['__typename' => 'Film', 'title' => 'Heat']], 'pinned_to' => ['__typename' => 'Book', 'title' => 'Dune']],
                 ['title' => 'n2', 'subjects' => [], 'pinned_to' => null],
             ]);
-        // A note reached through another field reads its links the same way.
+        // A note reached through another field reads its links the same way, fetched for it when
+        // the entry naming it did not populate them.
         $this->graphql("{ note(documentId: \"{$note}\") { subjects { ... on Film { title } } } }")
             ->assertJsonPath('data.note.subjects', [[], ['title' => 'Heat']]);
+        $this->api('POST', 'notes', ['title' => 'n3', 'subjects' => [$this->ref($note, 'note')]])->assertCreated();
+        $this->graphql('{ notes(filters: { title: { eq: "n3" } }) { subjects { ... on Note { title subjects { __typename } } } } }')
+            ->assertJsonMissingPath('errors')
+            ->assertJsonPath('data.notes.0.subjects', [['title' => 'n1', 'subjects' => [['__typename' => 'Book'], ['__typename' => 'Film']]]]);
     }
 
     public function test_a_strapi_archive_carries_the_links_in_and_out(): void
