@@ -37,7 +37,7 @@ describe("emitRoutes", () => {
   it("secured routes import guards, gate actions, filter reads, and return {id} on delete", () => {
     const ts = emitRoutes(article, [], { secured: true });
     expect(ts).toContain(
-      'import { authorizeAction, recordAllowed, filterRead, stripWrites, roleOf } from "../permissions/enforce";',
+      '  recordAllowed,\n  roleOf,\n  sortColumn,\n  stripWrites,\n} from "../permissions/enforce";',
     );
     expect(ts).toContain('authorizeAction(roleOf(req), "Article", "read")');
     expect(ts).toContain("filterRead(req,");
@@ -55,5 +55,31 @@ describe("emitRoutes", () => {
     expect(ts).toContain('data = await populateAiFields("Article", data, "create");');
     expect(ts).toContain('data = await populateAiFields("Article", data, "update");');
     expect(ts).not.toContain('"summary"');
+  });
+
+  describe("secured writes and reads", () => {
+    const ts = emitRoutes(article, ["owner_id"], { secured: true });
+    it("checks each action's own record condition", () => {
+      expect(ts).toContain('recordAllowed(req, "Article", "read", row)');
+      expect(ts).toContain('recordAllowed(req, "Article", "update", existing)');
+      expect(ts).toContain('recordAllowed(req, "Article", "delete", existing)');
+    });
+    it("fills assigned owners from the user and holds a create to the create condition", () => {
+      expect(ts).toContain(
+        'const data = assignOwners(req, "Article", stripWrites(req, "Article", proposed, proposed));',
+      );
+      expect(ts).toContain('if (!recordAllowed(req, "Article", "create", data)) {');
+    });
+    it("never lets an update move an assigned owner, and checks the row it would leave", () => {
+      expect(ts).toContain(
+        'const incoming = keepOwners(req, "Article", pick(req.body, ["title", "published", "owner_id"]));',
+      );
+      expect(ts).toContain(
+        'if (!recordAllowed(req, "Article", "update", { ...existing, ...data })) {',
+      );
+    });
+    it("sorts only by a column the caller may read", () => {
+      expect(ts).toContain('const sort = sortColumn(req, "Article", req.query._sort);');
+    });
   });
 });

@@ -3,7 +3,16 @@ import { Router, type Request } from "express";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { notes } from "../db/schema";
-import { authorizeAction, recordAllowed, filterRead, stripWrites, roleOf } from "../permissions/enforce";
+import {
+  assignOwners,
+  authorizeAction,
+  filterRead,
+  keepOwners,
+  recordAllowed,
+  roleOf,
+  sortColumn,
+  stripWrites,
+} from "../permissions/enforce";
 import { checkLinks, dropLinks, linkColumns, readLinks, writeLinks, type Allowed } from "../morphs";
 
 function pick(obj: Record<string, unknown>, keys: string[]): Record<string, unknown> {
@@ -16,7 +25,7 @@ function pick(obj: Record<string, unknown>, keys: string[]): Record<string, unkn
 const allowed =
   (req: Request): Allowed =>
   (type, row) =>
-    authorizeAction(roleOf(req), type, "read") && recordAllowed(req, type, row);
+    authorizeAction(roleOf(req), type, "read") && recordAllowed(req, type, "read", row);
 
 const view = (req: Request, row: Record<string, unknown>) =>
   filterRead(req, "Note", readLinks("Note", row, allowed(req)));
@@ -28,8 +37,8 @@ notesRouter.get("/", (req, res) => {
     res.status(403).json({ error: "forbidden" });
     return;
   }
-  const all = db.select().from(notes).all().filter((row) => recordAllowed(req, "Note", row));
-  const sort = String(req.query._sort ?? "id");
+  const all = db.select().from(notes).all().filter((row) => recordAllowed(req, "Note", "read", row));
+  const sort = sortColumn(req, "Note", req.query._sort);
   const order = String(req.query._order ?? "ASC").toUpperCase() === "DESC" ? -1 : 1;
   all.sort((a, b) => (a[sort as keyof typeof a] > b[sort as keyof typeof b] ? order : -order));
   const start = Number(req.query._start ?? 0);
@@ -45,7 +54,7 @@ notesRouter.get("/:id", (req, res) => {
     return;
   }
   const row = db.select().from(notes).where(eq(notes.id, Number(req.params.id))).get();
-  if (!row || !recordAllowed(req, "Note", row)) {
+  if (!row || !recordAllowed(req, "Note", "read", row)) {
     res.status(404).json({ error: "not found" });
     return;
   }
@@ -58,13 +67,17 @@ notesRouter.post("/", (req, res) => {
     return;
   }
   const proposed = pick(req.body, ["title", "subjects", "pinned_to"]);
-  const permitted = stripWrites(req, "Note", proposed, proposed);
+  const permitted = assignOwners(req, "Note", stripWrites(req, "Note", proposed, proposed));
   const refused = checkLinks("Note", permitted, allowed(req));
   if (refused !== null) {
     res.status(400).json({ error: refused });
     return;
   }
   const data = linkColumns("Note", permitted);
+  if (!recordAllowed(req, "Note", "create", data)) {
+    res.status(403).json({ error: "forbidden" });
+    return;
+  }
   const row = db.insert(notes).values(data).returning().get();
   writeLinks("Note", row.id, permitted);
   res.status(201).json(view(req, row));
@@ -76,11 +89,11 @@ notesRouter.patch("/:id", (req, res) => {
     return;
   }
   const existing = db.select().from(notes).where(eq(notes.id, Number(req.params.id))).get();
-  if (!existing || !recordAllowed(req, "Note", existing)) {
+  if (!existing || !recordAllowed(req, "Note", "update", existing)) {
     res.status(404).json({ error: "not found" });
     return;
   }
-  const incoming = pick(req.body, ["title", "subjects", "pinned_to"]);
+  const incoming = keepOwners(req, "Note", pick(req.body, ["title", "subjects", "pinned_to"]));
   const permitted = stripWrites(req, "Note", { ...existing, ...incoming }, incoming);
   const refused = checkLinks("Note", permitted, allowed(req));
   if (refused !== null) {
@@ -88,6 +101,10 @@ notesRouter.patch("/:id", (req, res) => {
     return;
   }
   const data = linkColumns("Note", permitted);
+  if (!recordAllowed(req, "Note", "update", { ...existing, ...data })) {
+    res.status(403).json({ error: "forbidden" });
+    return;
+  }
   const row =
     Object.keys(data).length > 0
       ? db.update(notes).set(data).where(eq(notes.id, Number(req.params.id))).returning().get()
@@ -102,7 +119,7 @@ notesRouter.delete("/:id", (req, res) => {
     return;
   }
   const existing = db.select().from(notes).where(eq(notes.id, Number(req.params.id))).get();
-  if (!existing || !recordAllowed(req, "Note", existing)) {
+  if (!existing || !recordAllowed(req, "Note", "delete", existing)) {
     res.status(404).json({ error: "not found" });
     return;
   }

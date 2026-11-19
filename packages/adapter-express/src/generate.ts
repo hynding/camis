@@ -39,8 +39,10 @@ const fkNames = (lines: string[]): string[] => lines.map((l) => l.trim().split("
 const namedConditions = (perms: ExpressPermissions): NamedCondition[] => {
   const out: NamedCondition[] = [];
   for (const [role, byCt] of Object.entries(perms.conditions)) {
-    for (const [ct, expr] of Object.entries(byCt)) {
-      out.push({ key: conditionKey(role, ct, "record"), expr });
+    for (const [ct, byAction] of Object.entries(byCt)) {
+      for (const [action, expr] of Object.entries(byAction)) {
+        out.push({ key: conditionKey(role, ct, action), expr });
+      }
     }
   }
   for (const [role, byCt] of Object.entries(perms.fieldRules)) {

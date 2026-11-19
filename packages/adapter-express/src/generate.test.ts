@@ -107,7 +107,7 @@ describe("secured generation", () => {
       "authorizeAction",
     );
     expect(r.files.find((f) => f.path === "src/permissions/conditions.ts")!.content).toContain(
-      "c__Editor__Article__record",
+      "c__Editor__Article__update",
     );
   });
 });

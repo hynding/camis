@@ -21,7 +21,12 @@ const USERS: (CamisUser & { password: string })[] = [
 ${users}
 ];
 
-export const jwtSecret = "dev-secret-change-me";
+// Never a fixed secret in production: anyone holding it signs tokens for any role.
+const configured = process.env.CAMIS_JWT_SECRET;
+if (!configured && process.env.NODE_ENV === "production") {
+  throw new Error("CAMIS_JWT_SECRET must be set in production (and replace the dev users in src/auth/store.ts)");
+}
+export const jwtSecret = configured || "dev-secret-change-me";
 
 export const verifyCredentials = (email: string, password: string): CamisUser | null => {
   const u = USERS.find((x) => x.email === email && x.password === password);
@@ -48,17 +53,24 @@ declare global {
   }
 }
 
-export const verify = (req: Request, _res: Response, next: NextFunction): void => {
+// No token: the caller is a guest (the public role). A token that does not verify, or names no
+// user, is refused rather than served as a guest, as Strapi refuses it.
+export const verify = (req: Request, res: Response, next: NextFunction): void => {
   const header = req.header("authorization");
   const token = header?.startsWith("Bearer ") ? header.slice(7) : undefined;
   if (token) {
+    let user: CamisUser | null = null;
     try {
       const payload = jwt.verify(token, jwtSecret) as { sub: number };
-      const user = getUser(payload.sub);
-      if (user) req.camisUser = user;
+      user = getUser(payload.sub);
     } catch {
-      /* invalid/expired token → treated as anonymous */
+      user = null;
     }
+    if (!user) {
+      res.status(401).json({ error: "invalid or expired token" });
+      return;
+    }
+    req.camisUser = user;
   }
   next();
 };

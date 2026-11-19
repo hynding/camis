@@ -14,8 +14,9 @@ const doc: IrDocument = {
 const perms: ExpressPermissions = {
   roles: ["Editor"],
   grants: { Editor: { Article: ["read", "update"] } },
-  conditions: { Editor: { Article: { kind: "lit", value: true } } },
+  conditions: { Editor: { Article: { update: { kind: "lit", value: true } } } },
   fieldRules: { Editor: { Article: [{ field: "secretNotes", access: "read" }] } },
+  assigns: {},
   gaps: [],
 };
 
@@ -34,8 +35,19 @@ describe("emitEnforce", () => {
     expect(file).toContain('"Editor"');
     expect(file).toContain('"secret_notes": "secretNotes"');
   });
-  it("wires a condition registry keyed by the grant record-condition key", () => {
-    expect(file).toContain("c__Editor__Article__record");
+  it("wires a condition registry keyed by role, type and action", () => {
+    expect(file).toContain("c__Editor__Article__update");
+    expect(file).not.toContain("c__Editor__Article__record");
+    expect(file).toContain(
+      "export const recordAllowed = (\n  req: Request,\n  ct: string,\n  action: string,\n  row: Record<string, unknown>,\n): boolean => {",
+    );
+  });
+  it("sorts only by a column the role reads unconditionally", () => {
+    expect(file).toContain("export const sortColumn");
+  });
+  it("fills and keeps the owners a grant assigns", () => {
+    expect(file).toContain("export const assignOwners");
+    expect(file).toContain("export const keepOwners");
   });
 });
 
@@ -66,18 +78,27 @@ describe("emitEnforce — ownership via relation FKs", () => {
     conditions: {
       member: {
         Note: {
-          kind: "eq",
-          left: { kind: "var", name: "record.ownerId" },
-          right: { kind: "var", name: "user.id" },
+          read: {
+            kind: "eq",
+            left: { kind: "var", name: "record.ownerId" },
+            right: { kind: "var", name: "user.id" },
+          },
         },
       },
     },
     fieldRules: {},
+    assigns: { member: { Note: ["owner_id"] } },
     gaps: [],
   };
 
   it("maps the owning-relation FK column to record.<name>Id", () => {
     const file = emitEnforce(ownerPerms, ownerDoc);
     expect(file).toContain('"owner_id": "ownerId"');
+  });
+  it("embeds the columns each role's grants assign", () => {
+    const file = emitEnforce(ownerPerms, ownerDoc);
+    expect(file).toContain(
+      'const ASSIGNS = {\n  "member": {\n    "Note": [\n      "owner_id"\n    ]\n  }\n}',
+    );
   });
 });

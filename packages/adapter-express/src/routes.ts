@@ -63,6 +63,15 @@ export const emitRoutes = (
     res.status(400).json({ error: refused });
     return;
   }`;
+  // A write must leave a row the role's condition for it holds on: a create may not make, and an
+  // update may not turn its row into, one the role could not have written.
+  const forbidden = (action: string, row: string) => `
+  if (!recordAllowed(req, "${typeName}", "${action}", ${row})) {
+    res.status(403).json({ error: "forbidden" });
+    return;
+  }`;
+  const createRefusal = forbidden("create", "data");
+  const updateRefusal = forbidden("update", "{ ...existing, ...data }");
   const shown = (row: string) =>
     links === "none" ? `filterRead(req, "${typeName}", ${row})` : `view(req, ${row})`;
 
@@ -145,7 +154,16 @@ ${t}Router.delete("/:id", (req, res) => {${own ? `\n  dropLinks("${typeName}", N
 import { eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { ${t} } from "../db/schema";
-import { authorizeAction, recordAllowed, filterRead, stripWrites, roleOf } from "../permissions/enforce";${aiImport}${linksImport}
+import {
+  assignOwners,
+  authorizeAction,
+  filterRead,
+  keepOwners,
+  recordAllowed,
+  roleOf,
+  sortColumn,
+  stripWrites,
+} from "../permissions/enforce";${aiImport}${linksImport}
 
 function pick(obj: Record<string, unknown>, keys: string[]): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -160,7 +178,7 @@ ${
 const allowed =
   (req: Request): Allowed =>
   (type, row) =>
-    authorizeAction(roleOf(req), type, "read") && recordAllowed(req, type, row);
+    authorizeAction(roleOf(req), type, "read") && recordAllowed(req, type, "read", row);
 
 const view = (req: Request, row: Record<string, unknown>) =>
   filterRead(req, "${typeName}", readLinks("${typeName}", row, allowed(req)));
@@ -173,8 +191,8 @@ ${t}Router.get("/", (req, res) => {
     res.status(403).json({ error: "forbidden" });
     return;
   }
-  const all = db.select().from(${t}).all().filter((row) => recordAllowed(req, "${typeName}", row));
-  const sort = String(req.query._sort ?? "id");
+  const all = db.select().from(${t}).all().filter((row) => recordAllowed(req, "${typeName}", "read", row));
+  const sort = sortColumn(req, "${typeName}", req.query._sort);
   const order = String(req.query._order ?? "ASC").toUpperCase() === "DESC" ? -1 : 1;
   all.sort((a, b) => (a[sort as keyof typeof a] > b[sort as keyof typeof b] ? order : -order));
   const start = Number(req.query._start ?? 0);
@@ -190,7 +208,7 @@ ${t}Router.get("/:id", (req, res) => {
     return;
   }
   const row = db.select().from(${t}).where(eq(${t}.id, Number(req.params.id))).get();
-  if (!row || !recordAllowed(req, "${typeName}", row)) {
+  if (!row || !recordAllowed(req, "${typeName}", "read", row)) {
     res.status(404).json({ error: "not found" });
     return;
   }
@@ -205,12 +223,12 @@ ${t}Router.post("/", ${asyncKw}(req, res) => {
   const proposed = pick(req.body, [${writable}]);${
     own
       ? `
-  const permitted = stripWrites(req, "${typeName}", proposed, proposed);${refusal("permitted", "allowed(req)")}
-  ${dataDecl} data = linkColumns("${typeName}", permitted);${createPop}
+  const permitted = assignOwners(req, "${typeName}", stripWrites(req, "${typeName}", proposed, proposed));${refusal("permitted", "allowed(req)")}
+  ${dataDecl} data = linkColumns("${typeName}", permitted);${createRefusal}${createPop}
   const row = db.insert(${t}).values(data).returning().get();
   writeLinks("${typeName}", row.id, permitted);`
       : `
-  ${dataDecl} data = stripWrites(req, "${typeName}", proposed, proposed);${createPop}
+  ${dataDecl} data = assignOwners(req, "${typeName}", stripWrites(req, "${typeName}", proposed, proposed));${createRefusal}${createPop}
   const row = db.insert(${t}).values(data).returning().get();`
   }
   res.status(201).json(${shown("row")});
@@ -222,22 +240,22 @@ ${t}Router.patch("/:id", ${asyncKw}(req, res) => {
     return;
   }
   const existing = db.select().from(${t}).where(eq(${t}.id, Number(req.params.id))).get();
-  if (!existing || !recordAllowed(req, "${typeName}", existing)) {
+  if (!existing || !recordAllowed(req, "${typeName}", "update", existing)) {
     res.status(404).json({ error: "not found" });
     return;
   }
-  const incoming = pick(req.body, [${writable}]);${
+  const incoming = keepOwners(req, "${typeName}", pick(req.body, [${writable}]));${
     own
       ? `
   const permitted = stripWrites(req, "${typeName}", { ...existing, ...incoming }, incoming);${refusal("permitted", "allowed(req)")}
-  ${dataDecl} data = linkColumns("${typeName}", permitted);${updatePop}
+  ${dataDecl} data = linkColumns("${typeName}", permitted);${updateRefusal}${updatePop}
   const row =
     Object.keys(data).length > 0
       ? db.update(${t}).set(data).where(eq(${t}.id, Number(req.params.id))).returning().get()
       : existing;
   writeLinks("${typeName}", row.id, permitted);`
       : `
-  ${dataDecl} data = stripWrites(req, "${typeName}", { ...existing, ...incoming }, incoming);${updatePop}
+  ${dataDecl} data = stripWrites(req, "${typeName}", { ...existing, ...incoming }, incoming);${updateRefusal}${updatePop}
   const row = db.update(${t}).set(data).where(eq(${t}.id, Number(req.params.id))).returning().get();`
   }
   res.json(${shown("row")});
@@ -249,7 +267,7 @@ ${t}Router.delete("/:id", (req, res) => {
     return;
   }
   const existing = db.select().from(${t}).where(eq(${t}.id, Number(req.params.id))).get();
-  if (!existing || !recordAllowed(req, "${typeName}", existing)) {
+  if (!existing || !recordAllowed(req, "${typeName}", "delete", existing)) {
     res.status(404).json({ error: "not found" });
     return;
   }
