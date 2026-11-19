@@ -77,6 +77,15 @@ describe("Strapi's admin accounts and admin API", () => {
     expect(config).toContain("'max' => (int) env('CAMIS_ADMIN_RATE_LIMIT_MAX', 5),");
   });
 
+  // An exists() under lockForUpdate locks no row while the table is empty, so two requests at
+  // install could each make a super admin: an atomic cache lock lets one through at a time.
+  it("registers the first admin one request at a time", () => {
+    const controller = content("app/Http/Controllers/Admin/StrapiAdminController.php");
+    expect(controller).toContain(
+      "$admin = Cache::lock('strapi-register-admin', 10)->block(5, fn (): AdminUser => DB::transaction(function () use ($input, $role): AdminUser {",
+    );
+  });
+
   it("refuses a sign-in as Strapi's local strategy does, and returns its body", () => {
     const controller = content("app/Http/Controllers/Admin/StrapiAdminController.php");
     expect(controller).toContain("'Invalid credentials'");
