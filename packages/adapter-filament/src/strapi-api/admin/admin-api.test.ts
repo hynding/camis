@@ -66,7 +66,7 @@ describe("Strapi's admin accounts and admin API", () => {
       /public function registerAdmin\(Request \$request\): JsonResponse\n {4}\{\n {8}\$this->throttle\(\$request\);/,
     );
     expect(controller).toContain(
-      "$key = 'strapi-admin-auth:'.mb_strtolower(is_string($email) ? $email : '').':'.$request->ip();",
+      "$key = 'strapi-admin-auth:' . mb_strtolower(is_string($email) ? $email : '') . ':' . $request->ip();",
     );
     expect(controller).toContain(
       "throw new StrapiError(429, 'RateLimitError', 'Too many requests, please try again later.');",
