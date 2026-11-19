@@ -209,7 +209,7 @@ final class StrapiGraphql
         if (isset($type['relations'][$key])) {
             return self::related($source, $parent, $key, $key !== $name, $args, $request, $info);
         }
-        if (array_key_exists($name, $type['morphs'] ?? [])) {
+        if (isset(StrapiGraphqlTypes::LINKS[$parent][$name])) {
             return self::linked($source, $parent, $name, $request);
         }
         if ($type['components'][$name]['repeatable'] ?? false) {
@@ -374,7 +374,7 @@ final class StrapiGraphql
         $type = StrapiGraphqlTypes::TYPES[$parent];
         $value = array_key_exists($key, $source) ? $source[$key] : (self::shown($source, $type, [$key => true], $request)[$key] ?? null);
         $known = fn (mixed $entry): bool => is_array($entry) && isset(StrapiGraphqlTypes::MORPHS[$entry['__type'] ?? '']);
-        if (($type['morphs'] ?? [])[$key] !== true) {
+        if (! StrapiGraphqlTypes::LINKS[$parent][$key]) {
             return $known($value) ? $value : null;
         }
 
@@ -416,7 +416,7 @@ final class StrapiGraphql
                     $populate[$key]['populate'] = array_replace_recursive($populate[$key]['populate'] ?? [], $inner);
                     $claims['children'][$key] = array_replace_recursive($claims['children'][$key], $innerClaims);
                 }
-            } elseif (array_key_exists($name, $meta['morphs'] ?? [])) {
+            } elseif (isset(StrapiGraphqlTypes::LINKS[$typeName][$name])) {
                 $populate[$name] = true;
             } elseif (isset($meta['components'][$name])) {
                 $populate[$name] = ['populate' => self::inside($meta['components'][$name]['type'], [$field], $info)];

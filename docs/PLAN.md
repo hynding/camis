@@ -2605,7 +2605,7 @@ a `polymorphicGraphql` gap.
   and a morphToOne `GenericMorph`, where the type's schema declares it (`MorphPlan.order`); neither is
   in the type's filters or input. A morphMany or morphOne inverse is not on the type at all, as on
   Strapi. `GenericMorph` is defined whenever a file or a link can name entries.
-- **Runtime.** `StrapiGraphqlTypes` names each type's links (`'morphs' => [key => many]`);
+- **Runtime.** `StrapiGraphqlTypes::LINKS` names each type's links (key → many);
   `StrapiGraphql` populates a selected link through REST (`populate[<key>]=true`), or fetches it for
   a row whose populate did not, and resolves each entry's member by its `__type`. A type the caller
   may not read is left out, as REST leaves it out.

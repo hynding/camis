@@ -190,7 +190,7 @@ describe("GraphQL's polymorphic relations", () => {
 
   it("tells the runtime which keys are links, and how many each holds", () => {
     expect(content("app/GraphQL/StrapiGraphqlTypes.php")).toContain(
-      "'morphs' => ['subjects' => true, 'pinned_to' => false],",
+      "'Note' => ['subjects' => true, 'pinned_to' => false],",
     );
     expect(result.gaps.gaps.map((g) => g.feature)).not.toContain("polymorphicGraphql");
   });

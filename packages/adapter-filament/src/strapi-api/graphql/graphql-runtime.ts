@@ -30,13 +30,15 @@ export const emitStrapiGraphqlTypes = (schema: GraphqlSchema, tokens: boolean): 
           `'${k}' => ['type' => '${r.type}', 'many' => ${phpBool(r.many)}, 'model' => \\App\\Models\\${r.model}::class]`,
       )
       .join(", ");
-  // Only a type holding a polymorphic link names them; StrapiGraphql reads a missing key as none.
-  const morphs = (entries: Record<string, boolean>) =>
-    Object.keys(entries).length === 0
-      ? ""
-      : `\n            'morphs' => [${Object.entries(entries)
+  const links = schema.types
+    .filter((t) => Object.keys(t.morphs).length > 0)
+    .map(
+      (t) =>
+        `        '${t.name}' => [${Object.entries(t.morphs)
           .map(([k, many]) => `'${k}' => ${phpBool(many)}`)
-          .join(", ")}],`;
+          .join(", ")}],`,
+    )
+    .join("\n");
   const types = schema.types
     .map(
       (t) => `        '${t.name}' => [
@@ -44,7 +46,7 @@ export const emitStrapiGraphqlTypes = (schema: GraphqlSchema, tokens: boolean): 
             'routeKey' => ${t.routeKey === null ? "null" : phpString(t.routeKey)},
             'draftPublish' => ${phpBool(t.draftPublish)},
             'localized' => ${phpBool(t.localized)},
-            'relations' => [${relations(t.relations)}],${morphs(t.morphs)}
+            'relations' => [${relations(t.relations)}],
             'components' => [${nested(t.components)}],
             'zones' => [${t.zones.map(phpString).join(", ")}],
         ],`,
@@ -99,6 +101,15 @@ ${components}
     /** A dynamic zone's union → the component types it holds. */
     public const ZONES = [
 ${zones}
+    ];
+
+    /**
+     * A content type → its polymorphic links (GenericMorph), each key → whether it holds many.
+     *
+     * @var array<string, array<string, bool>>
+     */
+    public const LINKS = [
+${links}
     ];
 
     /** A content type's uid → its type, for the GenericMorph entries of a file or a polymorphic link. */
