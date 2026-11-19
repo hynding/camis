@@ -53,6 +53,15 @@ describe("Strapi data import", () => {
       expect(command).toContain(option);
   });
 
+  // An archive's assets land on the upload disk, public/uploads by default, under their own names.
+  it("never stores an asset the web server would run as a script, and says so", () => {
+    const engine = content(IMPORT_ENGINE);
+    expect(engine).toContain("if (StrapiMimeTypes::executable($name) !== null) {");
+    expect(engine).toContain(
+      "$this->skipped[\"asset {$name}\"] = 'a file the web server would run as a script is not stored';",
+    );
+  });
+
   it("reads a timestamp as Strapi exports one, its epoch in milliseconds", () => {
     expect(content(IMPORT_ENGINE)).toContain(
       "'timestamp' => (is_numeric($value) ? CarbonImmutable::createFromTimestampMsUTC((float) $value) : CarbonImmutable::parse((string) $value))->utc()->format($dateFormat),",
