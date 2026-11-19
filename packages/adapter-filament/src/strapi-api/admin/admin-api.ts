@@ -20,6 +20,12 @@ export const adminAuthConfigKeys = (): string => `
     'admin_auth' => [
         'secret' => env('ADMIN_JWT_SECRET'),
         'access_token_lifespan' => (int) env('CAMIS_ADMIN_ACCESS_TOKEN_LIFESPAN', 1800),
+        // Strapi's admin.rateLimit on signing in: requests per email and address per interval (s).
+        'rate_limit' => [
+            'enabled' => (bool) env('CAMIS_ADMIN_RATE_LIMIT_ENABLED', true),
+            'interval' => (int) env('CAMIS_ADMIN_RATE_LIMIT_INTERVAL', 300),
+            'max' => (int) env('CAMIS_ADMIN_RATE_LIMIT_MAX', 5),
+        ],
     ],`;
 
 const RUNTIME_FILES = [

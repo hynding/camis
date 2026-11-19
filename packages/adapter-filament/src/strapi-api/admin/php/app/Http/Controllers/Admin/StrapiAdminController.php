@@ -12,6 +12,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\RateLimiter;
 use Spatie\Permission\Models\Role;
 
 /**
@@ -34,6 +35,7 @@ final class StrapiAdminController
     /** Strapi's local strategy: an unknown email and a wrong password read alike. */
     public function login(Request $request): JsonResponse
     {
+        $this->throttle($request);
         $email = $request->input('email');
         $password = $request->input('password');
         if (! is_string($email) || $email === '' || ! is_string($password) || $password === '') {
@@ -57,6 +59,7 @@ final class StrapiAdminController
     /** The first admin account, holding the first admin role, while there is none. */
     public function registerAdmin(Request $request): JsonResponse
     {
+        $this->throttle($request);
         $input = $this->registration($request);
         $role = AdminUser::adminRoles()[0] ?? null;
         if ($role === null || Role::query()->where('name', $role)->doesntExist()) {
@@ -103,6 +106,24 @@ final class StrapiAdminController
                 'code' => $role->getAttribute('name'),
             ])->values()->all(),
         ];
+    }
+
+    /**
+     * Strapi's admin::rateLimit: every request counts, keyed by the email it names and the client
+     * address, and one past the limit inside the interval is refused until the interval ends.
+     */
+    private function throttle(Request $request): void
+    {
+        $limit = (array) config('camis.admin_auth.rate_limit', []);
+        if (! (bool) ($limit['enabled'] ?? true)) {
+            return;
+        }
+        $email = $request->input('email');
+        $key = 'strapi-admin-auth:' . mb_strtolower(is_string($email) ? $email : '') . ':' . $request->ip();
+        if (RateLimiter::tooManyAttempts($key, max(1, (int) ($limit['max'] ?? 5)))) {
+            throw new StrapiError(429, 'RateLimitError', 'Too many requests, please try again later.');
+        }
+        RateLimiter::hit($key, max(1, (int) ($limit['interval'] ?? 300)));
     }
 
     private function session(AdminUser $admin): JsonResponse
