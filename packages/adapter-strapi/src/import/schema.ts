@@ -6,6 +6,7 @@ import {
   type ContentType,
   type Field,
 } from "@camis/ir-schema";
+import { ONE_WAY_COMPONENT_RELATIONS } from "@camis/adapter-kernel";
 import { componentDisplayName } from "@camis/strapi-schema";
 import { irField, type FieldImportOptions } from "./attributes";
 import { irName } from "./names";
@@ -102,7 +103,7 @@ export const irComponent = (
         feature: "morphRelation",
         location: { component: componentName, field: f.name },
         severity: "downgrade",
-        message: `polymorphic relation "${fieldApiName(f)}" inside component "${componentName}" is not representable; skipped.`,
+        message: `polymorphic relation "${fieldApiName(f)}" inside component "${componentName}" is skipped: ${ONE_WAY_COMPONENT_RELATIONS}, so camis does not serve a polymorphic one there.`,
       });
       return false;
     }

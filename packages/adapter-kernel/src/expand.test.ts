@@ -418,12 +418,12 @@ describe("expandComponents", () => {
         relationKind: "manyToOne",
         target: "Author",
       });
-      expect(r.gaps.filter((g) => g.feature === "componentRelationInverse")).toEqual([
-        expect.objectContaining({
-          message:
-            'relation "author" inside component "Link" is generated one way: Strapi\'s Content-Type Builder gives a component only one-way oneToOne and oneToMany relations, so its inverse "links" on "Author" is not generated.',
-        }),
-      ]);
+      expect([...new Set(r.gaps.map((g) => g.feature))]).toEqual(["componentRelationInverse"]);
+      expect(new Set(r.gaps.map((g) => g.message))).toEqual(
+        new Set([
+          'relation "author" inside component "Link" is generated one way: Strapi\'s Content-Type Builder gives a component only one-way oneToOne and oneToMany relations, so its inverse "links" on "Author" is not generated.',
+        ]),
+      );
     });
 
     it("still reports both as gaps without the options", () => {
