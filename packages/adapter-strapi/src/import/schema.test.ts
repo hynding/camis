@@ -141,7 +141,7 @@ describe("irComponent — polymorphic relations", () => {
         feature: "morphRelation",
         location: { component: "Seo", field: "about" },
         severity: "downgrade",
-        message: `polymorphic relation "about" inside component "Seo" is not representable; skipped.`,
+        message: `polymorphic relation "about" inside component "Seo" is skipped: Strapi's Content-Type Builder gives a component only one-way oneToOne and oneToMany relations, so camis does not serve a polymorphic one there.`,
       },
     ]);
   });
