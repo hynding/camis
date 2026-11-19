@@ -12,9 +12,20 @@ final class StrapiMimeTypes
     /** What content sniffing names that a file signature does not settle. */
     private const UNDETECTED = ['application/octet-stream', 'application/json', 'application/x-empty', 'inode/x-empty'];
 
+    /**
+     * Extensions a web server runs as a script. Uploads are kept in public/uploads under their own
+     * extension, where Strapi's Node server would only serve such a file but PHP-FPM, Apache or
+     * "php artisan serve" would execute it, so they are refused whatever the type lists say.
+     */
+    private const EXECUTABLE = '/^(php\d*|phtml|pht|phar|phps|pgif|shtml)$/';
+
     /** Why the upload security refuses the upload, as Strapi words it, or null to let it through. */
     public static function rejection(UploadedFile $upload): ?string
     {
+        $executable = self::executable($upload->getClientOriginalName());
+        if ($executable !== null) {
+            return "File extension '.{$executable}' is not allowed";
+        }
         $allowed = config('camis.upload.allowed_types');
         $denied = config('camis.upload.denied_types') ?? [];
         if ($allowed === null && $denied === []) {
@@ -62,6 +73,14 @@ final class StrapiMimeTypes
         }
 
         return 'Cannot verify file type for security reasons';
+    }
+
+    /** The extension of $name, lowercased, when a web server would run the file; else null. */
+    public static function executable(string $name): ?string
+    {
+        $extension = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+
+        return preg_match(self::EXECUTABLE, $extension) === 1 ? $extension : null;
     }
 
     /** The type the file's content shows, or null when its signature names none (any text). */
