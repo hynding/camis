@@ -92,25 +92,15 @@ describe("polymorphic relations on the Strapi API style", () => {
     }
   });
 
-  it("reports only that GraphQL leaves them out", () => {
+  // GraphQL serves them too (graphql.test.ts), so nothing is reported on either API.
+  it("reports none of them", () => {
     expect(strapi.gaps.gaps.filter((g) => /^polymorphic/.test(g.feature))).toEqual([]);
     const graphql = filamentAdapter.generate(morphRelationsBundle, {
       projectName: "notes",
       apiStyle: "strapi",
       graphql: true,
     });
-    expect(graphql.gaps.gaps.filter((g) => g.feature === "polymorphicGraphql")).toEqual([
-      {
-        feature: "polymorphicGraphql",
-        location: { contentType: "Note", field: "subjects" },
-        severity: "downgrade",
-        message: `polymorphic relation "subjects" is served over REST only; the GraphQL schema leaves it out.`,
-      },
-      expect.objectContaining({ location: { contentType: "Note", field: "pinnedTo" } }),
-      expect.objectContaining({ location: { contentType: "Book", field: "pins" } }),
-      expect.objectContaining({ location: { contentType: "Book", field: "remarks" } }),
-      expect.objectContaining({ location: { contentType: "Film", field: "pin" } }),
-    ]);
+    expect(graphql.gaps.gaps.filter((g) => /^polymorphic/.test(g.feature))).toEqual([]);
   });
 });
 

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { filamentAdapter } from "../../generate";
+import { morphRelationsBundle } from "../__fixtures__/morph-relations";
 import { strapiApiBundle } from "../__fixtures__/strapi-api";
 
 // Strapi 5's GraphQL plugin, opt-in on the Strapi API style. strapi-php's schema for the same
@@ -144,5 +145,53 @@ describe("GraphQL", () => {
 
   it("keeps the generated schema stable", async () => {
     await expect(sdl).toMatchFileSnapshot("../__golden__/strapi-api/schema.graphql");
+  });
+});
+
+// strapi-php's schema for the morph-relations fixture's types (graphql-morph-schema.strapi-php.graphql)
+// is the oracle: a morphToMany is a list of GenericMorph and a morphToOne one GenericMorph, neither
+// filtered nor written; the morphMany and morphOne inverses are not on the type at all.
+describe("GraphQL's polymorphic relations", () => {
+  const result = filamentAdapter.generate(morphRelationsBundle, {
+    projectName: "notes",
+    apiStyle: "strapi",
+    graphql: true,
+  });
+  const content = (p: string) => result.files.find((f) => f.path === p)?.content ?? "";
+  const ours = blocks(content("graphql/schema.graphql"));
+  const morphOracle = blocks(
+    readFileSync(
+      join(__dirname, "../__fixtures__/graphql-morph-schema.strapi-php.graphql"),
+      "utf8",
+    ),
+  );
+
+  it("types a link to entries of any type as GenericMorph, as Strapi does", () => {
+    for (const name of [
+      "Note",
+      "Book",
+      "Film",
+      "NoteInput",
+      "BookInput",
+      "NoteFiltersInput",
+      "BookFiltersInput",
+      "FilmFiltersInput",
+    ])
+      expect(ours.get(name), name).toBe(morphOracle.get(name));
+  });
+
+  it("unions every content type a link may name", () => {
+    const members = (sdl: Map<string, string>) =>
+      (sdl.get("GenericMorph") ?? "").replace(/^union \w+ = /, "").split(" | ");
+    const ourMembers = members(ours);
+    expect(members(morphOracle).filter((m) => ourMembers.includes(m))).toEqual(ourMembers);
+    expect(ourMembers).toEqual(expect.arrayContaining(["Book", "Film", "Note", "Secret"]));
+  });
+
+  it("tells the runtime which keys are links, and how many each holds", () => {
+    expect(content("app/GraphQL/StrapiGraphqlTypes.php")).toContain(
+      "'Note' => ['subjects' => true, 'pinned_to' => false],",
+    );
+    expect(result.gaps.gaps.map((g) => g.feature)).not.toContain("polymorphicGraphql");
   });
 });

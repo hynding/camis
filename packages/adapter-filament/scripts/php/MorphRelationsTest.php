@@ -213,6 +213,42 @@ class MorphRelationsTest extends TestCase
         $this->api('POST', 'books', ['title' => 'Ulysses', 'pins' => []])->assertCreated();
     }
 
+    private function graphql(string $query): TestResponse
+    {
+        return $this->withHeader('Authorization', 'Bearer '.$this->jwt)->postJson('/graphql', ['query' => $query])->assertOk();
+    }
+
+    // strapi-php types the links as Strapi does (GenericMorph) but answers every one of them with an
+    // internal error ("Missing schema in validateQuery"); here each is the REST populate's entries.
+    public function test_graphql_reads_a_note_s_links_as_the_entries_they_name(): void
+    {
+        $dune = $this->make('books', 'Dune');
+        $heat = $this->make('films', 'Heat');
+        $vault = Secret::query()->create(['title' => 'Vault']);
+        $note = $this->api('POST', 'notes', ['title' => 'n1', 'subjects' => [$this->ref($dune, 'book'), $this->ref($heat, 'film')]])
+            ->assertCreated()->json('data.documentId');
+        foreach (Note::query()->where('document_id', $note)->get() as $row) {
+            DB::table('notes_subjects_mph')->insert(['note_id' => $row->id, 'subjects_id' => $vault->id, 'subjects_type' => 'api::secret.secret', 'order' => 3]);
+            $row->forceFill(['pinned_to_id' => Book::query()->where('document_id', $dune)->value('id'), 'pinned_to_type' => 'api::book.book'])->save();
+        }
+        $this->api('POST', 'notes', ['title' => 'n2'])->assertCreated();
+
+        $this->graphql('{ notes(sort: "title") { title subjects { __typename ... on Book { documentId title } ... on Film { title } } pinned_to { __typename ... on Book { title } } } }')
+            ->assertJsonMissingPath('errors')
+            ->assertJsonPath('data.notes', [
+                ['title' => 'n1', 'subjects' => [['__typename' => 'Book', 'documentId' => $dune, 'title' => 'Dune'], ['__typename' => 'Film', 'title' => 'Heat']], 'pinned_to' => ['__typename' => 'Book', 'title' => 'Dune']],
+                ['title' => 'n2', 'subjects' => [], 'pinned_to' => null],
+            ]);
+        // A note reached through another field reads its links the same way, fetched for it when
+        // the entry naming it did not populate them.
+        $this->graphql("{ note(documentId: \"{$note}\") { subjects { ... on Film { title } } } }")
+            ->assertJsonPath('data.note.subjects', [[], ['title' => 'Heat']]);
+        $this->api('POST', 'notes', ['title' => 'n3', 'subjects' => [$this->ref($note, 'note')]])->assertCreated();
+        $this->graphql('{ notes(filters: { title: { eq: "n3" } }) { subjects { ... on Note { title subjects { __typename } } } } }')
+            ->assertJsonMissingPath('errors')
+            ->assertJsonPath('data.notes.0.subjects', [['title' => 'n1', 'subjects' => [['__typename' => 'Book'], ['__typename' => 'Film']]]]);
+    }
+
     public function test_a_strapi_archive_carries_the_links_in_and_out(): void
     {
         // strapi-php's export: n1's subjects are Heat then Dune and it is pinned to Heat, n2's

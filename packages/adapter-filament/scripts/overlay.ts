@@ -20,7 +20,8 @@ const storage = flag("--storage");
 const BUNDLES = {
   "author-role": { bundle: authorRoleBundle, projectName: "press" },
   "unique-components": { bundle: uniqueComponentsBundle, projectName: "fest" },
-  "morph-relations": { bundle: morphRelationsBundle, projectName: "notes" },
+  // MorphRelationsTest reads the links over GraphQL as well as REST.
+  "morph-relations": { bundle: morphRelationsBundle, projectName: "notes", graphql: true },
 } as const;
 const bundle = flag("--bundle");
 const own = bundle === undefined ? undefined : BUNDLES[bundle as keyof typeof BUNDLES];
@@ -42,7 +43,11 @@ const result =
         storageLayout: "strapi",
       })
     : own !== undefined
-      ? filamentAdapter.generate(own.bundle, { projectName: own.projectName, apiStyle: "strapi" })
+      ? filamentAdapter.generate(own.bundle, {
+          projectName: own.projectName,
+          apiStyle: "strapi",
+          graphql: "graphql" in own,
+        })
       : style === "strapi"
         ? filamentAdapter.generate(strapiApiBundle, {
             projectName: "oyl",

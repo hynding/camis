@@ -30,6 +30,15 @@ export const emitStrapiGraphqlTypes = (schema: GraphqlSchema, tokens: boolean): 
           `'${k}' => ['type' => '${r.type}', 'many' => ${phpBool(r.many)}, 'model' => \\App\\Models\\${r.model}::class]`,
       )
       .join(", ");
+  const links = schema.types
+    .filter((t) => Object.keys(t.morphs).length > 0)
+    .map(
+      (t) =>
+        `        '${t.name}' => [${Object.entries(t.morphs)
+          .map(([k, many]) => `'${k}' => ${phpBool(many)}`)
+          .join(", ")}],`,
+    )
+    .join("\n");
   const types = schema.types
     .map(
       (t) => `        '${t.name}' => [
@@ -58,7 +67,7 @@ export const emitStrapiGraphqlTypes = (schema: GraphqlSchema, tokens: boolean): 
         `        ${phpString(r.type)} => ['name' => ${phpString(r.name)}, 'description' => ${r.description === null ? "null" : phpString(r.description)}],`,
     )
     .join("\n");
-  const morphs = schema.types
+  const morphTypes = schema.types
     .filter((t) => t.name !== "UploadFile")
     .map((t) => `        ${phpString(t.uid)} => '${t.name}',`)
     .join("\n");
@@ -94,9 +103,18 @@ ${components}
 ${zones}
     ];
 
-    /** A content type's uid → its type, for the GenericMorph entries a file is linked from. */
+    /**
+     * A content type → its polymorphic links (GenericMorph), each key → whether it holds many.
+     *
+     * @var array<string, array<string, bool>>
+     */
+    public const LINKS = [
+${links}
+    ];
+
+    /** A content type's uid → its type, for the GenericMorph entries of a file or a polymorphic link. */
     public const MORPHS = [
-${morphs}
+${morphTypes}
     ];
 
     /** A plugin's root field → what StrapiGraphqlPlugins answers it with. */

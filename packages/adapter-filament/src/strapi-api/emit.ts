@@ -270,7 +270,7 @@ export interface StrapiApiInput {
   /** Content types whose routes run the IR's route policies and middlewares (`emitRouteHookFiles`). */
   routeHooked?: ReadonlySet<string>;
   /** The polymorphic relations served, each type's own and its inverses (`morphPlan`). */
-  morphs?: Pick<MorphPlan, "owners" | "inverses">;
+  morphs?: Pick<MorphPlan, "owners" | "inverses" | "order">;
 }
 export interface StrapiApiEmission {
   files: GeneratedFile[];
@@ -550,6 +550,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
       shapes,
       media: input.media !== undefined,
       roles: bundle.roles,
+      morphs: input.morphs ?? { owners: new Map(), order: new Map() },
     });
     gaps.push(...schema.gaps);
     files.push(
