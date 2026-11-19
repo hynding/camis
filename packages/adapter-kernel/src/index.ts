@@ -9,7 +9,7 @@ export type {
   ManifestEntry,
   StorageLayout,
 } from "./types";
-export { columnField, expandComponents } from "./expand";
+export { columnField, expandComponents, ONE_WAY_COMPONENT_RELATIONS } from "./expand";
 export type {
   ExpandedContentType,
   ExpandedScalar,

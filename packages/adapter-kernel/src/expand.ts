@@ -7,6 +7,10 @@ import {
   type IrDocument,
 } from "@camis/ir-schema";
 
+/** Why a component holds no polymorphic or two-way relation; the Strapi importer says the same. */
+export const ONE_WAY_COMPONENT_RELATIONS =
+  "Strapi's Content-Type Builder gives a component only one-way oneToOne and oneToMany relations";
+
 /** A scalar produced by flattening components; `path` is field-name segments from the owning table. */
 export interface ExpandedScalar {
   path: string[];
@@ -175,7 +179,7 @@ export const expandComponents = (
         holder.relations.push({
           path: [...path, field.name],
           apiPath: [...apiPath, fieldApiName(field)],
-          field: oneWay(field, location),
+          field: oneWay(field, component, location),
           component,
         });
         continue;
@@ -229,14 +233,19 @@ export const expandComponents = (
     }
   };
 
-  // Strapi's component relations go one way; an inverse would have no field to live on.
-  const oneWay = (field: RelationField, location: CapabilityGap["location"]): RelationField => {
+  // Strapi's builder gives a component only one-way relations, so no Strapi project an import
+  // could check an inverse against has one; it is reported, not served.
+  const oneWay = (
+    field: RelationField,
+    component: Component,
+    location: CapabilityGap["location"],
+  ): RelationField => {
     if (field.inverse === undefined) return field;
     out.gaps.push(
       gapAt(
         "componentRelationInverse",
         location,
-        `relation "${field.name}" inside a component goes one way, as Strapi's do; its inverse "${field.inverse}" is not generated.`,
+        `relation "${field.name}" inside component "${component.name}" is generated one way: ${ONE_WAY_COMPONENT_RELATIONS}, so its inverse "${field.inverse}" on "${field.target}" is not generated.`,
       ),
     );
     const rest = { ...field };
