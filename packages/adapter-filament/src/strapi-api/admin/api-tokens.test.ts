@@ -46,6 +46,14 @@ describe("API tokens", () => {
     expect(tokens).toContain("throw new StrapiError(401, 'UnauthorizedError', 'Token expired');");
   });
 
+  // Strapi's full-access token passes every check. A hand-written route (api-custom.php) has no
+  // Strapi action, so only a full-access token reaches it, and its writes must not be refused.
+  it("lets a full-access token do anything its route does, a hand-written one included", () => {
+    expect(content("app/Support/StrapiApiTokens.php")).toMatch(
+      /if \(\$token === null \|\| \$uid === null\) \{\n {12}return null;\n {8}\}\n {8}if \(\$uid === \$own \|\| \$token->type === 'full-access'\) \{\n {12}return true;/,
+    );
+  });
+
   it("checks a token on every API route before its own credentials", async () => {
     const routes = content("routes/api.php");
     expect(routes).toContain(

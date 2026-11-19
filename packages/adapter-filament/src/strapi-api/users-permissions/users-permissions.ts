@@ -224,6 +224,14 @@ export const emitUserController = (secured: boolean, guests = false): string => 
         }
 `
     : "";
+  // false: the body names no role, which the update leaves as it is.
+  const updateRole = secured
+    ? `        $role = array_key_exists('role', $body) ? (is_scalar($body['role']) ? Role::query()->find($body['role']) : null) : false;
+        if ($role === null) {
+            throw StrapiUsers::application('1 relation(s) of type plugin::users-permissions.role associated with this entity do not exist');
+        }
+`
+    : "";
   return `<?php
 ${PHP_MARKER}
 
@@ -322,11 +330,11 @@ ${assignRole}        $user = StrapiUsers::add([...$body, 'password' => Hash::mak
                 throw StrapiUsers::application('Email already taken');
             }
         }
-        $changes = array_intersect_key($body, array_flip(['username', 'email', 'confirmed', 'blocked']));
+${updateRole}        $changes = array_intersect_key($body, array_flip(['username', 'email', 'confirmed', 'blocked']));
         if (isset($body['password'])) {
             $changes['password'] = Hash::make((string) $body['password']);
         }
-        $user->forceFill($changes)->save();
+        $user->forceFill($changes)->save();${secured ? "\n        if ($role !== false) {\n            $user->syncRoles([$role]);\n        }" : ""}
 
         return response()->json(StrapiUsers::wire($user));
     }

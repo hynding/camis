@@ -109,11 +109,18 @@ final class UserController extends Controller
                 throw StrapiUsers::application('Email already taken');
             }
         }
+        $role = array_key_exists('role', $body) ? (is_scalar($body['role']) ? Role::query()->find($body['role']) : null) : false;
+        if ($role === null) {
+            throw StrapiUsers::application('1 relation(s) of type plugin::users-permissions.role associated with this entity do not exist');
+        }
         $changes = array_intersect_key($body, array_flip(['username', 'email', 'confirmed', 'blocked']));
         if (isset($body['password'])) {
             $changes['password'] = Hash::make((string) $body['password']);
         }
         $user->forceFill($changes)->save();
+        if ($role !== false) {
+            $user->syncRoles([$role]);
+        }
 
         return response()->json(StrapiUsers::wire($user));
     }

@@ -87,6 +87,19 @@ describe("users-permissions grants", () => {
     for (const permission of ["user.read", "user.create", "user.update", "user.delete"])
       expect(php).toContain(`'${permission}'`);
   });
+  // users-permissions' PUT /users/:id moves the user to the role its body names; one it cannot
+  // find fails the update as the relation check does, before anything is saved.
+  it("moves a user to the role an update names, refusing one that does not exist", () => {
+    const php = emitUserController(true);
+    expect(php).toContain(
+      "$role = array_key_exists('role', $body) ? (is_scalar($body['role']) ? Role::query()->find($body['role']) : null) : false;",
+    );
+    expect(php).toMatch(
+      /if \(\$role === null\) \{\n {12}throw StrapiUsers::application\('1 relation\(s\) of type plugin::users-permissions\.role associated with this entity do not exist'\);/,
+    );
+    expect(php).toContain("$user->syncRoles([$role]);");
+    expect(emitUserController(false)).not.toContain("syncRoles");
+  });
   it("seeds the read grant on the builtin user", () => {
     expect(content("database/seeders/RolePermissionSeeder.php")).toContain("'user.read'");
   });
