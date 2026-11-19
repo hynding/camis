@@ -27,6 +27,7 @@ import {
 import { definePluginApis, type PluginAction } from "./graphql-plugin-schema";
 import { FILE_UID } from "../upload/media-runtime";
 import { USER_UID, type WireShape } from "../core/wire-shape";
+import type { MorphPlan, WireMorph } from "../core/morphs";
 
 /**
  * Strapi 5's GraphQL schema for a project's content types, printed as webonyx's (and
@@ -54,6 +55,8 @@ export interface GraphqlContentType {
   draftPublish: boolean;
   localized: boolean;
   relations: Record<string, GraphqlRelation>;
+  /** Polymorphic links (GenericMorph), each key → whether it holds many entries. */
+  morphs: Record<string, boolean>;
   components: Record<string, { type: string; repeatable: boolean }>;
   zones: string[];
 }
@@ -98,6 +101,8 @@ export interface GraphqlSchemaInput {
   shapes: ReadonlyMap<string, WireShape>;
   media: boolean;
   roles: readonly { name: string; description?: string | undefined }[];
+  /** The polymorphic links served, which `doc` and `emitted` no longer carry. */
+  morphs: Pick<MorphPlan, "owners" | "order">;
 }
 
 // ------------------------------------------------------------------------------------ naming
@@ -446,15 +451,23 @@ class SchemaBuilder implements DefinitionSink {
   }
 }
 
-/** A content type's fields as Strapi's content API lays them out: its own, then inverse sides. */
+/**
+ * A content type's fields as Strapi's content API lays them out: its own (its polymorphic links
+ * where its schema declares them), then inverse sides.
+ */
 interface ContentField {
   field?: Field;
   key: string;
   relation?: WireShape["relations"][number];
+  morph?: WireMorph;
 }
-const contentFields = (ct: ContentType, shape: WireShape): ContentField[] => {
+const contentFields = (
+  ct: ContentType,
+  shape: WireShape,
+  morphs: GraphqlSchemaInput["morphs"],
+): ContentField[] => {
   const relations = new Map(shape.relations.map((r) => [r.key, r]));
-  const own = ct.fields.flatMap((f): ContentField[] => {
+  const fields = ct.fields.flatMap((f): ContentField[] => {
     const key = fieldApiName(f);
     if (f.type === "relation" || f.type === "media") {
       const relation = relations.get(key);
@@ -463,6 +476,11 @@ const contentFields = (ct: ContentType, shape: WireShape): ContentField[] => {
     }
     return [{ field: f, key }];
   });
+  const links = (morphs.owners.get(ct.name) ?? []).map(
+    (m): ContentField => ({ key: m.key, morph: m }),
+  );
+  const order = morphs.order.get(ct.name) ?? [];
+  const own = [...fields, ...links].sort((x, y) => order.indexOf(x.key) - order.indexOf(y.key));
   const ownKeys = new Set(own.map((o) => o.key));
   const inverse = shape.relations
     .filter((r) => !ownKeys.has(r.key) && r.kind !== "localizations")
@@ -537,6 +555,7 @@ export const buildGraphqlSchema = (input: GraphqlSchemaInput): GraphqlSchema => 
       draftPublish: shape.draftPublish,
       localized: shape.localized,
       relations: {},
+      morphs: {},
       components: {},
       zones: [],
     };
@@ -550,7 +569,15 @@ export const buildGraphqlSchema = (input: GraphqlSchemaInput): GraphqlSchema => 
     filter("documentId", () => b.scalarFilter("ID"));
     const inputFields: Member[] = [];
 
-    for (const { field, key, relation } of contentFields(ct, shape)) {
+    for (const { field, key, relation, morph } of contentFields(ct, shape, input.morphs)) {
+      // Strapi's type reads a link to entries of any type as they are; nothing filters or writes it.
+      if (morph !== undefined) {
+        if (morph.private === true) continue;
+        const many = morph.kind === "morphToMany";
+        map.morphs[key] = many;
+        typeFields.push({ name: key, type: many ? "[GenericMorph]" : "GenericMorph" });
+        continue;
+      }
       // Strapi's type and filters leave a private field out; its input still takes it.
       if (field?.private === true) {
         inputFields.push({ name: key, type: privateInput(b, name, key, field, relation) });
@@ -715,6 +742,7 @@ export const buildGraphqlSchema = (input: GraphqlSchemaInput): GraphqlSchema => 
       draftPublish: false,
       localized: false,
       relations: {},
+      morphs: {},
       components: {},
       zones: [],
     });
@@ -722,7 +750,8 @@ export const buildGraphqlSchema = (input: GraphqlSchemaInput): GraphqlSchema => 
   const plugins = definePluginApis(b, { media: input.media });
   queryFields.unshift(...plugins.queries);
   mutationFields.push(...plugins.mutations);
-  if (input.media) b.define(genericMorph(b, types));
+  if (input.media || types.some((t) => Object.keys(t.morphs).length > 0))
+    b.define(genericMorph(b, types));
   gaps.push(
     {
       feature: "graphqlRoleMutations",
@@ -754,7 +783,7 @@ export const buildGraphqlSchema = (input: GraphqlSchemaInput): GraphqlSchema => 
 };
 
 /**
- * Strapi's union of everything a file can be linked from, in its registration order: components,
+ * Strapi's union of everything a file or a polymorphic link can name, in its registration order: components,
  * then the plugins' types, then the content types by uid.
  */
 const genericMorph = (b: SchemaBuilder, types: GraphqlContentType[]): Definition => ({

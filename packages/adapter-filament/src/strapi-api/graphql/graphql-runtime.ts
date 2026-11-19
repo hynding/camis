@@ -30,6 +30,13 @@ export const emitStrapiGraphqlTypes = (schema: GraphqlSchema, tokens: boolean): 
           `'${k}' => ['type' => '${r.type}', 'many' => ${phpBool(r.many)}, 'model' => \\App\\Models\\${r.model}::class]`,
       )
       .join(", ");
+  // Only a type holding a polymorphic link names them; StrapiGraphql reads a missing key as none.
+  const morphs = (entries: Record<string, boolean>) =>
+    Object.keys(entries).length === 0
+      ? ""
+      : `\n            'morphs' => [${Object.entries(entries)
+          .map(([k, many]) => `'${k}' => ${phpBool(many)}`)
+          .join(", ")}],`;
   const types = schema.types
     .map(
       (t) => `        '${t.name}' => [
@@ -37,7 +44,7 @@ export const emitStrapiGraphqlTypes = (schema: GraphqlSchema, tokens: boolean): 
             'routeKey' => ${t.routeKey === null ? "null" : phpString(t.routeKey)},
             'draftPublish' => ${phpBool(t.draftPublish)},
             'localized' => ${phpBool(t.localized)},
-            'relations' => [${relations(t.relations)}],
+            'relations' => [${relations(t.relations)}],${morphs(t.morphs)}
             'components' => [${nested(t.components)}],
             'zones' => [${t.zones.map(phpString).join(", ")}],
         ],`,
@@ -58,7 +65,7 @@ export const emitStrapiGraphqlTypes = (schema: GraphqlSchema, tokens: boolean): 
         `        ${phpString(r.type)} => ['name' => ${phpString(r.name)}, 'description' => ${r.description === null ? "null" : phpString(r.description)}],`,
     )
     .join("\n");
-  const morphs = schema.types
+  const morphTypes = schema.types
     .filter((t) => t.name !== "UploadFile")
     .map((t) => `        ${phpString(t.uid)} => '${t.name}',`)
     .join("\n");
@@ -94,9 +101,9 @@ ${components}
 ${zones}
     ];
 
-    /** A content type's uid → its type, for the GenericMorph entries a file is linked from. */
+    /** A content type's uid → its type, for the GenericMorph entries of a file or a polymorphic link. */
     public const MORPHS = [
-${morphs}
+${morphTypes}
     ];
 
     /** A plugin's root field → what StrapiGraphqlPlugins answers it with. */

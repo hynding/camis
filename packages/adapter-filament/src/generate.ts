@@ -99,7 +99,6 @@ export const filamentAdapter: GenerateAdapter = {
     // Every emitter below reads the document without its polymorphic relations, which only the
     // Strapi API's own emitters serve, from the plan.
     const morphs = morphPlan(normalized, apiStyle, storage, {
-      graphql: options.graphql === true,
       versioned,
       localized,
     });

@@ -110,6 +110,8 @@ export interface MorphPlan {
   owners: Map<string, WireMorph[]>;
   /** Each content type's inverses, by name. */
   inverses: Map<string, MorphInverse[]>;
+  /** Each owning type's field keys in schema order, polymorphic ones included (GraphQL lays them out so). */
+  order: Map<string, string[]>;
 }
 
 const gapAt = (ct: ContentType, f: Field, feature: string, message: string): CapabilityGap => ({
@@ -128,7 +130,6 @@ export const morphPlan = (
   apiStyle: string,
   storage: string,
   options: {
-    graphql?: boolean;
     versioned?: ReadonlySet<string>;
     localized?: ReadonlySet<string>;
   } = {},
@@ -181,16 +182,6 @@ export const morphPlan = (
         );
         inverses.set(ct.name, [...(inverses.get(ct.name) ?? []), read]);
       }
-      if (options.graphql === true) {
-        gaps.push(
-          gapAt(
-            ct,
-            f,
-            "polymorphicGraphql",
-            `polymorphic relation "${f.name}" is served over REST only; the GraphQL schema leaves it out.`,
-          ),
-        );
-      }
     }
   }
   const stripped: IrDocument = {
@@ -200,7 +191,10 @@ export const morphPlan = (
       fields: ct.fields.filter((f) => !isPolymorphic(f)),
     })),
   };
-  return { doc: stripped, gaps, owners, inverses };
+  const order = new Map(
+    [...owners.keys()].map((name) => [name, byName.get(name)?.fields.map(fieldApiName) ?? []]),
+  );
+  return { doc: stripped, gaps, owners, inverses, order };
 };
 
 /** The columns a to-one's link takes on its entry's row, as a create-table migration declares them. */
