@@ -26,6 +26,21 @@ describe("users-permissions sessions", () => {
     expect(config).toContain("'http_only' => (bool) env('CAMIS_SESSIONS_HTTP_ONLY', false),");
   });
 
+  // Strapi's legacy JWT lasts jwt.expiresIn, 30 days unless configured; a Sanctum token without an
+  // expiry would last for ever. A password change or reset ends the account's other tokens.
+  it("expires a legacy token as Strapi's JWT expires, and revokes them on a new password", () => {
+    expect(content("config/camis.php")).toContain(
+      "'jwt_lifespan' => (int) env('CAMIS_JWT_LIFESPAN', 2592000),",
+    );
+    const sessions = content("app/Support/StrapiSessions.php");
+    expect(sessions).toContain(
+      "return $user->createToken(self::LEGACY, ['*'], $lifespan > 0 ? now()->addSeconds($lifespan) : null)->plainTextToken;",
+    );
+    expect(sessions).toMatch(
+      /public static function reissue\(User \$user\): array\n {4}\{\n {8}\$wire = \['user' => StrapiUsers::wire\(\$user\)\];\n {8}if \(! self::refreshMode\(\)\) \{\n {12}\$user->tokens\(\)->where\('name', self::LEGACY\)->delete\(\);/,
+    );
+  });
+
   it("keeps sessions in their own table, timed to the millisecond as Strapi lists them", async () => {
     const migration = content(
       "database/migrations/0001_01_02_000003_create_strapi_sessions_table.php",
