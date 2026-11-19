@@ -1,10 +1,16 @@
 import type { Expression, Value } from "@camis/expr";
 
+/**
+ * A single-quoted PHP string: only \\ and \' are escapes there, so a `$`, `{$…}` or `\n` in an
+ * author's literal stays the bytes it was, where a double-quoted string would interpolate it.
+ */
+const phpString = (s: string): string => `'${s.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
+
 const phpLiteral = (value: Value): string => {
   if (value === null) return "null";
   if (typeof value === "boolean") return value ? "true" : "false";
   if (typeof value === "number") return JSON.stringify(value);
-  return JSON.stringify(value);
+  return phpString(value);
 };
 
 const operand = (e: Expression): string => `fn() => ${emitPhp(e)}`;
@@ -14,7 +20,7 @@ export const emitPhp = (expr: Expression): string => {
     case "lit":
       return `Ring1::lit(${phpLiteral(expr.value)})`;
     case "var":
-      return `Ring1::var($data, ${JSON.stringify(expr.name)})`;
+      return `Ring1::var($data, ${phpString(expr.name)})`;
     case "eq":
     case "ne":
     case "lt":

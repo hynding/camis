@@ -179,6 +179,44 @@ export const vectors: Vector[] = [
     data: { rank: 5 },
     expect: { ok: true, value: true },
   },
+  // String literals and variable names reach the emitted PHP as source: PHP must read them back
+  // byte for byte, never interpolating $name or {$...} and never treating \n or \u as escapes.
+  {
+    name: "lit string with a dollar sign",
+    expr: lit("$draft"),
+    data: {},
+    expect: { ok: true, value: "$draft" },
+  },
+  {
+    name: "lit string with an interpolation",
+    expr: lit("{${strtoupper('x')}}"),
+    data: {},
+    expect: { ok: true, value: "{${strtoupper('x')}}" },
+  },
+  {
+    name: "lit string with quotes and backslashes",
+    expr: lit('it\'s \\n \\u00e9 "q" \\'),
+    data: {},
+    expect: { ok: true, value: 'it\'s \\n \\u00e9 "q" \\' },
+  },
+  {
+    name: "lit string with non-ASCII and a newline",
+    expr: lit("caf\u00e9\nnext"),
+    data: {},
+    expect: { ok: true, value: "caf\u00e9\nnext" },
+  },
+  {
+    name: "eq string with a dollar sign",
+    expr: { kind: "eq", left: v("status"), right: lit("$draft") },
+    data: { status: "$draft" },
+    expect: { ok: true, value: true },
+  },
+  {
+    name: "var name with a dollar sign",
+    expr: v("record.$x"),
+    data: { "record.$x": 4 },
+    expect: { ok: true, value: 4 },
+  },
   {
     name: "lit true",
     expr: lit(true),

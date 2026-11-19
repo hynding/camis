@@ -123,13 +123,13 @@ describe("emitPolicy — roles holding an action under different conditions", ()
             'record.status' => $record->status,
         ];
         if ($user->hasAnyRole(['author'])) {
-            $result = Ring1::eq(fn() => Ring1::var($data, "record.status"), fn() => Ring1::lit("draft"));
+            $result = Ring1::eq(fn() => Ring1::var($data, 'record.status'), fn() => Ring1::lit('draft'));
             if ($result['ok'] === true && $result['value'] === true) {
                 return true;
             }
         }
         if ($user->hasAnyRole(['reviewer'])) {
-            $result = Ring1::eq(fn() => Ring1::var($data, "record.status"), fn() => Ring1::lit("published"));
+            $result = Ring1::eq(fn() => Ring1::var($data, 'record.status'), fn() => Ring1::lit('published'));
             if ($result['ok'] === true && $result['value'] === true) {
                 return true;
             }

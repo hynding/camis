@@ -43,7 +43,7 @@ class ArticlePolicy
             'record.title' => $record->title,
             'record.status' => $record->status,
         ];
-        $result = Ring1::eq(fn() => Ring1::var($data, "record.status"), fn() => Ring1::lit("published"));
+        $result = Ring1::eq(fn() => Ring1::var($data, 'record.status'), fn() => Ring1::lit('published'));
         return $result['ok'] === true && $result['value'] === true;
     }
 
@@ -64,7 +64,7 @@ class ArticlePolicy
             'record.title' => $record->title,
             'record.status' => $record->status,
         ];
-        $result = Ring1::eq(fn() => Ring1::var($data, "record.status"), fn() => Ring1::lit("published"));
+        $result = Ring1::eq(fn() => Ring1::var($data, 'record.status'), fn() => Ring1::lit('published'));
         return $result['ok'] === true && $result['value'] === true;
     }
 }

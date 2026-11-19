@@ -27,7 +27,7 @@ describe("an admin role limited to the entries its accounts created", () => {
     expect(update).toContain(
       "'record.createdBy' => $user instanceof AdminUser ? $record->created_by_id : null,",
     );
-    expect(update).toContain('Ring1::var($data, "record.createdBy")');
+    expect(update).toContain("Ring1::var($data, 'record.createdBy')");
   });
 
   // The content API's users hold Story.read outright; the Author's condition is not theirs.
