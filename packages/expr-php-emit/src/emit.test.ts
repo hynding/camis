@@ -9,10 +9,16 @@ describe("emitPhp", () => {
       left: { kind: "var", name: "a" },
       right: { kind: "lit", value: 0 },
     };
-    expect(emitPhp(e)).toBe('Ring1::div(fn() => Ring1::var($data, "a"), fn() => Ring1::lit(0))');
+    expect(emitPhp(e)).toBe("Ring1::div(fn() => Ring1::var($data, 'a'), fn() => Ring1::lit(0))");
+  });
+  it("emits a string single-quoted, so PHP never interpolates it", () => {
+    expect(emitPhp({ kind: "lit", value: "{${x}} $y it's \\" })).toBe(
+      "Ring1::lit('{${x}} $y it\\'s \\\\')",
+    );
+    expect(emitPhp({ kind: "var", name: "record.$x" })).toBe("Ring1::var($data, 'record.$x')");
   });
   it("emits string, null, boolean literals", () => {
-    expect(emitPhp({ kind: "lit", value: "x" })).toBe('Ring1::lit("x")');
+    expect(emitPhp({ kind: "lit", value: "x" })).toBe("Ring1::lit('x')");
     expect(emitPhp({ kind: "lit", value: null })).toBe("Ring1::lit(null)");
     expect(emitPhp({ kind: "lit", value: true })).toBe("Ring1::lit(true)");
     expect(emitPhp({ kind: "lit", value: false })).toBe("Ring1::lit(false)");
@@ -51,6 +57,6 @@ describe("emitPhp", () => {
           { kind: "lit", value: 0 },
         ],
       }),
-    ).toBe('Ring1::coalesce(fn() => Ring1::var($data, "a"), fn() => Ring1::lit(0))');
+    ).toBe("Ring1::coalesce(fn() => Ring1::var($data, 'a'), fn() => Ring1::lit(0))");
   });
 });

@@ -34,7 +34,7 @@ class NotePolicy
             'record.occurredAt' => $record->occurred_at,
             'record.ownerId' => $record->ownerId,
         ];
-        $result = Ring1::eq(fn() => Ring1::var($data, "record.ownerId"), fn() => Ring1::var($data, "user.id"));
+        $result = Ring1::eq(fn() => Ring1::var($data, 'record.ownerId'), fn() => Ring1::var($data, 'user.id'));
         return $result['ok'] === true && $result['value'] === true;
     }
 
@@ -57,7 +57,7 @@ class NotePolicy
             'record.occurredAt' => $record->occurred_at,
             'record.ownerId' => $record->ownerId,
         ];
-        $result = Ring1::eq(fn() => Ring1::var($data, "record.ownerId"), fn() => Ring1::var($data, "user.id"));
+        $result = Ring1::eq(fn() => Ring1::var($data, 'record.ownerId'), fn() => Ring1::var($data, 'user.id'));
         return $result['ok'] === true && $result['value'] === true;
     }
 
@@ -80,7 +80,7 @@ class NotePolicy
             'record.occurredAt' => $record->occurred_at,
             'record.ownerId' => $record->ownerId,
         ];
-        $result = Ring1::eq(fn() => Ring1::var($data, "record.ownerId"), fn() => Ring1::var($data, "user.id"));
+        $result = Ring1::eq(fn() => Ring1::var($data, 'record.ownerId'), fn() => Ring1::var($data, 'user.id'));
         return $result['ok'] === true && $result['value'] === true;
     }
 }
