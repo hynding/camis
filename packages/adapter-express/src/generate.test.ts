@@ -465,25 +465,13 @@ describe("polymorphic relations", () => {
     roles: [],
   };
 
-  it("are reported, and leave no column behind", () => {
+  // morphs.test.ts covers the secured routes and the schema; without roles every link is read.
+  it("are served by the unsecured routes too, every caller reading every entry", () => {
     const result = expressAdapter.generate(polymorphic, { projectName: "library" });
-    expect(result.gaps.gaps).toEqual([
-      {
-        feature: "polymorphicRelation",
-        location: { contentType: "Note", field: "subjects" },
-        severity: "downgrade",
-        message: `field type "polymorphicRelation" is not supported by the Express target`,
-      },
-      {
-        feature: "polymorphicInverse",
-        location: { contentType: "Book", field: "remarks" },
-        severity: "downgrade",
-        message: `field type "polymorphicInverse" is not supported by the Express target`,
-      },
-    ]);
-    // The IR snapshot keeps every field; no table, route or admin page holds them.
-    for (const file of result.files.filter((f) => f.path !== "camis.schema.json")) {
-      expect(file.content).not.toMatch(/subjects|remarks/);
-    }
+    expect(result.gaps.gaps).toEqual([]);
+    const content = (path: string) => result.files.find((f) => f.path === path)!.content;
+    expect(content("src/routes/notes.ts")).toContain("const allowed: Allowed = () => true;");
+    expect(content("src/routes/notes.ts")).toContain('writeLinks("Note", row.id, body);');
+    expect(content("src/routes/books.ts")).toContain('readLinks("Book", row, allowed)');
   });
 });

@@ -2003,7 +2003,7 @@ Strapi's `morphToMany`/`morphToOne` link a document to documents of any type, an
   (`invalid_polymorphic_inverse`). Components cannot hold either: the import reports a gap.
 - **Strapi.** Imported from and written back to `morphTo*`/`morph{One,Many}` with `morphBy`.
   Express reports a capability gap; GraphQL leaves them out with a `polymorphicGraphql` gap
-  (served since Phase 91).
+  (both served since Phases 91 and 92).
 - **Filament (Strapi API style).** A morphToMany is stored in `<table>_<field>_mph` (owner id,
   `<field>_id`, `<field>_type`, `field`, `order`); a morphToOne in `<field>_id`/`<field>_type`
   columns. `StrapiMorphs` reads and writes them: a list or `set`/`connect`/`disconnect` of
@@ -2616,6 +2616,29 @@ a `polymorphicGraphql` gap.
 Exit: `graphql.test.ts`'s polymorphic cases; `morph-relations.test.ts` reports no gap; the
 morph-relations boot job (overlaid with GraphQL) reads a note's links over GraphQL, through a note's
 own populate and fetched for a linked note.
+
+---
+
+## Phase 92 — polymorphic relations on the Express target (`adapter-express`)
+
+Phase 64 left the Express target reporting each polymorphic field as unsupported.
+
+- **Storage.** A to-one link keeps `<key>_id` and `<key>_type` (the linked entry's content type
+  name) on its owner's row; a to-many keeps a table `<owner table>_<key>` of `<owner>_id`,
+  `target_id`, `target_type` and `position`.
+- **API.** Generated `src/morphs.ts` reads, checks and writes them. A body and a row carry a link
+  as `{ type, id }` under its key (a to-many as a list, kept in order, duplicates dropped); a
+  write naming a malformed link, an entry that is not there, or one the caller may not read (no
+  read grant, or a record condition hides it) is refused with 400; a read leaves out what the
+  caller may not read. An inverse reads as the ids of the readable entries whose link names this
+  one (a list, or one id or null), and is never written. A deleted entry takes its own to-many
+  links with it. No admin page shows them, as Strapi's Content Manager shows none.
+- **Fix found on the way.** The secured API's `permissions/enforce.ts` did not parse (a line
+  break before each `as` ended the statement), so no secured Express app booted;
+  `syntax.test.ts` now parses every emitted file.
+
+Exit: `morphs.test.ts` (schema, routes, goldens), `syntax.test.ts`, and the boot smoke's sqlite
+leg, which drives the links over HTTP (`scripts/morph-smoke.ts`).
 
 ---
 

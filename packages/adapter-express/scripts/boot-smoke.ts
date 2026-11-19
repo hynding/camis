@@ -13,6 +13,7 @@ import type { Dialect } from "../src/dialect";
 import { expressAdapterFor } from "../src/generate";
 import { aiFixture } from "../src/__fixtures__/ai";
 import { secured } from "../src/__fixtures__/secured";
+import { morphSmoke } from "./morph-smoke";
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -199,6 +200,9 @@ try {
       await rm(aiDir, { recursive: true, force: true });
     }
   }
+
+  // Polymorphic links: a third project, on the sqlite leg like the AI one.
+  if (dialect === "sqlite") await morphSmoke();
 
   console.log(`EXPRESS SECURED BOOT SMOKE PASS (${dialect})`);
 } finally {

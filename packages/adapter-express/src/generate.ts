@@ -27,6 +27,7 @@ import {
   ring1RuntimeFile,
   type NamedCondition,
 } from "./permissions/ring1";
+import { emitMorphsFile, morphLinks } from "./morphs";
 import { resolveRelations } from "./relations";
 import { emitRoutes } from "./routes";
 import { emitSchemaFile } from "./schema";
@@ -59,6 +60,7 @@ export const expressAdapterFor = (dialect: Dialect): GenerateAdapter => ({
   generate: (ir, options): GenerationResult => {
     const doc = normalize(ir.document);
     const rel = resolveRelations(doc, dialect);
+    const links = morphLinks(doc);
     const secured = ir.roles.length > 0;
     const gaps: CapabilityGap[] = [
       ...privateFieldGaps(doc, "the Express target"),
@@ -89,7 +91,8 @@ export const expressAdapterFor = (dialect: Dialect): GenerateAdapter => ({
         });
       }
       for (const f of ct.fields) {
-        if (f.type === "relation" || f.type === "component") continue;
+        if (["relation", "component", "polymorphicRelation", "polymorphicInverse"].includes(f.type))
+          continue;
         if (!isSupportedField(f.type)) {
           gaps.push({
             feature: f.type,
@@ -105,14 +108,20 @@ export const expressAdapterFor = (dialect: Dialect): GenerateAdapter => ({
       const fk = rel.fkColumns.get(ct.name) ?? [];
       files.push({
         path: `src/routes/${expressNames(ct).table}.ts`,
-        content: emitRoutes(ct, fkNames(fk), { secured, aiColumns: aiColumnsOf(ct) }),
+        content: emitRoutes(ct, fkNames(fk), {
+          secured,
+          aiColumns: aiColumnsOf(ct),
+          links: links.own.has(ct.name) ? "own" : links.inverses.has(ct.name) ? "inverse" : "none",
+        }),
       });
     });
 
     files.push({
       path: "src/db/schema.ts",
-      content: emitSchemaFile(doc.contentTypes, dialect, rel, expansions),
+      content: emitSchemaFile(doc.contentTypes, dialect, rel, expansions, links),
     });
+    if (links.own.size > 0)
+      files.push({ path: "src/morphs.ts", content: emitMorphsFile(doc, links) });
     files.push(camisSchemaFile(doc));
 
     if (hasAiField(doc)) files.push(...aiFiles(doc));

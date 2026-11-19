@@ -6,6 +6,8 @@ import { expressNames, snakeColumn } from "./names";
 export interface RouteOptions {
   secured?: boolean;
   aiColumns?: string[];
+  /** The type's polymorphic links (`src/morphs.ts`): its own, only inverses read, or none. */
+  links?: "own" | "inverse" | "none";
 }
 
 export const emitRoutes = (
@@ -27,6 +29,14 @@ export const emitRoutes = (
     .map((c) => `"${c}"`)
     .join(", ");
 
+  const links = options.links ?? "none";
+  const own = links === "own";
+  const linkKeys = ct.fields
+    .filter((f) => f.type === "polymorphicRelation")
+    .map((f) => `, "${snakeColumn(f.name)}"`)
+    .join("");
+  const writable = own ? `${cols}${linkKeys}` : cols;
+
   const hasAi = aiSet.size > 0;
   const asyncKw = hasAi ? "async " : "";
   const dataDecl = hasAi ? "let" : "const";
@@ -38,22 +48,40 @@ export const emitRoutes = (
     ? `\n  data = await populateAiFields("${typeName}", data, "update");`
     : "";
 
+  const linkNames =
+    links === "none"
+      ? []
+      : own
+        ? ["checkLinks", "dropLinks", "linkColumns", "readLinks", "writeLinks", "type Allowed"]
+        : ["readLinks", "type Allowed"];
+  const linksImport =
+    links === "none" ? "" : `\nimport { ${linkNames.join(", ")} } from "../morphs";`;
+  // A body naming an entry the caller may not read (or that is not there) is refused whole.
+  const refusal = (body: string, allowed: string) => `
+  const refused = checkLinks("${typeName}", ${body}, ${allowed});
+  if (refused !== null) {
+    res.status(400).json({ error: refused });
+    return;
+  }`;
+  const shown = (row: string) =>
+    links === "none" ? `filterRead(req, "${typeName}", ${row})` : `view(req, ${row})`;
+
   if (!options.secured) {
     return withMarker(`import { Router } from "express";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client";
-import { ${t} } from "../db/schema";${aiImport}
+import { ${t} } from "../db/schema";${aiImport}${linksImport}
 
 function pick(obj: Record<string, unknown>, keys: string[]): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const k of keys) if (k in obj) out[k] = obj[k];
   return out;
 }
-
+${links === "none" ? "" : `\n// Without grants every caller reads every entry a link names.\nconst allowed: Allowed = () => true;\n`}
 export const ${t}Router = Router();
 
 ${t}Router.get("/", (_req, res) => {
-  res.json(db.select().from(${t}).all());
+  res.json(db.select().from(${t}).all()${links === "none" ? "" : `.map((row) => readLinks("${typeName}", row, allowed))`});
 });
 
 ${t}Router.get("/:id", (req, res) => {
@@ -62,44 +90,82 @@ ${t}Router.get("/:id", (req, res) => {
     res.status(404).json({ error: "not found" });
     return;
   }
-  res.json(row);
+  res.json(${links === "none" ? "row" : `readLinks("${typeName}", row, allowed)`});
 });
 
-${t}Router.post("/", ${asyncKw}(req, res) => {
+${t}Router.post("/", ${asyncKw}(req, res) => {${
+      own
+        ? `
+  const body = pick(req.body, [${writable}]);${refusal("body", "allowed")}
+  ${dataDecl} data = linkColumns("${typeName}", body);${createPop}
+  const row = db.insert(${t}).values(data).returning().get();
+  writeLinks("${typeName}", row.id, body);
+  res.status(201).json(readLinks("${typeName}", row, allowed));`
+        : `
   ${dataDecl} data = pick(req.body, [${cols}]);${createPop}
   const row = db.insert(${t}).values(data).returning().get();
-  res.status(201).json(row);
+  res.status(201).json(${links === "none" ? "row" : `readLinks("${typeName}", row, allowed)`});`
+    }
 });
 
-${t}Router.patch("/:id", ${asyncKw}(req, res) => {
+${t}Router.patch("/:id", ${asyncKw}(req, res) => {${
+      own
+        ? `
+  const body = pick(req.body, [${writable}]);${refusal("body", "allowed")}
+  ${dataDecl} data = linkColumns("${typeName}", body);${updatePop}
+  const row =
+    Object.keys(data).length > 0
+      ? db.update(${t}).set(data).where(eq(${t}.id, Number(req.params.id))).returning().get()
+      : db.select().from(${t}).where(eq(${t}.id, Number(req.params.id))).get();
+  if (!row) {
+    res.status(404).json({ error: "not found" });
+    return;
+  }
+  writeLinks("${typeName}", row.id, body);
+  res.json(readLinks("${typeName}", row, allowed));`
+        : `
   ${dataDecl} data = pick(req.body, [${cols}]);${updatePop}
   const row = db.update(${t}).set(data).where(eq(${t}.id, Number(req.params.id))).returning().get();
   if (!row) {
     res.status(404).json({ error: "not found" });
     return;
   }
-  res.json(row);
+  res.json(${links === "none" ? "row" : `readLinks("${typeName}", row, allowed)`});`
+    }
 });
 
-${t}Router.delete("/:id", (req, res) => {
+${t}Router.delete("/:id", (req, res) => {${own ? `\n  dropLinks("${typeName}", Number(req.params.id));` : ""}
   db.delete(${t}).where(eq(${t}.id, Number(req.params.id))).run();
   res.status(204).end();
 });
 `);
   }
 
-  return withMarker(`import { Router } from "express";
+  return withMarker(`import { Router${links === "none" ? "" : ", type Request"} } from "express";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { ${t} } from "../db/schema";
-import { authorizeAction, recordAllowed, filterRead, stripWrites, roleOf } from "../permissions/enforce";${aiImport}
+import { authorizeAction, recordAllowed, filterRead, stripWrites, roleOf } from "../permissions/enforce";${aiImport}${linksImport}
 
 function pick(obj: Record<string, unknown>, keys: string[]): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const k of keys) if (k in obj) out[k] = obj[k];
   return out;
 }
+${
+  links === "none"
+    ? ""
+    : `
+// A link names an entry the caller may read: its type's read grant, and its record condition.
+const allowed =
+  (req: Request): Allowed =>
+  (type, row) =>
+    authorizeAction(roleOf(req), type, "read") && recordAllowed(req, type, row);
 
+const view = (req: Request, row: Record<string, unknown>) =>
+  filterRead(req, "${typeName}", readLinks("${typeName}", row, allowed(req)));
+`
+}
 export const ${t}Router = Router();
 
 ${t}Router.get("/", (req, res) => {
@@ -113,7 +179,7 @@ ${t}Router.get("/", (req, res) => {
   all.sort((a, b) => (a[sort as keyof typeof a] > b[sort as keyof typeof b] ? order : -order));
   const start = Number(req.query._start ?? 0);
   const end = Number(req.query._end ?? all.length);
-  const page = all.slice(start, end).map((row) => filterRead(req, "${typeName}", row));
+  const page = all.slice(start, end).map((row) => ${shown("row")});
   res.setHeader("Content-Range", \`${t} \${start}-\${Math.max(start, end - 1)}/\${all.length}\`);
   res.json(page);
 });
@@ -128,7 +194,7 @@ ${t}Router.get("/:id", (req, res) => {
     res.status(404).json({ error: "not found" });
     return;
   }
-  res.json(filterRead(req, "${typeName}", row));
+  res.json(${shown("row")});
 });
 
 ${t}Router.post("/", ${asyncKw}(req, res) => {
@@ -136,10 +202,18 @@ ${t}Router.post("/", ${asyncKw}(req, res) => {
     res.status(403).json({ error: "forbidden" });
     return;
   }
-  const proposed = pick(req.body, [${cols}]);
-  ${dataDecl} data = stripWrites(req, "${typeName}", proposed, proposed);${createPop}
+  const proposed = pick(req.body, [${writable}]);${
+    own
+      ? `
+  const permitted = stripWrites(req, "${typeName}", proposed, proposed);${refusal("permitted", "allowed(req)")}
+  ${dataDecl} data = linkColumns("${typeName}", permitted);${createPop}
   const row = db.insert(${t}).values(data).returning().get();
-  res.status(201).json(filterRead(req, "${typeName}", row));
+  writeLinks("${typeName}", row.id, permitted);`
+      : `
+  ${dataDecl} data = stripWrites(req, "${typeName}", proposed, proposed);${createPop}
+  const row = db.insert(${t}).values(data).returning().get();`
+  }
+  res.status(201).json(${shown("row")});
 });
 
 ${t}Router.patch("/:id", ${asyncKw}(req, res) => {
@@ -152,10 +226,21 @@ ${t}Router.patch("/:id", ${asyncKw}(req, res) => {
     res.status(404).json({ error: "not found" });
     return;
   }
-  const incoming = pick(req.body, [${cols}]);
+  const incoming = pick(req.body, [${writable}]);${
+    own
+      ? `
+  const permitted = stripWrites(req, "${typeName}", { ...existing, ...incoming }, incoming);${refusal("permitted", "allowed(req)")}
+  ${dataDecl} data = linkColumns("${typeName}", permitted);${updatePop}
+  const row =
+    Object.keys(data).length > 0
+      ? db.update(${t}).set(data).where(eq(${t}.id, Number(req.params.id))).returning().get()
+      : existing;
+  writeLinks("${typeName}", row.id, permitted);`
+      : `
   ${dataDecl} data = stripWrites(req, "${typeName}", { ...existing, ...incoming }, incoming);${updatePop}
-  const row = db.update(${t}).set(data).where(eq(${t}.id, Number(req.params.id))).returning().get();
-  res.json(filterRead(req, "${typeName}", row));
+  const row = db.update(${t}).set(data).where(eq(${t}.id, Number(req.params.id))).returning().get();`
+  }
+  res.json(${shown("row")});
 });
 
 ${t}Router.delete("/:id", (req, res) => {
@@ -168,7 +253,7 @@ ${t}Router.delete("/:id", (req, res) => {
     res.status(404).json({ error: "not found" });
     return;
   }
-  db.delete(${t}).where(eq(${t}.id, Number(req.params.id))).run();
+${own ? `  dropLinks("${typeName}", Number(req.params.id));\n` : ""}  db.delete(${t}).where(eq(${t}.id, Number(req.params.id))).run();
   res.json({ id: Number(req.params.id) });
 });
 `);
