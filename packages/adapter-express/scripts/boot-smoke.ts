@@ -95,6 +95,10 @@ try {
   });
   if (anon.status !== 403) fail(`anonymous create expected 403, got ${anon.status}`);
 
+  // denied: a token that does not verify is refused, not served as a guest → 401
+  const forged = await fetch(`${root}/articles`, { headers: bearer("not-a-token") });
+  if (forged.status !== 401) fail(`forged token expected 401, got ${forged.status}`);
+
   // record condition: a draft Article is invisible (404) to the Viewer (condition status==published)
   const draft = await fetch(`${root}/articles`, {
     method: "POST",

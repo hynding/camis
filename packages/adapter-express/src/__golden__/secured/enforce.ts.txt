@@ -35,12 +35,17 @@ const GRANTS = {
 } as Record<string, Record<string, string[]>>;
 const COND_KEY = {
   "public": {
-    "Article": "c__public__Article__record"
+    "Article": {
+      "read": "c__public__Article__read"
+    }
   },
   "Viewer": {
-    "Article": "c__Viewer__Article__record"
+    "Article": {
+      "read": "c__Viewer__Article__read"
+    }
   }
-} as Record<string, Record<string, string>>;
+} as Record<string, Record<string, Record<string, string>>>;
+const ASSIGNS = {} as Record<string, Record<string, string[]>>;
 const FIELD_RULES = {
   "Editor": {
     "Article": [
@@ -72,8 +77,8 @@ const COLUMN_TO_FIELD = {
   }
 } as Record<string, Record<string, string>>;
 const REGISTRY: Record<string, (data: Record<string, Value>) => EvalResult> = {
-  c__Viewer__Article__record: C.c__Viewer__Article__record,
-  c__public__Article__record: C.c__public__Article__record,
+  c__Viewer__Article__read: C.c__Viewer__Article__read,
+  c__public__Article__read: C.c__public__Article__read,
   f__Viewer__Article__secretNotes__read: C.f__Viewer__Article__secretNotes__read,
 };
 
@@ -102,12 +107,14 @@ const flattenRecord = (ct: string, row: Record<string, unknown>): Record<string,
 export const authorizeAction = (role: string, ct: string, action: string): boolean =>
   (GRANTS[role]?.[ct] ?? []).includes(action);
 
+// An action's record condition; an action the role holds outright has none.
 export const recordAllowed = (
   req: Request,
   ct: string,
+  action: string,
   row: Record<string, unknown>,
 ): boolean => {
-  const key = COND_KEY[roleOf(req)]?.[ct];
+  const key = COND_KEY[roleOf(req)]?.[ct]?.[action];
   if (!key) return true;
   const fn = REGISTRY[key];
   if (!fn) return false;
@@ -124,6 +131,40 @@ const fieldVisible = (
   const fn = REGISTRY[rule.key];
   if (!fn) return false;
   return allow(fn({ ...flattenUser(req), ...flattenRecord(ct, row) }));
+};
+
+// A grant's assign: on create the owning columns are the signed-in user, whatever the body says.
+export const assignOwners = (
+  req: Request,
+  ct: string,
+  data: Record<string, unknown>,
+): Record<string, unknown> => {
+  const out = { ...data };
+  for (const column of ASSIGNS[roleOf(req)]?.[ct] ?? []) out[column] = req.camisUser?.id ?? null;
+  return out;
+};
+
+// ...and no update moves them.
+export const keepOwners = (
+  req: Request,
+  ct: string,
+  body: Record<string, unknown>,
+): Record<string, unknown> => {
+  const out = { ...body };
+  for (const column of ASSIGNS[roleOf(req)]?.[ct] ?? []) delete out[column];
+  return out;
+};
+
+// A list is ordered by id or by a column the role reads on every row: ordering by a field a read
+// rule hides on some rows would reveal it through the order.
+export const sortColumn = (req: Request, ct: string, requested: unknown): string => {
+  if (typeof requested !== "string") return "id";
+  const field = COLUMN_TO_FIELD[ct]?.[requested];
+  if (field === undefined) return "id";
+  const hidden = (FIELD_RULES[roleOf(req)]?.[ct] ?? []).some(
+    (r) => r.access === "read" && r.field === field && r.key !== undefined,
+  );
+  return hidden ? "id" : requested;
 };
 
 export const filterRead = (

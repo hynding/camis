@@ -3,7 +3,16 @@ import { Router } from "express";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { articles } from "../db/schema";
-import { authorizeAction, recordAllowed, filterRead, stripWrites, roleOf } from "../permissions/enforce";
+import {
+  assignOwners,
+  authorizeAction,
+  filterRead,
+  keepOwners,
+  recordAllowed,
+  roleOf,
+  sortColumn,
+  stripWrites,
+} from "../permissions/enforce";
 
 function pick(obj: Record<string, unknown>, keys: string[]): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -18,8 +27,8 @@ articlesRouter.get("/", (req, res) => {
     res.status(403).json({ error: "forbidden" });
     return;
   }
-  const all = db.select().from(articles).all().filter((row) => recordAllowed(req, "Article", row));
-  const sort = String(req.query._sort ?? "id");
+  const all = db.select().from(articles).all().filter((row) => recordAllowed(req, "Article", "read", row));
+  const sort = sortColumn(req, "Article", req.query._sort);
   const order = String(req.query._order ?? "ASC").toUpperCase() === "DESC" ? -1 : 1;
   all.sort((a, b) => (a[sort as keyof typeof a] > b[sort as keyof typeof b] ? order : -order));
   const start = Number(req.query._start ?? 0);
@@ -35,7 +44,7 @@ articlesRouter.get("/:id", (req, res) => {
     return;
   }
   const row = db.select().from(articles).where(eq(articles.id, Number(req.params.id))).get();
-  if (!row || !recordAllowed(req, "Article", row)) {
+  if (!row || !recordAllowed(req, "Article", "read", row)) {
     res.status(404).json({ error: "not found" });
     return;
   }
@@ -48,7 +57,11 @@ articlesRouter.post("/", (req, res) => {
     return;
   }
   const proposed = pick(req.body, ["title", "status", "secret_notes", "author_id"]);
-  const data = stripWrites(req, "Article", proposed, proposed);
+  const data = assignOwners(req, "Article", stripWrites(req, "Article", proposed, proposed));
+  if (!recordAllowed(req, "Article", "create", data)) {
+    res.status(403).json({ error: "forbidden" });
+    return;
+  }
   const row = db.insert(articles).values(data).returning().get();
   res.status(201).json(filterRead(req, "Article", row));
 });
@@ -59,12 +72,16 @@ articlesRouter.patch("/:id", (req, res) => {
     return;
   }
   const existing = db.select().from(articles).where(eq(articles.id, Number(req.params.id))).get();
-  if (!existing || !recordAllowed(req, "Article", existing)) {
+  if (!existing || !recordAllowed(req, "Article", "update", existing)) {
     res.status(404).json({ error: "not found" });
     return;
   }
-  const incoming = pick(req.body, ["title", "status", "secret_notes", "author_id"]);
+  const incoming = keepOwners(req, "Article", pick(req.body, ["title", "status", "secret_notes", "author_id"]));
   const data = stripWrites(req, "Article", { ...existing, ...incoming }, incoming);
+  if (!recordAllowed(req, "Article", "update", { ...existing, ...data })) {
+    res.status(403).json({ error: "forbidden" });
+    return;
+  }
   const row = db.update(articles).set(data).where(eq(articles.id, Number(req.params.id))).returning().get();
   res.json(filterRead(req, "Article", row));
 });
@@ -75,7 +92,7 @@ articlesRouter.delete("/:id", (req, res) => {
     return;
   }
   const existing = db.select().from(articles).where(eq(articles.id, Number(req.params.id))).get();
-  if (!existing || !recordAllowed(req, "Article", existing)) {
+  if (!existing || !recordAllowed(req, "Article", "delete", existing)) {
     res.status(404).json({ error: "not found" });
     return;
   }

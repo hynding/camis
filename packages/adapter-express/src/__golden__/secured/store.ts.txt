@@ -11,7 +11,12 @@ const USERS: (CamisUser & { password: string })[] = [
   { id: 3, role: "public", email: "public@example.com", password: "dev" },
 ];
 
-export const jwtSecret = "dev-secret-change-me";
+// Never a fixed secret in production: anyone holding it signs tokens for any role.
+const configured = process.env.CAMIS_JWT_SECRET;
+if (!configured && process.env.NODE_ENV === "production") {
+  throw new Error("CAMIS_JWT_SECRET must be set in production (and replace the dev users in src/auth/store.ts)");
+}
+export const jwtSecret = configured || "dev-secret-change-me";
 
 export const verifyCredentials = (email: string, password: string): CamisUser | null => {
   const u = USERS.find((x) => x.email === email && x.password === password);

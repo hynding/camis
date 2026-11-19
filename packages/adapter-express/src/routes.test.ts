@@ -37,7 +37,7 @@ describe("emitRoutes", () => {
   it("secured routes import guards, gate actions, filter reads, and return {id} on delete", () => {
     const ts = emitRoutes(article, [], { secured: true });
     expect(ts).toContain(
-      'import { authorizeAction, recordAllowed, filterRead, stripWrites, roleOf } from "../permissions/enforce";',
+      '  recordAllowed,\n  roleOf,\n  sortColumn,\n  stripWrites,\n} from "../permissions/enforce";',
     );
     expect(ts).toContain('authorizeAction(roleOf(req), "Article", "read")');
     expect(ts).toContain("filterRead(req,");

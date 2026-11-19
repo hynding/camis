@@ -25,13 +25,15 @@ const columnToField = (doc: IrDocument): Record<string, Record<string, string>> 
 };
 
 export const emitEnforce = (perms: ExpressPermissions, doc: IrDocument): string => {
-  const condKeys: Record<string, Record<string, string>> = {};
+  const condKeys: Record<string, Record<string, Record<string, string>>> = {};
   const registryEntries: string[] = [];
   for (const [role, byCt] of Object.entries(perms.conditions)) {
-    for (const ct of Object.keys(byCt)) {
-      const key = conditionKey(role, ct, "record");
-      (condKeys[role] ??= {})[ct] = key;
-      registryEntries.push(`  ${key}: C.${key},`);
+    for (const [ct, byAction] of Object.entries(byCt)) {
+      for (const action of Object.keys(byAction)) {
+        const key = conditionKey(role, ct, action);
+        ((condKeys[role] ??= {})[ct] ??= {})[action] = key;
+        registryEntries.push(`  ${key}: C.${key},`);
+      }
     }
   }
   const fieldRuleKeys: Record<
@@ -51,7 +53,8 @@ export const emitEnforce = (perms: ExpressPermissions, doc: IrDocument): string 
   }
 
   const data = `const GRANTS = ${stableJson(perms.grants).trimEnd()} as Record<string, Record<string, string[]>>;
-const COND_KEY = ${stableJson(condKeys).trimEnd()} as Record<string, Record<string, string>>;
+const COND_KEY = ${stableJson(condKeys).trimEnd()} as Record<string, Record<string, Record<string, string>>>;
+const ASSIGNS = ${stableJson(perms.assigns).trimEnd()} as Record<string, Record<string, string[]>>;
 const FIELD_RULES = ${stableJson(fieldRuleKeys).trimEnd()} as Record<string, Record<string, { field: string; access: string; key?: string }[]>>;
 const COLUMN_TO_FIELD = ${stableJson(columnToField(doc)).trimEnd()} as Record<string, Record<string, string>>;
 const REGISTRY: Record<string, (data: Record<string, Value>) => EvalResult> = {
@@ -89,12 +92,14 @@ const flattenRecord = (ct: string, row: Record<string, unknown>): Record<string,
 export const authorizeAction = (role: string, ct: string, action: string): boolean =>
   (GRANTS[role]?.[ct] ?? []).includes(action);
 
+// An action's record condition; an action the role holds outright has none.
 export const recordAllowed = (
   req: Request,
   ct: string,
+  action: string,
   row: Record<string, unknown>,
 ): boolean => {
-  const key = COND_KEY[roleOf(req)]?.[ct];
+  const key = COND_KEY[roleOf(req)]?.[ct]?.[action];
   if (!key) return true;
   const fn = REGISTRY[key];
   if (!fn) return false;
@@ -111,6 +116,40 @@ const fieldVisible = (
   const fn = REGISTRY[rule.key];
   if (!fn) return false;
   return allow(fn({ ...flattenUser(req), ...flattenRecord(ct, row) }));
+};
+
+// A grant's assign: on create the owning columns are the signed-in user, whatever the body says.
+export const assignOwners = (
+  req: Request,
+  ct: string,
+  data: Record<string, unknown>,
+): Record<string, unknown> => {
+  const out = { ...data };
+  for (const column of ASSIGNS[roleOf(req)]?.[ct] ?? []) out[column] = req.camisUser?.id ?? null;
+  return out;
+};
+
+// ...and no update moves them.
+export const keepOwners = (
+  req: Request,
+  ct: string,
+  body: Record<string, unknown>,
+): Record<string, unknown> => {
+  const out = { ...body };
+  for (const column of ASSIGNS[roleOf(req)]?.[ct] ?? []) delete out[column];
+  return out;
+};
+
+// A list is ordered by id or by a column the role reads on every row: ordering by a field a read
+// rule hides on some rows would reveal it through the order.
+export const sortColumn = (req: Request, ct: string, requested: unknown): string => {
+  if (typeof requested !== "string") return "id";
+  const field = COLUMN_TO_FIELD[ct]?.[requested];
+  if (field === undefined) return "id";
+  const hidden = (FIELD_RULES[roleOf(req)]?.[ct] ?? []).some(
+    (r) => r.access === "read" && r.field === field && r.key !== undefined,
+  );
+  return hidden ? "id" : requested;
 };
 
 export const filterRead = (
