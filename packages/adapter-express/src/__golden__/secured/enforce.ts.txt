@@ -32,8 +32,7 @@ const GRANTS = {
       "read"
     ]
   }
-}
- as Record<string, Record<string, string[]>>;
+} as Record<string, Record<string, string[]>>;
 const COND_KEY = {
   "public": {
     "Article": "c__public__Article__record"
@@ -41,8 +40,7 @@ const COND_KEY = {
   "Viewer": {
     "Article": "c__Viewer__Article__record"
   }
-}
- as Record<string, Record<string, string>>;
+} as Record<string, Record<string, string>>;
 const FIELD_RULES = {
   "Editor": {
     "Article": [
@@ -61,8 +59,7 @@ const FIELD_RULES = {
       }
     ]
   }
-}
- as Record<string, Record<string, { field: string; access: string; key?: string }[]>>;
+} as Record<string, Record<string, { field: string; access: string; key?: string }[]>>;
 const COLUMN_TO_FIELD = {
   "Article": {
     "title": "title",
@@ -73,8 +70,7 @@ const COLUMN_TO_FIELD = {
   "Author": {
     "name": "name"
   }
-}
- as Record<string, Record<string, string>>;
+} as Record<string, Record<string, string>>;
 const REGISTRY: Record<string, (data: Record<string, Value>) => EvalResult> = {
   c__Viewer__Article__record: C.c__Viewer__Article__record,
   c__public__Article__record: C.c__public__Article__record,

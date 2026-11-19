@@ -3,6 +3,7 @@ import type { ContentType, Field } from "@camis/ir-schema";
 import { DIALECTS, type Dialect } from "./dialect";
 import { column, isSupportedField } from "./fields";
 import { expressNames, snakeColumn } from "./names";
+import { linkColumns, linkTable, type MorphLinks } from "./morphs";
 import type { ResolvedRelations } from "./relations";
 
 const snakePath = (path: string[]): string => path.map(snakeColumn).join("_");
@@ -18,6 +19,7 @@ export const emitSchemaFile = (
   dialect: Dialect,
   rel: ResolvedRelations,
   expansions: ReadonlyMap<string, ExpandedContentType> = new Map(),
+  links: MorphLinks = { own: new Map(), inverses: new Map() },
 ): string => {
   const spec = DIALECTS[dialect];
   const fkImport = dialect === "mysql" ? "int" : "integer";
@@ -44,7 +46,11 @@ export const emitSchemaFile = (
     const fk = rel.fkColumns.get(ct.name) ?? [];
     if (fk.length > 0) importNames.add(fkImport);
     const colLines = cols.map((c) => `  ${c.column}: ${c.drizzle},`).join("\n");
-    const body = [colLines, fk.join("\n")].filter((s) => s.length > 0).join("\n");
+    const morphColumns = linkColumns(dialect, links.own.get(ct.name) ?? []);
+    morphColumns.forEach((c) => importNames.add(c.import));
+    const body = [colLines, fk.join("\n"), morphColumns.map((c) => c.line).join("\n")]
+      .filter((s) => s.length > 0)
+      .join("\n");
     blocks.push(`export const ${n.table} = ${spec.tableFn}("${n.table}", {
   ${spec.idColumn},
 ${body}
@@ -90,6 +96,14 @@ ${relBlocks.join("\n")}
     blocks.push(`export const ${name} = ${spec.tableFn}("${name}", {
 ${lines.join("\n")}
 });`);
+  }
+
+  for (const ct of cts) {
+    for (const link of (links.own.get(ct.name) ?? []).filter((l) => l.many)) {
+      const emitted = linkTable(dialect, link, expressNames(ct).table, spec.tableFn, spec.idColumn);
+      emitted.imports.forEach((i) => importNames.add(i));
+      blocks.push(emitted.block);
+    }
   }
 
   const imports = [...importNames].sort().join(", ");

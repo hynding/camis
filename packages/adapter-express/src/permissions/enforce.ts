@@ -50,10 +50,10 @@ export const emitEnforce = (perms: ExpressPermissions, doc: IrDocument): string 
     }
   }
 
-  const data = `const GRANTS = ${stableJson(perms.grants)} as Record<string, Record<string, string[]>>;
-const COND_KEY = ${stableJson(condKeys)} as Record<string, Record<string, string>>;
-const FIELD_RULES = ${stableJson(fieldRuleKeys)} as Record<string, Record<string, { field: string; access: string; key?: string }[]>>;
-const COLUMN_TO_FIELD = ${stableJson(columnToField(doc))} as Record<string, Record<string, string>>;
+  const data = `const GRANTS = ${stableJson(perms.grants).trimEnd()} as Record<string, Record<string, string[]>>;
+const COND_KEY = ${stableJson(condKeys).trimEnd()} as Record<string, Record<string, string>>;
+const FIELD_RULES = ${stableJson(fieldRuleKeys).trimEnd()} as Record<string, Record<string, { field: string; access: string; key?: string }[]>>;
+const COLUMN_TO_FIELD = ${stableJson(columnToField(doc)).trimEnd()} as Record<string, Record<string, string>>;
 const REGISTRY: Record<string, (data: Record<string, Value>) => EvalResult> = {
 ${registryEntries.sort().join("\n")}
 };`;
