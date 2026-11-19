@@ -309,6 +309,7 @@
     "status": 200,
     "data": {
       "login": {
+        "jwt": "<jwt>",
         "user": {
           "username": "ann"
         }
