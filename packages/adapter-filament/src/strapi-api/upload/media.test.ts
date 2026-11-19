@@ -350,4 +350,54 @@ describe("upload security", () => {
     expect(execFileSync("php", ["-l", file], { encoding: "utf8" })).toContain("No syntax errors");
     rmSync(dir, { recursive: true, force: true });
   });
+  // Uploads are kept in public/uploads under their own extension, where the web server would run
+  // a PHP file as a script: such a file is refused whatever the type lists say, or with none set.
+  it.skipIf(!hasPhp())("refuses a file the web server would run, with no type lists set", () => {
+    const dir = mkdtempSync(join(tmpdir(), "camis-mime-"));
+    writeFileSync(join(dir, "StrapiMimeTypes.php"), content("app/Support/StrapiMimeTypes.php"));
+    writeFileSync(
+      join(dir, "run.php"),
+      `<?php
+namespace Illuminate\\Http {
+    class UploadedFile
+    {
+        public function __construct(private string $name) {}
+        public function getClientOriginalName(): string { return $this->name; }
+        public function getClientMimeType(): string { return 'application/octet-stream'; }
+        public function getRealPath(): string|false { return false; }
+        public function getMimeType(): ?string { return null; }
+    }
+}
+namespace Symfony\\Component\\Mime {
+    class MimeTypes
+    {
+        public static function getDefault(): self { return new self(); }
+        public function getMimeTypes(string $extension): array { return []; }
+    }
+}
+namespace {
+    function config(string $key, mixed $default = null): mixed { return $default; }
+    require __DIR__.'/StrapiMimeTypes.php';
+    $names = ['shell.php', 'SHELL.PHP', 'x.phtml', 'x.phar', 'x.php7', 'x.pht', 'x.phps', 'x.shtml', 'photo.jpg', 'notes.txt', 'report.php.pdf', 'README'];
+    $out = [];
+    foreach ($names as $name) {
+        $out[$name] = App\\Support\\StrapiMimeTypes::rejection(new Illuminate\\Http\\UploadedFile($name));
+    }
+    echo json_encode($out);
+}
+`,
+    );
+    const answers = JSON.parse(
+      execFileSync("php", [join(dir, "run.php")], { encoding: "utf8" }),
+    ) as Record<string, string | null>;
+    rmSync(dir, { recursive: true, force: true });
+    for (const name of ["shell.php", "x.phtml", "x.phar", "x.php7", "x.pht", "x.phps", "x.shtml"]) {
+      const extension = name.slice(name.lastIndexOf(".")).toLowerCase();
+      expect(answers[name], name).toBe(`File extension '${extension}' is not allowed`);
+    }
+    expect(answers["SHELL.PHP"]).toBe("File extension '.php' is not allowed");
+    for (const name of ["photo.jpg", "notes.txt", "report.php.pdf", "README"]) {
+      expect(answers[name], name).toBeNull();
+    }
+  });
 });

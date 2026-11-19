@@ -1096,6 +1096,12 @@ final class StrapiImport
                 continue;
             }
             $name = basename($path);
+            // The disk is public/uploads by default: a file the web server would run never lands there.
+            if (StrapiMimeTypes::executable($name) !== null) {
+                $this->skipped["asset {$name}"] = 'a file the web server would run as a script is not stored';
+
+                continue;
+            }
             $disk->put($name, $bytes);
             $kept[$name] = true;
             $this->counts['assets'] = ($this->counts['assets'] ?? 0) + 1;
