@@ -209,7 +209,7 @@ final class StrapiGraphql
         if (isset($type['relations'][$key])) {
             return self::related($source, $parent, $key, $key !== $name, $args, $request, $info);
         }
-        if (isset(StrapiGraphqlTypes::LINKS[$parent][$name])) {
+        if (isset(self::links($parent)[$name])) {
             return self::linked($source, $parent, $name, $request);
         }
         if ($type['components'][$name]['repeatable'] ?? false) {
@@ -365,6 +365,20 @@ final class StrapiGraphql
     }
 
     /**
+     * A type's polymorphic links, each key → whether it holds many (none for most projects, whose
+     * LINKS is empty).
+     *
+     * @return array<string, bool>
+     */
+    private static function links(string $type): array
+    {
+        /** @var array<string, array<string, bool>> $links */
+        $links = StrapiGraphqlTypes::LINKS;
+
+        return $links[$type] ?? [];
+    }
+
+    /**
      * A polymorphic link's entries as the REST populate reads them (each with its __type, a type the
      * caller may not read left out), from the row's own populate or fetched for the row. Strapi's
      * resolver answers these with an internal error; a GenericMorph member is resolved by __type.
@@ -374,7 +388,7 @@ final class StrapiGraphql
         $type = StrapiGraphqlTypes::TYPES[$parent];
         $value = array_key_exists($key, $source) ? $source[$key] : (self::shown($source, $type, [$key => true], $request)[$key] ?? null);
         $known = fn (mixed $entry): bool => is_array($entry) && isset(StrapiGraphqlTypes::MORPHS[$entry['__type'] ?? '']);
-        if (! StrapiGraphqlTypes::LINKS[$parent][$key]) {
+        if (! (self::links($parent)[$key] ?? false)) {
             return $known($value) ? $value : null;
         }
 
@@ -416,7 +430,7 @@ final class StrapiGraphql
                     $populate[$key]['populate'] = array_replace_recursive($populate[$key]['populate'] ?? [], $inner);
                     $claims['children'][$key] = array_replace_recursive($claims['children'][$key], $innerClaims);
                 }
-            } elseif (isset(StrapiGraphqlTypes::LINKS[$typeName][$name])) {
+            } elseif (isset(self::links($typeName)[$name])) {
                 $populate[$name] = true;
             } elseif (isset($meta['components'][$name])) {
                 $populate[$name] = ['populate' => self::inside($meta['components'][$name]['type'], [$field], $info)];
