@@ -325,7 +325,10 @@ ${models}
         }
     }
 
-    /** Its own route's type is the one the token was checked for; another type needs that type's find. */
+    /**
+     * Its own route's type is the one the token was checked for; another type needs that type's
+     * find. A full-access token passes every check, as Strapi's does (a hand-written route included).
+     */
     private static function decide(string $ability, mixed $subject): ?bool
     {
         [$token, $own] = request()->attributes->get(self::ATTRIBUTE) ?? [null, null];
@@ -333,7 +336,7 @@ ${models}
         if ($token === null || $uid === null) {
             return null;
         }
-        if ($uid === $own) {
+        if ($uid === $own || $token->type === 'full-access') {
             return true;
         }
 

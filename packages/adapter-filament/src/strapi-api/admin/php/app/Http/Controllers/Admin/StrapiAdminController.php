@@ -10,6 +10,7 @@ use App\Support\StrapiError;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
@@ -65,7 +66,9 @@ final class StrapiAdminController
         if ($role === null || Role::query()->where('name', $role)->doesntExist()) {
             throw new StrapiError(400, 'ApplicationError', "Cannot register the first admin because the super admin role doesn't exist.");
         }
-        $admin = DB::transaction(function () use ($input, $role): AdminUser {
+        // An exists() under lockForUpdate locks no row while the table is empty: the cache lock
+        // lets one registration through at a time, so a second finds the first admin.
+        $admin = Cache::lock('strapi-register-admin', 10)->block(5, fn (): AdminUser => DB::transaction(function () use ($input, $role): AdminUser {
             if (AdminUser::query()->lockForUpdate()->exists()) {
                 throw new StrapiError(400, 'ApplicationError', 'You cannot register a new super admin');
             }
@@ -74,7 +77,7 @@ final class StrapiAdminController
             $admin->assignRole($role);
 
             return $admin;
-        });
+        }));
 
         return $this->session($admin);
     }
