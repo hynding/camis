@@ -26,6 +26,9 @@ final class StrapiSessions
 
     private const PREFIX = 'session:';
 
+    /** The name of a legacy-mode token, which no session owns. */
+    private const LEGACY = 'api';
+
     // Strapi's user-agent heuristics in its order: the more specific tokens first.
     private const BROWSERS = [
         '~\bEdg(?:e|A|iOS)?/~' => 'Edge',
@@ -82,6 +85,8 @@ final class StrapiSessions
     {
         $wire = ['user' => StrapiUsers::wire($user)];
         if (! self::refreshMode()) {
+            $user->tokens()->where('name', self::LEGACY)->delete();
+
             return ['jwt' => self::lasting($user)] + $wire;
         }
         self::invalidate($user);
@@ -216,10 +221,12 @@ final class StrapiSessions
         return response()->json(['jwt' => $tokens['jwt']] + $body)->withCookie(self::cookie($tokens['refreshToken']));
     }
 
-    /** Strapi's legacy token, for as long as the user keeps it. */
+    /** Strapi's legacy token, good for jwt.expiresIn (30 days unless configured; 0: no expiry). */
     private static function lasting(User $user): string
     {
-        return $user->createToken('api')->plainTextToken;
+        $lifespan = (int) config('camis.users_permissions.jwt_lifespan', 2592000);
+
+        return $user->createToken(self::LEGACY, ['*'], $lifespan > 0 ? now()->addSeconds($lifespan) : null)->plainTextToken;
     }
 
     /** @return array{jwt: string, refreshToken: string} */

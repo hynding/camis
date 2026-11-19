@@ -103,7 +103,7 @@
     },
     {
       "name": "login with the new password",
-      "graphql": "mutation { login(input: { identifier: \"ann\", password: \"secret3\" }) { user { username } } }",
+      "graphql": "mutation { login(input: { identifier: \"ann\", password: \"secret3\" }) { jwt user { username } } }",
       "save": "ann"
     },
     {

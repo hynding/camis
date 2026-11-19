@@ -14,6 +14,8 @@ export const sessionsConfigKeys = (): string => `
         // Strapi's jwtManagement: 'legacy-support' issues one lasting token per login, 'refresh'
         // a short access token with a rotating refresh token, and lists the account's sessions.
         'jwt_management' => env('CAMIS_JWT_MANAGEMENT', 'legacy-support'),
+        // How long a legacy token lasts, in seconds (Strapi's jwt.expiresIn, 30 days); 0: no expiry.
+        'jwt_lifespan' => (int) env('CAMIS_JWT_LIFESPAN', 2592000),
         'sessions' => [
             'access_token_lifespan' => (int) env('CAMIS_ACCESS_TOKEN_LIFESPAN', 600),
             'max_refresh_token_lifespan' => (int) env('CAMIS_MAX_REFRESH_TOKEN_LIFESPAN', 2592000),
