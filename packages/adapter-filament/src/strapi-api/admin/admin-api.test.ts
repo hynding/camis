@@ -55,6 +55,28 @@ describe("Strapi's admin accounts and admin API", () => {
     );
   });
 
+  // Strapi's admin::rateLimit on its sign-in routes: five requests per email and address in five
+  // minutes, then a 429 RateLimitError. Without it /admin/login guesses passwords without limit.
+  it("rate-limits signing in and registering the first admin as Strapi does", () => {
+    const controller = content("app/Http/Controllers/Admin/StrapiAdminController.php");
+    expect(controller).toMatch(
+      /public function login\(Request \$request\): JsonResponse\n {4}\{\n {8}\$this->throttle\(\$request\);/,
+    );
+    expect(controller).toMatch(
+      /public function registerAdmin\(Request \$request\): JsonResponse\n {4}\{\n {8}\$this->throttle\(\$request\);/,
+    );
+    expect(controller).toContain(
+      "$key = 'strapi-admin-auth:'.mb_strtolower(is_string($email) ? $email : '').':'.$request->ip();",
+    );
+    expect(controller).toContain(
+      "throw new StrapiError(429, 'RateLimitError', 'Too many requests, please try again later.');",
+    );
+    const config = content("config/camis.php");
+    expect(config).toContain("'enabled' => (bool) env('CAMIS_ADMIN_RATE_LIMIT_ENABLED', true),");
+    expect(config).toContain("'interval' => (int) env('CAMIS_ADMIN_RATE_LIMIT_INTERVAL', 300),");
+    expect(config).toContain("'max' => (int) env('CAMIS_ADMIN_RATE_LIMIT_MAX', 5),");
+  });
+
   it("refuses a sign-in as Strapi's local strategy does, and returns its body", () => {
     const controller = content("app/Http/Controllers/Admin/StrapiAdminController.php");
     expect(controller).toContain("'Invalid credentials'");
