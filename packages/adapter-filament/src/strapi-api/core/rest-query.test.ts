@@ -48,6 +48,16 @@ describe("Strapi REST runtime files", () => {
   it("StrapiQuery golden", async () => {
     await expect(emitStrapiQuery()).toMatchFileSnapshot("../__golden__/strapi-api/StrapiQuery.php");
   });
+  // A row the caller's policy hides is dropped before the page is cut and counted, so the total
+  // counts only rows it may see and a page holds as many rows as it asked for.
+  it("filters rows through a visibility check before it pages and counts them", () => {
+    const php = emitStrapiQuery();
+    expect(php).toContain(
+      "public static function find(Builder $query, array $params, array $fields, ?Authenticatable $viewer = null, ?\\Closure $visible = null): array",
+    );
+    expect(php).toContain("$rows = $query->get()->filter($visible)->values();");
+    expect(php).toContain("$total = self::shouldCount($pagination) ? $rows->count() : null;");
+  });
   it("StrapiError golden", async () => {
     await expect(emitStrapiError()).toMatchFileSnapshot("../__golden__/strapi-api/StrapiError.php");
   });
