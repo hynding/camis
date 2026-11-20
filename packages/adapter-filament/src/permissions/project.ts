@@ -40,10 +40,12 @@ export interface FilamentPermissions {
   permissionKeys: string[];
   roleGrants: { role: string; keys: string[] }[];
   policies: PolicySpec[];
-  /** The content API's list scope per type, from the roles of its users (not admin roles). */
+  /** The Strapi database layout's list scope per type: the first condition a user's role reads under. */
   readConditions: Map<string, Expression>;
   /** The admin list's scope per type where an admin role reads it under a condition. */
   adminReadScopes: Map<string, AdminReadScope>;
+  /** The content API list's scope per type where a role of its users reads it under a condition. */
+  apiReadScopes: Map<string, AdminReadScope>;
   assigns: Map<string, string[]>;
   gaps: CapabilityGap[];
 }
@@ -156,8 +158,8 @@ export const projectFilamentPermissions = (
         else if (held === undefined) byRole.set(role.name, [grant.condition]);
         else if (held !== true && !held.some((c) => sameExpression(c, grant.condition!)))
           held.push(grant.condition);
-        // The content API's list scope takes one condition for every caller: the first a role
-        // of its users reads under. An admin account never calls the content API.
+        // The Strapi database layout's list scope takes one condition for every caller: the first
+        // a role of its users reads under. An admin account never calls the content API.
         if (action === "read" && grant.condition && !adminRoles.has(role.name)) {
           const existing = readConditions.get(grant.contentType);
           if (existing && !sameExpression(existing, grant.condition)) {
@@ -165,7 +167,7 @@ export const projectFilamentPermissions = (
               feature: "conditionConflict",
               location: { contentType: grant.contentType, rule: role.name },
               severity: "downgrade",
-              message: `roles read "${grant.contentType}" under different conditions; the content API's list keeps to the first`,
+              message: `roles read "${grant.contentType}" under different conditions; the Strapi database layout's list keeps to the first`,
             });
           } else if (!existing) {
             readConditions.set(grant.contentType, grant.condition);
@@ -238,21 +240,22 @@ export const projectFilamentPermissions = (
     roleGrants: roleGrants.sort((a, b) => a.role.localeCompare(b.role)),
     policies,
     readConditions,
-    adminReadScopes: adminReadScopes(holdings, adminRoles),
+    adminReadScopes: readScopes(holdings, (role) => adminRoles.has(role)),
+    apiReadScopes: readScopes(holdings, (role) => !adminRoles.has(role)),
     assigns: new Map([...assigns.entries()].map(([ct, s]) => [ct, [...s].sort()])),
     gaps,
   };
 };
 
-/** Per type some admin role reads under a condition, the admin roles reading it and how. */
-const adminReadScopes = (
+/** Per type some role `reads` lets through reads under a condition, those roles and how. */
+const readScopes = (
   holdings: Map<string, Map<string, Holding>>,
-  adminRoles: Set<string>,
+  reads: (role: string) => boolean,
 ): Map<string, AdminReadScope> => {
   const scopes = new Map<string, AdminReadScope>();
   for (const [ca, byRole] of [...holdings].sort(([a], [b]) => a.localeCompare(b))) {
     if (!ca.endsWith(".read")) continue;
-    const readers = [...byRole.keys()].filter((r) => adminRoles.has(r)).sort();
+    const readers = [...byRole.keys()].filter(reads).sort();
     const conditions = conditionGroups(byRole, readers);
     if (conditions.length === 0) continue;
     scopes.set(ca.slice(0, -".read".length), {

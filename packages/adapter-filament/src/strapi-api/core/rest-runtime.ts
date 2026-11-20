@@ -66,12 +66,27 @@ final class StrapiQuery
 
     private const LIKE_SPECIAL_CHARS = ['\\', '%', '_'];
 
-    /** @return array{rows: Collection, pagination: array<string, int>} */
-    public static function find(Builder $query, array $params, array $fields, ?Authenticatable $viewer = null): array
+    /**
+     * $visible drops the rows a caller may not see before the page is cut and counted, for a
+     * list whose scope SQL cannot narrow to them.
+     *
+     * @return array{rows: Collection, pagination: array<string, int>}
+     */
+    public static function find(Builder $query, array $params, array $fields, ?Authenticatable $viewer = null, ?\Closure $visible = null): array
     {
         self::filter($query, $params, $fields, $viewer, null);
         $pagination = is_array($params['pagination'] ?? null) ? $params['pagination'] : [];
         ['start' => $start, 'limit' => $limit] = self::paginationInfo($pagination);
+        if ($visible !== null) {
+            self::sort($query, $params['sort'] ?? null, $fields, $viewer);
+            $rows = $query->get()->filter($visible)->values();
+            $total = self::shouldCount($pagination) ? $rows->count() : null;
+
+            return [
+                'rows' => $rows->slice($start, $limit >= 0 ? $limit : null)->values(),
+                'pagination' => self::paginationResponse($start, $limit, $total, self::isPaged($pagination)),
+            ];
+        }
         // Counted before ordering: Postgres rejects an ORDER BY on an aggregate without GROUP BY.
         $total = self::shouldCount($pagination) ? (clone $query)->count() : null;
         self::sort($query, $params['sort'] ?? null, $fields, $viewer);

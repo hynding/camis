@@ -49,8 +49,8 @@ class NoteApiController extends Controller
     public function index(Request $request): JsonResponse
     {
         $this->authorize('viewAny', Note::class);
-        $found = StrapiQuery::find($this->scoped($request), $request->query(), NoteSerializer::FIELDS, $request->user());
-        $rows = $found['rows']->filter(fn (Note $m) => Gate::allows('view', $m));
+        $found = StrapiQuery::find($this->scoped($request), $request->query(), NoteSerializer::FIELDS, $request->user(), fn (Note $m): bool => Gate::allows('view', $m));
+        $rows = $found['rows'];
 
         return response()->json([
             'data' => StrapiPopulate::many($rows, $request->query(), NoteSerializer::class, $request->user()),

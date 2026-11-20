@@ -34,6 +34,11 @@ export interface ControllerSpec {
   rules?: string;
   /** Whether a rule is unique, so the validator is handed the other entries' rows. */
   unique?: boolean;
+  /**
+   * The model's list scope holds exactly the rows the policy's view allows, so a list pages it
+   * as it is. Otherwise a list filters its rows through the policy before it pages them.
+   */
+  exactScope?: boolean;
 }
 
 /** The per-layout halves of the controller; everything else is the shared class scaffold. */
@@ -166,8 +171,8 @@ ${assignBlock}${persist("")}
       "App\\Support\\StrapiRelations",
     ],
     query: scoped ? `${M}::query()->forUser($request->user())` : `${M}::query()`,
-    indexBody: `${auth(`$this->authorize('viewAny', ${M}::class);`)}        $found = StrapiQuery::find($this->scoped($request), $request->query(), ${S}::FIELDS, ${viewer});
-        $rows = $found['rows']${secured ? `->filter(fn (${M} $m) => Gate::allows('view', $m))` : ""};
+    indexBody: `${auth(`$this->authorize('viewAny', ${M}::class);`)}        $found = StrapiQuery::find($this->scoped($request), $request->query(), ${S}::FIELDS, ${viewer}${secured && spec.exactScope !== true ? `, fn (${M} $m): bool => Gate::allows('view', $m)` : ""});
+        $rows = $found['rows'];
 
         return response()->json([
             'data' => StrapiPopulate::many($rows, $request->query(), ${S}::class, ${viewer}),
