@@ -72,6 +72,34 @@ describe("strapi-api controllers", () => {
       }),
     ).toMatchFileSnapshot("../__golden__/strapi-api/Generated.ActivityApiController.php");
   });
+  // The scope already holds exactly the rows the policy shows, so the page counts only those.
+  it("pages a list whose scope is exact without filtering it again", () => {
+    const php = emitGeneratedController({
+      shape: wireShape(doc, ct("Note"), ["owner_id"]),
+      ct: ct("Note"),
+      assigns: ["owner"],
+      secured: true,
+      scoped: true,
+      exactScope: true,
+    });
+    expect(php).toContain(
+      "$found = StrapiQuery::find($this->scoped($request), $request->query(), NoteSerializer::FIELDS, $request->user());\n        $rows = $found['rows'];",
+    );
+  });
+  // Where SQL cannot hold a role's condition, the policy filters the rows before they are paged,
+  // so meta.pagination counts no row the caller cannot see and no page comes back short.
+  it("filters a list through the policy before paging where the scope is not exact", () => {
+    const php = emitGeneratedController({
+      shape: wireShape(doc, ct("Note"), ["owner_id"]),
+      ct: ct("Note"),
+      assigns: ["owner"],
+      secured: true,
+      scoped: true,
+    });
+    expect(php).toContain(
+      "$found = StrapiQuery::find($this->scoped($request), $request->query(), NoteSerializer::FIELDS, $request->user(), fn (Note $m): bool => Gate::allows('view', $m));\n        $rows = $found['rows'];",
+    );
+  });
   it("protected subclass golden", async () => {
     await expect(emitProtectedController("Note")).toMatchFileSnapshot(
       "../__golden__/strapi-api/NoteApiController.php",

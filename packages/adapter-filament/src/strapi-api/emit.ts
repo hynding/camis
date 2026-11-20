@@ -84,7 +84,7 @@ import { emitApiConfig, emitStrapiRoutes } from "./core/routes";
 import { emitCorsConfig } from "./core/cors";
 import { emitStrapiMimeTypes } from "./upload/upload-security";
 import { emitAdminScopeMethod } from "./core/admin-scope";
-import { emitScopeMethod } from "./core/scope";
+import { emitApiScopeMethod } from "./core/api-scope";
 import { emitStrapiPublicRoute } from "./core/public-actions";
 import { emitEndpointFiles } from "../hooks/endpoints";
 import {
@@ -300,8 +300,8 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
   const perm = secured
     ? projectFilamentPermissions(doc, bundle.roles, { creators: true, services: true })
     : {
-        readConditions: new Map<string, never>(),
         adminReadScopes: new Map<string, never>(),
+        apiReadScopes: new Map<string, never>(),
         assigns: new Map<string, string[]>(),
       };
   const files: GeneratedFile[] = [];
@@ -325,6 +325,9 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
       path: `app/Http/Serializers/${names.model}Serializer.php`,
       content: emitSerializer(shape),
     });
+    const scope = secured
+      ? emitApiScopeMethod(ct, perm.apiReadScopes.get(ct.name), { guests, tokens: true, open })
+      : undefined;
     files.push({
       path: `app/Http/Controllers/Api/Generated/${names.model}ApiController.php`,
       content: emitGeneratedController({
@@ -335,6 +338,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
         scoped: secured,
         rules: entity.constant,
         unique: entity.unique,
+        exactScope: scope?.exact === true,
       }),
     });
     files.push({
@@ -342,16 +346,8 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
       content: emitProtectedController(names.model),
       mode: "seed",
     });
-    if (secured) {
-      const scope = emitScopeMethod(
-        ct,
-        perm.readConditions.get(ct.name),
-        "laravel",
-        guests,
-        true,
-        open,
-      );
-      if (scope.gap) gaps.push(scope.gap);
+    if (scope !== undefined) {
+      gaps.push(...scope.gaps);
       const adminScope = perm.adminReadScopes.get(ct.name);
       const admin = adminScope === undefined ? undefined : emitAdminScopeMethod(ct, adminScope);
       if (admin !== undefined) {
@@ -498,16 +494,13 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
   files.push(...localeFiles());
   if (input.media !== undefined) {
     const scope = secured
-      ? emitScopeMethod(
-          input.media,
-          perm.readConditions.get(input.media.name),
-          "laravel",
+      ? emitApiScopeMethod(input.media, perm.apiReadScopes.get(input.media.name), {
           guests,
-          true,
+          tokens: true,
           open,
-        )
+        })
       : undefined;
-    if (scope?.gap) gaps.push(scope.gap);
+    if (scope !== undefined) gaps.push(...scope.gaps);
     // The media library lists what an admin role reads, as the Content Manager does.
     const adminScope = secured ? perm.adminReadScopes.get(input.media.name) : undefined;
     const admin =

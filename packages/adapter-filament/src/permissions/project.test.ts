@@ -274,6 +274,20 @@ describe("projectFilamentPermissions — the creator of an entry", () => {
   it("keeps an admin role's read condition out of the content API's list scope", () => {
     const out = projectFilamentPermissions(doc, roles, { creators: true });
     expect(out.readConditions.has("Article")).toBe(false);
+    expect(out.apiReadScopes.has("Article")).toBe(false);
+  });
+  // The content API lists each role's own rows, so its scope keeps every role's condition apart.
+  it("scopes the content API list per role reading under a condition", () => {
+    const api: Role[] = [
+      { name: "editor", grants: [{ contentType: "Article", actions: ["read"] }] },
+      { name: "reader", grants: [{ contentType: "Article", actions: ["read"], condition }] },
+      { ...roles[0]!, name: "author" },
+    ];
+    expect(projectFilamentPermissions(doc, api, { creators: true }).apiReadScopes).toEqual(
+      new Map([
+        ["Article", { unconditional: ["editor"], conditions: [{ roles: ["reader"], condition }] }],
+      ]),
+    );
   });
 });
 

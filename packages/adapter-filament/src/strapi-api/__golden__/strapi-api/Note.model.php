@@ -46,19 +46,20 @@ class Note extends Model
         return $this->belongsTo(User::class, 'owner_id');
     }
 
-    /** Rows visible to $user (Strapi API style list scope); null is a caller without a session. */
+    /** Rows visible to $user (Strapi API style list scope): each role's read condition, in SQL. */
     public function scopeForUser(Builder $q, ?User $user): Builder
     {
         if (\App\Support\StrapiApiTokens::active()) {
             return $q;
         }
-        if ($user === null) {
+
+        return $q->where(function (Builder $q) use ($user): void {
             $q->whereRaw('1 = 0');
-
-            return $q;
-        }
-        $q->where('owner_id', '=', $user->id);
-
-        return $q;
+            if ($user !== null && $user->hasAnyRole(['authenticated'])) {
+                $q->orWhere(function (Builder $q) use ($user): void {
+                    $q->where('owner_id', '=', $user->id);
+                });
+            }
+        });
     }
 }

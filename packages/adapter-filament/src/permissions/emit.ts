@@ -30,10 +30,14 @@ export const emitPermissions = (
 ): PermissionEmission => {
   if (roles.length === 0) return { files: [], gaps: [] };
   const byName = new Map(doc.contentTypes.map((ct) => [ct.name, ct]));
-  const { permissionKeys, roleGrants, policies, gaps } = projectFilamentPermissions(doc, roles, {
-    creators,
-    services,
-  });
+  const projection = projectFilamentPermissions(doc, roles, { creators, services });
+  const { permissionKeys, roleGrants, policies } = projection;
+  // Only the Strapi database layout's list scope keeps one condition per type; the Laravel
+  // layout's scopes each role to its own.
+  const gaps =
+    layout === "strapi"
+      ? projection.gaps
+      : projection.gaps.filter((g) => g.feature !== "conditionConflict");
   const files: GeneratedFile[] =
     layout === "strapi"
       ? []

@@ -49,8 +49,8 @@ class ActivityApiController extends Controller
     public function index(Request $request): JsonResponse
     {
         $this->authorize('viewAny', Activity::class);
-        $found = StrapiQuery::find($this->scoped($request), $request->query(), ActivitySerializer::FIELDS, $request->user());
-        $rows = $found['rows']->filter(fn (Activity $m) => Gate::allows('view', $m));
+        $found = StrapiQuery::find($this->scoped($request), $request->query(), ActivitySerializer::FIELDS, $request->user(), fn (Activity $m): bool => Gate::allows('view', $m));
+        $rows = $found['rows'];
 
         return response()->json([
             'data' => StrapiPopulate::many($rows, $request->query(), ActivitySerializer::class, $request->user()),
