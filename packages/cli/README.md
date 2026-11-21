@@ -147,10 +147,15 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
     every depth (400 otherwise): no key but an attribute (top-level `documentId`, `locale`,
     `publishedAt`, `createdBy` are refused); a relation item is a row id, a documentId, or an
     object with one of `id`/`documentId` and only `locale`, `status` and `position` beside it
-    (`__type` on a polymorphic item); a media item is a row id or `{ id }`; a component item
-    holds its attributes and its own `id`; a zone item names one of the zone's components. So no
-    `__pivot` reaches a join row (it overrode the linked ids, in releases before this one too),
-    and a to-one attribute takes one entry.
+    (`__type` on a polymorphic item; a position may name its anchor's `locale` and `status`); a
+    media item is a row id or `{ id }`; a component item holds its attributes and its own `id`; a
+    zone item names one of the zone's components; `null` clears. So no `__pivot` reaches a join
+    row (it overrode the linked ids, in releases before this one too), a to-one attribute takes
+    one entry, and a `set` stands alone. Any `set` but `null` replaces the relation, one entry
+    included, so every entry it drops is checked. The check covers every collection type camis
+    serves, including each with a relation or media field that a restricted role or an open route
+    writes (served for this alone, its reads and deletes stay Strapi's); single types, the
+    built-in user and the media library are served by Strapi and its plugins, unchecked.
   - The upload API, once a role the rules restrict holds a file grant (a generated
     `src/extensions/upload/strapi-server.ts` wraps the plugin's content API controller): `POST
     /api/upload` takes only `fileInfo`, `ref`, `refId` and `field` (any other body field, `path`

@@ -2814,13 +2814,36 @@ relation write, and a database seeded once kept it.
     a documentId (a string `parseInt` cannot read: Strapi takes `"5abc"` as row id `"5abc"`,
     which MySQL casts to 5), or an object with exactly one of `id`/`documentId` and only `locale`,
     `status` (`draft`/`published`) and `position` beside it (`before`/`after` naming an entry,
-    which must be one the caller may read, `start`/`end` true); `__type` only, and always, on a
-    polymorphic item; an operation object other than a non-empty set of `connect`, `set`,
-    `disconnect` and `options` (`{ strict: boolean }` alone); more than one entry on a to-one
-    attribute (Strapi keeps the last and checks only what it keeps); a component item with keys
-    other than its attributes and a positive integer `id` (Strapi's `deleteOldComponents` refuses
-    an id not on the entry); a zone item whose `__component` is not one of the zone's. A write
-    with both `set` and `connect` is decided on the `set` list, as Strapi ignores `connect` then.
+    which must be one the caller may read on every row of its document, `start`/`end` booleans,
+    and the `locale` and `status` Strapi looks the anchor up in, plus `__type` on a polymorphic
+    relation); `__type` only, and always, on a polymorphic item; an operation object other than a
+    non-empty set of `connect`, `set`, `disconnect` and `options` (`{ strict: boolean }` alone);
+    a `set` beside a `connect` or a `disconnect` (Strapi applies only the set, yet its document
+    service still looks up the others' entries); more than one entry on a to-one attribute
+    (Strapi keeps the last and checks only what it keeps); a component item with keys other than
+    its attributes and a positive integer `id` (Strapi's `deleteOldComponents` refuses an id not
+    on the entry); a zone item whose `__component` is not one of the zone's. `null` clears a
+    component, a repeatable component or a zone, as in Strapi.
+  - **One reading of a relation value.** `relationChange` (`api-conditions.ts`) turns every value
+    the body check accepts into the change Strapi makes, `{ mode: replace | change, connect,
+    disconnect, anchors }`, and the body check, the reach check, the write plan and the media
+    checks all take it: a shorthand (an id, a documentId, an item, a list, `null`) or any `set`
+    that is not `null` (a list, an item, one id or documentId) replaces the relation; otherwise
+    `connect` adds and `disconnect` removes, a to-one `connect` replacing the link it holds. A
+    review found the plan reading `set: "<documentId>"` and `set: 7` as no replacement, so a
+    reviewer's set of its own note dropped another member's note from a category unchecked; that
+    is fixed by this one reading. `runtime/engine.test.ts` writes every row id form on Strapi's own
+    entity manager, to-many and to-one, and compares the links left with the change predicted.
+  - **Where the body check applies.** Every collection type served by the generated controller:
+    besides the types above, each collection type with a relation or media field (its own, an
+    embedded component's, or an inverse Strapi gives it) that a restricted role creates or
+    updates, or an `auth: false` route opens for either (`linkWritten`, `api-shapes.ts`). A type
+    served only for this (no rules, no reach, no mirrored link) leaves its reads and deletes to
+    Strapi's own controller. Not checked, as their writes are not served by camis: single types
+    (Strapi's single type controller; a media field there is an error, a relation field is not,
+    so a restricted writer's `__pivot` reaches a single type's join rows), the built-in user (a
+    non-admin write is an `apiUserWrite` error) and the media library (the upload API takes only
+    the documented `fileInfo` fields); admin roles and API tokens; GraphQL.
   - Not narrowed, as on Strapi and the Filament target: admin roles and API tokens (Phase 25). An
     `auth: false` action (Phase 57) serves its own type's rows to anyone, and its reach is decided
     as the public role's, so a reach-only type's open route still answers. A session whose role is
@@ -3044,7 +3067,9 @@ Built from the plugin's source (`controllers/content-api.js`, `services/upload.j
   `files_related_mph` is unchanged (the other member's file stays off the note); a relation
   `connect` item whose `__pivot` names another `note_id` is 400 and the join table is unchanged,
   while the plain connect is 201; a reviewer who reads but does not update the note holding a
-  file cannot link it (403) and still updates her own note.
+  file cannot link it (403) and still updates her own note; a reviewer's `set` of her own note,
+  by documentId and by row id, on a category holding another member's note is 403 and the
+  category keeps that note.
 
 Known limits: the upload API is enforced for the content API only (GraphQL's upload mutations, if a
 project adds the plugin, are not); an IR relation (not a media field) to the media library's type
@@ -3058,7 +3083,9 @@ change and attach verdicts; media value forms, components and zones; `__pivot`, 
 `options` in media items; the link and change rules, with and without a recorded uploader);
 `runtime/api-conditions.test.ts` (relation items, to-one and `set` writes, `writeShape` at every
 depth); `runtime/engine.test.ts` (the real entity manager writes a `__pivot`-named entry into the
-join row; camis refuses the body); `upload-behaviour.test.ts`
+join row; camis refuses the body; every accepted relation value leaves the links `relationChange`
+predicts); `enforcement-behaviour.test.ts` (a rule-less type served for the body check: writes
+pass, a `__pivot` is 400, reads and deletes are Strapi's); `upload-behaviour.test.ts`
 (the emitted extension and controllers against a fake upload plugin and query engine: nothing
 stored, replaced or deleted on any refusal); `api-enforcement.test.ts` (the lifted error, the
 single type error with and without file grants and for an open action, the tables, the media
