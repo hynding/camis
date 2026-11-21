@@ -143,6 +143,21 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
     may update; a many-to-many link only one side declares needs read alone. Linking an entry
     whose other side holds one entry at most (a bidirectional oneToOne or oneToMany) takes it from
     its last holder, which must be one the caller may update when its type has rules.
+  - The upload API, once a role the rules restrict holds a file grant (a generated
+    `src/extensions/upload/strapi-server.ts` wraps the plugin's content API controller): `POST
+    /api/upload` takes only `fileInfo`, `ref`, `refId` and `field` (any other body field, `path`
+    and `folder` among them, or query parameter but `id`, is 400); `ref`, `refId` and `field` come
+    together, single-valued, `refId` a row id (a documentId is 400), and attach only to a content
+    type's own media field on an entry the caller may update (every row of it), else 403 before
+    anything is stored: a component's uid, a nested or non-media field and an entry that does not
+    exist are 403. Each upload records its uploader in a private `camisUploader` attribute (the
+    content API's `createdBy` is never set for a users-permissions caller). `?id=` (replace or
+    info update) and `DELETE /api/upload/files/:id` need update on every entry the file is
+    attached to, or, unattached, that the caller uploaded it. An entry create or update linking a
+    stored file through a media field (at any depth of components and zones) is 403 unless the
+    caller uploaded it or may read an entry it is attached to; a media value other than a row id
+    (`3`, `"3"`, `{ id: 3 }`, a list, `connect`/`set`) is 400. Listing and reading files stay the
+    plugin's.
   - The role is the session's users-permissions role, the public role without a session; a role
     the IR does not grant the type, a session whose role was not loaded and an unknown strategy are
     refused. Admin roles and API tokens are not narrowed; an `auth: false` action serves its own
@@ -157,9 +172,9 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
   built-in user, from the media library (a role that reads files, whose `related` entries reach a
   type it reads under a condition) or from a single type, and for a role that writes the built-in
   user or a single type whose relation both sides declare into a type it does not update outright
-  (the plugin's or Strapi's own controller serves those), and for a role that may create, update
-  or delete files while a type with a media field is one it does not update outright (the upload
-  API attaches, replaces or deletes a file on any entry unchecked); `apiUserWrite` for a non-admin
+  (the plugin's or Strapi's own controller serves those), and, once a restricted role writes
+  files, for a role that writes a single type with a media field (Strapi's single type controller
+  links any stored file id); `apiUserWrite` for a non-admin
   role that may create or update the built-in user (users-permissions sets any user's role and
   password from the body), whatever else it holds. The admin-panel copy of a non-admin role
   cannot read `record.*`, so there its condition denies every entry (`conditionContext`,

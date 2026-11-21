@@ -2815,14 +2815,12 @@ relation write, and a database seeded once kept it.
   since their plugins serve it; a role that reads the media library while a file's `related`
   entries reach a type it reads under a condition; a single type the role reads reaches one, since
   Strapi's own single-type controller serves it; or a role writes the built-in user or a single
-  type whose mirrored relation changes entries of a type it does not update outright; or a role
-  may create, update or delete files (`plugin::upload.content-api.upload` / `destroy`) while a type
-  with a media field (its own or an embedded component's) is one it does not update outright, since
-  `POST /api/upload` with `ref`, `refId` and `field` attaches the new file to any entry, `?id=`
-  replaces a file wherever it is attached, and `DELETE /api/upload/files/:id` removes it from every
-  entry, with no check of the entry (seen on Strapi 5.48: a member attached a file to another
-  member's private note). Enforcing it would mean wrapping the upload plugin's controller and
-  deciding on every entry a file is related to; refused instead. `apiUserWrite`: a non-admin role
+  type whose mirrored relation changes entries of a type it does not update outright; or, once a
+  role the rules restrict writes files, a role writes a single type with a media field (its own or
+  an embedded component's), since Strapi's own single type controller links any stored file id
+  there. A role that writes files was itself an error here (the upload API attached, replaced or
+  deleted a file on any entry: seen on Strapi 5.48, a member attached a file to another member's
+  private note); Phase 95 enforces the upload API and lifts it. `apiUserWrite`: a non-admin role
   may create or update the built-in user (no grant set of its own exempts it: another role may
   hold an endpoint or plugin service it lacks), since users-permissions' `PUT /api/users/:id` and `POST /api/users` set the role and
   password of any user from the body, so the caller could take any other role. An admin
@@ -2922,6 +2920,96 @@ entries, reviewer 403, guest, admin, token, unknown and prototype-named roles, r
 `enforcement-compile.test.ts`; `bootstrap-revoke.test.ts`; `content-api-allowlist.test.ts`
 (every action camis grants is allowlisted); `scripts/route-guard.test.ts`; `project.test.ts`; goldens under
 `__golden__/ownership/`, idempotent; the `strapi-enforcement-boot` CI job.
+
+## Phase 95 — the upload API decides on the entries it changes (`adapter-strapi`)
+
+**Goal:** a role the rules restrict may hold the file grants (`plugin::upload.content-api.upload`,
+`destroy`) without reaching entries it may not change: Phase 94 failed the build for it, since
+Strapi 5.48's upload plugin attaches, replaces and deletes files on any entry unchecked.
+
+Built from the plugin's source (`controllers/content-api.js`, `services/upload.js`,
+`utils/mime-validation.js`) and the database layer's media handling (`entity-manager` `toAssocs`):
+
+- **The uploader.** The content API passes no user to the upload service, so a file's `createdBy`
+  (an admin user) is empty for every users-permissions caller and cannot tie a file to one. The
+  generated `src/extensions/upload/strapi-server.ts` adds a private integer attribute
+  `camisUploader` (not configurable) to the plugin's file and records the session user's id on
+  every file an upload with a session creates (a replace keeps its file and uploader). Private, the
+  content API never returns it and drops it from filters, sorts and fields; the upload body's
+  `fileInfo` is validated `noUnknown` and the plugin builds the stored file from named fields, so no
+  client sets it. A guest's or API token's upload records none.
+- **The controller.** The extension puts `enforcedUpload` (`src/permissions/api-upload-controller.ts`)
+  over the plugin's `content-api` controller factory, keeping `find` and `findOne` as they are and
+  deciding `upload` and `destroy` first for a caller the rules restrict (a session's role, the
+  public role without one); an admin role and an API token pass, a session whose role was not
+  loaded is 403. Every refusal comes before the plugin stores, replaces or deletes a file.
+- **`POST /api/upload`** (the decisions are `src/permissions/api-uploads.ts`, pure):
+  - Query parameters other than `id` and body fields other than `fileInfo`, `ref`, `refId` and
+    `field` are 400: the upload keeps every other field as a meta of the stored file (`path` among
+    them), and `folder`, `source` or a text field named `files` are no part of the documented API.
+  - `ref`, `refId` and `field` come together or not at all (Strapi ignores a partial set; here it
+    is 400), each a single non-empty value (a repeated multipart field arrives as an array: 400),
+    `refId` a positive row id, as a number or plain digits: Strapi stores it in the link as the
+    row id, so a documentId is 400 rather than a broken link.
+  - The attach names a content type's own media field: `ref` must be a content type of the
+    project with a media field and `field` one of its top-level media attributes, else 403. A
+    component's uid is refused (its rows belong to the entry holding them, which the upload does
+    not name), as is a plugin's type, a non-media attribute, a component attribute and a dotted
+    path. Then the entry: its row is loaded by id, then every row of its document, and the caller
+    must hold update on all of them (a type with rules by its Ring 1 verdict; any other content
+    type, a single type included, by the roles holding update outright). An entry that does not
+    exist is 403 too, so the answer tells nothing of what exists.
+  - With no `ref` the file is stored unattached, owned by its uploader.
+- **`POST /api/upload?id=`** (a replace with a file, an info update without) **and
+  `DELETE /api/upload/files/:id`**: the file is loaded with its `related` entries; the caller must
+  hold update on every entry it is attached to (a component's row, or an entry of a type the
+  checks do not know, refuses), or, when it is attached to none, have uploaded it. A missing file,
+  a malformed id, or `ref`/`refId`/`field` beside `id` is refused (403, 400, 400). An unattached
+  file uploaded through the admin panel or by a guest has no uploader and no restricted caller
+  may change it.
+- **Linking a stored file through an entry write** (`{ avatar: 12 }`): the enforced controller
+  walks the data's media fields at any depth of its components and dynamic zones and refuses (403)
+  a file the caller neither uploaded nor finds on an entry it may read (or update); linking such a
+  file shows nothing it could not read already. A media value outside the forms the database
+  layer reads as a row id (an id, digits, `{ id }`, a list of those, `connect`/`set` lists) is
+  400. Every collection type with a media field (its own or an embedded component's) that a
+  restricted role creates or updates, or the router opens for create or update, is served by the
+  enforced controller for this, with no rules of its own if it has none.
+- **What stays.** `GET /api/upload/files` and `/files/:id` are the plugin's: reading the media
+  library while a file's `related` entries reach a type read under a condition stays an
+  `apiRelationReach` error (Phase 94), and the files a role lists are not scoped by uploader. Reads
+  of media through an entry are unchanged and a populate of `related` is still refused. A single
+  type with a media field that a restricted role writes stays an `apiRelationReach` error once the
+  upload API is enforced: Strapi's own single type controller links any stored file id. The
+  extension and the media checks are emitted only when a role the rules restrict writes files.
+- **Tables.** `TABLES.uploads` (`api-upload-enforcement.ts`, `projectUploads`): the admin roles;
+  every content type and component with a media field at some depth (its media attributes, and
+  the component or zone attributes leading to one); each content type's outright readers and
+  updaters.
+- **CI.** `strapi-enforcement-boot` now also checks, with members holding File create and delete:
+  an upload to the member's own note is 201 and attached, with the member recorded as uploader; an
+  upload to another member's note, to a note that does not exist, to a component's uid and to a
+  non-media field is 403, with a documentId `refId` or a `path` 400, and none stores a file nor
+  attaches one to the other note; a replace, an info update and a delete of a file on another
+  member's note, and a delete of another member's unattached file, are 403 and the file stays
+  attached; linking another member's file by id in a note create or update is 403; the member's
+  own upload links to her note, and is replaced and deleted there, and a member deletes his own
+  unattached file. The content API allowlist names `upload` and `destroy` with where they are
+  enforced.
+
+Known limits: the upload API is enforced for the content API only (GraphQL's upload mutations, if a
+project adds the plugin, are not); an IR relation (not a media field) to the media library's type
+is not checked; a file's uploader is recorded after the plugin stores it, so a failure between the
+two leaves the file with none (no restricted caller may then change it unattached).
+
+Exit: `runtime/api-uploads.test.ts` (every request shape: fileInfo forms, refId as a row id, a
+documentId, decimals, signs and arrays, partial and empty triples, `path`/`folder`/`source`/`files`,
+`?id=` forms and beside a ref, unknown query parameters; the attach field; the caller; entry,
+change and attach verdicts; media value forms, components and zones); `upload-behaviour.test.ts`
+(the emitted extension and controllers against a fake upload plugin and query engine: nothing
+stored, replaced or deleted on any refusal); `api-enforcement.test.ts` (the lifted error, the
+single type error, the tables, the served types); goldens `api-uploads.ts.txt`,
+`api-upload-controller.ts.txt`, `upload.strapi-server.ts.txt`, idempotent; the boot job.
 
 ---
 
