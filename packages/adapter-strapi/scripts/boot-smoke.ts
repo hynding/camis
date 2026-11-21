@@ -1,36 +1,98 @@
-// Generates, materializes, installs, boots Strapi on sqlite, asserts the Article
-// route is registered (200 or 403 — both prove it's exposed; 404/500 fail).
-// Runs in the gated CI job (Node 20). Cannot run in the restricted dev sandbox (npm denied).
+// Generates, materializes, installs, then boots Strapi on sqlite once per project below, each on
+// a fresh database, and asserts its route answers. The blog's Article (no roles) is registered:
+// 200 or 403. The notes projects seed roles through the generated bootstrap: a grant without a
+// condition, alone and beside a conditioned one; their public read must answer 200, which also
+// proves the bootstrap ran to the end.
+// Runs in the gated CI job (Node 22).
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { materialize } from "@camis/adapter-kernel";
+import type { IrBundle } from "@camis/permissions";
 import { strapiAdapter } from "../src/generate";
 import { blog } from "../src/__fixtures__/blog";
+import { publicReadBundle, someConditionsBundle } from "../src/__fixtures__/note-grants";
 import { stopProcessGroup } from "./stop-process-group";
 
-const pollUntilRegistered = async (url: string, timeoutMs: number): Promise<boolean> => {
+interface BootCase {
+  name: string;
+  bundle: IrBundle;
+  route: string;
+  accepted: number[];
+}
+
+// One project name for every case, so they share one package.json and one npm install.
+const CASES: BootCase[] = [
+  {
+    name: "blog, no roles",
+    bundle: { document: blog, roles: [] },
+    route: "/api/articles",
+    accepted: [200, 403], // 403 = default-deny: registered all the same
+  },
+  {
+    name: "notes, a public grant without a condition",
+    bundle: publicReadBundle,
+    route: "/api/notes",
+    accepted: [200],
+  },
+  {
+    name: "notes, conditions on some grants only",
+    bundle: someConditionsBundle,
+    route: "/api/notes",
+    accepted: [200],
+  },
+];
+
+const pollUntilAnswered = async (
+  url: string,
+  accepted: number[],
+  proc: ChildProcess,
+  timeoutMs: number,
+): Promise<string | undefined> => {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
+    if (proc.exitCode !== null) return `Strapi exited with code ${proc.exitCode}`;
     try {
       const res = await fetch(url);
-      if (res.status === 200 || res.status === 403) return true; // registered (403 = default-deny)
-      if (res.status === 404 || res.status >= 500) return false; // not registered / boot error
+      if (accepted.includes(res.status)) return undefined;
+      if (res.status >= 400) return `${url} answered ${res.status}`;
     } catch {
       /* server not up yet */
     }
     await new Promise((r) => setTimeout(r, 3000));
   }
-  return false;
+  return `${url} did not answer within ${timeoutMs} ms`;
+};
+
+const boot = async (dir: string, bootCase: BootCase): Promise<string | undefined> => {
+  await materialize(strapiAdapter.generate(bootCase.bundle, { projectName: "blog" }), dir);
+  // A fresh database and build for every case.
+  await rm(join(dir, ".tmp"), { recursive: true, force: true });
+  await rm(join(dir, "dist"), { recursive: true, force: true });
+  // Its own process group, so teardown reaches Strapi's forked worker and Vite: they
+  // outlive a SIGTERM to npm and would keep writing node_modules while it is deleted.
+  const proc: ChildProcess = spawn("npm", ["run", "develop"], {
+    cwd: dir,
+    stdio: "inherit",
+    detached: true,
+    env: { ...process.env, BROWSER: "none" },
+  });
+  try {
+    return await pollUntilAnswered(
+      `http://127.0.0.1:1337${bootCase.route}`,
+      bootCase.accepted,
+      proc,
+      180_000,
+    );
+  } finally {
+    await stopProcessGroup(proc);
+  }
 };
 
 const dir = await mkdtemp(join(tmpdir(), "camis-boot-"));
 try {
-  await materialize(
-    strapiAdapter.generate({ document: blog, roles: [] }, { projectName: "blog" }),
-    dir,
-  );
+  await materialize(strapiAdapter.generate(CASES[0]!.bundle, { projectName: "blog" }), dir);
   // Strapi hook contract coverage note: the `blog` fixture has no hooks (it is golden-tested
   // and must not be modified). End-to-end hook runtime coverage — including the reference impl
   // firing on publish — is provided by the Filament gated boot job. The Strapi hook contract
@@ -44,25 +106,14 @@ try {
     console.error(`npm install failed with exit code ${install.status}`);
     process.exit(1);
   }
-  // Its own process group, so teardown reaches Strapi's forked worker and Vite: they
-  // outlive a SIGTERM to npm and would keep writing node_modules while it is deleted.
-  const proc: ChildProcess = spawn("npm", ["run", "develop"], {
-    cwd: dir,
-    stdio: "inherit",
-    detached: true,
-    env: { ...process.env, BROWSER: "none" },
-  });
-  let ok = false;
-  try {
-    ok = await pollUntilRegistered("http://127.0.0.1:1337/api/articles", 180_000);
-  } finally {
-    await stopProcessGroup(proc);
+  for (const bootCase of CASES) {
+    const failure = await boot(dir, bootCase);
+    if (failure !== undefined) {
+      console.error(`BOOT SMOKE FAIL (${bootCase.name}): ${failure}`);
+      process.exit(1);
+    }
+    console.log(`BOOT SMOKE PASS (${bootCase.name}): ${bootCase.route} answered`);
   }
-  if (!ok) {
-    console.error("Article route not registered");
-    process.exit(1);
-  }
-  console.log("BOOT SMOKE PASS: Article route registered");
 } finally {
   await rm(dir, { recursive: true, force: true });
 }

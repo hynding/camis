@@ -2670,6 +2670,29 @@ and a CAMIS app generated from it: push, pull and the admin page.
 
 ---
 
+## Phase 95 — the Strapi target boots with any mix of conditions (`adapter-strapi`)
+
+A generated Strapi project with roles did not boot on a fresh database (issue #102):
+
+- An admin permission with no condition has no `conditions` key, and Strapi 5's query engine
+  binds that json column unserialised, which sqlite refuses (`SQLite3 can only bind numbers,
+  strings, bigints, buffers, and null`). The bootstrap now creates each admin permission with
+  `conditions: []` beneath its own.
+- `src/index.ts` imported `./permissions/conditions` even when no grant carried a condition and
+  the module was not emitted. The bootstrap now imports and registers the conditions module only
+  with it (`permissionsIndexTs(withConditions)`), so a project with conditions emits the same
+  bootstrap as before, and one without emits no Ring 1 runtime it never runs.
+
+The bootstrap still creates its admin permissions again on every start (issue #100).
+
+Exit: `bootstrap-boot.test.ts` (every module the bootstrap imports is emitted; the bootstrap runs
+against a query engine that refuses an absent `conditions`, for a project with no condition and
+one with conditions on some grants only; the golden of a bootstrap without conditions). The boot
+smoke (`pnpm --filter @camis/adapter-strapi smoke`, the `strapi-boot-smoke` workflow) boots both
+notes projects on fresh sqlite databases besides the blog, and reads their public notes (200).
+
+---
+
 ## Sequencing rationale (quick reference)
 
 1. **Strapi first** — mature schema validates the IR fastest, with the thinnest adapter.
