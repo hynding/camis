@@ -46,6 +46,21 @@ const check = (what: string, ok: boolean, detail: unknown): void => {
 const rows = (r: Response): { documentId: string; [key: string]: unknown }[] =>
   Array.isArray(r.body?.data) ? (r.body.data as { documentId: string }[]) : [];
 
+/** A list request that must answer 200: an error page never passes for an empty list. */
+const list = async (
+  path: string,
+  jwt?: string,
+): Promise<{ ok: boolean; ids: string[]; response: Response }> => {
+  const response = await call("GET", path, jwt);
+  return {
+    ok: response.status === 200 && Array.isArray(response.body?.data),
+    ids: rows(response).map((r) => r.documentId),
+    response,
+  };
+};
+const idOf = (r: Response): string =>
+  (r.body?.data as { documentId?: string } | undefined)?.documentId ?? "";
+
 const pollUntilUp = async (timeoutMs: number): Promise<boolean> => {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
@@ -102,17 +117,17 @@ const scenario = async (dir: string): Promise<void> => {
   });
   check("alice creates a note", created.status === 201, created);
   const aliceNote = (created.body?.data as { documentId?: string } | undefined)?.documentId ?? "";
-  const aliceList = rows(await call("GET", "/api/notes", alice.jwt));
+  const aliceList = await list("/api/notes", alice.jwt);
   check(
     "the client-supplied owner is overridden: alice lists her note",
-    aliceList.some((n) => n.documentId === aliceNote),
-    aliceList,
+    aliceList.ok && aliceList.ids.includes(aliceNote),
+    aliceList.response,
   );
-  const bobList = rows(await call("GET", "/api/notes", bob.jwt));
+  const bobList = await list("/api/notes", bob.jwt);
   check(
     "bob does not list alice's note",
-    !bobList.some((n) => n.documentId === aliceNote),
-    bobList,
+    bobList.ok && !bobList.ids.includes(aliceNote),
+    bobList.response,
   );
   for (const [method, data] of [
     ["GET", undefined],
@@ -159,8 +174,70 @@ const scenario = async (dir: string): Promise<void> => {
       );
     }
   }
-  const oracle = await call("GET", "/api/tags?filters[note][title][$eq]=bob%27s", alice.jwt);
-  check("alice's filter on bob's note matches nothing", rows(oracle).length === 0, oracle);
+  const byTitle = "/api/tags?filters[note][title][$eq]=bob%27s";
+  const oracle = await list(byTitle, alice.jwt);
+  check(
+    "alice's filter on bob's note matches nothing",
+    oracle.ok && oracle.ids.length === 0,
+    oracle.response,
+  );
+  const control = await list(byTitle, bob.jwt);
+  check(
+    "bob's same filter finds his tag",
+    control.ok && control.ids.includes(tagId ?? ""),
+    control.response,
+  );
+
+  // Two scoped relation filters at one level: neither may overwrite the other in Strapi's merge.
+  const child = await call("POST", "/api/tags", bob.jwt, {
+    data: { label: "b2", note: bobNoteId, parent: tagId },
+  });
+  check("bob tags his note again, under his first tag", child.status === 201, child);
+  const both = (title: string) =>
+    `/api/tags?filters[note][title][$eq]=${title}&filters[parent][note][title][$eq]=bob%27s`;
+  const neither = await list(both("nothing"), bob.jwt);
+  check(
+    "two relation filters both apply: no match",
+    neither.ok && neither.ids.length === 0,
+    neither.response,
+  );
+  const matched = await list(both("bob%27s"), bob.jwt);
+  check(
+    "two relation filters both apply: the child tag",
+    matched.ok && matched.ids.length === 1 && matched.ids[0] === idOf(child),
+    matched.response,
+  );
+
+  // A file's related entries may be any entry the file is attached to.
+  const related = await call(
+    "GET",
+    "/api/notes?populate[attachment][populate][related]=true",
+    alice.jwt,
+  );
+  check("a file's related entries are refused", related.status === 400, related.status);
+  const attachment = await list("/api/notes?populate=attachment", alice.jwt);
+  check("a note's attachment still populates", attachment.ok, attachment.response);
+
+  // A tag is pinned on one note at most: pinning bob's tag on alice's note would unpin it from his.
+  const pin = await call("PUT", `/api/notes/${bobNoteId}`, bob.jwt, {
+    data: { pinned: { connect: [tagId] } },
+  });
+  check("bob pins his tag on his note", pin.status === 200, pin);
+  const steal = await call("PUT", `/api/notes/${aliceNote}`, alice.jwt, {
+    data: { pinned: { connect: [tagId] } },
+  });
+  check("alice cannot take bob's pinned tag", steal.status === 403, steal);
+  const pinned = await call("GET", `/api/notes/${bobNoteId}?populate=pinned`, bob.jwt);
+  const pins = (pinned.body?.data as { pinned?: { documentId: string }[] } | undefined)?.pinned;
+  check(
+    "bob's note still pins his tag",
+    pinned.status === 200 && (pins ?? []).some((t) => t.documentId === tagId),
+    pinned,
+  );
+  const pinOn = await call("POST", "/api/tags", alice.jwt, {
+    data: { label: "a2", pinnedOn: bobNoteId },
+  });
+  check("alice cannot pin a tag on bob's note", pinOn.status === 403, pinOn);
   const sort = await call("GET", "/api/tags?sort=note.title:asc", alice.jwt);
   check("alice's sort through the note is refused", sort.status === 400, sort.status);
   const link = await call("POST", "/api/tags", alice.jwt, {
@@ -168,8 +245,12 @@ const scenario = async (dir: string): Promise<void> => {
   });
   check("alice cannot connect bob's note", link.status === 403, link);
   // The refusal must stop the write, not only answer 403 after it.
-  const after = rows(await call("GET", "/api/tags", bob.jwt));
-  check("the refused connect created no tag", !after.some((t) => t.label === "a"), after);
+  const after = await call("GET", "/api/tags", bob.jwt);
+  check(
+    "the refused writes created no tag",
+    after.status === 200 && !rows(after).some((t) => t.label === "a" || t.label === "a2"),
+    after,
+  );
 };
 
 const dir = await mkdtemp(join(tmpdir(), "camis-enforcement-"));

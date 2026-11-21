@@ -2,7 +2,9 @@
 # generated controllers enforce the IR's row conditions, assigned owner and relation reach:
 # another member's note is not listed, read, updated or deleted; a client-supplied owner is
 # overridden; a populate, filter, sort or connect through a tag does not reach another member's
-# note; and the member role has no GET /api/users. See scripts/enforcement-smoke.ts.
+# note, or take a tag pinned on it; a file's related entries are refused; two relation filters in
+# one request both apply; and the member role has no GET /api/users. See
+# scripts/enforcement-smoke.ts.
 name: strapi-enforcement-boot
 on:
   workflow_dispatch:
@@ -11,11 +13,19 @@ on:
       - "packages/adapter-strapi/**"
       - "packages/permissions/**"
       - ".github/workflows/strapi-enforcement-boot.yml"
+# Read-only token: the job only checks out and runs a script.
+permissions:
+  contents: read
 jobs:
   enforcement:
     runs-on: ubuntu-latest
+    # npm install of Strapi plus a develop boot takes a few minutes; a hung boot stops here.
+    timeout-minutes: 30
     steps:
+      # Actions are pinned by tag, as in the other camis workflows.
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
