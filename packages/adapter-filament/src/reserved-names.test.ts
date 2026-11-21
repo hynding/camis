@@ -11,6 +11,7 @@ import { lifecycleHooksBundle } from "./__fixtures__/lifecycle-hooks";
 import { permissionsBundle } from "./__fixtures__/permissions";
 import { routeHooksBundle } from "./__fixtures__/route-hooks";
 import { schedulesBundle } from "./__fixtures__/schedules";
+import { forStrapiApiStyle } from "./__fixtures__/strapi-api-style";
 import { authorRoleBundle } from "./strapi-api/__fixtures__/author-role";
 import { morphRelationsBundle } from "./strapi-api/__fixtures__/morph-relations";
 import { strapiApiBundle } from "./strapi-api/__fixtures__/strapi-api";
@@ -269,7 +270,11 @@ describe("Filament target: names its rows and wire shape reserve", () => {
   });
 
   // The Laravel-style fixtures keep a `publishedAt` field of their own, which only the Strapi API
-  // style keeps for itself; they are generated, and booted, in the Laravel API style only.
+  // style keeps for itself. They are booted in the Laravel API style only, and a test that runs
+  // one in the Strapi API style takes it through `forStrapiApiStyle`, which renames that field. Only
+  // draft-publish.test.ts still generates a field named `publishedAt` on the Strapi API style, on
+  // purpose: it pins the draft-and-publish plan's own downgrade for such a field, which the adapter
+  // reports beside this error for a caller other than the CLI.
   it.each([
     ["ai", aiFixture],
     ["blog", blog],
@@ -298,6 +303,17 @@ describe("Filament target: names its rows and wire shape reserve", () => {
     (_, bundle) => {
       expect(reserved(bundle, "laravel")).toEqual([]);
       expect(reserved(bundle, "strapi")).toEqual([]);
+    },
+  );
+
+  it.each([
+    ["catalog", catalog],
+    ["hooks", hooksBundle],
+  ] as [string, IrBundle][])(
+    "reports none for the %s fixture taken through forStrapiApiStyle, on either storage layout",
+    (_, bundle) => {
+      expect(reserved(forStrapiApiStyle(bundle), "strapi")).toEqual([]);
+      expect(reserved(forStrapiApiStyle(bundle), "strapi", "strapi")).toEqual([]);
     },
   );
 });
