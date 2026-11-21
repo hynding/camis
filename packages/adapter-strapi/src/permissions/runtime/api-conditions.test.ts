@@ -8,6 +8,7 @@ import {
   holdersVerdict,
   reachState,
   refsVerdict,
+  relationChange,
   writePlan,
   writeShape,
   relationRefs,
@@ -718,10 +719,36 @@ describe("relation items: only the keys Strapi documents, each of its form", () 
     expect(
       refs({ note: { connect: [{ documentId: "d1", position: { before: "d2", after: 3 } }] } }),
     ).toEqual({ ok: true, value: [{ target: NOTE, documentIds: ["d1", "d2"], ids: [3] }] });
-    for (const position of [{ middle: true }, { before: { id: 3 } }, { end: "yes" }, "end"])
+    for (const position of [
+      { middle: true },
+      { before: { id: 3 } },
+      { end: "yes" },
+      "end",
+      { before: "d2", locale: 3 },
+      { before: "d2", status: "archived" },
+      { before: "d2", __type: NOTE },
+    ])
       expect(refs({ note: { connect: [{ id: 5, position }] } }).ok, JSON.stringify(position)).toBe(
         false,
       );
+  });
+  // Strapi looks an anchor up in the locale and status the position names (and, on a polymorphic
+  // relation, its __type). The anchor is read on every row of its document, each locale and status.
+  it("accepts a position's locale and status, and a polymorphic position's __type", () => {
+    expect(
+      refs({
+        note: {
+          connect: [
+            { documentId: "d1", position: { before: "d2", locale: "fr", status: "draft" } },
+          ],
+        },
+      }),
+    ).toEqual({ ok: true, value: [{ target: NOTE, documentIds: ["d1", "d2"], ids: [] }] });
+    expect(
+      writeShape(tables, TAG, {
+        subject: { connect: [{ id: 3, __type: NOTE, position: { after: 4, __type: TAG } }] },
+      }),
+    ).toEqual({ ok: true, value: true });
   });
 });
 
@@ -729,24 +756,105 @@ describe("writePlan: what Strapi keeps is what is planned", () => {
   const reviewer = session("reviewer");
   // Strapi keeps only the last entry of a to-one write, so a list there would hide a drop.
   it("refuses more than one entry on a to-one attribute", () => {
-    for (const pinnedOn of [
-      ["n1", "n2"],
-      { connect: ["n1", "n2"] },
-      { set: ["n1"], connect: ["n2"] },
-    ])
+    for (const pinnedOn of [["n1", "n2"], { connect: ["n1", "n2"] }, { set: ["n1", "n2"] }])
       expect(writePlan(tables, TAG, member, { pinnedOn }), JSON.stringify(pinnedOn)).toEqual({
         ok: false,
         message: "Invalid relation value for pinnedOn: one entry at most",
       });
   });
-  // With a set, Strapi's database layer ignores connect: an entry only connected is dropped.
-  it("keeps only the set's entries when a write carries set and connect", () => {
-    const result = writePlan(tables, CATEGORY, reviewer, {
-      notes: { set: ["n1"], connect: ["n2"] },
-    });
-    expect(result.ok && result.value.replaced).toEqual([
-      { attribute: "notes", target: NOTE, kept: { documentIds: ["n1"], ids: [] } },
-    ]);
+  // With a set, Strapi's database layer ignores connect and disconnect (and its document service
+  // still looks up their entries): a write naming entries Strapi will not apply is refused.
+  it("refuses a set beside a connect or a disconnect", () => {
+    for (const notes of [
+      { set: ["n1"], connect: ["n2"] },
+      { set: 7, disconnect: ["n2"] },
+      { set: [], connect: [] },
+    ])
+      expect(writePlan(tables, CATEGORY, reviewer, { notes }), JSON.stringify(notes)).toEqual({
+        ok: false,
+        message: "Invalid relation value for notes",
+      });
+  });
+  // Strapi replaces the relation for any set it finds truthy, a single entry included.
+  it("plans a replacement for a set of one entry, as Strapi applies it", () => {
+    for (const [set, kept] of [
+      ["n1", { documentIds: ["n1"], ids: [] }],
+      [7, { documentIds: [], ids: [7] }],
+      ["7", { documentIds: [], ids: [7] }],
+      [{ id: 7 }, { documentIds: [], ids: [7] }],
+      [{ documentId: "n1" }, { documentIds: ["n1"], ids: [] }],
+    ] as const) {
+      const result = writePlan(tables, CATEGORY, reviewer, { notes: { set } });
+      expect(result.ok && result.value.replaced, JSON.stringify(set)).toEqual([
+        { attribute: "notes", target: NOTE, kept },
+      ]);
+    }
+    const unset = writePlan(tables, CATEGORY, reviewer, { notes: { set: null } });
+    expect(unset.ok && unset.value.replaced).toEqual([]);
+  });
+});
+
+// Every relation value camis accepts, in the one form Strapi 5.48 applies it: the document service
+// (mapRelation) wraps a shorthand in a set and maps each part's items; the database layer
+// (toAssocs) replaces the relation for a shorthand or a truthy set, and otherwise connects and
+// disconnects. runtime/engine.test.ts runs the row id forms on Strapi's own entity manager.
+describe("relationChange: each accepted relation value as the change Strapi makes", () => {
+  const entries = (documentIds: string[] = [], ids: number[] = []) => ({ documentIds, ids });
+  const none = entries();
+  const replace = (connect = none) => ({
+    mode: "replace",
+    connect,
+    disconnect: none,
+    anchors: none,
+  });
+  const change = (connect = none, disconnect = none) => ({
+    mode: "change",
+    connect,
+    disconnect,
+    anchors: none,
+  });
+  const cases: [unknown, unknown][] = [
+    [7, replace(entries([], [7]))],
+    ["7", replace(entries([], [7]))],
+    ["d1", replace(entries(["d1"]))],
+    [[7, "d1"], replace(entries(["d1"], [7]))],
+    [[], replace()],
+    [null, replace()],
+    [{ id: 7 }, replace(entries([], [7]))],
+    [{ documentId: "d1", locale: "fr" }, replace(entries(["d1"]))],
+    [{ connect: [7] }, change(entries([], [7]))],
+    [{ connect: 7 }, change(entries([], [7]))],
+    [{ connect: "d1" }, change(entries(["d1"]))],
+    [{ disconnect: [7] }, change(none, entries([], [7]))],
+    [{ connect: [7], disconnect: ["d1"] }, change(entries([], [7]), entries(["d1"]))],
+    [{ connect: [7], options: { strict: false } }, change(entries([], [7]))],
+    [{ options: { strict: true } }, change()],
+    [{ set: [7] }, replace(entries([], [7]))],
+    [{ set: { id: 7 } }, replace(entries([], [7]))],
+    [{ set: "d1" }, replace(entries(["d1"]))],
+    [{ set: 7 }, replace(entries([], [7]))],
+    [{ set: "7" }, replace(entries([], [7]))],
+    [{ set: [] }, replace()],
+    [{ set: null }, change()],
+    [{ set: null, connect: [7] }, change(entries([], [7]))],
+    [{ set: [7], connect: null, disconnect: null }, replace(entries([], [7]))],
+  ];
+  it.each(cases)("reads %j", (value, expected) => {
+    expect(relationChange(value, "relation")).toEqual(expected);
+  });
+  it("refuses a set beside connect or disconnect, and an empty object", () => {
+    for (const value of [{ set: [7], connect: [8] }, { set: 7, disconnect: [] }, {}])
+      expect(relationChange(value, "relation"), JSON.stringify(value)).toBeNull();
+  });
+  it("reads a media value's items as row ids only", () => {
+    expect(relationChange({ set: 7 }, "media")).toEqual(replace(entries([], [7])));
+    expect(relationChange({ connect: "7" }, "media")).toEqual(change(entries([], [7])));
+    for (const value of [
+      "d1",
+      { documentId: "d1" },
+      { connect: [{ id: 7, position: { end: true } }] },
+    ])
+      expect(relationChange(value, "media"), JSON.stringify(value)).toBeNull();
   });
 });
 
@@ -765,6 +873,8 @@ describe("writeShape: a restricted caller's write names only the type's writable
       }),
     ).toEqual({ ok: true, value: true });
     expect(shape({ single: null, refs: [] })).toEqual({ ok: true, value: true });
+    // Strapi clears a repeatable component or a dynamic zone written as null.
+    expect(shape({ refs: null, blocks: null })).toEqual({ ok: true, value: true });
     expect(shape({ attachment: [3, "4", { id: 5 }], owner: 7 }, NOTE)).toEqual({
       ok: true,
       value: true,

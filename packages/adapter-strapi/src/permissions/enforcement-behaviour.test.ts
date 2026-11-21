@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { strapiAdapter } from "../generate";
 import { ownershipBundle } from "../__fixtures__/ownership";
+import type { IrBundle } from "@camis/ir-schema";
 
 // Strapi cannot be booted here, so the emitted enforcement modules run against a small fake of
 // the surface they use: the request context, the core controller Strapi builds them on, its
@@ -14,6 +15,7 @@ import { ownershipBundle } from "../__fixtures__/ownership";
 const NOTE = "api::note.note";
 const TAG = "api::tag.tag";
 const CATEGORY = "api::category.category";
+const BOOKMARK = "api::bookmark.bookmark";
 
 type Row = Record<string, unknown> & { id: number; documentId: string };
 type Filter = Record<string, unknown>;
@@ -34,6 +36,7 @@ const SCHEMA: Record<string, Record<string, { relation: string } | { component: 
     refs: { component: "shared.reference" },
   },
   "shared.reference": { note: { relation: NOTE } },
+  [BOOKMARK]: { parent: { relation: BOOKMARK } },
 };
 
 /**
@@ -150,6 +153,8 @@ const seed = (): void => {
   tables[NOTE] = [mine, theirs, open];
   tables[TAG] = [t1, t2, t3];
   tables[CATEGORY] = [c1, c2];
+  const b1: Row = { id: 1, documentId: "b1", label: "b1", parent: null };
+  tables[BOOKMARK] = [b1, { id: 2, documentId: "b2", label: "b2", parent: b1 }];
 };
 const rowsOf = (uid: string): Row[] => tables[uid]!;
 const byDocument = (uid: string, documentId: unknown) =>
@@ -335,6 +340,55 @@ beforeAll(async () => {
     controllers[uid] = createCoreController(uid, ({ strapi: s }) =>
       enforcedController(s, uid, TABLES),
     );
+  // A type with no rules of its own and nothing it reaches, served only so a restricted write's
+  // body is checked: members create and update bookmarks, each under a parent bookmark.
+  const withBookmarks: IrBundle = {
+    document: {
+      ...ownershipBundle.document,
+      contentTypes: [
+        ...ownershipBundle.document.contentTypes,
+        {
+          name: "Bookmark",
+          kind: "collection",
+          fields: [
+            { type: "string", name: "label" },
+            { type: "relation", name: "parent", relationKind: "manyToOne", target: "Bookmark" },
+          ],
+        },
+      ],
+    },
+    roles: ownershipBundle.roles.map((r) =>
+      r.name === "member"
+        ? {
+            ...r,
+            grants: [
+              ...r.grants,
+              { contentType: "Bookmark", actions: ["create", "read", "update", "delete"] },
+            ],
+          }
+        : r,
+    ),
+  };
+  const bookmarks = strapiAdapter.generate(withBookmarks, { projectName: "notes" });
+  await mkdir(join(dir, "bookmarks"));
+  for (const name of [
+    "api-conditions.ts",
+    "api-controller.ts",
+    "api-uploads.ts",
+    "api-upload-controller.ts",
+  ]) {
+    const content = bookmarks.files.find((f) => f.path === `src/permissions/${name}`)!.content;
+    await writeFile(join(dir, "bookmarks", name), content);
+  }
+  const bookmarkTables = (
+    await import(pathToFileURL(join(dir, "bookmarks", "api-conditions.ts")).href)
+  ).TABLES;
+  const bookmarkController = (
+    await import(pathToFileURL(join(dir, "bookmarks", "api-controller.ts")).href)
+  ).enforcedController;
+  controllers[BOOKMARK] = createCoreController(BOOKMARK, ({ strapi: s }) =>
+    bookmarkController(s, BOOKMARK, bookmarkTables),
+  );
 });
 afterAll(async () => {
   await rm(dir, { recursive: true, force: true });
@@ -709,5 +763,53 @@ describe("callers the rules do not know are refused", () => {
     await notes().create(none);
     expect(none.status).toBe(403);
     expect(calls).toEqual([]);
+  });
+});
+
+// Strapi's database layer spreads a relation item's __pivot into the join row: on a type with no
+// rules, a member with create alone could otherwise add links to existing entries.
+describe("a type with no rules, served only to check a restricted write's body", () => {
+  const bookmarks = () => controllers[BOOKMARK]!;
+  it("creates and updates as Strapi does", async () => {
+    const created = context(member(), {
+      request: { body: { data: { label: "new", parent: "b2" } } },
+    });
+    await bookmarks().create(created);
+    expect(created.status).toBe(201);
+    expect(rowsOf(BOOKMARK).map((r) => r.label)).toEqual(["b1", "b2", "new"]);
+    const updated = context(member(), {
+      params: { id: "b1" },
+      request: { body: { data: { label: "edited", parent: { connect: [{ id: 2 }] } } } },
+    });
+    await bookmarks().update(updated);
+    expect(updated.status).toBeUndefined();
+    expect(byDocument(BOOKMARK, "b1")).toMatchObject({ label: "edited" });
+  });
+  it("refuses a __pivot, or any key that is no attribute, before Strapi sees the write", async () => {
+    for (const data of [
+      { label: "x", parent: { connect: [{ id: 1, __pivot: { bookmark_id: 2 } }] } },
+      { label: "x", documentId: "b1" },
+    ]) {
+      const create = context(member(), { request: { body: { data } } });
+      await bookmarks().create(create);
+      expect(create.status, JSON.stringify(data)).toBe(400);
+      const update = context(member(), { params: { id: "b1" }, request: { body: { data } } });
+      await bookmarks().update(update);
+      expect(update.status, JSON.stringify(data)).toBe(400);
+    }
+    expect(rowsOf(BOOKMARK).map((r) => [r.documentId, r.label])).toEqual([
+      ["b1", "b1"],
+      ["b2", "b2"],
+    ]);
+  });
+  it("leaves reads and deletes to Strapi's own controller, query parameters and all", async () => {
+    await bookmarks().find(context(member(), { query: { publicationFilter: "never-published" } }));
+    await bookmarks().findOne(context(member(), { params: { id: "b1" } }));
+    await bookmarks().delete(context(member(), { params: { id: "b1" }, query: { filters: {} } }));
+    expect(calls).toEqual([
+      `core.find ${BOOKMARK}`,
+      `core.findOne ${BOOKMARK}`,
+      `core.delete ${BOOKMARK}`,
+    ]);
   });
 });

@@ -3,8 +3,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Database, type Model } from "@strapi/database";
-import { relationRefs, scopeQuery, writeShape } from "./api-conditions";
-import { NOTE, REF, TAG, tables } from "./__fixtures__/reach-tables";
+import { relationChange, relationRefs, scopeQuery, writePlan, writeShape } from "./api-conditions";
+import { CATEGORY, NOTE, REF, TAG, tables } from "./__fixtures__/reach-tables";
 
 // The scoped queries run on Strapi's own query engine over a throwaway sqlite database (Strapi
 // resolves the filename as a path, so ":memory:" would be a file in the working directory), so the
@@ -33,6 +33,16 @@ const models = [
       title: { type: "string" },
       shared: { type: "boolean" },
       owner: relation(USER),
+    },
+  },
+  {
+    uid: CATEGORY,
+    singularName: "category",
+    tableName: "categories",
+    attributes: {
+      id: { type: "increments" },
+      label: { type: "string" },
+      notes: { type: "relation", relation: "manyToMany", target: NOTE },
     },
   },
   {
@@ -379,5 +389,93 @@ describe("an item's __pivot on Strapi's own entity manager", () => {
       message: "Invalid relation value for note",
     });
     expect(writeShape(tables, TAG, { label: "t", note }).ok).toBe(false);
+  });
+});
+
+// The change camis plans for a relation value is the change Strapi makes: each row id form camis
+// accepts is written by Strapi's own entity manager (toAssocs, then the join table writes) and the
+// links it leaves are those relationChange predicts, on a to-many and on a to-one relation. The
+// documentId forms reach the entity manager as these same forms: the document service's
+// mapRelation maps each item's documentId to row ids and keeps the shape (a shorthand in a set).
+describe("relationChange against Strapi's own entity manager", () => {
+  type Ids = number[];
+  const linksOf = async (uid: string, id: number, attribute: string): Promise<Ids> => {
+    const row = (await db
+      .query(uid)
+      .findOne({ where: { id }, populate: { [attribute]: true } })) as Record<
+      string,
+      unknown
+    > | null;
+    const value = row?.[attribute];
+    const items = Array.isArray(value)
+      ? value
+      : value === null || value === undefined
+        ? []
+        : [value];
+    return items.map((item) => (item as { id: number }).id).sort((a, b) => a - b);
+  };
+  const predicted = (value: unknown, initial: Ids, toOne: boolean): Ids => {
+    const change = relationChange(value, "relation");
+    if (change === null) throw new Error(`refused ${JSON.stringify(value)}`);
+    const connect = change.connect.ids;
+    const disconnect = change.disconnect.ids;
+    if (change.mode === "replace" || (toOne && connect.length > 0)) return [...connect].sort();
+    return [...new Set([...initial, ...connect])].filter((id) => !disconnect.includes(id)).sort();
+  };
+  const toMany = (): unknown[] => [
+    ids.theirs,
+    String(ids.theirs),
+    [ids.theirs, ids.orphan],
+    [],
+    null,
+    { id: ids.theirs },
+    { connect: [ids.theirs] },
+    { connect: ids.theirs },
+    { disconnect: [ids.mine] },
+    { connect: [ids.theirs], disconnect: [ids.mine] },
+    { connect: [ids.theirs], options: { strict: false } },
+    { options: { strict: true } },
+    { set: [ids.theirs] },
+    { set: { id: ids.theirs } },
+    { set: ids.theirs },
+    { set: String(ids.theirs) },
+    { set: [] },
+    { set: null },
+    { set: null, connect: [ids.theirs] },
+    { set: [ids.theirs], connect: null, disconnect: null },
+  ];
+  it("on a to-many relation", async () => {
+    for (const value of toMany()) {
+      const initial = [ids.mine!, ids.open!].sort();
+      const category = await create(CATEGORY, { label: "c", notes: initial });
+      await db.query(CATEGORY).update({ where: { id: category }, data: { notes: value } });
+      const after = await linksOf(CATEGORY, category, "notes");
+      expect(after, JSON.stringify(value)).toEqual(predicted(value, initial, false));
+      // What a replacement keeps is what the write plan decides the dropped entries on.
+      const plan = writePlan(tables, CATEGORY, as("reviewer"), { notes: value });
+      const change = relationChange(value, "relation")!;
+      expect(plan.ok && plan.value.replaced.map((r) => r.kept), JSON.stringify(value)).toEqual(
+        change.mode === "replace" ? [change.connect] : [],
+      );
+    }
+  });
+  it("on a to-one relation", async () => {
+    for (const value of [
+      ids.theirs,
+      null,
+      [ids.theirs],
+      { connect: [ids.theirs] },
+      { disconnect: [ids.mine] },
+      { set: ids.theirs },
+      { set: [ids.theirs] },
+      { set: null },
+      { set: null, connect: [ids.theirs] },
+    ]) {
+      const tag = await create(TAG, { label: "one", note: ids.mine });
+      await db.query(TAG).update({ where: { id: tag }, data: { note: value } });
+      expect(await linksOf(TAG, tag, "note"), JSON.stringify(value)).toEqual(
+        predicted(value, [ids.mine!], true),
+      );
+    }
   });
 });

@@ -286,10 +286,11 @@ describe("mediaFileIds: the stored files an entry write links through its media 
     expect(ids({ attachment: { id: 3 } })).toEqual({ ok: true, value: [3] });
     expect(ids({ attachment: [3, { id: "4" }] })).toEqual({ ok: true, value: [3, 4] });
     expect(
-      ids({
-        attachment: { connect: [5], set: [{ id: 6 }], disconnect: [7], options: { strict: true } },
-      }),
-    ).toEqual({ ok: true, value: [5, 6] });
+      ids({ attachment: { connect: [5], disconnect: [7], options: { strict: true } } }),
+    ).toEqual({ ok: true, value: [5] });
+    expect(ids({ attachment: { set: [{ id: 6 }] } })).toEqual({ ok: true, value: [6] });
+    expect(ids({ attachment: { set: 6 } })).toEqual({ ok: true, value: [6] });
+    expect(ids({ attachment: { connect: "3" } })).toEqual({ ok: true, value: [3] });
     expect(ids({ attachment: null })).toEqual({ ok: true, value: [] });
     expect(ids({ attachment: { set: null } })).toEqual({ ok: true, value: [] });
     expect(ids({ title: 3 })).toEqual({ ok: true, value: [] });
@@ -307,8 +308,8 @@ describe("mediaFileIds: the stored files an entry write links through its media 
       { id: 0 },
       { foo: 1 },
       [3, "abc"],
-      { connect: "3" },
       { connect: [{ documentId: "abc" }] },
+      { connect: [5], set: [6] },
       // Strapi's database layer spreads __pivot into the join row: file_id, related_id and
       // related_type would name another file or entry than the id checked.
       { id: 3, __pivot: { file_id: 9 } },

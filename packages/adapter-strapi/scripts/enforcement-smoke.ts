@@ -640,6 +640,45 @@ const uploads = async (dir: string, alice: Account, bob: Account): Promise<void>
     data: { title: "rita's own" },
   });
   check("rita updates her own note", retitle.status === 200, retitle);
+
+  // Strapi replaces a relation for any set it finds truthy, one entry included: a set naming only
+  // rita's note drops alice's from the category, which rita may not update.
+  const category = `category-${Date.now()}`;
+  run(
+    dir,
+    "INSERT INTO categories (document_id, label, created_at, updated_at, published_at) VALUES (?, ?, ?, ?, ?)",
+    category,
+    "shared",
+    Date.now(),
+    Date.now(),
+    Date.now(),
+  );
+  const categoryId = select(dir, "SELECT id FROM categories WHERE document_id = ?", category)[0]!
+    .id;
+  run(
+    dir,
+    "INSERT INTO notes_category_lnk (note_id, category_id, note_ord) VALUES (?, ?, 1)",
+    mine.id,
+    categoryId,
+  );
+  const held = () =>
+    select(dir, "SELECT note_id FROM notes_category_lnk WHERE category_id = ?", categoryId).map(
+      (r) => Number(r.note_id),
+    );
+  for (const [what, set] of [
+    ["a set of her note's documentId", ritas.documentId],
+    ["a set of her note's row id", ritas.id],
+  ] as const) {
+    const r = await call("PUT", `/api/categories/${category}`, rita.jwt, {
+      data: { notes: { set } },
+    });
+    check(`rita's ${what} cannot drop alice's note from a category`, r.status === 403, r);
+  }
+  check(
+    "alice's note stays in the category",
+    JSON.stringify(held()) === JSON.stringify([mine.id]),
+    held(),
+  );
 };
 
 /**

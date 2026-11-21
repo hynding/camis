@@ -617,6 +617,53 @@ describe("writes the users-permissions and upload plugins serve unchecked fail t
     // Reading it alone writes no link (its media reach may still have it served).
     expect([...projectUploads(album, writer("Album", ["read"])).served]).toEqual(["Note", "Tag"]);
   });
+  // Strapi's database layer spreads a relation item's __pivot into the join row whatever type it
+  // is written through, so a restricted write's body is checked on every type with a link.
+  it("serves each collection type with a relation that a restricted role or an open route writes", () => {
+    const bookmark = (fields: IrDocument["contentTypes"][number]["fields"], open = false) => ({
+      ...doc,
+      contentTypes: [
+        ...doc.contentTypes,
+        {
+          name: "Bookmark",
+          kind: "collection" as const,
+          fields,
+          ...(open ? { options: { publicApiActions: ["update" as const] } } : {}),
+        },
+      ],
+    });
+    const link = [
+      {
+        type: "relation" as const,
+        name: "parent",
+        relationKind: "manyToOne" as const,
+        target: "Bookmark",
+      },
+    ];
+    const servedOf = (d: IrDocument, rs: Role[]) =>
+      projectApiEnforcement(d, rs).types.find((t) => t.contentType === "Bookmark");
+    for (const actions of [["create"], ["update"]] as const) {
+      const out = projectApiEnforcement(bookmark(link), writer("Bookmark", actions));
+      expect(out.types.find((t) => t.contentType === "Bookmark")).toMatchObject({
+        own: false,
+        relations: {},
+        roles: {},
+      });
+      expect(out.shapes["api::bookmark.bookmark"]).toEqual({ parent: "relation" });
+    }
+    expect(servedOf(bookmark(link, true), roles)).toBeDefined();
+    // Read alone, or no link to write, or an admin role only: Strapi's own controller serves it.
+    expect(servedOf(bookmark(link), writer("Bookmark", ["read", "delete"]))).toBeUndefined();
+    expect(
+      servedOf(bookmark([{ type: "string", name: "label" }]), writer("Bookmark", ["create"])),
+    ).toBeUndefined();
+    const admin = roles.map((r) =>
+      r.name === "manager"
+        ? { ...r, grants: [...r.grants, { contentType: "Bookmark", actions: ["create" as const] }] }
+        : r,
+    );
+    expect(servedOf(bookmark(link), admin)).toBeUndefined();
+  });
 
   // users-permissions' user update and create take any role and password from the body.
   it("a non-admin role that creates or updates the built-in user", () => {
