@@ -8,33 +8,75 @@ import { ownershipBundle } from "../__fixtures__/ownership";
 
 // Strapi cannot be booted here, so the emitted enforcement modules run against a small fake of
 // the surface they use: the request context, the core controller Strapi builds them on, its
-// document service and its query engine. The fake core controller is what an unguarded request
-// would reach: it serves every row and writes whatever the body says.
+// document service (with filters and populate) and its query engine. The fake core controller is
+// what an unguarded request would reach: it serves every row and writes whatever the body says.
 
-const UID = "api::note.note";
+const NOTE = "api::note.note";
+const TAG = "api::tag.tag";
 
-interface Row {
-  id: number;
-  documentId: string;
-  title: string;
-  shared: boolean;
-  owner: { id: number; documentId: string } | null;
-}
-
+type Row = Record<string, unknown> & { id: number; documentId: string };
 type Filter = Record<string, unknown>;
 
+/** Which attributes of each type are relations (to which type) or repeatable components. */
+const SCHEMA: Record<string, Record<string, { relation: string } | { component: string }>> = {
+  [NOTE]: { owner: { relation: "user" } },
+  [TAG]: {
+    note: { relation: NOTE },
+    parent: { relation: TAG },
+    refs: { component: "shared.reference" },
+  },
+  "shared.reference": { note: { relation: NOTE } },
+};
+
 /** Strapi filter semantics for the operators the enforcement writes and a client might send. */
-const matches = (row: Record<string, unknown>, filter: Filter): boolean =>
+const matches = (row: unknown, filter: Filter): boolean =>
   Object.entries(filter).every(([key, cond]) => {
     if (key === "$and") return (cond as Filter[]).every((f) => matches(row, f));
     if (key === "$or") return (cond as Filter[]).some((f) => matches(row, f));
-    const value = row[key];
+    if (key === "$not") return !matches(row, cond as Filter);
+    const value = (row as Record<string, unknown> | null)?.[key];
     const ops = cond as Record<string, unknown>;
     if ("$eq" in ops) return value === ops.$eq;
     if ("$null" in ops) return (value === null || value === undefined) === ops.$null;
-    // A relation: its own filter applies to the related row.
-    return value !== null && typeof value === "object" && matches(value as Filter, ops as Filter);
+    // A relation or a component: its own filter applies to the related rows (any of them).
+    if (Array.isArray(value)) return value.some((v) => matches(v, ops));
+    return value !== null && typeof value === "object" && matches(value, ops);
   });
+
+/** A row as the document service returns it: scalars, plus what `populate` asks for. */
+const shape = (
+  row: Record<string, unknown>,
+  uid: string,
+  populate: unknown,
+): Record<string, unknown> => {
+  const schema = SCHEMA[uid] ?? {};
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(row)) if (!(key in schema)) out[key] = value;
+  const entries: Record<string, unknown> =
+    populate === "*"
+      ? Object.fromEntries(Object.keys(schema).map((k) => [k, true]))
+      : typeof populate === "object" && populate !== null
+        ? (populate as Record<string, unknown>)
+        : {};
+  for (const [key, entry] of Object.entries(entries)) {
+    const link = schema[key];
+    if (link === undefined || entry === false) continue;
+    const options = typeof entry === "object" && entry !== null ? (entry as Filter) : {};
+    const value = row[key];
+    if ("component" in link) {
+      out[key] = ((value as Record<string, unknown>[] | undefined) ?? []).map((c) =>
+        shape(c, link.component, options.populate),
+      );
+      continue;
+    }
+    const related = value as Record<string, unknown> | null | undefined;
+    const visible =
+      related != null &&
+      (options.filters === undefined || matches(related, options.filters as Filter));
+    out[key] = visible ? shape(related, link.relation, options.populate) : null;
+  }
+  return out;
+};
 
 const user = (id: number, role: string) => ({
   id,
@@ -48,67 +90,106 @@ const asUser = (id: number, role: string) => ({
 });
 const asGuest = { auth: { strategy: { name: "users-permissions" }, credentials: null } };
 const asToken = { auth: { strategy: { name: "api-token" }, credentials: { type: "full-access" } } };
+const member = () => asUser(10, "member");
 
-let rows: Row[];
+const tables: Record<string, Row[]> = {};
 const calls: string[] = [];
 let seenInput: unknown[] = [];
 let createdWith: unknown;
 
-const store = (): Row[] => [
-  {
-    id: 1,
-    documentId: "mine",
-    title: "mine",
-    shared: false,
-    owner: { id: 10, documentId: "user-10" },
-  },
-  {
+const owner = (id: number) => ({ id, documentId: `user-${id}` });
+const seed = (): void => {
+  const mine: Row = { id: 1, documentId: "mine", title: "mine", shared: false, owner: owner(10) };
+  const theirs: Row = {
     id: 2,
     documentId: "theirs",
     title: "theirs",
     shared: false,
-    owner: { id: 11, documentId: "user-11" },
-  },
-  {
-    id: 3,
-    documentId: "open",
-    title: "open",
-    shared: true,
-    owner: { id: 11, documentId: "user-11" },
-  },
-];
+    owner: owner(11),
+  };
+  const open: Row = { id: 3, documentId: "open", title: "open", shared: true, owner: owner(11) };
+  const t1: Row = {
+    id: 1,
+    documentId: "t1",
+    label: "t1",
+    note: theirs,
+    parent: null,
+    refs: [{ note: theirs }],
+  };
+  const t2: Row = { id: 2, documentId: "t2", label: "t2", note: open, parent: t1, refs: [] };
+  const t3: Row = { id: 3, documentId: "t3", label: "t3", note: mine, parent: null, refs: [] };
+  tables[NOTE] = [mine, theirs, open];
+  tables[TAG] = [t1, t2, t3];
+};
+const rowsOf = (uid: string): Row[] => tables[uid]!;
+const byDocument = (uid: string, documentId: unknown) =>
+  rowsOf(uid).find((r) => r.documentId === documentId);
+
+/** A relation value as Strapi's document service resolves it: a document id or a connect list. */
+const resolve = (uid: string, value: unknown): unknown => {
+  if (typeof value === "string") return byDocument(uid, value) ?? null;
+  if (typeof value === "object" && value !== null && "connect" in value) {
+    const [first] = (value as { connect: unknown[] }).connect;
+    return resolve(
+      uid,
+      typeof first === "object" && first !== null ? (first as Row).documentId : first,
+    );
+  }
+  return value;
+};
 
 const strapi = {
   db: {
     query: (uid: string) => ({
-      findMany: async (params: { where: { documentId: string } }) => {
-        expect(uid).toBe(UID);
-        return rows.filter((r) => r.documentId === params.where.documentId);
+      findMany: async (params: { where: Filter }) => {
+        const where = params.where;
+        if ("documentId" in where)
+          return rowsOf(uid).filter((r) => r.documentId === where.documentId);
+        const [byDoc, byId] = where.$or as [
+          { documentId: { $in: string[] } },
+          { id: { $in: number[] } },
+        ];
+        return rowsOf(uid).filter(
+          (r) => byDoc.documentId.$in.includes(r.documentId) || byId.id.$in.includes(r.id),
+        );
       },
     }),
   },
   service: (uid: string) => ({
-    find: async (params: { filters?: Filter }) => {
-      expect(uid).toBe(UID);
-      const results = rows.filter(
-        (r) => params.filters === undefined || matches({ ...r }, params.filters),
-      );
+    find: async (params: { filters?: Filter; populate?: unknown }) => {
+      const results = rowsOf(uid)
+        .filter((r) => params.filters === undefined || matches(r, params.filters))
+        .map((r) => shape(r, uid, params.populate));
       return {
         results,
         pagination: { page: 1, pageSize: 25, pageCount: 1, total: results.length },
       };
     },
-    create: async (params: { data: Record<string, unknown> }) => {
+    findOne: async (documentId: string, params: { populate?: unknown }) => {
+      const row = byDocument(uid, documentId);
+      return row === undefined ? null : shape(row, uid, params.populate);
+    },
+    create: async (params: { data: Record<string, unknown>; populate?: unknown }) => {
       createdWith = params.data;
+      const data = { ...params.data };
+      for (const [key, link] of Object.entries(SCHEMA[uid] ?? {}))
+        if ("relation" in link && key in data) data[key] = resolve(link.relation, data[key]);
       const row: Row = {
-        id: rows.length + 1,
-        documentId: `new-${rows.length + 1}`,
-        title: String(params.data.title),
-        shared: false,
-        owner: null,
+        ...data,
+        id: rowsOf(uid).length + 1,
+        documentId: `new-${rowsOf(uid).length + 1}`,
       };
-      rows.push(row);
-      return row;
+      rowsOf(uid).push(row);
+      return shape(row, uid, params.populate);
+    },
+    update: async (
+      documentId: string,
+      params: { data: Record<string, unknown>; populate?: unknown },
+    ) => {
+      const row = byDocument(uid, documentId);
+      if (row === undefined) return null;
+      Object.assign(row, params.data);
+      return shape(row, uid, params.populate);
     },
   }),
 };
@@ -117,10 +198,11 @@ interface Context {
   params: { id?: string };
   query: Record<string, unknown>;
   state: unknown;
-  request: { body?: { data?: Record<string, unknown> } };
+  request: { body?: { data?: unknown } };
   status?: number;
   notFound: () => unknown;
   forbidden: () => unknown;
+  badRequest: (message?: string) => unknown;
 }
 
 const context = (state: unknown, extra: Partial<Context> = {}): Context => {
@@ -131,19 +213,23 @@ const context = (state: unknown, extra: Partial<Context> = {}): Context => {
     request: {},
     notFound: () => {
       ctx.status = 404;
-      return { error: { status: 404, name: "NotFoundError" } };
+      return { data: null, error: { status: 404, name: "NotFoundError" } };
     },
     forbidden: () => {
       ctx.status = 403;
-      return { error: { status: 403, name: "ForbiddenError" } };
+      return { data: null, error: { status: 403, name: "ForbiddenError" } };
+    },
+    badRequest: () => {
+      ctx.status = 400;
+      return { data: null, error: { status: 400, name: "ValidationError" } };
     },
     ...extra,
   };
   return ctx;
 };
 
-/** Strapi's core collection controller for the type: every row, every write, no questions. */
-const coreController = () => ({
+/** Strapi's core collection controller for a type: every row, every write, no questions. */
+const coreController = (uid: string) => ({
   validateQuery: async () => {},
   sanitizeQuery: async (ctx: Context) => ({ ...ctx.query }),
   validateInput: async (data: unknown) => {
@@ -153,46 +239,45 @@ const coreController = () => ({
   sanitizeOutput: async (data: unknown) => data,
   transformResponse: (data: unknown, meta?: unknown) => ({ data, meta: meta ?? {} }),
   async find(ctx: Context) {
-    calls.push("core.find");
-    const { results, pagination } = await strapi.service(UID).find({ ...(ctx.query as object) });
+    calls.push(`core.find ${uid}`);
+    const { results, pagination } = await strapi.service(uid).find({ ...ctx.query });
     return { data: results, meta: { pagination } };
   },
   async findOne(ctx: Context) {
-    calls.push("core.findOne");
-    return { data: rows.find((r) => r.documentId === ctx.params.id) ?? null };
+    calls.push(`core.findOne ${uid}`);
+    return { data: await strapi.service(uid).findOne(String(ctx.params.id), { ...ctx.query }) };
   },
   async create(ctx: Context) {
-    calls.push("core.create");
-    seenInput.push(ctx.request.body?.data);
-    return { data: await strapi.service(UID).create({ data: ctx.request.body!.data! }) };
+    calls.push(`core.create ${uid}`);
+    const data = ctx.request.body?.data as Record<string, unknown>;
+    seenInput.push(data);
+    return { data: await strapi.service(uid).create({ data }) };
   },
   async update(ctx: Context) {
-    calls.push("core.update");
-    const row = rows.find((r) => r.documentId === ctx.params.id)!;
-    const data = ctx.request.body!.data!;
-    if (typeof data.title === "string") row.title = data.title;
-    if (typeof data.owner === "number")
-      row.owner = { id: data.owner, documentId: `user-${data.owner}` };
-    return { data: row };
+    calls.push(`core.update ${uid}`);
+    const data = ctx.request.body?.data as Record<string, unknown>;
+    return { data: await strapi.service(uid).update(String(ctx.params.id), { data }) };
   },
   async delete(ctx: Context) {
-    calls.push("core.delete");
-    rows = rows.filter((r) => r.documentId !== ctx.params.id);
+    calls.push(`core.delete ${uid}`);
+    tables[uid] = rowsOf(uid).filter((r) => r.documentId !== ctx.params.id);
     return { data: null };
   },
 });
 
-type Action = (
-  ctx: Context,
-) => Promise<{ data: unknown; meta?: { pagination?: { total: number } } }>;
+interface Body {
+  data: unknown;
+  meta?: { pagination?: { total: number } };
+}
+type Action = (ctx: Context) => Promise<Body>;
 type Controller = Record<"find" | "findOne" | "create" | "update" | "delete", Action>;
 
 let dir: string;
-let controller: Controller;
+const controllers: Record<string, Controller> = {};
 
 /** Strapi 5's createCoreController: the core's methods under the given ones, as its prototype. */
-const createCoreController = (factory: (p: { strapi: typeof strapi }) => object): Controller => {
-  const base = coreController();
+const createCoreController = (uid: string, factory: (p: { strapi: typeof strapi }) => object) => {
+  const base = coreController(uid);
   const own = factory({ strapi }) as Record<string, unknown>;
   for (const [name, method] of Object.entries(base))
     if (own[name] === undefined) own[name] = method;
@@ -208,75 +293,78 @@ beforeAll(async () => {
     const content = result.files.find((f) => f.path === `src/permissions/${name}`)!.content;
     await writeFile(join(dir, "permissions", name), content);
   }
-  const conditions = await import(
+  const { TABLES } = await import(
     pathToFileURL(join(dir, "permissions", "api-conditions.ts")).href
   );
   const { enforcedController } = await import(
     pathToFileURL(join(dir, "permissions", "api-controller.ts")).href
   );
-  controller = createCoreController(({ strapi: s }) =>
-    enforcedController(s, UID, conditions.RULES[UID]),
-  );
+  for (const uid of [NOTE, TAG])
+    controllers[uid] = createCoreController(uid, ({ strapi: s }) =>
+      enforcedController(s, uid, TABLES),
+    );
 });
 afterAll(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 beforeEach(() => {
-  rows = store();
+  seed();
   calls.length = 0;
   seenInput = [];
   createdWith = undefined;
 });
 
-const ids = (body: { data: unknown }): string[] => (body.data as Row[]).map((r) => r.documentId);
+const notes = () => controllers[NOTE]!;
+const tags = () => controllers[TAG]!;
+const documentIds = (body: Body): string[] => (body.data as Row[]).map((r) => r.documentId);
+const field = (body: Body, documentId: string, key: string): unknown =>
+  (body.data as Row[]).find((r) => r.documentId === documentId)?.[key];
 
 describe("a member, who manages only the notes it owns", () => {
-  const member = () => asUser(10, "member");
-
   it("lists only its own notes, and the page counts only those", async () => {
-    const body = await controller.find(context(member()));
-    expect(ids(body)).toEqual(["mine"]);
+    const body = await notes().find(context(member()));
+    expect(documentIds(body)).toEqual(["mine"]);
     expect(body.meta?.pagination?.total).toBe(1);
-    expect(calls).not.toContain("core.find");
+    expect(calls).toEqual([]);
   });
   it("cannot widen the list with a filter of its own", async () => {
     const wide = { $or: [{ owner: { id: { $eq: 11 } } }, { title: { $eq: "theirs" } }] };
-    const body = await controller.find(context(member(), { query: { filters: wide } }));
-    expect(ids(body)).toEqual([]);
-    const narrowing = await controller.find(
-      context(member(), { query: { filters: { title: { $eq: "mine" } } } }),
-    );
-    expect(ids(narrowing)).toEqual(["mine"]);
+    expect(
+      documentIds(await notes().find(context(member(), { query: { filters: wide } }))),
+    ).toEqual([]);
+    const narrowing = { title: { $eq: "mine" } };
+    expect(
+      documentIds(await notes().find(context(member(), { query: { filters: narrowing } }))),
+    ).toEqual(["mine"]);
   });
   it("reads its own note, and is answered 404 for another's, which is never fetched", async () => {
-    const own = context(member(), { params: { id: "mine" } });
-    expect((await controller.findOne(own)).data).toMatchObject({ documentId: "mine" });
+    const own = await notes().findOne(context(member(), { params: { id: "mine" } }));
+    expect(own.data).toMatchObject({ documentId: "mine" });
     const other = context(member(), { params: { id: "theirs" } });
-    await controller.findOne(other);
+    await notes().findOne(other);
     expect(other.status).toBe(404);
-    expect(calls).toEqual(["core.findOne"]);
   });
   it("cannot update or delete another's note", async () => {
     const update = context(member(), {
       params: { id: "theirs" },
       request: { body: { data: { title: "x" } } },
     });
-    await controller.update(update);
+    await notes().update(update);
     expect(update.status).toBe(404);
     const del = context(member(), { params: { id: "theirs" } });
-    await controller.delete(del);
+    await notes().delete(del);
     expect(del.status).toBe(404);
     expect(calls).toEqual([]);
-    expect(rows.find((r) => r.documentId === "theirs")).toMatchObject({ title: "theirs" });
+    expect(byDocument(NOTE, "theirs")).toMatchObject({ title: "theirs" });
   });
   it("is answered 404 for a note that does not exist", async () => {
     const ctx = context(member(), { params: { id: "nope" } });
-    await controller.delete(ctx);
+    await notes().delete(ctx);
     expect(ctx.status).toBe(404);
   });
   it("creates a note owned by itself, whatever owner the body names", async () => {
     const ctx = context(member(), { request: { body: { data: { title: "new", owner: 11 } } } });
-    await controller.create(ctx);
+    await notes().create(ctx);
     expect(ctx.status).toBe(201);
     expect(createdWith).toEqual({ title: "new", owner: { set: [{ documentId: "user-10" }] } });
     // Strapi's validator never sees the relation, which the role may not read.
@@ -287,34 +375,93 @@ describe("a member, who manages only the notes it owns", () => {
       params: { id: "mine" },
       request: { body: { data: { title: "edited", owner: 11 } } },
     });
-    await controller.update(ctx);
-    expect(calls).toEqual(["core.update"]);
-    expect(rows.find((r) => r.documentId === "mine")).toMatchObject({
-      title: "edited",
-      owner: { id: 10 },
-    });
+    await notes().update(ctx);
+    expect(byDocument(NOTE, "mine")).toMatchObject({ title: "edited", owner: { id: 10 } });
   });
   it("deletes its own note", async () => {
-    await controller.delete(context(member(), { params: { id: "mine" } }));
-    expect(rows.map((r) => r.documentId)).toEqual(["theirs", "open"]);
+    await notes().delete(context(member(), { params: { id: "mine" } }));
+    expect(rowsOf(NOTE).map((r) => r.documentId)).toEqual(["theirs", "open"]);
+  });
+  // A draft and its published version are two rows of one entry: both must pass.
+  it("is refused an entry whose draft it owns but whose published version it does not", async () => {
+    rowsOf(NOTE).push({
+      id: 9,
+      documentId: "mine",
+      title: "mine",
+      shared: false,
+      owner: owner(11),
+    });
+    const read = context(member(), { params: { id: "mine" } });
+    await notes().findOne(read);
+    expect(read.status).toBe(404);
+    const update = context(member(), {
+      params: { id: "mine" },
+      request: { body: { data: { title: "x" } } },
+    });
+    await notes().update(update);
+    expect(update.status).toBe(404);
+    expect(calls).toEqual([]);
+  });
+  it("is answered 400 for a create or update whose data is not an object, before Strapi sees it", async () => {
+    for (const data of [[], "x", null]) {
+      const create = context(member(), { request: { body: { data } } });
+      await notes().create(create);
+      expect(create.status, JSON.stringify(data)).toBe(400);
+      const update = context(member(), { params: { id: "mine" }, request: { body: { data } } });
+      await notes().update(update);
+      expect(update.status, JSON.stringify(data)).toBe(400);
+    }
+    expect(calls).toEqual([]);
+    expect(rowsOf(NOTE)).toHaveLength(3);
+  });
+});
+
+describe("create conditions", () => {
+  // A contributor may only add private notes; a note is shared unless it says otherwise.
+  it("refuses a create whose omitted field defaults to a value the condition forbids", async () => {
+    const omitted = context(asUser(12, "contributor"), {
+      request: { body: { data: { title: "c" } } },
+    });
+    await notes().create(omitted);
+    expect(omitted.status).toBe(403);
+    const shared = context(asUser(12, "contributor"), {
+      request: { body: { data: { title: "c", shared: true } } },
+    });
+    await notes().create(shared);
+    expect(shared.status).toBe(403);
+    expect(rowsOf(NOTE)).toHaveLength(3);
+    const ok = context(asUser(12, "contributor"), {
+      request: { body: { data: { title: "c", shared: false } } },
+    });
+    await notes().create(ok);
+    expect(ok.status).toBe(201);
+  });
+  it("refuses a guest's create, which the public role does not hold", async () => {
+    const ctx = context(asGuest, { request: { body: { data: { title: "g" } } } });
+    await notes().create(ctx);
+    expect(ctx.status).toBe(403);
+    expect(calls).toEqual([]);
   });
 });
 
 describe("a reviewer, who reads every note but edits only its own", () => {
   const reviewer = () => asUser(10, "reviewer");
-
   it("lists every note", async () => {
-    expect(ids(await controller.find(context(reviewer())))).toEqual(["mine", "theirs", "open"]);
+    expect(documentIds(await notes().find(context(reviewer())))).toEqual([
+      "mine",
+      "theirs",
+      "open",
+    ]);
   });
   it("is answered 403 updating or deleting a note it may read but not edit", async () => {
     const update = context(reviewer(), {
       params: { id: "theirs" },
       request: { body: { data: { title: "x" } } },
     });
-    await controller.update(update);
+    await notes().update(update);
     expect(update.status).toBe(403);
     const del = context(reviewer(), { params: { id: "theirs" } });
-    await controller.delete(del);
+    await notes().delete(del);
     expect(del.status).toBe(403);
     expect(calls).toEqual([]);
   });
@@ -322,45 +469,121 @@ describe("a reviewer, who reads every note but edits only its own", () => {
 
 describe("a guest, who holds the public role", () => {
   it("lists and reads only shared notes", async () => {
-    expect(ids(await controller.find(context(asGuest)))).toEqual(["open"]);
+    expect(documentIds(await notes().find(context(asGuest)))).toEqual(["open"]);
     const hidden = context(asGuest, { params: { id: "theirs" } });
-    await controller.findOne(hidden);
+    await notes().findOne(hidden);
     expect(hidden.status).toBe(404);
+  });
+});
+
+describe("tags reach notes: a populate, a filter or a link carries the note's condition", () => {
+  const list = (state: unknown, query: Record<string, unknown>) =>
+    tags().find(context(state, { query }));
+
+  it("populates only the notes the caller may read", async () => {
+    const body = await list(member(), { populate: "note" });
+    expect(field(body, "t1", "note")).toBeNull();
+    expect(field(body, "t2", "note")).toBeNull();
+    expect(field(body, "t3", "note")).toMatchObject({ documentId: "mine" });
+    const guest = await list(asGuest, { populate: ["note"] });
+    expect(field(guest, "t1", "note")).toBeNull();
+    expect(field(guest, "t2", "note")).toMatchObject({ documentId: "open" });
+  });
+  it("narrows populate=*, a nested populate and a component's relation as well", async () => {
+    expect(field(await list(member(), { populate: "*" }), "t1", "note")).toBeNull();
+    const nested = await list(member(), { populate: { parent: { populate: { note: true } } } });
+    expect(field(nested, "t2", "parent")).toMatchObject({ documentId: "t1", note: null });
+    const dotted = await list(member(), { populate: "parent.note" });
+    expect(field(dotted, "t2", "parent")).toMatchObject({ documentId: "t1", note: null });
+    const component = await list(member(), { populate: { refs: { populate: ["note"] } } });
+    expect(field(component, "t1", "refs")).toEqual([{ note: null }]);
+  });
+  it("narrows a populate on one entry too", async () => {
+    const one = await tags().findOne(
+      context(member(), { params: { id: "t1" }, query: { populate: "*" } }),
+    );
+    expect(one.data).toMatchObject({ documentId: "t1", note: null });
+  });
+  it("answers a filter on another member's note as if it were not there", async () => {
+    const oracle = await list(member(), { filters: { note: { title: { $eq: "theirs" } } } });
+    expect(documentIds(oracle)).toEqual([]);
+    const own = await list(member(), { filters: { note: { title: { $eq: "mine" } } } });
+    expect(documentIds(own)).toEqual(["t3"]);
+  });
+  it("refuses a sort through the note, with 400", async () => {
+    const ctx = context(member(), { query: { sort: "note.title:asc" } });
+    await tags().find(ctx);
+    expect(ctx.status).toBe(400);
+  });
+  it("refuses to link another member's note, by document id, connect or a component", async () => {
+    for (const data of [
+      { label: "x", note: "theirs" },
+      { label: "x", note: { connect: [{ documentId: "theirs" }] } },
+      { label: "x", note: { connect: [2] } },
+      { label: "x", refs: [{ note: "theirs" }] },
+      { label: "x", note: "nope" },
+    ]) {
+      const ctx = context(member(), { request: { body: { data } } });
+      await tags().create(ctx);
+      expect(ctx.status, JSON.stringify(data)).toBe(403);
+    }
+    expect(rowsOf(TAG)).toHaveLength(3);
+    const ok = context(member(), { request: { body: { data: { label: "y", note: "mine" } } } });
+    await tags().create(ok);
+    expect(ok.status).toBe(201);
+  });
+  it("leaves a tag list alone for a caller no condition narrows", async () => {
+    const body = await list(asToken, { populate: "note" });
+    expect(field(body, "t1", "note")).toMatchObject({ documentId: "theirs" });
+    expect(calls).toEqual([`core.find ${TAG}`]);
   });
 });
 
 describe("callers no role restricts", () => {
   it("an admin role reaches every note through the core controller", async () => {
-    expect(ids(await controller.find(context(asUser(12, "manager"))))).toEqual([
+    expect(documentIds(await notes().find(context(asUser(12, "manager"))))).toEqual([
       "mine",
       "theirs",
       "open",
     ]);
-    expect(calls).toEqual(["core.find"]);
+    expect(calls).toEqual([`core.find ${NOTE}`]);
   });
   // Strapi's API tokens stand for no role and no user (Phase 25): no row condition applies, and
   // an assigned owner is left unset rather than taken from the body.
   it("an API token reads every note, and cannot name an owner", async () => {
-    expect(ids(await controller.find(context(asToken)))).toEqual(["mine", "theirs", "open"]);
+    expect(documentIds(await notes().find(context(asToken)))).toEqual(["mine", "theirs", "open"]);
     const ctx = context(asToken, { request: { body: { data: { title: "t", owner: 11 } } } });
-    await controller.create(ctx);
+    await notes().create(ctx);
     expect(seenInput).toEqual([{ title: "t" }]);
   });
 });
 
 describe("callers the rules do not know are refused", () => {
   it("a role the IR does not grant the type lists nothing and edits nothing", async () => {
-    expect(ids(await controller.find(context(asUser(13, "stranger"))))).toEqual([]);
+    expect(documentIds(await notes().find(context(asUser(13, "stranger"))))).toEqual([]);
     const ctx = context(asUser(13, "stranger"), { params: { id: "theirs" } });
-    await controller.delete(ctx);
+    await notes().delete(ctx);
     expect(ctx.status).toBe(403);
+  });
+  it("a role named like an Object prototype property is a stranger, not a crash", async () => {
+    for (const role of ["constructor", "toString", "__proto__"]) {
+      const ctx = context(asUser(13, role), { request: { body: { data: { title: "x" } } } });
+      await notes().create(ctx);
+      expect(ctx.status, role).toBe(403);
+      const update = context(asUser(13, role), {
+        params: { id: "mine" },
+        request: { body: { data: { title: "x" } } },
+      });
+      await notes().update(update);
+      expect(update.status, role).toBe(403);
+    }
   });
   it("a session whose role was not loaded, or a request no strategy authenticated", async () => {
     const roleless = context({ user: { id: 10 } }, { params: { id: "mine" } });
-    await controller.findOne(roleless);
+    await notes().findOne(roleless);
     expect(roleless.status).toBe(403);
     const none = context({}, { request: { body: { data: { title: "x" } } } });
-    await controller.create(none);
+    await notes().create(none);
     expect(none.status).toBe(403);
     expect(calls).toEqual([]);
   });

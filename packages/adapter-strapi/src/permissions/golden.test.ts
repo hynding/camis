@@ -23,15 +23,13 @@ describe("permissions golden", () => {
   // generation seeded, so the role kept an API permission camis no longer emits. The bootstrap
   // therefore revokes too — but only rows it owns: the `plugin::*` rows are Strapi's own defaults
   // (users-permissions' `user.me`, the auth endpoints), and deleting those breaks login itself,
-  // except the few api-roles.json lists as `managed`, which camis grants on its own account.
-  it("bootstrap revokes stale api:: permissions and never touches plugin:: ones", () => {
+  // except the ones the bootstrap itself created, which it keeps a record of in Strapi's store.
+  it("bootstrap revokes stale api:: permissions and only the plugin:: ones it granted", () => {
     const index = result.files.find((f) => f.path === "src/index.ts")!.content;
     expect(index).toContain(
       'const owned = await strapi.query("plugin::users-permissions.permission").findMany({ where: { role: role.id } });',
     );
-    expect(index).toContain(
-      'if (!p.action.startsWith("api::") && !managed.includes(p.action)) continue;',
-    );
+    expect(index).toContain('if (!p.action.startsWith("api::") && !mine.has(p.action)) continue;');
     expect(index).toContain("if (actions.includes(p.action)) continue;");
     expect(index).toContain(
       'await strapi.query("plugin::users-permissions.permission").delete({ where: { id: p.id } });',

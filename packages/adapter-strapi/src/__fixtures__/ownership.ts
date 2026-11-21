@@ -12,9 +12,17 @@ const shared: Expression = {
   right: { kind: "lit", value: true },
 };
 
+const unshared: Expression = {
+  kind: "ne",
+  left: { kind: "var", name: "record.shared" },
+  right: { kind: "lit", value: true },
+};
+
 /**
  * Notes owned by the account that made them: members manage their own, guests read the shared
- * ones, reviewers read every note but edit only their own, and the admin role does anything.
+ * ones, reviewers read every note but edit only their own, contributors may only add private
+ * notes (a note is shared unless it says otherwise), and the admin role does anything. Tags reach
+ * notes directly, through a parent tag, and through a repeatable reference component.
  */
 export const ownershipBundle: IrBundle = {
   document: {
@@ -35,7 +43,7 @@ export const ownershipBundle: IrBundle = {
         fields: [
           { type: "relation", name: "owner", relationKind: "manyToOne", target: "User" },
           { type: "string", name: "title" },
-          { type: "boolean", name: "shared" },
+          { type: "boolean", name: "shared", default: true },
         ],
       },
       {
@@ -44,10 +52,17 @@ export const ownershipBundle: IrBundle = {
         fields: [
           { type: "string", name: "label" },
           { type: "relation", name: "note", relationKind: "manyToOne", target: "Note" },
+          { type: "relation", name: "parent", relationKind: "manyToOne", target: "Tag" },
+          { type: "component", name: "refs", component: "Reference", repeatable: true },
         ],
       },
     ],
-    components: [],
+    components: [
+      {
+        name: "Reference",
+        fields: [{ type: "relation", name: "note", relationKind: "manyToOne", target: "Note" }],
+      },
+    ],
   },
   roles: [
     {
@@ -66,7 +81,18 @@ export const ownershipBundle: IrBundle = {
           condition: owned,
           assign: { owner: "user.id" },
         },
-        { contentType: "Tag", actions: ["read"] },
+        { contentType: "Tag", actions: ["create", "read"] },
+      ],
+    },
+    {
+      name: "contributor",
+      grants: [
+        {
+          contentType: "Note",
+          actions: ["create"],
+          condition: unshared,
+          assign: { owner: "user.id" },
+        },
       ],
     },
     {

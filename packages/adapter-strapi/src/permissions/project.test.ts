@@ -78,9 +78,9 @@ describe("projectPermissions", () => {
     const out = projectPermissions(doc, [r]);
     expect(out.gaps.map((g) => g.feature)).toContain("conditionContext");
   });
-  // A non-admin role reaches entries through the content API, which now evaluates record.* itself;
-  // the admin-panel handler that sees only the user is not where its condition is enforced.
-  it("does not gap a non-admin role's record.* condition, which the content API enforces", () => {
+  // A non-admin role's grant is enforced by the content API, which reads record.*; camis still
+  // seeds its admin-panel copy, whose handler sees only the user, so that copy denies every entry.
+  it("warns that a non-admin role's record.* condition denies everything in its admin-panel copy", () => {
     const r: Role = {
       name: "R",
       grants: [
@@ -91,9 +91,15 @@ describe("projectPermissions", () => {
         },
       ],
     };
-    expect(projectPermissions(doc, [r]).gaps.map((g) => g.feature)).not.toContain(
-      "conditionContext",
-    );
+    expect(projectPermissions(doc, [r]).gaps).toEqual([
+      {
+        feature: "conditionContext",
+        location: { contentType: "Article", rule: "R" },
+        severity: "downgrade",
+        message:
+          'the admin-panel copy of role "R" cannot read record.ownerId, so in the admin panel its condition denies every entry; the content API enforces it',
+      },
+    ]);
   });
   it("gaps publish on a non-draftPublish type", () => {
     const r: Role = { name: "R", grants: [{ contentType: "Article", actions: ["publish"] }] };
@@ -386,19 +392,10 @@ describe("projectApiRoles", () => {
     expect(out.roles[0]!.actions).toContain("plugin::users-permissions.user.find");
     expect(out.gaps.map((g) => g.feature)).toContain("userRelationWrite");
   });
-  // A database seeded by an earlier generation keeps every row camis once granted, so the
-  // bootstrap revokes the plugin actions camis manages as well as its api:: ones — and only those.
-  it("names the plugin actions camis manages, so the bootstrap can revoke them", () => {
-    const withUser: IrDocument = {
-      version: 1,
-      contentTypes: [
-        { name: "User", kind: "collection", builtin: "user", fields: [] },
-        { name: "Article", kind: "collection", fields: [{ type: "string", name: "title" }] },
-      ],
-      components: [],
-    };
-    expect(projectApiRoles(withUser, []).managed).toEqual(["plugin::users-permissions.user.find"]);
-    expect(projectApiRoles(doc, []).managed).toEqual([]);
+  // Which plugin actions the bootstrap may revoke is now what it granted itself, kept in Strapi's
+  // store (bootstrap-revoke.test.ts), not a list camis declares for every database.
+  it("declares no managed plugin actions", () => {
+    expect(projectApiRoles(doc, [])).not.toHaveProperty("managed");
   });
   it("lists the public actions needed for registration and login, in that order", () => {
     const out = projectApiRoles(doc, [editor]);

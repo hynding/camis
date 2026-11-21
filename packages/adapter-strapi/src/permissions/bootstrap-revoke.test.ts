@@ -9,11 +9,19 @@ interface PermissionRow {
   role: number;
 }
 
-/** The generated bootstrap, run against an in-memory users-permissions store. */
-const runBootstrap = async (
-  apiRoles: { roles: { type: string; actions: string[] }[]; public: string[]; managed: string[] },
-  seeded: PermissionRow[],
-): Promise<PermissionRow[]> => {
+interface ApiRoles {
+  roles: { type: string; actions: string[] }[];
+  public: string[];
+}
+
+/** A Strapi database as the generated bootstrap sees it: permissions, roles and the core store. */
+interface Database {
+  permissions: PermissionRow[];
+  store: Map<string, unknown>;
+}
+
+/** The generated bootstrap, run against an in-memory users-permissions database. */
+const runBootstrap = async (apiRoles: ApiRoles, db: Database): Promise<void> => {
   const index = strapiAdapter
     .generate(ownershipBundle, { projectName: "notes" })
     .files.find((f) => f.path === "src/index.ts")!.content;
@@ -31,7 +39,6 @@ const runBootstrap = async (
     { id: 1, type: "public" },
     { id: 2, type: "member" },
   ];
-  let permissions = [...seeded];
   const query = (uid: string) => {
     if (uid === "plugin::users-permissions.role")
       return {
@@ -46,75 +53,82 @@ const runBootstrap = async (
     if (uid === "plugin::users-permissions.permission")
       return {
         findOne: async ({ where }: { where: { action: string; role: number } }) =>
-          permissions.find((p) => p.action === where.action && p.role === where.role) ?? null,
+          db.permissions.find((p) => p.action === where.action && p.role === where.role) ?? null,
         findMany: async ({ where }: { where: { role: number } }) =>
-          permissions.filter((p) => p.role === where.role),
+          db.permissions.filter((p) => p.role === where.role),
         create: async ({ data }: { data: { action: string; role: number } }) => {
-          permissions.push({ id: permissions.length + 100, ...data });
+          db.permissions.push({ id: db.permissions.length + 100, ...data });
         },
         delete: async ({ where }: { where: { id: number } }) => {
-          permissions = permissions.filter((p) => p.id !== where.id);
+          db.permissions = db.permissions.filter((p) => p.id !== where.id);
         },
       };
     return { findOne: async () => ({ id: 1 }), create: async () => ({ id: 1 }) };
   };
+  // Strapi's core store, as `strapi.store({ type, name })` hands it out.
+  const store = ({ type, name }: { type: string; name: string }) => ({
+    get: async ({ key }: { key: string }) => db.store.get(`${type}:${name}:${key}`) ?? null,
+    set: async ({ key, value }: { key: string; value: unknown }) => {
+      db.store.set(`${type}:${name}:${key}`, structuredClone(value));
+    },
+  });
   const strapi = {
     admin: { services: { permission: { conditionProvider: { registerMany: async () => {} } } } },
     query,
+    store,
   };
   await module([], [], apiRoles).bootstrap({ strapi });
-  return permissions;
 };
 
 const USER_FIND = "plugin::users-permissions.user.find";
 const USER_ME = "plugin::users-permissions.user.me";
+const REGISTER = "plugin::users-permissions.auth.register";
+const actionsOf = (db: Database, role: number): string[] =>
+  db.permissions
+    .filter((p) => p.role === role)
+    .map((p) => p.action)
+    .sort();
 
 describe("the generated bootstrap's revoke", () => {
-  const seeded: PermissionRow[] = [
-    { id: 1, action: USER_FIND, role: 2 },
-    { id: 2, action: USER_ME, role: 2 },
-    { id: 3, action: "api::note.note.find", role: 2 },
-  ];
-
-  // An earlier generation granted user.find for the owner relation; once the owner is assigned on
-  // the server, the next boot must take it back, not leave GET /api/users open forever.
-  it("revokes a plugin action camis manages and no longer grants", async () => {
-    const after = await runBootstrap(
-      {
-        roles: [{ type: "member", actions: ["api::note.note.find"] }],
-        public: [],
-        managed: [USER_FIND],
-      },
-      seeded,
+  // An earlier boot granted user.find for the owner relation; once the owner is assigned on the
+  // server, the next boot takes it back rather than leave GET /api/users open.
+  it("revokes a plugin action an earlier boot of it granted and it no longer grants", async () => {
+    const db: Database = { permissions: [{ id: 2, action: USER_ME, role: 2 }], store: new Map() };
+    await runBootstrap({ roles: [{ type: "member", actions: [USER_FIND] }], public: [] }, db);
+    expect(actionsOf(db, 2)).toEqual([USER_FIND, USER_ME]);
+    await runBootstrap(
+      { roles: [{ type: "member", actions: ["api::note.note.find"] }], public: [] },
+      db,
     );
-    expect(
-      after
-        .filter((p) => p.role === 2)
-        .map((p) => p.action)
-        .sort(),
-    ).toEqual(["api::note.note.find", USER_ME]);
+    expect(actionsOf(db, 2)).toEqual(["api::note.note.find", USER_ME]);
   });
-  it("keeps a managed plugin action camis still grants", async () => {
-    const after = await runBootstrap(
-      {
-        roles: [{ type: "member", actions: ["api::note.note.find", USER_FIND] }],
-        public: [],
-        managed: [USER_FIND],
-      },
-      seeded,
-    );
-    expect(after.filter((p) => p.role === 2).map((p) => p.action)).toContain(USER_FIND);
+  it("keeps a plugin action an administrator granted by hand, even one camis also granted", async () => {
+    const db: Database = { permissions: [{ id: 1, action: USER_FIND, role: 2 }], store: new Map() };
+    await runBootstrap({ roles: [{ type: "member", actions: [USER_FIND] }], public: [] }, db);
+    await runBootstrap({ roles: [{ type: "member", actions: [] }], public: [] }, db);
+    expect(actionsOf(db, 2)).toEqual([USER_FIND]);
   });
-  it("never touches a plugin action camis does not manage", async () => {
-    const after = await runBootstrap(
-      { roles: [{ type: "member", actions: [] }], public: [], managed: [] },
-      seeded,
-    );
-    expect(
-      after
-        .filter((p) => p.role === 2)
-        .map((p) => p.action)
-        .sort(),
-    ).toEqual([USER_FIND, USER_ME]);
+  it("never touches a plugin action it did not grant", async () => {
+    const db: Database = {
+      permissions: [
+        { id: 1, action: USER_FIND, role: 2 },
+        { id: 2, action: USER_ME, role: 2 },
+      ],
+      store: new Map(),
+    };
+    await runBootstrap({ roles: [{ type: "member", actions: [] }], public: [] }, db);
+    expect(actionsOf(db, 2)).toEqual([USER_FIND, USER_ME]);
+  });
+  // The public role is granted the registration actions and its IR grants in one pass, so the
+  // second never revokes what the first just granted.
+  it("keeps the public role's registration actions beside its own grants", async () => {
+    const db: Database = { permissions: [], store: new Map() };
+    const apiRoles = {
+      roles: [{ type: "public", actions: ["api::note.note.find"] }],
+      public: [REGISTER],
+    };
+    await runBootstrap(apiRoles, db);
+    await runBootstrap(apiRoles, db);
+    expect(actionsOf(db, 1)).toEqual(["api::note.note.find", REGISTER]);
   });
 });

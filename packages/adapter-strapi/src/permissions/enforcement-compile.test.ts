@@ -18,6 +18,7 @@ describe("the emitted enforcement compiles under the generated project's tsconfi
       "src/permissions/api-conditions.ts",
       "src/permissions/api-controller.ts",
       "src/api/note/controllers/note.ts",
+      "src/api/tag/controllers/tag.ts",
     ]) {
       sources.set(`/project/${path}`, result.files.find((f) => f.path === path)!.content);
     }

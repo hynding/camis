@@ -32,9 +32,9 @@ describe("content API enforcement golden", () => {
       "../__golden__/ownership/note.controller.ts.txt",
     );
   });
-  it("a type no condition or assign touches keeps the bare core controller", () => {
-    expect(file(result, "src/api/tag/controllers/tag.ts")).toContain(
-      'export default factories.createCoreController("api::tag.tag");',
+  it("a type that only reaches a conditioned type gets the same wrapper", async () => {
+    await expect(emitted(result, "src/api/tag/controllers/tag.ts")).toMatchFileSnapshot(
+      "../__golden__/ownership/tag.controller.ts.txt",
     );
   });
   it("every enforcement file carries the generated marker", () => {
@@ -42,6 +42,7 @@ describe("content API enforcement golden", () => {
       "src/permissions/api-conditions.ts",
       "src/permissions/api-controller.ts",
       "src/api/note/controllers/note.ts",
+      "src/api/tag/controllers/tag.ts",
     ]) {
       expect(file(result, path)?.startsWith("// @camis:generated")).toBe(true);
     }
@@ -56,16 +57,18 @@ describe("content API enforcement golden", () => {
       "../__golden__/ownership/index.ts.txt",
     );
   });
-  it("reports the populate downgrade and the admin role's user.find, and nothing open", () => {
+  it("reports the admin-panel copies' conditions and the user.find of roles that write the owner, and nothing open", () => {
     expect(
       result.gaps.gaps.map(
         (g) => `${g.severity} ${g.feature} ${g.location.contentType}.${g.location.rule}`,
       ),
     ).toEqual([
+      "downgrade conditionContext Note.public",
+      "downgrade conditionContext Note.member",
+      "downgrade conditionContext Note.contributor",
+      "downgrade conditionContext Note.reviewer",
       "downgrade userRelationWrite Note.reviewer",
       "downgrade userRelationWrite Note.manager",
-      "downgrade apiPopulateScope Note.member",
-      "downgrade apiPopulateScope Note.public",
     ]);
   });
   it("regeneration is idempotent", () => {

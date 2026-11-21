@@ -17,8 +17,69 @@ describe("projectApiEnforcement", () => {
   const note = out.types.find((t) => t.contentType === "Note")!;
 
   it("enforces each type a non-admin role holds under a condition or an assign", () => {
-    expect(out.types.map((t) => t.contentType)).toEqual(["Note"]);
     expect(note.uid).toBe("api::note.note");
+    expect(note.own).toBe(true);
+  });
+  // A type that reaches a conditioned type through a relation serves that type's rows in a
+  // populate, a relation filter or a relation write, so it gets a controller of its own too.
+  it("also serves every collection type that reaches a conditioned type, with no rules of its own", () => {
+    expect(out.types.map((t) => [t.contentType, t.own])).toEqual([
+      ["Note", true],
+      ["Tag", false],
+    ]);
+    expect(out.types.find((t) => t.contentType === "Tag")!.roles).toEqual({});
+  });
+  it("maps how each holder reaches a conditioned type: relations, inverses, components", () => {
+    expect(out.holders).toEqual({
+      "api::tag.tag": {
+        populatable: ["note", "parent", "refs"],
+        links: {
+          note: { relation: "api::note.note" },
+          parent: { relation: "api::tag.tag" },
+          refs: { component: "shared.reference" },
+        },
+      },
+      "shared.reference": {
+        populatable: ["note"],
+        links: { note: { relation: "api::note.note" } },
+      },
+    });
+  });
+  it("names the field defaults a create condition reads, which Strapi fills when omitted", () => {
+    expect(note.defaults).toEqual({ "record.shared": true });
+  });
+  // Two types may share a condition's predicate but not its field types: each type compiles its
+  // own filter.
+  it("compiles each type's filter for its own fields, even when types share a predicate", () => {
+    const status: Expression = {
+      kind: "eq",
+      left: v("record.status"),
+      right: { kind: "lit", value: "open" },
+    };
+    const two: IrDocument = {
+      version: 1,
+      components: [],
+      contentTypes: [
+        { name: "A", kind: "collection", fields: [{ type: "string", name: "status" }] },
+        { name: "B", kind: "collection", fields: [{ type: "integer", name: "status" }] },
+      ],
+    };
+    const result = projectApiEnforcement(two, [
+      {
+        name: "member",
+        grants: [
+          { contentType: "A", actions: ["read"], condition: status },
+          { contentType: "B", actions: ["update"], condition: status },
+        ],
+      },
+    ]);
+    const a = result.types.find((t) => t.contentType === "A")!;
+    expect(a.conditions.map((c) => c.filter)).toEqual([
+      { kind: "eq", variable: "record.status", value: { kind: "literal", value: "open" } },
+    ]);
+    expect(
+      result.types.find((t) => t.contentType === "B")!.conditions.map((c) => c.filter),
+    ).toEqual([null]);
   });
   it("keeps per role how it holds each action: outright, or under its conditions", () => {
     const member = note.roles.member!;
@@ -45,7 +106,7 @@ describe("projectApiEnforcement", () => {
   });
   it("gives each condition its Ring 1 predicate and, for a list, its row filter", () => {
     const byPredicate = (p: Expression) =>
-      out.conditions.find((c) => JSON.stringify(c.predicate) === JSON.stringify(p));
+      note.conditions.find((c) => JSON.stringify(c.predicate) === JSON.stringify(p));
     expect(byPredicate(owned)?.filter).toEqual({
       kind: "eq",
       variable: "record.ownerId",
@@ -58,25 +119,8 @@ describe("projectApiEnforcement", () => {
   it("reports no error for an enforceable model", () => {
     expect(out.gaps.filter((g) => g.severity === "error")).toEqual([]);
   });
-  // A populate is served by Strapi's own relation loader, which knows nothing of the role's
-  // condition, so it is reported rather than claimed.
-  it("reports that a populate through a relation to a conditioned type is not narrowed", () => {
-    expect(out.gaps.filter((g) => g.feature === "apiPopulateScope")).toEqual([
-      {
-        feature: "apiPopulateScope",
-        location: { contentType: "Note", rule: "member" },
-        severity: "downgrade",
-        message:
-          'role "member" reads "Note" under a condition the content API enforces on /api/note only: a populate or relation filter through Tag.note is not narrowed by it',
-      },
-      {
-        feature: "apiPopulateScope",
-        location: { contentType: "Note", rule: "public" },
-        severity: "downgrade",
-        message:
-          'role "public" reads "Note" under a condition the content API enforces on /api/note only: a populate or relation filter through Tag.note is not narrowed by it',
-      },
-    ]);
+  it("reports no populate gap: the reach is enforced", () => {
+    expect(out.gaps.map((g) => g.feature)).not.toContain("apiPopulateScope");
   });
   it("leaves an admin role's condition to the admin panel, as a downgrade", () => {
     const admin: Role = {
@@ -86,6 +130,7 @@ describe("projectApiEnforcement", () => {
     };
     const result = projectApiEnforcement(doc, [admin]);
     expect(result.types).toEqual([]);
+    expect(result.holders).toEqual({});
     expect(result.gaps).toEqual([
       {
         feature: "apiGrantCondition",
@@ -184,6 +229,98 @@ describe("conditions the Strapi content API cannot enforce fail the build", () =
     ]);
     expect(errors(withFile, grant("File", ["read"], self)).map((g) => g.message)).toEqual([
       'role "member" holds "File" under a condition, which the upload plugin serves unconditioned; the Strapi target cannot enforce it',
+    ]);
+  });
+});
+
+describe("a reach the Strapi content API cannot narrow fails the build", () => {
+  const member: Role[] = [
+    {
+      name: "member",
+      grants: [
+        { contentType: "Note", actions: ["read"], condition: owned },
+        { contentType: "Tag", actions: ["read"] },
+      ],
+    },
+  ];
+
+  // A polymorphic relation may point at any type; its populate takes no per-target filter Strapi
+  // is known to honour, so a role that reads its holder while reading some type under a condition
+  // cannot be kept from that type's rows through it.
+  it("a polymorphic relation on a type a role reads while it reads another type under a condition", () => {
+    const morph: IrDocument = {
+      ...doc,
+      contentTypes: doc.contentTypes.map((ct) =>
+        ct.name === "Tag"
+          ? {
+              ...ct,
+              fields: [
+                { type: "string", name: "label" },
+                { type: "polymorphicRelation", name: "about", many: true },
+              ],
+            }
+          : ct,
+      ),
+    };
+    expect(errors(morph, member)).toEqual([
+      {
+        feature: "apiPolymorphicReach",
+        location: { contentType: "Tag", rule: "member" },
+        severity: "error",
+        message:
+          'role "member" reads "Tag", whose polymorphic relation Tag.about can reach "Note", which it reads under a condition; the Strapi target cannot narrow a polymorphic populate or write',
+      },
+    ]);
+  });
+  // The built-in user's inverse is served by the users-permissions plugin (/api/users/me), which
+  // camis does not wrap.
+  it("an inverse of a conditioned type's relation that lands on the built-in user", () => {
+    const inverse: IrDocument = {
+      ...doc,
+      contentTypes: doc.contentTypes.map((ct) =>
+        ct.name === "Note"
+          ? {
+              ...ct,
+              fields: ct.fields.map((f) =>
+                f.name === "owner" && f.type === "relation" ? { ...f, inverse: "notes" } : f,
+              ),
+            }
+          : ct,
+      ),
+    };
+    expect(errors(inverse, member)).toEqual([
+      {
+        feature: "apiRelationReach",
+        location: { contentType: "Note", rule: "member" },
+        severity: "error",
+        message:
+          'role "member" reads "Note" under a condition, but User.notes reaches it from a type the users-permissions plugin serves; the Strapi target cannot narrow that populate',
+      },
+    ]);
+  });
+  it("a single type that reaches a conditioned type", () => {
+    const single: IrDocument = {
+      ...doc,
+      contentTypes: [
+        ...doc.contentTypes,
+        {
+          name: "Home",
+          kind: "single",
+          fields: [{ type: "relation", name: "pinned", relationKind: "manyToOne", target: "Tag" }],
+        },
+      ],
+    };
+    const reader: Role[] = [
+      { ...member[0]!, grants: [...member[0]!.grants, { contentType: "Home", actions: ["read"] }] },
+    ];
+    expect(errors(single, reader)).toEqual([
+      {
+        feature: "apiRelationReach",
+        location: { contentType: "Home", rule: "member" },
+        severity: "error",
+        message:
+          'role "member" reads single type "Home", which reaches "Note" (read under a condition) through Home.pinned; the Strapi target does not narrow a single type\'s populate or relation writes',
+      },
     ]);
   });
 });
