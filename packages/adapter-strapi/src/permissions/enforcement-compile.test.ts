@@ -22,6 +22,7 @@ describe("the emitted enforcement compiles under the generated project's tsconfi
       "src/extensions/upload/strapi-server.ts",
       "src/api/note/controllers/note.ts",
       "src/api/tag/controllers/tag.ts",
+      "src/api/front/controllers/front.ts",
     ]) {
       sources.set(`/project/${path}`, result.files.find((f) => f.path === path)!.content);
     }

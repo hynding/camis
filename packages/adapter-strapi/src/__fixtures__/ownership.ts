@@ -34,7 +34,8 @@ const unshared: Expression = {
  * belongs to a category (whose `notes` inverse a reviewer may write), pins tags (each tag pinned on
  * one note at most: `Tag.pinnedOn`, whose inverse is `Note.pinned`), and has an attachment; a
  * reference has an image. Members upload files and delete them, which the upload API allows only
- * on entries they may update or files they uploaded.
+ * on entries they may update or files they uploaded. A single type, the home page, features a
+ * category; reviewers update it through Strapi's own single type controller.
  */
 export const ownershipBundle: IrBundle = {
   document: {
@@ -68,6 +69,14 @@ export const ownershipBundle: IrBundle = {
         ],
       },
       { name: "Category", kind: "collection", fields: [{ type: "string", name: "label" }] },
+      {
+        name: "Front",
+        kind: "single",
+        fields: [
+          { type: "string", name: "headline" },
+          { type: "relation", name: "featured", relationKind: "manyToOne", target: "Category" },
+        ],
+      },
       {
         name: "Tag",
         kind: "collection",
@@ -143,6 +152,7 @@ export const ownershipBundle: IrBundle = {
         { contentType: "Note", actions: ["read"] },
         { contentType: "Note", actions: ["update", "delete"], condition: owned },
         { contentType: "Category", actions: ["read", "update"] },
+        { contentType: "Front", actions: ["update"] },
       ],
     },
     {

@@ -16,6 +16,7 @@ const NOTE = "api::note.note";
 const TAG = "api::tag.tag";
 const CATEGORY = "api::category.category";
 const BOOKMARK = "api::bookmark.bookmark";
+const FRONT = "api::front.front";
 
 type Row = Record<string, unknown> & { id: number; documentId: string };
 type Filter = Record<string, unknown>;
@@ -37,6 +38,7 @@ const SCHEMA: Record<string, Record<string, { relation: string } | { component: 
   },
   "shared.reference": { note: { relation: NOTE } },
   [BOOKMARK]: { parent: { relation: BOOKMARK } },
+  [FRONT]: { featured: { relation: CATEGORY } },
 };
 
 /**
@@ -154,6 +156,7 @@ const seed = (): void => {
   tables[TAG] = [t1, t2, t3];
   tables[CATEGORY] = [c1, c2];
   const b1: Row = { id: 1, documentId: "b1", label: "b1", parent: null };
+  tables[FRONT] = [{ id: 1, documentId: "front", headline: "hello", featured: c1 }];
   tables[BOOKMARK] = [b1, { id: 2, documentId: "b2", label: "b2", parent: b1 }];
 };
 const rowsOf = (uid: string): Row[] => tables[uid]!;
@@ -340,6 +343,10 @@ beforeAll(async () => {
     controllers[uid] = createCoreController(uid, ({ strapi: s }) =>
       enforcedController(s, uid, TABLES),
     );
+  const { bodyCheckedSingle } = await import(
+    pathToFileURL(join(dir, "permissions", "api-controller.ts")).href
+  );
+  controllers[FRONT] = createCoreController(FRONT, () => bodyCheckedSingle(FRONT, TABLES));
   // A type with no rules of its own and nothing it reaches, served only so a restricted write's
   // body is checked: members create and update bookmarks, each under a parent bookmark.
   const withBookmarks: IrBundle = {
@@ -810,6 +817,52 @@ describe("a type with no rules, served only to check a restricted write's body",
       `core.find ${BOOKMARK}`,
       `core.findOne ${BOOKMARK}`,
       `core.delete ${BOOKMARK}`,
+    ]);
+  });
+});
+
+// Strapi's single type controller writes through the same database layer, which spreads a
+// relation item's __pivot into the join row: a restricted caller's body is checked first.
+describe("a single type a restricted role writes, over Strapi's single type controller", () => {
+  const front = () => controllers[FRONT]!;
+  const reviewer = () => asUser(12, "reviewer");
+  it("passes a write of its attributes on to Strapi's own update", async () => {
+    const ctx = context(reviewer(), {
+      request: { body: { data: { headline: "new", featured: { connect: [{ id: 2 }] } } } },
+    });
+    await front().update(ctx);
+    expect(ctx.status).toBeUndefined();
+    expect(calls).toEqual([`core.update ${FRONT}`]);
+  });
+  it("refuses a __pivot or a key that is no attribute, before Strapi sees it", async () => {
+    for (const data of [
+      { featured: { connect: [{ id: 2, __pivot: { front_id: 9 } }] } },
+      { featured: { set: [2], connect: [1] } },
+      { headline: "x", publishedAt: null },
+      { locale: "fr" },
+    ]) {
+      const ctx = context(reviewer(), { request: { body: { data } } });
+      await front().update(ctx);
+      expect(ctx.status, JSON.stringify(data)).toBe(400);
+    }
+    const guest = context(asGuest, {
+      request: { body: { data: { featured: { connect: [{ id: 2, __pivot: {} }] } } } },
+    });
+    await front().update(guest);
+    expect(guest.status).toBe(400);
+    expect(calls).toEqual([]);
+  });
+  it("leaves an admin role's and an API token's write, and every read and delete, to Strapi", async () => {
+    const data = { featured: { connect: [{ id: 2, __pivot: { front_id: 9 } }] } };
+    for (const state of [asUser(13, "manager"), asToken])
+      await front().update(context(state, { request: { body: { data } } }));
+    await front().find(context(reviewer()));
+    await front().delete(context(reviewer()));
+    expect(calls).toEqual([
+      `core.update ${FRONT}`,
+      `core.update ${FRONT}`,
+      `core.find ${FRONT}`,
+      `core.delete ${FRONT}`,
     ]);
   });
 });

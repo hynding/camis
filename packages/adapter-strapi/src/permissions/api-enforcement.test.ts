@@ -37,6 +37,11 @@ describe("projectApiEnforcement", () => {
         populatable: ["notes"],
         links: { notes: { relation: "api::note.note" } },
       },
+      // The single type reaches notes through its category; no role reads it.
+      "api::front.front": {
+        populatable: ["featured"],
+        links: { featured: { relation: "api::category.category" } },
+      },
       // A file's `related` entries are any entry it is attached to: a note's attachment leads
       // back to notes.
       "api::note.note": {
@@ -663,6 +668,34 @@ describe("writes the users-permissions and upload plugins serve unchecked fail t
         : r,
     );
     expect(servedOf(bookmark(link), admin)).toBeUndefined();
+  });
+
+  // Strapi's single type controller passes a body to the same database layer: a relation item's
+  // __pivot would reach the join row, so the single type gets the body check over that controller.
+  it("serves a single type with a relation that a restricted role or an open route writes, for its body", () => {
+    const out = projectApiEnforcement(doc, roles);
+    expect(out.singles).toEqual(["api::front.front"]);
+    expect(out.types.find((t) => t.contentType === "Front")).toMatchObject({
+      uid: "api::front.front",
+      own: false,
+      roles: {},
+      relations: {},
+    });
+    expect(out.shapes["api::front.front"]).toEqual({ featured: "relation", headline: "scalar" });
+    expect(out.gaps.filter((g) => g.location.contentType === "Front")).toEqual([]);
+    const noWriter = roles.map((r) =>
+      r.name === "reviewer"
+        ? { ...r, grants: r.grants.filter((g) => g.contentType !== "Front") }
+        : r,
+    );
+    expect(projectApiEnforcement(doc, noWriter).singles).toEqual([]);
+    const opened: IrDocument = {
+      ...doc,
+      contentTypes: doc.contentTypes.map((ct) =>
+        ct.name === "Front" ? { ...ct, options: { publicApiActions: ["update"] } } : ct,
+      ),
+    };
+    expect(projectApiEnforcement(opened, noWriter).singles).toEqual(["api::front.front"]);
   });
 
   // users-permissions' user update and create take any role and password from the body.

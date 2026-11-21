@@ -57,6 +57,11 @@ describe("content API enforcement golden", () => {
       "../__golden__/ownership/category.controller.ts.txt",
     );
   });
+  it("a single type a restricted role writes gets the body check over Strapi's single type controller", async () => {
+    await expect(emitted(result, "src/api/front/controllers/front.ts")).toMatchFileSnapshot(
+      "../__golden__/ownership/front.controller.ts.txt",
+    );
+  });
   it("every enforcement file carries the generated marker", () => {
     for (const path of [
       "src/permissions/api-conditions.ts",

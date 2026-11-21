@@ -679,6 +679,23 @@ const uploads = async (dir: string, alice: Account, bob: Account): Promise<void>
     JSON.stringify(held()) === JSON.stringify([mine.id]),
     held(),
   );
+
+  // Strapi's single type controller writes through the same database layer: a restricted
+  // caller's __pivot there would name the join row's front_id or category_id.
+  const featured = () => select(dir, "SELECT COUNT(*) AS n FROM fronts_featured_lnk")[0]!.n;
+  const featuredBefore = featured();
+  const pivotFront = await call("PUT", "/api/front", rita.jwt, {
+    data: { featured: { connect: [{ id: categoryId, __pivot: { front_id: 999 } }] } },
+  });
+  check("rita's single type write with a __pivot is 400", pivotFront.status === 400, pivotFront);
+  check("the refused single type write linked nothing", featured() === featuredBefore, {
+    before: featuredBefore,
+    after: featured(),
+  });
+  const plainFront = await call("PUT", "/api/front", rita.jwt, {
+    data: { headline: "welcome", featured: category },
+  });
+  check("rita's plain single type write is 200", plainFront.status === 200, plainFront);
 };
 
 /**
