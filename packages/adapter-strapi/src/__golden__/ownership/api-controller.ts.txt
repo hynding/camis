@@ -3,6 +3,8 @@ import {
   assignedValues,
   callerOf,
   createVerdict,
+  customToken,
+  CUSTOM_TOKEN_REFUSAL,
   currentLinksQuery,
   droppedLinks,
   holdersQuery,
@@ -17,11 +19,14 @@ import {
   scopedFilters,
   withoutAssigned,
   writePlan,
+  writeShape,
   type Caller,
   type RecordAction,
   type RelationRef,
   type Tables,
 } from "./api-conditions";
+import { loadFile } from "./api-upload-controller";
+import { attachVerdict, mediaFileIds } from "./api-uploads";
 
 // The core controller methods a content type with row conditions, assigned fields or a relation
 // into a conditioned type is served by, copied into each generated Strapi project as
@@ -36,7 +41,7 @@ interface RequestContext {
   request?: { body?: unknown };
   status?: number;
   notFound: () => unknown;
-  forbidden: () => unknown;
+  forbidden: (message?: string) => unknown;
   badRequest: (message?: string) => unknown;
 }
 
@@ -87,6 +92,24 @@ const replaceData = (ctx: RequestContext, data: Record<string, unknown>): void =
   if (ctx.request !== undefined) ctx.request.body = { ...(ctx.request.body as object), data };
 };
 
+type Method = (this: CoreController, ctx: RequestContext) => Promise<unknown>;
+
+/**
+ * The methods, each refusing a custom API token (403) before anything else: Strapi checks one
+ * against its own scopes, and its sanitizer keeps a polymorphic list whole when the token may read
+ * none of its entries, at any depth of any type. Wrapped in place, since each method's `super` is
+ * the object Strapi puts its core controller under.
+ */
+const refusingCustomTokens = <T extends Record<string, Method>>(methods: T): T => {
+  for (const name of Object.keys(methods) as (keyof T)[]) {
+    const method = methods[name] as Method;
+    methods[name] = async function (this: CoreController, ctx: RequestContext) {
+      return customToken(ctx.state) ? ctx.forbidden(CUSTOM_TOKEN_REFUSAL) : method.call(this, ctx);
+    } as T[keyof T];
+  }
+  return methods;
+};
+
 /**
  * The type's find, findOne, create, update and delete, each deciding on the caller's role before
  * Strapi's own: a list narrowed in the query (so paging and counts hold only what the caller may
@@ -97,6 +120,10 @@ const replaceData = (ctx: RequestContext, data: Record<string, unknown>): void =
 export const enforcedController = (strapiInstance: unknown, uid: string, tables: Tables) => {
   const strapi = strapiInstance as StrapiServices;
   const rules = tables.rules[uid]!;
+  // A type with no rules, no reach and no mirrored link is served only so a restricted write's
+  // body is checked: its reads and deletes are Strapi's own, exactly as without camis.
+  const bodyOnly =
+    !rules.own && tables.holders[uid] === undefined && Object.keys(rules.relations).length === 0;
 
   const verdict = async (caller: Caller, ctx: RequestContext, as: RecordAction) => {
     if (caller.kind === "unrestricted" || !rules.own) return "allow";
@@ -147,9 +174,11 @@ export const enforcedController = (strapiInstance: unknown, uid: string, tables:
   /**
    * Whether the write is refused, the response already set: a 403 when the data links an entry
    * of a conditioned type the caller may not read (or one that does not exist), changes an entry
-   * through a link it shows that the caller may not update (adding, dropping or replacing it), or
-   * takes an entry from a last holder the caller may not update; a 400 for a relation value it
-   * cannot read. A boolean, since Strapi's response helpers return nothing.
+   * through a link it shows that the caller may not update (adding, dropping or replacing it),
+   * takes an entry from a last holder the caller may not update, or links a stored file through a
+   * media field that the caller neither uploaded nor may read on an entry it is attached to; a 400
+   * for a relation or media value it cannot read. A boolean, since Strapi's response helpers
+   * return nothing.
    */
   const writeRefused = async (
     ctx: RequestContext,
@@ -180,11 +209,23 @@ export const enforcedController = (strapiInstance: unknown, uid: string, tables:
         return true;
       }
     }
+    const files = mediaFileIds(tables, uid, state, data);
+    if (!files.ok) {
+      ctx.badRequest(files.message);
+      return true;
+    }
+    for (const id of files.value) {
+      if (!attachVerdict(tables, state, await loadFile(strapi, tables, id))) {
+        ctx.forbidden();
+        return true;
+      }
+    }
     return false;
   };
 
-  return {
+  return refusingCustomTokens({
     async find(this: CoreController, ctx: RequestContext) {
+      if (bodyOnly) return super.find(ctx);
       const caller = callerOf(rules, ctx.state, "find");
       if (caller.kind === "refused") return ctx.forbidden();
       const reach = reachOf(caller, ctx, "find");
@@ -201,6 +242,7 @@ export const enforcedController = (strapiInstance: unknown, uid: string, tables:
     },
 
     async findOne(this: CoreController, ctx: RequestContext) {
+      if (bodyOnly) return super.findOne(ctx);
       const caller = callerOf(rules, ctx.state, "findOne");
       if (caller.kind === "refused") return ctx.forbidden();
       const reach = reachOf(caller, ctx, "findOne");
@@ -225,6 +267,10 @@ export const enforcedController = (strapiInstance: unknown, uid: string, tables:
         // A restricted caller's create is decided here, so a payload it cannot read is refused
         // here; Strapi's own create answers anyone else's.
         return reach !== null ? ctx.badRequest("Missing or invalid data") : super.create(ctx);
+      }
+      if (reach !== null) {
+        const shape = writeShape(tables, uid, sent);
+        if (!shape.ok) return ctx.badRequest(shape.message);
       }
       const data = withoutAssigned(caller, sent);
       if (createVerdict(rules, caller, data) === "forbidden") return ctx.forbidden();
@@ -256,6 +302,8 @@ export const enforcedController = (strapiInstance: unknown, uid: string, tables:
         return super.update(ctx);
       }
       if (sent === undefined) return ctx.badRequest("Missing or invalid data");
+      const shape = writeShape(tables, uid, sent);
+      if (!shape.ok) return ctx.badRequest(shape.message);
       // Strapi 5.48's update ignores filters (only delete reads them into its where); they are
       // refused all the same, so the check holds whatever a later Strapi does with them.
       if (ctx.query?.filters !== undefined) return ctx.badRequest("Invalid filters on an update");
@@ -277,6 +325,7 @@ export const enforcedController = (strapiInstance: unknown, uid: string, tables:
     },
 
     async delete(ctx: RequestContext) {
+      if (bodyOnly) return super.delete(ctx);
       const caller = callerOf(rules, ctx.state, "delete");
       if (caller.kind === "refused") return ctx.forbidden();
       if (reachOf(caller, ctx, "delete") !== null) {
@@ -288,5 +337,50 @@ export const enforcedController = (strapiInstance: unknown, uid: string, tables:
       if (answer === "forbidden") return ctx.forbidden();
       return super.delete(ctx);
     },
+  });
+};
+
+/**
+ * A single type's controller methods over Strapi's single type controller: for a restricted
+ * caller (a session's role, the public role, or anyone on an `auth: false` route) the query is
+ * checked by `scopeQuery` (a populate of a file's related entries, or a parameter Strapi has not
+ * documented, is a 400) and an update's body by `writeShape`; the request then goes to Strapi's
+ * own method as it came. Every other request and action is Strapi's, but a custom API token's,
+ * which is refused.
+ */
+export const checkedSingle = (uid: string, tables: Tables) => {
+  const rules = tables.rules[uid]!;
+  /** The state the request is checked for; null for a caller no role restricts. */
+  const checkedAs = (ctx: RequestContext, action: string): unknown =>
+    rules.open.includes(action)
+      ? reachState(rules, ctx.state, action)
+      : callerOf(rules, ctx.state, action).kind === "unrestricted"
+        ? null
+        : ctx.state;
+  const refusedQuery = (ctx: RequestContext, state: unknown): string | undefined => {
+    const scoped = scopeQuery(tables, uid, state, ctx.query ?? {});
+    return scoped.ok ? undefined : scoped.message;
   };
+  return refusingCustomTokens({
+    async find(this: CoreController, ctx: RequestContext) {
+      const state = checkedAs(ctx, "find");
+      const refused = state === null ? undefined : refusedQuery(ctx, state);
+      return refused === undefined ? super.find(ctx) : ctx.badRequest(refused);
+    },
+    async update(this: CoreController, ctx: RequestContext) {
+      const state = checkedAs(ctx, "update");
+      if (state !== null) {
+        const sent = requestData(ctx);
+        if (sent === undefined) return ctx.badRequest("Missing or invalid data");
+        const shape = writeShape(tables, uid, sent);
+        if (!shape.ok) return ctx.badRequest(shape.message);
+        const refused = refusedQuery(ctx, state);
+        if (refused !== undefined) return ctx.badRequest(refused);
+      }
+      return super.update(ctx);
+    },
+    async delete(this: CoreController, ctx: RequestContext) {
+      return super.delete(ctx);
+    },
+  });
 };

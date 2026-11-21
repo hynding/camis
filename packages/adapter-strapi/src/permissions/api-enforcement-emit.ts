@@ -10,10 +10,15 @@ import type {
   ApiHolding,
   ApiTypeRules,
 } from "./api-enforcement";
+import type { ApiMediaHolder, ApiUploads } from "./api-upload-enforcement";
+import type { ApiAttributeShape } from "./api-shapes";
 import { handlerBody } from "./conditions";
 
 export const API_CONDITIONS_PATH = "src/permissions/api-conditions.ts";
 export const API_CONTROLLER_PATH = "src/permissions/api-controller.ts";
+export const API_UPLOADS_PATH = "src/permissions/api-uploads.ts";
+export const API_UPLOAD_CONTROLLER_PATH = "src/permissions/api-upload-controller.ts";
+export const UPLOAD_EXTENSION_PATH = "src/extensions/upload/strapi-server.ts";
 
 const runtime = (name: string): string =>
   readFileSync(new URL(`./runtime/${name}`, import.meta.url), "utf8");
@@ -100,6 +105,7 @@ const holderLink = (link: ApiHolderLink): string => {
   if ("relation" in link) return `{ relation: ${key(link.relation)} }`;
   if ("component" in link) return `{ component: ${key(link.component)} }`;
   if ("media" in link) return "{ media: true }";
+  if ("polymorphic" in link) return "{ polymorphic: true }";
   return `{ zone: ${list(link.zone)} }`;
 };
 
@@ -111,6 +117,7 @@ const holdersSource = (holders: Record<string, ApiHolder>): string =>
         .join("\n");
       return `  ${key(uid)}: {
     populatable: ${list(holder.populatable)},
+    unwalked: ${list(holder.unwalked)},
     links: {
 ${links}
     },
@@ -118,9 +125,60 @@ ${links}
     })
     .join("\n");
 
+const mediaHolder = (holder: ApiMediaHolder): string => {
+  const nested = Object.entries(holder.nested)
+    .map(
+      ([attribute, link]) =>
+        `${key(attribute)}: ${"component" in link ? `{ component: ${key(link.component)} }` : `{ zone: ${list(link.zone)} }`}`,
+    )
+    .join(", ");
+  return `{ fields: ${list(holder.fields)}, nested: {${nested === "" ? "" : ` ${nested} `}} }`;
+};
+
+const uploadsSource = (uploads: ApiUploads): string => {
+  const holders = Object.entries(uploads.holders)
+    .map(([uid, holder]) => `    ${key(uid)}: ${mediaHolder(holder)},`)
+    .join("\n");
+  const grants = Object.entries(uploads.grants)
+    .map(([uid, g]) => `    ${key(uid)}: { read: ${list(g.read)}, update: ${list(g.update)} },`)
+    .join("\n");
+  return `
+/** What the upload API's checks read: media fields, and who holds each type outright. */
+const UPLOADS: Uploads = {
+  admins: ADMIN_ROLES,
+  uploaderRecorded: ${String(uploads.uploaderRecorded)},
+  holders: {
+${holders}
+  },
+  grants: {
+${grants}
+  },
+};
+`;
+};
+
+const shapeSource = (shape: ApiAttributeShape): string => {
+  if (typeof shape === "string") return key(shape);
+  return "component" in shape
+    ? `{ component: ${key(shape.component)}, repeatable: ${String(shape.repeatable)} }`
+    : `{ zone: ${list(shape.zone)} }`;
+};
+
+const shapesSource = (shapes: ApiEnforcement["shapes"]): string =>
+  Object.entries(shapes)
+    .map(([uid, attributes]) => {
+      const lines = Object.entries(attributes)
+        .map(([attribute, shape]) => `    ${key(attribute)}: ${shapeSource(shape)},`)
+        .join("\n");
+      return `  ${key(uid)}: {\n${lines}\n  },`;
+    })
+    .join("\n");
+
 const rulesSource = (enforcement: ApiEnforcement): string => {
-  const admins = enforcement.types[0]?.admins ?? [];
+  const admins = enforcement.types[0]?.admins ?? enforcement.uploads?.admins ?? [];
   const holders = holdersSource(enforcement.holders);
+  const uploads = enforcement.uploads;
+  const shapes = shapesSource(enforcement.shapes);
   return `// The project's rules: generated from the IR's roles.
 
 /** Each type's conditions by name, each filter compiled for that type's fields. */
@@ -137,7 +195,10 @@ ${enforcement.types.map(typeRules).join("\n")}
 /** The types and components that reach a type some role reads under a condition. */
 const HOLDERS: Record<string, Holder> = {${holders === "" ? "" : `\n${holders}\n`}};
 
-export const TABLES: Tables = { rules: RULES, holders: HOLDERS };
+/** The writable attributes of each served type and every component it embeds. */
+const SHAPES: Record<string, Record<string, AttributeShape>> = {${shapes === "" ? "" : `\n${shapes}\n`}};
+${uploads === null ? "" : uploadsSource(uploads)}
+export const TABLES: Tables = { rules: RULES, holders: HOLDERS, shapes: SHAPES${uploads === null ? "" : ", uploads: UPLOADS"} };
 `;
 };
 
@@ -156,9 +217,66 @@ export default factories.createCoreController(${key(uid)}, ({ strapi }) =>
 );
 `);
 
-/** The decisions module (Ring 1 runtime, decisions, the project's rules) and the controller methods. */
+/** A single type's controller: Strapi's own, with a restricted caller's request checked first. */
+export const checkedSingleSource = (uid: string): string =>
+  withMarker(`import { factories } from "@strapi/strapi";
+import { TABLES } from "../../../permissions/api-conditions";
+import { checkedSingle } from "../../../permissions/api-controller";
+
+// Strapi's single type controller serves every action; a restricted caller's query is checked
+// first (no populate of a file's related entries, no parameter Strapi has not documented), and
+// its update body against the type's attributes, so no key Strapi or its database layer reads (a
+// relation item's __pivot above all) reaches it undecided. The cast keeps Strapi's own controller
+// typings, which camis does not check the methods against, out of the build.
+export default factories.createCoreController(${key(uid)}, () =>
+  checkedSingle(${key(uid)}, TABLES) as any,
+);
+`);
+
+/**
+ * The upload plugin's extension: the plugin's content API controller with the upload checks before
+ * it and, once a restricted role writes files, a private attribute recording each file's uploader.
+ * A `strapi-server` hook, like the users-permissions one, since it changes the loaded plugin rather
+ * than restating its schema.
+ */
+const uploadExtensionSource = (uploaderRecorded: boolean): string =>
+  withMarker(`import { TABLES } from "../../permissions/api-conditions";
+import { enforcedUpload } from "../../permissions/api-upload-controller";
+${
+  uploaderRecorded
+    ? `
+// Strapi's content API passes no user to the upload service, so a file's createdBy (an admin
+// user) stays empty for every users-permissions caller: camis records the uploader itself, in an
+// attribute the content API neither returns nor lets a client filter on or set.
+interface UploadPlugin {
+  contentTypes: { file: { schema: { attributes: Record<string, unknown> } } };
+  controllers: Record<string, unknown>;
+}
+
+export default (plugin: UploadPlugin): UploadPlugin => {
+  plugin.contentTypes.file.schema.attributes.camisUploader = {
+    type: "integer",
+    private: true,
+    configurable: false,
+  };`
+    : `
+interface UploadPlugin {
+  controllers: Record<string, unknown>;
+}
+
+export default (plugin: UploadPlugin): UploadPlugin => {`
+}
+  plugin.controllers["content-api"] = enforcedUpload(plugin.controllers["content-api"], TABLES);
+  return plugin;
+};
+`);
+
+/**
+ * The decisions module (Ring 1 runtime, decisions, the project's rules), the controller methods,
+ * the upload decisions they check a linked file with and the upload extension.
+ */
 export const emitApiEnforcementFiles = (enforcement: ApiEnforcement): GeneratedFile[] =>
-  enforcement.types.length === 0
+  enforcement.types.length === 0 && enforcement.uploads === null
     ? []
     : [
         {
@@ -168,4 +286,17 @@ export const emitApiEnforcementFiles = (enforcement: ApiEnforcement): GeneratedF
           ),
         },
         { path: API_CONTROLLER_PATH, content: withMarker(runtime("api-controller.ts")) },
+        { path: API_UPLOADS_PATH, content: withMarker(runtime("api-uploads.ts")) },
+        {
+          path: API_UPLOAD_CONTROLLER_PATH,
+          content: withMarker(runtime("api-upload-controller.ts")),
+        },
+        ...(enforcement.uploads === null
+          ? []
+          : [
+              {
+                path: UPLOAD_EXTENSION_PATH,
+                content: uploadExtensionSource(enforcement.uploads!.uploaderRecorded),
+              },
+            ]),
       ];

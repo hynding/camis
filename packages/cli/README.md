@@ -143,42 +143,98 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
     may update; a many-to-many link only one side declares needs read alone. Linking an entry
     whose other side holds one entry at most (a bidirectional oneToOne or oneToMany) takes it from
     its last holder, which must be one the caller may update when its type has rules.
+  - A restricted caller's create or update body is first checked against the type's attributes at
+    every depth (400 otherwise): no key but an attribute (top-level `documentId`, `locale`,
+    `publishedAt`, `createdBy` are refused); a relation item is a row id, a documentId, or an object
+    with one of `id`/`documentId` and only `locale`, `status` and `position` beside it (`__type` on
+    a polymorphic item; a position may name its anchor's `locale` and `status`); a media item is a
+    row id or `{ id }`; a component item holds its attributes and its own `id`; a zone item names
+    one of the zone's components; `null` clears. So no `__pivot` reaches a join row (it overrode the
+    linked ids, in releases before this one too), a to-one relation, a polymorphic relation to one
+    and a single media field take one entry, and a `set` stands alone. Any `set` but `null` replaces
+    the relation, one entry included, so every entry it drops is checked. The check covers every
+    collection type camis serves, including each with a relation or media field that a restricted
+    role or an open route writes (served for this alone, its reads and deletes stay Strapi's), and
+    each such single type, whose update is checked over Strapi's own single type controller; the
+    built-in user and the media library are served by their plugins, unchecked (a non-admin user
+    write is an error; the upload API takes only its documented fields).
+  - The upload API, once a role the rules restrict holds a file grant, read included (a generated
+    `src/extensions/upload/strapi-server.ts` wraps the plugin's content API controller): `POST
+    /api/upload` takes only `fileInfo`, `ref`, `refId` and `field` (any other body field, `path` and
+    `folder` among them, or query parameter but `id`, is 400); `ref`, `refId` and `field` come
+    together, single-valued, `refId` a row id (a documentId is 400), and attach only to a content
+    type's own media field on an entry the caller may update (every row of it), else 403 before
+    anything is stored: a component's uid, a nested or non-media field and an entry that does not
+    exist are 403. Each upload records its uploader in a private `camisUploader` attribute (the
+    content API's `createdBy` is never set for a users-permissions caller). `?id=` (replace or info
+    update) and `DELETE /api/upload/files/:id` need update on every entry the file is attached to,
+    or that the caller uploaded it (an uploader keeps its own file). An entry create or update
+    linking a stored file through a media field (at any depth of components and zones) is 403 unless
+    the caller uploaded it or may update an entry it is attached to; a media value other than a row
+    id (`3`, `"3"`, `{ id: 3 }`, a list, `connect`/`set`) is 400. These link checks apply whenever a
+    restricted role or an open action writes a media field, file grants or not; with no file grants
+    there is no uploader record and only the entry rule applies. Listing and reading files (`GET
+    /api/upload/files`, `/files/:id`) are the plugin's once a restricted caller's populate of a
+    file's `related` entries is refused (400, in any form or depth): Strapi returns that polymorphic
+    list whole when it can read none of its entries.
   - The role is the session's users-permissions role, the public role without a session; a role
     the IR does not grant the type, a session whose role was not loaded and an unknown strategy are
     refused. Admin roles and API tokens are not narrowed; an `auth: false` action serves its own
     type's rows to anyone, but its reach into a conditioned type is the public role's.
+  - API tokens are known as Strapi 5.48 authenticates them (strategy `content-api-token`, the
+    token's `type` in `ctx.state.auth.credentials`; anything else is 403). A full-access or
+    read-only token passes unchanged: no row condition applies and it reads every type. Custom
+    tokens are not supported on enforced routes: Strapi returns a polymorphic list whole when the
+    token may read none of its entries, at any depth, so every route camis serves (entry
+    controllers, single types, the upload API) refuses a custom token with 403. camis leaves some
+    routes to Strapi, each for a reason: on `/api/users*` a custom token is subject to Strapi's
+    polymorphic sanitizer behaviour (issue #111); a type camis does not serve where the rules
+    restrict someone (a plain type with no link, media or polymorphic reach) is safe, as nothing
+    polymorphic can be populated from it; `/api/i18n/locales` and the auth routes are safe, as they
+    populate nothing polymorphic; and every route where the rules restrict no one gets no
+    enforcement (issue #111). A populate through the built-in user is walked like any other (every
+    built-in user type of the IR is one user), and on the paths the generated controllers walk (a
+    served type's query and its populates through links of the reach graph) a nested populate, a
+    sort through, or any filter on a relation Strapi adds that camis does not walk (the user's
+    `role`, an admin's `createdBy` and `updatedBy`, named in the generated holders) is 400 for a
+    restricted caller, whatever the filter's value (`role=3` and `role[$in]` included); filters on
+    the entry's own fields and on known relations pass. Two paths stay Strapi's own behaviour (issue
+    #113): a type linking to the user that camis does not serve, and a populatable relation that is
+    no link of the graph; there a populate's filter through `role` can tell which role a user has.
+    `*` beneath the user populates its inverses only, not `role`.
 
   The build fails (`error`) where it cannot enforce: `apiGrantCondition` for a read condition
   outside `eq`/`and`/`or` over `record.<field>`/`record.<relation>Id` vs a literal or
   `user.id`/`user.email`/`user.role`, an update/delete condition reading another variable, a create
-  condition reading a relation the client writes, or a condition on a single type, the built-in
-  user or the media library; `apiPolymorphicReach` when a role reads a type with a polymorphic
-  relation while it reads some type under a condition; `apiRelationReach` for a reach from the
-  built-in user, from the media library (a role that reads files, whose `related` entries reach a
-  type it reads under a condition) or from a single type, and for a role that writes the built-in
-  user or a single type whose relation both sides declare into a type it does not update outright
-  (the plugin's or Strapi's own controller serves those), and for a role that may create, update
-  or delete files while a type with a media field is one it does not update outright (the upload
-  API attaches, replaces or deletes a file on any entry unchecked); `apiUserWrite` for a non-admin
-  role that may create or update the built-in user (users-permissions sets any user's role and
-  password from the body), whatever else it holds. The admin-panel copy of a non-admin role
-  cannot read `record.*`, so there its condition denies every entry (`conditionContext`,
-  downgrade). Not enforced: GraphQL (if added by hand) and a `protected/` file replacing a
-  generated controller; a publish condition apart from update's; deleting an entry, which drops
-  its links and so changes the entries at their other ends without asking for update on them. On
-  MySQL a string comparison follows the column's collation, whose defaults ignore case (and mostly
-  accents), so a list or populate filter may let through rows Ring 1 would deny
-  (`user.email == "A@x"` matches `a@x`); entry checks run Ring 1 and are exact. Closing that needs
-  a binary comparison (`BINARY col = ?` or a `_bin` collation on the columns), which Strapi's
-  filter syntax cannot express. The enforcement is unit-tested against a fake of the Strapi
-  surface it uses, and its scoped queries run on Strapi's own query engine over sqlite; the
-  `strapi-enforcement-boot` CI job runs the ownership fixture against a real
-  Strapi 5 on sqlite (list, entry, owner, `GET /api/users`, populate, filter, two relation filters,
-  sort, connect, a file's related entries, taking a pinned tag, the refused `$not` and `$null`
-  filters, a component's populate filter, a tag with no note answering as one with a hidden
-  note, a delete or update filtered by a guess), not zones, locales, drafts, MySQL or Postgres;
-  it also fails unless every content API route a role can reach is in
-  `scripts/content-api-allowlist.json` with a reason.
+  condition reading a relation the client writes, or a condition on a single type, the built-in user
+  or the media library; `apiPolymorphicReach` when a non-admin role reads or writes a type with a
+  polymorphic relation or inverse at any depth, conditions or not (Strapi leaves a polymorphic list
+  untouched when it can read none of its entries), and for any `auth: false` action on a type with a
+  polymorphic relation at any depth, whatever roles exist (with no roles at all the open routes are
+  still enforced); `apiRelationReach` for a reach from the built-in user, from the media library (a
+  role that reads files, whose `related` entries reach a type it reads under a condition) or from a
+  single type a role reads or writes, and for a role that writes the built-in user or a single type
+  whose relation both sides declare into a type it does not update outright (the plugin's or
+  Strapi's own controller serves those), and for a restricted role, or an `auth: false` action, that
+  writes a single type with a media field (Strapi's single type controller links any stored file
+  id); `apiUserWrite` for a non-admin role that may create or update the built-in user
+  (users-permissions sets any user's role and password from the body), whatever else it holds. The
+  admin-panel copy of a non-admin role cannot read `record.*`, so there its condition denies every
+  entry (`conditionContext`, downgrade). Not enforced: GraphQL (if added by hand) and a `protected/`
+  file replacing a generated controller; a publish condition apart from update's; deleting an entry,
+  which drops its links and so changes the entries at their other ends without asking for update on
+  them. On MySQL a string comparison follows the column's collation, whose defaults ignore case (and
+  mostly accents), so a list or populate filter may let through rows Ring 1 would deny (`user.email
+  == "A@x"` matches `a@x`); entry checks run Ring 1 and are exact. Closing that needs a binary
+  comparison (`BINARY col = ?` or a `_bin` collation on the columns), which Strapi's filter syntax
+  cannot express. The enforcement is unit-tested against a fake of the Strapi surface it uses, and
+  its scoped queries run on Strapi's own query engine over sqlite; the `strapi-enforcement-boot` CI
+  job runs the ownership fixture against a real Strapi 5 on sqlite (list, entry, owner, `GET
+  /api/users`, populate, filter, two relation filters, sort, connect, a file's related entries,
+  taking a pinned tag, the refused `$not` and `$null` filters, a component's populate filter, a tag
+  with no note answering as one with a hidden note, a delete or update filtered by a guess), not
+  zones, locales, drafts, MySQL or Postgres; it also fails unless every content API route a role can
+  reach is in `scripts/content-api-allowlist.json` with a reason.
 
 - `protected` (optional) is a directory mirrored into every target's `out` after generation —
   the home for hand-written seams (`routes/api-custom.php`, protected controller subclasses,

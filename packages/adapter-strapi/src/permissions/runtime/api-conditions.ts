@@ -78,19 +78,69 @@ export type HolderLink =
   | { relation: string }
   | { component: string }
   | { zone: readonly string[] }
-  | { media: true };
+  | { media: true }
+  /** A polymorphic relation or inverse: its entries may be of any type. */
+  | { polymorphic: true };
 
 export interface Holder {
   /** Every attribute `populate=*` populates. */
   populatable: readonly string[];
+  /**
+   * The relations Strapi adds that the graph does not walk (an admin's createdBy, the user's
+   * role): a filter on one answers what the caller may not read, whatever its value.
+   */
+  unwalked: readonly string[];
   /** The attributes that lead to a conditioned type, directly or further on. */
   links: Readonly<Record<string, HolderLink>>;
 }
+
+/** A type's or component's media fields, and its attributes that hold one further down. */
+export interface MediaHolder {
+  fields: readonly string[];
+  nested: Readonly<Record<string, { component: string } | { zone: readonly string[] }>>;
+}
+
+/**
+ * What the media checks read: present when a role the rules restrict (or an `auth: false` route)
+ * writes a type with a media field, or a restricted role writes files.
+ */
+export interface Uploads {
+  /** Roles flagged admin, which no check restricts. */
+  admins: readonly string[];
+  /** The upload extension records each file's uploader (a restricted role writes files). */
+  uploaderRecorded: boolean;
+  /** Every content type and component with a media field at some depth, by uid. */
+  holders: Readonly<Record<string, MediaHolder>>;
+  /**
+   * Each content type with a media field, by uid: the roles holding read and update on it
+   * outright, which decide on its entries when it has no rules of its own.
+   */
+  grants: Readonly<Record<string, { read: readonly string[]; update: readonly string[] }>>;
+}
+
+/**
+ * How an attribute is written: a scalar (Strapi validates its value), a relation, a polymorphic
+ * relation (whose items name their `__type`) or a media field, each to one entry at most or to
+ * many; a component or a dynamic zone.
+ */
+export type AttributeShape =
+  | "scalar"
+  | "relation"
+  | "toOneRelation"
+  | "polymorphic"
+  | "toOnePolymorphic"
+  | "media"
+  | "toOneMedia"
+  | { component: string; repeatable: boolean }
+  | { zone: readonly string[] };
 
 /** The project's rules per type uid, and the holders (types and components) that reach. */
 export interface Tables {
   rules: Readonly<Record<string, TypeRules>>;
   holders: Readonly<Record<string, Holder>>;
+  /** The writable attributes of every type the controllers serve and every component they embed. */
+  shapes: Readonly<Record<string, Readonly<Record<string, AttributeShape>>>>;
+  uploads?: Uploads;
 }
 
 /** A result or why there is none; both sides name both fields, so either reads without narrowing. */
@@ -153,7 +203,10 @@ const field = (source: unknown, key: string): unknown =>
  * A table's own entry for a key a caller chose (a role name, an attribute name), never one
  * inherited from Object.prototype: a role named "constructor" names no rules.
  */
-const own = <T>(table: Readonly<Record<string, T>> | undefined, key: string): T | undefined =>
+export const own = <T>(
+  table: Readonly<Record<string, T>> | undefined,
+  key: string,
+): T | undefined =>
   table !== undefined && Object.prototype.hasOwnProperty.call(table, key) ? table[key] : undefined;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -170,8 +223,34 @@ const strategyOf = (state: unknown): unknown =>
   field(field(field(state, "auth"), "strategy"), "name");
 
 /**
- * Who is asking, from Strapi's ctx.state. A route opened with `auth: false` and an API token
- * (which stands for no role and no user) read every row, as Strapi's own do; a session acts as
+ * The content API token strategy of Strapi 5.48 (@strapi/admin strategies/content-api-token),
+ * whose ctx.state.auth.credentials is the stored token, its `type` one of TOKEN_TYPES.
+ */
+export const TOKEN_STRATEGY = "content-api-token";
+/** The token types that read every type, so no polymorphic list is ever unreadable to them. */
+const READING_TOKENS = ["full-access", "read-only"];
+
+const tokenType = (state: unknown): unknown =>
+  field(field(field(state, "auth"), "credentials"), "type");
+
+/**
+ * Whether the request carries a custom API token. Strapi checks one against its own scopes, and its
+ * sanitizer keeps a polymorphic list whole when the token may read none of its entries, at any
+ * depth of any type (the built-in user's inverses included): camis does not support one on a
+ * route it serves.
+ */
+export const customToken = (state: unknown): boolean =>
+  strategyOf(state) === TOKEN_STRATEGY && tokenType(state) === "custom";
+
+/** The 403 message for a custom API token on a route camis serves. */
+export const CUSTOM_TOKEN_REFUSAL =
+  "A custom API token is not supported on this route: use a full-access or read-only token";
+
+/**
+ * Who is asking, from Strapi's ctx.state. A route opened with `auth: false` and a content API
+ * token that reads every type (full-access, read-only; it stands for no role and no user) read
+ * every row, as Strapi's own do; a custom token, or one of a type Strapi does not issue, is
+ * refused; a session acts as
  * its users-permissions role, an admin role unrestricted; a request with no session acts as the
  * public role. Anything else — a session whose role was not loaded, an unknown strategy — is
  * refused rather than guessed at.
@@ -179,8 +258,10 @@ const strategyOf = (state: unknown): unknown =>
 export const callerOf = (rules: TypeRules, state: unknown, action: string): Caller => {
   if (rules.open.includes(action))
     return { kind: "unrestricted", user: null, assign: rules.assign };
-  if (strategyOf(state) === "api-token")
-    return { kind: "unrestricted", user: null, assign: rules.assign };
+  if (strategyOf(state) === TOKEN_STRATEGY)
+    return READING_TOKENS.includes(tokenType(state) as string)
+      ? { kind: "unrestricted", user: null, assign: rules.assign }
+      : { kind: "refused" };
   const sessionUser = field(state, "user");
   if (sessionUser !== undefined && sessionUser !== null) {
     const role = field(field(sessionUser, "role"), "type");
@@ -477,8 +558,10 @@ const sortPaths = (sort: unknown): string[][] => {
 const sortLeaks = (tables: Tables, holder: string, path: string[], state: unknown): boolean => {
   const [head, ...rest] = path;
   if (head === undefined || rest.length === 0) return false;
-  const link = own(own(tables.holders, holder)?.links, head);
-  if (link === undefined) return false;
+  const known = own(tables.holders, holder);
+  const link = own(known?.links, head);
+  // Through an attribute camis does not know (the user's role), the order is an oracle on it.
+  if (link === undefined) return known !== undefined && !known.populatable.includes(head);
   if ("relation" in link) {
     if (reachScope(tables, link.relation, state) !== null) return true;
     return sortLeaks(tables, link.relation, rest, state);
@@ -520,8 +603,14 @@ const scopeFilters = (
   if (!isRecord(filters)) return { ok: true, value: filters };
   const rest: Record<string, unknown> = {};
   const lifted: Record<string, unknown>[] = [];
+  const known = own(tables.holders, holder);
   for (const [key, value] of Object.entries(filters)) {
-    const link = key.startsWith("$") ? undefined : own(own(tables.holders, holder)?.links, key);
+    const link = key.startsWith("$") ? undefined : own(known?.links, key);
+    // Strapi checks neither a populate's filters nor a relation filter's inner ones against the
+    // caller's grants: on a relation camis does not walk (the user's role) any filter, `role: 3`
+    // as much as `role.name`, would answer what the caller may not read.
+    if (link === undefined && known?.unwalked.includes(key) === true)
+      return refuse(`Invalid filter through ${key}`);
     let scoped: Checked<unknown> = { ok: true, value };
     if (key === "$and" || key === "$or" || key === "$not") {
       scoped = scopeFilters(tables, holder, value, state, negated || key === "$not");
@@ -603,16 +692,33 @@ const relationTest = (key: string, value: unknown, conditioned: boolean): Checke
   return { ok: true, value: { id: value } };
 };
 
-/** Whether a file's populate asks for its `related` entries, in any form. */
-const populatesRelated = (populate: unknown): boolean => {
-  const named = (text: string): boolean =>
-    text.split(",").some((part) => ["related", "*"].includes(part.trim().split(".")[0]!));
+/**
+ * Whether a file's populate asks for its `related` entries, in any form and at any depth: a
+ * `related` or `*` anywhere in a string, an array item or a key, an entry's own populate or a
+ * zone's `on`. Conservative past the file: a `*` under its folder is refused as well.
+ */
+export const populatesRelated = (populate: unknown): boolean => {
   if (populate === true) return true;
-  if (typeof populate === "string") return named(populate);
-  if (Array.isArray(populate)) return populate.some((p) => typeof p === "string" && named(p));
-  if (isRecord(populate))
-    return Object.entries(populate).some(([key, entry]) => entry !== false && named(key));
-  return false;
+  if (typeof populate === "string")
+    return populate.split(",").some((part) =>
+      part
+        .trim()
+        .split(".")
+        .some((segment) => segment === "related" || segment === "*"),
+    );
+  if (Array.isArray(populate)) return populate.some(populatesRelated);
+  if (!isRecord(populate)) return false;
+  return Object.entries(populate).some(([key, entry]) => {
+    if (entry === false || entry === "false") return false;
+    if (populatesRelated(key)) return true;
+    if (typeof entry === "string" && entry !== "true") return populatesRelated(entry);
+    if (Array.isArray(entry)) return populatesRelated(entry);
+    if (!isRecord(entry)) return false;
+    return (
+      populatesRelated(entry.populate ?? false) ||
+      (isRecord(entry.on) && Object.values(entry.on).some((f) => populatesRelated({ [key]: f })))
+    );
+  });
 };
 
 /** One populate entry for an attribute of `holder`, scoped; a message when it cannot be. */
@@ -623,6 +729,7 @@ const scopeEntry = (
   state: unknown,
 ): Checked<unknown> => {
   const options = isRecord(entry) ? entry : {};
+  if ("polymorphic" in link) return refuse("Invalid populate of a polymorphic relation");
   if ("media" in link) {
     // A file's related entries are polymorphic: no filter of one type's narrows them.
     return populatesRelated(options.populate)
@@ -720,12 +827,19 @@ const scopePopulate = (
   state: unknown,
 ): Checked<Record<string, unknown>> => {
   const normalised = normalisePopulate(tables, holder, populate);
-  const links = own(tables.holders, holder)?.links;
+  const known = own(tables.holders, holder);
   for (const [key, entry] of Object.entries(normalised)) {
     const unknown = unknownParameter(entry, POPULATE_PARAMETERS);
     if (unknown !== undefined) return refuse(`Invalid populate parameter ${unknown}`);
-    const link = own(links, key);
-    if (link === undefined) continue;
+    const link = own(known?.links, key);
+    if (link === undefined) {
+      // Beneath an attribute the reach graph does not know (the user's role, an admin's
+      // createdBy) nothing is known of what the populate meets: it is not passed on unchecked.
+      const nested = isRecord(entry) && (entry.populate !== undefined || entry.on !== undefined);
+      if (nested && known !== undefined && !known.populatable.includes(key))
+        return refuse(`Invalid populate beneath ${key}`);
+      continue;
+    }
     const scoped = scopeEntry(tables, link, entry, state);
     if (!scoped.ok) return { ok: false, message: scoped.message };
     normalised[key] = scoped.value;
@@ -740,7 +854,8 @@ const scopePopulate = (
  * same way, a component's populate filters included, so it is no oracle; a sort through one is
  * refused, since its join carries no filter, and so is a `$not` around one or a `$null` on one;
  * so is any parameter outside QUERY_PARAMETERS (or POPULATE_PARAMETERS in a populate), on every
- * type with rules or a reach. A caller no role restricts gets the query back as it is.
+ * type with rules or a reach; a populate of a polymorphic relation or of a file's related entries
+ * is refused. A caller no role restricts gets the query back as it is.
  */
 export const scopeQuery = (
   tables: Tables,
@@ -749,8 +864,9 @@ export const scopeQuery = (
   query: Record<string, unknown>,
 ): Checked<Record<string, unknown>> => {
   const rules = own(tables.rules, uid);
-  if (rules === undefined || callerOf(rules, state, "").kind === "unrestricted")
-    return { ok: true, value: query };
+  if (rules === undefined) return { ok: true, value: query };
+  const caller = callerOf(rules, state, "");
+  if (caller.kind === "unrestricted") return { ok: true, value: query };
   const unknown = unknownParameter(query, QUERY_PARAMETERS);
   if (unknown !== undefined) return refuse(`Invalid query parameter ${unknown}`);
   if (own(tables.holders, uid) === undefined) return { ok: true, value: query };
@@ -770,32 +886,190 @@ export const scopeQuery = (
   return { ok: true, value: out };
 };
 
-/** The entries one relation value links: document ids and row ids; null for a shape it cannot read. */
-const linked = (value: unknown): { documentIds: string[]; ids: number[] } | null => {
-  const documentIds: string[] = [];
-  const ids: number[] = [];
-  const item = (v: unknown): boolean => {
-    if (typeof v === "string") documentIds.push(v);
-    else if (typeof v === "number") ids.push(v);
-    else if (isRecord(v) && typeof own(v, "documentId") === "string")
-      documentIds.push(v.documentId as string);
-    else if (isRecord(v) && typeof own(v, "id") === "number") ids.push(v.id as number);
-    else return false;
-    return true;
-  };
-  if (value === null || value === undefined) return { documentIds, ids };
-  if (Array.isArray(value)) return value.every(item) ? { documentIds, ids } : null;
-  if (isRecord(value) && ("connect" in value || "set" in value || "disconnect" in value)) {
-    // A disconnect only drops a link, which reveals and grants nothing.
-    for (const key of ["connect", "set"]) {
-      const list = own(value, key);
-      if (list === undefined) continue;
-      if (!Array.isArray(list) || !list.every(item)) return null;
-    }
-    return { documentIds, ids };
-  }
-  return item(value) ? { documentIds, ids } : null;
+export interface Linked {
+  documentIds: string[];
+  ids: number[];
+}
+
+const noEntries = (): Linked => ({ documentIds: [], ids: [] });
+const count = (entries: Linked): number => entries.documentIds.length + entries.ids.length;
+const joined = (...lists: Linked[]): Linked => ({
+  documentIds: lists.flatMap((l) => l.documentIds),
+  ids: lists.flatMap((l) => l.ids),
+});
+
+/** A positive row id, as a number or the plain digits a query string or a JSON string carries. */
+export const rowId = (value: unknown): number | null => {
+  if (typeof value === "number") return Number.isInteger(value) && value > 0 ? value : null;
+  return typeof value === "string" && /^[1-9][0-9]*$/.test(value) ? Number(value) : null;
 };
+
+/**
+ * One entry named as Strapi's document service reads a shorthand: a number or plain digits as a
+ * row id, any other string as a documentId. A string parseInt reads a number from ("5abc", " 5",
+ * "-5") is refused: Strapi takes it for a row id, which MySQL compares as its leading number.
+ */
+const shorthand = (value: unknown, into: Linked): boolean => {
+  const id = rowId(value);
+  if (id !== null) {
+    into.ids.push(id);
+    return true;
+  }
+  if (typeof value !== "string" || value === "" || !Number.isNaN(Number.parseInt(value, 10)))
+    return false;
+  into.documentIds.push(value);
+  return true;
+};
+
+/**
+ * The keys of a relation item Strapi 5.48 reads to pick the entry and its place: the document
+ * service maps `documentId` (with `locale` and `status`) to row ids and `position` to anchors; the
+ * database layer reads `id`, `position`, and also spreads `__pivot` into the join row after the
+ * ids, so a `__pivot` would name another entry than the one checked. Only these pass; a media
+ * item, which the document service does not map, is a row id alone.
+ */
+const ITEM_KEYS = ["id", "documentId", "locale", "status", "position"];
+const POSITION_KEYS = ["before", "after", "start", "end", "locale", "status"];
+const STATUSES = ["draft", "published"];
+const OPERATIONS = ["connect", "set", "disconnect", "options"];
+
+/** How an attribute's items are named: a relation, a polymorphic relation, or a media field. */
+export type ItemForm = "relation" | "polymorphic" | "media";
+
+const isNil = (value: unknown): boolean => value === undefined || value === null;
+
+const localeAndStatus = (value: Record<string, unknown>): boolean => {
+  const locale = own(value, "locale");
+  const status = own(value, "status");
+  return (
+    (locale === undefined || typeof locale === "string") &&
+    (status === undefined || STATUSES.includes(status as string))
+  );
+};
+
+/**
+ * A relation item's position: `before`/`after` an entry (an anchor), or `start`/`end`; the
+ * `locale` and `status` Strapi looks the anchor up in, and on a polymorphic relation its `__type`.
+ * An anchor is read on every row of its document, so whichever locale and status it names.
+ */
+const positionOf = (value: unknown, polymorphic: boolean, anchors: Linked): boolean => {
+  if (value === undefined) return true;
+  const keys = polymorphic ? [...POSITION_KEYS, "__type"] : POSITION_KEYS;
+  if (!isRecord(value) || !Object.keys(value).every((k) => keys.includes(k))) return false;
+  for (const key of ["before", "after"])
+    if (own(value, key) !== undefined && !shorthand(own(value, key), anchors)) return false;
+  const type = own(value, "__type");
+  return (
+    ["start", "end"].every(
+      (k) => own(value, k) === undefined || typeof own(value, k) === "boolean",
+    ) &&
+    localeAndStatus(value) &&
+    (type === undefined || (typeof type === "string" && type !== ""))
+  );
+};
+
+/** One item: a shorthand, or an object of exactly the keys Strapi reads (and `__type`). */
+const itemOf = (value: unknown, form: ItemForm, entries: Linked, anchors: Linked): boolean => {
+  if (form === "media") {
+    const id = isRecord(value)
+      ? Object.keys(value).length === 1
+        ? rowId(own(value, "id"))
+        : null
+      : rowId(value);
+    if (id === null) return false;
+    entries.ids.push(id);
+    return true;
+  }
+  const polymorphic = form === "polymorphic";
+  if (!isRecord(value)) return !polymorphic && shorthand(value, entries);
+  const keys = polymorphic ? [...ITEM_KEYS, "__type"] : ITEM_KEYS;
+  if (!Object.keys(value).every((k) => keys.includes(k))) return false;
+  const id = own(value, "id");
+  const documentId = own(value, "documentId");
+  if ((id === undefined) === (documentId === undefined)) return false;
+  if (id !== undefined) {
+    const row = rowId(id);
+    if (row === null) return false;
+    entries.ids.push(row);
+  } else if (typeof documentId === "string" && documentId !== "") {
+    entries.documentIds.push(documentId);
+  } else return false;
+  const type = own(value, "__type");
+  return (
+    localeAndStatus(value) &&
+    (!polymorphic || (typeof type === "string" && type !== "")) &&
+    positionOf(own(value, "position"), polymorphic, anchors)
+  );
+};
+
+/** A list of items, or one item, into `entries`; nothing for null. */
+const itemsOf = (value: unknown, form: ItemForm, entries: Linked, anchors: Linked): boolean => {
+  if (isNil(value)) return true;
+  const items = Array.isArray(value) ? value : [value];
+  return items.every((item) => itemOf(item, form, entries, anchors));
+};
+
+/**
+ * A relation or media value as the change Strapi 5.48 makes to the attribute: on "replace" it
+ * holds exactly `connect` afterwards, on "change" `connect` is added to what it holds and
+ * `disconnect` taken from it. The only reading of a value camis has: the body check and the
+ * write plan both take it, so neither can read a value otherwise than Strapi applies it.
+ */
+export interface RelationChange {
+  mode: "replace" | "change";
+  connect: Linked;
+  disconnect: Linked;
+  /** The entries a position places a link before or after. */
+  anchors: Linked;
+}
+
+/**
+ * The change a value makes, every item exact; null for anything else. Strapi's document service
+ * (mapRelation) wraps a shorthand (an id, a documentId, an item, a list, null) in a set; its
+ * database layer (toAssocs) replaces the relation for that or for any truthy `set`, ignoring
+ * `connect` and `disconnect` beside it, and otherwise connects and disconnects. A set beside a
+ * connect or a disconnect is refused: Strapi would not apply what they name, yet still look up
+ * their entries. `options` takes only `strict`.
+ */
+export const relationChange = (value: unknown, form: ItemForm): RelationChange | null => {
+  const anchors = noEntries();
+  const connect = noEntries();
+  const disconnect = noEntries();
+  const isOperation =
+    isRecord(value) &&
+    Object.keys(value).length > 0 &&
+    Object.keys(value).every((k) => OPERATIONS.includes(k));
+  if (!isOperation)
+    return itemsOf(value, form, connect, anchors)
+      ? { mode: "replace", connect, disconnect, anchors }
+      : null;
+  const options = own(value, "options");
+  const strictOptions =
+    isNil(options) ||
+    (isRecord(options) &&
+      Object.keys(options).every((k) => k === "strict") &&
+      ["undefined", "boolean"].includes(typeof own(options, "strict")));
+  if (!strictOptions) return null;
+  const set = own(value, "set");
+  if (!isNil(set)) {
+    if (!isNil(own(value, "connect")) || !isNil(own(value, "disconnect"))) return null;
+    return itemsOf(set, form, connect, anchors)
+      ? { mode: "replace", connect, disconnect, anchors }
+      : null;
+  }
+  return itemsOf(own(value, "connect"), form, connect, anchors) &&
+    itemsOf(own(value, "disconnect"), form, disconnect, noEntries())
+    ? { mode: "change", connect, disconnect, anchors }
+    : null;
+};
+
+/**
+ * The row ids a media value links, or null for a value of any other form: a documentId, a
+ * `position` (whose anchors Strapi reads raw), or any other key, `__pivot` above all, which the
+ * database layer spreads into the files_related_mph row over file_id, related_id and related_type.
+ */
+export const mediaIds = (value: unknown): number[] | null =>
+  relationChange(value, "media")?.connect.ids ?? null;
 
 /**
  * The entries of conditioned types a write's data links, through relations at any depth of its
@@ -817,9 +1091,11 @@ export const relationRefs = (
       if (link === undefined) continue;
       if ("relation" in link) {
         if (reachScope(tables, link.relation, state) === null) continue;
-        const entries = linked(value);
-        if (entries === null) return `Invalid relation value for ${key}`;
-        if (entries.documentIds.length + entries.ids.length === 0) continue;
+        const change = relationChange(value, "relation");
+        if (change === null) return `Invalid relation value for ${key}`;
+        // An anchor is looked up as an entry is: its error would tell whether it exists.
+        const entries = joined(change.connect, change.anchors);
+        if (count(entries) === 0) continue;
         const ref = refs.get(link.relation) ?? { target: link.relation, documentIds: [], ids: [] };
         ref.documentIds.push(...entries.documentIds);
         ref.ids.push(...entries.ids);
@@ -844,6 +1120,89 @@ export const relationRefs = (
   return problem === undefined
     ? { ok: true, value: [...refs.values()] }
     : { ok: false, message: problem };
+};
+
+/** How each link shape's items are named, and whether it holds one entry at most. */
+const LINK_SHAPES: Record<
+  Exclude<AttributeShape, "scalar" | object>,
+  { form: ItemForm; toOne: boolean }
+> = {
+  relation: { form: "relation", toOne: false },
+  toOneRelation: { form: "relation", toOne: true },
+  polymorphic: { form: "polymorphic", toOne: false },
+  toOnePolymorphic: { form: "polymorphic", toOne: true },
+  media: { form: "media", toOne: false },
+  toOneMedia: { form: "media", toOne: true },
+};
+
+/**
+ * Whether a restricted caller's write names only what the type's rules decide on: every key, at
+ * every depth of its components and dynamic zones, is a writable attribute of camis's (a component
+ * item may also name its `id`, which Strapi only keeps if the entry already holds it, and a zone
+ * item its `__component`), and every relation and media value takes one of Strapi's forms with
+ * exactly the keys it documents. Anything else Strapi or its database layer reads from a body
+ * (`id`, `documentId`, `locale`, `publishedAt`, `createdBy`, `localizations`, `__pivot`, ...) is
+ * refused before any other decision.
+ */
+export const writeShape = (
+  tables: Tables,
+  uid: string,
+  data: Record<string, unknown>,
+): Checked<true> => {
+  const walk = (
+    holder: string,
+    values: Record<string, unknown>,
+    path: string,
+    extra: readonly string[],
+  ): string | undefined => {
+    const shapes = own(tables.shapes, holder);
+    for (const [key, value] of Object.entries(values)) {
+      const at = `${path}${key}`;
+      if (extra.includes(key)) {
+        if (key === "id" && rowId(value) === null) return `Invalid key ${at}`;
+        continue;
+      }
+      const shape = own(shapes, key);
+      if (shape === undefined) return `Invalid key ${at}`;
+      if (shape === "scalar") continue;
+      if (typeof shape === "string") {
+        const { form, toOne } = LINK_SHAPES[shape];
+        const what = form === "media" ? "media" : "relation";
+        const change = relationChange(value, form);
+        if (change === null) return `Invalid ${what} value for ${at}`;
+        // Strapi keeps the last entry of a to-one write: the others would go unread as written.
+        if (toOne && count(change.connect) > 1)
+          return `Invalid ${what} value for ${at}: one entry at most`;
+      } else if ("component" in shape) {
+        // Strapi clears a component or a dynamic zone written as null.
+        if (value === null) continue;
+        const items = shape.repeatable ? value : [value];
+        if (!Array.isArray(items) || (!shape.repeatable && Array.isArray(value)))
+          return `Invalid component value for ${at}`;
+        for (const item of items) {
+          if (!isRecord(item)) return `Invalid component value for ${at}`;
+          const problem = walk(shape.component, item, `${at}.`, ["id"]);
+          if (problem !== undefined) return problem;
+        }
+      } else {
+        if (value === null) continue;
+        if (!Array.isArray(value)) return `Invalid dynamic zone value for ${at}`;
+        for (const item of value) {
+          const component = isRecord(item) ? own(item, "__component") : undefined;
+          if (typeof component !== "string" || !shape.zone.includes(component))
+            return `Invalid dynamic zone value for ${at}`;
+          const problem = walk(component, item as Record<string, unknown>, `${at}.`, [
+            "id",
+            "__component",
+          ]);
+          if (problem !== undefined) return problem;
+        }
+      }
+    }
+    return undefined;
+  };
+  const problem = walk(uid, data, "", []);
+  return problem === undefined ? { ok: true, value: true } : refuse(problem);
 };
 
 /** What to load of the rows a write links, to decide on them. */
@@ -901,35 +1260,6 @@ export const refsVerdict = (
 export const reachState = (rules: TypeRules, state: unknown, action: string): unknown =>
   rules.open.includes(action) ? GUEST_STATE : state;
 
-interface Linked {
-  documentIds: string[];
-  ids: number[];
-}
-
-/** One relation value as a write: what it adds, what it drops by name, and whether it replaces. */
-const relationChange = (
-  value: unknown,
-  toOne: boolean,
-): { added: Linked; removed: Linked; replace: boolean } | null => {
-  const removed: Linked = { documentIds: [], ids: [] };
-  if (isRecord(value) && ("connect" in value || "set" in value || "disconnect" in value)) {
-    const connect = linked(own(value, "connect") ?? null);
-    const set = linked(own(value, "set") ?? null);
-    const disconnect = linked(own(value, "disconnect") ?? null);
-    if (connect === null || set === null || disconnect === null) return null;
-    const added: Linked = {
-      documentIds: [...connect.documentIds, ...set.documentIds],
-      ids: [...connect.ids, ...set.ids],
-    };
-    const replace =
-      own(value, "set") !== undefined || (toOne && added.documentIds.length + added.ids.length > 0);
-    return { added, removed: disconnect, replace };
-  }
-  // A shorthand (an id, a list, null) sets the relation to exactly what it names.
-  const added = linked(value);
-  return added === null ? null : { added, removed, replace: true };
-};
-
 /** The checks a relation write needs beyond the entry written, before it is made. */
 export interface WritePlan {
   /** Entries the write links or unlinks, each to be read, or updated where the link shows. */
@@ -962,25 +1292,25 @@ export const writePlan = (
   for (const [attribute, write] of Object.entries(rules.relations)) {
     const value = own(data, attribute);
     if (value === undefined) continue;
-    const change = relationChange(value, write.toOne);
+    const change = relationChange(value, "relation");
     if (change === null) return { ok: false, message: `Invalid relation value for ${attribute}` };
+    // Strapi keeps the last entry of a to-one write: a list there would hide the entries dropped.
+    if (write.toOne && count(change.connect) > 1)
+      return { ok: false, message: `Invalid relation value for ${attribute}: one entry at most` };
+    // A to-one connect replaces the link it holds, as a replacement does.
+    const kept =
+      change.mode === "replace" || (write.toOne && count(change.connect) > 0)
+        ? change.connect
+        : null;
     const target = own(tables.rules, write.target);
     if (write.mirrored && target?.own === true) {
-      const touched = {
-        documentIds: [...change.added.documentIds, ...change.removed.documentIds],
-        ids: [...change.added.ids, ...change.removed.ids],
-      };
-      if (touched.documentIds.length + touched.ids.length > 0)
+      const touched = joined(change.connect, change.disconnect);
+      if (count(touched) > 0)
         plan.refs.push({ target: write.target, ...touched, action: "update" });
-      if (change.replace)
-        plan.replaced.push({ attribute, target: write.target, kept: change.added });
+      if (kept !== null) plan.replaced.push({ attribute, target: write.target, kept });
     }
-    if (
-      write.exclusive &&
-      rules.own &&
-      change.added.documentIds.length + change.added.ids.length > 0
-    )
-      plan.stolen.push({ attribute, ...change.added });
+    if (write.exclusive && rules.own && count(change.connect) > 0)
+      plan.stolen.push({ attribute, ...change.connect });
   }
   return { ok: true, value: plan };
 };

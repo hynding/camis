@@ -8,9 +8,12 @@ import {
   holdersVerdict,
   reachState,
   refsVerdict,
+  relationChange,
   writePlan,
+  writeShape,
   relationRefs,
   scopeQuery,
+  customToken,
   withoutAssigned,
   type Tables,
   listFilter,
@@ -22,6 +25,7 @@ import {
   type TypeRules,
 } from "./api-conditions";
 import { CATEGORY, NOTE, REF, TAG, owned, tables } from "./__fixtures__/reach-tables";
+import { tokenState } from "../../__fixtures__/token-states";
 
 const isEditor: Condition = {
   test: (data: RecordData) => data["user.role"] === "editor",
@@ -115,7 +119,7 @@ describe("recordData and recordVerdict", () => {
 const member = session("member");
 const MINE = { owner: { id: { $eq: 7 } } };
 const SHARED = { shared: { $eq: true } };
-const token = { auth: { strategy: { name: "api-token" } } };
+const token = tokenState("full-access");
 
 const scoped = (state: unknown, query: Record<string, unknown>) => {
   const result = scopeQuery(tables, TAG, state, query);
@@ -403,13 +407,19 @@ describe("createVerdict and assigned fields", () => {
 describe("scopeQuery: a localized type's localizations reach like any relation", () => {
   const localized: Tables = {
     rules: tables.rules,
+    shapes: tables.shapes,
     holders: {
       ...tables.holders,
       [TAG]: {
         populatable: ["localizations", "note"],
+        unwalked: ["createdBy", "updatedBy"],
         links: { localizations: { relation: TAG }, note: { relation: NOTE } },
       },
-      [NOTE]: { populatable: ["localizations"], links: { localizations: { relation: NOTE } } },
+      [NOTE]: {
+        populatable: ["localizations"],
+        unwalked: ["createdBy", "updatedBy"],
+        links: { localizations: { relation: NOTE } },
+      },
     },
   };
   const run = (uid: string, query: Record<string, unknown>) =>
@@ -647,5 +657,517 @@ describe("writePlan: a relation write must be allowed on every entry it changes"
     expect(refsVerdict(tables, reviewer, ref, [{ ...theirs[0], owner: { id: 7 } }], "update")).toBe(
       "allow",
     );
+  });
+});
+
+// Strapi's database layer spreads a relation or media item's `__pivot` into the join row it writes
+// (entity-manager attachRelations/updateRelations), after the ids it was asked to link: so an item
+// `{ id: <mine>, __pivot: { note_id: <theirs> } }` links theirs. Every item is read exactly.
+describe("relation items: only the keys Strapi documents, each of its form", () => {
+  const refs = (data: Record<string, unknown>) => relationRefs(tables, TAG, member, data);
+  it("refuses __pivot, __type and any other key, in every place an item may stand", () => {
+    const item = { id: 5, __pivot: { note_id: 9 } };
+    for (const note of [
+      item,
+      [item],
+      { connect: [item] },
+      { set: [item] },
+      { disconnect: [item] },
+      { connect: item },
+      { connect: [{ documentId: "d1", __pivot: { note_id: 9 } }] },
+      { connect: [{ id: 5, __type: NOTE }] },
+      { connect: [{ id: 5, extra: true }] },
+      { connect: [5], other: [6] },
+      { connect: [5], options: { strict: true, extra: 1 } },
+      { connect: [5], options: "strict" },
+    ])
+      expect(refs({ note }), JSON.stringify(note)).toEqual({
+        ok: false,
+        message: "Invalid relation value for note",
+      });
+  });
+  it("accepts id, documentId, locale, status and position, and options.strict", () => {
+    expect(
+      refs({
+        note: {
+          connect: [
+            { documentId: "d1", locale: "fr", status: "published", position: { end: true } },
+            { id: "6", position: { start: true } },
+          ],
+          options: { strict: false },
+        },
+      }),
+    ).toEqual({ ok: true, value: [{ target: NOTE, documentIds: ["d1"], ids: [6] }] });
+  });
+  it("refuses an item naming both an id and a documentId, or neither, or a bad status or locale", () => {
+    for (const item of [
+      { id: 5, documentId: "d1" },
+      { locale: "fr" },
+      { id: 5, status: "archived" },
+      { id: 5, locale: 3 },
+      { id: 0 },
+      { id: "5abc" },
+    ])
+      expect(refs({ note: { connect: [item] } }).ok, JSON.stringify(item)).toBe(false);
+  });
+  // Strapi's document service reads a string that parseInt reads as a number as a row id, and a
+  // MySQL comparison reads "5abc" as 5: such a string is neither a documentId nor an id here.
+  it("reads a string of digits as a row id and refuses one that only starts like a number", () => {
+    expect(refs({ note: "12" })).toEqual({
+      ok: true,
+      value: [{ target: NOTE, documentIds: [], ids: [12] }],
+    });
+    for (const note of ["5abc", " 5", "-5", "0", "", ["7x"]])
+      expect(refs({ note }).ok, JSON.stringify(note)).toBe(false);
+  });
+  // An anchor names an entry by documentId (or id), which Strapi looks up: unreadable, its error
+  // would tell whether it exists. So an anchor must be readable like any linked entry.
+  it("reads a position's before and after as entries to be read, and refuses other position keys", () => {
+    expect(
+      refs({ note: { connect: [{ documentId: "d1", position: { before: "d2", after: 3 } }] } }),
+    ).toEqual({ ok: true, value: [{ target: NOTE, documentIds: ["d1", "d2"], ids: [3] }] });
+    for (const position of [
+      { middle: true },
+      { before: { id: 3 } },
+      { end: "yes" },
+      "end",
+      { before: "d2", locale: 3 },
+      { before: "d2", status: "archived" },
+      { before: "d2", __type: NOTE },
+    ])
+      expect(refs({ note: { connect: [{ id: 5, position }] } }).ok, JSON.stringify(position)).toBe(
+        false,
+      );
+  });
+  // Strapi looks an anchor up in the locale and status the position names (and, on a polymorphic
+  // relation, its __type). The anchor is read on every row of its document, each locale and status.
+  it("accepts a position's locale and status, and a polymorphic position's __type", () => {
+    expect(
+      refs({
+        note: {
+          connect: [
+            { documentId: "d1", position: { before: "d2", locale: "fr", status: "draft" } },
+          ],
+        },
+      }),
+    ).toEqual({ ok: true, value: [{ target: NOTE, documentIds: ["d1", "d2"], ids: [] }] });
+    expect(
+      writeShape(tables, TAG, {
+        subject: { connect: [{ id: 3, __type: NOTE, position: { after: 4, __type: TAG } }] },
+      }),
+    ).toEqual({ ok: true, value: true });
+  });
+});
+
+describe("writePlan: what Strapi keeps is what is planned", () => {
+  const reviewer = session("reviewer");
+  // Strapi keeps only the last entry of a to-one write, so a list there would hide a drop.
+  it("refuses more than one entry on a to-one attribute", () => {
+    for (const pinnedOn of [["n1", "n2"], { connect: ["n1", "n2"] }, { set: ["n1", "n2"] }])
+      expect(writePlan(tables, TAG, member, { pinnedOn }), JSON.stringify(pinnedOn)).toEqual({
+        ok: false,
+        message: "Invalid relation value for pinnedOn: one entry at most",
+      });
+  });
+  // With a set, Strapi's database layer ignores connect and disconnect (and its document service
+  // still looks up their entries): a write naming entries Strapi will not apply is refused.
+  it("refuses a set beside a connect or a disconnect", () => {
+    for (const notes of [
+      { set: ["n1"], connect: ["n2"] },
+      { set: 7, disconnect: ["n2"] },
+      { set: [], connect: [] },
+    ])
+      expect(writePlan(tables, CATEGORY, reviewer, { notes }), JSON.stringify(notes)).toEqual({
+        ok: false,
+        message: "Invalid relation value for notes",
+      });
+  });
+  // Strapi replaces the relation for any set it finds truthy, a single entry included.
+  it("plans a replacement for a set of one entry, as Strapi applies it", () => {
+    for (const [set, kept] of [
+      ["n1", { documentIds: ["n1"], ids: [] }],
+      [7, { documentIds: [], ids: [7] }],
+      ["7", { documentIds: [], ids: [7] }],
+      [{ id: 7 }, { documentIds: [], ids: [7] }],
+      [{ documentId: "n1" }, { documentIds: ["n1"], ids: [] }],
+    ] as const) {
+      const result = writePlan(tables, CATEGORY, reviewer, { notes: { set } });
+      expect(result.ok && result.value.replaced, JSON.stringify(set)).toEqual([
+        { attribute: "notes", target: NOTE, kept },
+      ]);
+    }
+    const unset = writePlan(tables, CATEGORY, reviewer, { notes: { set: null } });
+    expect(unset.ok && unset.value.replaced).toEqual([]);
+  });
+});
+
+// Every relation value camis accepts, in the one form Strapi 5.48 applies it: the document service
+// (mapRelation) wraps a shorthand in a set and maps each part's items; the database layer
+// (toAssocs) replaces the relation for a shorthand or a truthy set, and otherwise connects and
+// disconnects. runtime/engine.test.ts runs the row id forms on Strapi's own entity manager.
+describe("relationChange: each accepted relation value as the change Strapi makes", () => {
+  const entries = (documentIds: string[] = [], ids: number[] = []) => ({ documentIds, ids });
+  const none = entries();
+  const replace = (connect = none) => ({
+    mode: "replace",
+    connect,
+    disconnect: none,
+    anchors: none,
+  });
+  const change = (connect = none, disconnect = none) => ({
+    mode: "change",
+    connect,
+    disconnect,
+    anchors: none,
+  });
+  const cases: [unknown, unknown][] = [
+    [7, replace(entries([], [7]))],
+    ["7", replace(entries([], [7]))],
+    ["d1", replace(entries(["d1"]))],
+    [[7, "d1"], replace(entries(["d1"], [7]))],
+    [[], replace()],
+    [null, replace()],
+    [{ id: 7 }, replace(entries([], [7]))],
+    [{ documentId: "d1", locale: "fr" }, replace(entries(["d1"]))],
+    [{ connect: [7] }, change(entries([], [7]))],
+    [{ connect: 7 }, change(entries([], [7]))],
+    [{ connect: "d1" }, change(entries(["d1"]))],
+    [{ disconnect: [7] }, change(none, entries([], [7]))],
+    [{ connect: [7], disconnect: ["d1"] }, change(entries([], [7]), entries(["d1"]))],
+    [{ connect: [7], options: { strict: false } }, change(entries([], [7]))],
+    [{ options: { strict: true } }, change()],
+    [{ set: [7] }, replace(entries([], [7]))],
+    [{ set: { id: 7 } }, replace(entries([], [7]))],
+    [{ set: "d1" }, replace(entries(["d1"]))],
+    [{ set: 7 }, replace(entries([], [7]))],
+    [{ set: "7" }, replace(entries([], [7]))],
+    [{ set: [] }, replace()],
+    [{ set: null }, change()],
+    [{ set: null, connect: [7] }, change(entries([], [7]))],
+    [{ set: [7], connect: null, disconnect: null }, replace(entries([], [7]))],
+  ];
+  it.each(cases)("reads %j", (value, expected) => {
+    expect(relationChange(value, "relation")).toEqual(expected);
+  });
+  it("refuses a set beside connect or disconnect, and an empty object", () => {
+    for (const value of [{ set: [7], connect: [8] }, { set: 7, disconnect: [] }, {}])
+      expect(relationChange(value, "relation"), JSON.stringify(value)).toBeNull();
+  });
+  it("reads a media value's items as row ids only", () => {
+    expect(relationChange({ set: 7 }, "media")).toEqual(replace(entries([], [7])));
+    expect(relationChange({ connect: "7" }, "media")).toEqual(change(entries([], [7])));
+    for (const value of [
+      "d1",
+      { documentId: "d1" },
+      { connect: [{ id: 7, position: { end: true } }] },
+    ])
+      expect(relationChange(value, "media"), JSON.stringify(value)).toBeNull();
+  });
+});
+
+describe("writeShape: a restricted caller's write names only the type's writable attributes", () => {
+  const shape = (data: Record<string, unknown>, uid = TAG) => writeShape(tables, uid, data);
+  it("passes a write of attributes in their forms, at every depth", () => {
+    expect(
+      shape({
+        label: "x",
+        note: { connect: [{ documentId: "d1" }] },
+        parent: 3,
+        refs: [{ id: 4, label: "r", note: "d2", image: 7 }],
+        single: { image: { id: 8 } },
+        blocks: [{ __component: REF, id: 2, note: null }],
+        subject: [{ id: 3, __type: NOTE }],
+      }),
+    ).toEqual({ ok: true, value: true });
+    expect(shape({ single: null, refs: [] })).toEqual({ ok: true, value: true });
+    // Strapi clears a repeatable component or a dynamic zone written as null.
+    expect(shape({ refs: null, blocks: null })).toEqual({ ok: true, value: true });
+    expect(shape({ attachment: [3, "4", { id: 5 }], owner: 7 }, NOTE)).toEqual({
+      ok: true,
+      value: true,
+    });
+  });
+  // Each of these Strapi or its database layer reads from a body; none is an attribute of camis's.
+  it("refuses every key that is not an attribute: id, documentId, locale, publishedAt and the rest", () => {
+    for (const key of [
+      "id",
+      "documentId",
+      "locale",
+      "publishedAt",
+      "createdAt",
+      "updatedAt",
+      "createdBy",
+      "updatedBy",
+      "localizations",
+      "__pivot",
+      "__type",
+      "__component",
+      "__temp_key__",
+      "constructor",
+    ])
+      expect(shape({ [key]: 1 }), key).toEqual({ ok: false, message: `Invalid key ${key}` });
+  });
+  it("refuses unknown keys inside components and zones, and a component of the wrong form", () => {
+    expect(shape({ refs: [{ label: "r", __pivot: { cmp_id: 9 } }] })).toEqual({
+      ok: false,
+      message: "Invalid key refs.__pivot",
+    });
+    expect(shape({ single: { __temp_key__: 1 } })).toEqual({
+      ok: false,
+      message: "Invalid key single.__temp_key__",
+    });
+    expect(shape({ blocks: [{ __component: REF, documentId: "x" }] })).toEqual({
+      ok: false,
+      message: "Invalid key blocks.documentId",
+    });
+    for (const data of [
+      { refs: { label: "r" } },
+      { refs: [1] },
+      { single: [{ label: "r" }] },
+      { refs: [{ id: "x" }] },
+      { blocks: [{ __component: "other.block" }] },
+      { blocks: [{ label: "no component" }] },
+      { blocks: { __component: REF } },
+    ])
+      expect(shape(data).ok, JSON.stringify(data)).toBe(false);
+  });
+  // Strapi keeps only the last entry of a to-one write, and decides on what it keeps: more than
+  // one entry there would carry entries no check reads as written.
+  it("refuses more than one entry on a to-one relation, at any depth", () => {
+    for (const note of [["d1", "d2"], { connect: [1, 2] }, { set: [1, 2] }, [{ id: 1 }, 2]])
+      expect(shape({ note }), JSON.stringify(note)).toEqual({
+        ok: false,
+        message: "Invalid relation value for note: one entry at most",
+      });
+    expect(shape({ refs: [{ note: [1, 2] }] })).toEqual({
+      ok: false,
+      message: "Invalid relation value for refs.note: one entry at most",
+    });
+    for (const note of [["d1"], { connect: [1], disconnect: [2] }, { set: 1 }, null, []])
+      expect(shape({ note }), JSON.stringify(note)).toEqual({ ok: true, value: true });
+    expect(shape({ notes: [1, 2, 3] }, CATEGORY)).toEqual({ ok: true, value: true });
+  });
+  it("refuses more than one entry on a polymorphic relation to one or a single media field", () => {
+    const item = (id: number) => ({ id, __type: NOTE });
+    for (const about of [
+      [item(1), item(2)],
+      { connect: [item(1), item(2)] },
+      { set: [item(1), item(2)] },
+    ])
+      expect(shape({ about }), JSON.stringify(about)).toEqual({
+        ok: false,
+        message: "Invalid relation value for about: one entry at most",
+      });
+    for (const cover of [[1, 2], { connect: [1, 2] }, { set: [1, 2] }])
+      expect(shape({ cover }), JSON.stringify(cover)).toEqual({
+        ok: false,
+        message: "Invalid media value for cover: one entry at most",
+      });
+    for (const data of [
+      { about: [item(1)] },
+      { about: null },
+      { about: [] },
+      { cover: 1 },
+      { cover: null },
+      { cover: [] },
+      { subject: [item(1), item(2)] },
+    ])
+      expect(shape(data), JSON.stringify(data)).toEqual({ ok: true, value: true });
+  });
+  it("refuses a relation, media or polymorphic value of any form but Strapi's documented ones", () => {
+    expect(shape({ attachment: { connect: [{ id: 3, __pivot: { file_id: 9 } }] } }, NOTE)).toEqual({
+      ok: false,
+      message: "Invalid media value for attachment",
+    });
+    expect(shape({ refs: [{ image: { id: 3, __pivot: { related_id: 1 } } }] })).toEqual({
+      ok: false,
+      message: "Invalid media value for refs.image",
+    });
+    expect(shape({ note: { id: 3, __pivot: { note_id: 9 } } })).toEqual({
+      ok: false,
+      message: "Invalid relation value for note",
+    });
+    for (const subject of [[{ id: 3 }], [{ id: 3, __type: NOTE, __pivot: { field: "x" } }], 3])
+      expect(shape({ subject }).ok, JSON.stringify(subject)).toBe(false);
+  });
+});
+
+// Strapi 5.48 names its content API token strategy `content-api-token` and keeps the token's type
+// in `credentials`. A full-access or read-only token reads every type, so Strapi's sanitizer never
+// meets a polymorphic list it can read none of: it passes as it is. A custom token is checked
+// against its own scopes by Strapi, whose sanitizer keeps a polymorphic list whole when none of its
+// entries passes, at any depth of any type, the built-in user's included: camis does not support it
+// on a route it serves, and refuses it.
+describe("an API token", () => {
+  const poly: Tables = {
+    ...tables,
+    holders: {
+      ...tables.holders,
+      [TAG]: {
+        ...tables.holders[TAG]!,
+        populatable: [...tables.holders[TAG]!.populatable, "subject"],
+        links: { ...tables.holders[TAG]!.links, subject: { polymorphic: true } },
+      },
+    },
+  };
+  it("is known by the strategy Strapi 5.48 names and by its type", () => {
+    for (const type of ["full-access", "read-only"] as const)
+      expect(callerOf(rules, tokenState(type), "find")).toEqual({
+        kind: "unrestricted",
+        user: null,
+        assign: rules.assign,
+      });
+  });
+  it("is refused when custom, under another strategy name, or with a type Strapi does not issue", () => {
+    expect(customToken(tokenState("custom"))).toBe(true);
+    expect(customToken(tokenState("read-only"))).toBe(false);
+    expect(callerOf(rules, tokenState("custom"), "find").kind).toBe("refused");
+    expect(callerOf(rules, { auth: { strategy: { name: "api-token" } } }, "find").kind).toBe(
+      "refused",
+    );
+    const odd = { auth: { strategy: { name: "content-api-token" }, credentials: { type: "x" } } };
+    expect(callerOf(rules, odd, "find").kind).toBe("refused");
+  });
+  it("passes a full-access or read-only token's query as it is, related entries included", () => {
+    for (const type of ["full-access", "read-only"] as const) {
+      const query = { populate: { note: { populate: { attachment: { populate: "related" } } } } };
+      expect(scopeQuery(poly, TAG, tokenState(type), query)).toEqual({ ok: true, value: query });
+      expect(scopeQuery(poly, TAG, tokenState(type), { populate: "subject" }).ok).toBe(true);
+    }
+  });
+  it("refuses a polymorphic populate for a role and a guest", () => {
+    for (const state of [member, guest])
+      expect(scopeQuery(poly, TAG, state, { populate: "subject" }).ok).toBe(false);
+  });
+});
+
+// The built-in user is served by users-permissions, but a relation to it leads on through its
+// inverses: a populate beneath it is walked like any other, and one beneath an attribute camis
+// does not know (the user's role, an admin's createdBy) is refused rather than passed on unchecked.
+describe("a populate through the built-in user", () => {
+  const USER = "plugin::users-permissions.user";
+  const BOARD = "api::board.board";
+  const viaUser: Tables = {
+    ...tables,
+    holders: {
+      ...tables.holders,
+      [TAG]: {
+        ...tables.holders[TAG]!,
+        populatable: [...tables.holders[TAG]!.populatable, "author"],
+        links: { ...tables.holders[TAG]!.links, author: { relation: USER } },
+      },
+      [USER]: {
+        populatable: ["boards"],
+        unwalked: ["createdBy", "role", "updatedBy"],
+        links: { boards: { relation: BOARD } },
+      },
+      [BOARD]: {
+        populatable: ["subjects"],
+        unwalked: ["createdBy", "updatedBy"],
+        links: { subjects: { polymorphic: true } },
+      },
+    },
+  };
+  it("refuses a polymorphic relation beneath it, for a role and a guest, in any form", () => {
+    for (const state of [member, guest])
+      for (const populate of [
+        { author: { populate: { boards: { populate: "subjects" } } } },
+        { author: { populate: { boards: { populate: "*" } } } },
+        "author.boards.subjects",
+      ])
+        expect(scopeQuery(viaUser, TAG, state, { populate }).ok, JSON.stringify(populate)).toBe(
+          false,
+        );
+  });
+  // Strapi does not check a populate's filters against the caller's grants: a filter through the
+  // user's role would answer whether another user holds it (seen on 5.48).
+  it("refuses a filter or sort through an attribute camis does not know, in a populate or at the top", () => {
+    for (const state of [member, guest]) {
+      for (const query of [
+        { populate: { author: { filters: { role: { name: { $eq: "viewer" } } } } } },
+        { populate: { author: { filters: { $or: [{ role: { type: "x" } }] } } } },
+        { populate: { author: { sort: "role.name" } } },
+        { populate: { author: { sort: ["role.name:asc"] } } },
+        { filters: { author: { role: { name: "viewer" } } } },
+        { sort: "author.role.name" },
+      ])
+        expect(scopeQuery(viaUser, TAG, state, query).ok, JSON.stringify(query)).toBe(false);
+      for (const query of [
+        { populate: { author: { filters: { username: { $eq: "a" } } } } },
+        { populate: { author: { filters: { boards: { title: { $eq: "b" } } } } } },
+        { populate: { author: { sort: "username" } } },
+        { filters: { author: { username: "a" } } },
+      ])
+        expect(scopeQuery(viaUser, TAG, state, query).ok, JSON.stringify(query)).toBe(true);
+    }
+  });
+  // The generated tables name each relation Strapi adds that the graph does not walk, so a
+  // filter through one is refused whatever its value: `role: 3` or `$in` on it is a role-id oracle.
+  it("refuses any filter on a relation camis does not walk, whatever its value", () => {
+    for (const state of [member, guest]) {
+      for (const filters of [
+        { role: 3 },
+        { role: "3" },
+        { role: { $eq: 3 } },
+        { role: { $in: [4] } },
+        { role: { $null: true } },
+        { role: { $notNull: true } },
+        { $or: [{ role: 3 }, { username: "a" }] },
+        { $and: [{ role: { $ne: 3 } }] },
+        { $not: { role: { $eq: 3 } } },
+        { createdBy: { $eq: 1 } },
+        { updatedBy: { id: 1 } },
+      ]) {
+        const query = { populate: { author: { filters } } };
+        expect(scopeQuery(viaUser, TAG, state, query).ok, JSON.stringify(query)).toBe(false);
+      }
+      for (const filters of [{ createdBy: 1 }, { $or: [{ updatedBy: { $null: true } }] }])
+        expect(scopeQuery(viaUser, TAG, state, { filters }).ok, JSON.stringify(filters)).toBe(
+          false,
+        );
+    }
+  });
+  it("passes filters on own fields and known relations, and the ordinary query parameters", () => {
+    for (const state of [member, guest]) {
+      for (const filters of [
+        { id: 3 },
+        { id: { $in: [3, 4] } },
+        { documentId: "abc" },
+        { createdAt: { $gt: "2026-01-01" } },
+        { publishedAt: { $null: true } },
+        { username: { $in: ["a", "b"] } },
+        { blocked: { $null: false } },
+        { $or: [{ username: "a" }, { id: 2 }] },
+        { $and: [{ username: { $ne: "a" } }] },
+        { $not: { username: "a" } },
+        { boards: { title: { $eq: "b" } } },
+        { boards: { id: { $in: [1] } } },
+      ]) {
+        const query = { populate: { author: { filters, sort: "createdAt:desc" } } };
+        expect(scopeQuery(viaUser, TAG, state, query).ok, JSON.stringify(query)).toBe(true);
+      }
+      for (const query of [
+        { filters: { label: "a", id: { $in: [1] }, documentId: "d", createdAt: { $null: false } } },
+        { filters: { refs: { label: { $eq: "r" } } } },
+        { filters: { blocks: { $null: true } } },
+        { filters: { cover: { $null: true } } },
+        { filters: { $or: [{ parent: { label: "p" } }, { publishedAt: { $notNull: true } }] } },
+        { filters: { author: { username: "a" } } },
+        { sort: ["createdAt:desc", "label"], locale: "fr", _q: "find" },
+      ])
+        expect(scopeQuery(viaUser, TAG, state, query).ok, JSON.stringify(query)).toBe(true);
+    }
+  });
+  it("refuses a populate beneath an attribute camis does not know, and passes one up to it", () => {
+    expect(
+      scopeQuery(viaUser, TAG, member, {
+        populate: { author: { populate: { role: { populate: "users" } } } },
+      }).ok,
+    ).toBe(false);
+    expect(scopeQuery(viaUser, TAG, member, { populate: "author.role.users" }).ok).toBe(false);
+    expect(scopeQuery(viaUser, TAG, member, { populate: "author.role" }).ok).toBe(true);
+    expect(
+      scopeQuery(viaUser, TAG, member, { populate: { author: { populate: "boards" } } }).ok,
+    ).toBe(true);
   });
 });
