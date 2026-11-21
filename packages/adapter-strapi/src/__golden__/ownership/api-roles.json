@@ -25,7 +25,9 @@
     {
       "type": "contributor",
       "actions": [
-        "api::note.note.create"
+        "api::note.note.create",
+        "api::tag.tag.find",
+        "api::tag.tag.findOne"
       ]
     },
     {

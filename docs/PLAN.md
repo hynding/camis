@@ -2729,14 +2729,30 @@ relation write, and a database seeded once kept it.
     branches (each branch's relation carries its own scope and join). The scope itself has no
     negation: a read condition's filter is `eq`/`and`/`or` only (a negated read condition such as
     `record.shared != true` is an `apiGrantCondition` error), and a null literal compiles to
-    `$null`, matching Ring 1's `null == null`; an `eq` against a NULL column is unknown in SQL and
-    false in Ring 1, the same outcome in a positive context.
+    `$null`, matching Ring 1's `null == null`.
+  - **No linked entry.** Strapi LEFT JOINs a filtered relation, so an entry with no link joins an
+    all-NULL row. A scope a NULL satisfies — a null-literal condition (`owner IS NULL`), a null
+    user variable, or the filter of a role with no read on the target — and a client shape a NULL
+    satisfies (`$null`, `$notNull: false`, a `$not` inside the relation's own filter such as
+    `$not: { title: { $notNull: true } }`, an `$or` holding one) together matched that row, so
+    "no linked entry" answered unlike "a linked entry you cannot read". Every scope on a joined
+    relation is therefore `{ $and: [client, { id: { $notNull: true } }, scope] }`, needing a real
+    joined row, and the filter of a role with no read is `id IS NULL AND id IS NOT NULL`, which no
+    row satisfies, the all-NULL one included (`id IS NULL` alone matched it). `$ne`, `$notIn` and
+    `$notContains` are unknown on a NULL and never matched it; they are covered all the same. A
+    populate's own scope and the own type's scope apply to real rows (a populate queries the
+    target's rows, a list its own), where `owner IS NULL` is Ring 1's `record.owner == null`;
+    the write checks (`refsQuery`, `currentLinksQuery`, `holdersQuery`) carry no scope and test
+    ids positively. The engine test checks each such shape for a role with no read, a null-literal
+    condition, the public role and an owner condition, through a relation, a component, a parent
+    tag and a populate filter.
   - **A relation's own operator.** Strapi reads a bare value (`filters[note]=5`), a list, or a lone
     operator on the relation (`[$eq]`, `[$in]`, …) as a test of the related id; it is rewritten to
     `{ id: … }` so it can sit beside the scope (it was a 500). `$notNull` (or `$null: false`) asks
     for a readable entry; `$null` (or `$notNull: false`) across a conditioned relation is refused
     with 400, since it would count an unreadable entry as none and "none readable" needs a
-    negation; operators mixed with attributes, or two operators, are refused with 400 (Strapi
+    negation. The value arrives as a string and is read as Strapi's `parseType` reads a boolean
+    (`true`/`t`/`1`, `false`/`f`/`0`); anything else is refused with 400 rather than guessed at; operators mixed with attributes, or two operators, are refused with 400 (Strapi
     throws on both). A filter through a dynamic zone or a file's `related` is not narrowed: those
     are polymorphic relations with no `target`, which Strapi's `processWhere` refuses to filter on.
   - Each relation or component filter becomes its own
@@ -2798,7 +2814,10 @@ relation write, and a database seeded once kept it.
   denied filter beside a positive control; two scoped relation filters in one request both apply;
   a file's `related` entries are refused; a member cannot take a tag pinned on another
   member's note nor pin one there; a `$not` around the note filter and a `$null` on the note
-  relation are 400 while `$notNull` lists only tags with a readable note; and a component's
+  relation are 400 while `$notNull` lists only tags with a readable note (`$null=false` the same,
+  `$notNull=false` 400, as strings); a contributor, who reads tags but no note, gets the same
+  answer for a tag with no note as for one with another member's (`[note][id][$null]`,
+  `[note][title][$null]`, and through the component); and a component's
   populate filter through its note matches another member's note for its owner only, a sort
   through it 400. Run locally against Strapi 5.48.0 before
   merge, it found two bugs the fake had hidden, each fixed test-first: the bootstrap's admin-panel
@@ -2845,7 +2864,8 @@ localizations, a file's related entries, open routes, relation refs, write plans
 names); `runtime/engine.test.ts` (the scoped queries on Strapi's query engine and sqlite: a right
 guess at an unreadable title answers as a wrong one for relation filters, NULL-owner rows, two
 relation filters, populate filters, a component's populate filters and `$not` shapes, which are
-refused; a relation's own operators); `enforcement-behaviour.test.ts`
+refused; a relation's own operators, string booleans included; no linked entry answering as an
+unreadable one for every NULL-satisfied shape); `enforcement-behaviour.test.ts`
 (the emitted modules against a fake core controller, document service and query engine: another
 member's note is not listed, read, updated or deleted, a client filter cannot widen the list, an
 owner is assigned on create and kept on update, draft/published rows that disagree, non-object

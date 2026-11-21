@@ -77,8 +77,8 @@ const pollUntilUp = async (timeoutMs: number): Promise<boolean> => {
   return false;
 };
 
-/** A registered account (which users-permissions puts in its default role), as a member. */
-const member = async (dir: string, name: string) => {
+/** A registered account (which users-permissions puts in its default role), moved to `role`. */
+const member = async (dir: string, name: string, role = "member") => {
   const registered = await call("POST", "/api/auth/local/register", undefined, {
     username: name,
     email: `${name}@example.test`,
@@ -97,10 +97,10 @@ const member = async (dir: string, name: string) => {
   try {
     const moved = db
       .prepare(
-        "UPDATE up_users_role_lnk SET role_id = (SELECT id FROM up_roles WHERE type = 'member') WHERE user_id = ?",
+        "UPDATE up_users_role_lnk SET role_id = (SELECT id FROM up_roles WHERE type = ?) WHERE user_id = ?",
       )
-      .run(registered.body.user!.id);
-    if (moved.changes !== 1) throw new Error(`move ${name} to member: ${moved.changes} rows`);
+      .run(role, registered.body.user!.id);
+    if (moved.changes !== 1) throw new Error(`move ${name} to ${role}: ${moved.changes} rows`);
   } finally {
     db.close();
   }
@@ -288,6 +288,32 @@ const scenario = async (dir: string): Promise<void> => {
   );
   const refsSort = await call("GET", "/api/tags?populate[refs][sort]=note.title", alice.jwt);
   check("alice's sort through a component's note is refused", refsSort.status === 400, refsSort);
+
+  // Over HTTP a boolean is a string, read as Strapi reads it.
+  const notNone = await list("/api/tags?filters[note][$null]=false", bob.jwt);
+  check(
+    "bob's $null=false on the note relation finds his tag",
+    notNone.ok && notNone.ids.includes(tagId ?? ""),
+    notNone.response,
+  );
+  const notSome = await call("GET", "/api/tags?filters[note][$notNull]=false", alice.jwt);
+  check("alice's $notNull=false on the note relation is refused", notSome.status === 400, notSome);
+
+  // A contributor reads tags but no note. A tag with no note joins an all-NULL note row, which
+  // a client's $null matches; it must answer as a tag whose note the contributor cannot read.
+  const carol = await member(dir, "carol", "contributor");
+  for (const query of [
+    "filters[note][id][$null]=true",
+    "filters[note][title][$null]=true",
+    "filters[refs][note][title][$null]=true",
+  ]) {
+    const r = await list(`/api/tags?${query}`, carol.jwt);
+    check(
+      `carol's ${query} answers a tag with no note as one with bob's`,
+      r.ok && r.ids.includes(idOf(withRefs)) === r.ids.includes(tagId ?? ""),
+      r.response,
+    );
+  }
   const link = await call("POST", "/api/tags", alice.jwt, {
     data: { label: "a", note: { connect: [{ documentId: bobNoteId }] } },
   });

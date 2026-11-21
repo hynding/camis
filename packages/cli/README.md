@@ -123,8 +123,11 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
     count an unreadable entry as none; a relation filter mixing an operator with attributes, or
     with a second operator. A bare value, a list or a lone operator on a relation
     (`filters[note][$in][0]=5`) tests the related id, under the scope; `$notNull` asks for a
-    readable entry. A `$not` inside a relation's own filter, `$ne`, `$notIn` and `$null` on a
-    related attribute, and `$or` are allowed: the scope stays in a positive `$and` there.
+    readable entry; either operator's value is read as Strapi reads a boolean (`true`/`t`/`1`,
+    `false`/`f`/`0`), anything else 400. A `$not` inside a relation's own filter, `$ne`, `$notIn`
+    and `$null` on a related attribute, and `$or` are allowed: the scope stays in a positive `$and`
+    there, beside `id IS NOT NULL`, so an entry with no link (which Strapi's LEFT JOIN gives an
+    all-NULL row) answers as one linked to an entry the caller cannot read.
   - A write linking an entry of a conditioned type (document id, row id, `connect`, `set`, in
     components and zones) is 403 unless the caller may read every row of it. Where both sides
     declare the link, it shows on the other entry, so each entry it connects, disconnects or drops
