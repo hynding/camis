@@ -2704,19 +2704,40 @@ relation write, and a database seeded once kept it.
     not read the user type; `update` drops them, so ownership cannot move. A token or an open route
     leaves an assigned owner unset. A restricted caller's create or update whose `data` is not an
     object is 400 before Strapi sees it.
-  - **Reach.** Every content type and component with a path (relation, relation inverse, component,
-    dynamic zone) to a type some role reads under a condition is a holder; a reaching collection
-    type gets the controller too, with no rules of its own. For a restricted caller, a populate of
-    a conditioned type — at any depth, in any form (`*`, comma lists, dotted paths, arrays,
-    objects, a zone's shared `populate` or `on` fragments) — carries its read filter, `$and`-ed with
-    the client's populate filter; a relation filter through one is narrowed the same way, so it is
-    no oracle; a sort through one (top level or inside a populate) is refused with 400, since its
-    join carries no filter; a write that links an entry of one (document id, row id, `connect`,
-    `set`, plain arrays; in components and zones; `disconnect` ignored) loads its rows and is 403
-    unless the caller may read every one of them, the same answer for one that does not exist.
-  - Not narrowed, as on Strapi and the Filament target: admin roles, API tokens (Phase 25) and
-    `auth: false` actions (Phase 57). A session whose role is not loaded, a role the IR does not
-    grant the type, and an unknown strategy are refused.
+  - **Reach.** Every content type and component with a path (relation, relation inverse, a
+    localized type's `localizations` — i18n's `oneToMany` relation to the entry's other locales —
+    component, dynamic zone, or media field, whose file's polymorphic `related` leads to every type
+    and component with a media field) to a type some role reads under a condition is a holder; a
+    reaching collection type gets the controller too, with no rules of its own. For a restricted
+    caller, a populate of a conditioned type — at any depth, in any form (`*`, comma lists, dotted
+    paths, arrays, objects, a zone's shared `populate` or `on` fragments) — carries its read
+    filter, `$and`-ed with the client's populate filter; a relation filter through one is narrowed
+    the same way, so it is no oracle; a sort through one (top level or inside a populate) is
+    refused with 400, since its join carries no filter; a populate of a file's `related` entries
+    under any media field is refused with 400. Each relation or component filter becomes its own
+    item of an `$and` at its level, the scope beside the client's filter on that same relation:
+    Strapi's `processWhere` merges a nested relation's where into its parent with `Object.assign`,
+    so two side by side, or one beside the client's own `$and`, overwrote each other (results
+    over-broad, never the scope dropped alone); splitting the scope into a sibling would not do,
+    since each relation filter gets its own join and on a to-many relation two joins match two
+    different entries.
+  - **Relation writes.** A write that links an entry of a conditioned type (document id, row id,
+    `connect`, `set`, plain arrays; in components and zones) loads its rows and is 403 unless the
+    caller may read every one of them, the same answer for one that does not exist. A link both
+    sides declare (`inversedBy`/`mappedBy`) shows on the entry at the other end, so writing it
+    changes that entry: each entry it connects or disconnects, and on update each entry a
+    replacement drops (`set`, a shorthand id or list, `null`, or any write of a to-one side; the
+    entry's current links are loaded), must be one the caller may update when its type has rules.
+    A link whose other side holds one entry at most (a bidirectional `oneToOne` or `oneToMany`:
+    Strapi's `deletePreviousOneToAnyRelations`) takes the entry from its last holder, which must be
+    one the caller may update when the written type has rules. A link only one side declares
+    (including a unidirectional many-to-many, and every relation in a component) changes nothing at
+    the other end and needs read alone. A collection type with a mirrored relation into a type with
+    rules is served by the controller too.
+  - Not narrowed, as on Strapi and the Filament target: admin roles and API tokens (Phase 25). An
+    `auth: false` action (Phase 57) serves its own type's rows to anyone, and its reach is decided
+    as the public role's, so a reach-only type's open route still answers. A session whose role is
+    not loaded, a role the IR does not grant the type, and an unknown strategy are refused.
 - **Gaps.** What the content API cannot enforce fails the build (`error`), located by type and
   role. `apiGrantCondition`: a read condition outside the filter subset, an update/delete condition
   reading a variable an entry lacks, a create condition reading a relation the client writes, any
@@ -2725,8 +2746,11 @@ relation write, and a database seeded once kept it.
   that reaches a conditioned type, while it reads some type under a condition — a polymorphic
   populate takes no per-target filter. `apiRelationReach`: a relation from the built-in user or
   media library (its own, or an inverse onto it) reaches a type the role reads under a condition,
-  since their plugins serve it; or a single type the role reads reaches one, since Strapi's own
-  single-type controller serves it. An admin role's condition stays a downgrade (admin panel only).
+  since their plugins serve it; a role that reads the media library while a file's `related`
+  entries reach a type it reads under a condition; a single type the role reads reaches one, since
+  Strapi's own single-type controller serves it; or a role writes the built-in user or a single
+  type whose mirrored relation changes entries of a type it does not update outright. An admin
+  role's condition stays a downgrade (admin panel only).
   The admin-panel copy of a non-admin role cannot read `record.*`, so its condition there denies
   every entry: `conditionContext` (downgrade) says so, as the adapter already projects every role
   onto an admin role.
@@ -2743,7 +2767,10 @@ relation write, and a database seeded once kept it.
   over HTTP that another member's note is not listed, read, updated or deleted, a client-supplied
   owner is overridden, the member role has no `GET /api/users`, a tag's populate (`note`, `*`,
   with `fields`), relation filter and sort do not reach another member's note for a member or a
-  guest, and connecting it is 403 and writes nothing. Run locally against Strapi 5.48.0 before
+  guest, and connecting it is 403 and writes nothing; every list it reads must answer 200, each
+  denied filter beside a positive control; two scoped relation filters in one request both apply;
+  a file's `related` entries are refused; and a member cannot take a tag pinned on another
+  member's note nor pin one there. Run locally against Strapi 5.48.0 before
   merge, it found two bugs the fake had hidden, each fixed test-first: the bootstrap's admin-panel
   permission without conditions crashed the boot on sqlite, and a refused relation write still
   created the entry, since Strapi's response helpers return nothing.
@@ -2761,7 +2788,12 @@ Known limits:
   administrator's.
 - GraphQL (if a project adds the plugin) and a hand-written controller in `protected/` that
   replaces the generated one bypass the enforcement. A publish condition is not enforced apart from
-  update's.
+  update's. Deleting an entry drops its links, which changes the entries at their other ends
+  without asking for update on them.
+- Localized types are covered by unit tests only: the boot job's fixture is not localized.
+- camis emits a bidirectional `oneToMany` declared on its "one" side as the owning side, which
+  Strapi refuses at boot; such a relation must be declared from its `manyToOne` side (as the
+  fixture's `Tag.pinnedOn` is). Not changed here.
 - The Filament target authorizes a create by role alone, so there a failing create condition is not
   refused. Stored dates compare as ISO strings; a `bigInteger` comes back from Strapi as a string,
   so a condition comparing one with a number denies on an entry while a list filter matches it.
@@ -2773,13 +2805,16 @@ Known limits:
   populate, locales, drafts, MySQL or Postgres).
 
 Exit: `record-filter.test.ts`; `api-enforcement.test.ts` (rules, per-type filters, defaults,
-holders, every error gap); `runtime/api-conditions.test.ts` (populate normalisation and scoping,
-filter scoping, sort refusal, relation refs, prototype role names); `enforcement-behaviour.test.ts`
+holders including localizations and media, relation writes, open actions, every error gap);
+`runtime/api-conditions.test.ts` (populate normalisation and scoping, filter scoping and lifting,
+sort refusal, localizations, a file's related entries, open routes, relation refs, write plans,
+prototype role names); `enforcement-behaviour.test.ts`
 (the emitted modules against a fake core controller, document service and query engine: another
 member's note is not listed, read, updated or deleted, a client filter cannot widen the list, an
 owner is assigned on create and kept on update, draft/published rows that disagree, non-object
 data, a create condition with a default, a guest create, populate/filter/sort/connect through a
-tag, reviewer 403, guest, admin, token, unknown and prototype-named roles, roleless session);
+tag, a category's notes connected, disconnected or replaced, a pinned tag taken, a file's related
+entries, reviewer 403, guest, admin, token, unknown and prototype-named roles, roleless session);
 `enforcement-compile.test.ts`; `bootstrap-revoke.test.ts`; `project.test.ts`; goldens under
 `__golden__/ownership/`, idempotent; the `strapi-enforcement-boot` CI job.
 
