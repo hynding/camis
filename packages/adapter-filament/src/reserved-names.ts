@@ -9,6 +9,7 @@ import type { CapabilityGap, Field, IrDocument } from "@camis/ir-schema";
 import { STRAPI_RESERVED_NAMES, strapiAttributeNames } from "@camis/strapi-schema";
 import { childTableEmit, ITEM_POSITION_COLUMN, type ChildTableEmit } from "./components";
 import { snakeColumn } from "./names";
+import { oneToManyKeyColumn } from "./relations";
 
 type ApiStyle = "laravel" | "strapi";
 
@@ -37,12 +38,38 @@ const ownsKey = (field: Extract<Field, { type: "relation" }>): boolean =>
 
 const column = (name: string): TargetName => ({ spelled: name, mapped: name });
 
-/** The column a field is stored in on its own row: a to-one relation's is its key. */
-const columnNames = (field: Field): TargetName[] => {
-  if (field.type === "relation")
-    return ownsKey(field) ? [column(`${snakeColumn(field.name)}_id`)] : [];
-  if (NO_COLUMN.has(field.type)) return [];
-  return [{ spelled: field.name, mapped: snakeColumn(field.name) }];
+/**
+ * The columns a content type's field is stored in, on its own row or, a one-to-many's key, on the
+ * related type's: a to-one relation's is its key, and on the Laravel storage layout a one-to-many's
+ * key is a column of its target's rows named by its inverse (by the holding type without one),
+ * left out where the target is a built-in type, whose table the host app owns. The Strapi storage
+ * layout keeps a one-to-many in a link table of Strapi's.
+ */
+const columnNamesOf = (doc: IrDocument, storage: ApiStyle): ((field: Field) => TargetName[]) => {
+  const builtins = new Set(
+    doc.contentTypes.flatMap((ct) => (ct.builtin === undefined ? [] : [ct.name])),
+  );
+  const holders = new Map(
+    doc.contentTypes.flatMap((ct) => ct.fields.map((f) => [f, ct.name] as const)),
+  );
+  const relationColumns = (field: Extract<Field, { type: "relation" }>): TargetName[] => {
+    if (ownsKey(field)) return [column(`${snakeColumn(field.name)}_id`)];
+    const holder = holders.get(field);
+    if (
+      field.relationKind !== "oneToMany" ||
+      storage !== "laravel" ||
+      builtins.has(field.target) ||
+      holder === undefined
+    )
+      return [];
+    const key = oneToManyKeyColumn(holder, field);
+    return [field.inverse === undefined ? column(key) : { ...column(key), inverse: true }];
+  };
+  return (field) => {
+    if (field.type === "relation") return relationColumns(field);
+    if (NO_COLUMN.has(field.type)) return [];
+    return [{ spelled: field.name, mapped: snakeColumn(field.name) }];
+  };
 };
 
 /**
@@ -129,6 +156,7 @@ export const filamentReservedNameGaps = (
           items: itemTables(doc, apiStyle, linksMedia),
         }
       : {};
+  const columnNames = columnNamesOf(doc, storage);
   return apiStyle === "strapi"
     ? reservedNameGaps(
         doc,

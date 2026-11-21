@@ -2962,7 +2962,9 @@ no gap reported (issue #103).
   component) and the field, so `camis generate`/`camis build` stop before writing. A relation's
   inverse is located on the type it lands on, by its name there; a field is reported once for each
   name the target keeps however many of its names (a key and its key column) map onto it, and its
-  inverse apart, so `updatedBy` with inverse `updatedBy` is reported on both types. `ir-core`'s
+  inverse apart, likewise once however many of its names map onto one (the message says the name
+  the target maps it to, where that is not its own), so `updatedBy` with inverse `updatedBy` is
+  reported on both types. `ir-core`'s
   `reservedNameGaps(doc, target, reserved, namesOf, options)` walks the fields; each target says how
   it maps a field's names and which it keeps, and whether a built-in type's own fields are checked
   (`builtins`): Strapi and Filament map a built-in type onto a model of their own (users-permissions'
@@ -3000,7 +3002,13 @@ no gap reported (issue #103).
   only embedded, `Note.seo` holding a Seo that embeds Stamp as `created` is `seo_created_at`.
 - **Filament.** The Strapi API style answers Strapi's REST API, so it reports Strapi's names, and
   also a column of its own rows a field's column would repeat: a to-one relation named `document`
-  keeps `document_id`. The Laravel API style reports `createdAt` and `updatedAt`, whose columns are
+  keeps `document_id`. On the Laravel storage layout a one-to-many's key is a column of its
+  target's rows, named by its inverse, so `Note.tags` with inverse `document` is a second
+  `document_id` on `tags`, reported as the inverse on Tag; without an inverse it is named by the
+  type holding the relation (a type `Document`'s is `document_id`), reported at the relation. A
+  one-to-one's inverse keeps no column (the key is the owning side's), nor does a one-to-many to a
+  built-in type, whose table the host app owns; the Strapi storage layout links either in a table
+  of Strapi's. The Laravel API style reports `createdAt` and `updatedAt`, whose columns are
   Laravel's timestamps on every table, a component item's included. On the Laravel storage layout,
   in either API style, an embedded component's columns land on the entry's row, checked against
   the names above, and an item's fields' columns on its item table's rows, checked against that

@@ -136,6 +136,13 @@ const LINK_PIVOT = "->using(\\App\\Support\\StrapiLinkPivot::class)";
 type RelationField = Extract<Field, { type: "relation" }>;
 
 /**
+ * The key column a one-to-many puts on its target's rows, named by its inverse, or without one by
+ * the type holding the relation (`owner`).
+ */
+export const oneToManyKeyColumn = (owner: string, field: RelationField): string =>
+  `${snakeColumn(field.inverse ?? snake(owner))}_id`;
+
+/**
  * Admin pickers offer the rows a link may hold: a draft-and-publish target's drafts, which every
  * link goes through, and a localized target's rows in the record's locale (the default locale,
  * from a type that is not localized).
@@ -320,8 +327,7 @@ export const resolveRelations = (
           );
         }
       } else if (kind === "oneToMany") {
-        const inverseName = f.inverse ?? snake(owner);
-        const fk = `${snakeColumn(inverseName)}_id`;
+        const fk = oneToManyKeyColumn(owner, f);
         push(out.methods, owner, method("HasMany", f.name, targetN.model, `'${fk}'`));
         pickInverse(owner, target, f.name, "oneToMany", false);
         push(out.fkColumns, target, {

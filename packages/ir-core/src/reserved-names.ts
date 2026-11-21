@@ -11,7 +11,10 @@ import type {
 
 /** One name a field takes on a target. */
 export interface TargetName {
-  /** As the target is told it: the field's name or API key, its key column, or its inverse. */
+  /**
+   * As the target is told it: the field's name or API key, its key column, or its inverse's (its
+   * name or API key, or a key column the target names by it).
+   */
   spelled: string;
   /** As the target compares it with its own (its column, its snake_cased key). */
   mapped: string;
@@ -76,11 +79,13 @@ interface EmbeddedField {
 }
 
 const describe = (holderName: string, field: Field, name: TargetName): string => {
-  if (name.inverse === true)
-    return `inverse "${name.spelled}" of relation "${holderName}.${field.name}"`;
-  return name.spelled === field.name
-    ? `field "${field.name}"`
-    : `field "${field.name}", as "${name.spelled}",`;
+  if (name.inverse !== true)
+    return name.spelled === field.name
+      ? `field "${field.name}"`
+      : `field "${field.name}", as "${name.spelled}",`;
+  const inverse = (field.type === "relation" ? field.inverse : undefined) ?? name.spelled;
+  const relation = `inverse "${inverse}" of relation "${holderName}.${field.name}"`;
+  return name.spelled === inverse ? relation : `${relation}, as "${name.spelled}",`;
 };
 
 const describeEmbedded = (holderName: string, embedded: EmbeddedField, name: TargetName) =>
@@ -138,15 +143,14 @@ export const reservedNameGaps = (
     kept: KeptNames,
     locate: (name: TargetName) => IrErrorLocation,
     described: (name: TargetName) => string,
+    relation = "",
   ): CapabilityGap[] =>
     names.flatMap((name): CapabilityGap[] => {
       const clash = clashOf(kept, name.mapped);
       if (clash === undefined) return [];
       const location = locate(name);
-      // An inverse is told apart by its relation, which its description names.
-      const key = [locationKey(location), name.inverse === true ? described(name) : "", clash].join(
-        "\0",
-      );
+      // An inverse is told apart by its relation (`relation`), however many of its names clash.
+      const key = [locationKey(location), name.inverse === true ? relation : "", clash].join("\0");
       if (reported.has(key)) return [];
       reported.add(key);
       return [
@@ -201,8 +205,12 @@ export const reservedNameGaps = (
       name.inverse === true && field.type === "relation"
         ? { contentType: field.target, field: field.inverse ?? name.spelled }
         : { ...at, field: field.name };
-    return gaps(namesOf(field, holder).filter(checked), reserved, locate, (name) =>
-      describe(holderName, field, name),
+    return gaps(
+      namesOf(field, holder).filter(checked),
+      reserved,
+      locate,
+      (name) => describe(holderName, field, name),
+      `${holderName}.${field.name}`,
     );
   };
 
