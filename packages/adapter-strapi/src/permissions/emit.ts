@@ -7,7 +7,7 @@ import {
   emitApiEnforcementFiles,
   enforcedControllerSource,
 } from "./api-enforcement-emit";
-import { projectApiEnforcement } from "./api-enforcement";
+import { projectApiEnforcement, type ApiEnforcement } from "./api-enforcement";
 import { emitConditionsModule } from "./conditions";
 import { projectApiRoles, projectPermissions } from "./project";
 
@@ -20,8 +20,33 @@ export interface PermissionEmission {
   controllers: Map<string, string>;
 }
 
+const controllersOf = (enforcement: ApiEnforcement): Map<string, string> =>
+  new Map(
+    enforcement.types.map((t) => [
+      t.uid,
+      enforcement.singles.includes(t.uid)
+        ? checkedSingleSource(t.uid)
+        : enforcedControllerSource(t.uid),
+    ]),
+  );
+
+/**
+ * With no roles, an `auth: false` route is still open to anyone: its requests are enforced, and
+ * the bootstrap, which has no role to grant, stays the skeleton's.
+ */
+const openRoutesOnly = (doc: IrDocument): PermissionEmission => {
+  if (!doc.contentTypes.some((ct) => (ct.options?.publicApiActions ?? []).length > 0))
+    return { files: [], gaps: [], controllers: new Map() };
+  const enforcement = projectApiEnforcement(doc, []);
+  return {
+    files: emitApiEnforcementFiles(enforcement),
+    gaps: enforcement.gaps,
+    controllers: controllersOf(enforcement),
+  };
+};
+
 export const emitPermissions = (doc: IrDocument, roles: Role[]): PermissionEmission => {
-  if (roles.length === 0) return { files: [], gaps: [], controllers: new Map() };
+  if (roles.length === 0) return openRoutesOnly(doc);
   const { roles: emittedRoles, conditions, gaps } = projectPermissions(doc, roles);
   const apiRoles = projectApiRoles(doc, roles);
   const enforcement = projectApiEnforcement(doc, roles);
@@ -43,13 +68,6 @@ export const emitPermissions = (doc: IrDocument, roles: Role[]): PermissionEmiss
     files,
     gaps: [...gaps, ...apiRoles.gaps, ...enforcement.gaps],
     indexContent: PERMISSIONS_INDEX_TS,
-    controllers: new Map(
-      enforcement.types.map((t) => [
-        t.uid,
-        enforcement.singles.includes(t.uid)
-          ? checkedSingleSource(t.uid)
-          : enforcedControllerSource(t.uid),
-      ]),
-    ),
+    controllers: controllersOf(enforcement),
   };
 };

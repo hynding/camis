@@ -649,16 +649,33 @@ const relationTest = (key: string, value: unknown, conditioned: boolean): Checke
   return { ok: true, value: { id: value } };
 };
 
-/** Whether a file's populate asks for its `related` entries, in any form. */
-const populatesRelated = (populate: unknown): boolean => {
-  const named = (text: string): boolean =>
-    text.split(",").some((part) => ["related", "*"].includes(part.trim().split(".")[0]!));
+/**
+ * Whether a file's populate asks for its `related` entries, in any form and at any depth: a
+ * `related` or `*` anywhere in a string, an array item or a key, an entry's own populate or a
+ * zone's `on`. Conservative past the file: a `*` under its folder is refused as well.
+ */
+export const populatesRelated = (populate: unknown): boolean => {
   if (populate === true) return true;
-  if (typeof populate === "string") return named(populate);
-  if (Array.isArray(populate)) return populate.some((p) => typeof p === "string" && named(p));
-  if (isRecord(populate))
-    return Object.entries(populate).some(([key, entry]) => entry !== false && named(key));
-  return false;
+  if (typeof populate === "string")
+    return populate.split(",").some((part) =>
+      part
+        .trim()
+        .split(".")
+        .some((segment) => segment === "related" || segment === "*"),
+    );
+  if (Array.isArray(populate)) return populate.some(populatesRelated);
+  if (!isRecord(populate)) return false;
+  return Object.entries(populate).some(([key, entry]) => {
+    if (entry === false || entry === "false") return false;
+    if (populatesRelated(key)) return true;
+    if (typeof entry === "string" && entry !== "true") return populatesRelated(entry);
+    if (Array.isArray(entry)) return populatesRelated(entry);
+    if (!isRecord(entry)) return false;
+    return (
+      populatesRelated(entry.populate ?? false) ||
+      (isRecord(entry.on) && Object.values(entry.on).some((f) => populatesRelated({ [key]: f })))
+    );
+  });
 };
 
 /** One populate entry for an attribute of `holder`, scoped; a message when it cannot be. */

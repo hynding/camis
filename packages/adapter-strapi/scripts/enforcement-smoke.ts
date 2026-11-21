@@ -643,8 +643,8 @@ const uploads = async (dir: string, alice: Account, bob: Account): Promise<void>
 
   // Rita reads the media library: Strapi returns a file's related entries whole when it can read
   // none of them (bob's note was one), so any populate of them is refused.
-  const files = await call("GET", "/api/upload/files", rita.jwt);
-  check("rita lists the media library", files.status === 200, files);
+  const library = await call("GET", "/api/upload/files", rita.jwt);
+  check("rita lists the media library", library.status === 200, library);
   for (const path of [
     "/api/upload/files?populate=related",
     "/api/upload/files?populate=*",

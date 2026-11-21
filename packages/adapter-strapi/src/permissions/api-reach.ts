@@ -283,11 +283,10 @@ export const projectReach = (doc: IrDocument, roles: Role[], types: ApiTypeRules
 
   for (const role of nonAdmin) {
     const mine = [...conditionedFor.get(role.name)!].sort();
-    if (mine.length === 0) continue;
     for (const ct of doc.contentTypes) {
       if (ct.builtin !== undefined) continue;
       const how = touches(role, ct);
-      if (how !== null) gaps.push(...polymorphicGaps(doc, role.name, how, ct, mine, reachFrom));
+      if (how !== null) gaps.push(...polymorphicGaps(doc, role.name, how, ct));
       const single = how ?? (openlyWritten(role, ct) ? "writes" : null);
       if (ct.kind === "single" && single !== null)
         gaps.push(...singleGaps(role.name, single, ct, mine, nodes, reachFrom));
@@ -306,41 +305,33 @@ export const projectReach = (doc: IrDocument, roles: Role[], types: ApiTypeRules
   };
 };
 
-/** A polymorphic relation of a type the role reads or writes (or of a component it embeds). */
+/**
+ * A polymorphic relation or inverse of a type the role reads or writes (or of a component it
+ * embeds, at any depth). Strapi's sanitizer leaves a polymorphic list as it is when it can read
+ * none of its entries (seen on 5.48), so the role gets entries of types it holds no grant on, or
+ * reads only under a condition, whatever conditions the IR names.
+ */
 const polymorphicGaps = (
   doc: IrDocument,
   role: string,
   how: "reads" | "writes",
   ct: ContentType,
-  mine: readonly string[],
-  reachFrom: (key: NodeKey) => Set<string>,
-): CapabilityGap[] => {
-  const owners: { owner: string; fields: readonly Field[] }[] = [
+): CapabilityGap[] =>
+  [
     { owner: ct.name, fields: ct.fields },
     ...embedded(doc, ct.fields).map((c) => ({ owner: c.name, fields: c.fields })),
-  ];
-  const gaps: CapabilityGap[] = [];
-  for (const { owner, fields } of owners) {
-    for (const f of fields) {
-      let targets: readonly string[] = [];
-      if (f.type === "polymorphicRelation") targets = mine;
-      else if (f.type === "polymorphicInverse") {
-        const reached = reachFrom(`type:${f.target}`);
-        targets = mine.filter((t) => reached.has(t));
-      }
-      for (const target of targets)
-        gaps.push(
-          gap(
-            ct.name,
-            role,
-            "apiPolymorphicReach",
-            `role "${role}" ${how} "${ct.name}", whose polymorphic relation ${owner}.${f.name} can reach "${target}", which it reads under a condition; the Strapi target cannot narrow a polymorphic populate or write`,
-          ),
-        );
-    }
-  }
-  return gaps;
-};
+  ].flatMap(({ owner, fields }) =>
+    fields
+      .filter((f) => f.type === "polymorphicRelation" || f.type === "polymorphicInverse")
+      .map((f) =>
+        gap(
+          ct.name,
+          role,
+          "apiPolymorphicReach",
+          `role "${role}" ${how} "${ct.name}", whose polymorphic relation ${owner}.${f.name} can return entries of any type, ones the role holds no grant on or reads only under a condition included: Strapi leaves a polymorphic populate unchecked when it can read none of its entries, so the Strapi target cannot narrow it or a polymorphic write`,
+        ),
+      ),
+  );
 
 /**
  * A polymorphic relation (its own, or a component's at any depth) of a type an `auth: false`

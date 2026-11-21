@@ -232,14 +232,17 @@ export default factories.createCoreController(${key(uid)}, () =>
 `);
 
 /**
- * The upload plugin's extension: a private attribute recording each file's uploader, and the
- * plugin's content API controller with the upload checks before it. A `strapi-server` hook, like
- * the users-permissions one, since it changes the loaded plugin rather than restating its schema.
+ * The upload plugin's extension: the plugin's content API controller with the upload checks before
+ * it and, once a restricted role writes files, a private attribute recording each file's uploader.
+ * A `strapi-server` hook, like the users-permissions one, since it changes the loaded plugin rather
+ * than restating its schema.
  */
-const uploadExtensionSource = (): string =>
+const uploadExtensionSource = (uploaderRecorded: boolean): string =>
   withMarker(`import { TABLES } from "../../permissions/api-conditions";
 import { enforcedUpload } from "../../permissions/api-upload-controller";
-
+${
+  uploaderRecorded
+    ? `
 // Strapi's content API passes no user to the upload service, so a file's createdBy (an admin
 // user) stays empty for every users-permissions caller: camis records the uploader itself, in an
 // attribute the content API neither returns nor lets a client filter on or set.
@@ -253,7 +256,14 @@ export default (plugin: UploadPlugin): UploadPlugin => {
     type: "integer",
     private: true,
     configurable: false,
-  };
+  };`
+    : `
+interface UploadPlugin {
+  controllers: Record<string, unknown>;
+}
+
+export default (plugin: UploadPlugin): UploadPlugin => {`
+}
   plugin.controllers["content-api"] = enforcedUpload(plugin.controllers["content-api"], TABLES);
   return plugin;
 };
@@ -261,8 +271,8 @@ export default (plugin: UploadPlugin): UploadPlugin => {
 
 /**
  * The decisions module (Ring 1 runtime, decisions, the project's rules), the controller methods,
- * the upload decisions they check a linked file with and, when a restricted role writes files,
- * the upload extension.
+ * the upload decisions they check a linked file with and, when a restricted role reads or writes
+ * files, the upload extension.
  */
 export const emitApiEnforcementFiles = (enforcement: ApiEnforcement): GeneratedFile[] =>
   enforcement.types.length === 0 && enforcement.uploads === null
@@ -280,7 +290,12 @@ export const emitApiEnforcementFiles = (enforcement: ApiEnforcement): GeneratedF
           path: API_UPLOAD_CONTROLLER_PATH,
           content: withMarker(runtime("api-upload-controller.ts")),
         },
-        ...(enforcement.uploads?.uploaderRecorded === true
-          ? [{ path: UPLOAD_EXTENSION_PATH, content: uploadExtensionSource() }]
-          : []),
+        ...(enforcement.uploads?.extended !== true
+          ? []
+          : [
+              {
+                path: UPLOAD_EXTENSION_PATH,
+                content: uploadExtensionSource(enforcement.uploads!.uploaderRecorded),
+              },
+            ]),
       ];

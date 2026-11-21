@@ -1,4 +1,4 @@
-import { own, recordQuery, type Tables } from "./api-conditions";
+import { own, populatesRelated, recordQuery, type Tables } from "./api-conditions";
 import {
   FILE_UID,
   UPLOADER,
@@ -31,6 +31,8 @@ interface UploadContext {
 
 /** The parts of the plugin's content API controller wrapped here. */
 interface UploadController {
+  find(ctx: UploadContext): Promise<unknown>;
+  findOne(ctx: UploadContext): Promise<unknown>;
   upload(ctx: UploadContext): Promise<unknown>;
   destroy(ctx: UploadContext): Promise<unknown>;
 }
@@ -93,8 +95,9 @@ const createdIds = (body: unknown): number[] =>
     .filter((id): id is number => typeof id === "number");
 
 /**
- * The plugin's content API controller factory, with upload and destroy decided first for a caller
- * the rules restrict: an upload attaches only to a content type's own media field on an entry the
+ * The plugin's content API controller factory, with every action decided first for a caller the
+ * rules restrict: a read populates no file's related entries, which may be of any type and which
+ * Strapi returns whole when it can read none of them; an upload attaches only to a content type's own media field on an entry the
  * caller may update; a replace, an info update or a delete needs update on every entry the file is
  * attached to, or, for an unattached file, that the caller uploaded it. Every upload with a session
  * records its uploader. An API token and an admin role pass to the plugin as they are.
@@ -119,8 +122,25 @@ export const enforcedUpload =
         .updateMany({ where: { id: { $in: ids } }, data: { [UPLOADER]: uploader } });
     };
 
+    /** A read, refused first when its populate reaches a file's related entries. */
+    const read = async (ctx: UploadContext, action: "find" | "findOne"): Promise<unknown> => {
+      const caller = uploadCaller(uploads, ctx.state);
+      if (caller.kind === "refused") return ctx.forbidden();
+      if (caller.kind === "role" && populatesRelated(ctx.query?.populate ?? false))
+        return ctx.badRequest("Invalid populate of a file's related entries");
+      return core[action].call(core, ctx);
+    };
+
     return {
       ...core,
+
+      async find(ctx: UploadContext) {
+        return read(ctx, "find");
+      },
+
+      async findOne(ctx: UploadContext) {
+        return read(ctx, "findOne");
+      },
 
       async upload(ctx: UploadContext) {
         const caller = uploadCaller(uploads, ctx.state);

@@ -861,6 +861,7 @@ describe("writes the users-permissions and upload plugins serve unchecked fail t
     expect(projectApiEnforcement(doc, roles).uploads).toEqual({
       admins: ["manager"],
       uploaderRecorded: true,
+      extended: true,
       holders: {
         "api::note.note": { fields: ["attachment"], nested: {} },
         "api::tag.tag": { fields: [], nested: { refs: { component: "shared.reference" } } },
