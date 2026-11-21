@@ -36,7 +36,11 @@ const SCHEMA: Record<string, Record<string, { relation: string } | { component: 
   "shared.reference": { note: { relation: NOTE } },
 };
 
-/** Strapi filter semantics for the operators the enforcement writes and a client might send. */
+/**
+ * Strapi filter semantics for the operators the enforcement writes and a client might send, in
+ * two-valued logic: it cannot show what SQL's NULLs do to a filter (a NOT of an unknown is
+ * unknown), so runtime/engine.test.ts runs the scoped queries on Strapi's own query engine.
+ */
 const matches = (row: unknown, filter: Filter): boolean =>
   Object.entries(filter).every(([key, cond]) => {
     if (key === "$and") return (cond as Filter[]).every((f) => matches(row, f));

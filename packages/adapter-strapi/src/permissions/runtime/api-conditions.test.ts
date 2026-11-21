@@ -21,15 +21,11 @@ import {
   type RecordData,
   type TypeRules,
 } from "./api-conditions";
+import { CATEGORY, NOTE, REF, TAG, owned, tables } from "./__fixtures__/reach-tables";
 
 const isEditor: Condition = {
   test: (data: RecordData) => data["user.role"] === "editor",
   filter: { kind: "caller", test: (data: RecordData) => data["user.role"] === "editor" },
-};
-const owned: Condition = {
-  test: (data: RecordData) =>
-    data["user.id"] !== undefined && data["record.ownerId"] === data["user.id"],
-  filter: { kind: "eq", variable: "record.ownerId", value: { kind: "user", variable: "user.id" } },
 };
 const recent: Condition = {
   test: (data: RecordData) => data["record.seenAt"] === "2026-01-01T00:00:00.000Z",
@@ -113,76 +109,6 @@ describe("recordData and recordVerdict", () => {
   });
 });
 
-// Tags reach notes directly, through a parent tag, a repeatable reference component and a
-// dynamic zone of references; a member reads its own notes, a guest the shared ones.
-const shared: Condition = {
-  test: (data: RecordData) => data["record.shared"] === true,
-  filter: { kind: "eq", variable: "record.shared", value: { kind: "literal", value: true } },
-};
-const unshared: Condition = {
-  test: (data: RecordData) => data["record.shared"] !== true,
-  filter: null,
-};
-const NOTE = "api::note.note";
-const TAG = "api::tag.tag";
-const CATEGORY = "api::category.category";
-const REF = "shared.reference";
-const tables: Tables = {
-  rules: {
-    [NOTE]: {
-      own: true,
-      defaults: { "record.shared": true },
-      relations: { pinned: { target: TAG, mirrored: true, toOne: false, exclusive: true } },
-      variables: {
-        "record.ownerId": { field: "owner", relation: true },
-        "record.shared": { field: "shared", relation: false },
-      },
-      open: [],
-      assign: ["owner"],
-      admins: ["manager"],
-      roles: {
-        member: { read: [owned], create: [owned], update: [owned], assign: ["owner"] },
-        contributor: { create: [unshared], assign: ["owner"] },
-        public: { read: [shared], assign: [] },
-        reviewer: { read: true, update: [owned], assign: [] },
-      },
-    },
-    [CATEGORY]: {
-      own: false,
-      defaults: {},
-      relations: { notes: { target: NOTE, mirrored: true, toOne: false, exclusive: true } },
-      variables: {},
-      open: [],
-      assign: [],
-      admins: ["manager"],
-      roles: {},
-    },
-    [TAG]: {
-      own: false,
-      defaults: {},
-      relations: { pinnedOn: { target: NOTE, mirrored: true, toOne: true, exclusive: false } },
-      variables: {},
-      open: [],
-      assign: [],
-      admins: ["manager"],
-      roles: {},
-    },
-  },
-  holders: {
-    [TAG]: {
-      populatable: ["note", "parent", "refs", "blocks"],
-      links: {
-        note: { relation: NOTE },
-        parent: { relation: TAG },
-        refs: { component: REF },
-        blocks: { zone: [REF] },
-        pinnedOn: { relation: NOTE },
-      },
-    },
-    [REF]: { populatable: ["note"], links: { note: { relation: NOTE } } },
-    [NOTE]: { populatable: ["attachment", "owner"], links: { attachment: { media: true } } },
-  },
-};
 const member = session("member");
 const MINE = { owner: { id: { $eq: 7 } } };
 const SHARED = { shared: { $eq: true } };
@@ -250,26 +176,79 @@ describe("scopeQuery: filters and sorts through a relation into a conditioned ty
   // relation's where into its parent with Object.assign, so two `$and`s side by side would
   // overwrite each other. The scope stays with the client's filter on that same relation, whose
   // join it must share.
-  it("scopes a relation filter, inside $or/$not and through components, so it is no oracle", () => {
+  it("scopes a relation filter, inside $or and through components, so it is no oracle", () => {
     const titled = (title: string) => ({ $and: [{ title: { $eq: title } }, MINE] });
     expect(scoped(member, { filters: { note: { title: { $eq: "x" } } } }).filters).toEqual({
       $and: [{ note: titled("x") }],
     });
     expect(
       scoped(member, {
-        filters: {
-          $or: [{ label: { $eq: "a" } }, { $not: { refs: { note: { title: { $eq: "x" } } } } }],
-        },
+        filters: { $or: [{ label: { $eq: "a" } }, { refs: { note: { title: { $eq: "x" } } } }] },
       }).filters,
     ).toEqual({
-      $or: [
-        { label: { $eq: "a" } },
-        { $not: { $and: [{ refs: { $and: [{ note: titled("x") }] } }] } },
-      ],
+      $or: [{ label: { $eq: "a" } }, { $and: [{ refs: { $and: [{ note: titled("x") }] } }] }],
     });
     expect(
       scoped(member, { filters: { parent: { note: { title: { $eq: "x" } } } } }).filters,
     ).toEqual({ $and: [{ parent: { $and: [{ note: titled("x") }] } }] });
+  });
+  // SQL's NOT of an unknown is unknown: a row whose scope reads a NULL (an entry with no owner)
+  // drops out under a right guess and stays under a wrong one.
+  it("refuses a $not whose subtree crosses a relation into a conditioned type, at any depth", () => {
+    for (const filters of [
+      { $not: { note: { title: { $eq: "x" } } } },
+      { $not: { note: { id: { $notNull: true } } } },
+      { $or: [{ label: { $eq: "a" } }, { $not: { refs: { note: { title: { $eq: "x" } } } } }] },
+      { $not: { $and: [{ parent: { note: { title: { $eq: "x" } } } }] } },
+      { parent: { $not: { note: { title: { $eq: "x" } } } } },
+    ]) {
+      expect(scopeQuery(tables, TAG, member, { filters }).ok, JSON.stringify(filters)).toBe(false);
+      const populate = { parent: { filters } };
+      expect(scopeQuery(tables, TAG, member, { populate }).ok, JSON.stringify(populate)).toBe(
+        false,
+      );
+    }
+    // Inside the relation the scope stays outside the client's $not, so the negation is safe.
+    expect(
+      scoped(member, { filters: { note: { $not: { title: { $eq: "x" } } } } }).filters,
+    ).toEqual({ $and: [{ note: { $and: [{ $not: { title: { $eq: "x" } } }, MINE] } }] });
+    expect(scoped(member, { filters: { $not: { label: { $eq: "a" } } } }).filters).toEqual({
+      $not: { label: { $eq: "a" } },
+    });
+    expect(
+      scoped(member, { filters: { $not: { parent: { label: { $eq: "a" } } } } }).filters,
+    ).toEqual({ $not: { $and: [{ parent: { label: { $eq: "a" } } }] } });
+    expect(
+      scopeQuery(tables, TAG, session("reviewer"), { filters: { $not: { note: { title: "x" } } } })
+        .ok,
+    ).toBe(true);
+  });
+  // Strapi reads a relation's own operator (or a bare value) as one on the related id.
+  it("rewrites an operator on a relation itself as one on the related id, under the scope", () => {
+    const under = (test: unknown) => ({ $and: [{ note: { $and: [{ id: test }, MINE] } }] });
+    expect(scoped(member, { filters: { note: 5 } }).filters).toEqual(under(5));
+    expect(scoped(member, { filters: { note: [5, 6] } }).filters).toEqual(under([5, 6]));
+    expect(scoped(member, { filters: { note: { $eq: 5 } } }).filters).toEqual(under({ $eq: 5 }));
+    expect(scoped(member, { filters: { note: { $in: [5] } } }).filters).toEqual(
+      under({ $in: [5] }),
+    );
+    expect(scoped(member, { filters: { note: { $notNull: true } } }).filters).toEqual(
+      under({ $notNull: true }),
+    );
+    expect(scoped(member, { filters: { note: { $null: false } } }).filters).toEqual(
+      under({ $notNull: true }),
+    );
+    expect(scoped(member, { filters: { note: { $or: [{ title: "a" }] } } }).filters).toEqual({
+      $and: [{ note: { $and: [{ $or: [{ title: "a" }] }, MINE] } }],
+    });
+    // "Has none" would count an entry the caller cannot read as none.
+    for (const note of [{ $null: true }, { $notNull: false }, { $in: [5], title: "x" }])
+      expect(scopeQuery(tables, TAG, member, { filters: { note } }).ok, JSON.stringify(note)).toBe(
+        false,
+      );
+    expect(scoped(member, { filters: { parent: { $null: true } } }).filters).toEqual({
+      $and: [{ parent: { id: { $null: true } } }],
+    });
   });
   it("keeps two relation filters at one level, and a client $and beside them, as separate items", () => {
     const titled = (title: string) => ({ $and: [{ title: { $eq: title } }, MINE] });
@@ -310,6 +289,35 @@ describe("scopeQuery: filters and sorts through a relation into a conditioned ty
     ).toBe(false);
     expect(scopeQuery(tables, TAG, member, { sort: ["label:asc", "parent.label"] }).ok).toBe(true);
     expect(scopeQuery(tables, TAG, session("reviewer"), { sort: "note.title" }).ok).toBe(true);
+  });
+  it("scopes a component's populate filters and refuses a sort through its relations", () => {
+    const filters = { note: { title: { $eq: "x" } } };
+    expect(
+      scoped(member, { populate: { refs: { filters, populate: ["note"] } } }).populate,
+    ).toEqual({
+      refs: {
+        filters: { $and: [{ note: { $and: [{ title: { $eq: "x" } }, MINE] } }] },
+        populate: { note: { filters: MINE } },
+      },
+    });
+    expect(
+      scoped(member, { populate: { blocks: { on: { [REF]: { filters } } } } }).populate,
+    ).toEqual({
+      blocks: {
+        on: { [REF]: { filters: { $and: [{ note: { $and: [{ title: { $eq: "x" } }, MINE] } }] } } },
+      },
+    });
+    expect(scopeQuery(tables, TAG, member, { populate: { refs: { sort: "note.title" } } }).ok).toBe(
+      false,
+    );
+    expect(
+      scopeQuery(tables, TAG, member, {
+        populate: { blocks: { on: { [REF]: { sort: ["note.title"] } } } },
+      }).ok,
+    ).toBe(false);
+    expect(
+      scopeQuery(tables, TAG, member, { populate: { refs: { filters: { $not: filters } } } }).ok,
+    ).toBe(false);
   });
 });
 

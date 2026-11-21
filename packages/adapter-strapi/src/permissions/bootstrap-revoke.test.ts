@@ -23,7 +23,11 @@ interface Database {
 }
 
 /** The generated bootstrap, run against an in-memory users-permissions database. */
-const runBootstrap = async (apiRoles: ApiRoles, db: Database): Promise<void> => {
+/** Runs it once; answers the users-permissions roles there are afterwards. */
+const runBootstrap = async (
+  apiRoles: ApiRoles,
+  db: Database,
+): Promise<{ id: number; type: string }[]> => {
   const files = strapiAdapter.generate(ownershipBundle, { projectName: "notes" }).files;
   const index = files.find((f) => f.path === "src/index.ts")!.content;
   const adminRoles: unknown = JSON.parse(
@@ -89,6 +93,7 @@ const runBootstrap = async (apiRoles: ApiRoles, db: Database): Promise<void> => 
     store,
   };
   await module([], adminRoles, apiRoles).bootstrap({ strapi });
+  return upRoles;
 };
 
 const USER_FIND = "plugin::users-permissions.user.find";
@@ -129,6 +134,26 @@ describe("the generated bootstrap's revoke", () => {
     };
     await runBootstrap({ roles: [{ type: "member", actions: [] }], public: [] }, db);
     expect(actionsOf(db, 2)).toEqual([USER_FIND, USER_ME]);
+  });
+  // A role taken out of the IR keeps no grant of camis's: its next boot finds the type among
+  // those an earlier boot granted, revokes them, forgets it, and never creates the role anew.
+  it("revokes every grant of a role type the IR no longer has, and forgets it", async () => {
+    const db: Database = { permissions: [{ id: 1, action: USER_ME, role: 2 }], store: new Map() };
+    await runBootstrap(
+      { roles: [{ type: "member", actions: ["api::note.note.find", USER_FIND] }], public: [] },
+      db,
+    );
+    expect(actionsOf(db, 2)).toEqual(["api::note.note.find", USER_FIND, USER_ME]);
+    db.store.set("plugin:camis:granted-plugin-actions", {
+      ...(db.store.get("plugin:camis:granted-plugin-actions") as object),
+      editor: [USER_FIND],
+    });
+    const roles = await runBootstrap({ roles: [], public: [] }, db);
+    expect(actionsOf(db, 2)).toEqual([USER_ME]);
+    expect(Object.keys(db.store.get("plugin:camis:granted-plugin-actions") as object)).toEqual([
+      "public",
+    ]);
+    expect(roles.map((r) => r.type)).toEqual(["public", "member"]);
   });
   // The public role is granted the registration actions and its IR grants in one pass, so the
   // second never revokes what the first just granted.

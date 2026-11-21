@@ -29,5 +29,10 @@
   "lint-staged": {
     "*.{ts,js,json,yml,yaml}": "prettier --write",
     "*.{ts,js}": "eslint --fix"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ]
   }
 }

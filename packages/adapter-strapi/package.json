@@ -25,7 +25,9 @@
     "pg": "^8.23.1"
   },
   "devDependencies": {
+    "@strapi/database": "5.48.0",
     "@types/pg": "^8.23.1",
+    "better-sqlite3": "^12.11.1",
     "tsx": "^4.22.4"
   }
 }
