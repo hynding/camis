@@ -81,7 +81,8 @@ export const reservedNameGaps = (
     });
   };
 
-  // One gap per name the target keeps, however many of the field's names map onto it.
+  // One gap per name the target keeps, however many of the field's names map onto it: a key and
+  // its key column (created_by, created_by_id) may both be one name of the target's.
   const gaps = (
     names: readonly TargetName[],
     location: IrErrorLocation,
@@ -90,8 +91,8 @@ export const reservedNameGaps = (
     const reported = new Set<string>();
     return names.flatMap((name): CapabilityGap[] => {
       const own = reserved.get(name.mapped);
-      if (own === undefined || reported.has(name.mapped)) return [];
-      reported.add(name.mapped);
+      if (own === undefined || reported.has(own)) return [];
+      reported.add(own);
       return [
         {
           feature: "reservedFieldName",
