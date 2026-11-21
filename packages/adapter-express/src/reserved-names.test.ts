@@ -65,6 +65,34 @@ describe("Express target: names its tables reserve", () => {
     expect(reserved(bundle)).toEqual([]);
   });
 
+  // A built-in type is a plain table with the same timestamps, its fields columns like any other's.
+  it.each([
+    ["user", "updatedAt"],
+    ["file", "createdAt"],
+  ] as const)("reports a %s built-in type's field named %s", (builtin, name) => {
+    const bundle: IrBundle = {
+      document: {
+        version: 1,
+        contentTypes: [
+          {
+            name: "Account",
+            kind: "collection",
+            builtin,
+            fields: [
+              { type: "string", name: "username" },
+              { type: "dateTime", name },
+            ],
+          },
+        ],
+        components: [],
+      },
+      roles: [],
+    };
+    expect(reserved(bundle).map((g) => [g.severity, g.location])).toEqual([
+      ["error", { contentType: "Account", field: name }],
+    ]);
+  });
+
   it.each([
     ["ai", aiFixture],
     ["blog", blog],

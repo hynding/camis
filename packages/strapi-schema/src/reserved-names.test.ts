@@ -81,6 +81,23 @@ describe("strapiReservedNameGaps", () => {
     expect(reportedFields(doc)).toEqual(["updatedBy"]);
   });
 
+  // A built-in type is a plugin's own content type: no schema.json of ours carries its fields.
+  it("leaves a built-in type's fields", () => {
+    const doc: IrDocument = {
+      version: 1,
+      contentTypes: [
+        {
+          name: "User",
+          kind: "collection",
+          builtin: "user",
+          fields: [{ type: "dateTime", name: "updatedAt" }],
+        },
+      ],
+      components: [],
+    };
+    expect(strapiReservedNameGaps(doc)).toEqual([]);
+  });
+
   // Strapi's Content-Type Builder refuses the same keys in a component.
   it("reports a component's field", () => {
     const doc: IrDocument = {

@@ -69,9 +69,23 @@ describe("reservedNameGaps", () => {
     ]);
   });
 
-  it("leaves a built-in type alone: the target owns its fields", () => {
+  it("leaves a built-in type alone by default: the target owns its fields", () => {
     const gaps = reservedNameGaps(doc, "the Test target", RESERVED, snakeNames);
     expect(gaps.some((g) => g.location.contentType === "User")).toBe(false);
+  });
+
+  it("walks a built-in type for a target that emits its fields as any type's", () => {
+    const gaps = reservedNameGaps(doc, "the Test target", RESERVED, snakeNames, {
+      builtins: true,
+    });
+    expect(gaps.filter((g) => g.location.contentType === "User")).toEqual([
+      {
+        feature: "reservedFieldName",
+        location: { contentType: "User", field: "stampedAt" },
+        severity: "error",
+        message: `field "stampedAt" collides with the Test target's own "stampedAt"; rename it`,
+      },
+    ]);
   });
 
   it("tells the holder apart, so a target can map a component's fields differently", () => {

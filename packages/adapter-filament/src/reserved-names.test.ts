@@ -136,6 +136,30 @@ describe("Filament target: names its rows and wire shape reserve", () => {
     });
   });
 
+  // A built-in type maps onto the host app's own model and table (users, or Strapi's up_users):
+  // nothing is generated from its fields, so they are not checked.
+  it.each(["laravel", "strapi"] as const)(
+    "leaves a built-in type's fields in the %s API style",
+    (apiStyle) => {
+      const bundle: IrBundle = {
+        document: {
+          version: 1,
+          contentTypes: [
+            {
+              name: "User",
+              kind: "collection",
+              builtin: "user",
+              fields: [{ type: "dateTime", name: "updatedAt" }],
+            },
+          ],
+          components: [],
+        },
+        roles: [],
+      };
+      expect(reserved(bundle, apiStyle)).toEqual([]);
+    },
+  );
+
   // The Laravel-style fixtures keep a `publishedAt` field of their own, which only the Strapi API
   // style keeps for itself; they are generated, and booted, in the Laravel API style only.
   it.each([
