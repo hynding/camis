@@ -99,7 +99,7 @@ describe("Filament target: names its rows and wire shape reserve", () => {
       ]);
     });
 
-    it("reports Strapi's discriminator keys and its strapi prefix, as Strapi does", () => {
+    it("reports Strapi's discriminator keys, which are keys on its wire, and its strapi prefix", () => {
       const bundle = withFields([
         { type: "string", name: "kind", names: { api: "__component" } },
         { type: "string", name: "strapiStage" },

@@ -13,8 +13,10 @@ import {
  * entry itself: an attribute of the same name is overwritten (`publishedAt`) or refused on write
  * (`updatedAt`); the `*_by_id` columns are the keys of `createdBy` and `updatedBy`. And Strapi's
  * discriminator keys: `__component` names a dynamic zone item's component beside the item's own
- * keys. Strapi's builder additionally refuses `status`, `meta` and `entry_id`, which are not keys of
- * an entry, so an attribute of that name reads and writes as it should, and camis lets them through.
+ * keys. These camis refuses because they are keys on the wire: Strapi's builder snake_cases a name
+ * before comparing it, which strips the leading underscores, so it does not refuse them. Strapi's
+ * builder additionally refuses `status`, `meta` and `entry_id`, which are not keys of an entry, so
+ * an attribute of that name reads and writes as it should, and camis lets them through.
  */
 const STRAPI_KEYS: ReadonlyMap<string, string> = new Map([
   ["id", "id"],

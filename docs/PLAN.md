@@ -2721,7 +2721,9 @@ no gap reported (issue #103).
   `publishedAt`, `createdBy`, `updatedBy`, `locale`, `localizations`, and the
   `created_by_id`/`updated_by_id` key columns; Strapi's discriminator keys `__component` (which a
   dynamic zone item's component goes by on the wire, beside the item's own keys) and
-  `__contentType`, which only an API key can spell; and any name with Strapi's `strapi`, `_strapi`
+  `__contentType`, which only an API key can spell (camis's own rule, since they are keys on the
+  wire: Strapi's builder snake_cases a name before comparing it, which strips the leading
+  underscores, so it does not refuse them); and any name with Strapi's `strapi`, `_strapi`
   or `__strapi` prefix (`strapi_stage`, `strapi_assignee` are its own columns). Names are compared
   snake_cased as Strapi's Content-Type Builder compares attribute names, so an API key
   `published_at` or `PublishedAt` is caught. A field's API key, a relation's inverse (Strapi adds it
