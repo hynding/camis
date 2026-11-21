@@ -207,9 +207,10 @@ interface Context {
   state: unknown;
   request: { body?: { data?: unknown } };
   status?: number;
-  notFound: () => unknown;
-  forbidden: () => unknown;
-  badRequest: (message?: string) => unknown;
+  body?: unknown;
+  notFound: () => void;
+  forbidden: () => void;
+  badRequest: (message?: string) => void;
 }
 
 const context = (state: unknown, extra: Partial<Context> = {}): Context => {
@@ -218,17 +219,19 @@ const context = (state: unknown, extra: Partial<Context> = {}): Context => {
     query: {},
     state,
     request: {},
+    // Strapi's helpers set the response and return nothing (a real boot showed a create carry
+    // on past a refusal that relied on their return value), so these return nothing either.
     notFound: () => {
       ctx.status = 404;
-      return { data: null, error: { status: 404, name: "NotFoundError" } };
+      ctx.body = { data: null, error: { status: 404, name: "NotFoundError" } };
     },
     forbidden: () => {
       ctx.status = 403;
-      return { data: null, error: { status: 403, name: "ForbiddenError" } };
+      ctx.body = { data: null, error: { status: 403, name: "ForbiddenError" } };
     },
     badRequest: () => {
       ctx.status = 400;
-      return { data: null, error: { status: 400, name: "ValidationError" } };
+      ctx.body = { data: null, error: { status: 400, name: "ValidationError" } };
     },
     ...extra,
   };
