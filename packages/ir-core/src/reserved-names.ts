@@ -98,8 +98,10 @@ const locationKey = (location: IrErrorLocation): string =>
  * An `error` gap for every field whose name, as `target` maps it, is one the target keeps for its
  * own: such a field is overwritten or refused at run time, so generation stops before it is
  * written. `reserved` maps each kept name, as `namesOf` maps names, to what the target calls it.
- * A built-in content type is checked only with `builtins`; the columns of a row, an embedded
- * component's on the entry's and an item's on its own, only with `columns` (and `items`).
+ * A built-in content type's own names are checked only with `builtins`, its relations' inverses
+ * always; the columns of a row, an embedded component's on the entry's and an item's on its own,
+ * only with `columns` (and `items`). The location has one component: an item's embedded field is
+ * located at its own component, and the message names the item holding it.
  */
 export const reservedNameGaps = (
   doc: IrDocument,
