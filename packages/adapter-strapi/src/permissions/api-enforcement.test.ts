@@ -418,7 +418,7 @@ describe("a reach the Strapi content API cannot narrow fails the build", () => {
         ],
       },
     ];
-    expect(errors(inverse, writer)).toEqual([
+    expect(errors(inverse, writer).filter((g) => g.feature !== "apiUserWrite")).toEqual([
       {
         feature: "apiRelationReach",
         location: { contentType: "User", rule: "member" },
@@ -512,7 +512,11 @@ describe("writes the users-permissions and upload plugins serve unchecked fail t
     },
   ];
   const featured = (d: IrDocument, rs: Role[], feature: string) =>
-    errors(d, rs).filter((g) => g.feature === feature);
+    errors(d, rs).filter(
+      (g) =>
+        g.feature === feature &&
+        (feature !== "apiRelationReach" || g.message.includes("upload API")),
+    );
 
   // POST /api/upload with ref, refId and field attaches the new file to any entry, `?id=`
   // replaces a file wherever it is attached, and DELETE removes it from every entry.

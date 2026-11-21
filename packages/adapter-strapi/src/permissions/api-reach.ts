@@ -193,7 +193,7 @@ const holdersOf = (
 };
 
 /** The components a type embeds, at any depth, through components and dynamic zones. */
-const embedded = (doc: IrDocument, fields: readonly Field[]): Component[] => {
+export const embedded = (doc: IrDocument, fields: readonly Field[]): Component[] => {
   const byName = new Map(doc.components.map((c) => [c.name, c]));
   const seen = new Map<string, Component>();
   const visit = (list: readonly Field[]): void => {

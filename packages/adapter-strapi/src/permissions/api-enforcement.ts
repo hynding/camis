@@ -17,6 +17,7 @@ import {
 import { strapiNames } from "@camis/strapi-schema";
 import { CORE_ACTIONS } from "../hooks/route-hooks";
 import { projectReach, typeKey } from "./api-reach";
+import { builtinWriteGaps } from "./api-builtin-writes";
 import { projectRelationWrites, relationWriteGaps } from "./api-relation-writes";
 import { conditionName } from "./condition-name";
 import { codePointOrder } from "./code-point-order";
@@ -296,7 +297,11 @@ export const projectApiEnforcement = (doc: IrDocument, roles: Role[]): ApiEnforc
   }
 
   const reach = projectReach(doc, roles, types);
-  gaps.push(...reach.gaps, ...relationWriteGaps(doc, roles, types));
+  gaps.push(
+    ...reach.gaps,
+    ...relationWriteGaps(doc, roles, types),
+    ...builtinWriteGaps(doc, roles),
+  );
   const writes = projectRelationWrites(doc, enforced);
   const core = CORE_ACTIONS.collection;
   const openOf = (ct: ContentType): string[] =>
