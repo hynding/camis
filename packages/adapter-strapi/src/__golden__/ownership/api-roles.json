@@ -1,0 +1,53 @@
+{
+  "roles": [
+    {
+      "type": "public",
+      "actions": [
+        "api::note.note.find",
+        "api::note.note.findOne",
+        "api::tag.tag.find",
+        "api::tag.tag.findOne"
+      ]
+    },
+    {
+      "type": "member",
+      "actions": [
+        "api::note.note.create",
+        "api::note.note.delete",
+        "api::note.note.find",
+        "api::note.note.findOne",
+        "api::note.note.update",
+        "api::tag.tag.find",
+        "api::tag.tag.findOne"
+      ]
+    },
+    {
+      "type": "reviewer",
+      "actions": [
+        "api::note.note.delete",
+        "api::note.note.find",
+        "api::note.note.findOne",
+        "api::note.note.update",
+        "plugin::users-permissions.user.find"
+      ]
+    },
+    {
+      "type": "manager",
+      "actions": [
+        "api::note.note.create",
+        "api::note.note.delete",
+        "api::note.note.find",
+        "api::note.note.findOne",
+        "api::note.note.update",
+        "plugin::users-permissions.user.find"
+      ]
+    }
+  ],
+  "public": [
+    "plugin::users-permissions.auth.register",
+    "plugin::users-permissions.auth.callback"
+  ],
+  "managed": [
+    "plugin::users-permissions.user.find"
+  ]
+}

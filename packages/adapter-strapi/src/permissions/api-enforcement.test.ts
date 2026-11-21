@@ -67,14 +67,14 @@ describe("projectApiEnforcement", () => {
         location: { contentType: "Note", rule: "member" },
         severity: "downgrade",
         message:
-          'role "member" reads "Note" under a condition the content API enforces on /api/notes only: a populate or relation filter through Tag.note is not narrowed by it',
+          'role "member" reads "Note" under a condition the content API enforces on /api/note only: a populate or relation filter through Tag.note is not narrowed by it',
       },
       {
         feature: "apiPopulateScope",
         location: { contentType: "Note", rule: "public" },
         severity: "downgrade",
         message:
-          'role "public" reads "Note" under a condition the content API enforces on /api/notes only: a populate or relation filter through Tag.note is not narrowed by it',
+          'role "public" reads "Note" under a condition the content API enforces on /api/note only: a populate or relation filter through Tag.note is not narrowed by it',
       },
     ]);
   });

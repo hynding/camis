@@ -59,9 +59,13 @@ export const projectPermissions = (doc: IrDocument, roles: Role[]): ProjectionRe
   const register = (
     predicate: Expression,
     where: { contentType: string; field?: string; rule: string },
+    adminPanelOnly: boolean,
   ): string => {
     const name = conditionName(predicate);
     conditions.set(name, predicate);
+    // A non-admin role's grant condition is enforced by the content API, which reads record.*;
+    // only where the admin panel is the sole enforcer does its user-only context matter.
+    if (!adminPanelOnly) return name;
     const escaping = freeVars(predicate).filter(
       (v) => !USER_CONTEXT.includes(v as (typeof USER_CONTEXT)[number]),
     );
@@ -99,7 +103,13 @@ export const projectPermissions = (doc: IrDocument, roles: Role[]): ProjectionRe
       }
       const subject = ct.builtin === "user" ? PLUGIN_USER_UID : strapiNames(ct).uid;
       const grantConditions = grant.condition
-        ? [register(grant.condition, { contentType: grant.contentType, rule: role.name })]
+        ? [
+            register(
+              grant.condition,
+              { contentType: grant.contentType, rule: role.name },
+              role.admin === true,
+            ),
+          ]
         : undefined;
 
       for (const act of grant.actions) {
@@ -121,11 +131,11 @@ export const projectPermissions = (doc: IrDocument, roles: Role[]): ProjectionRe
       for (const fr of grant.fieldRules ?? []) {
         const condNames = fr.when
           ? [
-              register(fr.when, {
-                contentType: grant.contentType,
-                field: fr.field,
-                rule: role.name,
-              }),
+              register(
+                fr.when,
+                { contentType: grant.contentType, field: fr.field, rule: role.name },
+                true,
+              ),
             ]
           : undefined;
         for (const act of FIELD_ACCESS_ACTIONS[fr.access]) {
@@ -155,6 +165,11 @@ export interface ApiRoleGrant {
 export interface ApiRoleProjection {
   roles: ApiRoleGrant[];
   public: string[];
+  /**
+   * The plugin actions camis grants on its own account, which the bootstrap therefore also
+   * revokes from a role it no longer grants them to; every other plugin action is Strapi's.
+   */
+  managed: string[];
   gaps: CapabilityGap[];
 }
 
@@ -162,6 +177,7 @@ export interface ApiRoleProjection {
  * Projects IR roles onto the users-permissions REST API's own role/permission model — distinct
  * from `projectPermissions`'s admin-panel projection: users-permissions actions carry no
  * conditions and have no `publish` action (Strapi 5 publishes via `update` + a `status` param).
+ * A grant's condition and assign are enforced by the generated controllers (`api-enforcement`).
  */
 export const projectApiRoles = (doc: IrDocument, roles: Role[]): ApiRoleProjection => {
   const byName = new Map(doc.contentTypes.map((ct) => [ct.name, ct]));
@@ -169,10 +185,17 @@ export const projectApiRoles = (doc: IrDocument, roles: Role[]): ApiRoleProjecti
   const builtinUsers = new Set(
     doc.contentTypes.filter((ct) => ct.builtin === "user").map((ct) => ct.name),
   );
-  const ownsUserRelation = (name: string): boolean =>
-    (byName.get(name)?.fields ?? []).some(
-      (f) => f.type === "relation" && builtinUsers.has(f.target),
+  const userRelations = (name: string): string[] =>
+    (byName.get(name)?.fields ?? [])
+      .filter((f) => f.type === "relation" && builtinUsers.has(f.target))
+      .map((f) => f.name);
+  /** The client writes a user relation: one no grant of the role on the type assigns. */
+  const writesUserRelation = (role: Role, name: string): boolean => {
+    const assigned = new Set(
+      role.grants.filter((g) => g.contentType === name).flatMap((g) => Object.keys(g.assign ?? {})),
     );
+    return userRelations(name).some((f) => !assigned.has(f));
+  };
   const WRITE_ACTIONS: Action[] = ["create", "update"];
 
   const projected = roles.map((role): ApiRoleGrant => {
@@ -204,7 +227,7 @@ export const projectApiRoles = (doc: IrDocument, roles: Role[]): ApiRoleProjecti
         });
       }
       if (
-        ownsUserRelation(grant.contentType) &&
+        writesUserRelation(role, grant.contentType) &&
         grant.actions.some((act) => WRITE_ACTIONS.includes(act))
       ) {
         actions.add(USER_RELATION_WRITE_ACTION);
@@ -213,14 +236,6 @@ export const projectApiRoles = (doc: IrDocument, roles: Role[]): ApiRoleProjecti
           location: { contentType: grant.contentType, rule: role.name },
           severity: "downgrade",
           message: `"${role.name}" writes a relation to the built-in user on "${grant.contentType}"; Strapi validates that against the user type's find scope, so the role also gets ${USER_RELATION_WRITE_ACTION} — which exposes every user's username and email at GET /api/users${role.name === "public" ? ", and since this is the public role, unauthenticated" : ""}`,
-        });
-      }
-      if (grant.condition) {
-        gaps.push({
-          feature: "apiGrantCondition",
-          location: { contentType: grant.contentType, rule: role.name },
-          severity: "downgrade",
-          message: `"${role.name}" grant on "${grant.contentType}" is unconditioned at the users-permissions API; conditions apply to the admin panel only`,
         });
       }
     }
@@ -234,5 +249,10 @@ export const projectApiRoles = (doc: IrDocument, roles: Role[]): ApiRoleProjecti
     return { type: role.name, actions: [...actions].sort() };
   });
 
-  return { roles: projected, public: [...PUBLIC_API_ACTIONS], gaps };
+  return {
+    roles: projected,
+    public: [...PUBLIC_API_ACTIONS],
+    managed: builtinUsers.size > 0 ? [USER_RELATION_WRITE_ACTION] : [],
+    gaps,
+  };
 };

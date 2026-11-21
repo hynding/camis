@@ -108,10 +108,23 @@ export const strapiAdapter: GenerateAdapter = {
         : []),
     ];
     const perm = emitPermissions(doc, ir.roles);
-    const withPerm =
-      perm.indexContent === undefined
-        ? files
-        : files.map((f) => (f.path === "src/index.ts" ? { ...f, content: perm.indexContent! } : f));
+    const controllerPaths = new Map<string, string>(
+      doc.contentTypes
+        .filter((ct) => perm.controllers.has(strapiNames(ct).uid))
+        .map((ct) => {
+          const names = strapiNames(ct);
+          return [
+            `src/api/${names.singularName}/controllers/${names.singularName}.ts`,
+            perm.controllers.get(names.uid)!,
+          ] as const;
+        }),
+    );
+    const withPerm = files.map((f) => {
+      if (f.path === "src/index.ts" && perm.indexContent !== undefined)
+        return { ...f, content: perm.indexContent };
+      const controller = controllerPaths.get(f.path);
+      return controller === undefined ? f : { ...f, content: controller };
+    });
     const aiGenFiles: GeneratedFile[] = [];
     const aiGaps: CapabilityGap[] = [];
     if (hasAiField(doc)) {

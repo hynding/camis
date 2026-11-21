@@ -1,0 +1,300 @@
+import type { Expression } from "@camis/expr";
+import { freeVars } from "@camis/expr";
+import {
+  fieldApiName,
+  type CapabilityGap,
+  type ContentType,
+  type IrDocument,
+} from "@camis/ir-schema";
+import {
+  recordVariables,
+  toRecordFilter,
+  USER_VARIABLES,
+  type Action,
+  type RecordFilter,
+  type Role,
+} from "@camis/permissions";
+import { strapiNames } from "@camis/strapi-schema";
+import { CORE_ACTIONS } from "../hooks/route-hooks";
+import { conditionName } from "./condition-name";
+
+/** The actions the content API serves an entry through, which a condition may narrow. */
+const ENFORCED_ACTIONS = ["read", "create", "update", "delete"] as const;
+type EnforcedAction = (typeof ENFORCED_ACTIONS)[number];
+
+export interface ApiCondition {
+  name: string;
+  predicate: Expression;
+  /** The condition as a row filter, for a list; null when it has none. */
+  filter: RecordFilter | null;
+}
+
+/** Outright, or under the named conditions (any of them). */
+export type ApiHolding = true | string[];
+
+export type ApiRoleRules = Partial<Record<EnforcedAction, ApiHolding>> & {
+  /** The Strapi attributes the role's grants assign from the session user. */
+  assign: string[];
+};
+
+export interface ApiTypeRules {
+  contentType: string;
+  uid: string;
+  /** Each record variable the type's conditions read, as the Strapi attribute holding it. */
+  variables: Record<string, { field: string; relation: boolean }>;
+  /** Core actions the router opens with `auth: false`. */
+  open: string[];
+  /** Every attribute a grant on the type assigns. */
+  assign: string[];
+  admins: string[];
+  roles: Record<string, ApiRoleRules>;
+}
+
+export interface ApiEnforcement {
+  conditions: ApiCondition[];
+  types: ApiTypeRules[];
+  gaps: CapabilityGap[];
+}
+
+const USER_NAMES = Object.keys(USER_VARIABLES);
+const ROW_VARIABLES =
+  "only eq/and/or over record.<field> or record.<relation>Id against a literal or user.id/email/role";
+const ENTRY_VARIABLES =
+  "only user.id/email/role, record.<field> and record.<relation>Id of an owning relation";
+
+const VERB: Record<Exclude<EnforcedAction, "read">, string> = {
+  create: "create",
+  update: "update",
+  delete: "delete",
+};
+
+const BUILTIN_PLUGIN: Record<string, string> = { user: "users-permissions", file: "upload" };
+
+const restricts = (role: Role): boolean => role.admin !== true;
+const touches = (grant: Role["grants"][number]): boolean =>
+  grant.condition !== undefined || Object.keys(grant.assign ?? {}).length > 0;
+
+/** The record variables of `ct`, keyed as Ring 1 names them, valued as Strapi stores them. */
+const strapiVariables = (ct: ContentType) => {
+  const apiName = new Map(ct.fields.map((f) => [f.name, fieldApiName(f)]));
+  const variables = recordVariables(ct);
+  return {
+    typeOf: (name: string) => variables.get(name)?.type,
+    attribute: (name: string) => {
+      const v = variables.get(name);
+      return v === undefined
+        ? undefined
+        : { field: apiName.get(v.field) ?? v.field, relation: v.relation };
+    },
+    apiName: (field: string) => apiName.get(field) ?? field,
+  };
+};
+
+const gap = (
+  ct: string,
+  role: string,
+  severity: CapabilityGap["severity"],
+  message: string,
+  feature = "apiGrantCondition",
+): CapabilityGap => ({ feature, location: { contentType: ct, rule: role }, severity, message });
+
+/**
+ * Why the content API cannot enforce `condition` for `action`, or undefined when it can: a list
+ * needs a row filter; an entry needs only variables a stored row has; a create, variables known
+ * before the write (fields as sent, relations the server assigns).
+ */
+const unenforceable = (
+  ct: ContentType,
+  role: string,
+  action: EnforcedAction,
+  condition: Expression,
+  assigned: ReadonlySet<string>,
+): string | undefined => {
+  const vars = strapiVariables(ct);
+  if (action === "read") {
+    return toRecordFilter(condition, vars.typeOf, USER_NAMES) === null
+      ? `role "${role}" reads "${ct.name}" under a condition the Strapi content API cannot filter a list by (${ROW_VARIABLES}); every row would be listed`
+      : undefined;
+  }
+  const records = recordVariables(ct);
+  const unknown = freeVars(condition).filter((v) => !USER_NAMES.includes(v) && !records.has(v));
+  if (unknown.length > 0) {
+    return `role "${role}" may ${VERB[action]} "${ct.name}" under a condition that reads ${unknown.join(", ")}, which the Strapi content API cannot read off an entry (${ENTRY_VARIABLES})`;
+  }
+  if (action !== "create") return undefined;
+  const unwritten = freeVars(condition).filter((v) => {
+    const variable = records.get(v);
+    return variable?.relation === true && !assigned.has(variable.field);
+  });
+  return unwritten.length > 0
+    ? `role "${role}" may create "${ct.name}" under a condition that reads ${unwritten.join(", ")}, which the Strapi content API cannot know before the entry is written (assign the relation from user.id, or condition on fields only)`
+    : undefined;
+};
+
+/** Where a populate or a relation filter reaches `target` from: `Type.field`, sorted. */
+const reachingRelations = (doc: IrDocument, target: string): string[] => {
+  const sources: string[] = [];
+  for (const holder of [...doc.contentTypes, ...doc.components]) {
+    for (const f of holder.fields) {
+      if (f.type !== "relation") continue;
+      if (f.target === target) sources.push(`${holder.name}.${f.name}`);
+      if (holder.name === target && f.inverse !== undefined)
+        sources.push(`${f.target}.${f.inverse}`);
+    }
+  }
+  return [...new Set(sources)].sort();
+};
+
+const addHolding = (
+  holdings: Map<EnforcedAction, ApiHolding>,
+  action: EnforcedAction,
+  name: string | undefined,
+): void => {
+  const held = holdings.get(action);
+  if (name === undefined) holdings.set(action, true);
+  else if (held === undefined) holdings.set(action, [name]);
+  else if (held !== true && !held.includes(name)) held.push(name);
+};
+
+/**
+ * What the generated content API controllers enforce: for each collection type a non-admin role
+ * holds under a condition or an assign, how every role holds each action on it, the record
+ * variables its conditions read and the fields its grants assign. A condition the content API
+ * cannot enforce is an error, since the action alone would open every row.
+ */
+export const projectApiEnforcement = (doc: IrDocument, roles: Role[]): ApiEnforcement => {
+  const byName = new Map(doc.contentTypes.map((ct) => [ct.name, ct]));
+  const conditions = new Map<string, ApiCondition>();
+  const gaps: CapabilityGap[] = [];
+  const admins = roles
+    .filter((r) => !restricts(r))
+    .map((r) => r.name)
+    .sort();
+
+  const enforced = new Set<string>();
+  for (const role of roles) {
+    for (const grant of role.grants) {
+      const ct = byName.get(grant.contentType);
+      if (ct === undefined) continue;
+      if (!restricts(role) && grant.condition !== undefined)
+        gaps.push(
+          gap(
+            ct.name,
+            role.name,
+            "downgrade",
+            `"${role.name}" is an admin role, which the content API does not restrict: its condition on "${ct.name}" applies to the admin panel only`,
+          ),
+        );
+      // An admin role is not restricted, but what it assigns is still the server's to fill.
+      if (restricts(role) ? !touches(grant) : Object.keys(grant.assign ?? {}).length === 0)
+        continue;
+      if (ct.builtin !== undefined) {
+        if (grant.condition !== undefined && restricts(role))
+          gaps.push(
+            gap(
+              ct.name,
+              role.name,
+              "error",
+              `role "${role.name}" holds "${ct.name}" under a condition, which the ${BUILTIN_PLUGIN[ct.builtin] ?? ct.builtin} plugin serves unconditioned; the Strapi target cannot enforce it`,
+            ),
+          );
+        continue;
+      }
+      if (ct.kind === "single") {
+        gaps.push(
+          gap(
+            ct.name,
+            role.name,
+            "error",
+            `role "${role.name}" holds single type "${ct.name}" under a condition or assign, which the Strapi target does not enforce on a single type`,
+          ),
+        );
+        continue;
+      }
+      enforced.add(ct.name);
+    }
+  }
+
+  const types: ApiTypeRules[] = [];
+  for (const ct of doc.contentTypes.filter((c) => enforced.has(c.name))) {
+    const vars = strapiVariables(ct);
+    const ruleSet: Record<string, ApiRoleRules> = {};
+    const read = new Set<string>();
+    const typeAssign = new Set<string>();
+    for (const role of roles) {
+      const grants = role.grants.filter((g) => g.contentType === ct.name);
+      if (grants.length === 0) continue;
+      const assigned = new Set(grants.flatMap((g) => Object.keys(g.assign ?? {})));
+      const holdings = new Map<EnforcedAction, ApiHolding>();
+      for (const grant of grants) {
+        const name = grant.condition === undefined ? undefined : conditionName(grant.condition);
+        for (const action of ENFORCED_ACTIONS.filter((a) => grant.actions.includes(a as Action))) {
+          if (grant.condition !== undefined && restricts(role)) {
+            const why = unenforceable(ct, role.name, action, grant.condition, assigned);
+            if (why !== undefined) gaps.push(gap(ct.name, role.name, "error", why));
+            conditions.set(name!, {
+              name: name!,
+              predicate: grant.condition,
+              filter: toRecordFilter(grant.condition, vars.typeOf, USER_NAMES),
+            });
+            for (const v of freeVars(grant.condition)) {
+              if (vars.attribute(v) !== undefined) read.add(v);
+            }
+          }
+          addHolding(holdings, action, restricts(role) ? name : undefined);
+        }
+      }
+      const assign = [...assigned].map(vars.apiName).sort();
+      assign.forEach((a) => typeAssign.add(a));
+      ruleSet[role.name] = {
+        ...Object.fromEntries(
+          ENFORCED_ACTIONS.filter((a) => holdings.has(a)).map((a) => [a, holdings.get(a)!]),
+        ),
+        assign,
+      };
+    }
+    const core = CORE_ACTIONS.collection;
+    types.push({
+      contentType: ct.name,
+      uid: strapiNames(ct).uid,
+      variables: Object.fromEntries([...read].sort().map((v) => [v, vars.attribute(v)!] as const)),
+      open: (ct.options?.publicApiActions ?? [])
+        .map((a) => core[a])
+        .filter((a): a is string => a !== undefined),
+      assign: [...typeAssign].sort(),
+      admins,
+      roles: ruleSet,
+    });
+    gaps.push(...populateGaps(doc, ct, ruleSet));
+  }
+
+  return {
+    conditions: [...conditions.values()].sort((a, b) => a.name.localeCompare(b.name)),
+    types,
+    gaps,
+  };
+};
+
+/** One downgrade per role reading `ct` under a condition another type's relation reaches around. */
+const populateGaps = (
+  doc: IrDocument,
+  ct: ContentType,
+  ruleSet: Record<string, ApiRoleRules>,
+): CapabilityGap[] => {
+  const sources = reachingRelations(doc, ct.name);
+  if (sources.length === 0) return [];
+  const path = `/api/${strapiNames(ct).pluralName}`;
+  return Object.entries(ruleSet)
+    .filter(([, rules]) => Array.isArray(rules.read))
+    .map(([role]) => role)
+    .sort()
+    .map((role) =>
+      gap(
+        ct.name,
+        role,
+        "downgrade",
+        `role "${role}" reads "${ct.name}" under a condition the content API enforces on ${path} only: a populate or relation filter through ${sources.join(", ")} is not narrowed by it`,
+        "apiPopulateScope",
+      ),
+    );
+};

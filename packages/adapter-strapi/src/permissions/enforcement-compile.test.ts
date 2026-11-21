@@ -37,6 +37,9 @@ describe("the emitted enforcement compiles under the generated project's tsconfi
     const read = host.readFile.bind(host);
     host.readFile = (name) => sources.get(name) ?? read(name);
     host.fileExists = (name) => sources.has(name) || ts.sys.fileExists(name);
+    host.directoryExists = (name) =>
+      [...sources.keys()].some((path) => path.startsWith(`${name}/`)) ||
+      ts.sys.directoryExists(name);
     const program = ts.createProgram([...sources.keys()], options, host);
     const messages = ts
       .getPreEmitDiagnostics(program)
