@@ -56,9 +56,9 @@ describe("reservedNameGaps", () => {
       },
       {
         feature: "reservedFieldName",
-        location: { contentType: "Note", field: "owner" },
+        location: { contentType: "Person", field: "stamped" },
         severity: "error",
-        message: `inverse "stamped" of relation "owner" collides with the Test target's own "stamped"; rename it`,
+        message: `inverse "stamped" of relation "Note.owner" collides with the Test target's own "stamped"; rename it`,
       },
       {
         feature: "reservedFieldName",
@@ -129,6 +129,41 @@ describe("reservedNameGaps", () => {
     );
     expect(gaps.map((g) => g.message)).toEqual([
       `field "stampedAt" collides with the Test target's own "stampedAt"; rename it`,
+    ]);
+  });
+
+  // Renaming the field leaves its inverse's collision on Person, so each is reported where it is.
+  it("reports a relation and its inverse kept under one name each where it lands", () => {
+    const related: IrDocument = {
+      version: 1,
+      contentTypes: [
+        {
+          name: "Note",
+          kind: "collection",
+          fields: [
+            {
+              type: "relation",
+              name: "stamped",
+              relationKind: "manyToOne",
+              target: "Person",
+              inverse: "stamped",
+            },
+          ],
+        },
+        { name: "Person", kind: "collection", fields: [{ type: "string", name: "name" }] },
+      ],
+      components: [],
+    };
+    const gaps = reservedNameGaps(related, "the Test target", RESERVED, snakeNames);
+    expect(gaps.map((g) => [g.location, g.message])).toEqual([
+      [
+        { contentType: "Note", field: "stamped" },
+        `field "stamped" collides with the Test target's own "stamped"; rename it`,
+      ],
+      [
+        { contentType: "Person", field: "stamped" },
+        `inverse "stamped" of relation "Note.stamped" collides with the Test target's own "stamped"; rename it`,
+      ],
     ]);
   });
 });

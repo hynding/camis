@@ -68,9 +68,23 @@ describe("strapiReservedNameGaps", () => {
     const gaps = strapiReservedNameGaps(doc);
     expect(gaps.map((g) => [g.location, g.message])).toEqual([
       [
-        { contentType: "Note", field: "tags" },
-        `inverse "createdBy" of relation "tags" collides with Strapi's own "createdBy"; rename it`,
+        { contentType: "Tag", field: "createdBy" },
+        `inverse "createdBy" of relation "Note.tags" collides with Strapi's own "createdBy"; rename it`,
       ],
+    ]);
+  });
+
+  // Renaming the relation alone would leave its inverse's collision on Tag.
+  it.each([
+    ["updatedBy", "updatedBy"],
+    ["strapiOwner", "strapiNotes"],
+  ])("reports a relation %s and its inverse %s, each where it lands", (name, inverse) => {
+    const doc = withFields([
+      { type: "relation", name, relationKind: "manyToOne", target: "Tag", inverse },
+    ]);
+    expect(strapiReservedNameGaps(doc).map((g) => g.location)).toEqual([
+      { contentType: "Note", field: name },
+      { contentType: "Tag", field: inverse },
     ]);
   });
 

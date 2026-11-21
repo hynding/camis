@@ -127,6 +127,23 @@ describe("Filament target: names its rows and wire shape reserve", () => {
       },
     );
 
+    // Its key column updated_by_id is Strapi's updatedBy too, on Note: Note is reported once.
+    it("reports a relation updatedBy and its inverse updatedBy, each where it lands", () => {
+      const bundle = withFields([
+        {
+          type: "relation",
+          name: "updatedBy",
+          relationKind: "manyToOne",
+          target: "Tag",
+          inverse: "updatedBy",
+        },
+      ]);
+      expect(reportedFields(bundle, "strapi")).toEqual([
+        { contentType: "Note", field: "updatedBy" },
+        { contentType: "Tag", field: "updatedBy" },
+      ]);
+    });
+
     it("reports a relation's inverse and a component's field", () => {
       const bundle = withFields(
         [
@@ -141,7 +158,7 @@ describe("Filament target: names its rows and wire shape reserve", () => {
         [{ type: "string", name: "createdAt" }],
       );
       expect(reportedFields(bundle, "strapi")).toEqual([
-        { contentType: "Note", field: "tags" },
+        { contentType: "Tag", field: "localizations" },
         { component: "Seo", field: "createdAt" },
       ]);
     });
