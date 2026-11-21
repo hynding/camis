@@ -22,6 +22,7 @@ export interface TargetName {
 /** What a target calls each name it keeps, by that name as the target maps names; a Map is one. */
 export interface KeptNames {
   get(mapped: string): string | undefined;
+  /** The prefix the target keeps that a name begins with, where it keeps any. */
   prefixOf?(mapped: string): string | undefined;
 }
 
@@ -123,6 +124,13 @@ export const reservedNameGaps = (
   // and its key column (created_by, created_by_id) may both be one name of the target's. An
   // inverse is a name of its own, where it lands, so it is reported beside its relation.
   const reported = new Set<string>();
+  // How a name clashes with what the target keeps, as the message says it.
+  const clashOf = (kept: KeptNames, mapped: string): string | undefined => {
+    const own = kept.get(mapped);
+    if (own !== undefined) return `collides with ${target}'s own "${own}"`;
+    const prefix = kept.prefixOf?.(mapped);
+    return prefix === undefined ? undefined : `uses ${target}'s reserved prefix "${prefix}"`;
+  };
   const gaps = (
     names: readonly TargetName[],
     kept: KeptNames,
@@ -130,20 +138,21 @@ export const reservedNameGaps = (
     described: (name: TargetName) => string,
   ): CapabilityGap[] =>
     names.flatMap((name): CapabilityGap[] => {
-      const own = kept.get(name.mapped);
+      const clash = clashOf(kept, name.mapped);
+      if (clash === undefined) return [];
       const location = locate(name);
       // An inverse is told apart by its relation, which its description names.
-      const key = [locationKey(location), name.inverse === true ? described(name) : "", own].join(
+      const key = [locationKey(location), name.inverse === true ? described(name) : "", clash].join(
         "\0",
       );
-      if (own === undefined || reported.has(key)) return [];
+      if (reported.has(key)) return [];
       reported.add(key);
       return [
         {
           feature: "reservedFieldName",
           location,
           severity: "error",
-          message: `${described(name)} collides with ${target}'s own "${own}"; rename it`,
+          message: `${described(name)} ${clash}; rename it`,
         },
       ];
     });

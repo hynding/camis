@@ -37,9 +37,8 @@ const STRAPI_PREFIXES = ["strapi", "_strapi", "__strapi"] as const;
 
 /** Every name camis refuses on a Strapi API: Strapi's own keys, and its prefix. */
 export const STRAPI_RESERVED_NAMES: KeptNames = {
-  get: (mapped) =>
-    STRAPI_KEYS.get(mapped) ??
-    (STRAPI_PREFIXES.some((prefix) => mapped.startsWith(prefix)) ? "strapi*" : undefined),
+  get: (mapped) => STRAPI_KEYS.get(mapped),
+  prefixOf: (mapped) => STRAPI_PREFIXES.find((prefix) => mapped.startsWith(prefix)),
 };
 
 const named = (spelled: string): TargetName => ({ spelled, mapped: snakeCase(spelled) });
