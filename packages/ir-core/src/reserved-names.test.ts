@@ -74,6 +74,41 @@ describe("reservedNameGaps", () => {
     expect(gaps.some((g) => g.location.contentType === "User")).toBe(false);
   });
 
+  // The target generates nothing from a built-in type's own fields, but a relation's inverse lands
+  // on the related type, which it does generate.
+  it("checks a built-in type's relations' inverses, which land on another type", () => {
+    const owning: IrDocument = {
+      ...doc,
+      contentTypes: doc.contentTypes.map((ct) =>
+        ct.builtin === undefined
+          ? ct
+          : {
+              ...ct,
+              fields: [
+                ...ct.fields,
+                {
+                  type: "relation",
+                  name: "people",
+                  relationKind: "oneToMany",
+                  target: "Person",
+                  inverse: "stamped",
+                },
+              ],
+            },
+      ),
+    };
+    const gaps = reservedNameGaps(owning, "the Test target", RESERVED, snakeNames);
+    expect(gaps.filter((g) => g.location.contentType === "Person")).toEqual([
+      {
+        feature: "reservedFieldName",
+        location: { contentType: "Person", field: "stamped" },
+        severity: "error",
+        message: `inverse "stamped" of relation "User.people" collides with the Test target's own "stamped"; rename it`,
+      },
+    ]);
+    expect(gaps.some((g) => g.location.contentType === "User")).toBe(false);
+  });
+
   it("walks a built-in type for a target that emits its fields as any type's", () => {
     const gaps = reservedNameGaps(doc, "the Test target", RESERVED, snakeNames, {
       builtins: true,

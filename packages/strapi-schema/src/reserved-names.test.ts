@@ -112,6 +112,40 @@ describe("strapiReservedNameGaps", () => {
     expect(strapiReservedNameGaps(doc)).toEqual([]);
   });
 
+  // Its relation's inverse is an attribute of the related type's schema.json, which camis writes.
+  it.each(["createdBy", "publishedAt"])(
+    "reports a built-in type's relation whose inverse %s lands on a type of ours",
+    (inverse) => {
+      const doc: IrDocument = {
+        version: 1,
+        contentTypes: [
+          {
+            name: "User",
+            kind: "collection",
+            builtin: "user",
+            fields: [
+              {
+                type: "relation",
+                name: "notes",
+                relationKind: "oneToMany",
+                target: "Note",
+                inverse,
+              },
+            ],
+          },
+          { name: "Note", kind: "collection", fields: [{ type: "string", name: "title" }] },
+        ],
+        components: [],
+      };
+      expect(strapiReservedNameGaps(doc).map((g) => [g.location, g.message])).toEqual([
+        [
+          { contentType: "Note", field: inverse },
+          `inverse "${inverse}" of relation "User.notes" collides with Strapi's own "${inverse}"; rename it`,
+        ],
+      ]);
+    },
+  );
+
   // Strapi's Content-Type Builder refuses the same keys in a component.
   it("reports a component's field", () => {
     const doc: IrDocument = {

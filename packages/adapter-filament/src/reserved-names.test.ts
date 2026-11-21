@@ -217,6 +217,40 @@ describe("Filament target: names its rows and wire shape reserve", () => {
     },
   );
 
+  // Its relation's inverse lands on Note, whose row and key the generator does emit: an inverse
+  // createdBy is a second created_by_id on notes, beside the Strapi API style's own creator key.
+  it.each(["createdBy", "publishedAt"])(
+    "reports a built-in type's relation whose inverse %s lands on a type of ours",
+    (inverse) => {
+      const bundle: IrBundle = {
+        document: {
+          version: 1,
+          contentTypes: [
+            {
+              name: "User",
+              kind: "collection",
+              builtin: "user",
+              fields: [
+                {
+                  type: "relation",
+                  name: "notes",
+                  relationKind: "oneToMany",
+                  target: "Note",
+                  inverse,
+                },
+              ],
+            },
+            { name: "Note", kind: "collection", fields: [{ type: "string", name: "title" }] },
+          ],
+          components: [],
+        },
+        roles: [],
+      };
+      expect(reportedFields(bundle, "strapi")).toEqual([{ contentType: "Note", field: inverse }]);
+      expect(reserved(bundle, "laravel")).toEqual([]);
+    },
+  );
+
   // On the Laravel storage layout an embedded component's field is a column of the row holding it
   // (the entry's, or an item's, which carries the timestamps too), named by its path snake_cased
   // and joined: `created` holding `at` is created_at. The Strapi storage layout keeps a component
