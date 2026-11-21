@@ -1,7 +1,7 @@
 import type { StorageLayout } from "@camis/adapter-kernel";
 import type { Expression } from "@camis/expr";
 import type { ContentType, FieldType } from "@camis/ir-schema";
-import { CREATED_BY, CREATOR_SHARES_ROLE } from "@camis/permissions";
+import { CREATED_BY, CREATOR_SHARES_ROLE, recordEquality } from "@camis/permissions";
 import { snakeColumn } from "../../names";
 import { linkColumns, linkTable, strapiTable, type RelationField } from "../storage/names";
 
@@ -37,21 +37,6 @@ export interface WhereContext {
   /** The table records each row's creating admin account. */
   creators?: boolean;
 }
-
-const NUMERIC = new Set<FieldType>(["integer", "bigInteger", "float", "decimal"]);
-const STRINGY = new Set<FieldType>([
-  "string",
-  "text",
-  "richText",
-  "email",
-  "uid",
-  "color",
-  "enumeration",
-  "date",
-  "time",
-  "dateTime",
-  "timestamp",
-]);
 
 /**
  * Maps Ring 1 `record.*` variable names to their SQL column + IR type for one content type.
@@ -113,30 +98,6 @@ export const whereContext = (
   return creators ? { columns, creators } : { columns };
 };
 
-const compatible = (type: FieldType, value: WhereValue): boolean => {
-  if (value.kind === "userId") return NUMERIC.has(type);
-  const v = value.value;
-  if (v === null) return true;
-  if (typeof v === "number") return NUMERIC.has(type);
-  if (typeof v === "boolean") return type === "boolean";
-  return STRINGY.has(type);
-};
-
-const operand = (
-  e: Expression,
-  ctx: WhereContext,
-): { column: string; type: FieldType; link?: LinkInfo } | WhereValue | null => {
-  if (e.kind === "lit") return { kind: "lit", value: e.value };
-  if (e.kind === "var") {
-    if (e.name === "user.id") return { kind: "userId" };
-    return ctx.columns.get(e.name) ?? null;
-  }
-  return null;
-};
-
-const isColumn = (o: unknown): o is { column: string; type: FieldType; link?: LinkInfo } =>
-  typeof o === "object" && o !== null && "column" in o;
-
 /** Ring 1 predicate → WhereNode, or null when it cannot be expressed as SQL with identical semantics. */
 const isSharesRole = (e: Expression, ctx: WhereContext): boolean =>
   ctx.creators === true &&
@@ -155,16 +116,17 @@ export const toWhereNode = (expr: Expression, ctx: WhereContext): WhereNode | nu
   if (isSharesRole(expr, ctx)) return { kind: "creatorSharesRole" };
   switch (expr.kind) {
     case "eq": {
-      const l = operand(expr.left, ctx);
-      const r = operand(expr.right, ctx);
-      if (l === null || r === null) return null;
-      const col = isColumn(l) ? l : isColumn(r) ? r : null;
-      const val = isColumn(l) ? r : l;
-      if (col === null || isColumn(val)) return null; // record-vs-record or lit-vs-lit
-      if (!compatible(col.type, val)) return null;
+      // Only the caller's id binds here: the SQL renderers have no other user value to hand.
+      const equality = recordEquality(expr, (name) => ctx.columns.get(name)?.type, ["user.id"]);
+      if (equality === null) return null;
+      const col = ctx.columns.get(equality.variable)!;
+      const value: WhereValue =
+        equality.value.kind === "user"
+          ? { kind: "userId" }
+          : { kind: "lit", value: equality.value.value };
       return col.link !== undefined
-        ? { kind: "eq", column: col.column, value: val, link: col.link }
-        : { kind: "eq", column: col.column, value: val };
+        ? { kind: "eq", column: col.column, value, link: col.link }
+        : { kind: "eq", column: col.column, value };
     }
     case "and":
     case "or": {
