@@ -105,9 +105,13 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
     filters, so pages and counts hold only readable rows); `findOne` (404 when unreadable),
     `update` and `delete` (404 when unreadable, 403 when readable but not changeable) evaluate the
     Ring 1 condition on every stored row of the entry (each version and locale) first.
-  - A restricted caller's delete may carry only `locale` and `status` query parameters, and an
-    update no `filters` (400 otherwise): Strapi reads them into the where that picks the rows it
-    deletes or updates, so a relation filter there would answer a guess.
+  - A restricted caller's delete may carry only `locale` and `status` query parameters (400
+    otherwise): Strapi reads a delete's filters into the where that picks the rows it deletes, so a
+    relation filter there would answer a guess. An update's `filters` are 400 too, so the check
+    holds whatever Strapi does with them (5.48 ignores them). Every other request takes only the
+    query parameters Strapi 5.48 documents, and a populate only the options it reads; anything
+    else, `publicationFilter` and `hasPublishedVersion` included (they test for a version the
+    caller may not read), is 400.
   - `create` evaluates the role's create condition on the fields sent, an omitted field read as its
     IR `default`; each assigned relation is set from the session user on create and dropped from an
     update body. A restricted caller's create or update whose `data` is not an object is 400.
@@ -156,7 +160,7 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
   or delete files while a type with a media field is one it does not update outright (the upload
   API attaches, replaces or deletes a file on any entry unchecked); `apiUserWrite` for a non-admin
   role that may create or update the built-in user (users-permissions sets any user's role and
-  password from the body) unless it holds every action outright anyway. The admin-panel copy of a non-admin role
+  password from the body), whatever else it holds. The admin-panel copy of a non-admin role
   cannot read `record.*`, so there its condition denies every entry (`conditionContext`,
   downgrade). Not enforced: GraphQL (if added by hand) and a `protected/` file replacing a
   generated controller; a publish condition apart from update's; deleting an entry, which drops

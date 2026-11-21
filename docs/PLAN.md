@@ -2698,18 +2698,27 @@ relation write, and a database seeded once kept it.
     query engine and evaluate Ring 1 over `record.*` and `user.*` before acting: an entry the caller
     may not read is 404 `NotFoundError`, as the Filament target answers; one it may read but not
     change is 403 `ForbiddenError`. A guest's comparison with a user variable denies.
-  - **Entry queries.** Strapi's `deleteDocument` reads a delete's `filters` into its where, and its
-    `update` finds the row to write by them (creating a new row of the document when none matches),
-    so a relation filter there decided whether an entry the caller may change was changed: an
-    oracle on what the relation reaches, through shapes refused elsewhere too. For a restricted
-    caller a delete may carry only `locale` and `status` (anything else is 400: refused rather than
-    dropped, so a client never gets an unconditional delete it did not ask for), and an update's
-    `filters` are 400. `locale` and `status` cannot pick a version the verdict did not check: the
+  - **Entry queries.** Strapi's `deleteDocument` reads a delete's `filters` into its where, so a
+    relation filter there decided whether an entry the caller may delete was deleted: an oracle on
+    what the relation reaches, through shapes refused elsewhere too. For a restricted caller a
+    delete may carry only `locale` and `status` (anything else is 400: refused rather than dropped,
+    so a client never gets an unconditional delete it did not ask for). An update's `filters` are
+    400 too: Strapi 5.48's update ignores them (`pickSelectionParams`), but the check then holds
+    whatever a later Strapi does with them. `locale` and `status` cannot pick a version the verdict did not check: the
     verdict loads every row of the document. An update naming a locale the document lacks creates
     that locale's row, decided by the update verdict on the existing rows as any update is (Strapi
     treats locales as one document); `status=published` publishes, as Strapi's content API does.
     `findOne`'s filters stay, scoped like a list's: they can only hide the entry the verdict
     already lets the caller read.
+  - **Query parameters by allowlist.** For a restricted caller on a type with rules or a reach,
+    `scopeQuery` lets through only the parameters Strapi 5.48's content API accepts
+    (`ALLOWED_QUERY_PARAM_KEYS`: `filters`, `sort`, `fields`, `populate`, `status`, `locale`,
+    `page`, `pageSize`, `start`, `limit`, `_q`, `pagination`, `count`, `ordering`) and, in a populate
+    or a zone's `on` fragment, only the options `convertNestedPopulate` reads (`sort`, `filters`,
+    `fields`, `populate`, `count`, `ordering`, `page`, `pageSize`, `start`, `limit`, `on`); anything
+    else is 400, so a parameter a later Strapi adds is refused until reviewed. `publicationFilter`
+    and `hasPublishedVersion` are refused: their cohorts compile to an EXISTS over the document's
+    other version, which would tell whether a version the caller may not read exists.
   - `create` evaluates the role's create condition on the fields sent, an omitted field as its IR
     `default` (which Strapi fills), an assigned relation as the caller's id; it drops the assigned
     fields from the body and sets each from the session after Strapi's validation, so the role need
@@ -2812,8 +2821,8 @@ relation write, and a database seeded once kept it.
   entry, with no check of the entry (seen on Strapi 5.48: a member attached a file to another
   member's private note). Enforcing it would mean wrapping the upload plugin's controller and
   deciding on every entry a file is related to; refused instead. `apiUserWrite`: a non-admin role
-  may create or update the built-in user while it does not hold every action outright on every
-  type, since users-permissions' `PUT /api/users/:id` and `POST /api/users` set the role and
+  may create or update the built-in user (no grant set of its own exempts it: another role may
+  hold an endpoint or plugin service it lacks), since users-permissions' `PUT /api/users/:id` and `POST /api/users` set the role and
   password of any user from the body, so the caller could take any other role. An admin
   role's condition stays a downgrade (admin panel only).
   The admin-panel copy of a non-admin role cannot read `record.*`, so its condition there denies
@@ -2845,10 +2854,15 @@ relation write, and a database seeded once kept it.
   contributor, who reads tags but no note, has such a filter refused by Strapi's own query
   validation; a delete or update of alice's own note filtered by a right or a wrong guess at bob's
   is 400 alike and the note survives; and, with Strapi stopped, it loads the app
-  (`scripts/content-api-routes.mjs`) and fails unless every content API route a role holds the
-  action of, or that is open to anyone, is in `scripts/content-api-allowlist.json` with a reason
-  (where it is enforced or why it is safe), so a route a Strapi version, plugin or grant adds is
-  reviewed before it passes; and a component's
+  (`scripts/content-api-routes.mjs`) and fails unless every content API route a role can reach is
+  in `scripts/content-api-allowlist.json` with a reason (where it is enforced or why it is safe):
+  a route is decided by its `config.auth.scope`, as users-permissions decides it, so every scope
+  action of a route a role holds one of must be named, and its handler too where it differs; a
+  route with no scope (a function handler) is open to any authenticated caller and one with
+  `auth: false` to anyone, so each needs an entry of its own (`scripts/route-guard.ts`, with unit
+  tests showing it fails on each). A route a Strapi version, plugin or grant adds is reviewed
+  before it passes; it also checks that every documented query parameter passes and an unknown
+  one, `publicationFilter` and `hasPublishedVersion` are 400; and a component's
   populate filter through its note matches another member's note for its owner only, a sort
   through it 400. Run locally against Strapi 5.48.0 before
   merge, it found two bugs the fake had hidden, each fixed test-first: the bootstrap's admin-panel
@@ -2904,7 +2918,7 @@ data, a create condition with a default, a guest create, populate/filter/sort/co
 tag, a category's notes connected, disconnected or replaced, a pinned tag taken, a file's related
 entries, reviewer 403, guest, admin, token, unknown and prototype-named roles, roleless session);
 `enforcement-compile.test.ts`; `bootstrap-revoke.test.ts`; `content-api-allowlist.test.ts`
-(every action camis grants is allowlisted); `project.test.ts`; goldens under
+(every action camis grants is allowlisted); `scripts/route-guard.test.ts`; `project.test.ts`; goldens under
 `__golden__/ownership/`, idempotent; the `strapi-enforcement-boot` CI job.
 
 ---

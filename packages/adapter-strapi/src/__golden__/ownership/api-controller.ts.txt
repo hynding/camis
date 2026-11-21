@@ -256,8 +256,8 @@ export const enforcedController = (strapiInstance: unknown, uid: string, tables:
         return super.update(ctx);
       }
       if (sent === undefined) return ctx.badRequest("Missing or invalid data");
-      // Strapi finds the row to update by the filters too, and creates a new one when none
-      // matches: the filters would decide what is written.
+      // Strapi 5.48's update ignores filters (only delete reads them into its where); they are
+      // refused all the same, so the check holds whatever a later Strapi does with them.
       if (ctx.query?.filters !== undefined) return ctx.badRequest("Invalid filters on an update");
       const answer = await verdict(caller, ctx, "update");
       if (answer === "notFound") return ctx.notFound();
