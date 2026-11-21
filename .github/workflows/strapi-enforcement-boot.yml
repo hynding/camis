@@ -1,0 +1,25 @@
+# Boots the ownership fixture's generated Strapi 5 project and checks over HTTP that the
+# generated controllers enforce the IR's row conditions, assigned owner and relation reach:
+# another member's note is not listed, read, updated or deleted; a client-supplied owner is
+# overridden; a populate, filter, sort or connect through a tag does not reach another member's
+# note; and the member role has no GET /api/users. See scripts/enforcement-smoke.ts.
+name: strapi-enforcement-boot
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "packages/adapter-strapi/**"
+      - "packages/permissions/**"
+      - ".github/workflows/strapi-enforcement-boot.yml"
+jobs:
+  enforcement:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @camis/adapter-strapi enforcement-smoke
