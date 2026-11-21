@@ -562,6 +562,11 @@ describe("writes the users-permissions and upload plugins serve unchecked fail t
         })) as Role["grants"],
       },
     ];
-    expect(featured(doc, everything, "apiUserWrite")).toEqual([]);
+    // Holding every action on every type is no exemption: another role may hold an endpoint or
+    // a plugin service this one lacks, and the user API would let it take that role.
+    expect(featured(doc, everything, "apiUserWrite").map((g) => g.message.split(",")[0])).toEqual([
+      'role "member" may create the built-in user',
+      'role "member" may update the built-in user',
+    ]);
   });
 });

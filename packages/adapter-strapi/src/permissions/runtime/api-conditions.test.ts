@@ -445,6 +445,66 @@ describe("scopeQuery: a localized type's localizations reach like any relation",
 });
 
 // The upload plugin's file has a polymorphic `related`: every entry the file is attached to.
+// Strapi's publication cohorts compile to an EXISTS over the document's other version, which the
+// caller may not read; and a parameter a later Strapi adds should be refused until reviewed.
+describe("scopeQuery: only the parameters Strapi 5.48 documents pass, for a restricted caller", () => {
+  const unlinked: Tables = {
+    ...tables,
+    holders: { [TAG]: tables.holders[TAG]!, [REF]: tables.holders[REF]! },
+  };
+  it("refuses publicationFilter and hasPublishedVersion, at the top and in a populate", () => {
+    for (const query of [
+      { publicationFilter: "never-published" },
+      { hasPublishedVersion: "true" },
+      { populate: { note: { publicationFilter: "has-published-version" } } },
+      { populate: { parent: { populate: { note: { hasPublishedVersion: "false" } } } } },
+      { populate: { refs: { populate: { note: { publicationFilter: "x" } } } } },
+    ]) {
+      expect(scopeQuery(tables, TAG, member, query).ok, JSON.stringify(query)).toBe(false);
+    }
+    // A conditioned type no holder table names is restricted all the same.
+    expect(scopeQuery(unlinked, NOTE, member, { hasPublishedVersion: "true" }).ok).toBe(false);
+    expect(scopeQuery(tables, NOTE, member, { publicationFilter: "x" }).ok).toBe(false);
+    expect(scopeQuery(tables, TAG, token, { publicationFilter: "x" }).ok).toBe(true);
+  });
+  it("refuses a parameter it does not know, and lets every documented one through", () => {
+    expect(scopeQuery(tables, TAG, member, { future: "1" }).ok).toBe(false);
+    expect(scopeQuery(tables, TAG, member, { populate: { note: { future: true } } }).ok).toBe(
+      false,
+    );
+    const known = {
+      filters: { label: { $eq: "a" } },
+      sort: "label",
+      fields: ["label"],
+      populate: {
+        note: {
+          fields: ["title"],
+          sort: "title",
+          filters: { title: { $eq: "x" } },
+          count: true,
+          ordering: "asc",
+          page: 1,
+          pageSize: 5,
+          start: 0,
+          limit: 5,
+        },
+        blocks: { on: { [REF]: { populate: ["note"] } } },
+      },
+      status: "published",
+      locale: "en",
+      page: 1,
+      pageSize: 10,
+      start: 0,
+      limit: 10,
+      pagination: { page: 1, pageSize: 10, withCount: true },
+      _q: "a",
+      count: true,
+      ordering: "asc",
+    };
+    expect(scopeQuery(tables, TAG, member, known).ok).toBe(true);
+  });
+});
+
 describe("scopeQuery: a file's related entries are refused", () => {
   it("refuses related under a media populate, in any form, and keeps the rest of the file", () => {
     for (const populate of [
