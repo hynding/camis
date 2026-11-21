@@ -88,7 +88,8 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
   because it also exposes `GET /api/users`. The bootstrap revokes what camis no longer grants: its
   `api::` actions, and a `plugin::` action only when an earlier boot of the bootstrap created it
   (recorded per role in Strapi's core store, `strapi.store({ type: "plugin", name: "camis" })`,
-  key `granted-plugin-actions`), never one Strapi or an administrator granted. A database seeded by
+  key `granted-plugin-actions`), never one Strapi or an administrator granted; a role type taken
+  out of the IR loses every action camis granted it (the role itself stays). A database seeded by
   a camis version before that record existed keeps its `user.find` until it is removed by hand. A
   content type whose relation inverts onto the user
   also gets a generated `src/extensions/users-permissions/strapi-server.ts`, declaring the other
@@ -111,9 +112,19 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
     arrays, objects, components, dynamic zones and their `on` fragments, `localizations`), carries
     that type's read filter (`$and`-ed with any filter of the client's); a relation filter through
     one is narrowed the same way, each relation filter its own item of an `$and` so Strapi's merge
-    of nested filters cannot drop one; a sort through one is refused with 400, since its join
-    cannot carry a filter. Populating a file's `related` entries under any media field is refused
-    with 400 (they may be entries of any type).
+    of nested filters cannot drop one, and so are the filters of a component's populate and of a
+    zone's `on` fragments; a sort through one (a populate's included) is refused with 400, since
+    its join cannot carry a filter. Populating a file's `related` entries under any media field is
+    refused with 400 (they may be entries of any type).
+  - Refused with 400 for a restricted caller, as filters SQL could turn into an oracle or Strapi
+    cannot run: a `$not` whose subtree crosses a relation into a conditioned type (SQL's NOT of an
+    unknown is unknown, so an entry with a NULL owner would answer a guess), at the top level or in
+    a populate; `$null` (or `$notNull: false`) on a relation into a conditioned type, which would
+    count an unreadable entry as none; a relation filter mixing an operator with attributes, or
+    with a second operator. A bare value, a list or a lone operator on a relation
+    (`filters[note][$in][0]=5`) tests the related id, under the scope; `$notNull` asks for a
+    readable entry. A `$not` inside a relation's own filter, `$ne`, `$notIn` and `$null` on a
+    related attribute, and `$or` are allowed: the scope stays in a positive `$and` there.
   - A write linking an entry of a conditioned type (document id, row id, `connect`, `set`, in
     components and zones) is 403 unless the caller may read every row of it. Where both sides
     declare the link, it shows on the other entry, so each entry it connects, disconnects or drops
@@ -145,10 +156,11 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
   (`user.email == "A@x"` matches `a@x`); entry checks run Ring 1 and are exact. Closing that needs
   a binary comparison (`BINARY col = ?` or a `_bin` collation on the columns), which Strapi's
   filter syntax cannot express. The enforcement is unit-tested against a fake of the Strapi
-  surface it uses; the `strapi-enforcement-boot` CI job runs the ownership fixture against a real
+  surface it uses, and its scoped queries run on Strapi's own query engine over sqlite; the
+  `strapi-enforcement-boot` CI job runs the ownership fixture against a real
   Strapi 5 on sqlite (list, entry, owner, `GET /api/users`, populate, filter, two relation filters,
-  sort, connect, a file's related entries, taking a pinned tag), not components, zones, locales,
-  drafts, MySQL or Postgres.
+  sort, connect, a file's related entries, taking a pinned tag, the refused `$not` and `$null`
+  filters, a component's populate filter), not zones, locales, drafts, MySQL or Postgres.
 
 - `protected` (optional) is a directory mirrored into every target's `out` after generation —
   the home for hand-written seams (`routes/api-custom.php`, protected controller subclasses,

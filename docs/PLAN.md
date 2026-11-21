@@ -2712,9 +2712,34 @@ relation write, and a database seeded once kept it.
     caller, a populate of a conditioned type — at any depth, in any form (`*`, comma lists, dotted
     paths, arrays, objects, a zone's shared `populate` or `on` fragments) — carries its read
     filter, `$and`-ed with the client's populate filter; a relation filter through one is narrowed
-    the same way, so it is no oracle; a sort through one (top level or inside a populate) is
-    refused with 400, since its join carries no filter; a populate of a file's `related` entries
-    under any media field is refused with 400. Each relation or component filter becomes its own
+    the same way, so it is no oracle, and so are the filters of a component's populate (and of a
+    zone's `on` fragments), whose rows are the holder's but whose relations are not; a sort through
+    one (top level, inside a populate, a component's or a fragment's included) is refused with 400,
+    since its join carries no filter; a populate of a file's `related` entries under any media field
+    is refused with 400. `fields`, `count` and populate paging need nothing more: they select from,
+    count and page the rows the filter already narrowed.
+  - **Negation.** SQL's NOT of an unknown is unknown: an entry whose scope reads a NULL (no owner, no
+    `shared`) drops out of `$not(guess and scope)` when the guess is right and stays when it is
+    wrong. So a client `$not` whose subtree crosses a relation into a conditioned type (directly,
+    through a component, or further along any path) is refused with 400, at the top level and in
+    populate filters. Everywhere else the scope sits in a positive `$and` beside the client's
+    filter on that relation, where an unknown never matches, so the rest of the class is safe: a
+    `$not` inside a relation's own filter (it wraps only the client's part, the scope stays
+    outside), `$ne`, `$notIn`, `$null` and `$notNull` on a related attribute, and an `$or` mixing
+    branches (each branch's relation carries its own scope and join). The scope itself has no
+    negation: a read condition's filter is `eq`/`and`/`or` only (a negated read condition such as
+    `record.shared != true` is an `apiGrantCondition` error), and a null literal compiles to
+    `$null`, matching Ring 1's `null == null`; an `eq` against a NULL column is unknown in SQL and
+    false in Ring 1, the same outcome in a positive context.
+  - **A relation's own operator.** Strapi reads a bare value (`filters[note]=5`), a list, or a lone
+    operator on the relation (`[$eq]`, `[$in]`, …) as a test of the related id; it is rewritten to
+    `{ id: … }` so it can sit beside the scope (it was a 500). `$notNull` (or `$null: false`) asks
+    for a readable entry; `$null` (or `$notNull: false`) across a conditioned relation is refused
+    with 400, since it would count an unreadable entry as none and "none readable" needs a
+    negation; operators mixed with attributes, or two operators, are refused with 400 (Strapi
+    throws on both). A filter through a dynamic zone or a file's `related` is not narrowed: those
+    are polymorphic relations with no `target`, which Strapi's `processWhere` refuses to filter on.
+  - Each relation or component filter becomes its own
     item of an `$and` at its level, the scope beside the client's filter on that same relation:
     Strapi's `processWhere` merges a nested relation's where into its parent with `Object.assign`,
     so two side by side, or one beside the client's own `$and`, overwrote each other (results
@@ -2760,7 +2785,9 @@ relation write, and a database seeded once kept it.
   that role, as recorded in Strapi's core store (`strapi.store({ type: "plugin", name: "camis" })`,
   key `granted-plugin-actions`); an action Strapi or an administrator granted is never touched,
   even one camis also grants. The public role's registration actions and its IR grants are granted
-  in one pass, so neither revokes the other.
+  in one pass, so neither revokes the other. A role type the IR no longer has, found among those
+  the record names, has every action camis granted it revoked and is dropped from the record; the
+  role itself stays (users may hold it), and one already deleted is not created again.
 - **CI.** `strapi-enforcement-boot` (pull requests touching `adapter-strapi` or `permissions`, and
   on demand) runs `scripts/enforcement-smoke.ts`: it boots the ownership fixture on Strapi 5 and
   sqlite, registers two accounts and moves them to the member role in the database, then checks
@@ -2769,8 +2796,11 @@ relation write, and a database seeded once kept it.
   with `fields`), relation filter and sort do not reach another member's note for a member or a
   guest, and connecting it is 403 and writes nothing; every list it reads must answer 200, each
   denied filter beside a positive control; two scoped relation filters in one request both apply;
-  a file's `related` entries are refused; and a member cannot take a tag pinned on another
-  member's note nor pin one there. Run locally against Strapi 5.48.0 before
+  a file's `related` entries are refused; a member cannot take a tag pinned on another
+  member's note nor pin one there; a `$not` around the note filter and a `$null` on the note
+  relation are 400 while `$notNull` lists only tags with a readable note; and a component's
+  populate filter through its note matches another member's note for its owner only, a sort
+  through it 400. Run locally against Strapi 5.48.0 before
   merge, it found two bugs the fake had hidden, each fixed test-first: the bootstrap's admin-panel
   permission without conditions crashed the boot on sqlite, and a refused relation write still
   created the entry, since Strapi's response helpers return nothing.
@@ -2800,15 +2830,22 @@ Known limits:
 - The Strapi surface the controllers use (core-controller prototype and `super`, `ctx.state`
   shape, document-service `find`/`findOne`/`create`/`update` params, query-engine `findMany`
   `where`/`select`/`populate`, populate `filters` and zone `on`, relation `set`/`connect` syntax,
-  `ctx.badRequest`, `strapi.store`) is exercised by the unit tests against a fake; the boot job
-  covers on a real Strapi only the paths it names (sqlite; no components, zones, nested or dotted
-  populate, locales, drafts, MySQL or Postgres).
+  `ctx.badRequest`, `strapi.store`) is exercised by the unit tests against a fake; the scoped
+  queries themselves run on Strapi's own `@strapi/database` 5.48 over sqlite in
+  `runtime/engine.test.ts` (hand-written models of the fixture's types, a repeatable component's
+  `_cmps` join table included; REST parameters mapped to the engine's by hand); the boot job
+  covers on a real Strapi only the paths it names (sqlite; one repeatable component; no zones,
+  nested or dotted populate, locales, drafts, unowned rows, MySQL or Postgres).
 
 Exit: `record-filter.test.ts`; `api-enforcement.test.ts` (rules, per-type filters, defaults,
 holders including localizations and media, relation writes, open actions, every error gap);
 `runtime/api-conditions.test.ts` (populate normalisation and scoping, filter scoping and lifting,
-sort refusal, localizations, a file's related entries, open routes, relation refs, write plans,
-prototype role names); `enforcement-behaviour.test.ts`
+sort refusal, component populate filters, `$not` refusal, a relation's own operators,
+localizations, a file's related entries, open routes, relation refs, write plans, prototype role
+names); `runtime/engine.test.ts` (the scoped queries on Strapi's query engine and sqlite: a right
+guess at an unreadable title answers as a wrong one for relation filters, NULL-owner rows, two
+relation filters, populate filters, a component's populate filters and `$not` shapes, which are
+refused; a relation's own operators); `enforcement-behaviour.test.ts`
 (the emitted modules against a fake core controller, document service and query engine: another
 member's note is not listed, read, updated or deleted, a client filter cannot widen the list, an
 owner is assigned on create and kept on update, draft/published rows that disagree, non-object

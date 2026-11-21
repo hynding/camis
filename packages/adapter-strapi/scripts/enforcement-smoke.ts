@@ -240,6 +240,54 @@ const scenario = async (dir: string): Promise<void> => {
   check("alice cannot pin a tag on bob's note", pinOn.status === 403, pinOn);
   const sort = await call("GET", "/api/tags?sort=note.title:asc", alice.jwt);
   check("alice's sort through the note is refused", sort.status === 400, sort.status);
+
+  // SQL's NOT of an unknown is unknown, so a $not around a scoped relation could answer a guess.
+  const negated = await call("GET", "/api/tags?filters[$not][note][title][$eq]=bob%27s", alice.jwt);
+  check("alice's $not around the note filter is refused", negated.status === 400, negated.status);
+  const none = await call("GET", "/api/tags?filters[note][$null]=true", alice.jwt);
+  check("alice's $null on the note relation is refused", none.status === 400, none.status);
+  const some = (jwt: string) => list("/api/tags?filters[note][$notNull]=true", jwt);
+  const bobSome = await some(bob.jwt);
+  check(
+    "bob's $notNull on the note relation finds his tag",
+    bobSome.ok && bobSome.ids.includes(tagId ?? ""),
+    bobSome.response,
+  );
+  const aliceSome = await some(alice.jwt);
+  check(
+    "alice's $notNull on the note relation skips bob's tag",
+    aliceSome.ok && !aliceSome.ids.includes(tagId ?? ""),
+    aliceSome.response,
+  );
+
+  // A component's rows are the tag's, but a populate filter on them through the note is scoped.
+  const withRefs = await call("POST", "/api/tags", bob.jwt, {
+    data: { label: "b3", refs: [{ note: bobNoteId }] },
+  });
+  check("bob tags with a reference to his note", withRefs.status === 201, withRefs);
+  const refsOf = async (jwt: string) => {
+    const r = await list(
+      `/api/tags?filters[documentId][$eq]=${idOf(withRefs)}` +
+        "&populate[refs][filters][note][title][$eq]=bob%27s&populate[refs][populate]=note",
+      jwt,
+    );
+    const tag = rows(r.response)[0] as { refs?: unknown[] } | undefined;
+    return { ok: r.ok && tag !== undefined, refs: tag?.refs ?? [], response: r.response };
+  };
+  const bobRefs = await refsOf(bob.jwt);
+  check(
+    "bob's component populate filter finds his reference",
+    bobRefs.ok && bobRefs.refs.length === 1,
+    bobRefs.response,
+  );
+  const aliceRefs = await refsOf(alice.jwt);
+  check(
+    "alice's component populate filter on bob's note matches nothing",
+    aliceRefs.ok && aliceRefs.refs.length === 0,
+    aliceRefs.response,
+  );
+  const refsSort = await call("GET", "/api/tags?populate[refs][sort]=note.title", alice.jwt);
+  check("alice's sort through a component's note is refused", refsSort.status === 400, refsSort);
   const link = await call("POST", "/api/tags", alice.jwt, {
     data: { label: "a", note: { connect: [{ documentId: bobNoteId }] } },
   });
