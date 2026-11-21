@@ -749,7 +749,7 @@ const writerGaps = (): void => {
   };
   const errors = strapiAdapter
     .generate(writesFront, { projectName: "notes" })
-    .gaps.filter((g) => g.severity === "error");
+    .gaps.gaps.filter((g) => g.severity === "error");
   check(
     "a member that writes the single type without reading it fails the build",
     errors.some(
