@@ -658,8 +658,10 @@ const sortPaths = (sort: unknown): string[][] => {
 const sortLeaks = (tables: Tables, holder: string, path: string[], state: unknown): boolean => {
   const [head, ...rest] = path;
   if (head === undefined || rest.length === 0) return false;
-  const link = own(own(tables.holders, holder)?.links, head);
-  if (link === undefined) return false;
+  const known = own(tables.holders, holder);
+  const link = own(known?.links, head);
+  // Through an attribute camis does not know (the user's role), the order is an oracle on it.
+  if (link === undefined) return known !== undefined && !known.populatable.includes(head);
   if ("relation" in link) {
     if (reachScope(tables, link.relation, state) !== null) return true;
     return sortLeaks(tables, link.relation, rest, state);
@@ -682,6 +684,13 @@ const refuse = (message: string): { ok: false; message: string } => ({ ok: false
  * of a right guess and stay in a wrong one. Everywhere else the scope sits in a positive `$and`
  * (a client's `$or`, `$ne`, `$notIn` or `$null` included), where an unknown never matches.
  */
+/** Whether a filter value tests attributes of what it names, not only the attribute itself. */
+const traverses = (value: unknown): boolean => {
+  if (Array.isArray(value)) return value.some(traverses);
+  if (!isRecord(value)) return false;
+  return Object.entries(value).some(([key, inner]) => !key.startsWith("$") || traverses(inner));
+};
+
 const scopeFilters = (
   tables: Tables,
   holder: string,
@@ -701,8 +710,20 @@ const scopeFilters = (
   if (!isRecord(filters)) return { ok: true, value: filters };
   const rest: Record<string, unknown> = {};
   const lifted: Record<string, unknown>[] = [];
+  const known = own(tables.holders, holder);
   for (const [key, value] of Object.entries(filters)) {
-    const link = key.startsWith("$") ? undefined : own(own(tables.holders, holder)?.links, key);
+    const link = key.startsWith("$") ? undefined : own(known?.links, key);
+    // Strapi checks neither a populate's filters nor a relation filter's inner ones against the
+    // caller's grants: through an attribute camis does not know (the user's role) a filter would
+    // answer what the caller may not read.
+    if (
+      link === undefined &&
+      !key.startsWith("$") &&
+      known !== undefined &&
+      !known.populatable.includes(key) &&
+      traverses(value)
+    )
+      return refuse(`Invalid filter through ${key}`);
     let scoped: Checked<unknown> = { ok: true, value };
     if (key === "$and" || key === "$or" || key === "$not") {
       scoped = scopeFilters(tables, holder, value, state, negated || key === "$not");
@@ -1627,6 +1648,7 @@ const HOLDERS: Record<string, Holder> = {
     links: {
       "attachment": { media: true },
       "category": { relation: "api::category.category" },
+      "owner": { relation: "plugin::users-permissions.user" },
       "pinned": { relation: "api::tag.tag" },
     },
   },
@@ -1637,6 +1659,12 @@ const HOLDERS: Record<string, Holder> = {
       "parent": { relation: "api::tag.tag" },
       "pinnedOn": { relation: "api::note.note" },
       "refs": { component: "shared.reference" },
+    },
+  },
+  "plugin::users-permissions.user": {
+    populatable: [],
+    links: {
+
     },
   },
   "shared.reference": {

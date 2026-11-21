@@ -23,7 +23,9 @@ const userGaps = (role: Role, user: ContentType): CapabilityGap[] =>
 
 /** The errors for writes to the built-in user its plugin serves unchecked. */
 export const builtinWriteGaps = (doc: IrDocument, roles: readonly Role[]): CapabilityGap[] => {
-  const user = doc.contentTypes.find((ct) => ct.builtin === "user");
-  if (user === undefined) return [];
-  return roles.filter((r) => r.admin !== true).flatMap((role) => userGaps(role, user));
+  // Every built-in user type of the IR is users-permissions' one user.
+  const users = doc.contentTypes.filter((ct) => ct.builtin === "user");
+  return roles
+    .filter((r) => r.admin !== true)
+    .flatMap((role) => users.flatMap((user) => userGaps(role, user)));
 };

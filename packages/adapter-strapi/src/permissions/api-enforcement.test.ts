@@ -51,6 +51,7 @@ describe("projectApiEnforcement", () => {
         links: {
           attachment: { media: true },
           category: { relation: "api::category.category" },
+          owner: { relation: "plugin::users-permissions.user" },
           pinned: { relation: "api::tag.tag" },
         },
       },
@@ -67,6 +68,9 @@ describe("projectApiEnforcement", () => {
         populatable: ["image", "note"],
         links: { image: { media: true }, note: { relation: "api::note.note" } },
       },
+      // The user is walked beneath every relation to it: what lies under it (its role) is not
+      // passed on unchecked, whatever it reaches.
+      "plugin::users-permissions.user": { populatable: [], links: {} },
     });
   });
   // A write through a relation both sides show changes the entry on the other side too; one

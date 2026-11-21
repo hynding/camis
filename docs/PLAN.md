@@ -2908,7 +2908,26 @@ relation write, and a database seeded once kept it.
     /api/albums?populate[curator][populate][boards][populate]=subjects` (and `=*`, and
     `[curator][populate][role][populate]=users`) and the same through an open route
     (`/api/galleries?populate[owner]…`) are 400; `populate[curator][populate]=boards` and `=role`
-    are 200.
+    are 200. `populate[x][populate]=*` beneath the built-in user expands to the user's inverses
+    only, so `role` is not populated. This is a deliberate difference from Strapi, which also
+    populates `role`: camis expands `*` to the attributes the graph knows. Every built-in user type
+    of the IR is one node (eighth review round), with the union of their inverse edges, because
+    users-permissions serves one user. Before this, two built-in user types each became a node with
+    the same uid, and only the last one's inverses were walked. A grant on any built-in user type
+    counts for `apiUserWrite`, and a grant on any built-in file type counts for `apiRelationReach`
+    and for the upload enforcement. The media library was already one node. For a restricted caller,
+    a `filters` or `sort` inside a populate entry that goes through an attribute the graph does not
+    know is refused (400 "Invalid filter through …", "Invalid sort through a relation in populate").
+    Filters and sorts on the entry's own scalar fields and on known relations pass. At top level
+    Strapi's validator already refuses them (400 "Invalid key role at writer.role"). Live on 5.48
+    with two built-in user types:
+    - `GET /api/posts?populate[writer][filters][role][name][$eq]=viewer` and
+      `[writer][sort]=role.name` are 400 for a role, and the same through an open route's `[owner]`
+      is 400 for an anonymous caller.
+    - `[writer][filters][username][$notNull]=true` and `[writer][filters][albums][name][$eq]=…` are
+      200.
+    - `populate[writer][populate][albums][populate]=art`, through the first user type's inverse, is
+      200.
   - **API tokens.** Strapi 5.48 authenticates a content API token with the strategy
     `content-api-token` (`@strapi/admin` `strategies/content-api-token.js`) and leaves
     `ctx.state.auth` as `{ strategy, credentials, ability }`, `credentials` the stored token, its
@@ -2929,11 +2948,16 @@ relation write, and a database seeded once kept it.
     custom token with 403 "A custom API token is not supported on this route: use a full-access or
     read-only token" before anything else: every action of `enforcedController`, `checkedSingle`'s
     find, update and delete, and the upload API's `find`, `findOne`, `upload` and `destroy`
-    (fail-closed, as before the sixth round, now deliberate). On routes camis does not wrap
-    (`/api/users*`, and everything where the rules restrict no one, as no enforcement is emitted
-    there) a custom token is subject to Strapi's polymorphic sanitizer behaviour (live: a custom
-    token holding `user.find` got the Secret through `GET
-    /api/users?populate[boards][populate]=subjects`), tracked in issue #111. An `auth: false` route
+    (fail-closed, as before the sixth round, now deliberate). camis leaves these routes to Strapi,
+    each for a reason. `/api/users*`: a custom token is subject to Strapi's polymorphic sanitizer
+    behaviour there (live: a custom token holding `user.find` got the Secret through `GET
+    /api/users?populate[boards][populate]=subjects`), tracked in issue #111. The content API of a
+    type camis does not serve where the rules do restrict someone (a plain type with no link, media
+    or polymorphic reach): safe, since nothing polymorphic can be populated from it (a type leading
+    to a polymorphic relation, a media field or a conditioned type is served). `/api/i18n/locales`
+    and the other allowlisted plugin routes (the users-permissions auth routes): safe, since locales
+    hold no relation and the auth routes populate nothing from the query. Every route where the
+    rules restrict no one, as no enforcement is emitted there: issue #111. An `auth: false` route
     authenticates no one, so a token sent there is an anonymous request, decided as the public
     role's.
   - **Route sweep (fifth review round).** Every route a non-admin or anonymous caller can reach, and
@@ -2952,7 +2976,7 @@ relation write, and a database seeded once kept it.
     | `/api/auth/*` | none: they answer with the sanitized user, populating nothing from the query | `POST /api/auth/local?populate=*` populates nothing |
     | i18n `GET /api/i18n/locales` | none: locales hold no relation; 403 unless a role is granted it | 403 |
     | Other allowlisted plugin routes | none: `scripts/content-api-allowlist.json` names only the content API and the users-permissions and upload routes above | — |
-    | Any served route and the upload API, with a content API token (sixth and seventh rounds) | full-access and read-only: passed unchanged, every type readable to them; custom: refused (403) on every route camis serves; on a route camis does not serve (`/api/users*`; an unserved type, which leads to no polymorphic relation, media field or conditioned type where the rules restrict anyone, and every type where they restrict no one): Strapi's sanitizer, issue #111 | full-access 200 with `related`; read-only 200 on reads, 403 on a create; custom 403 "A custom API token is not supported…" on a served list, the single type, a PUT and the upload list |
+    | Any served route and the upload API, with a content API token (sixth and seventh rounds) | full-access and read-only: passed unchanged, every type readable to them; custom: refused (403) on every route camis serves; on a route camis does not serve (`/api/users*`; an unserved type, which leads to no polymorphic relation, media field or conditioned type where the rules restrict anyone; `/api/i18n/locales` and the auth routes, which populate nothing polymorphic; and every route where the rules restrict no one): Strapi's sanitizer, issue #111 where something polymorphic can be populated | full-access 200 with `related`; read-only 200 on reads, 403 on a create; custom 403 "A custom API token is not supported…" on a served list, the single type, a PUT and the upload list |
   - Not narrowed, as on Strapi and the Filament target: admin roles and full-access and read-only
     API tokens (Phase 25; a custom token is refused, above). An
     `auth: false` action (Phase 57) serves its own type's rows to anyone, and its reach is decided
@@ -3063,24 +3087,26 @@ Known limits:
   covers on a real Strapi only the paths it names (sqlite; one repeatable component; no zones,
   nested or dotted populate, locales, drafts, unowned rows, MySQL or Postgres).
 
-Exit: `record-filter.test.ts`; `api-enforcement.test.ts` (rules, per-type filters, defaults,
-holders including localizations and media, relation writes, open actions, every error gap);
-`runtime/api-conditions.test.ts` (populate normalisation and scoping, filter scoping and lifting,
-sort refusal, component populate filters, `$not` refusal, a relation's own operators,
+Exit: `record-filter.test.ts`; `api-enforcement.test.ts` (rules, per-type filters, defaults, holders
+including localizations and media, relation writes, open actions, every error gap, two built-in user
+types and two built-in file types); `runtime/api-conditions.test.ts` (populate normalisation and
+scoping, filter scoping and lifting, sort refusal, a filter or sort through an attribute the graph
+does not know, component populate filters, `$not` refusal, a relation's own operators,
 localizations, a file's related entries, open routes, relation refs, write plans, prototype role
 names); `runtime/engine.test.ts` (the scoped queries on Strapi's query engine and sqlite: a right
 guess at an unreadable title answers as a wrong one for relation filters, NULL-owner rows, two
 relation filters, populate filters, a component's populate filters and `$not` shapes, which are
 refused; a relation's own operators, string booleans included; no linked entry answering as an
-unreadable one for every NULL-satisfied shape); `enforcement-behaviour.test.ts`
-(the emitted modules against a fake core controller, document service and query engine: another
-member's note is not listed, read, updated or deleted, a client filter cannot widen the list, an
-owner is assigned on create and kept on update, draft/published rows that disagree, non-object
-data, a create condition with a default, a guest create, populate/filter/sort/connect through a
-tag, a category's notes connected, disconnected or replaced, a pinned tag taken, a file's related
-entries, reviewer 403, guest, admin, token, unknown and prototype-named roles, roleless session);
-`enforcement-compile.test.ts`; `bootstrap-revoke.test.ts`; `content-api-allowlist.test.ts`
-(every action camis grants is allowlisted); `scripts/route-guard.test.ts`; `project.test.ts`; goldens under
+unreadable one for every NULL-satisfied shape); `enforcement-behaviour.test.ts` (the emitted modules
+against a fake core controller, document service and query engine: another member's note is not
+listed, read, updated or deleted, a client filter cannot widen the list, an owner is assigned on
+create and kept on update, draft/published rows that disagree, non-object data, a create condition
+with a default, a guest create, populate/filter/sort/connect through a tag, a category's notes
+connected, disconnected or replaced, a pinned tag taken, a file's related entries, reviewer 403,
+guest, admin, token (a custom token's 403 on every served action, the single type's find, update and
+delete included), unknown and prototype-named roles, roleless session);
+`enforcement-compile.test.ts`; `bootstrap-revoke.test.ts`; `content-api-allowlist.test.ts` (every
+action camis grants is allowlisted); `scripts/route-guard.test.ts`; `project.test.ts`; goldens under
 `__golden__/ownership/`, idempotent; the `strapi-enforcement-boot` CI job.
 
 ## Phase 95 — the upload API decides on the entries it changes (`adapter-strapi`)

@@ -23,9 +23,14 @@ import { codePointOrder } from "./code-point-order";
  * A node of the reach graph: a content type or a component, which may share a name, or the upload
  * plugin's file, whose polymorphic `related` leads to every type and component with a media field.
  */
-type NodeKey = `type:${string}` | `component:${string}` | "file" | "polymorphic";
+type NodeKey = `type:${string}` | `component:${string}` | "file" | "polymorphic" | "user";
 
 const FILE: NodeKey = "file";
+/**
+ * users-permissions' user, which every built-in user type of the IR names: one node, whose edges
+ * are the inverses onto any of them.
+ */
+const USER: NodeKey = "user";
 /** Where every polymorphic relation or inverse leads: entries of any type. */
 const POLYMORPHIC: NodeKey = "polymorphic";
 /**
@@ -82,7 +87,8 @@ const graphOf = (doc: IrDocument): Map<NodeKey, Node> => {
       if (f.type === "relation") {
         const target = byName.get(f.target);
         // The built-in user is a node (its inverses lead on); the media library's file is not.
-        return target === undefined || (target.builtin !== undefined && target.builtin !== "user")
+        if (target?.builtin === "user") return [{ attribute, link: "relation", targets: [USER] }];
+        return target === undefined || target.builtin !== undefined
           ? []
           : [{ attribute, link: "relation", targets: [typeKey(target)] }];
       }
@@ -97,16 +103,12 @@ const graphOf = (doc: IrDocument): Map<NodeKey, Node> => {
     });
   const populatable = (fields: readonly Field[]): string[] =>
     fields.filter((f) => POPULATABLE.has(f.type)).map(fieldApiName);
+  // users-permissions serves the user and camis emits none of its own fields, but a relation to
+  // it leads on through its inverses: a node with those alone.
+  const user = doc.contentTypes.find((ct) => ct.builtin === "user");
+  if (user !== undefined)
+    nodes.set(USER, { uid: PLUGIN_USER_UID, owner: user.name, populatable: [], edges: [] });
   for (const ct of doc.contentTypes) {
-    // users-permissions serves the user and camis emits none of its own fields, but a relation to
-    // it leads on through its inverses: a node with those alone.
-    if (ct.builtin === "user")
-      nodes.set(typeKey(ct), {
-        uid: PLUGIN_USER_UID,
-        owner: ct.name,
-        populatable: [],
-        edges: [],
-      });
     if (ct.builtin !== undefined) continue;
     nodes.set(typeKey(ct), {
       uid: strapiNames(ct).uid,
@@ -138,7 +140,9 @@ const graphOf = (doc: IrDocument): Map<NodeKey, Node> => {
     for (const f of ct.fields) {
       const inverse = f.type === "relation" ? inverseApiName(f) : undefined;
       if (f.type !== "relation" || inverse === undefined) continue;
-      const target = nodes.get(`type:${f.target}`);
+      const target = nodes.get(
+        byName.get(f.target)?.builtin === "user" ? USER : (`type:${f.target}` as NodeKey),
+      );
       if (target === undefined) continue;
       target.populatable.push(inverse);
       target.edges.push({ attribute: inverse, link: "relation", targets: [typeKey(ct)] });
@@ -191,13 +195,19 @@ const reachOf = (
   return reach;
 };
 
-/** The holder entries of the reaching nodes: each link that leads on towards a conditioned type. */
+/**
+ * The holder entries of the reaching nodes: each link that leads on towards a conditioned type.
+ * The user is always one, and every relation to it a link: Strapi checks neither a populate's
+ * filters nor its sorts against the caller's grants, so what lies beneath the user (its role) is
+ * walked and refused where camis does not know it, whatever the user reaches.
+ */
 const holdersOf = (
   nodes: ReadonlyMap<NodeKey, Node>,
   reach: ReadonlyMap<NodeKey, Set<string>>,
   conditioned: ReadonlySet<string>,
 ): Record<string, ApiHolder> => {
   const leads = (target: NodeKey): boolean =>
+    target === USER ||
     (reach.get(target)?.size ?? 0) > 0 ||
     (target.startsWith("type:") && conditioned.has(target.slice(5)));
   const uid = (key: NodeKey): string => nodes.get(key)!.uid;
@@ -205,7 +215,8 @@ const holdersOf = (
   for (const [key, node] of nodes) {
     // The file has no controller of camis's (its reach is a build error instead), and the
     // polymorphic sentinel is no type.
-    if (key === FILE || key === POLYMORPHIC || (reach.get(key)?.size ?? 0) === 0) continue;
+    if (key === FILE || key === POLYMORPHIC) continue;
+    if (key !== USER && (reach.get(key)?.size ?? 0) === 0) continue;
     const links: [string, ApiHolderLink][] = [];
     for (const edge of node.edges) {
       const targets = edge.targets.filter(leads);
@@ -221,7 +232,12 @@ const holdersOf = (
     holders.push([node.uid, { populatable: node.populatable, links: Object.fromEntries(links) }]);
   }
   holders.sort(([a], [b]) => codePointOrder(a, b));
-  return Object.fromEntries(holders);
+  // The user's entry matters only beneath a holder that links to it.
+  const userUid = nodes.get(USER)?.uid;
+  const linked = holders.some(([, h]) =>
+    Object.values(h.links).some((l) => "relation" in l && l.relation === userUid),
+  );
+  return Object.fromEntries(holders.filter(([uid]) => linked || uid !== userUid));
 };
 
 /** The components a type embeds, at any depth, through components and dynamic zones. */
@@ -435,8 +451,9 @@ const builtinGaps = (
       );
   };
   // The upload plugin serves a file's related entries to a role that reads the media library.
-  const file = doc.contentTypes.find((ct) => ct.builtin === "file");
-  if (file !== undefined && readsType(roleOf, file.name)) add(file, "related", FILE);
+  // A grant on any built-in file type is one on the media library.
+  const file = doc.contentTypes.find((ct) => ct.builtin === "file" && readsType(roleOf, ct.name));
+  if (file !== undefined) add(file, "related", FILE);
   for (const ct of doc.contentTypes) {
     for (const f of ct.fields) {
       if (f.type !== "relation") continue;

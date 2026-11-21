@@ -186,12 +186,16 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
     read-only token passes unchanged: no row condition applies and it reads every type. Custom
     tokens are not supported on enforced routes: Strapi returns a polymorphic list whole when the
     token may read none of its entries, at any depth, so every route camis serves (entry
-    controllers, single types, the upload API) refuses a custom token with 403. On routes camis does
-    not wrap (`/api/users*`, and every route where the rules restrict no one, as no enforcement is
-    emitted there) a custom token is subject to Strapi's polymorphic sanitizer behaviour, tracked in
-    issue #111. A populate through the built-in user is walked like any other, and a nested populate
-    beneath an attribute camis does not know (the user's `role`, an admin's `createdBy`) is 400 for
-    a restricted caller.
+    controllers, single types, the upload API) refuses a custom token with 403. camis leaves some
+    routes to Strapi, each for a reason: on `/api/users*` a custom token is subject to Strapi's
+    polymorphic sanitizer behaviour (issue #111); a type camis does not serve where the rules
+    restrict someone (a plain type with no link, media or polymorphic reach) is safe, as nothing
+    polymorphic can be populated from it; `/api/i18n/locales` and the auth routes are safe, as they
+    populate nothing polymorphic; and every route where the rules restrict no one gets no
+    enforcement (issue #111). A populate through the built-in user is walked like any other (every
+    built-in user type of the IR is one user), and a nested populate, filter or sort beneath an
+    attribute camis does not know (the user's `role`, an admin's `createdBy`) is 400 for a
+    restricted caller; `*` beneath the user populates its inverses only, not `role`.
 
   The build fails (`error`) where it cannot enforce: `apiGrantCondition` for a read condition
   outside `eq`/`and`/`or` over `record.<field>`/`record.<relation>Id` vs a literal or

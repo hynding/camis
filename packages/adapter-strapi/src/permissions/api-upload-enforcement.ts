@@ -130,10 +130,11 @@ const mediaFieldNames = (doc: IrDocument, ct: ContentType): string[] => [
  * that writes files makes the upload extension record uploaders.
  */
 export const projectUploads = (doc: IrDocument, roles: readonly Role[]): UploadEnforcement => {
-  const file = doc.contentTypes.find((ct) => ct.builtin === "file");
+  // A grant on any built-in file type of the IR is one on the media library.
+  const files = doc.contentTypes.filter((ct) => ct.builtin === "file");
   const restricted = roles.filter(restricts);
-  const writers = restricted.filter(
-    (r) => file !== undefined && holds(r, file.name, ["create", "update", "delete"]),
+  const writers = restricted.filter((r) =>
+    files.some((file) => holds(r, file.name, ["create", "update", "delete"])),
   );
   const holding = mediaComponents(doc);
   const types = doc.contentTypes
