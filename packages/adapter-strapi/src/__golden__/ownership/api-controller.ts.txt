@@ -100,6 +100,10 @@ const replaceData = (ctx: RequestContext, data: Record<string, unknown>): void =
 export const enforcedController = (strapiInstance: unknown, uid: string, tables: Tables) => {
   const strapi = strapiInstance as StrapiServices;
   const rules = tables.rules[uid]!;
+  // A type with no rules, no reach and no mirrored link is served only so a restricted write's
+  // body is checked: its reads and deletes are Strapi's own, exactly as without camis.
+  const bodyOnly =
+    !rules.own && tables.holders[uid] === undefined && Object.keys(rules.relations).length === 0;
 
   const verdict = async (caller: Caller, ctx: RequestContext, as: RecordAction) => {
     if (caller.kind === "unrestricted" || !rules.own) return "allow";
@@ -201,6 +205,7 @@ export const enforcedController = (strapiInstance: unknown, uid: string, tables:
 
   return {
     async find(this: CoreController, ctx: RequestContext) {
+      if (bodyOnly) return super.find(ctx);
       const caller = callerOf(rules, ctx.state, "find");
       if (caller.kind === "refused") return ctx.forbidden();
       const reach = reachOf(caller, ctx, "find");
@@ -217,6 +222,7 @@ export const enforcedController = (strapiInstance: unknown, uid: string, tables:
     },
 
     async findOne(this: CoreController, ctx: RequestContext) {
+      if (bodyOnly) return super.findOne(ctx);
       const caller = callerOf(rules, ctx.state, "findOne");
       if (caller.kind === "refused") return ctx.forbidden();
       const reach = reachOf(caller, ctx, "findOne");
@@ -299,6 +305,7 @@ export const enforcedController = (strapiInstance: unknown, uid: string, tables:
     },
 
     async delete(ctx: RequestContext) {
+      if (bodyOnly) return super.delete(ctx);
       const caller = callerOf(rules, ctx.state, "delete");
       if (caller.kind === "refused") return ctx.forbidden();
       if (reachOf(caller, ctx, "delete") !== null) {

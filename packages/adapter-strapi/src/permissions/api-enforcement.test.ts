@@ -642,7 +642,7 @@ describe("writes the users-permissions and upload plugins serve unchecked fail t
     ];
     const servedOf = (d: IrDocument, rs: Role[]) =>
       projectApiEnforcement(d, rs).types.find((t) => t.contentType === "Bookmark");
-    for (const actions of [["create"], ["update"]] as const) {
+    for (const actions of [["create"], ["update"]] as Role["grants"][number]["actions"][]) {
       const out = projectApiEnforcement(bookmark(link), writer("Bookmark", actions));
       expect(out.types.find((t) => t.contentType === "Bookmark")).toMatchObject({
         own: false,

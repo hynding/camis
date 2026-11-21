@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { strapiAdapter } from "../generate";
 import { ownershipBundle } from "../__fixtures__/ownership";
-import type { IrBundle } from "@camis/ir-schema";
+import type { IrBundle } from "@camis/permissions";
 
 // Strapi cannot be booted here, so the emitted enforcement modules run against a small fake of
 // the surface they use: the request context, the core controller Strapi builds them on, its

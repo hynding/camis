@@ -19,7 +19,7 @@ import { CORE_ACTIONS } from "../hooks/route-hooks";
 import { projectReach, typeKey } from "./api-reach";
 import { builtinWriteGaps } from "./api-builtin-writes";
 import { projectUploads, type ApiUploads } from "./api-upload-enforcement";
-import { projectShapes, type ApiAttributeShape } from "./api-shapes";
+import { linkWritten, projectShapes, type ApiAttributeShape } from "./api-shapes";
 import { projectRelationWrites, relationWriteGaps } from "./api-relation-writes";
 import { conditionName } from "./condition-name";
 import { codePointOrder } from "./code-point-order";
@@ -316,12 +316,16 @@ export const projectApiEnforcement = (doc: IrDocument, roles: Role[]): ApiEnforc
     (ct.options?.publicApiActions ?? [])
       .map((a) => core[a])
       .filter((a): a is string => a !== undefined);
+  const checked = linkWritten(doc, roles);
   const served = doc.contentTypes.filter(
     (ct) =>
       enforced.has(ct.name) ||
       (ct.kind === "collection" &&
         ct.builtin === undefined &&
-        (reach.reaching.has(typeKey(ct)) || writes.has(ct.name) || uploads.served.has(ct.name))),
+        (reach.reaching.has(typeKey(ct)) ||
+          writes.has(ct.name) ||
+          uploads.served.has(ct.name) ||
+          checked.has(ct.name))),
   );
   return {
     types: served.map((ct): ApiTypeRules => {

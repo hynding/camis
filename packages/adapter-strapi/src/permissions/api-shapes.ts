@@ -1,4 +1,5 @@
 import { fieldApiName, type ContentType, type Field, type IrDocument } from "@camis/ir-schema";
+import type { Role } from "@camis/permissions";
 import { componentUids, strapiNames, synthesizedInverses } from "@camis/strapi-schema";
 import { embedded } from "./api-reach";
 import { codePointOrder } from "./code-point-order";
@@ -62,4 +63,43 @@ export const projectShapes = (
       ordered(attributes(c.fields)),
     ]),
   ]);
+};
+
+const LINKS: readonly Field["type"][] = [
+  "relation",
+  "polymorphicRelation",
+  "polymorphicInverse",
+  "media",
+];
+
+/**
+ * The collection types whose writes the generated controller must check the body of: each with a
+ * relation or media field (its own, an embedded component's, or an inverse Strapi gives it) that
+ * a role the rules restrict creates or updates, or that an `auth: false` route opens for either.
+ * Strapi's database layer spreads an item's `__pivot` into the join row whatever type it is
+ * written through, so without the check a role with create alone could link existing entries.
+ */
+export const linkWritten = (doc: IrDocument, roles: readonly Role[]): Set<string> => {
+  const inverses = synthesizedInverses(doc);
+  const links = (ct: ContentType): boolean =>
+    Object.keys(inverses.get(ct.name) ?? {}).length > 0 ||
+    [ct.fields, ...embedded(doc, ct.fields).map((c) => c.fields)].some((fields) =>
+      fields.some((f) => LINKS.includes(f.type)),
+    );
+  const written = (ct: ContentType): boolean =>
+    roles.some(
+      (r) =>
+        r.admin !== true &&
+        r.grants.some(
+          (g) =>
+            g.contentType === ct.name &&
+            (g.actions.includes("create") || g.actions.includes("update")),
+        ),
+    ) || (ct.options?.publicApiActions ?? []).some((a) => a === "create" || a === "update");
+  return new Set(
+    doc.contentTypes
+      .filter((ct) => ct.kind === "collection" && ct.builtin === undefined)
+      .filter((ct) => links(ct) && written(ct))
+      .map((ct) => ct.name),
+  );
 };
