@@ -2994,7 +2994,9 @@ no gap reported (issue #103).
   component with a field `at` is a column `created_at`, which a target may keep. With the walker's
   `columns` option a target says what a field's column is called by its path from its row, and an
   embedded field is reported located at the content type, the component and its field, with the
-  path in the message. A repeatable component, or a dynamic zone where the target keeps one as
+  path in the message. Such a column is checked against the names the target keeps, not a prefix
+  it keeps, which is its own names' (on the Filament Strapi API style `Note.strapi` embedding a
+  field `foo` is reported for the key `strapi`, not again as `strapi_foo`). A repeatable component, or a dynamic zone where the target keeps one as
   tables, is rows of a table of its own: the target names each item table it emits (`items`), with
   the names its rows keep, and an item's fields, its embedded components' included, are checked
   from the item's row, the path restarting there, located at the component and its field. A

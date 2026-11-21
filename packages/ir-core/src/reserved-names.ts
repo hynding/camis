@@ -25,7 +25,10 @@ export interface TargetName {
 /** What a target calls each name it keeps, by that name as the target maps names; a Map is one. */
 export interface KeptNames {
   get(mapped: string): string | undefined;
-  /** The prefix the target keeps that a name begins with, where it keeps any. */
+  /**
+   * The prefix the target keeps that a name begins with, where it keeps any: a field's own names
+   * are checked against it, an embedded field's column on the entry's row (`columns`) is not.
+   */
   prefixOf?(mapped: string): string | undefined;
 }
 
@@ -164,6 +167,9 @@ export const reservedNameGaps = (
     });
 
   const columns = options.columns;
+  // A kept prefix is the target's for names it gives; an embedded field's column takes its start
+  // from the holding field, whose own name is checked against the prefix already.
+  const keptColumns: KeptNames = { get: (mapped) => reserved.get(mapped) };
 
   const entryColumnGaps = (contentType: string, field: Field): CapabilityGap[] => {
     if (columns === undefined || field.type !== "component" || field.repeatable) return [];
@@ -172,7 +178,7 @@ export const reservedNameGaps = (
     return embeddedIn(component, [field.name]).flatMap((e) =>
       gaps(
         columns(e.path, e.field),
-        reserved,
+        keptColumns,
         () => ({ contentType, component: e.component.name, field: e.field.name }),
         (name) => describeEmbedded(contentType, e, name),
       ),
