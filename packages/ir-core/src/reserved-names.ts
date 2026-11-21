@@ -6,6 +6,9 @@ import type {
   IrErrorLocation,
 } from "@camis/ir-schema";
 
+// Here rather than beside adapter-kernel's privateFieldGaps: strapi-schema reports Strapi's names
+// with it and depends on ir-core, not on the adapters' kernel.
+
 /** One name a field takes on a target. */
 export interface TargetName {
   /** As the target is told it: the field's name or API key, its key column, or its inverse. */

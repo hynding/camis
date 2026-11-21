@@ -2687,9 +2687,11 @@ The bootstrap still creates its admin permissions again on every start (issue #1
 
 Exit: `bootstrap-boot.test.ts` (every module the bootstrap imports is emitted; the bootstrap runs
 against a query engine that refuses an absent `conditions`, for a project with no condition and
-one with conditions on some grants only; the golden of a bootstrap without conditions). The boot
-smoke (`pnpm --filter @camis/adapter-strapi smoke`, the `strapi-boot-smoke` workflow) boots both
-notes projects on fresh sqlite databases besides the blog, and reads their public notes (200).
+one with conditions on some grants only; the golden of a bootstrap without conditions), which run
+on every pull request. The boot smoke (`pnpm --filter @camis/adapter-strapi smoke`) boots both
+notes projects on fresh sqlite databases besides the blog, and reads their public notes (200); it
+runs by hand, or in the `strapi-boot-smoke` workflow, which runs nightly or when dispatched, not on
+pull requests.
 
 ---
 
