@@ -82,4 +82,26 @@ export const tables: Tables = {
     [REF]: { populatable: ["note"], links: { note: { relation: NOTE } } },
     [NOTE]: { populatable: ["attachment", "owner"], links: { attachment: { media: true } } },
   },
+  shapes: {
+    [NOTE]: {
+      owner: "relation",
+      title: "scalar",
+      shared: "scalar",
+      attachment: "media",
+      category: "relation",
+      pinned: "relation",
+    },
+    [CATEGORY]: { label: "scalar", notes: "relation" },
+    [TAG]: {
+      label: "scalar",
+      note: "relation",
+      parent: "relation",
+      refs: { component: REF, repeatable: true },
+      single: { component: REF, repeatable: false },
+      blocks: { zone: [REF] },
+      pinnedOn: "relation",
+      subject: "polymorphic",
+    },
+    [REF]: { label: "scalar", note: "relation", image: "media" },
+  },
 };

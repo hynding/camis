@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Database, type Model } from "@strapi/database";
-import { scopeQuery } from "./api-conditions";
+import { relationRefs, scopeQuery, writeShape } from "./api-conditions";
 import { NOTE, REF, TAG, tables } from "./__fixtures__/reach-tables";
 
 // The scoped queries run on Strapi's own query engine over a throwaway sqlite database (Strapi
@@ -360,5 +360,24 @@ describe("scoped queries on Strapi's query engine", () => {
         ).toEqual([true, true]);
       }
     }
+  });
+});
+
+// Strapi's entity manager builds a relation's join row as { <owner>_id, <target>_id: item.id,
+// ...item.__pivot }: the item's __pivot overrides the id the checks decided on. The same holds for
+// a media item's row in files_related_mph (file_id, related_id, related_type).
+describe("an item's __pivot on Strapi's own entity manager", () => {
+  it("links the entry __pivot names, not the id checked, so camis refuses the item", async () => {
+    const note = { connect: [{ id: ids.mine, __pivot: { note_id: ids.theirs } }] };
+    const tag = await create(TAG, { label: "t-pivot", note });
+    const row = (await db.query(TAG).findOne({ where: { id: tag }, populate: { note: true } })) as {
+      note: { id: number } | null;
+    };
+    expect(row.note?.id).toBe(ids.theirs);
+    expect(relationRefs(tables, TAG, member, { note })).toEqual({
+      ok: false,
+      message: "Invalid relation value for note",
+    });
+    expect(writeShape(tables, TAG, { label: "t", note }).ok).toBe(false);
   });
 });

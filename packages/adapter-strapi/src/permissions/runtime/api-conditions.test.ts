@@ -9,6 +9,7 @@ import {
   reachState,
   refsVerdict,
   writePlan,
+  writeShape,
   relationRefs,
   scopeQuery,
   withoutAssigned,
@@ -647,5 +648,185 @@ describe("writePlan: a relation write must be allowed on every entry it changes"
     expect(refsVerdict(tables, reviewer, ref, [{ ...theirs[0], owner: { id: 7 } }], "update")).toBe(
       "allow",
     );
+  });
+});
+
+// Strapi's database layer spreads a relation or media item's `__pivot` into the join row it writes
+// (entity-manager attachRelations/updateRelations), after the ids it was asked to link: so an item
+// `{ id: <mine>, __pivot: { note_id: <theirs> } }` links theirs. Every item is read exactly.
+describe("relation items: only the keys Strapi documents, each of its form", () => {
+  const refs = (data: Record<string, unknown>) => relationRefs(tables, TAG, member, data);
+  it("refuses __pivot, __type and any other key, in every place an item may stand", () => {
+    const item = { id: 5, __pivot: { note_id: 9 } };
+    for (const note of [
+      item,
+      [item],
+      { connect: [item] },
+      { set: [item] },
+      { disconnect: [item] },
+      { connect: item },
+      { connect: [{ documentId: "d1", __pivot: { note_id: 9 } }] },
+      { connect: [{ id: 5, __type: NOTE }] },
+      { connect: [{ id: 5, extra: true }] },
+      { connect: [5], other: [6] },
+      { connect: [5], options: { strict: true, extra: 1 } },
+      { connect: [5], options: "strict" },
+    ])
+      expect(refs({ note }), JSON.stringify(note)).toEqual({
+        ok: false,
+        message: "Invalid relation value for note",
+      });
+  });
+  it("accepts id, documentId, locale, status and position, and options.strict", () => {
+    expect(
+      refs({
+        note: {
+          connect: [
+            { documentId: "d1", locale: "fr", status: "published", position: { end: true } },
+            { id: "6", position: { start: true } },
+          ],
+          options: { strict: false },
+        },
+      }),
+    ).toEqual({ ok: true, value: [{ target: NOTE, documentIds: ["d1"], ids: [6] }] });
+  });
+  it("refuses an item naming both an id and a documentId, or neither, or a bad status or locale", () => {
+    for (const item of [
+      { id: 5, documentId: "d1" },
+      { locale: "fr" },
+      { id: 5, status: "archived" },
+      { id: 5, locale: 3 },
+      { id: 0 },
+      { id: "5abc" },
+    ])
+      expect(refs({ note: { connect: [item] } }).ok, JSON.stringify(item)).toBe(false);
+  });
+  // Strapi's document service reads a string that parseInt reads as a number as a row id, and a
+  // MySQL comparison reads "5abc" as 5: such a string is neither a documentId nor an id here.
+  it("reads a string of digits as a row id and refuses one that only starts like a number", () => {
+    expect(refs({ note: "12" })).toEqual({
+      ok: true,
+      value: [{ target: NOTE, documentIds: [], ids: [12] }],
+    });
+    for (const note of ["5abc", " 5", "-5", "0", "", ["7x"]])
+      expect(refs({ note }).ok, JSON.stringify(note)).toBe(false);
+  });
+  // An anchor names an entry by documentId (or id), which Strapi looks up: unreadable, its error
+  // would tell whether it exists. So an anchor must be readable like any linked entry.
+  it("reads a position's before and after as entries to be read, and refuses other position keys", () => {
+    expect(
+      refs({ note: { connect: [{ documentId: "d1", position: { before: "d2", after: 3 } }] } }),
+    ).toEqual({ ok: true, value: [{ target: NOTE, documentIds: ["d1", "d2"], ids: [3] }] });
+    for (const position of [{ middle: true }, { before: { id: 3 } }, { end: "yes" }, "end"])
+      expect(refs({ note: { connect: [{ id: 5, position }] } }).ok, JSON.stringify(position)).toBe(
+        false,
+      );
+  });
+});
+
+describe("writePlan: what Strapi keeps is what is planned", () => {
+  const reviewer = session("reviewer");
+  // Strapi keeps only the last entry of a to-one write, so a list there would hide a drop.
+  it("refuses more than one entry on a to-one attribute", () => {
+    for (const pinnedOn of [
+      ["n1", "n2"],
+      { connect: ["n1", "n2"] },
+      { set: ["n1"], connect: ["n2"] },
+    ])
+      expect(writePlan(tables, TAG, member, { pinnedOn }), JSON.stringify(pinnedOn)).toEqual({
+        ok: false,
+        message: "Invalid relation value for pinnedOn: one entry at most",
+      });
+  });
+  // With a set, Strapi's database layer ignores connect: an entry only connected is dropped.
+  it("keeps only the set's entries when a write carries set and connect", () => {
+    const result = writePlan(tables, CATEGORY, reviewer, {
+      notes: { set: ["n1"], connect: ["n2"] },
+    });
+    expect(result.ok && result.value.replaced).toEqual([
+      { attribute: "notes", target: NOTE, kept: { documentIds: ["n1"], ids: [] } },
+    ]);
+  });
+});
+
+describe("writeShape: a restricted caller's write names only the type's writable attributes", () => {
+  const shape = (data: Record<string, unknown>, uid = TAG) => writeShape(tables, uid, data);
+  it("passes a write of attributes in their forms, at every depth", () => {
+    expect(
+      shape({
+        label: "x",
+        note: { connect: [{ documentId: "d1" }] },
+        parent: 3,
+        refs: [{ id: 4, label: "r", note: "d2", image: 7 }],
+        single: { image: { id: 8 } },
+        blocks: [{ __component: REF, id: 2, note: null }],
+        subject: [{ id: 3, __type: NOTE }],
+      }),
+    ).toEqual({ ok: true, value: true });
+    expect(shape({ single: null, refs: [] })).toEqual({ ok: true, value: true });
+    expect(shape({ attachment: [3, "4", { id: 5 }], owner: 7 }, NOTE)).toEqual({
+      ok: true,
+      value: true,
+    });
+  });
+  // Each of these Strapi or its database layer reads from a body; none is an attribute of camis's.
+  it("refuses every key that is not an attribute: id, documentId, locale, publishedAt and the rest", () => {
+    for (const key of [
+      "id",
+      "documentId",
+      "locale",
+      "publishedAt",
+      "createdAt",
+      "updatedAt",
+      "createdBy",
+      "updatedBy",
+      "localizations",
+      "__pivot",
+      "__type",
+      "__component",
+      "__temp_key__",
+      "constructor",
+    ])
+      expect(shape({ [key]: 1 }), key).toEqual({ ok: false, message: `Invalid key ${key}` });
+  });
+  it("refuses unknown keys inside components and zones, and a component of the wrong form", () => {
+    expect(shape({ refs: [{ label: "r", __pivot: { cmp_id: 9 } }] })).toEqual({
+      ok: false,
+      message: "Invalid key refs.__pivot",
+    });
+    expect(shape({ single: { __temp_key__: 1 } })).toEqual({
+      ok: false,
+      message: "Invalid key single.__temp_key__",
+    });
+    expect(shape({ blocks: [{ __component: REF, documentId: "x" }] })).toEqual({
+      ok: false,
+      message: "Invalid key blocks.documentId",
+    });
+    for (const data of [
+      { refs: { label: "r" } },
+      { refs: [1] },
+      { single: [{ label: "r" }] },
+      { refs: [{ id: "x" }] },
+      { blocks: [{ __component: "other.block" }] },
+      { blocks: [{ label: "no component" }] },
+      { blocks: { __component: REF } },
+    ])
+      expect(shape(data).ok, JSON.stringify(data)).toBe(false);
+  });
+  it("refuses a relation, media or polymorphic value of any form but Strapi's documented ones", () => {
+    expect(shape({ attachment: { connect: [{ id: 3, __pivot: { file_id: 9 } }] } }, NOTE)).toEqual({
+      ok: false,
+      message: "Invalid media value for attachment",
+    });
+    expect(shape({ refs: [{ image: { id: 3, __pivot: { related_id: 1 } } }] })).toEqual({
+      ok: false,
+      message: "Invalid media value for refs.image",
+    });
+    expect(shape({ note: { id: 3, __pivot: { note_id: 9 } } })).toEqual({
+      ok: false,
+      message: "Invalid relation value for note",
+    });
+    for (const subject of [[{ id: 3 }], [{ id: 3, __type: NOTE, __pivot: { field: "x" } }], 3])
+      expect(shape({ subject }).ok, JSON.stringify(subject)).toBe(false);
   });
 });

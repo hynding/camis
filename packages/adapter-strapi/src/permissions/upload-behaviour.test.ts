@@ -33,6 +33,7 @@ const seed = (): void => {
   tables[NOTE] = [
     { id: 1, documentId: "mine", title: "mine", owner: { id: 10 } },
     { id: 2, documentId: "theirs", title: "theirs", owner: { id: 11 } },
+    { id: 3, documentId: "reviewed", title: "reviewed", owner: { id: 12 } },
   ];
   tables[TAG] = [{ id: 1, documentId: "t1", label: "t1" }];
   tables[FILE] = [
@@ -41,6 +42,7 @@ const seed = (): void => {
     { id: 3, camisUploader: 11, related: [] },
     { id: 4, camisUploader: 11, related: [{ __type: NOTE, id: 1 }] },
     { id: 5, camisUploader: 10, related: [{ __type: REF, id: 1 }] },
+    { id: 6, camisUploader: 10, related: [{ __type: NOTE, id: 2 }] },
   ];
   stored = [];
 };
@@ -320,7 +322,7 @@ describe("POST /api/upload?id= (replace, or update a file's info) and DELETE /ap
       expect((await destroy(id)).status, `destroy ${id}`).toBe(403);
     }
     expect(stored).toEqual([]);
-    expect(tables[FILE]!.map((f) => f.id)).toEqual([1, 2, 3, 4, 5]);
+    expect(tables[FILE]!.map((f) => f.id)).toEqual([1, 2, 3, 4, 5, 6]);
   });
   it("allows the caller's own unattached file and a file on an entry it may update", async () => {
     await replace("1", aFile);
@@ -364,7 +366,7 @@ describe("attaching a stored file through an entry's media field", () => {
       expect((await write(NOTE, { attachment }, "mine")).status).toBe(403);
     }
     expect((await write(TAG, { label: "x", refs: [{ image: 3 }] })).status).toBe(403);
-    expect(tables[NOTE]!.length).toBe(2);
+    expect(tables[NOTE]!.length).toBe(3);
     expect(tables[TAG]!.length).toBe(1);
     expect(tables[NOTE]![0]!.attachment).toBeUndefined();
   });
@@ -372,9 +374,57 @@ describe("attaching a stored file through an entry's media field", () => {
     expect((await write(NOTE, { title: "x", attachment: "abc" })).status).toBe(400);
     expect((await write(NOTE, { attachment: { documentId: "x" } }, "mine")).status).toBe(400);
   });
-  it("allows the caller's own upload and a file on an entry it may read", async () => {
+  it("allows the caller's own upload and a file on an entry it may update", async () => {
     expect((await write(NOTE, { title: "x", attachment: 1 })).status).toBe(201);
     expect((await write(NOTE, { attachment: 4 }, "mine")).status).toBeUndefined();
     expect((await write(TAG, { label: "x", refs: [{ image: 1 }] })).status).toBe(201);
+  });
+  // A reviewer reads every note but updates only its own: reading bob's note is no claim on its file.
+  it("is 403 for a file only on an entry the caller may read, not update", async () => {
+    const ctx = context(user(12, "reviewer"), {
+      params: { id: "reviewed" },
+      request: { body: { data: { attachment: 2 } } },
+    });
+    await controllers[NOTE]!.update(ctx);
+    expect(ctx.status).toBe(403);
+    expect(tables[NOTE]![2]!.attachment).toBeUndefined();
+  });
+  // Strapi's database layer spreads an item's __pivot into the join row after the ids it checked.
+  it("is 400 for __pivot or any other unknown key, in a media or relation item, a component or the data", async () => {
+    for (const [uid, data, id] of [
+      [NOTE, { attachment: { connect: [{ id: 1, __pivot: { file_id: 2 } }] } }, "mine"],
+      [NOTE, { title: "x", attachment: { set: [{ id: 1, __pivot: { related_id: 2 } }] } }],
+      [NOTE, { attachment: { id: 1, __pivot: {} } }, "mine"],
+      [TAG, { label: "x", note: { connect: [{ id: 1, __pivot: { note_id: 2 } }] } }],
+      [TAG, { label: "x", note: { id: 1, __pivot: { note_id: 2 } } }],
+      [TAG, { label: "x", refs: [{ note: 1, __pivot: { entity_id: 9 } }] }],
+      [NOTE, { title: "x", publishedAt: "2026-01-01" }],
+      [NOTE, { documentId: "theirs", title: "x" }, "mine"],
+      [NOTE, { title: "x", createdBy: 1 }],
+    ] as [string, Record<string, unknown>, string?][]) {
+      const ctx = await write(uid, data, id);
+      expect(ctx.status, JSON.stringify(data)).toBe(400);
+    }
+    expect(tables[NOTE]!.length).toBe(3);
+    expect(tables[TAG]!.length).toBe(1);
+    expect(tables[NOTE]![0]).toEqual({
+      id: 1,
+      documentId: "mine",
+      title: "mine",
+      owner: { id: 10 },
+    });
+  });
+});
+
+describe("the uploader keeps its file", () => {
+  // Whoever linked alice's file to bob's note cannot take the file from her.
+  it("replaces and deletes its own file wherever it is attached", async () => {
+    const replace = context(alice(), { query: { id: "6" }, request: { body: {}, files: aFile } });
+    await upload.upload(replace);
+    expect(replace.status).toBeUndefined();
+    const destroy = context(alice(), { params: { id: "6" } });
+    await upload.destroy(destroy);
+    expect(destroy.status).toBeUndefined();
+    expect(stored).toEqual(["replace 6", "destroy 6"]);
   });
 });

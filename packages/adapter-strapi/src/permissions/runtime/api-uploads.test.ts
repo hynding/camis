@@ -20,6 +20,7 @@ const withUploads: Tables = {
   ...tables,
   uploads: {
     admins: ["manager"],
+    uploaderRecorded: true,
     holders: {
       [HOME]: { fields: ["banner"], nested: {} },
       [NOTE]: { fields: ["attachment"], nested: {} },
@@ -203,22 +204,26 @@ describe("changeVerdict: replacing or deleting a stored file", () => {
     expect(changeVerdict(withUploads, alice, file(null))).toBe(false);
     expect(changeVerdict(withUploads, guest, file(null))).toBe(false);
   });
-  it("an attached file only when the caller may update every entry it is related to", () => {
+  it("an attached file when the caller may update every entry it is related to", () => {
     expect(changeVerdict(withUploads, alice, file(8, { uid: NOTE, rows: note(7) }))).toBe(true);
     expect(
       changeVerdict(
         withUploads,
         alice,
-        file(7, { uid: NOTE, rows: note(7) }, { uid: NOTE, rows: note(8) }),
+        file(8, { uid: NOTE, rows: note(7) }, { uid: NOTE, rows: note(8) }),
       ),
     ).toBe(false);
-    // Uploading it is no claim on an entry it was attached to since.
-    expect(changeVerdict(withUploads, alice, file(7, { uid: NOTE, rows: note(8) }))).toBe(false);
   });
-  it("refuses a file on a component's row, an entry gone missing, or a file that does not exist", () => {
-    expect(changeVerdict(withUploads, alice, file(7, { uid: REF, rows: [{ id: 1 }] }))).toBe(false);
-    expect(changeVerdict(withUploads, alice, file(7, { uid: NOTE, rows: [] }))).toBe(false);
-    expect(changeVerdict(withUploads, alice, file(7, { uid: "", rows: [] }))).toBe(false);
+  // Whoever links a file follows it: no one may take control of a file from its uploader by
+  // linking it to an entry of theirs.
+  it("always by its uploader, wherever the file is attached", () => {
+    expect(changeVerdict(withUploads, alice, file(7, { uid: NOTE, rows: note(8) }))).toBe(true);
+    expect(changeVerdict(withUploads, alice, file(7, { uid: REF, rows: [{ id: 1 }] }))).toBe(true);
+  });
+  it("refuses another's file on a component's row, an entry gone missing, or a file that does not exist", () => {
+    expect(changeVerdict(withUploads, alice, file(8, { uid: REF, rows: [{ id: 1 }] }))).toBe(false);
+    expect(changeVerdict(withUploads, alice, file(8, { uid: NOTE, rows: [] }))).toBe(false);
+    expect(changeVerdict(withUploads, alice, file(8, { uid: "", rows: [] }))).toBe(false);
     expect(changeVerdict(withUploads, alice, null)).toBe(false);
   });
 });
@@ -228,10 +233,8 @@ describe("attachVerdict: linking a stored file to an entry through a media field
     expect(attachVerdict(withUploads, alice, file(7))).toBe(true);
     expect(attachVerdict(withUploads, alice, file(7, { uid: NOTE, rows: note(8) }))).toBe(true);
   });
-  it("allows a file related to an entry the caller may read", () => {
+  it("allows a file related to an entry the caller may update", () => {
     expect(attachVerdict(withUploads, alice, file(8, { uid: NOTE, rows: note(7) }))).toBe(true);
-    const reviewer = session(9, "reviewer");
-    expect(attachVerdict(withUploads, reviewer, file(8, { uid: NOTE, rows: note(8) }))).toBe(true);
     expect(
       attachVerdict(
         withUploads,
@@ -239,6 +242,16 @@ describe("attachVerdict: linking a stored file to an entry through a media field
         file(8, { uid: NOTE, rows: note(8) }, { uid: NOTE, rows: note(7) }),
       ),
     ).toBe(true);
+    const editor = session(9, "editor");
+    expect(attachVerdict(withUploads, editor, file(8, { uid: HOME, rows: home }))).toBe(true);
+  });
+  // Reading an entry is no claim on its file: linking it would make the file's owner need the
+  // linker's entry to replace or delete it (before uploaders kept their files) and copies a link
+  // the reader could not make by uploading.
+  it("refuses a file only on entries the caller may read but not update", () => {
+    const reviewer = session(9, "reviewer");
+    expect(attachVerdict(withUploads, reviewer, file(8, { uid: NOTE, rows: note(8) }))).toBe(false);
+    expect(attachVerdict(withUploads, alice, file(8, { uid: HOME, rows: home }))).toBe(false);
   });
   it("refuses another's file that is unattached, on entries the caller cannot read, or on a component", () => {
     expect(attachVerdict(withUploads, alice, file(8))).toBe(false);
@@ -247,6 +260,18 @@ describe("attachVerdict: linking a stored file to an entry through a media field
     expect(attachVerdict(withUploads, alice, file(8, { uid: REF, rows: [{ id: 1 }] }))).toBe(false);
     expect(attachVerdict(withUploads, alice, null)).toBe(false);
     expect(attachVerdict(withUploads, guest, file(null))).toBe(false);
+  });
+  // With no role writing files there is no upload extension: no file has a recorded uploader.
+  it("decides by the entries alone where no uploader is recorded", () => {
+    const unrecorded: Tables = { ...withUploads, uploads: { ...uploads, uploaderRecorded: false } };
+    expect(attachVerdict(unrecorded, alice, file(7))).toBe(false);
+    expect(attachVerdict(unrecorded, alice, file(7, { uid: NOTE, rows: note(7) }))).toBe(true);
+    expect(changeVerdict(unrecorded, alice, file(7))).toBe(false);
+    expect(fileQuery(4, false)).toEqual({
+      where: { id: 4 },
+      select: ["id"],
+      populate: { related: true },
+    });
   });
 });
 
@@ -261,7 +286,9 @@ describe("mediaFileIds: the stored files an entry write links through its media 
     expect(ids({ attachment: { id: 3 } })).toEqual({ ok: true, value: [3] });
     expect(ids({ attachment: [3, { id: "4" }] })).toEqual({ ok: true, value: [3, 4] });
     expect(
-      ids({ attachment: { connect: [5], set: [{ id: 6 }], disconnect: [7], options: {} } }),
+      ids({
+        attachment: { connect: [5], set: [{ id: 6 }], disconnect: [7], options: { strict: true } },
+      }),
     ).toEqual({ ok: true, value: [5, 6] });
     expect(ids({ attachment: null })).toEqual({ ok: true, value: [] });
     expect(ids({ attachment: { set: null } })).toEqual({ ok: true, value: [] });
@@ -282,6 +309,16 @@ describe("mediaFileIds: the stored files an entry write links through its media 
       [3, "abc"],
       { connect: "3" },
       { connect: [{ documentId: "abc" }] },
+      // Strapi's database layer spreads __pivot into the join row: file_id, related_id and
+      // related_type would name another file or entry than the id checked.
+      { id: 3, __pivot: { file_id: 9 } },
+      { connect: [{ id: 3, __pivot: { file_id: 9 } }] },
+      { set: [{ id: 3, __pivot: { related_id: 1 } }] },
+      { disconnect: [{ id: 3, __pivot: { related_type: "api::other.other" } }] },
+      [{ id: 3, __pivot: {} }],
+      { connect: [{ id: 3, position: { end: true } }] },
+      { connect: [3], options: { strict: true, other: 1 } },
+      { id: 3, connect: [4] },
     ])
       expect(ids({ attachment: value }), JSON.stringify(value)).toEqual({
         ok: false,
@@ -312,7 +349,7 @@ describe("mediaFileIds: the stored files an entry write links through its media 
 
 describe("relatedEntries and fileQuery", () => {
   it("loads a file with its uploader and the entries it is attached to", () => {
-    expect(fileQuery(4)).toEqual({
+    expect(fileQuery(4, true)).toEqual({
       where: { id: 4 },
       select: ["id", "camisUploader"],
       populate: { related: true },

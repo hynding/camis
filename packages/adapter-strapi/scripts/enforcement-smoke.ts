@@ -104,6 +104,16 @@ const select = (dir: string, sql: string, ...args: unknown[]): Record<string, un
   }
 };
 
+/** A statement on the project's database. */
+const run = (dir: string, sql: string, ...args: unknown[]): void => {
+  const db = database(dir);
+  try {
+    db.prepare(sql).run(...args);
+  } finally {
+    db.close();
+  }
+};
+
 /** A body for POST /api/upload: its text fields, and one small file unless `file` is false. */
 const form = (fields: Record<string, string>, file = true): FormData => {
   const body = new FormData();
@@ -551,6 +561,85 @@ const uploads = async (dir: string, alice: Account, bob: Account): Promise<void>
   check("alice deletes the file on her own note", drop.status === 200, drop);
   const tidy = await send("DELETE", `/api/upload/files/${looseOfBob}`, bob.jwt);
   check("bob deletes his own unattached file", tidy.status === 200, tidy);
+
+  // Strapi's database layer spreads an item's __pivot into the join row after the id it links:
+  // file_id, related_id or note_id there would name a file or entry no check decided on.
+  const links = () => select(dir, "SELECT COUNT(*) AS n FROM files_related_mph")[0]!.n;
+  const linksBefore = links();
+  const aliceFile = created(own);
+  for (const [what, method, path, data] of [
+    [
+      "a media connect item's __pivot file_id",
+      "PUT",
+      `/api/notes/${mine.documentId}`,
+      { attachment: { connect: [{ id: aliceFile, __pivot: { file_id: fileOfBob } }] } },
+    ],
+    [
+      "a media connect item's __pivot related_id",
+      "PUT",
+      `/api/notes/${mine.documentId}`,
+      { attachment: { connect: [{ id: aliceFile, __pivot: { related_id: theirs.id } }] } },
+    ],
+    [
+      "a media set item's __pivot file_id, on create",
+      "POST",
+      "/api/notes",
+      {
+        title: "pivot",
+        shared: false,
+        attachment: { set: [{ id: aliceFile, __pivot: { file_id: fileOfBob } }] },
+      },
+    ],
+  ] as const) {
+    const r = await call(method, path, alice.jwt, { data });
+    check(`alice's ${what} is 400`, r.status === 400, r);
+  }
+  check("the refused media items linked nothing", links() === linksBefore, {
+    before: linksBefore,
+    after: links(),
+  });
+  check(
+    "bob's file is on no note of alice's",
+    !attachedTo(mine.id).includes(fileOfBob),
+    attachedTo(mine.id),
+  );
+  const tagLinks = () => select(dir, "SELECT COUNT(*) AS n FROM tags_note_lnk")[0]!.n;
+  const tagLinksBefore = tagLinks();
+  const pivotTag = await call("POST", "/api/tags", alice.jwt, {
+    data: { label: "pivot", note: { connect: [{ id: mine.id, __pivot: { note_id: theirs.id } }] } },
+  });
+  check(
+    "alice's relation connect item with a __pivot note_id is 400",
+    pivotTag.status === 400,
+    pivotTag,
+  );
+  check("the refused relation item linked nothing", tagLinks() === tagLinksBefore, {
+    before: tagLinksBefore,
+    after: tagLinks(),
+  });
+  const ownTag = await call("POST", "/api/tags", alice.jwt, {
+    data: { label: "plain", note: { connect: [{ id: mine.id }] } },
+  });
+  check("alice's plain connect item links her note", ownTag.status === 201, ownTag);
+
+  // A reviewer reads every note and updates only its own, and holds no file grant: Strapi needs
+  // none to link a stored file, so reading bob's note must not let it link his file.
+  const rita = await member(dir, "rita", "reviewer");
+  const ritas = await note(alice, "rita's note");
+  run(
+    dir,
+    "UPDATE notes_owner_lnk SET user_id = ? WHERE note_id IN (SELECT id FROM notes WHERE document_id = ?)",
+    rita.id,
+    ritas.documentId,
+  );
+  const borrow = await call("PUT", `/api/notes/${ritas.documentId}`, rita.jwt, {
+    data: { attachment: fileOfBob },
+  });
+  check("rita cannot link bob's file from a note she only reads", borrow.status === 403, borrow);
+  const retitle = await call("PUT", `/api/notes/${ritas.documentId}`, rita.jwt, {
+    data: { title: "rita's own" },
+  });
+  check("rita updates her own note", retitle.status === 200, retitle);
 };
 
 /**
