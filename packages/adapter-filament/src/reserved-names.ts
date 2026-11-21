@@ -35,16 +35,16 @@ const columnNames = (field: Field): TargetName[] => {
 /**
  * The column an embedded component's field is stored in on the row holding it, named by its path
  * snake_cased and joined (`created` holding `at` is created_at). Only the Strapi API style keeps a
- * relation inside a component, a to-one one by a key column, and keeps a media library, whose
- * files a media field links rather than holds.
+ * relation inside a component, a to-one one by a key column. With a media library (`linksMedia`)
+ * a media field links the library's files rather than holding a path column.
  */
 const embeddedColumnNames =
-  (apiStyle: ApiStyle) =>
+  (apiStyle: ApiStyle, linksMedia: boolean) =>
   (path: readonly string[], field: Field): TargetName[] => {
     const prefix = path.map(snakeColumn).join("_");
     if (field.type === "relation")
       return apiStyle === "strapi" && ownsKey(field) ? [column(`${prefix}_id`)] : [];
-    if (NO_COLUMN.has(field.type) || (apiStyle === "strapi" && field.type === "media")) return [];
+    if (NO_COLUMN.has(field.type) || (linksMedia && field.type === "media")) return [];
     return [column(prefix)];
   };
 
@@ -55,15 +55,17 @@ const embeddedColumnNames =
  * published_at, locale and created_by_id among them, the rows carry too), its discriminator keys
  * and its strapi prefix. On the Laravel storage layout an embedded
  * component's fields are columns of the row holding it, an item's included; the Strapi storage
- * layout keeps a component in a table of its own, as Strapi does.
+ * layout keeps a component in a table of its own, as Strapi does. `linksMedia` says whether the
+ * project keeps a media library (`mediaPlan`).
  */
 export const filamentReservedNameGaps = (
   doc: IrDocument,
   apiStyle: ApiStyle,
   storage: ApiStyle,
+  linksMedia: boolean,
 ): CapabilityGap[] => {
   const options: ReservedNameOptions =
-    storage === "laravel" ? { embedded: embeddedColumnNames(apiStyle) } : {};
+    storage === "laravel" ? { embedded: embeddedColumnNames(apiStyle, linksMedia) } : {};
   return apiStyle === "strapi"
     ? reservedNameGaps(
         doc,

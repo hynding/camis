@@ -2737,7 +2737,9 @@ no gap reported (issue #103).
   in either API style, an embedded component's columns land on the entry's row or an item's, both
   of which carry the timestamps, and are checked against the same names (on the Strapi API style a
   to-one relation inside one by its key column, `created.by` being `created_by_id`, and a media
-  field not at all, since it links the media library's files). The Strapi storage layout keeps a
+  field only without a media library: the Strapi API style keeps one, whose files a media field
+  links, only when a content type has a media field of its own or a file type is declared, as
+  `mediaPlan` decides; otherwise a media field is a path column). The Strapi storage layout keeps a
   component in a table of its own, as Strapi does.
 - **Express** reports `createdAt` and `updatedAt` on a content type, a built-in one included (each
   table's timestamp columns), an embedded component's columns on the entry's table among them; a
