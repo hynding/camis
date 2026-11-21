@@ -24,8 +24,9 @@ export default {
     const granted: Record<string, string[]> = stored !== null && typeof stored === "object" ? stored : {};
     const grantedTo = (type: string): string[] =>
       Object.prototype.hasOwnProperty.call(granted, type) && Array.isArray(granted[type]) ? granted[type] : [];
-    const grant = async (type: string, actions: string[]) => {
+    const grant = async (type: string, actions: string[], create = true) => {
       let role = await strapi.query("plugin::users-permissions.role").findOne({ where: { type } });
+      if (!role && !create) return;
       if (!role) role = await strapi.query("plugin::users-permissions.role").create({ data: { name: type, type, description: "camis" } });
       const mine = new Set<string>(grantedTo(type));
       for (const action of actions) {
@@ -52,6 +53,14 @@ export default {
     const publicGrants = apiRoles.roles.find((r) => r.type === "public")?.actions ?? [];
     await grant("public", [...apiRoles.public, ...publicGrants]);
     for (const r of apiRoles.roles) if (r.type !== "public") await grant(r.type, r.actions);
+    // A role type taken out of the IR: revoke all an earlier boot granted it, then forget it.
+    // The role itself stays (users may hold it); one already deleted is not created again.
+    const current = new Set<string>(["public", ...apiRoles.roles.map((r) => r.type)]);
+    for (const type of Object.keys(granted)) {
+      if (current.has(type)) continue;
+      await grant(type, [], false);
+      delete granted[type];
+    }
     await store.set({ key: "granted-plugin-actions", value: granted });
   },
 };
