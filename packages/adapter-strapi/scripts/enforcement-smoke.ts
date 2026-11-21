@@ -3,6 +3,7 @@
 // against a real Strapi 5 (the unit tests run them against a fake of its surface only).
 // Runs in the gated CI job; cannot run in the restricted dev sandbox (npm denied).
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { copyFileSync, readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -319,6 +320,31 @@ const scenario = async (dir: string): Promise<void> => {
   const carol = await member(dir, "carol", "contributor");
   const blind = await call("GET", "/api/tags?filters[note][id][$null]=true", carol.jwt);
   check("carol's filter through a note she cannot read is refused", blind.status === 400, blind);
+  // Strapi's delete reads filters into its where: a relation filter would decide whether alice's
+  // own note is deleted, by a guess at bob's. Both guesses are refused alike.
+  const throwaway = await call("POST", "/api/notes", alice.jwt, {
+    data: { title: "throwaway", shared: false },
+  });
+  for (const guess of ["bob%27s", "wrong"]) {
+    const del = await call(
+      "DELETE",
+      `/api/notes/${idOf(throwaway)}?filters[pinned][note][title][$eq]=${guess}`,
+      alice.jwt,
+    );
+    check(`alice's delete filtered by a guess (${guess}) is refused`, del.status === 400, del);
+  }
+  const kept = await call("GET", `/api/notes/${idOf(throwaway)}`, alice.jwt);
+  check("alice's note survives both guesses", kept.status === 200, kept);
+  const plain = await call("DELETE", `/api/notes/${idOf(throwaway)}`, alice.jwt);
+  check("alice deletes her own note", plain.status === 204, plain);
+  const updateGuess = await call(
+    "PUT",
+    `/api/notes/${aliceNote}?filters[pinned][note][title][$eq]=bob%27s`,
+    alice.jwt,
+    { data: { title: "alice's" } },
+  );
+  check("alice's update filtered by a guess is refused", updateGuess.status === 400, updateGuess);
+
   const link = await call("POST", "/api/tags", alice.jwt, {
     data: { label: "a", note: { connect: [{ documentId: bobNoteId }] } },
   });
@@ -330,6 +356,48 @@ const scenario = async (dir: string): Promise<void> => {
     after.status === 200 && !rows(after).some((t) => t.label === "a" || t.label === "a2"),
     after,
   );
+};
+
+/**
+ * Every content API route Strapi registers that a role may reach (one it holds the action of, or
+ * one open to anyone) must be in content-api-allowlist.json, which names where it is enforced or
+ * why it is safe: a route a new Strapi version, plugin or grant adds fails here until reviewed.
+ */
+const routeGuard = (dir: string): void => {
+  copyFileSync(new URL("./content-api-routes.mjs", import.meta.url), join(dir, "camis-routes.mjs"));
+  const run = spawnSync("node", ["camis-routes.mjs"], { cwd: dir, encoding: "utf8" });
+  const line = run.stdout.split("\n").find((l) => l.startsWith("CAMIS_ROUTES "));
+  if (run.status !== 0 || line === undefined) {
+    failures.push(`listing the content API routes failed: ${run.stderr.slice(-2000)}`);
+    return;
+  }
+  const listed = JSON.parse(line.slice("CAMIS_ROUTES ".length)) as {
+    routes: { method: string; path: string; action: string; open: boolean }[];
+    granted: { role: string | null; action: string }[];
+  };
+  const allowlist = JSON.parse(
+    readFileSync(new URL("./content-api-allowlist.json", import.meta.url), "utf8"),
+  ) as Record<string, string>;
+  const holders = new Map<string, string[]>();
+  for (const g of listed.granted)
+    holders.set(g.action, [...(holders.get(g.action) ?? []), g.role ?? "?"]);
+  check("Strapi lists content API routes", listed.routes.length > 0, listed.routes.length);
+  for (const route of listed.routes) {
+    const roles = holders.get(route.action) ?? [];
+    if (!route.open && roles.length === 0) continue;
+    const who = route.open ? "anyone (auth: false)" : roles.join(", ");
+    check(
+      `${route.method} ${route.path} (${route.action}, ${who}) is allowlisted`,
+      Object.prototype.hasOwnProperty.call(allowlist, route.action),
+      route,
+    );
+  }
+  for (const action of holders.keys())
+    check(
+      `granted action ${action} names a registered route`,
+      listed.routes.some((r) => r.action === action),
+      action,
+    );
 };
 
 const dir = await mkdtemp(join(tmpdir(), "camis-enforcement-"));
@@ -358,6 +426,7 @@ try {
   } finally {
     await stopProcessGroup(proc);
   }
+  routeGuard(dir);
 } finally {
   await rm(dir, { recursive: true, force: true });
 }

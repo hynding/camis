@@ -2698,6 +2698,18 @@ relation write, and a database seeded once kept it.
     query engine and evaluate Ring 1 over `record.*` and `user.*` before acting: an entry the caller
     may not read is 404 `NotFoundError`, as the Filament target answers; one it may read but not
     change is 403 `ForbiddenError`. A guest's comparison with a user variable denies.
+  - **Entry queries.** Strapi's `deleteDocument` reads a delete's `filters` into its where, and its
+    `update` finds the row to write by them (creating a new row of the document when none matches),
+    so a relation filter there decided whether an entry the caller may change was changed: an
+    oracle on what the relation reaches, through shapes refused elsewhere too. For a restricted
+    caller a delete may carry only `locale` and `status` (anything else is 400: refused rather than
+    dropped, so a client never gets an unconditional delete it did not ask for), and an update's
+    `filters` are 400. `locale` and `status` cannot pick a version the verdict did not check: the
+    verdict loads every row of the document. An update naming a locale the document lacks creates
+    that locale's row, decided by the update verdict on the existing rows as any update is (Strapi
+    treats locales as one document); `status=published` publishes, as Strapi's content API does.
+    `findOne`'s filters stay, scoped like a list's: they can only hide the entry the verdict
+    already lets the caller read.
   - `create` evaluates the role's create condition on the fields sent, an omitted field as its IR
     `default` (which Strapi fills), an assigned relation as the caller's id; it drops the assigned
     fields from the body and sets each from the session after Strapi's validation, so the role need
@@ -2792,7 +2804,17 @@ relation write, and a database seeded once kept it.
   since their plugins serve it; a role that reads the media library while a file's `related`
   entries reach a type it reads under a condition; a single type the role reads reaches one, since
   Strapi's own single-type controller serves it; or a role writes the built-in user or a single
-  type whose mirrored relation changes entries of a type it does not update outright. An admin
+  type whose mirrored relation changes entries of a type it does not update outright; or a role
+  may create, update or delete files (`plugin::upload.content-api.upload` / `destroy`) while a type
+  with a media field (its own or an embedded component's) is one it does not update outright, since
+  `POST /api/upload` with `ref`, `refId` and `field` attaches the new file to any entry, `?id=`
+  replaces a file wherever it is attached, and `DELETE /api/upload/files/:id` removes it from every
+  entry, with no check of the entry (seen on Strapi 5.48: a member attached a file to another
+  member's private note). Enforcing it would mean wrapping the upload plugin's controller and
+  deciding on every entry a file is related to; refused instead. `apiUserWrite`: a non-admin role
+  may create or update the built-in user while it does not hold every action outright on every
+  type, since users-permissions' `PUT /api/users/:id` and `POST /api/users` set the role and
+  password of any user from the body, so the caller could take any other role. An admin
   role's condition stays a downgrade (admin panel only).
   The admin-panel copy of a non-admin role cannot read `record.*`, so its condition there denies
   every entry: `conditionContext` (downgrade) says so, as the adapter already projects every role
@@ -2821,7 +2843,12 @@ relation write, and a database seeded once kept it.
   null-literal condition), gets the same answer for a tag with no note as for one with another
   member's (`[note][id][$null]`, `[note][title][$null]`, and through the component), and a
   contributor, who reads tags but no note, has such a filter refused by Strapi's own query
-  validation; and a component's
+  validation; a delete or update of alice's own note filtered by a right or a wrong guess at bob's
+  is 400 alike and the note survives; and, with Strapi stopped, it loads the app
+  (`scripts/content-api-routes.mjs`) and fails unless every content API route a role holds the
+  action of, or that is open to anyone, is in `scripts/content-api-allowlist.json` with a reason
+  (where it is enforced or why it is safe), so a route a Strapi version, plugin or grant adds is
+  reviewed before it passes; and a component's
   populate filter through its note matches another member's note for its owner only, a sort
   through it 400. Run locally against Strapi 5.48.0 before
   merge, it found two bugs the fake had hidden, each fixed test-first: the bootstrap's admin-panel
@@ -2876,7 +2903,8 @@ owner is assigned on create and kept on update, draft/published rows that disagr
 data, a create condition with a default, a guest create, populate/filter/sort/connect through a
 tag, a category's notes connected, disconnected or replaced, a pinned tag taken, a file's related
 entries, reviewer 403, guest, admin, token, unknown and prototype-named roles, roleless session);
-`enforcement-compile.test.ts`; `bootstrap-revoke.test.ts`; `project.test.ts`; goldens under
+`enforcement-compile.test.ts`; `bootstrap-revoke.test.ts`; `content-api-allowlist.test.ts`
+(every action camis grants is allowlisted); `project.test.ts`; goldens under
 `__golden__/ownership/`, idempotent; the `strapi-enforcement-boot` CI job.
 
 ---

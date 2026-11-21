@@ -105,6 +105,9 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
     filters, so pages and counts hold only readable rows); `findOne` (404 when unreadable),
     `update` and `delete` (404 when unreadable, 403 when readable but not changeable) evaluate the
     Ring 1 condition on every stored row of the entry (each version and locale) first.
+  - A restricted caller's delete may carry only `locale` and `status` query parameters, and an
+    update no `filters` (400 otherwise): Strapi reads them into the where that picks the rows it
+    deletes or updates, so a relation filter there would answer a guess.
   - `create` evaluates the role's create condition on the fields sent, an omitted field read as its
     IR `default`; each assigned relation is set from the session user on create and dropped from an
     update body. A restricted caller's create or update whose `data` is not an object is 400.
@@ -149,7 +152,11 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
   built-in user, from the media library (a role that reads files, whose `related` entries reach a
   type it reads under a condition) or from a single type, and for a role that writes the built-in
   user or a single type whose relation both sides declare into a type it does not update outright
-  (the plugin's or Strapi's own controller serves those). The admin-panel copy of a non-admin role
+  (the plugin's or Strapi's own controller serves those), and for a role that may create, update
+  or delete files while a type with a media field is one it does not update outright (the upload
+  API attaches, replaces or deletes a file on any entry unchecked); `apiUserWrite` for a non-admin
+  role that may create or update the built-in user (users-permissions sets any user's role and
+  password from the body) unless it holds every action outright anyway. The admin-panel copy of a non-admin role
   cannot read `record.*`, so there its condition denies every entry (`conditionContext`,
   downgrade). Not enforced: GraphQL (if added by hand) and a `protected/` file replacing a
   generated controller; a publish condition apart from update's; deleting an entry, which drops
@@ -164,7 +171,9 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
   Strapi 5 on sqlite (list, entry, owner, `GET /api/users`, populate, filter, two relation filters,
   sort, connect, a file's related entries, taking a pinned tag, the refused `$not` and `$null`
   filters, a component's populate filter, a tag with no note answering as one with a hidden
-  note), not zones, locales, drafts, MySQL or Postgres.
+  note, a delete or update filtered by a guess), not zones, locales, drafts, MySQL or Postgres;
+  it also fails unless every content API route a role can reach is in
+  `scripts/content-api-allowlist.json` with a reason.
 
 - `protected` (optional) is a directory mirrored into every target's `out` after generation —
   the home for hand-written seams (`routes/api-custom.php`, protected controller subclasses,
