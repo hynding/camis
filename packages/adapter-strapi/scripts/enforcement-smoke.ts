@@ -1,0 +1,454 @@
+// Generates the ownership fixture's Strapi project, boots it on sqlite and checks over HTTP that
+// the generated controllers enforce the IR's row conditions, assigned owner and relation reach
+// against a real Strapi 5 (the unit tests run them against a fake of its surface only).
+// Runs in the gated CI job; cannot run in the restricted dev sandbox (npm denied).
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { copyFileSync, readFileSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { materialize } from "@camis/adapter-kernel";
+import { strapiAdapter } from "../src/generate";
+import { ownershipBundle } from "../src/__fixtures__/ownership";
+import { routeProblems, type Granted, type ListedRoute } from "./route-guard";
+import { stopProcessGroup } from "./stop-process-group";
+
+const BASE = "http://127.0.0.1:1337";
+
+interface Response {
+  status: number;
+  body: { data?: unknown; jwt?: string; user?: { id: number } } | null;
+}
+
+const call = async (
+  method: string,
+  path: string,
+  jwt?: string,
+  data?: unknown,
+): Promise<Response> => {
+  const res = await fetch(`${BASE}${path}`, {
+    method,
+    headers: {
+      "content-type": "application/json",
+      ...(jwt === undefined ? {} : { authorization: `Bearer ${jwt}` }),
+    },
+    ...(data === undefined ? {} : { body: JSON.stringify(data) }),
+  });
+  const text = await res.text();
+  return { status: res.status, body: text === "" ? null : (JSON.parse(text) as Response["body"]) };
+};
+
+const failures: string[] = [];
+const check = (what: string, ok: boolean, detail: unknown): void => {
+  console.log(`${ok ? "ok  " : "FAIL"} ${what}`);
+  if (!ok) failures.push(`${what}: ${JSON.stringify(detail)}`);
+};
+
+const rows = (r: Response): { documentId: string; [key: string]: unknown }[] =>
+  Array.isArray(r.body?.data) ? (r.body.data as { documentId: string }[]) : [];
+
+/** A list request that must answer 200: an error page never passes for an empty list. */
+const list = async (
+  path: string,
+  jwt?: string,
+): Promise<{ ok: boolean; ids: string[]; response: Response }> => {
+  const response = await call("GET", path, jwt);
+  return {
+    ok: response.status === 200 && Array.isArray(response.body?.data),
+    ids: rows(response).map((r) => r.documentId),
+    response,
+  };
+};
+const idOf = (r: Response): string =>
+  (r.body?.data as { documentId?: string } | undefined)?.documentId ?? "";
+
+const pollUntilUp = async (timeoutMs: number): Promise<boolean> => {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      // The public role reads shared notes, so a booted project answers 200.
+      const res = await fetch(`${BASE}/api/notes`);
+      if (res.status === 200) return true;
+      if (res.status === 404 || res.status >= 500) return false;
+    } catch {
+      /* server not up yet */
+    }
+    await new Promise((r) => setTimeout(r, 3000));
+  }
+  return false;
+};
+
+/** A registered account (which users-permissions puts in its default role), moved to `role`. */
+const member = async (dir: string, name: string, role = "member") => {
+  const registered = await call("POST", "/api/auth/local/register", undefined, {
+    username: name,
+    email: `${name}@example.test`,
+    password: "Passw0rd!camis",
+  });
+  if (registered.status !== 200 || registered.body?.jwt === undefined)
+    throw new Error(`register ${name}: ${JSON.stringify(registered)}`);
+  // users-permissions has no API to change a user's role short of the admin panel, so move the
+  // account in the database. The JWT names only the user; its role is loaded on every request.
+  const require = createRequire(join(dir, "package.json"));
+  const Database = require("better-sqlite3") as new (file: string) => {
+    prepare(sql: string): { run(...args: unknown[]): { changes: number } };
+    close(): void;
+  };
+  const db = new Database(join(dir, ".tmp", "data.db"));
+  try {
+    const moved = db
+      .prepare(
+        "UPDATE up_users_role_lnk SET role_id = (SELECT id FROM up_roles WHERE type = ?) WHERE user_id = ?",
+      )
+      .run(role, registered.body.user!.id);
+    if (moved.changes !== 1) throw new Error(`move ${name} to ${role}: ${moved.changes} rows`);
+  } finally {
+    db.close();
+  }
+  return { jwt: registered.body.jwt, id: registered.body.user!.id };
+};
+
+const scenario = async (dir: string): Promise<void> => {
+  const alice = await member(dir, "alice");
+  const bob = await member(dir, "bob");
+
+  // alice names bob as the owner; the server assigns alice instead.
+  const created = await call("POST", "/api/notes", alice.jwt, {
+    data: { title: "alice's", shared: false, owner: bob.id },
+  });
+  check("alice creates a note", created.status === 201, created);
+  const aliceNote = (created.body?.data as { documentId?: string } | undefined)?.documentId ?? "";
+  const aliceList = await list("/api/notes", alice.jwt);
+  check(
+    "the client-supplied owner is overridden: alice lists her note",
+    aliceList.ok && aliceList.ids.includes(aliceNote),
+    aliceList.response,
+  );
+  const bobList = await list("/api/notes", bob.jwt);
+  check(
+    "bob does not list alice's note",
+    bobList.ok && !bobList.ids.includes(aliceNote),
+    bobList.response,
+  );
+  for (const [method, data] of [
+    ["GET", undefined],
+    ["PUT", { data: { title: "bob was here" } }],
+    ["DELETE", undefined],
+  ] as const) {
+    const r = await call(method, `/api/notes/${aliceNote}`, bob.jwt, data);
+    check(`bob's ${method} of alice's note is 404`, r.status === 404, r);
+  }
+  const still = await call("GET", `/api/notes/${aliceNote}`, alice.jwt);
+  check(
+    "alice's note is unchanged",
+    (still.body?.data as { title?: string } | undefined)?.title === "alice's",
+    still,
+  );
+
+  // The member role writes the owner relation only through assign, so it lacks user.find.
+  const users = await call("GET", "/api/users", alice.jwt);
+  check("the member role has no GET /api/users", users.status === 403, users.status);
+
+  // A tag of bob's links bob's private note; neither alice nor a guest sees the note through it.
+  const bobNote = await call("POST", "/api/notes", bob.jwt, {
+    data: { title: "bob's", shared: false },
+  });
+  const bobNoteId = (bobNote.body?.data as { documentId?: string } | undefined)?.documentId;
+  const tag = await call("POST", "/api/tags", bob.jwt, { data: { label: "b", note: bobNoteId } });
+  check("bob tags his own note", tag.status === 201, tag);
+  const tagId = (tag.body?.data as { documentId?: string } | undefined)?.documentId;
+  // The tag itself must be listed, so a missing tag never passes for a hidden note.
+  const listed = (r: Response) => rows(r).some((t) => t.documentId === tagId);
+  const noteOf = (r: Response) => rows(r).find((t) => t.documentId === tagId)?.note;
+  const asBob = await call("GET", "/api/tags?populate=note", bob.jwt);
+  check("bob sees his note through his tag", noteOf(asBob) != null, asBob);
+  for (const [who, jwt] of [
+    ["alice", alice.jwt],
+    ["a guest", undefined],
+  ] as const) {
+    for (const query of ["populate=note", "populate=*", "populate[note][fields][0]=title"]) {
+      const r = await call("GET", `/api/tags?${query}`, jwt);
+      check(
+        `${who} sees no note through bob's tag (${query})`,
+        r.status === 200 && listed(r) && noteOf(r) == null,
+        r,
+      );
+    }
+  }
+  const byTitle = "/api/tags?filters[note][title][$eq]=bob%27s";
+  const oracle = await list(byTitle, alice.jwt);
+  check(
+    "alice's filter on bob's note matches nothing",
+    oracle.ok && oracle.ids.length === 0,
+    oracle.response,
+  );
+  const control = await list(byTitle, bob.jwt);
+  check(
+    "bob's same filter finds his tag",
+    control.ok && control.ids.includes(tagId ?? ""),
+    control.response,
+  );
+
+  // Two scoped relation filters at one level: neither may overwrite the other in Strapi's merge.
+  const child = await call("POST", "/api/tags", bob.jwt, {
+    data: { label: "b2", note: bobNoteId, parent: tagId },
+  });
+  check("bob tags his note again, under his first tag", child.status === 201, child);
+  const both = (title: string) =>
+    `/api/tags?filters[note][title][$eq]=${title}&filters[parent][note][title][$eq]=bob%27s`;
+  const neither = await list(both("nothing"), bob.jwt);
+  check(
+    "two relation filters both apply: no match",
+    neither.ok && neither.ids.length === 0,
+    neither.response,
+  );
+  const matched = await list(both("bob%27s"), bob.jwt);
+  check(
+    "two relation filters both apply: the child tag",
+    matched.ok && matched.ids.length === 1 && matched.ids[0] === idOf(child),
+    matched.response,
+  );
+
+  // A file's related entries may be any entry the file is attached to.
+  const related = await call(
+    "GET",
+    "/api/notes?populate[attachment][populate][related]=true",
+    alice.jwt,
+  );
+  check("a file's related entries are refused", related.status === 400, related.status);
+  const attachment = await list("/api/notes?populate=attachment", alice.jwt);
+  check("a note's attachment still populates", attachment.ok, attachment.response);
+
+  // A tag is pinned on one note at most: pinning bob's tag on alice's note would unpin it from his.
+  const pin = await call("PUT", `/api/notes/${bobNoteId}`, bob.jwt, {
+    data: { pinned: { connect: [tagId] } },
+  });
+  check("bob pins his tag on his note", pin.status === 200, pin);
+  const steal = await call("PUT", `/api/notes/${aliceNote}`, alice.jwt, {
+    data: { pinned: { connect: [tagId] } },
+  });
+  check("alice cannot take bob's pinned tag", steal.status === 403, steal);
+  const pinned = await call("GET", `/api/notes/${bobNoteId}?populate=pinned`, bob.jwt);
+  const pins = (pinned.body?.data as { pinned?: { documentId: string }[] } | undefined)?.pinned;
+  check(
+    "bob's note still pins his tag",
+    pinned.status === 200 && (pins ?? []).some((t) => t.documentId === tagId),
+    pinned,
+  );
+  const pinOn = await call("POST", "/api/tags", alice.jwt, {
+    data: { label: "a2", pinnedOn: bobNoteId },
+  });
+  check("alice cannot pin a tag on bob's note", pinOn.status === 403, pinOn);
+  const sort = await call("GET", "/api/tags?sort=note.title:asc", alice.jwt);
+  check("alice's sort through the note is refused", sort.status === 400, sort.status);
+
+  // SQL's NOT of an unknown is unknown, so a $not around a scoped relation could answer a guess.
+  const negated = await call("GET", "/api/tags?filters[$not][note][title][$eq]=bob%27s", alice.jwt);
+  check("alice's $not around the note filter is refused", negated.status === 400, negated.status);
+  const none = await call("GET", "/api/tags?filters[note][$null]=true", alice.jwt);
+  check("alice's $null on the note relation is refused", none.status === 400, none.status);
+  const some = (jwt: string) => list("/api/tags?filters[note][$notNull]=true", jwt);
+  const bobSome = await some(bob.jwt);
+  check(
+    "bob's $notNull on the note relation finds his tag",
+    bobSome.ok && bobSome.ids.includes(tagId ?? ""),
+    bobSome.response,
+  );
+  const aliceSome = await some(alice.jwt);
+  check(
+    "alice's $notNull on the note relation skips bob's tag",
+    aliceSome.ok && !aliceSome.ids.includes(tagId ?? ""),
+    aliceSome.response,
+  );
+
+  // A component's rows are the tag's, but a populate filter on them through the note is scoped.
+  const withRefs = await call("POST", "/api/tags", bob.jwt, {
+    data: { label: "b3", refs: [{ note: bobNoteId }] },
+  });
+  check("bob tags with a reference to his note", withRefs.status === 201, withRefs);
+  const refsOf = async (jwt: string) => {
+    const r = await list(
+      `/api/tags?filters[documentId][$eq]=${idOf(withRefs)}` +
+        "&populate[refs][filters][note][title][$eq]=bob%27s&populate[refs][populate]=note",
+      jwt,
+    );
+    const tag = rows(r.response)[0] as { refs?: unknown[] } | undefined;
+    return { ok: r.ok && tag !== undefined, refs: tag?.refs ?? [], response: r.response };
+  };
+  const bobRefs = await refsOf(bob.jwt);
+  check(
+    "bob's component populate filter finds his reference",
+    bobRefs.ok && bobRefs.refs.length === 1,
+    bobRefs.response,
+  );
+  const aliceRefs = await refsOf(alice.jwt);
+  check(
+    "alice's component populate filter on bob's note matches nothing",
+    aliceRefs.ok && aliceRefs.refs.length === 0,
+    aliceRefs.response,
+  );
+  const refsSort = await call("GET", "/api/tags?populate[refs][sort]=note.title", alice.jwt);
+  check("alice's sort through a component's note is refused", refsSort.status === 400, refsSort);
+
+  // Over HTTP a boolean is a string, read as Strapi reads it.
+  const notNone = await list("/api/tags?filters[note][$null]=false", bob.jwt);
+  check(
+    "bob's $null=false on the note relation finds his tag",
+    notNone.ok && notNone.ids.includes(tagId ?? ""),
+    notNone.response,
+  );
+  const notSome = await call("GET", "/api/tags?filters[note][$notNull]=false", alice.jwt);
+  check("alice's $notNull=false on the note relation is refused", notSome.status === 400, notSome);
+
+  // A drafter reads the notes no one owns: its scope, `owner IS NULL`, holds on the all-NULL note
+  // row Strapi's LEFT JOIN gives a tag with no note, as does a client's $null. A tag with no note
+  // must answer as a tag whose note the drafter cannot read.
+  const dana = await member(dir, "dana", "drafter");
+  for (const query of [
+    "filters[note][id][$null]=true",
+    "filters[note][title][$null]=true",
+    "filters[refs][note][title][$null]=true",
+  ]) {
+    const r = await list(`/api/tags?${query}`, dana.jwt);
+    check(
+      `dana's ${query} answers a tag with no note as one with bob's`,
+      r.ok && r.ids.includes(idOf(withRefs)) === r.ids.includes(tagId ?? ""),
+      r.response,
+    );
+  }
+  // A contributor reads tags but no note: Strapi's own query validation refuses the filter.
+  const carol = await member(dir, "carol", "contributor");
+  const blind = await call("GET", "/api/tags?filters[note][id][$null]=true", carol.jwt);
+  check("carol's filter through a note she cannot read is refused", blind.status === 400, blind);
+  // Only the query parameters Strapi documents pass for a restricted caller; the publication
+  // cohorts, which test for a version the caller may not read, and an unknown one are refused.
+  for (const query of [
+    "future=1",
+    "publicationFilter=never-published",
+    "hasPublishedVersion=true",
+    "populate[note][publicationFilter]=has-published-version",
+  ]) {
+    const r = await call("GET", `/api/tags?${query}`, alice.jwt);
+    check(`alice's ${query} is refused`, r.status === 400, r.status);
+  }
+  const documented = await list(
+    "/api/tags?filters[label][$eq]=b&sort=label:asc&fields[0]=label&_q=b&status=published" +
+      "&pagination[page]=1&pagination[pageSize]=5&pagination[withCount]=true" +
+      "&populate[note][fields][0]=title&populate[note][sort]=title",
+    bob.jwt,
+  );
+  check(
+    "bob's list with every documented parameter finds his tag",
+    documented.ok && documented.ids.includes(tagId ?? ""),
+    documented.response,
+  );
+
+  // Strapi's delete reads filters into its where: a relation filter would decide whether alice's
+  // own note is deleted, by a guess at bob's. Both guesses are refused alike.
+  const throwaway = await call("POST", "/api/notes", alice.jwt, {
+    data: { title: "throwaway", shared: false },
+  });
+  for (const guess of ["bob%27s", "wrong"]) {
+    const del = await call(
+      "DELETE",
+      `/api/notes/${idOf(throwaway)}?filters[pinned][note][title][$eq]=${guess}`,
+      alice.jwt,
+    );
+    check(`alice's delete filtered by a guess (${guess}) is refused`, del.status === 400, del);
+  }
+  const kept = await call("GET", `/api/notes/${idOf(throwaway)}`, alice.jwt);
+  check("alice's note survives both guesses", kept.status === 200, kept);
+  const plain = await call("DELETE", `/api/notes/${idOf(throwaway)}`, alice.jwt);
+  check("alice deletes her own note", plain.status === 204, plain);
+  const updateGuess = await call(
+    "PUT",
+    `/api/notes/${aliceNote}?filters[pinned][note][title][$eq]=bob%27s`,
+    alice.jwt,
+    { data: { title: "alice's" } },
+  );
+  check("alice's update filtered by a guess is refused", updateGuess.status === 400, updateGuess);
+
+  const link = await call("POST", "/api/tags", alice.jwt, {
+    data: { label: "a", note: { connect: [{ documentId: bobNoteId }] } },
+  });
+  check("alice cannot connect bob's note", link.status === 403, link);
+  // The refusal must stop the write, not only answer 403 after it.
+  const after = await call("GET", "/api/tags", bob.jwt);
+  check(
+    "the refused writes created no tag",
+    after.status === 200 && !rows(after).some((t) => t.label === "a" || t.label === "a2"),
+    after,
+  );
+};
+
+/**
+ * Every content API route Strapi registers that a role may reach (one it holds the action of, or
+ * one open to anyone) must be in content-api-allowlist.json, which names where it is enforced or
+ * why it is safe: a route a new Strapi version, plugin or grant adds fails here until reviewed.
+ */
+const routeGuard = (dir: string): void => {
+  copyFileSync(new URL("./content-api-routes.mjs", import.meta.url), join(dir, "camis-routes.mjs"));
+  const run = spawnSync("node", ["camis-routes.mjs"], { cwd: dir, encoding: "utf8" });
+  const line = run.stdout.split("\n").find((l) => l.startsWith("CAMIS_ROUTES "));
+  if (run.status !== 0 || line === undefined) {
+    failures.push(`listing the content API routes failed: ${run.stderr.slice(-2000)}`);
+    return;
+  }
+  const listed = JSON.parse(line.slice("CAMIS_ROUTES ".length)) as {
+    routes: ListedRoute[];
+    granted: Granted[];
+  };
+  const allowlist = JSON.parse(
+    readFileSync(new URL("./content-api-allowlist.json", import.meta.url), "utf8"),
+  ) as Record<string, string>;
+  check("Strapi lists content API routes", listed.routes.length > 0, listed.routes.length);
+  const problems = routeProblems(listed.routes, listed.granted, allowlist);
+  check("every content API route a role can reach is allowlisted", problems.length === 0, problems);
+  const holders = new Set(listed.granted.map((g) => g.action));
+  const actions = new Set(
+    listed.routes.flatMap((r) =>
+      [r.handler, ...(r.auth === false || r.auth === null ? [] : (r.auth.scope ?? []))]
+        .filter((a): a is string => a !== null)
+        .map((a) => (a.includes("::") ? a : `${r.namespace}.${a}`)),
+    ),
+  );
+  for (const action of holders)
+    check(`granted action ${action} names a registered route`, actions.has(action), action);
+};
+
+const dir = await mkdtemp(join(tmpdir(), "camis-enforcement-"));
+try {
+  await materialize(strapiAdapter.generate(ownershipBundle, { projectName: "notes" }), dir);
+  const install = spawnSync("npm", ["install", "--no-audit", "--no-fund"], {
+    cwd: dir,
+    stdio: "inherit",
+  });
+  if (install.status !== 0) {
+    console.error(`npm install failed with exit code ${install.status}`);
+    process.exit(1);
+  }
+  // Its own process group, so teardown reaches Strapi's forked worker and Vite.
+  const proc: ChildProcess = spawn("npm", ["run", "develop"], {
+    cwd: dir,
+    stdio: "inherit",
+    detached: true,
+    env: { ...process.env, BROWSER: "none" },
+  });
+  try {
+    if (!(await pollUntilUp(180_000))) failures.push("Strapi did not answer GET /api/notes");
+    else await scenario(dir);
+  } catch (error) {
+    failures.push(String(error));
+  } finally {
+    await stopProcessGroup(proc);
+  }
+  routeGuard(dir);
+} finally {
+  await rm(dir, { recursive: true, force: true });
+}
+if (failures.length > 0) {
+  console.error(`ENFORCEMENT SMOKE FAIL:\n${failures.join("\n")}`);
+  process.exit(1);
+}
+console.log("ENFORCEMENT SMOKE PASS");

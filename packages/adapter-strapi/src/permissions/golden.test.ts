@@ -22,13 +22,14 @@ describe("permissions golden", () => {
   // Granting alone is one-way: a grant deleted from the IR stayed in a database an earlier
   // generation seeded, so the role kept an API permission camis no longer emits. The bootstrap
   // therefore revokes too — but only rows it owns: the `plugin::*` rows are Strapi's own defaults
-  // (users-permissions' `user.me`, the auth endpoints), and deleting those breaks login itself.
-  it("bootstrap revokes stale api:: permissions and never touches plugin:: ones", () => {
+  // (users-permissions' `user.me`, the auth endpoints), and deleting those breaks login itself,
+  // except the ones the bootstrap itself created, which it keeps a record of in Strapi's store.
+  it("bootstrap revokes stale api:: permissions and only the plugin:: ones it granted", () => {
     const index = result.files.find((f) => f.path === "src/index.ts")!.content;
     expect(index).toContain(
       'const owned = await strapi.query("plugin::users-permissions.permission").findMany({ where: { role: role.id } });',
     );
-    expect(index).toContain('if (!p.action.startsWith("api::")) continue;');
+    expect(index).toContain('if (!p.action.startsWith("api::") && !mine.has(p.action)) continue;');
     expect(index).toContain("if (actions.includes(p.action)) continue;");
     expect(index).toContain(
       'await strapi.query("plugin::users-permissions.permission").delete({ where: { id: p.id } });',
@@ -43,16 +44,9 @@ describe("permissions golden", () => {
     const apiRoles = result.files.find((f) => f.path === "src/permissions/api-roles.json")!.content;
     await expect(apiRoles).toMatchFileSnapshot("../__golden__/permissions.api-roles.json");
   });
-  it("gap report lists only the API-condition downgrade", () => {
-    expect(result.gaps.gaps).toEqual([
-      {
-        feature: "apiGrantCondition",
-        location: { contentType: "Article", rule: "Editor" },
-        severity: "downgrade",
-        message:
-          '"Editor" grant on "Article" is unconditioned at the users-permissions API; conditions apply to the admin panel only',
-      },
-    ]);
+  // The Editor's condition is enforced by the generated controller, so nothing is reported.
+  it("gap report is empty: the content API enforces the Editor's condition", () => {
+    expect(result.gaps.gaps).toEqual([]);
   });
   it("regeneration is idempotent", () => {
     const again = strapiAdapter.generate(permissionsBundle, { projectName: "blog" });

@@ -15,3 +15,5 @@ export {
 export type { FieldRule, Grant, Role, RolesFile, Service } from "./model";
 export { validateBundle } from "./validate";
 export type { IrBundle } from "./validate";
+export { recordEquality, recordVariables, toRecordFilter, USER_VARIABLES } from "./record-filter";
+export type { RecordEquality, RecordFilter, RecordOperand, RecordVariable } from "./record-filter";

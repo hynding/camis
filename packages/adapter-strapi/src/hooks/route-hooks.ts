@@ -4,7 +4,7 @@ import { ROUTE_ACTIONS } from "@camis/ir-schema";
 import { hookSlug } from "./names";
 
 // Strapi's core router action for each content API action a type of each kind has.
-const CORE_ACTIONS: Record<ContentType["kind"], Partial<Record<RouteAction, string>>> = {
+export const CORE_ACTIONS: Record<ContentType["kind"], Partial<Record<RouteAction, string>>> = {
   collection: {
     list: "find",
     read: "findOne",
