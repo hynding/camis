@@ -114,3 +114,97 @@ describe("reservedNameGaps", () => {
     expect(gaps).toHaveLength(3);
   });
 });
+
+describe("reservedNameGaps, embedded components", () => {
+  // Note.created embeds Stamp, whose `at` and nested `by.at` land on Note's own row; `items` and
+  // `zone` are rows of tables of their own, so nothing under them is embedded in Note.
+  const embedding: IrDocument = {
+    version: 1,
+    contentTypes: [
+      {
+        name: "Note",
+        kind: "collection",
+        fields: [
+          { type: "component", name: "created", component: "Stamp", repeatable: false },
+          { type: "component", name: "items", component: "Stamp", repeatable: true },
+          { type: "dynamicZone", name: "zone", components: ["Stamp"] },
+        ],
+      },
+    ],
+    components: [
+      {
+        name: "Stamp",
+        fields: [
+          { type: "dateTime", name: "at" },
+          { type: "component", name: "by", component: "Mark", repeatable: false },
+          { type: "component", name: "marks", component: "Mark", repeatable: true },
+        ],
+      },
+      { name: "Mark", fields: [{ type: "dateTime", name: "at" }] },
+    ],
+  };
+
+  const KEPT = new Map([
+    ["created_at", "createdAt"],
+    ["created_by_at", "createdByAt"],
+    ["by_at", "byAt"],
+  ]);
+
+  const nothingOwn = (): TargetName[] => [];
+  const joined = (path: readonly string[]): TargetName[] => {
+    const column = path.map(snakeCase).join("_");
+    return [{ spelled: column, mapped: column }];
+  };
+
+  it("reports a field of an embedded component whose path the target keeps, located", () => {
+    const gaps = reservedNameGaps(embedding, "the Test target", KEPT, nothingOwn, {
+      embedded: (path, _field, holder) => (holder === "contentType" ? joined(path) : []),
+    });
+    expect(gaps).toEqual([
+      {
+        feature: "reservedFieldName",
+        location: { contentType: "Note", component: "Stamp", field: "at" },
+        severity: "error",
+        message: `field "at" of component "Stamp", embedded in "Note.created" as "created_at", collides with the Test target's own "createdAt"; rename it`,
+      },
+      {
+        feature: "reservedFieldName",
+        location: { contentType: "Note", component: "Mark", field: "at" },
+        severity: "error",
+        message: `field "at" of component "Mark", embedded in "Note.created.by" as "created_by_at", collides with the Test target's own "createdByAt"; rename it`,
+      },
+    ]);
+  });
+
+  // A component's own embedded paths are its items' columns where it is repeatable.
+  it("walks a component's embedded components too, telling the holder apart", () => {
+    const gaps = reservedNameGaps(embedding, "the Test target", KEPT, nothingOwn, {
+      embedded: (path, _field, holder) => (holder === "component" ? joined(path) : []),
+    });
+    expect(gaps.map((g) => [g.location, g.message])).toEqual([
+      [
+        { component: "Mark", field: "at" },
+        `field "at" of component "Mark", embedded in "Stamp.by" as "by_at", collides with the Test target's own "byAt"; rename it`,
+      ],
+    ]);
+  });
+
+  it("hands the target each embedded field with its path from the row", () => {
+    const seen: string[] = [];
+    reservedNameGaps(embedding, "the Test target", KEPT, nothingOwn, {
+      embedded: (path, field, holder) => {
+        seen.push(`${holder}:${path.join(".")}:${field.type}`);
+        return [];
+      },
+    });
+    expect(seen).toEqual([
+      "contentType:created.at:dateTime",
+      "contentType:created.by.at:dateTime",
+      "component:by.at:dateTime",
+    ]);
+  });
+
+  it("checks no embedded path for a target that embeds none", () => {
+    expect(reservedNameGaps(embedding, "the Test target", KEPT, nothingOwn)).toEqual([]);
+  });
+});

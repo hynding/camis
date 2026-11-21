@@ -65,6 +65,48 @@ describe("Express target: names its tables reserve", () => {
     expect(reserved(bundle)).toEqual([]);
   });
 
+  // An embedded component's field is a column of the entry's table named by its path, snake_cased
+  // and joined: `created` holding `at` is created_at, beside the timestamps.
+  const embedding = (repeatable: boolean): IrBundle => ({
+    document: {
+      version: 1,
+      contentTypes: [
+        {
+          name: "Note",
+          kind: "collection",
+          fields: [
+            { type: "string", name: "title" },
+            { type: "component", name: "created", component: "Stamp", repeatable },
+            { type: "component", name: "updated", component: "Change", repeatable },
+          ],
+        },
+      ],
+      components: [
+        { name: "Stamp", fields: [{ type: "dateTime", name: "at" }] },
+        {
+          name: "Change",
+          fields: [{ type: "component", name: "edit", component: "Stamp", repeatable: false }],
+        },
+      ],
+    },
+    roles: [],
+  });
+
+  it("reports an embedded component's field whose column is a timestamp, located", () => {
+    expect(reserved(embedding(false))).toEqual([
+      {
+        feature: "reservedFieldName",
+        location: { contentType: "Note", component: "Stamp", field: "at" },
+        severity: "error",
+        message: `field "at" of component "Stamp", embedded in "Note.created" as "created_at", collides with the Express target's own "created_at"; rename it`,
+      },
+    ]);
+  });
+
+  it("leaves a repeatable component's fields, rows of a table without timestamps", () => {
+    expect(reserved(embedding(true))).toEqual([]);
+  });
+
   // A built-in type is a plain table with the same timestamps, its fields columns like any other's.
   it.each([
     ["user", "updatedAt"],
