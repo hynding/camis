@@ -2708,13 +2708,20 @@ no gap reported (issue #103).
   (`builtins`): Strapi and Filament map a built-in type onto a model of their own (users-permissions'
   user, the host app's `users` or Strapi's `up_users`) and generate nothing from its fields, while
   Express emits it as a plain table with the same timestamps, so only Express checks it.
-- **Strapi** (`@camis/strapi-schema`'s `STRAPI_RESERVED_NAMES`, `strapiReservedNameGaps`):
-  `documentId`, `createdAt`, `updatedAt`, `publishedAt`, `createdBy`, `updatedBy`, `locale`,
-  `localizations`, and the `created_by_id`/`updated_by_id` key columns, compared snake_cased as
-  Strapi's Content-Type Builder compares attribute names, so an API key `published_at` or
-  `PublishedAt` is caught. A field's API key, a relation's inverse (Strapi adds it to the related
-  type) and a component's field (the builder refuses it there too) are checked. The builder also
-  refuses `status`, `meta` and `entry_id`, which are not keys of the entry and are left alone.
+- **Strapi** (`@camis/strapi-schema`'s `STRAPI_RESERVED_NAMES`, `strapiReservedNameGaps`). What
+  camis refuses: the keys of the entry itself, `documentId`, `createdAt`, `updatedAt`,
+  `publishedAt`, `createdBy`, `updatedBy`, `locale`, `localizations`, and the
+  `created_by_id`/`updated_by_id` key columns; Strapi's discriminator keys `__component` (which a
+  dynamic zone item's component goes by on the wire, beside the item's own keys) and
+  `__contentType`, which only an API key can spell; and any name with Strapi's `strapi`, `_strapi`
+  or `__strapi` prefix (`strapi_stage`, `strapi_assignee` are its own columns). Names are compared
+  snake_cased as Strapi's Content-Type Builder compares attribute names, so an API key
+  `published_at` or `PublishedAt` is caught. A field's API key, a relation's inverse (Strapi adds it
+  to the related type) and a component's field (the builder refuses it there too) are checked. What
+  Strapi's builder additionally refuses, and camis lets through: `status` (since 5.48), `meta` and
+  `entry_id`, which are not keys of an entry (`meta` sits beside `data` in a response), so such a
+  field reads and writes as it should, and Strapi only warns of `status` when it boots; the blog
+  fixtures keep a `status` and the catalogs a `meta`. Each decision is pinned by a test.
 - **Embedded components.** A non-repeatable component's fields are flattened into the row holding
   it, as columns named by their path snake_cased and joined, so a field `created` holding a
   component with a field `at` is a column `created_at`, which a target may keep. With the walker's

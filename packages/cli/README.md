@@ -69,9 +69,12 @@ by their path (`created` holding `at` is `created_at`) and checked too, located 
 
 - `strapi`, and `filament` with `apiStyle: "strapi"`: `documentId`, `createdAt`, `updatedAt`,
   `publishedAt`, `createdBy`, `updatedBy`, `locale`, `localizations` (and `createdById`,
-  `updatedById`), compared snake_cased; for a field, its API key, a relation's inverse and a
-  component's field. The Filament target also checks a to-one relation's key column, so a relation
-  named `document` (`document_id`) is refused there.
+  `updatedById`), the API keys `__component` and `__contentType`, and any name starting with
+  `strapi`, `_strapi` or `__strapi`, compared snake_cased; for a field, its API key, a relation's
+  inverse and a component's field. The Filament target also checks a to-one relation's key column,
+  so a relation named `document` (`document_id`) is refused there. Strapi's Content-Type Builder
+  additionally refuses `status`, `meta` and `entry_id`; camis lets them through, since none is a key
+  of an entry and Strapi reads and writes such a field as it should.
 - `filament` with `apiStyle: "laravel"`: `createdAt` and `updatedAt`, whose columns are Laravel's
   timestamps, a component's fields included.
 - `filament` on the Laravel storage layout (either API style): an embedded component's columns on

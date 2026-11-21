@@ -51,8 +51,9 @@ const embeddedColumnNames =
 /**
  * An `error` gap for each field whose column, or on the Strapi API style whose key on Strapi's wire
  * shape, is one the generated rows keep for themselves: Laravel's timestamps, and on the Strapi API
- * style the keys Strapi gives every entry (whose columns, document_id, published_at, locale and
- * created_by_id among them, the rows carry too). On the Laravel storage layout an embedded
+ * style the names Strapi keeps: the keys it gives every entry (whose columns, document_id,
+ * published_at, locale and created_by_id among them, the rows carry too), its discriminator keys
+ * and its strapi prefix. On the Laravel storage layout an embedded
  * component's fields are columns of the row holding it, an item's included; the Strapi storage
  * layout keeps a component in a table of its own, as Strapi does.
  */

@@ -1,4 +1,4 @@
-import { reservedNameGaps, snakeCase, type TargetName } from "@camis/ir-core";
+import { reservedNameGaps, snakeCase, type KeptNames, type TargetName } from "@camis/ir-core";
 import {
   fieldApiName,
   inverseApiName,
@@ -8,12 +8,15 @@ import {
 } from "@camis/ir-schema";
 
 /**
- * The keys Strapi gives every entry itself, snake_cased as its Content-Type Builder compares an
- * attribute's name (the column it becomes), each to the key it goes by. An attribute of the same
- * name is overwritten (`publishedAt`) or refused on write (`updatedAt`); the `*_by_id` columns are
- * the keys of `createdBy` and `updatedBy`.
+ * What camis refuses, of the names Strapi keeps, snake_cased as its Content-Type Builder compares an
+ * attribute's name (the column it becomes), each to the key it goes by. The keys Strapi gives every
+ * entry itself: an attribute of the same name is overwritten (`publishedAt`) or refused on write
+ * (`updatedAt`); the `*_by_id` columns are the keys of `createdBy` and `updatedBy`. And Strapi's
+ * discriminator keys: `__component` names a dynamic zone item's component beside the item's own
+ * keys. Strapi's builder additionally refuses `status`, `meta` and `entry_id`, which are not keys of
+ * an entry, so an attribute of that name reads and writes as it should, and camis lets them through.
  */
-export const STRAPI_RESERVED_NAMES: ReadonlyMap<string, string> = new Map([
+const STRAPI_KEYS: ReadonlyMap<string, string> = new Map([
   ["id", "id"],
   ["document_id", "documentId"],
   ["created_at", "createdAt"],
@@ -25,7 +28,19 @@ export const STRAPI_RESERVED_NAMES: ReadonlyMap<string, string> = new Map([
   ["updated_by_id", "updatedBy"],
   ["locale", "locale"],
   ["localizations", "localizations"],
+  ["__component", "__component"],
+  ["__content_type", "__contentType"],
 ]);
+
+/** Strapi keeps names with these prefixes for its own columns (`strapi_stage`, `strapi_assignee`). */
+const STRAPI_PREFIXES = ["strapi", "_strapi", "__strapi"] as const;
+
+/** Every name camis refuses on a Strapi API: Strapi's own keys, and its prefix. */
+export const STRAPI_RESERVED_NAMES: KeptNames = {
+  get: (mapped) =>
+    STRAPI_KEYS.get(mapped) ??
+    (STRAPI_PREFIXES.some((prefix) => mapped.startsWith(prefix)) ? "strapi*" : undefined),
+};
 
 const named = (spelled: string): TargetName => ({ spelled, mapped: snakeCase(spelled) });
 

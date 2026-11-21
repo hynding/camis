@@ -16,6 +16,11 @@ export interface TargetName {
   inverse?: true;
 }
 
+/** What a target calls each name it keeps, by that name as the target maps names; a Map is one. */
+export interface KeptNames {
+  get(mapped: string): string | undefined;
+}
+
 export type FieldHolder = "contentType" | "component";
 
 /** The names a field takes on a target, as that target maps them. */
@@ -64,7 +69,7 @@ const describeEmbedded = (holderName: string, embedded: EmbeddedField, name: Tar
 export const reservedNameGaps = (
   doc: IrDocument,
   target: string,
-  reserved: ReadonlyMap<string, string>,
+  reserved: KeptNames,
   namesOf: TargetNames,
   options: ReservedNameOptions = {},
 ): CapabilityGap[] => {
