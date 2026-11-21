@@ -99,17 +99,27 @@ export const enforcedController = (strapiInstance: unknown, uid: string, tables:
   };
 
   /**
-   * A 403 when the data links an entry of a conditioned type the caller may not read (or one
-   * that does not exist), a 400 for a relation value it cannot read; undefined to go on.
+   * Whether the write is refused, the response already set: a 403 when the data links an entry
+   * of a conditioned type the caller may not read (or one that does not exist), a 400 for a
+   * relation value it cannot read. A boolean, since Strapi's response helpers return nothing.
    */
-  const linksRefused = async (ctx: RequestContext, data: Record<string, unknown>) => {
+  const linksRefused = async (
+    ctx: RequestContext,
+    data: Record<string, unknown>,
+  ): Promise<boolean> => {
     const refs = relationRefs(tables, uid, ctx.state, data);
-    if (!refs.ok) return ctx.badRequest(refs.message);
+    if (!refs.ok) {
+      ctx.badRequest(refs.message);
+      return true;
+    }
     for (const ref of refs.value) {
       const rows = await strapi.db.query(ref.target).findMany(refsQuery(tables, ref));
-      if (refsVerdict(tables, ctx.state, ref, rows) === "forbidden") return ctx.forbidden();
+      if (refsVerdict(tables, ctx.state, ref, rows) === "forbidden") {
+        ctx.forbidden();
+        return true;
+      }
     }
-    return undefined;
+    return false;
   };
 
   return {
@@ -157,8 +167,7 @@ export const enforcedController = (strapiInstance: unknown, uid: string, tables:
       const data = withoutAssigned(caller, sent);
       if (createVerdict(rules, caller, data) === "forbidden") return ctx.forbidden();
       if (caller.kind === "role") {
-        const refused = await linksRefused(ctx, data);
-        if (refused !== undefined) return refused;
+        if (await linksRefused(ctx, data)) return undefined;
       }
       replaceData(ctx, data);
       const assigned = assignedValues(caller);
@@ -191,8 +200,7 @@ export const enforcedController = (strapiInstance: unknown, uid: string, tables:
       if (answer === "notFound") return ctx.notFound();
       if (answer === "forbidden") return ctx.forbidden();
       const data = withoutAssigned(caller, sent);
-      const refused = await linksRefused(ctx, data);
-      if (refused !== undefined) return refused;
+      if (await linksRefused(ctx, data)) return undefined;
       replaceData(ctx, data);
       const scoped = await query(this, ctx);
       if ("refused" in scoped) return scoped.refused;
