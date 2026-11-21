@@ -31,6 +31,7 @@ import {
 
 interface RequestContext {
   params?: { id?: unknown };
+  query?: Record<string, unknown>;
   state?: unknown;
   request?: { body?: unknown };
   status?: number;
@@ -68,6 +69,18 @@ const requestData = (ctx: RequestContext): Record<string, unknown> | undefined =
   const body = ctx.request?.body;
   return isObject(body) && isObject(body.data) ? body.data : undefined;
 };
+
+/**
+ * The query parameters a restricted caller's delete may carry. Strapi's deleteDocument reads
+ * every other one into its where (filters) or its selection (populate, fields), so a filter
+ * through a relation would decide whether the entry is deleted; the verdict has already checked
+ * every row of the entry, whichever locale or status these pick.
+ */
+const DELETE_QUERY = ["locale", "status"];
+
+/** The first query parameter a restricted caller's delete may not carry, if any. */
+const unexpectedDeleteQuery = (ctx: RequestContext): string | undefined =>
+  Object.keys(ctx.query ?? {}).find((key) => !DELETE_QUERY.includes(key));
 
 /** The body with its data replaced, so Strapi's own methods read the data as decided here. */
 const replaceData = (ctx: RequestContext, data: Record<string, unknown>): void => {
@@ -243,6 +256,9 @@ export const enforcedController = (strapiInstance: unknown, uid: string, tables:
         return super.update(ctx);
       }
       if (sent === undefined) return ctx.badRequest("Missing or invalid data");
+      // Strapi finds the row to update by the filters too, and creates a new one when none
+      // matches: the filters would decide what is written.
+      if (ctx.query?.filters !== undefined) return ctx.badRequest("Invalid filters on an update");
       const answer = await verdict(caller, ctx, "update");
       if (answer === "notFound") return ctx.notFound();
       if (answer === "forbidden") return ctx.forbidden();
@@ -263,6 +279,10 @@ export const enforcedController = (strapiInstance: unknown, uid: string, tables:
     async delete(ctx: RequestContext) {
       const caller = callerOf(rules, ctx.state, "delete");
       if (caller.kind === "refused") return ctx.forbidden();
+      if (reachOf(caller, ctx, "delete") !== null) {
+        const unexpected = unexpectedDeleteQuery(ctx);
+        if (unexpected !== undefined) return ctx.badRequest(`Invalid ${unexpected} on a delete`);
+      }
       const answer = await verdict(caller, ctx, "delete");
       if (answer === "notFound") return ctx.notFound();
       if (answer === "forbidden") return ctx.forbidden();
