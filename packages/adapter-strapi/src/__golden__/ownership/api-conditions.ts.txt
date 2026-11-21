@@ -581,38 +581,104 @@ const sortLeaks = (tables: Tables, holder: string, path: string[], state: unknow
   return false;
 };
 
+const refuse = (message: string): { ok: false; message: string } => ({ ok: false, message });
+
 /**
  * A filter with every relation into a conditioned type narrowed to the rows the caller reads.
  * Each relation or component filter becomes its own item of an `$and` at its level, with the
  * scope beside the client's filter on that same relation (so both share its join): Strapi merges
  * a relation's processed where into its parent with Object.assign, so two of them side by side,
  * or one beside the client's own `$and`, would otherwise overwrite each other.
+ *
+ * Under a client's `$not` (`negated`) a relation into a conditioned type is refused: SQL's NOT of
+ * an unknown is unknown, so a row whose scope reads a NULL (an entry with no owner) would drop out
+ * of a right guess and stay in a wrong one. Everywhere else the scope sits in a positive `$and`
+ * (a client's `$or`, `$ne`, `$notIn` or `$null` included), where an unknown never matches.
  */
 const scopeFilters = (
   tables: Tables,
   holder: string,
   filters: unknown,
   state: unknown,
-): unknown => {
-  if (Array.isArray(filters)) return filters.map((f) => scopeFilters(tables, holder, f, state));
-  if (!isRecord(filters)) return filters;
+  negated = false,
+): Checked<unknown> => {
+  if (Array.isArray(filters)) {
+    const items: unknown[] = [];
+    for (const item of filters) {
+      const scoped = scopeFilters(tables, holder, item, state, negated);
+      if (!scoped.ok) return scoped;
+      items.push(scoped.value);
+    }
+    return { ok: true, value: items };
+  }
+  if (!isRecord(filters)) return { ok: true, value: filters };
   const rest: Record<string, unknown> = {};
   const lifted: Record<string, unknown>[] = [];
   for (const [key, value] of Object.entries(filters)) {
-    const link = own(own(tables.holders, holder)?.links, key);
+    const link = key.startsWith("$") ? undefined : own(own(tables.holders, holder)?.links, key);
+    let scoped: Checked<unknown> = { ok: true, value };
     if (key === "$and" || key === "$or" || key === "$not") {
-      rest[key] = scopeFilters(tables, holder, value, state);
-    } else if (link === undefined || key.startsWith("$")) {
-      rest[key] = value;
-    } else if ("relation" in link) {
-      const inner = scopeFilters(tables, link.relation, value, state);
-      lifted.push({ [key]: both(inner, reachScope(tables, link.relation, state)) ?? inner });
-    } else if ("component" in link) {
-      lifted.push({ [key]: scopeFilters(tables, link.component, value, state) });
-    } else rest[key] = value;
+      scoped = scopeFilters(tables, holder, value, state, negated || key === "$not");
+    } else if (link !== undefined && "relation" in link) {
+      scoped = relationFilter(tables, link.relation, key, value, state, negated);
+    } else if (link !== undefined && "component" in link) {
+      scoped = scopeFilters(tables, link.component, value, state, negated);
+    }
+    if (!scoped.ok) return scoped;
+    if (link !== undefined && ("relation" in link || "component" in link))
+      lifted.push({ [key]: scoped.value });
+    else rest[key] = scoped.value;
   }
-  if (lifted.length === 0) return rest;
-  return { $and: [...(Object.keys(rest).length > 0 ? [rest] : []), ...lifted] };
+  if (lifted.length === 0) return { ok: true, value: rest };
+  return {
+    ok: true,
+    value: { $and: [...(Object.keys(rest).length > 0 ? [rest] : []), ...lifted] },
+  };
+};
+
+/** One relation's filter, scoped to the rows of `target` the caller reads. */
+const relationFilter = (
+  tables: Tables,
+  target: string,
+  key: string,
+  value: unknown,
+  state: unknown,
+  negated: boolean,
+): Checked<unknown> => {
+  const scope = reachScope(tables, target, state);
+  if (negated && scope !== null) return refuse(`Invalid $not around the relation filter ${key}`);
+  const client = relationTest(key, value, scope !== null);
+  if (!client.ok) return client;
+  const inner = scopeFilters(tables, target, client.value, state, negated);
+  if (!inner.ok) return inner;
+  return { ok: true, value: both(inner.value, scope) ?? inner.value };
+};
+
+const GROUPS = ["$and", "$or", "$not"];
+
+/**
+ * A relation's filter as one on the related rows' attributes. Strapi reads a bare value, or a
+ * lone operator, on the relation itself as a test of the related id; written so, it can sit
+ * beside the scope. "Has none" (`$null`) across a conditioned relation is refused: it would count
+ * an entry the caller cannot read as none, and only a negation could ask for "none readable".
+ * `$notNull` asks for a readable entry. Strapi tests either operator's value for truth.
+ */
+const relationTest = (key: string, value: unknown, conditioned: boolean): Checked<unknown> => {
+  if (!isRecord(value)) return { ok: true, value: { id: value } };
+  const keys = Object.keys(value);
+  const operators = keys.filter((k) => k.startsWith("$"));
+  if (operators.length === 0) return { ok: true, value };
+  if (operators.length !== keys.length || operators.length > 1)
+    return refuse(`Invalid filter on the relation ${key}: one operator, or attributes`);
+  const operator = operators[0]!;
+  if (GROUPS.includes(operator)) return { ok: true, value };
+  if (operator === "$null" || operator === "$notNull") {
+    const none = operator === "$null" ? Boolean(value[operator]) : !value[operator];
+    if (!conditioned) return { ok: true, value: { id: value } };
+    if (none) return refuse(`Invalid $null on the relation ${key}`);
+    return { ok: true, value: { id: { $notNull: true } } };
+  }
+  return { ok: true, value: { id: value } };
 };
 
 /** Whether a file's populate asks for its `related` entries, in any form. */
@@ -666,16 +732,20 @@ const scopeEntry = (
     if (!nested.ok) return { ok: false, message: nested.message };
     out.populate = nested.value;
   }
-  if ("relation" in link) {
-    if (sortPaths(options.sort).some((p) => sortLeaks(tables, target, p, state)))
-      return { ok: false, message: `Invalid sort through a relation in populate` };
-    const filters =
-      options.filters === undefined
-        ? undefined
-        : scopeFilters(tables, target, options.filters, state);
-    const scoped = both(filters, reachScope(tables, target, state));
-    if (scoped !== undefined) out.filters = scoped;
-  }
+  // A component's rows are its holder's, so only its own relations take a scope; its filters and
+  // sort cross them all the same.
+  if (sortPaths(options.sort).some((p) => sortLeaks(tables, target, p, state)))
+    return refuse("Invalid sort through a relation in populate");
+  const filters =
+    options.filters === undefined
+      ? undefined
+      : scopeFilters(tables, target, options.filters, state);
+  if (filters !== undefined && !filters.ok) return filters;
+  const scoped = both(
+    filters?.value,
+    "relation" in link ? reachScope(tables, target, state) : null,
+  );
+  if (scoped !== undefined) out.filters = scoped;
   return { ok: true, value: Object.keys(out).length === 0 ? true : out };
 };
 
@@ -701,7 +771,8 @@ const scopePopulate = (
  * A sanitized query of `uid` with every relation into a conditioned type narrowed for the
  * caller: each populate of one carries that type's filter (`$and` with the client's), at any
  * depth and whatever form the populate takes; each relation filter through one is narrowed the
- * same way, so it is no oracle; a sort through one is refused, since its join carries no filter.
+ * same way, a component's populate filters included, so it is no oracle; a sort through one is
+ * refused, since its join carries no filter, and so is a `$not` around one or a `$null` on one.
  * A caller no role restricts gets the query back as it is.
  */
 export const scopeQuery = (
@@ -722,7 +793,11 @@ export const scopeQuery = (
     if (!populate.ok) return { ok: false, message: populate.message };
     out.populate = populate.value;
   }
-  if (query.filters !== undefined) out.filters = scopeFilters(tables, uid, query.filters, state);
+  if (query.filters !== undefined) {
+    const filters = scopeFilters(tables, uid, query.filters, state);
+    if (!filters.ok) return refuse(filters.message);
+    out.filters = filters.value;
+  }
   return { ok: true, value: out };
 };
 
@@ -813,9 +888,10 @@ export const refsQuery = (tables: Tables, ref: RelationRef): Record<string, unkn
 };
 
 /**
- * Whether the caller may link every entry `ref` names: each must exist and every row of it
- * (each version and locale) be one the caller may read, or update where the link shows on it. One it cannot find is refused the same
- * way, so the answer tells nothing of what exists.
+ * Whether the caller may link every entry `ref` names: each must exist and be one the caller may
+ * read, or update where the link shows on it. A document id is decided on every row `refsQuery`
+ * loads of it (each version and locale); a row id on that one row, the row the link is made to.
+ * One it cannot find is refused the same way, so the answer tells nothing of what exists.
  */
 export const refsVerdict = (
   tables: Tables,
