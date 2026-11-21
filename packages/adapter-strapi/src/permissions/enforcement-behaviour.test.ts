@@ -53,6 +53,7 @@ const matches = (row: unknown, filter: Filter): boolean =>
     if ("$ne" in ops) return value !== ops.$ne;
     if ("$in" in ops) return (ops.$in as unknown[]).includes(value);
     if ("$null" in ops) return (value === null || value === undefined) === ops.$null;
+    if ("$notNull" in ops) return (value !== null && value !== undefined) === ops.$notNull;
     // A relation or a component: its own filter applies to the related rows (any of them).
     if (Array.isArray(value)) return value.some((v) => matches(v, ops));
     return value !== null && typeof value === "object" && matches(value, ops);

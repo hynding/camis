@@ -117,7 +117,7 @@ beforeAll(async () => {
   ids.tagTheirs = await create(TAG, { label: "t-theirs", note: ids.theirs });
   await create(TAG, { label: "t-orphan", note: ids.orphan });
   await create(TAG, { label: "t-open", note: ids.open });
-  await create(TAG, { label: "t-none" });
+  ids.tagNone = await create(TAG, { label: "t-none" });
   await create(TAG, { label: "t-child-of-theirs", note: ids.mine, parent: ids.tagTheirs });
   await create(TAG, { label: "t-child-of-mine", note: ids.mine, parent: ids.tagMine });
   const pivot = { field: "refs", component_type: REF };
@@ -127,6 +127,13 @@ beforeAll(async () => {
     await create(REF, { label: "r-orphan", note: ids.orphan }),
   ];
   await create(TAG, { label: "t-refs", refs: references.map((id) => ({ id, __pivot: pivot })) });
+  // A tag beside t-none and t-theirs for each path: a reference with no note and one to another
+  // user's private note; a child of the tag with no note.
+  const bare = await create(REF, { label: "r-none" });
+  await create(TAG, { label: "t-ref-none", refs: [{ id: bare, __pivot: pivot }] });
+  const hidden = await create(REF, { label: "r-theirs-2", note: ids.theirs });
+  await create(TAG, { label: "t-ref-theirs", refs: [{ id: hidden, __pivot: pivot }] });
+  await create(TAG, { label: "t-child-of-none", note: ids.mine, parent: ids.tagNone });
 });
 
 afterAll(async () => {
@@ -137,6 +144,7 @@ afterAll(async () => {
 
 const member = { user: { id: MEMBER, documentId: "member", role: { type: "member" } } };
 const guest = { auth: { strategy: { name: "users-permissions" } } };
+const as = (role: string) => ({ user: { id: MEMBER, documentId: "member", role: { type: role } } });
 
 /** A sanitized query's REST parameters as the query engine's (Strapi's convertQueryParams). */
 const engineParams = (query: Record<string, unknown>): Record<string, unknown> => {
@@ -195,6 +203,7 @@ describe("scoped queries on Strapi's query engine", () => {
       "t-mine",
       "t-child-of-theirs",
       "t-child-of-mine",
+      "t-child-of-none",
     ]);
     await sameForAnyGuess(member, (guess) => ({ filters: { note: { title: { $eq: guess } } } }));
     expect(await labels(member, { filters: { note: { shared: { $null: true } } } })).toEqual([]);
@@ -235,7 +244,7 @@ describe("scoped queries on Strapi's query engine", () => {
       "refused",
     );
     expect(await labels(member, { filters: { $not: { label: { $eq: "t-mine" } } } })).toHaveLength(
-      7,
+      10,
     );
     expect(
       await labels(member, { filters: { note: { $not: { title: { $eq: "mine" } } } } }),
@@ -276,17 +285,80 @@ describe("scoped queries on Strapi's query engine", () => {
       "t-mine",
       "t-child-of-theirs",
       "t-child-of-mine",
+      "t-child-of-none",
     ]);
     expect(await labels(member, { filters: { note: { $eq: ids.theirs } } })).toEqual([]);
-    expect(await labels(member, { filters: { note: ids.mine } })).toHaveLength(3);
+    expect(await labels(member, { filters: { note: ids.mine } })).toHaveLength(4);
     expect(await labels(member, { filters: { note: { $notNull: true } } })).toEqual([
       "t-mine",
       "t-child-of-theirs",
       "t-child-of-mine",
+      "t-child-of-none",
     ]);
     expect(await answer(member, { filters: { note: { $null: true } } })).toBe("refused");
     expect(await answer(member, { filters: { note: { $notNull: false } } })).toBe("refused");
     expect(await answer(member, { filters: { note: { $in: [1], title: "x" } } })).toBe("refused");
-    expect(await labels(member, { filters: { parent: { $null: true } } })).toHaveLength(6);
+    // Over HTTP the value is a string, read as Strapi's parseType reads a boolean.
+    expect(await labels(member, { filters: { note: { $null: "false" } } })).toEqual([
+      "t-mine",
+      "t-child-of-theirs",
+      "t-child-of-mine",
+      "t-child-of-none",
+    ]);
+    for (const note of [{ $notNull: "false" }, { $null: "1" }, { $notNull: "f" }, { $null: "yes" }])
+      expect(await answer(member, { filters: { note } }), JSON.stringify(note)).toBe("refused");
+    expect(await labels(member, { filters: { parent: { $null: true } } })).toHaveLength(8);
+  });
+
+  // Strapi LEFT JOINs a filtered relation: a tag with no note joins an all-NULL row, which a
+  // client's `$null` matches, and so would a scope a NULL satisfies (no read: a filter no row
+  // passes; a null-literal condition: owner IS NULL). Each shape here is one an all-NULL row may
+  // satisfy; with no entry and with an entry the caller cannot read, it must answer the same.
+  it("answers alike for no linked entry and an unreadable one, for every NULL-satisfied shape", async () => {
+    const shapes: Record<string, unknown>[] = [
+      { id: { $null: true } },
+      { title: { $null: true } },
+      { title: { $null: "true" } },
+      { id: { $notNull: false } },
+      { title: { $ne: "x" } },
+      { title: { $notIn: ["x"] } },
+      { title: { $notContains: "x" } },
+      { $not: { title: { $notNull: true } } },
+      { $not: { title: { $eq: "x" } } },
+      { $or: [{ title: { $null: true } }, { title: { $eq: "x" } }] },
+      { owner: { id: { $null: true } } },
+    ];
+    const roles = { contributor: as("contributor"), drafter: as("drafter"), guest, member };
+    const paths: [string, (shape: unknown) => Record<string, unknown>, string, string][] = [
+      ["relation", (note) => ({ filters: { note } }), "t-none", "t-theirs"],
+      ["component", (note) => ({ filters: { refs: { note } } }), "t-ref-none", "t-ref-theirs"],
+      [
+        "parent",
+        (note) => ({ filters: { parent: { note } } }),
+        "t-child-of-none",
+        "t-child-of-theirs",
+      ],
+    ];
+    for (const [roleName, state] of Object.entries(roles)) {
+      for (const shape of shapes) {
+        for (const [path, query, none, hidden] of paths) {
+          const found = await labels(state, query(shape));
+          const what = `${roleName} ${path} ${JSON.stringify(shape)}: ${JSON.stringify(found)}`;
+          expect(Array.isArray(found), what).toBe(true);
+          expect((found as string[]).includes(none), what).toBe(
+            (found as string[]).includes(hidden),
+          );
+        }
+        const populated = (await answer(state, {
+          filters: { label: { $in: ["t-child-of-none", "t-child-of-theirs"] } },
+          populate: { parent: { filters: { note: shape } } },
+        })) as { label: string; parent: unknown }[];
+        const what = `${roleName} populate ${JSON.stringify(shape)}: ${JSON.stringify(populated)}`;
+        expect(
+          populated.map((row) => row.parent === null),
+          what,
+        ).toEqual([true, true]);
+      }
+    }
   });
 });

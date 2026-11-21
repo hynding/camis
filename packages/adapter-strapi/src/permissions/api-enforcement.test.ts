@@ -88,6 +88,26 @@ describe("projectApiEnforcement", () => {
     const note = projectApiEnforcement(localized("Note"), roles).holders["api::note.note"]!;
     expect(note.links.localizations).toEqual({ relation: "api::note.note" });
   });
+  // Code-point order, as the goldens need: the same bytes whatever the machine's locale.
+  it("orders a holder's links by code point", () => {
+    const cased: IrDocument = {
+      ...doc,
+      contentTypes: doc.contentTypes.map((ct) =>
+        ct.name === "Tag"
+          ? {
+              ...ct,
+              fields: [
+                ...ct.fields,
+                { type: "relation", name: "pina", relationKind: "manyToOne", target: "Note" },
+                { type: "relation", name: "pinA", relationKind: "manyToOne", target: "Note" },
+              ],
+            }
+          : ct,
+      ),
+    };
+    const tag = projectApiEnforcement(cased, roles).holders["api::tag.tag"]!;
+    expect(Object.keys(tag.links)).toEqual(["note", "parent", "pinA", "pina", "pinnedOn", "refs"]);
+  });
   // Strapi opens an `auth: false` action to anyone; the controller must still answer it.
   it("carries a reach-only type's open actions", () => {
     const open: IrDocument = {

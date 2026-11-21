@@ -51,7 +51,10 @@ const rules: TypeRules = {
 };
 const session = (role: string) => ({ user: { id: 7, documentId: "u7", role: { type: role } } });
 const guest = { auth: { strategy: { name: "users-permissions" } } };
-const NO_ROWS = { id: { $null: true } };
+/** A filter no row satisfies, not even a LEFT JOIN's all-NULL row. */
+const NO_ROWS = { $and: [{ id: { $null: true } }, { id: { $notNull: true } }] };
+/** Beside a scope on a joined relation: the scope must meet a real row, not an all-NULL one. */
+const ENTRY = { id: { $notNull: true } };
 
 describe("listFilter", () => {
   it("decides a condition that reads only the caller before the query", () => {
@@ -177,7 +180,7 @@ describe("scopeQuery: filters and sorts through a relation into a conditioned ty
   // overwrite each other. The scope stays with the client's filter on that same relation, whose
   // join it must share.
   it("scopes a relation filter, inside $or and through components, so it is no oracle", () => {
-    const titled = (title: string) => ({ $and: [{ title: { $eq: title } }, MINE] });
+    const titled = (title: string) => ({ $and: [{ title: { $eq: title } }, ENTRY, MINE] });
     expect(scoped(member, { filters: { note: { title: { $eq: "x" } } } }).filters).toEqual({
       $and: [{ note: titled("x") }],
     });
@@ -211,7 +214,7 @@ describe("scopeQuery: filters and sorts through a relation into a conditioned ty
     // Inside the relation the scope stays outside the client's $not, so the negation is safe.
     expect(
       scoped(member, { filters: { note: { $not: { title: { $eq: "x" } } } } }).filters,
-    ).toEqual({ $and: [{ note: { $and: [{ $not: { title: { $eq: "x" } } }, MINE] } }] });
+    ).toEqual({ $and: [{ note: { $and: [{ $not: { title: { $eq: "x" } } }, ENTRY, MINE] } }] });
     expect(scoped(member, { filters: { $not: { label: { $eq: "a" } } } }).filters).toEqual({
       $not: { label: { $eq: "a" } },
     });
@@ -225,7 +228,7 @@ describe("scopeQuery: filters and sorts through a relation into a conditioned ty
   });
   // Strapi reads a relation's own operator (or a bare value) as one on the related id.
   it("rewrites an operator on a relation itself as one on the related id, under the scope", () => {
-    const under = (test: unknown) => ({ $and: [{ note: { $and: [{ id: test }, MINE] } }] });
+    const under = (test: unknown) => ({ $and: [{ note: { $and: [{ id: test }, ENTRY, MINE] } }] });
     expect(scoped(member, { filters: { note: 5 } }).filters).toEqual(under(5));
     expect(scoped(member, { filters: { note: [5, 6] } }).filters).toEqual(under([5, 6]));
     expect(scoped(member, { filters: { note: { $eq: 5 } } }).filters).toEqual(under({ $eq: 5 }));
@@ -239,8 +242,19 @@ describe("scopeQuery: filters and sorts through a relation into a conditioned ty
       under({ $notNull: true }),
     );
     expect(scoped(member, { filters: { note: { $or: [{ title: "a" }] } } }).filters).toEqual({
-      $and: [{ note: { $and: [{ $or: [{ title: "a" }] }, MINE] } }],
+      $and: [{ note: { $and: [{ $or: [{ title: "a" }] }, ENTRY, MINE] } }],
     });
+    // A value over HTTP is a string, read as Strapi's parseType reads a boolean.
+    expect(scoped(member, { filters: { note: { $null: "false" } } }).filters).toEqual(
+      under({ $notNull: true }),
+    );
+    expect(scoped(member, { filters: { note: { $notNull: "t" } } }).filters).toEqual(
+      under({ $notNull: true }),
+    );
+    for (const note of [{ $notNull: "false" }, { $null: "1" }, { $null: "yes" }, { $notNull: "" }])
+      expect(scopeQuery(tables, TAG, member, { filters: { note } }).ok, JSON.stringify(note)).toBe(
+        false,
+      );
     // "Has none" would count an entry the caller cannot read as none.
     for (const note of [{ $null: true }, { $notNull: false }, { $in: [5], title: "x" }])
       expect(scopeQuery(tables, TAG, member, { filters: { note } }).ok, JSON.stringify(note)).toBe(
@@ -251,7 +265,7 @@ describe("scopeQuery: filters and sorts through a relation into a conditioned ty
     });
   });
   it("keeps two relation filters at one level, and a client $and beside them, as separate items", () => {
-    const titled = (title: string) => ({ $and: [{ title: { $eq: title } }, MINE] });
+    const titled = (title: string) => ({ $and: [{ title: { $eq: title } }, ENTRY, MINE] });
     expect(
       scoped(member, {
         filters: {
@@ -296,7 +310,7 @@ describe("scopeQuery: filters and sorts through a relation into a conditioned ty
       scoped(member, { populate: { refs: { filters, populate: ["note"] } } }).populate,
     ).toEqual({
       refs: {
-        filters: { $and: [{ note: { $and: [{ title: { $eq: "x" } }, MINE] } }] },
+        filters: { $and: [{ note: { $and: [{ title: { $eq: "x" } }, ENTRY, MINE] } }] },
         populate: { note: { filters: MINE } },
       },
     });
@@ -304,7 +318,11 @@ describe("scopeQuery: filters and sorts through a relation into a conditioned ty
       scoped(member, { populate: { blocks: { on: { [REF]: { filters } } } } }).populate,
     ).toEqual({
       blocks: {
-        on: { [REF]: { filters: { $and: [{ note: { $and: [{ title: { $eq: "x" } }, MINE] } }] } } },
+        on: {
+          [REF]: {
+            filters: { $and: [{ note: { $and: [{ title: { $eq: "x" } }, ENTRY, MINE] } }] },
+          },
+        },
       },
     });
     expect(scopeQuery(tables, TAG, member, { populate: { refs: { sort: "note.title" } } }).ok).toBe(
@@ -404,7 +422,9 @@ describe("scopeQuery: a localized type's localizations reach like any relation",
     expect(result.value).toEqual({
       populate: { localizations: { populate: { note: { filters: MINE } } } },
       filters: {
-        $and: [{ localizations: { $and: [{ note: { $and: [{ title: { $eq: "x" } }, MINE] } }] } }],
+        $and: [
+          { localizations: { $and: [{ note: { $and: [{ title: { $eq: "x" } }, ENTRY, MINE] } }] } },
+        ],
       },
     });
     expect(run(TAG, { sort: "localizations.note.title:asc" }).ok).toBe(false);
@@ -419,7 +439,7 @@ describe("scopeQuery: a localized type's localizations reach like any relation",
     });
     expect(
       run(NOTE, { filters: { localizations: { title: { $eq: "x" } } } }).value?.filters,
-    ).toEqual({ $and: [{ localizations: { $and: [{ title: { $eq: "x" } }, MINE] } }] });
+    ).toEqual({ $and: [{ localizations: { $and: [{ title: { $eq: "x" } }, ENTRY, MINE] } }] });
     expect(run(NOTE, { sort: "localizations.title" }).ok).toBe(false);
   });
 });

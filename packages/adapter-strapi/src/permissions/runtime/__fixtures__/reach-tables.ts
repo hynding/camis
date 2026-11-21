@@ -17,6 +17,11 @@ export const unshared: Condition = {
   test: (data: RecordData) => data["record.shared"] !== true,
   filter: null,
 };
+/** A condition with a null literal: the record has no owner. */
+export const unowned: Condition = {
+  test: (data: RecordData) => data["record.ownerId"] === null,
+  filter: { kind: "eq", variable: "record.ownerId", value: { kind: "literal", value: null } },
+};
 export const NOTE = "api::note.note";
 export const TAG = "api::tag.tag";
 export const CATEGORY = "api::category.category";
@@ -38,6 +43,7 @@ export const tables: Tables = {
         member: { read: [owned], create: [owned], update: [owned], assign: ["owner"] },
         contributor: { create: [unshared], assign: ["owner"] },
         public: { read: [shared], assign: [] },
+        drafter: { read: [unowned], assign: [] },
         reviewer: { read: true, update: [owned], assign: [] },
       },
     },
