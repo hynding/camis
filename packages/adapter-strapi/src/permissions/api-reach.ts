@@ -25,6 +25,12 @@ import { codePointOrder } from "./code-point-order";
 type NodeKey = `type:${string}` | `component:${string}` | "file";
 
 const FILE: NodeKey = "file";
+/**
+ * What a file's `related` entries reach besides conditioned types: they are polymorphic, so a
+ * populate of them takes no per-type filter and returns entries of any type, one the caller holds
+ * no grant on included. Every node that leads to a file reaches it, so its populate is checked.
+ */
+const ANY_TYPE = "file.related";
 const FILE_UID = "plugin::upload.file";
 
 export const typeKey = (ct: { name: string }): NodeKey => `type:${ct.name}`;
@@ -138,8 +144,11 @@ const graphOf = (doc: IrDocument): Map<NodeKey, Node> => {
 const reachOf = (
   nodes: ReadonlyMap<NodeKey, Node>,
   conditioned: ReadonlySet<string>,
+  restricted: boolean,
 ): Map<NodeKey, Set<string>> => {
-  const reach = new Map<NodeKey, Set<string>>([...nodes.keys()].map((k) => [k, new Set()]));
+  const reach = new Map<NodeKey, Set<string>>(
+    [...nodes.keys()].map((k) => [k, new Set(restricted && k === FILE ? [ANY_TYPE] : [])]),
+  );
   const step = (target: NodeKey): Set<string> => {
     const out = new Set(reach.get(target) ?? []);
     if (target.startsWith("type:") && conditioned.has(target.slice(5))) out.add(target.slice(5));
@@ -217,20 +226,23 @@ const readsType = (role: Role, ct: string): boolean =>
 
 /**
  * How a role reaches a type's links: by reading it, or by writing it (a write's response is
- * populated like a read, and a single type's or a polymorphic link is written unchecked); an
- * `auth: false` create or update route writes as the public role. Null when it does neither.
+ * populated like a read, and a single type's or a polymorphic link is written unchecked). Null
+ * when it does neither.
  */
 const touches = (role: Role, ct: ContentType): "reads" | "writes" | null => {
   if (readsType(role, ct.name)) return "reads";
-  const writes =
-    role.grants.some(
-      (g) =>
-        g.contentType === ct.name && (g.actions.includes("create") || g.actions.includes("update")),
-    ) ||
-    (role.name === PUBLIC_ROLE &&
-      (ct.options?.publicApiActions ?? []).some((a) => a === "create" || a === "update"));
-  return writes ? "writes" : null;
+  return role.grants.some(
+    (g) =>
+      g.contentType === ct.name && (g.actions.includes("create") || g.actions.includes("update")),
+  )
+    ? "writes"
+    : null;
 };
+
+/** Whether an `auth: false` route writes the type: it does so as the public role. */
+const openlyWritten = (role: Role, ct: ContentType): boolean =>
+  role.name === PUBLIC_ROLE &&
+  (ct.options?.publicApiActions ?? []).some((a) => a === "create" || a === "update");
 
 export interface ApiReach {
   holders: Record<string, ApiHolder>;
@@ -256,7 +268,11 @@ export const projectReach = (doc: IrDocument, roles: Role[], types: ApiTypeRules
   );
   const conditioned = new Set([...conditionedFor.values()].flatMap((s) => [...s]));
   const nodes = graphOf(doc);
-  const reach = reachOf(nodes, conditioned);
+  // With no role the rules restrict and no open route, no request is narrowed at all.
+  const restricted =
+    nonAdmin.length > 0 ||
+    doc.contentTypes.some((ct) => (ct.options?.publicApiActions ?? []).length > 0);
+  const reach = reachOf(nodes, conditioned, restricted);
   const reachFrom = (key: NodeKey): Set<string> => {
     const out = new Set(reach.get(key) ?? []);
     if (key.startsWith("type:") && conditioned.has(key.slice(5))) out.add(key.slice(5));
@@ -269,14 +285,17 @@ export const projectReach = (doc: IrDocument, roles: Role[], types: ApiTypeRules
     const mine = [...conditionedFor.get(role.name)!].sort();
     if (mine.length === 0) continue;
     for (const ct of doc.contentTypes) {
-      const how = ct.builtin === undefined ? touches(role, ct) : null;
-      if (how === null) continue;
-      gaps.push(...polymorphicGaps(doc, role.name, how, ct, mine, reachFrom));
-      if (ct.kind === "single")
-        gaps.push(...singleGaps(role.name, how, ct, mine, nodes, reachFrom));
+      if (ct.builtin !== undefined) continue;
+      const how = touches(role, ct);
+      if (how !== null) gaps.push(...polymorphicGaps(doc, role.name, how, ct, mine, reachFrom));
+      const single = how ?? (openlyWritten(role, ct) ? "writes" : null);
+      if (ct.kind === "single" && single !== null)
+        gaps.push(...singleGaps(role.name, single, ct, mine, nodes, reachFrom));
     }
     gaps.push(...builtinGaps(doc, byName, role, mine, reachFrom));
   }
+  for (const ct of doc.contentTypes)
+    if (ct.builtin === undefined) gaps.push(...openPolymorphicGaps(doc, ct));
 
   return {
     holders: holdersOf(nodes, reach, conditioned),
@@ -321,6 +340,34 @@ const polymorphicGaps = (
     }
   }
   return gaps;
+};
+
+/**
+ * A polymorphic relation (its own, or a component's at any depth) of a type an `auth: false`
+ * route serves. Strapi sanitises such a request with no credentials, which strips an ordinary
+ * relation from populate but not a polymorphic one: it returns entries of any type, one the public
+ * role may not read or holds no grant on (seen on 5.48). Whatever roles the IR names.
+ */
+const openPolymorphicGaps = (doc: IrDocument, ct: ContentType): CapabilityGap[] => {
+  const opened = (ct.options?.publicApiActions ?? []).filter((a) =>
+    ["list", "read", "create", "update"].includes(a),
+  );
+  if (opened.length === 0) return [];
+  return [
+    { owner: ct.name, fields: ct.fields },
+    ...embedded(doc, ct.fields).map((c) => ({ owner: c.name, fields: c.fields })),
+  ].flatMap(({ owner, fields }) =>
+    fields
+      .filter((f) => f.type === "polymorphicRelation" || f.type === "polymorphicInverse")
+      .map((f) =>
+        gap(
+          ct.name,
+          PUBLIC_ROLE,
+          "apiPolymorphicReach",
+          `"${ct.name}" opens ${opened.join(", ")} to anyone (an auth: false route), and its polymorphic relation ${owner}.${f.name} can return entries of any type: Strapi does not narrow a polymorphic populate there, whatever the public role holds`,
+        ),
+      ),
+  );
 };
 
 /** A single type's reach, which Strapi's own single-type controller serves unnarrowed. */

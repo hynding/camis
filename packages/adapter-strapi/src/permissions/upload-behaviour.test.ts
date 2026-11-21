@@ -361,7 +361,7 @@ describe("attaching a stored file through an entry's media field", () => {
     return ctx;
   };
   it("is 403 for another's unattached file or one on an entry the caller cannot read", async () => {
-    for (const attachment of [3, 2, { id: 3 }, [1, 3], { connect: [2] }]) {
+    for (const attachment of [3, 2, { id: 3 }, [3], { connect: [2] }]) {
       expect((await write(NOTE, { title: "x", attachment })).status).toBe(403);
       expect((await write(NOTE, { attachment }, "mine")).status).toBe(403);
     }
@@ -373,6 +373,8 @@ describe("attaching a stored file through an entry's media field", () => {
   it("is 400 for a media value it cannot read as a row id", async () => {
     expect((await write(NOTE, { title: "x", attachment: "abc" })).status).toBe(400);
     expect((await write(NOTE, { attachment: { documentId: "x" } }, "mine")).status).toBe(400);
+    // A note's attachment holds one file: Strapi would keep the last of a list.
+    expect((await write(NOTE, { title: "x", attachment: [1, 3] })).status).toBe(400);
   });
   it("allows the caller's own upload and a file on an entry it may update", async () => {
     expect((await write(NOTE, { title: "x", attachment: 1 })).status).toBe(201);

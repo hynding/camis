@@ -3,7 +3,7 @@ import type { CapabilityGap, IrDocument } from "@camis/ir-schema";
 import type { Role } from "@camis/permissions";
 import { PERMISSIONS_INDEX_TS } from "../skeleton/templates";
 import {
-  bodyCheckedSingleSource,
+  checkedSingleSource,
   emitApiEnforcementFiles,
   enforcedControllerSource,
 } from "./api-enforcement-emit";
@@ -47,7 +47,7 @@ export const emitPermissions = (doc: IrDocument, roles: Role[]): PermissionEmiss
       enforcement.types.map((t) => [
         t.uid,
         enforcement.singles.includes(t.uid)
-          ? bodyCheckedSingleSource(t.uid)
+          ? checkedSingleSource(t.uid)
           : enforcedControllerSource(t.uid),
       ]),
     ),

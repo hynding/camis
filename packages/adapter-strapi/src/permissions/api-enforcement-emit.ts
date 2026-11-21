@@ -215,18 +215,19 @@ export default factories.createCoreController(${key(uid)}, ({ strapi }) =>
 );
 `);
 
-/** A single type's controller: Strapi's own, with a restricted caller's write body checked first. */
-export const bodyCheckedSingleSource = (uid: string): string =>
+/** A single type's controller: Strapi's own, with a restricted caller's request checked first. */
+export const checkedSingleSource = (uid: string): string =>
   withMarker(`import { factories } from "@strapi/strapi";
 import { TABLES } from "../../../permissions/api-conditions";
-import { bodyCheckedSingle } from "../../../permissions/api-controller";
+import { checkedSingle } from "../../../permissions/api-controller";
 
-// Strapi's single type controller serves every action; a restricted caller's update body is
-// checked against the type's attributes first, so no key Strapi or its database layer reads
-// (a relation item's __pivot above all) reaches it undecided. The cast keeps Strapi's own
-// controller typings, which camis does not check the method against, out of the build.
+// Strapi's single type controller serves every action; a restricted caller's query is checked
+// first (no populate of a file's related entries, no parameter Strapi has not documented), and
+// its update body against the type's attributes, so no key Strapi or its database layer reads (a
+// relation item's __pivot above all) reaches it undecided. The cast keeps Strapi's own controller
+// typings, which camis does not check the methods against, out of the build.
 export default factories.createCoreController(${key(uid)}, () =>
-  bodyCheckedSingle(${key(uid)}, TABLES) as any,
+  checkedSingle(${key(uid)}, TABLES) as any,
 );
 `);
 

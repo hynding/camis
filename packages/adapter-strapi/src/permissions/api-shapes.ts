@@ -22,7 +22,9 @@ export type ApiAttributeShape =
   | "relation"
   | "toOneRelation"
   | "polymorphic"
+  | "toOnePolymorphic"
   | "media"
+  | "toOneMedia"
   | { component: string; repeatable: boolean }
   | { zone: string[] };
 
@@ -34,8 +36,9 @@ const relationShape = (kind: unknown): ApiAttributeShape =>
 const shapeOf = (f: Field, uids: ReadonlyMap<string, string>): ApiAttributeShape => {
   if (f.type === "relation") return relationShape(f.relationKind);
   if (f.type === "polymorphicInverse") return "relation";
-  if (f.type === "polymorphicRelation") return "polymorphic";
-  if (f.type === "media") return "media";
+  if (f.type === "polymorphicRelation") return f.many ? "polymorphic" : "toOnePolymorphic";
+  // Strapi's media attribute holds one file unless it is `multiple`.
+  if (f.type === "media") return f.multiple === true ? "media" : "toOneMedia";
   if (f.type === "component")
     return { component: uids.get(f.component) ?? f.component, repeatable: f.repeatable };
   if (f.type === "dynamicZone") return { zone: f.components.map((c) => uids.get(c) ?? c) };

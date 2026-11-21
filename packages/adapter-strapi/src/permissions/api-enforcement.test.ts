@@ -575,7 +575,12 @@ describe("a reach the Strapi content API cannot narrow fails the build", () => {
       ],
       components: [
         ...doc.components,
-        { name: "Pointer", fields: [{ type: "polymorphicRelation", name: "target", many: false }] },
+        // The IR's validator keeps a polymorphic relation out of components; the check does not
+        // rest on that.
+        {
+          name: "Pointer",
+          fields: [{ type: "polymorphicRelation", name: "target", many: false }],
+        } as unknown as IrDocument["components"][number],
         {
           name: "Holder",
           fields: [{ type: "component", name: "inner", component: "Pointer", repeatable: true }],
@@ -902,14 +907,26 @@ describe("writes the users-permissions and upload plugins serve unchecked fail t
         ? { ...r, grants: r.grants.filter((g) => g.contentType !== "Front") }
         : r,
     );
-    expect(projectApiEnforcement(doc, noWriter).singles).toEqual([]);
+    // Front also reaches notes, so it is served for its query whoever writes it.
+    expect(projectApiEnforcement(doc, noWriter).singles).toEqual(["api::front.front"]);
     const opened: IrDocument = {
       ...doc,
-      contentTypes: doc.contentTypes.map((ct) =>
-        ct.name === "Front" ? { ...ct, options: { publicApiActions: ["update"] } } : ct,
-      ),
+      contentTypes: [
+        ...doc.contentTypes,
+        { name: "Banner", kind: "single", fields: [{ type: "string", name: "text" }] },
+        {
+          name: "Ticker",
+          kind: "single",
+          options: { publicApiActions: ["update"] },
+          fields: [{ type: "relation", name: "pick", relationKind: "manyToOne", target: "User" }],
+        },
+      ],
     };
-    expect(projectApiEnforcement(opened, noWriter).singles).toEqual(["api::front.front"]);
+    // A single type with no link is Strapi's; one an open route writes is served for its body.
+    expect(projectApiEnforcement(opened, noWriter).singles).toEqual([
+      "api::front.front",
+      "api::ticker.ticker",
+    ]);
   });
 
   // users-permissions' user update and create take any role and password from the body.

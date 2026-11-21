@@ -321,20 +321,40 @@ export const enforcedController = (strapiInstance: unknown, uid: string, tables:
 };
 
 /**
- * A single type's controller methods over Strapi's single type controller: a restricted caller's
- * update (a session's role, the public role, or anyone on an `auth: false` route) has its body
- * checked by `writeShape` first, a 400 otherwise; every other request and action is Strapi's.
+ * A single type's controller methods over Strapi's single type controller: for a restricted
+ * caller (a session's role, the public role, or anyone on an `auth: false` route) the query is
+ * checked by `scopeQuery` (a populate of a file's related entries, or a parameter Strapi has not
+ * documented, is a 400) and an update's body by `writeShape`; the request then goes to Strapi's
+ * own method as it came. Every other request and action is Strapi's.
  */
-export const bodyCheckedSingle = (uid: string, tables: Tables) => {
+export const checkedSingle = (uid: string, tables: Tables) => {
   const rules = tables.rules[uid]!;
+  /** The state the request is checked for; null for a caller no role restricts. */
+  const checkedAs = (ctx: RequestContext, action: string): unknown =>
+    rules.open.includes(action)
+      ? reachState(rules, ctx.state, action)
+      : callerOf(rules, ctx.state, action).kind === "unrestricted"
+        ? null
+        : ctx.state;
+  const refusedQuery = (ctx: RequestContext, state: unknown): string | undefined => {
+    const scoped = scopeQuery(tables, uid, state, ctx.query ?? {});
+    return scoped.ok ? undefined : scoped.message;
+  };
   return {
+    async find(this: CoreController, ctx: RequestContext) {
+      const state = checkedAs(ctx, "find");
+      const refused = state === null ? undefined : refusedQuery(ctx, state);
+      return refused === undefined ? super.find(ctx) : ctx.badRequest(refused);
+    },
     async update(this: CoreController, ctx: RequestContext) {
-      const caller = callerOf(rules, ctx.state, "update");
-      if (caller.kind !== "unrestricted" || rules.open.includes("update")) {
+      const state = checkedAs(ctx, "update");
+      if (state !== null) {
         const sent = requestData(ctx);
         if (sent === undefined) return ctx.badRequest("Missing or invalid data");
         const shape = writeShape(tables, uid, sent);
         if (!shape.ok) return ctx.badRequest(shape.message);
+        const refused = refusedQuery(ctx, state);
+        if (refused !== undefined) return ctx.badRequest(refused);
       }
       return super.update(ctx);
     },
