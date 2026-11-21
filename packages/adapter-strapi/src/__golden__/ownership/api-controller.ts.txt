@@ -319,3 +319,24 @@ export const enforcedController = (strapiInstance: unknown, uid: string, tables:
     },
   };
 };
+
+/**
+ * A single type's controller methods over Strapi's single type controller: a restricted caller's
+ * update (a session's role, the public role, or anyone on an `auth: false` route) has its body
+ * checked by `writeShape` first, a 400 otherwise; every other request and action is Strapi's.
+ */
+export const bodyCheckedSingle = (uid: string, tables: Tables) => {
+  const rules = tables.rules[uid]!;
+  return {
+    async update(this: CoreController, ctx: RequestContext) {
+      const caller = callerOf(rules, ctx.state, "update");
+      if (caller.kind !== "unrestricted" || rules.open.includes("update")) {
+        const sent = requestData(ctx);
+        if (sent === undefined) return ctx.badRequest("Missing or invalid data");
+        const shape = writeShape(tables, uid, sent);
+        if (!shape.ok) return ctx.badRequest(shape.message);
+      }
+      return super.update(ctx);
+    },
+  };
+};

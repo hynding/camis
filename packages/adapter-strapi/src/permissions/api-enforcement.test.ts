@@ -27,6 +27,7 @@ describe("projectApiEnforcement", () => {
     expect(out.types.map((t) => [t.contentType, t.own])).toEqual([
       ["Note", true],
       ["Category", false],
+      ["Front", false],
       ["Tag", false],
     ]);
     expect(out.types.find((t) => t.contentType === "Tag")!.roles).toEqual({});
@@ -585,6 +586,7 @@ describe("writes the users-permissions and upload plugins serve unchecked fail t
   it("tables each served type's and component's writable attributes by their form", () => {
     expect(projectApiEnforcement(doc, roles).shapes).toEqual({
       "api::category.category": { label: "scalar", notes: "relation" },
+      "api::front.front": { featured: "relation", headline: "scalar" },
       "api::note.note": {
         attachment: "media",
         category: "relation",

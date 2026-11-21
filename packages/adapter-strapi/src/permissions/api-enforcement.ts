@@ -97,6 +97,11 @@ export interface ApiEnforcement {
   shapes: Record<string, Record<string, ApiAttributeShape>>;
   /** What the media checks read; null when no restricted caller writes files or media fields. */
   uploads: ApiUploads | null;
+  /**
+   * The served single types, by uid: Strapi's single type controller serves them, with only a
+   * restricted caller's write body checked first.
+   */
+  singles: string[];
   gaps: CapabilityGap[];
 }
 
@@ -311,15 +316,15 @@ export const projectApiEnforcement = (doc: IrDocument, roles: Role[]): ApiEnforc
     ...uploads.gaps,
   );
   const writes = projectRelationWrites(doc, enforced);
-  const core = CORE_ACTIONS.collection;
   const openOf = (ct: ContentType): string[] =>
     (ct.options?.publicApiActions ?? [])
-      .map((a) => core[a])
+      .map((a) => CORE_ACTIONS[ct.kind][a])
       .filter((a): a is string => a !== undefined);
   const checked = linkWritten(doc, roles);
   const served = doc.contentTypes.filter(
     (ct) =>
       enforced.has(ct.name) ||
+      (ct.kind === "single" && checked.has(ct.name)) ||
       (ct.kind === "collection" &&
         ct.builtin === undefined &&
         (reach.reaching.has(typeKey(ct)) ||
@@ -350,6 +355,7 @@ export const projectApiEnforcement = (doc: IrDocument, roles: Role[]): ApiEnforc
     holders: reach.holders,
     shapes: projectShapes(doc, served),
     uploads: uploads.uploads,
+    singles: served.filter((ct) => ct.kind === "single").map((ct) => strapiNames(ct).uid),
     gaps,
   };
 };

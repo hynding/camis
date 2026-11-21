@@ -2,7 +2,11 @@ import { stableJson, type GeneratedFile } from "@camis/adapter-kernel";
 import type { CapabilityGap, IrDocument } from "@camis/ir-schema";
 import type { Role } from "@camis/permissions";
 import { PERMISSIONS_INDEX_TS } from "../skeleton/templates";
-import { emitApiEnforcementFiles, enforcedControllerSource } from "./api-enforcement-emit";
+import {
+  bodyCheckedSingleSource,
+  emitApiEnforcementFiles,
+  enforcedControllerSource,
+} from "./api-enforcement-emit";
 import { projectApiEnforcement } from "./api-enforcement";
 import { emitConditionsModule } from "./conditions";
 import { projectApiRoles, projectPermissions } from "./project";
@@ -39,6 +43,13 @@ export const emitPermissions = (doc: IrDocument, roles: Role[]): PermissionEmiss
     files,
     gaps: [...gaps, ...apiRoles.gaps, ...enforcement.gaps],
     indexContent: PERMISSIONS_INDEX_TS,
-    controllers: new Map(enforcement.types.map((t) => [t.uid, enforcedControllerSource(t.uid)])),
+    controllers: new Map(
+      enforcement.types.map((t) => [
+        t.uid,
+        enforcement.singles.includes(t.uid)
+          ? bodyCheckedSingleSource(t.uid)
+          : enforcedControllerSource(t.uid),
+      ]),
+    ),
   };
 };

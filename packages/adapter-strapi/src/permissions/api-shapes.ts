@@ -73,11 +73,12 @@ const LINKS: readonly Field["type"][] = [
 ];
 
 /**
- * The collection types whose writes the generated controller must check the body of: each with a
+ * The content types whose writes the generated controller must check the body of: each with a
  * relation or media field (its own, an embedded component's, or an inverse Strapi gives it) that
  * a role the rules restrict creates or updates, or that an `auth: false` route opens for either.
  * Strapi's database layer spreads an item's `__pivot` into the join row whatever type it is
- * written through, so without the check a role with create alone could link existing entries.
+ * written through, so without the check a role with create alone could link existing entries, or
+ * a single type's writer name another row of it (a locale, the published version) in its join rows.
  */
 export const linkWritten = (doc: IrDocument, roles: readonly Role[]): Set<string> => {
   const inverses = synthesizedInverses(doc);
@@ -98,7 +99,7 @@ export const linkWritten = (doc: IrDocument, roles: readonly Role[]): Set<string
     ) || (ct.options?.publicApiActions ?? []).some((a) => a === "create" || a === "update");
   return new Set(
     doc.contentTypes
-      .filter((ct) => ct.kind === "collection" && ct.builtin === undefined)
+      .filter((ct) => ct.builtin === undefined)
       .filter((ct) => links(ct) && written(ct))
       .map((ct) => ct.name),
   );

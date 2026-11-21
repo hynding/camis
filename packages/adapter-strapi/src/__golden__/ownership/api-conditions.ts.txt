@@ -1439,6 +1439,7 @@ const CONDITIONS: Record<string, Record<string, Condition>> = {
     },
   },
   "api::category.category": {},
+  "api::front.front": {},
   "api::tag.tag": {},
 };
 
@@ -1505,6 +1506,16 @@ const RULES: Record<string, TypeRules> = {
     admins: ADMIN_ROLES,
     roles: {},
   },
+  "api::front.front": {
+    own: false,
+    defaults: {},
+    relations: {},
+    variables: {},
+    open: [],
+    assign: [],
+    admins: ADMIN_ROLES,
+    roles: {},
+  },
   "api::tag.tag": {
     own: false,
     defaults: {},
@@ -1525,6 +1536,12 @@ const HOLDERS: Record<string, Holder> = {
     populatable: ["notes"],
     links: {
       "notes": { relation: "api::note.note" },
+    },
+  },
+  "api::front.front": {
+    populatable: ["featured"],
+    links: {
+      "featured": { relation: "api::category.category" },
     },
   },
   "api::note.note": {
@@ -1558,6 +1575,10 @@ const SHAPES: Record<string, Record<string, AttributeShape>> = {
   "api::category.category": {
     "label": "scalar",
     "notes": "relation",
+  },
+  "api::front.front": {
+    "featured": "relation",
+    "headline": "scalar",
   },
   "api::note.note": {
     "attachment": "media",
