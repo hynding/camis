@@ -9,6 +9,7 @@ import {
 import type { Role } from "@camis/permissions";
 import { dual, strapiNames } from "@camis/strapi-schema";
 import type { ApiRelationWrite, ApiTypeRules } from "./api-enforcement";
+import { codePointOrder } from "./code-point-order";
 
 // What a write through a relation changes besides the entry written, as Strapi 5 stores links: a
 // link both sides declare (`inversedBy`/`mappedBy`) shows on the entry at the other end too, so
@@ -77,7 +78,7 @@ export const projectRelationWrites = (
   own: ReadonlySet<string>,
 ): Map<string, Record<string, ApiRelationWrite>> => {
   const out = new Map<string, Record<string, ApiRelationWrite>>();
-  const sorted = [...attributesOf(doc)].sort((a, b) => a.attribute.localeCompare(b.attribute));
+  const sorted = [...attributesOf(doc)].sort((a, b) => codePointOrder(a.attribute, b.attribute));
   for (const a of sorted) {
     if (a.holder.builtin !== undefined || a.target.builtin !== undefined) continue;
     const write = writeOf(a);

@@ -10,6 +10,7 @@ import {
 import type { Role } from "@camis/permissions";
 import { componentUid, strapiNames } from "@camis/strapi-schema";
 import type { ApiHolder, ApiHolderLink, ApiTypeRules } from "./api-enforcement";
+import { codePointOrder } from "./code-point-order";
 
 // Which content types and components reach a type some role reads under a condition, through
 // relations (and their inverses), a localized type's localizations, components, dynamic zones and
@@ -184,10 +185,10 @@ const holdersOf = (
         links.push([edge.attribute, { component: uid(targets[0]!) }]);
       else links.push([edge.attribute, { relation: uid(targets[0]!) }]);
     }
-    links.sort(([a], [b]) => a.localeCompare(b));
+    links.sort(([a], [b]) => codePointOrder(a, b));
     holders.push([node.uid, { populatable: node.populatable, links: Object.fromEntries(links) }]);
   }
-  holders.sort(([a], [b]) => a.localeCompare(b));
+  holders.sort(([a], [b]) => codePointOrder(a, b));
   return Object.fromEntries(holders);
 };
 

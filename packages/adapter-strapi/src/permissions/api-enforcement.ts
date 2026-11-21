@@ -19,6 +19,7 @@ import { CORE_ACTIONS } from "../hooks/route-hooks";
 import { projectReach, typeKey } from "./api-reach";
 import { projectRelationWrites, relationWriteGaps } from "./api-relation-writes";
 import { conditionName } from "./condition-name";
+import { codePointOrder } from "./code-point-order";
 
 /** The actions the content API serves an entry through, which a condition may narrow. */
 const ENFORCED_ACTIONS = ["read", "create", "update", "delete"] as const;
@@ -281,7 +282,7 @@ export const projectApiEnforcement = (doc: IrDocument, roles: Role[]): ApiEnforc
       contentType: ct.name,
       uid: strapiNames(ct).uid,
       own: true,
-      conditions: [...conditions.values()].sort((a, b) => a.name.localeCompare(b.name)),
+      conditions: [...conditions.values()].sort((a, b) => codePointOrder(a.name, b.name)),
       defaults: defaultsOf(ct, variables),
       relations: {},
       variables: Object.fromEntries(variables.map((v) => [v, vars.attribute(v)!] as const)),
