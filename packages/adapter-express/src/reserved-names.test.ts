@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Field } from "@camis/ir-schema";
+import type { ComponentFieldT, Field } from "@camis/ir-schema";
 import type { IrBundle } from "@camis/permissions";
 import { expressAdapter } from "./generate";
 import { aiFixture } from "./__fixtures__/ai";
@@ -8,7 +8,7 @@ import { catalog } from "./__fixtures__/catalog";
 import { morphs } from "./__fixtures__/morphs";
 import { secured } from "./__fixtures__/secured";
 
-const withFields = (fields: Field[], componentFields: Field[] = []): IrBundle => ({
+const withFields = (fields: Field[], componentFields: ComponentFieldT[] = []): IrBundle => ({
   document: {
     version: 1,
     contentTypes: [

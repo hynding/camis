@@ -37,7 +37,7 @@ const RESERVED = new Map([
   ["stamped", "stamped"],
 ]);
 
-const snakeNames = (field: { name: string; type: string; inverse?: string }): TargetName[] => [
+const snakeNames = (field: { name: string; inverse?: string | undefined }): TargetName[] => [
   { spelled: field.name, mapped: snakeCase(field.name) },
   ...(field.inverse !== undefined
     ? [{ spelled: field.inverse, mapped: snakeCase(field.inverse), inverse: true as const }]

@@ -59,6 +59,22 @@ components, and repeatables nested inside repeatables, are reported as downgrade
 Exit codes: `0` on success (capability *downgrades* are warnings); non-zero on a validation failure,
 an unreadable/invalid config, an unknown command, or an `error`-severity capability gap.
 
+A field named as a target names its own keys or columns is such an error (`reservedFieldName`,
+located at the content type or component and the field, before anything is written), since the
+target would overwrite or refuse it. Names are compared as the target maps them, so
+`published_at` and `PublishedAt` (an imported API key) are caught as `publishedAt` is:
+
+- `strapi`, and `filament` with `apiStyle: "strapi"`: `documentId`, `createdAt`, `updatedAt`,
+  `publishedAt`, `createdBy`, `updatedBy`, `locale`, `localizations` (and `createdById`,
+  `updatedById`), compared snake_cased; for a field, its API key, a relation's inverse and a
+  component's field. The Filament target also checks a to-one relation's key column, so a relation
+  named `document` (`document_id`) is refused there.
+- `filament` with `apiStyle: "laravel"`: `createdAt` and `updatedAt`, whose columns are Laravel's
+  timestamps, a component's fields included.
+- `express`: `createdAt` and `updatedAt` on a content type.
+
+`id` is refused by `camis validate` itself, since every target keeps it.
+
 ## camis.config.json
 
 ```json

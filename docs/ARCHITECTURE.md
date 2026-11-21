@@ -152,7 +152,9 @@ adapter's Strapi API style needs for Strapi's data-transfer archives.
 Targets are not equally expressive. The IR carries a **capability descriptor** per target,
 and generation produces a **capability-gap report**: any IR feature a target cannot represent
 is surfaced loudly (error or explicit, acknowledged downgrade) rather than silently dropped.
-The canonical example is permissions (§4).
+The canonical example is permissions (§4). A field name a target keeps for itself (Strapi's
+`publishedAt`, Laravel's `created_at`) is such an error, reported by the adapter that owns the name;
+only a name every target keeps (`id`) is an IR rule.
 
 ---
 

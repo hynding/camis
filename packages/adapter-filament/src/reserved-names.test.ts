@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Field } from "@camis/ir-schema";
+import type { ComponentFieldT, Field } from "@camis/ir-schema";
 import type { IrBundle } from "@camis/permissions";
 import { filamentAdapter } from "./generate";
 import { aiFixture } from "./__fixtures__/ai";
@@ -15,10 +15,11 @@ import { authorRoleBundle } from "./strapi-api/__fixtures__/author-role";
 import { morphRelationsBundle } from "./strapi-api/__fixtures__/morph-relations";
 import { strapiApiBundle } from "./strapi-api/__fixtures__/strapi-api";
 import { uniqueComponentsBundle } from "./strapi-api/__fixtures__/unique-components";
+import { storageBundle } from "./strapi-api/storage/__fixtures__/storage";
 
 type ApiStyle = "laravel" | "strapi";
 
-const withFields = (fields: Field[], componentFields: Field[] = []): IrBundle => ({
+const withFields = (fields: Field[], componentFields: ComponentFieldT[] = []): IrBundle => ({
   document: {
     version: 1,
     contentTypes: [
@@ -135,6 +136,8 @@ describe("Filament target: names its rows and wire shape reserve", () => {
     });
   });
 
+  // The Laravel-style fixtures keep a `publishedAt` field of their own, which only the Strapi API
+  // style keeps for itself; they are generated, and booted, in the Laravel API style only.
   it.each([
     ["ai", aiFixture],
     ["blog", blog],
@@ -145,10 +148,19 @@ describe("Filament target: names its rows and wire shape reserve", () => {
     ["permissions", permissionsBundle],
     ["route hooks", routeHooksBundle],
     ["schedules", schedulesBundle],
+  ] as [string, IrBundle][])(
+    "reports none for the %s fixture in the Laravel API style",
+    (_, bundle) => {
+      expect(reserved(bundle, "laravel")).toEqual([]);
+    },
+  );
+
+  it.each([
     ["author role", authorRoleBundle],
     ["morph relations", morphRelationsBundle],
     ["strapi api", strapiApiBundle],
     ["unique components", uniqueComponentsBundle],
+    ["storage", storageBundle],
   ] as [string, IrBundle][])(
     "reports none for the %s fixture, in either API style",
     (_, bundle) => {

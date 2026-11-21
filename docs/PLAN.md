@@ -2693,6 +2693,41 @@ notes projects on fresh sqlite databases besides the blog, and reads their publi
 
 ---
 
+## Phase 96 — field names a target keeps for itself (`ir-core`, `strapi-schema`, `adapter-strapi`, `adapter-filament`, `adapter-express`, `cli`)
+
+The IR accepted fields named `publishedAt` and `updatedAt`, the Strapi target emitted them, and
+Strapi then overwrote the one and refused writes naming the other (`Invalid key updatedAt`), with
+no gap reported (issue #103).
+
+- **Where the rule lives.** Only `id` is kept by every target, and it stays an IR rule
+  (`reserved_field_name`). The other names are one target's concept, so the adapter that owns the
+  name reports it: an `error`-severity `reservedFieldName` gap, located at the content type (or
+  component) and the field, so `camis generate`/`camis build` stop before writing. `ir-core`'s
+  `reservedNameGaps(doc, target, reserved, namesOf)` walks the fields; each target says how it maps
+  a field's names and which it keeps. A built-in type is the target's own and is not checked.
+- **Strapi** (`@camis/strapi-schema`'s `STRAPI_RESERVED_NAMES`, `strapiReservedNameGaps`):
+  `documentId`, `createdAt`, `updatedAt`, `publishedAt`, `createdBy`, `updatedBy`, `locale`,
+  `localizations`, and the `created_by_id`/`updated_by_id` key columns, compared snake_cased as
+  Strapi's Content-Type Builder compares attribute names, so an API key `published_at` or
+  `PublishedAt` is caught. A field's API key, a relation's inverse (Strapi adds it to the related
+  type) and a component's field (the builder refuses it there too) are checked. The builder also
+  refuses `status`, `meta` and `entry_id`, which are not keys of the entry and are left alone.
+- **Filament.** The Strapi API style answers Strapi's REST API, so it reports Strapi's names, and
+  also a column of its own rows a field's column would repeat: a to-one relation named `document`
+  keeps `document_id`. The Laravel API style reports `createdAt` and `updatedAt`, whose columns are
+  Laravel's timestamps on every table, a component item's included.
+- **Express** reports `createdAt` and `updatedAt` on a content type (each table's timestamp
+  columns); a component's fields are prefixed columns, or rows of a table without timestamps.
+- **Import.** A Strapi project's schema.json never carries these names (Strapi adds them itself and
+  its builder refuses them), so it imports and generates as before. One edited by hand to carry one
+  imports as it is, and generation reports it.
+
+Exit: `reserved-names.test.ts` in `ir-core`, `strapi-schema`, `adapter-strapi` (with the import
+cases), `adapter-filament` (both API styles) and `adapter-express`, each with its fixtures reporting
+none; `generate.test.ts` in the CLI fails with a located message per name and writes nothing.
+
+---
+
 ## Sequencing rationale (quick reference)
 
 1. **Strapi first** — mature schema validates the IR fastest, with the thinnest adapter.
