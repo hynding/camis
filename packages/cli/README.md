@@ -193,9 +193,15 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
     polymorphic can be populated from it; `/api/i18n/locales` and the auth routes are safe, as they
     populate nothing polymorphic; and every route where the rules restrict no one gets no
     enforcement (issue #111). A populate through the built-in user is walked like any other (every
-    built-in user type of the IR is one user), and a nested populate, filter or sort beneath an
-    attribute camis does not know (the user's `role`, an admin's `createdBy`) is 400 for a
-    restricted caller; `*` beneath the user populates its inverses only, not `role`.
+    built-in user type of the IR is one user), and on the paths the generated controllers walk (a
+    served type's query and its populates through links of the reach graph) a nested populate, a
+    sort through, or any filter on a relation Strapi adds that camis does not walk (the user's
+    `role`, an admin's `createdBy` and `updatedBy`, named in the generated holders) is 400 for a
+    restricted caller, whatever the filter's value (`role=3` and `role[$in]` included); filters on
+    the entry's own fields and on known relations pass. Two paths stay Strapi's own behaviour (issue
+    #113): a type linking to the user that camis does not serve, and a populatable relation that is
+    no link of the graph; there a populate's filter through `role` can tell which role a user has.
+    `*` beneath the user populates its inverses only, not `role`.
 
   The build fails (`error`) where it cannot enforce: `apiGrantCondition` for a read condition
   outside `eq`/`and`/`or` over `record.<field>`/`record.<relation>Id` vs a literal or

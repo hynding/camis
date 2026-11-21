@@ -57,8 +57,13 @@ interface Node {
   /** `Type.field` names, by attribute, for messages. */
   owner: string;
   populatable: string[];
+  /** The relations Strapi adds to the type that are no edge: nothing is known beneath them. */
+  unwalked: string[];
   edges: Edge[];
 }
+
+/** Strapi relates every content type to the admin users who created and last updated it. */
+const ADMIN_RELATIONS = ["createdBy", "updatedBy"];
 
 const BUILTIN_PLUGIN: Record<string, string> = { user: "users-permissions", file: "upload" };
 const POPULATABLE = new Set<Field["type"]>([
@@ -107,7 +112,13 @@ const graphOf = (doc: IrDocument): Map<NodeKey, Node> => {
   // it leads on through its inverses: a node with those alone.
   const user = doc.contentTypes.find((ct) => ct.builtin === "user");
   if (user !== undefined)
-    nodes.set(USER, { uid: PLUGIN_USER_UID, owner: user.name, populatable: [], edges: [] });
+    nodes.set(USER, {
+      uid: PLUGIN_USER_UID,
+      owner: user.name,
+      populatable: [],
+      unwalked: [...ADMIN_RELATIONS, "role"].sort(),
+      edges: [],
+    });
   for (const ct of doc.contentTypes) {
     if (ct.builtin !== undefined) continue;
     nodes.set(typeKey(ct), {
@@ -117,6 +128,7 @@ const graphOf = (doc: IrDocument): Map<NodeKey, Node> => {
         ...populatable(ct.fields),
         ...(ct.options?.localized === true ? ["localizations"] : []),
       ],
+      unwalked: ADMIN_RELATIONS,
       edges: [
         ...fieldEdges(ct.fields),
         // i18n's relation from each locale of an entry to its other locales.
@@ -131,6 +143,7 @@ const graphOf = (doc: IrDocument): Map<NodeKey, Node> => {
       uid: componentUid(c),
       owner: c.name,
       populatable: populatable(c.fields),
+      unwalked: [],
       edges: fieldEdges(c.fields),
     });
   }
@@ -155,9 +168,10 @@ const graphOf = (doc: IrDocument): Map<NodeKey, Node> => {
     uid: FILE_UID,
     owner: "File",
     populatable: ["related"],
+    unwalked: ADMIN_RELATIONS,
     edges: [{ attribute: "related", link: "relation", targets: attached }],
   });
-  nodes.set(POLYMORPHIC, { uid: "", owner: "", populatable: [], edges: [] });
+  nodes.set(POLYMORPHIC, { uid: "", owner: "", populatable: [], unwalked: [], edges: [] });
   for (const node of nodes.values()) node.populatable = [...new Set(node.populatable)].sort();
   return nodes;
 };
@@ -229,7 +243,10 @@ const holdersOf = (
       else links.push([edge.attribute, { relation: uid(targets[0]!) }]);
     }
     links.sort(([a], [b]) => codePointOrder(a, b));
-    holders.push([node.uid, { populatable: node.populatable, links: Object.fromEntries(links) }]);
+    holders.push([
+      node.uid,
+      { populatable: node.populatable, unwalked: node.unwalked, links: Object.fromEntries(links) },
+    ]);
   }
   holders.sort(([a], [b]) => codePointOrder(a, b));
   // The user's entry matters only beneath a holder that links to it.

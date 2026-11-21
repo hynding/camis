@@ -117,6 +117,7 @@ const holdersSource = (holders: Record<string, ApiHolder>): string =>
         .join("\n");
       return `  ${key(uid)}: {
     populatable: ${list(holder.populatable)},
+    unwalked: ${list(holder.unwalked)},
     links: {
 ${links}
     },

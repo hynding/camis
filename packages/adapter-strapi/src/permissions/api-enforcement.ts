@@ -89,6 +89,8 @@ export interface ApiRelationWrite {
 export interface ApiHolder {
   /** Every attribute `populate=*` populates. */
   populatable: string[];
+  /** The relations Strapi adds that the reach graph does not walk. */
+  unwalked: string[];
   links: Record<string, ApiHolderLink>;
 }
 

@@ -85,6 +85,11 @@ export type HolderLink =
 export interface Holder {
   /** Every attribute `populate=*` populates. */
   populatable: readonly string[];
+  /**
+   * The relations Strapi adds that the graph does not walk (an admin's createdBy, the user's
+   * role): a filter on one answers what the caller may not read, whatever its value.
+   */
+  unwalked: readonly string[];
   /** The attributes that lead to a conditioned type, directly or further on. */
   links: Readonly<Record<string, HolderLink>>;
 }
@@ -579,13 +584,6 @@ const refuse = (message: string): { ok: false; message: string } => ({ ok: false
  * of a right guess and stay in a wrong one. Everywhere else the scope sits in a positive `$and`
  * (a client's `$or`, `$ne`, `$notIn` or `$null` included), where an unknown never matches.
  */
-/** Whether a filter value tests attributes of what it names, not only the attribute itself. */
-const traverses = (value: unknown): boolean => {
-  if (Array.isArray(value)) return value.some(traverses);
-  if (!isRecord(value)) return false;
-  return Object.entries(value).some(([key, inner]) => !key.startsWith("$") || traverses(inner));
-};
-
 const scopeFilters = (
   tables: Tables,
   holder: string,
@@ -609,15 +607,9 @@ const scopeFilters = (
   for (const [key, value] of Object.entries(filters)) {
     const link = key.startsWith("$") ? undefined : own(known?.links, key);
     // Strapi checks neither a populate's filters nor a relation filter's inner ones against the
-    // caller's grants: through an attribute camis does not know (the user's role) a filter would
-    // answer what the caller may not read.
-    if (
-      link === undefined &&
-      !key.startsWith("$") &&
-      known !== undefined &&
-      !known.populatable.includes(key) &&
-      traverses(value)
-    )
+    // caller's grants: on a relation camis does not walk (the user's role) any filter, `role: 3`
+    // as much as `role.name`, would answer what the caller may not read.
+    if (link === undefined && known?.unwalked.includes(key) === true)
       return refuse(`Invalid filter through ${key}`);
     let scoped: Checked<unknown> = { ok: true, value };
     if (key === "$and" || key === "$or" || key === "$not") {

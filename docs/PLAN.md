@@ -2902,11 +2902,11 @@ relation write, and a database seeded once kept it.
     The built-in user is a node of the reach graph with its inverses as edges (users-permissions
     serves it, but a relation to it leads on: a board's author to the author's boards), so a
     populate through it is walked, and a type reaching a polymorphic relation or a conditioned type
-    only through it is served; a nested populate beneath an attribute the graph does not know (the
-    user's `role`, an admin's `createdBy`) is refused (400 "Invalid populate beneath …") rather than
-    passed on unchecked. Live on 5.48: a role's `GET
-    /api/albums?populate[curator][populate][boards][populate]=subjects` (and `=*`, and
-    `[curator][populate][role][populate]=users`) and the same through an open route
+    only through it is served; on those paths a nested populate beneath an attribute the graph does
+    not know (the user's `role`, an admin's `createdBy`) is refused (400 "Invalid populate beneath
+    …") rather than passed on unchecked (the two paths left to Strapi are below, issue #113). Live
+    on 5.48: a role's `GET /api/albums?populate[curator][populate][boards][populate]=subjects` (and
+    `=*`, and `[curator][populate][role][populate]=users`) and the same through an open route
     (`/api/galleries?populate[owner]…`) are 400; `populate[curator][populate]=boards` and `=role`
     are 200. `populate[x][populate]=*` beneath the built-in user expands to the user's inverses
     only, so `role` is not populated. This is a deliberate difference from Strapi, which also
@@ -2915,12 +2915,24 @@ relation write, and a database seeded once kept it.
     users-permissions serves one user. Before this, two built-in user types each became a node with
     the same uid, and only the last one's inverses were walked. A grant on any built-in user type
     counts for `apiUserWrite`, and a grant on any built-in file type counts for `apiRelationReach`
-    and for the upload enforcement. The media library was already one node. For a restricted caller,
-    a `filters` or `sort` inside a populate entry that goes through an attribute the graph does not
-    know is refused (400 "Invalid filter through …", "Invalid sort through a relation in populate").
-    Filters and sorts on the entry's own scalar fields and on known relations pass. At top level
-    Strapi's validator already refuses them (400 "Invalid key role at writer.role"). Live on 5.48
-    with two built-in user types:
+    and for the upload enforcement. The media library was already one node. Each generated holder
+    names the relations Strapi adds that the graph does not walk (`unwalked`: every content type's
+    `createdBy` and `updatedBy`, and the user's `role`), from the IR, not guessed from the request.
+    For a restricted caller, a filter on one of them is refused whatever its value (ninth review
+    round: `role=3`, `role[$eq]=3`, `role[$in][0]=4` and `role[$null]=true` were a role-membership
+    oracle by role id), and so is a sort through one (400 "Invalid filter through …", "Invalid sort
+    through a relation in populate"). Filters and sorts on the entry's own fields (`id`,
+    `documentId`, `createdAt`, `publishedAt` included) and on known relations, components and media
+    pass, under `$or`, `$and` and `$not` too. These refusals hold on the paths the generated
+    controllers walk: a served type's own query and its populates through graph links. Two paths
+    stay Strapi's own behaviour, tracked in issue #113: a type that links to the user but that camis
+    does not serve, and a populatable relation that is not a graph link
+    (`populate[ref][filters][writer][role][type]`, where `ref` leads to no conditioned type). On
+    those, a populate's filter or sort through the user's `role` (or an admin's
+    `createdBy`/`updatedBy`) reaches Strapi unchecked; what it exposes is which role a user has (or
+    which admin created or last updated an entry), not an entry the caller may not read. At top
+    level Strapi's validator already refuses a filter through `role` (400 "Invalid key role at
+    writer.role"). Live on 5.48 with two built-in user types:
     - `GET /api/posts?populate[writer][filters][role][name][$eq]=viewer` and
       `[writer][sort]=role.name` are 400 for a role, and the same through an open route's `[owner]`
       is 400 for an anonymous caller.
@@ -3090,16 +3102,16 @@ Known limits:
 Exit: `record-filter.test.ts`; `api-enforcement.test.ts` (rules, per-type filters, defaults, holders
 including localizations and media, relation writes, open actions, every error gap, two built-in user
 types and two built-in file types); `runtime/api-conditions.test.ts` (populate normalisation and
-scoping, filter scoping and lifting, sort refusal, a filter or sort through an attribute the graph
-does not know, component populate filters, `$not` refusal, a relation's own operators,
-localizations, a file's related entries, open routes, relation refs, write plans, prototype role
-names); `runtime/engine.test.ts` (the scoped queries on Strapi's query engine and sqlite: a right
-guess at an unreadable title answers as a wrong one for relation filters, NULL-owner rows, two
-relation filters, populate filters, a component's populate filters and `$not` shapes, which are
-refused; a relation's own operators, string booleans included; no linked entry answering as an
-unreadable one for every NULL-satisfied shape); `enforcement-behaviour.test.ts` (the emitted modules
-against a fake core controller, document service and query engine: another member's note is not
-listed, read, updated or deleted, a client filter cannot widen the list, an owner is assigned on
+scoping, filter scoping and lifting, sort refusal, a filter on a relation the graph does not walk,
+whatever its value, and a sort through one, component populate filters, `$not` refusal, a relation's
+own operators, localizations, a file's related entries, open routes, relation refs, write plans,
+prototype role names); `runtime/engine.test.ts` (the scoped queries on Strapi's query engine and
+sqlite: a right guess at an unreadable title answers as a wrong one for relation filters, NULL-owner
+rows, two relation filters, populate filters, a component's populate filters and `$not` shapes,
+which are refused; a relation's own operators, string booleans included; no linked entry answering
+as an unreadable one for every NULL-satisfied shape); `enforcement-behaviour.test.ts` (the emitted
+modules against a fake core controller, document service and query engine: another member's note is
+not listed, read, updated or deleted, a client filter cannot widen the list, an owner is assigned on
 create and kept on update, draft/published rows that disagree, non-object data, a create condition
 with a default, a guest create, populate/filter/sort/connect through a tag, a category's notes
 connected, disconnected or replaced, a pinned tag taken, a file's related entries, reviewer 403,
