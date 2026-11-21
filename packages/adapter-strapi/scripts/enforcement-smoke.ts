@@ -777,11 +777,17 @@ const token = (dir: string, type: string, actions: string[] = []): string => {
  */
 const tokens = async (dir: string): Promise<void> => {
   const require = createRequire(join(dir, "package.json"));
-  const strategy = (
-    require("@strapi/admin/dist/server/server/src/strategies/content-api-token.js") as {
-      default: { name: string };
-    }
-  ).default.name;
+  const strategy = // Not among the package's exports: loaded by its path in the installed project.
+    (
+      require(
+        join(
+          dir,
+          "node_modules/@strapi/admin/dist/server/server/src/strategies/content-api-token.js",
+        ),
+      ) as {
+        default: { name: string };
+      }
+    ).default.name;
   check(
     "camis recognises the token strategy the installed Strapi registers",
     readFileSync(join(dir, "src/permissions/api-conditions.ts"), "utf8").includes(

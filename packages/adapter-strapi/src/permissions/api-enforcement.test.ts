@@ -861,7 +861,6 @@ describe("writes the users-permissions and upload plugins serve unchecked fail t
     expect(projectApiEnforcement(doc, roles).uploads).toEqual({
       admins: ["manager"],
       uploaderRecorded: true,
-      extended: true,
       holders: {
         "api::note.note": { fields: ["attachment"], nested: {} },
         "api::tag.tag": { fields: [], nested: { refs: { component: "shared.reference" } } },
@@ -883,11 +882,21 @@ describe("writes the users-permissions and upload plugins serve unchecked fail t
     const out = projectApiEnforcement(doc, noFiles);
     expect(out.uploads).toMatchObject({ uploaderRecorded: false });
     expect(out.uploads?.holders).toEqual(projectApiEnforcement(doc, roles).uploads?.holders);
+    // A custom API token may hold the upload API's scopes whatever the roles: wherever the rules
+    // restrict anyone the upload checks are tabled; only where they restrict no one are they not.
     const readOnly = noFiles.map((r) => ({
       ...r,
       grants: r.grants.map((g) => ({ ...g, actions: g.actions.filter((a) => a === "read") })),
     }));
-    expect(projectApiEnforcement(doc, readOnly).uploads).toBeNull();
+    expect(projectApiEnforcement(doc, readOnly).uploads).toMatchObject({
+      uploaderRecorded: false,
+    });
+    expect(
+      projectApiEnforcement(
+        doc,
+        roles.filter((r) => r.admin === true),
+      ).uploads,
+    ).toBeNull();
   });
   // The upload plugin returns a file's related entries, of any type, to whoever reads the media
   // library: its find and findOne are wrapped for every restricted reader, uploaders recorded or not.

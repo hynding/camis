@@ -14,8 +14,8 @@ import { codePointOrder } from "./code-point-order";
 // The upload plugin attaches, replaces and deletes files on entries (`ref`, `refId` and `field` on
 // POST /api/upload, `?id=`, DELETE /api/upload/files/:id), and any entry write links a stored file
 // by its id, with no upload permission. Wherever a restricted caller writes a type with a media
-// field, the entry controllers check each file linked; once a restricted role reads or writes files,
-// the generated upload extension also decides each upload API request: a write on the entries it
+// field, the entry controllers check each file linked; wherever the rules restrict anyone, the
+// generated upload extension also decides each upload API request: a write on the entries it
 // changes, a read on the populate (no file's related entries, which may be of any type).
 
 /** A type's or component's media fields, and its attributes that hold one further down. */
@@ -28,8 +28,6 @@ export interface ApiUploads {
   admins: string[];
   /** A restricted role writes files: the upload extension records each file's uploader. */
   uploaderRecorded: boolean;
-  /** A restricted role reads or writes files: the upload extension decides its upload API requests. */
-  extended: boolean;
   /** Every content type and component with a media field at some depth, by uid. */
   holders: Record<string, ApiMediaHolder>;
   /** Each content type with a media field: the roles holding read and update on it outright. */
@@ -37,7 +35,7 @@ export interface ApiUploads {
 }
 
 export interface UploadEnforcement {
-  /** Null when no restricted caller reads or writes files, or writes a type with a media field. */
+  /** Null where the rules restrict no one: no non-admin role and no open route. */
   uploads: ApiUploads | null;
   /** The collection types with a media field a restricted caller writes, which camis serves. */
   served: Set<string>;
@@ -129,7 +127,7 @@ const mediaFieldNames = (doc: IrDocument, ct: ContentType): string[] => [
  * What the media checks need, the types they make camis serve, and where they cannot hold. Strapi
  * links a stored file through a media field with no upload permission, so the checks run wherever
  * a restricted role (or an `auth: false` route) writes a type with one, file grants or not; a role
- * that reads or writes files adds the upload extension, which records uploaders for a writer.
+ * that writes files makes the upload extension record uploaders.
  */
 export const projectUploads = (doc: IrDocument, roles: readonly Role[]): UploadEnforcement => {
   const file = doc.contentTypes.find((ct) => ct.builtin === "file");
@@ -151,10 +149,13 @@ export const projectUploads = (doc: IrDocument, roles: readonly Role[]): UploadE
   const written = types.filter(
     ({ ct }) => restricted.some((r) => writes(r, ct)) || open(ct).length > 0,
   );
-  // The upload API's find and findOne return a file's related entries, of any type, to a reader.
-  const readers = restricted.filter((r) => file !== undefined && holds(r, file.name, ["read"]));
-  if (writers.length === 0 && written.length === 0 && readers.length === 0)
-    return { uploads: null, served: new Set(), gaps: [] };
+  // The upload API's find and findOne return a file's related entries, of any type, to a role that
+  // reads files or a custom API token holding their scope, which generation cannot see: wherever
+  // the rules restrict anyone (a non-admin role, an open route), the extension checks them.
+  const guarded =
+    restricted.length > 0 ||
+    doc.contentTypes.some((ct) => (ct.options?.publicApiActions ?? []).length > 0);
+  if (!guarded) return { uploads: null, served: new Set(), gaps: [] };
   const roleNames = (ct: ContentType, action: Action): string[] =>
     restricted
       .filter((r) => holds(r, ct.name, [action], true))
@@ -197,7 +198,6 @@ export const projectUploads = (doc: IrDocument, roles: readonly Role[]): UploadE
         .map((r) => r.name)
         .sort(codePointOrder),
       uploaderRecorded: writers.length > 0,
-      extended: writers.length > 0 || readers.length > 0,
       holders: sorted([
         ...types.map(({ ct, holder }) => [strapiNames(ct).uid, holder] as [string, ApiMediaHolder]),
         ...[...holding.values()].flatMap((c): [string, ApiMediaHolder][] => {

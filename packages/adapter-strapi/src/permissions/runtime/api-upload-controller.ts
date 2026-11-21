@@ -126,7 +126,8 @@ export const enforcedUpload =
     const read = async (ctx: UploadContext, action: "find" | "findOne"): Promise<unknown> => {
       const caller = uploadCaller(uploads, ctx.state);
       if (caller.kind === "refused") return ctx.forbidden();
-      if (caller.kind === "role" && populatesRelated(ctx.query?.populate ?? false))
+      const checked = caller.kind === "role" || (caller.kind === "unrestricted" && caller.custom);
+      if (checked && populatesRelated(ctx.query?.populate ?? false))
         return ctx.badRequest("Invalid populate of a file's related entries");
       return core[action].call(core, ctx);
     };

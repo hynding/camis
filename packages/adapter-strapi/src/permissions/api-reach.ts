@@ -22,15 +22,19 @@ import { codePointOrder } from "./code-point-order";
  * A node of the reach graph: a content type or a component, which may share a name, or the upload
  * plugin's file, whose polymorphic `related` leads to every type and component with a media field.
  */
-type NodeKey = `type:${string}` | `component:${string}` | "file";
+type NodeKey = `type:${string}` | `component:${string}` | "file" | "polymorphic";
 
 const FILE: NodeKey = "file";
+/** Where every polymorphic relation or inverse leads: entries of any type. */
+const POLYMORPHIC: NodeKey = "polymorphic";
 /**
- * What a file's `related` entries reach besides conditioned types: they are polymorphic, so a
- * populate of them takes no per-type filter and returns entries of any type, one the caller holds
- * no grant on included. Every node that leads to a file reaches it, so its populate is checked.
+ * What a file's `related` entries, and any polymorphic relation or inverse, reach besides
+ * conditioned types: a populate of one takes no per-type filter and returns entries of any type,
+ * one the caller holds no grant on included (Strapi's sanitizer keeps such a list whole when it
+ * can read none of its entries). Every node that leads to one reaches it, so its populate is
+ * checked: refused for a role and for a custom API token alike.
  */
-const ANY_TYPE = "file.related";
+const ANY_TYPE = "any type";
 const FILE_UID = "plugin::upload.file";
 
 export const typeKey = (ct: { name: string }): NodeKey => `type:${ct.name}`;
@@ -38,7 +42,7 @@ const componentKey = (name: string): NodeKey => `component:${name}`;
 
 interface Edge {
   attribute: string;
-  link: "relation" | "component" | "zone" | "media";
+  link: "relation" | "component" | "zone" | "media" | "polymorphic";
   targets: NodeKey[];
 }
 
@@ -85,6 +89,8 @@ const graphOf = (doc: IrDocument): Map<NodeKey, Node> => {
       if (f.type === "dynamicZone")
         return [{ attribute, link: "zone", targets: f.components.map(componentKey) }];
       if (f.type === "media") return [{ attribute, link: "media", targets: [FILE] }];
+      if (f.type === "polymorphicRelation" || f.type === "polymorphicInverse")
+        return [{ attribute, link: "polymorphic", targets: [POLYMORPHIC] }];
       return [];
     });
   const populatable = (fields: readonly Field[]): string[] =>
@@ -136,6 +142,7 @@ const graphOf = (doc: IrDocument): Map<NodeKey, Node> => {
     populatable: ["related"],
     edges: [{ attribute: "related", link: "relation", targets: attached }],
   });
+  nodes.set(POLYMORPHIC, { uid: "", owner: "", populatable: [], edges: [] });
   for (const node of nodes.values()) node.populatable = [...new Set(node.populatable)].sort();
   return nodes;
 };
@@ -147,7 +154,10 @@ const reachOf = (
   restricted: boolean,
 ): Map<NodeKey, Set<string>> => {
   const reach = new Map<NodeKey, Set<string>>(
-    [...nodes.keys()].map((k) => [k, new Set(restricted && k === FILE ? [ANY_TYPE] : [])]),
+    [...nodes.keys()].map((k) => [
+      k,
+      new Set(restricted && (k === FILE || k === POLYMORPHIC) ? [ANY_TYPE] : []),
+    ]),
   );
   const step = (target: NodeKey): Set<string> => {
     const out = new Set(reach.get(target) ?? []);
@@ -182,13 +192,15 @@ const holdersOf = (
   const uid = (key: NodeKey): string => nodes.get(key)!.uid;
   const holders: [string, ApiHolder][] = [];
   for (const [key, node] of nodes) {
-    // The file has no controller of camis's: its reach is a build error instead.
-    if (key === FILE || (reach.get(key)?.size ?? 0) === 0) continue;
+    // The file has no controller of camis's (its reach is a build error instead), and the
+    // polymorphic sentinel is no type.
+    if (key === FILE || key === POLYMORPHIC || (reach.get(key)?.size ?? 0) === 0) continue;
     const links: [string, ApiHolderLink][] = [];
     for (const edge of node.edges) {
       const targets = edge.targets.filter(leads);
       if (targets.length === 0) continue;
       if (edge.link === "media") links.push([edge.attribute, { media: true }]);
+      else if (edge.link === "polymorphic") links.push([edge.attribute, { polymorphic: true }]);
       else if (edge.link === "zone") links.push([edge.attribute, { zone: targets.map(uid) }]);
       else if (edge.link === "component")
         links.push([edge.attribute, { component: uid(targets[0]!) }]);
@@ -299,7 +311,9 @@ export const projectReach = (doc: IrDocument, roles: Role[], types: ApiTypeRules
   return {
     holders: holdersOf(nodes, reach, conditioned),
     reaching: new Set(
-      [...reach].filter(([key, s]) => key !== FILE && s.size > 0).map(([key]) => key),
+      [...reach]
+        .filter(([key, s]) => key !== FILE && key !== POLYMORPHIC && s.size > 0)
+        .map(([key]) => key),
     ),
     gaps,
   };

@@ -125,6 +125,18 @@ export const enforcedController = (strapiInstance: unknown, uid: string, tables:
         ? reachState(rules, ctx.state, action)
         : null;
 
+  /**
+   * Whether a custom API token's populate of a polymorphic relation or a file's related entries,
+   * which Strapi's own methods would answer whole, was refused (the 400 already set).
+   */
+  const customRefused = (caller: Caller, ctx: RequestContext): boolean => {
+    if (caller.kind !== "unrestricted" || !caller.custom) return false;
+    const checked = scopeQuery(tables, uid, ctx.state, ctx.query ?? {});
+    if (checked.ok) return false;
+    ctx.badRequest(checked.message);
+    return true;
+  };
+
   /** The validated, sanitized query, narrowed for `state`; a 400 when it cannot be. */
   const query = async (
     controller: CoreController,
@@ -208,7 +220,7 @@ export const enforcedController = (strapiInstance: unknown, uid: string, tables:
       const caller = callerOf(rules, ctx.state, "find");
       if (caller.kind === "refused") return ctx.forbidden();
       const reach = reachOf(caller, ctx, "find");
-      if (reach === null) return super.find(ctx);
+      if (reach === null) return customRefused(caller, ctx) ? undefined : super.find(ctx);
       const scoped = await query(this, ctx, reach);
       if ("refused" in scoped) return scoped.refused;
       const scope = listFilter(rules, caller);
@@ -225,7 +237,7 @@ export const enforcedController = (strapiInstance: unknown, uid: string, tables:
       const caller = callerOf(rules, ctx.state, "findOne");
       if (caller.kind === "refused") return ctx.forbidden();
       const reach = reachOf(caller, ctx, "findOne");
-      if (reach === null) return super.findOne(ctx);
+      if (reach === null) return customRefused(caller, ctx) ? undefined : super.findOne(ctx);
       const answer = await verdict(caller, ctx, "read");
       if (answer === "notFound") return ctx.notFound();
       if (answer === "forbidden") return ctx.forbidden();
@@ -241,6 +253,7 @@ export const enforcedController = (strapiInstance: unknown, uid: string, tables:
       const caller = callerOf(rules, ctx.state, "create");
       if (caller.kind === "refused") return ctx.forbidden();
       const reach = reachOf(caller, ctx, "create");
+      if (customRefused(caller, ctx)) return undefined;
       const sent = requestData(ctx);
       if (sent === undefined) {
         // A restricted caller's create is decided here, so a payload it cannot read is refused
@@ -275,6 +288,7 @@ export const enforcedController = (strapiInstance: unknown, uid: string, tables:
       const caller = callerOf(rules, ctx.state, "update");
       if (caller.kind === "refused") return ctx.forbidden();
       const reach = reachOf(caller, ctx, "update");
+      if (customRefused(caller, ctx)) return undefined;
       const sent = requestData(ctx);
       if (reach === null) {
         if (sent !== undefined) replaceData(ctx, withoutAssigned(caller, sent));
@@ -339,14 +353,23 @@ export const checkedSingle = (uid: string, tables: Tables) => {
     const scoped = scopeQuery(tables, uid, state, ctx.query ?? {});
     return scoped.ok ? undefined : scoped.message;
   };
+  /** A custom API token's query, checked for a polymorphic populate alone (scopeQuery). */
+  const customQuery = (ctx: RequestContext, action: string): string | undefined => {
+    const caller = callerOf(rules, ctx.state, action);
+    return caller.kind === "unrestricted" && caller.custom
+      ? refusedQuery(ctx, ctx.state)
+      : undefined;
+  };
   return {
     async find(this: CoreController, ctx: RequestContext) {
       const state = checkedAs(ctx, "find");
-      const refused = state === null ? undefined : refusedQuery(ctx, state);
+      const refused = state === null ? customQuery(ctx, "find") : refusedQuery(ctx, state);
       return refused === undefined ? super.find(ctx) : ctx.badRequest(refused);
     },
     async update(this: CoreController, ctx: RequestContext) {
       const state = checkedAs(ctx, "update");
+      const custom = state === null ? customQuery(ctx, "update") : undefined;
+      if (custom !== undefined) return ctx.badRequest(custom);
       if (state !== null) {
         const sent = requestData(ctx);
         if (sent === undefined) return ctx.badRequest("Missing or invalid data");

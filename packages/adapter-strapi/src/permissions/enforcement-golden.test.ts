@@ -102,8 +102,9 @@ describe("content API enforcement golden", () => {
     ]);
   });
   // Strapi links a stored file through a media field with no upload permission, so the media
-  // checks run without file grants; only the uploader record needs the extension.
-  it("with no role writing files, tables the media checks but emits no upload extension", () => {
+  // checks run without file grants; the extension still checks the upload API's reads (a custom
+  // API token may hold their scope), but records no uploader.
+  it("with no role writing files, tables the media checks and records no uploader", () => {
     const noFiles = {
       ...ownershipBundle,
       roles: ownershipBundle.roles.map((r) => ({
@@ -112,7 +113,8 @@ describe("content API enforcement golden", () => {
       })),
     };
     const files = strapiAdapter.generate(noFiles, { projectName: "notes" });
-    expect(file(files, "src/extensions/upload/strapi-server.ts")).toBeUndefined();
+    expect(file(files, "src/extensions/upload/strapi-server.ts")).toContain("enforcedUpload");
+    expect(file(files, "src/extensions/upload/strapi-server.ts")).not.toContain("camisUploader");
     expect(emitted(files, "src/permissions/api-conditions.ts")).toContain(
       "uploaderRecorded: false,",
     );

@@ -183,7 +183,9 @@ export type HolderLink =
   | { relation: string }
   | { component: string }
   | { zone: readonly string[] }
-  | { media: true };
+  | { media: true }
+  /** A polymorphic relation or inverse: its entries may be of any type. */
+  | { polymorphic: true };
 
 export interface Holder {
   /** Every attribute `populate=*` populates. */
@@ -261,7 +263,17 @@ export interface SessionUser {
 }
 
 export type Caller =
-  | { kind: "unrestricted"; user: SessionUser | null; assign: readonly string[] }
+  | {
+      kind: "unrestricted";
+      user: SessionUser | null;
+      assign: readonly string[];
+      /**
+       * A custom API token: Strapi checks its scopes and no row condition applies, but its
+       * sanitizer keeps a polymorphic list whole when the token may read none of its entries, so
+       * its populate of one is refused.
+       */
+      custom: boolean;
+    }
   | {
       kind: "role";
       role: string;
@@ -321,17 +333,36 @@ const strategyOf = (state: unknown): unknown =>
   field(field(field(state, "auth"), "strategy"), "name");
 
 /**
- * Who is asking, from Strapi's ctx.state. A route opened with `auth: false` and an API token
- * (which stands for no role and no user) read every row, as Strapi's own do; a session acts as
+ * The content API token strategy of Strapi 5.48 (@strapi/admin strategies/content-api-token),
+ * whose ctx.state.auth.credentials is the stored token, its `type` one of TOKEN_TYPES.
+ */
+export const TOKEN_STRATEGY = "content-api-token";
+/** Whether each token type is custom: checked against its own scopes, as no role is. */
+const TOKEN_TYPES: Readonly<Record<string, boolean>> = {
+  "full-access": false,
+  "read-only": false,
+  custom: true,
+};
+
+/**
+ * Who is asking, from Strapi's ctx.state. A route opened with `auth: false` and a content API
+ * token (which stands for no role and no user) read every row, as Strapi's own do, a custom token
+ * flagged (its polymorphic populate is still refused); a token of a type Strapi does not issue is
+ * refused; a session acts as
  * its users-permissions role, an admin role unrestricted; a request with no session acts as the
  * public role. Anything else — a session whose role was not loaded, an unknown strategy — is
  * refused rather than guessed at.
  */
 export const callerOf = (rules: TypeRules, state: unknown, action: string): Caller => {
   if (rules.open.includes(action))
-    return { kind: "unrestricted", user: null, assign: rules.assign };
-  if (strategyOf(state) === "api-token")
-    return { kind: "unrestricted", user: null, assign: rules.assign };
+    return { kind: "unrestricted", user: null, assign: rules.assign, custom: false };
+  if (strategyOf(state) === TOKEN_STRATEGY) {
+    const type = field(field(field(state, "auth"), "credentials"), "type");
+    const custom = typeof type === "string" ? own(TOKEN_TYPES, type) : undefined;
+    return custom === undefined
+      ? { kind: "refused" }
+      : { kind: "unrestricted", user: null, assign: rules.assign, custom };
+  }
   const sessionUser = field(state, "user");
   if (sessionUser !== undefined && sessionUser !== null) {
     const role = field(field(sessionUser, "role"), "type");
@@ -346,7 +377,7 @@ export const callerOf = (rules: TypeRules, state: unknown, action: string): Call
     const roleRules = own(rules.roles, role) ?? null;
     // A role the rules do not name keeps no field of the type's assigned ones either.
     const assign = roleRules?.assign ?? rules.assign;
-    if (rules.admins.includes(role)) return { kind: "unrestricted", user, assign };
+    if (rules.admins.includes(role)) return { kind: "unrestricted", user, assign, custom: false };
     return { kind: "role", role, user, rules: roleRules, assign };
   }
   if (strategyOf(state) === "users-permissions") {
@@ -791,6 +822,7 @@ const scopeEntry = (
   state: unknown,
 ): Checked<unknown> => {
   const options = isRecord(entry) ? entry : {};
+  if ("polymorphic" in link) return refuse("Invalid populate of a polymorphic relation");
   if ("media" in link) {
     // A file's related entries are polymorphic: no filter of one type's narrows them.
     return populatesRelated(options.populate)
@@ -908,7 +940,9 @@ const scopePopulate = (
  * same way, a component's populate filters included, so it is no oracle; a sort through one is
  * refused, since its join carries no filter, and so is a `$not` around one or a `$null` on one;
  * so is any parameter outside QUERY_PARAMETERS (or POPULATE_PARAMETERS in a populate), on every
- * type with rules or a reach. A caller no role restricts gets the query back as it is.
+ * type with rules or a reach; a populate of a polymorphic relation or of a file's related entries
+ * is refused. A caller no role restricts gets the query back as it is, but for a custom API
+ * token's populate of a polymorphic relation or a file's related entries, which is refused too.
  */
 export const scopeQuery = (
   tables: Tables,
@@ -917,8 +951,15 @@ export const scopeQuery = (
   query: Record<string, unknown>,
 ): Checked<Record<string, unknown>> => {
   const rules = own(tables.rules, uid);
-  if (rules === undefined || callerOf(rules, state, "").kind === "unrestricted")
-    return { ok: true, value: query };
+  if (rules === undefined) return { ok: true, value: query };
+  const caller = callerOf(rules, state, "");
+  if (caller.kind === "unrestricted") {
+    // A custom token's query reaches Strapi as sent, once no populate of it is polymorphic.
+    if (!caller.custom || query.populate === undefined || own(tables.holders, uid) === undefined)
+      return { ok: true, value: query };
+    const populate = scopePopulate(tables, uid, query.populate, state);
+    return populate.ok ? { ok: true, value: query } : populate;
+  }
   const unknown = unknownParameter(query, QUERY_PARAMETERS);
   if (unknown !== undefined) return refuse(`Invalid query parameter ${unknown}`);
   if (own(tables.holders, uid) === undefined) return { ok: true, value: query };

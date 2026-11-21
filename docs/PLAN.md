@@ -2881,18 +2881,46 @@ relation write, and a database seeded once kept it.
     `handleMorphRelation`) puts a polymorphic list back only when some entry of it is readable (`if
     (newMorphValue.length) set(key, newMorphValue)`), so a list none of whose entries the caller may
     read reaches the response untouched; every leak of the fourth and fifth review rounds was this
-    one. The rule: no polymorphic populate reaches Strapi unchecked for anyone but an admin role or
-    an API token. So a polymorphic relation or inverse (its own, or a component's or zone's at any
-    depth) on a type any non-admin role reads or writes fails the build, conditions or not
-    (`apiPolymorphicReach`: a role with no condition anywhere still gets entries of types it holds
-    no grant on); an open action on one fails it whatever roles exist; a populate of a file's
-    `related` is refused under every media field (the entry controllers, `checkedSingle`) and on the
-    upload API's `find` and `findOne` (Phase 95; seen on 5.48: a role holding only File read got
-    another user's note through `GET /api/upload/files/2?populate=related`); and an IR with no roles
-    but an `auth: false` route is still enforced: the enforcement files and controllers are emitted,
-    the bootstrap stays the skeleton's, as there is no role to grant (seen on 5.48 before the fix:
-    with no roles, an anonymous `?populate[pic][populate]=related` and `?populate=subj` returned a
-    private entry). Only an IR with neither a non-admin role nor an open route emits no enforcement.
+    one. The rule: no polymorphic populate reaches Strapi unchecked for anyone but an admin role, a
+    full-access or a read-only API token (see **API tokens**). So a polymorphic relation or inverse
+    (its own, or a component's or zone's at any depth) on a type any non-admin role reads or writes
+    fails the build, conditions or not (`apiPolymorphicReach`: a role with no condition anywhere
+    still gets entries of types it holds no grant on); an open action on one fails it whatever roles
+    exist; a populate of a file's `related` is refused under every media field (the entry
+    controllers, `checkedSingle`) and on the upload API's `find` and `findOne` (Phase 95; seen on
+    5.48: a role holding only File read got another user's note through `GET
+    /api/upload/files/2?populate=related`); and an IR with no roles but an `auth: false` route is
+    still enforced: the enforcement files and controllers are emitted, the bootstrap stays the
+    skeleton's, as there is no role to grant (seen on 5.48 before the fix: with no roles, an
+    anonymous `?populate[pic][populate]=related` and `?populate=subj` returned a private entry).
+    Only an IR with neither a non-admin role nor an open route emits no enforcement. Every type with
+    a polymorphic relation or inverse at any depth, and every type leading to one, is served once
+    the rules restrict anyone (a polymorphic link in its holder), and a populate of it is refused
+    (400 "Invalid populate of a polymorphic relation"), for a role as for a custom token.
+  - **API tokens.** Strapi 5.48 authenticates a content API token with the strategy
+    `content-api-token` (`@strapi/admin` `strategies/content-api-token.js`) and leaves
+    `ctx.state.auth` as `{ strategy, credentials, ability }`, `credentials` the stored token, its
+    `type` `full-access`, `read-only` or `custom` (only a custom token carries an ability). camis
+    recognises exactly that (`TOKEN_STRATEGY`); `api-token` (the name older Strapi releases used;
+    camis pins 5.48.0, which does not) and a type Strapi does not issue are refused (403), as an
+    unknown strategy is. A full-access token and a read-only token pass unchanged: no row condition
+    applies (a token stands for no role and no user) and either reads every type, so Strapi's
+    sanitizer never meets a polymorphic list none of whose entries it may read (seen live: a
+    read-only token's `GET /api/boards?populate=subjects` returns the Secret it may read through
+    `/api/secrets` anyway, and its create is 403, Strapi's). A custom token is checked against its
+    own scopes by Strapi and no row condition applies to it either, but Strapi's
+    `handleMorphElements` checks each polymorphic entry against its ability and keeps the list whole
+    when none passes (seen on 5.48: a custom token holding only `api::board.board.find` got a Secret
+    from `GET /api/boards?populate=subjects`); so on every served type (`enforcedController`'s find,
+    findOne, create and update, `checkedSingle`'s find and update) and on the upload API's `find`
+    and `findOne`, its populate of a polymorphic relation or a file's `related` entries, in any form
+    and depth, is refused with the same 400 as a role's, and nothing else of its request is changed.
+    An `auth: false` route authenticates no one, so a token sent there is an anonymous request,
+    decided as the public role's. Limitation: where the rules restrict no one (no non-admin role and
+    no open route) camis emits no enforcement, so there a custom token's polymorphic populate is
+    subject to Strapi's sanitizer as it is; a generated policy on every core route would close it,
+    but routers camis does not otherwise touch are read back by the importer, so it is not built
+    here.
   - **Route sweep (fifth review round).** Every route a non-admin or anonymous caller can reach, and
     whether a polymorphic or relation populate reaches Strapi unchecked there (live probes on 5.48,
     sqlite, with a role holding File and User read beside the ownership fixture's roles):
@@ -2909,7 +2937,9 @@ relation write, and a database seeded once kept it.
     | `/api/auth/*` | none: they answer with the sanitized user, populating nothing from the query | `POST /api/auth/local?populate=*` populates nothing |
     | i18n `GET /api/i18n/locales` | none: locales hold no relation; 403 unless a role is granted it | 403 |
     | Other allowlisted plugin routes | none: `scripts/content-api-allowlist.json` names only the content API and the users-permissions and upload routes above | — |
-  - Not narrowed, as on Strapi and the Filament target: admin roles and API tokens (Phase 25). An
+    | Any served route, upload `find`/`findOne`, with a content API token (sixth round) | full-access and read-only: passed unchanged, every type readable to them; custom: a polymorphic or `related` populate refused, nothing else changed; a type camis does not serve (only where the rules restrict no one): Strapi's sanitizer | full-access 200 with `related`; read-only 200 on reads, 403 on a create; custom 200 on its granted list, 400 on `related`, `*` and a polymorphic populate (`subjects`, its `on` form), 403 where it holds no scope |
+  - Not narrowed, as on Strapi and the Filament target: admin roles and API tokens (Phase 25; a
+    custom token's polymorphic populate excepted, above). An
     `auth: false` action (Phase 57) serves its own type's rows to anyone, and its reach is decided
     as the public role's, so a reach-only type's open route still answers. A session whose role is
     not loaded, a role the IR does not grant the type, and an unknown strategy are refused.
@@ -3060,8 +3090,12 @@ Built from the plugin's source (`controllers/content-api.js`, `services/upload.j
   deciding `find` and `findOne` (no populate of a file's `related` entries, in any form or depth:
   `populatesRelated`, the check the entry controllers run under a media field) and `upload` and
   `destroy` first for a caller the rules restrict (a session's role, the public role without one);
-  an admin role and an API token pass, a session whose role was not loaded is 403. Every refusal
-  comes before the plugin stores, replaces or deletes a file.
+  an admin role and a full-access or read-only API token pass, a custom token's `find` and `findOne`
+  refuse a populate of `related` as a role's do (Phase 94, **API tokens**), and a session whose role
+  was not loaded is 403. Every refusal comes before the plugin stores, replaces or deletes a file.
+  The extension is emitted wherever the rules restrict anyone (a non-admin role or an open route),
+  since a custom token may hold the upload API's scopes whatever the roles; `camisUploader` only
+  once a restricted role writes files.
 - **`POST /api/upload`** (the decisions are `src/permissions/api-uploads.ts`, pure):
   - Query parameters other than `id` and body fields other than `fileInfo`, `ref`, `refId` and
     `field` are 400: the upload keeps every other field as a meta of the stored file (`path` among
@@ -3109,11 +3143,11 @@ Built from the plugin's source (`controllers/content-api.js`, `services/upload.j
   file, so a non-uploader who links a file on entry A to its entry B can change it only if it
   also updates A, as before. The uploader always keeps its own file, wherever it is attached:
   others linking it cannot lock its owner out.
-- **Without file grants.** When no restricted role reads or writes files the upload extension is not
-  emitted (with a reader alone it is, with no `camisUploader`: `TABLES.uploads.extended`), and when
-  none writes them no `camisUploader` exists (`TABLES.uploads.uploaderRecorded: false`): no file has
-  an uploader, so a link or change is decided on the entry rule alone, and an unattached file cannot
-  be linked by a restricted caller (the media checks and tables are still emitted).
+- **Without file grants.** When no restricted role writes files the upload extension is still
+  emitted wherever the rules restrict anyone, with no `camisUploader`, and when none writes them no
+  `camisUploader` exists (`TABLES.uploads.uploaderRecorded: false`): no file has an uploader, so a
+  link or change is decided on the entry rule alone, and an unattached file cannot be linked by a
+  restricted caller (the media checks and tables are still emitted).
 - **What stays.** `GET /api/upload/files` and `/files/:id` answer as the plugin does once the
   populate is checked (a populate of `related` is 400 for every restricted caller, conditions or
   not: Strapi returns the list whole when it can read none of its entries); reading the media
@@ -3124,13 +3158,12 @@ Built from the plugin's source (`controllers/content-api.js`, `services/upload.j
   type with a media field that a restricted role creates or updates, or that `publicApiActions`
   opens for create or update (located as "anyone (an auth: false route)"), is an
   `apiRelationReach` error, file grants or not: Strapi's own single type controller links any
-  stored file id there. The extension is emitted only when a role the rules restrict reads or
-  writes files; the media checks whenever a restricted role or an open action writes a media field.
+  stored file id there. The extension is emitted wherever the rules restrict anyone; the media
+  checks whenever a restricted role or an open action writes a media field.
 - **Tables.** `TABLES.uploads` (`api-upload-enforcement.ts`, `projectUploads`): the admin roles;
   every content type and component with a media field at some depth (its media attributes, and
   the component or zone attributes leading to one); each content type's outright readers and
-  updaters; `uploaderRecorded`; `extended` (emitted in the projection only, it decides the
-  extension). `TABLES.shapes` (`api-shapes.ts`): each served type's and
+  updaters; `uploaderRecorded`. `TABLES.shapes` (`api-shapes.ts`): each served type's and
   embedded component's attributes and how each is written (scalar, relation, polymorphic, media,
   component, zone), for the body check of Phase 94.
 - **CI.** `strapi-enforcement-boot` now also checks, with members holding File create and delete:
@@ -3159,36 +3192,46 @@ Built from the plugin's source (`controllers/content-api.js`, `services/upload.j
   a polymorphic type with no condition anywhere fails it. The allowlist names `find` and `findOne`.
 
 Known limits: the upload API is enforced for the content API only (GraphQL's upload mutations, if a
-project adds the plugin, are not); an IR relation (not a media field) to the media library's type
-is not checked; a file's uploader is recorded after the plugin stores it, so a failure between the
-two leaves the file with none (no restricted caller may then change it unattached).
+project adds the plugin, are not); an IR relation (not a media field) to the media library's type is
+not supported: the schema names its target `api::file.file`, which Strapi does not define, and the
+app fails to boot (`Metadata for "api::file.file" not found`); a file's uploader is recorded after
+the plugin stores it, so a failure between the two leaves the file with none (no restricted caller
+may then change it unattached).
 
 Exit: `runtime/api-uploads.test.ts` (every request shape: fileInfo forms, refId as a row id, a
 documentId, decimals, signs and arrays, partial and empty triples, `path`/`folder`/`source`/`files`,
-`?id=` forms and beside a ref, unknown query parameters; the attach field; the caller; entry,
-change and attach verdicts; media value forms, components and zones; `__pivot`, `position` and
-`options` in media items; the link and change rules, with and without a recorded uploader);
+`?id=` forms and beside a ref, unknown query parameters; the attach field; the caller; entry, change
+and attach verdicts; media value forms, components and zones; `__pivot`, `position` and `options` in
+media items; the link and change rules, with and without a recorded uploader);
 `runtime/api-conditions.test.ts` (relation items, to-one and `set` writes, `writeShape` at every
 depth); `runtime/engine.test.ts` (the real entity manager writes a `__pivot`-named entry into the
 join row; camis refuses the body; every accepted relation value leaves the links `relationChange`
-predicts); `enforcement-behaviour.test.ts` (a rule-less type served for the body check: writes
-pass, a `__pivot` is 400, reads and deletes are Strapi's; the single type's update the same over
-Strapi's single type controller, an admin role's and a token's passed on); `upload-behaviour.test.ts`
-(the emitted extension and controllers against a fake upload plugin and query engine: nothing
-stored, replaced or deleted on any refusal); `api-enforcement.test.ts` (the lifted error, the
-single type error with and without file grants and for an open action, the tables, the media
-tables without file grants, the shapes, the served types); `enforcement-golden.test.ts` (no
-extension without file grants); goldens `api-conditions.ts.txt`, `api-controller.ts.txt`,
-`api-uploads.ts.txt`,
-`api-upload-controller.ts.txt`, `upload.strapi-server.ts.txt`, idempotent; the boot job. Added
-with the fifth review round: `upload-behaviour.test.ts` (a populate of `related` on `find` and
-`findOne` is 400 in every form, string, list, dotted, `*`, object, `on`, nested under `folder`, for
-a member and a guest, and the plugin reads nothing; other populates pass; a token and an admin role
-pass; a session whose role was not loaded is 403); `api-enforcement.test.ts` (an unconditioned
-reader or writer of a polymorphic relation or inverse at any depth fails the build, an admin and a
-role not touching it do not; with no roles an open polymorphic type fails it, an open media type is
-served with no `roles.json` and the skeleton's bootstrap, and nothing is emitted with no open route;
-a File reader alone tables the uploads and emits the extension without `camisUploader`).
+predicts); `enforcement-behaviour.test.ts` (a rule-less type served for the body check: writes pass,
+a `__pivot` is 400, reads and deletes are Strapi's; the single type's update the same over Strapi's
+single type controller, an admin role's and a token's passed on); `upload-behaviour.test.ts` (the
+emitted extension and controllers against a fake upload plugin and query engine: nothing stored,
+replaced or deleted on any refusal); `api-enforcement.test.ts` (the lifted error, the single type
+error with and without file grants and for an open action, the tables, the media tables without file
+grants, the shapes, the served types); `enforcement-golden.test.ts` (no extension without file
+grants); goldens `api-conditions.ts.txt`, `api-controller.ts.txt`, `api-uploads.ts.txt`,
+`api-upload-controller.ts.txt`, `upload.strapi-server.ts.txt`, idempotent; the boot job. Added with
+the fifth review round: `upload-behaviour.test.ts` (a populate of `related` on `find` and `findOne`
+is 400 in every form, string, list, dotted, `*`, object, `on`, nested under `folder`, for a member
+and a guest, and the plugin reads nothing; other populates pass; a token and an admin role pass; a
+session whose role was not loaded is 403); `api-enforcement.test.ts` (an unconditioned reader or
+writer of a polymorphic relation or inverse at any depth fails the build, an admin and a role not
+touching it do not; with no roles an open polymorphic type fails it, an open media type is served
+with no `roles.json` and the skeleton's bootstrap, and nothing is emitted with no open route; a File
+reader alone tables the uploads and emits the extension without `camisUploader`). Added with the
+sixth review round: every token test uses Strapi 5.48's state (`src/__fixtures__/token-states.ts`:
+`content-api-token`, `credentials.type`); `runtime/api-conditions.test.ts` (each token type's
+caller, the old name and an unknown type refused, a custom token's polymorphic and `related`
+populates refused and its other populates and filters passed as sent, a role's polymorphic populate
+refused); `enforcement-behaviour.test.ts` and `upload-behaviour.test.ts` (full-access and read-only
+pass, custom refused on find, findOne, create, a deep populate, the single type and the upload API's
+reads); `api-enforcement.test.ts` (a polymorphic type no role reaches is served with every type
+leading to it, not where the rules restrict no one); the boot job creates real tokens (full-access,
+read-only, custom) and checks the strategy name against the installed Strapi.
 
 ---
 

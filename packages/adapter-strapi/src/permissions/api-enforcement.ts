@@ -70,7 +70,9 @@ export type ApiHolderLink =
   | { component: string }
   | { zone: string[] }
   /** A media field: the file's `related` entries reach every type a file can be attached to. */
-  | { media: true };
+  | { media: true }
+  /** A polymorphic relation or inverse: its entries may be of any type. */
+  | { polymorphic: true };
 
 /** What a write through a relation attribute changes besides the entry written. */
 export interface ApiRelationWrite {

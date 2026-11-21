@@ -105,6 +105,7 @@ const holderLink = (link: ApiHolderLink): string => {
   if ("relation" in link) return `{ relation: ${key(link.relation)} }`;
   if ("component" in link) return `{ component: ${key(link.component)} }`;
   if ("media" in link) return "{ media: true }";
+  if ("polymorphic" in link) return "{ polymorphic: true }";
   return `{ zone: ${list(link.zone)} }`;
 };
 
@@ -271,8 +272,7 @@ export default (plugin: UploadPlugin): UploadPlugin => {`
 
 /**
  * The decisions module (Ring 1 runtime, decisions, the project's rules), the controller methods,
- * the upload decisions they check a linked file with and, when a restricted role reads or writes
- * files, the upload extension.
+ * the upload decisions they check a linked file with and the upload extension.
  */
 export const emitApiEnforcementFiles = (enforcement: ApiEnforcement): GeneratedFile[] =>
   enforcement.types.length === 0 && enforcement.uploads === null
@@ -290,7 +290,7 @@ export const emitApiEnforcementFiles = (enforcement: ApiEnforcement): GeneratedF
           path: API_UPLOAD_CONTROLLER_PATH,
           content: withMarker(runtime("api-upload-controller.ts")),
         },
-        ...(enforcement.uploads?.extended !== true
+        ...(enforcement.uploads === null
           ? []
           : [
               {

@@ -181,6 +181,16 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
     the IR does not grant the type, a session whose role was not loaded and an unknown strategy are
     refused. Admin roles and API tokens are not narrowed; an `auth: false` action serves its own
     type's rows to anyone, but its reach into a conditioned type is the public role's.
+  - API tokens are known as Strapi 5.48 authenticates them (strategy `content-api-token`, the
+    token's `type` in `ctx.state.auth.credentials`; anything else is 403). A full-access or
+    read-only token passes unchanged: no row condition applies and it reads every type. A custom
+    token has no row condition either, but Strapi returns a polymorphic list whole when the token
+    may read none of its entries, so on every served type and on the upload API's `find` and
+    `findOne` its populate of a polymorphic relation or a file's `related` entries is 400, as a
+    role's is (every type with a polymorphic relation, and every type leading to one, is served
+    wherever the rules restrict anyone). Where the rules restrict no one (no non-admin role, no
+    open route) camis emits no enforcement, and a custom token's polymorphic populate is left to
+    Strapi's sanitizer.
 
   The build fails (`error`) where it cannot enforce: `apiGrantCondition` for a read condition
   outside `eq`/`and`/`or` over `record.<field>`/`record.<relation>Id` vs a literal or
