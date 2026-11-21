@@ -324,6 +324,19 @@ describe("reservedNameGaps, embedded components", () => {
     ]);
   });
 
+  // A prefix is kept for the target's names (its keys): a column of a row the target names only
+  // from the field's path (created_at) takes none of its own from the holding field's name.
+  it("checks an embedded field's column against the names the target keeps, not its prefix", () => {
+    const prefixed = {
+      get: (): string | undefined => undefined,
+      prefixOf: (mapped: string) => (mapped.startsWith("created") ? "created" : undefined),
+    };
+    const gaps = reservedNameGaps(embedding, "the Test target", prefixed, nothingOwn, {
+      columns: joined,
+    });
+    expect(gaps).toEqual([]);
+  });
+
   // Stamp is only embedded unless the target says it stores Stamp's items: `by.at` is then no
   // column of any row (on Note's it is created_by_at).
   it("checks a component's paths from no row of its own unless the target stores its items", () => {

@@ -576,6 +576,28 @@ describe("Filament target: names its rows and wire shape reserve", () => {
       ]);
     });
 
+    // Strapi keeps its prefix for its keys and its own columns: Note's key `strapi` is one, while
+    // the column strapi_foo it gives an embedded field is none of the rows' own, nor is `foo`.
+    it("reports a holding field with Strapi's prefix, not the columns of the fields it embeds", () => {
+      const bundle: IrBundle = {
+        document: {
+          version: 1,
+          contentTypes: [
+            {
+              name: "Note",
+              kind: "collection",
+              fields: [
+                { type: "component", name: "strapi", component: "Extra", repeatable: false },
+              ],
+            },
+          ],
+          components: [{ name: "Extra", fields: [{ type: "string", name: "foo" }] }],
+        },
+        roles: [],
+      };
+      expect(reportedFields(bundle, "strapi")).toEqual([{ contentType: "Note", field: "strapi" }]);
+    });
+
     it("leaves the Strapi storage layout, where a component is a table of its own", () => {
       expect(reserved(stamped(at, true), "strapi", "strapi")).toEqual([]);
     });
