@@ -110,15 +110,81 @@ describe("strapiReservedNameGaps", () => {
     ]);
   });
 
-  // Strapi's Content-Type Builder also refuses `status`, `meta` and `entry_id`; they are not keys of
-  // the entry itself, so an entry with such a field reads and writes as it should.
-  it("leaves names that only resemble a reserved one", () => {
+  // `__component` names a dynamic zone item's component on Strapi's wire, beside the item's own
+  // keys, and `__contentType` is Strapi's other discriminator key; only an API key can spell them.
+  it.each([
+    ["__component", "__component"],
+    ["__contentType", "__contentType"],
+  ])("reports an API key %s, one of Strapi's discriminator keys", (api, own) => {
+    const gaps = strapiReservedNameGaps(
+      withFields([{ type: "string", name: "kind", names: { api } }]),
+    );
+    expect(gaps.map((g) => [g.location, g.message])).toEqual([
+      [
+        { contentType: "Note", field: "kind" },
+        `field "kind", as "${api}", collides with Strapi's own "${own}"; rename it`,
+      ],
+    ]);
+  });
+
+  it("reports a dynamic zone member's field keyed __component, which its items would repeat", () => {
+    const doc: IrDocument = {
+      version: 1,
+      contentTypes: [
+        {
+          name: "Page",
+          kind: "collection",
+          fields: [{ type: "dynamicZone", name: "blocks", components: ["Hero"] }],
+        },
+      ],
+      components: [
+        {
+          name: "Hero",
+          fields: [{ type: "string", name: "variant", names: { api: "__component" } }],
+        },
+      ],
+    };
+    expect(strapiReservedNameGaps(doc).map((g) => [g.severity, g.location])).toEqual([
+      ["error", { component: "Hero", field: "variant" }],
+    ]);
+  });
+
+  // Strapi keeps the strapi prefix for its own columns and attributes (review workflows'
+  // strapi_stage and strapi_assignee among them), with one or two leading underscores too.
+  it.each([
+    ["strapiStage", undefined],
+    ["strapiness", undefined],
+    ["stage", "strapi_stage"],
+    ["stage", "_strapi_stage"],
+    ["stage", "__strapiStage"],
+    ["stage", "StrapiStage"],
+  ])("reports a field %s (API key %s) named with Strapi's own prefix", (name, api) => {
+    const field: Field =
+      api === undefined ? { type: "string", name } : { type: "string", name, names: { api } };
+    const gaps = strapiReservedNameGaps(withFields([field]));
+    expect(gaps.map((g) => [g.severity, g.location])).toEqual([
+      ["error", { contentType: "Note", field: name }],
+    ]);
+    expect(gaps[0]!.message).toContain(`collides with Strapi's own "strapi*"; rename it`);
+  });
+
+  // Strapi's Content-Type Builder also refuses `status` (since 5.48), `meta` and `entry_id`, which
+  // camis leaves: none is a key of the entry itself, so an entry with such a field reads and writes
+  // as it should (`meta` sits beside `data` in a response, not in an entry), and Strapi only warns of
+  // `status` when it boots. The blog fixtures keep a `status` and the catalogs a `meta`.
+  it("leaves names that only resemble a reserved one, and those camis lets through", () => {
     const doc = withFields([
       { type: "dateTime", name: "published" },
       { type: "dateTime", name: "publishedOn" },
       { type: "string", name: "locales" },
       { type: "string", name: "author" },
       { type: "string", name: "status" },
+      { type: "json", name: "meta" },
+      { type: "integer", name: "entryId" },
+      { type: "string", name: "entry", names: { api: "entry_id" } },
+      { type: "string", name: "myStrapi" },
+      { type: "string", name: "strap" },
+      { type: "string", name: "component", names: { api: "_component" } },
     ]);
     expect(strapiReservedNameGaps(doc)).toEqual([]);
   });

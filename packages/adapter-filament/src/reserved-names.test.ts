@@ -87,6 +87,18 @@ describe("Filament target: names its rows and wire shape reserve", () => {
       ]);
     });
 
+    it("reports Strapi's discriminator keys and its strapi prefix, as Strapi does", () => {
+      const bundle = withFields([
+        { type: "string", name: "kind", names: { api: "__component" } },
+        { type: "string", name: "strapiStage" },
+      ]);
+      expect(reportedFields(bundle, "strapi")).toEqual([
+        { contentType: "Note", field: "kind" },
+        { contentType: "Note", field: "strapiStage" },
+      ]);
+      expect(reserved(bundle, "laravel")).toEqual([]);
+    });
+
     // Its key created_by and its key column created_by_id are both Strapi's createdBy: one gap.
     it.each(["createdBy", "updatedBy"])(
       "reports a to-one relation named %s once, for the one key it collides with",
