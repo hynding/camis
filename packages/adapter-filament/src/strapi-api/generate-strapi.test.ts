@@ -60,6 +60,9 @@ describe("filamentAdapter apiStyle strapi without roles", () => {
     f.path.startsWith("app/Http/Controllers/Api/Generated/"),
   );
 
+  it("reports no error gap, so the CLI would generate it", () => {
+    expect(result.gaps.gaps.filter((g) => g.severity === "error")).toEqual([]);
+  });
   it("emits no scopeForUser on any model", () => {
     expect(models.length).toBeGreaterThan(0);
     for (const m of models) expect(m.content).not.toContain("scopeForUser");

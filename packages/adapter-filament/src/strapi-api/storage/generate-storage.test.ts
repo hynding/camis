@@ -267,6 +267,10 @@ describe("storageLayout strapi with a hook", () => {
   });
   const hookedPaths = hooked.files.map((f) => f.path);
 
+  it("reports no error gap, so the CLI would generate it", () => {
+    expect(hooked.gaps.gaps.filter((g) => g.severity === "error")).toEqual([]);
+  });
+
   it("emits the observer file and registers it on the storage model", () => {
     expect(hookedPaths).toContain("app/Observers/ArticleObserver.php");
     const model = hooked.files.find((f) => f.path === "app/Models/Article.php")!.content;
