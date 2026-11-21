@@ -10,6 +10,7 @@ import { STRAPI_RESERVED_NAMES, strapiAttributeNames } from "@camis/strapi-schem
 import { childTableEmit, ITEM_POSITION_COLUMN, type ChildTableEmit } from "./components";
 import { snakeColumn } from "./names";
 import { oneToManyKeyColumn } from "./relations";
+import { morphLinkColumns, servesMorphs } from "./strapi-api/core/morphs";
 
 type ApiStyle = "laravel" | "strapi";
 
@@ -43,9 +44,14 @@ const column = (name: string): TargetName => ({ spelled: name, mapped: name });
  * related type's: a to-one relation's is its key, and on the Laravel storage layout a one-to-many's
  * key is a column of its target's rows named by its inverse (by the holding type without one),
  * left out where the target is a built-in type, whose table the host app owns. The Strapi storage
- * layout keeps a one-to-many in a link table of Strapi's.
+ * layout keeps a one-to-many in a link table of Strapi's. Where polymorphic relations are served
+ * (`servesMorphs`), a to-one one keeps its link's two columns on the row, a to-many one a table.
  */
-const columnNamesOf = (doc: IrDocument, storage: ApiStyle): ((field: Field) => TargetName[]) => {
+const columnNamesOf = (
+  doc: IrDocument,
+  apiStyle: ApiStyle,
+  storage: ApiStyle,
+): ((field: Field) => TargetName[]) => {
   const builtins = new Set(
     doc.contentTypes.flatMap((ct) => (ct.builtin === undefined ? [] : [ct.name])),
   );
@@ -65,8 +71,13 @@ const columnNamesOf = (doc: IrDocument, storage: ApiStyle): ((field: Field) => T
     const key = oneToManyKeyColumn(holder, field);
     return [field.inverse === undefined ? column(key) : { ...column(key), inverse: true }];
   };
+  const morphs = servesMorphs(apiStyle, storage);
   return (field) => {
     if (field.type === "relation") return relationColumns(field);
+    if (field.type === "polymorphicRelation" && morphs && !field.many) {
+      const link = morphLinkColumns(field);
+      return [column(link.idColumn), column(link.typeColumn)];
+    }
     if (NO_COLUMN.has(field.type)) return [];
     return [{ spelled: field.name, mapped: snakeColumn(field.name) }];
   };
@@ -156,7 +167,7 @@ export const filamentReservedNameGaps = (
           items: itemTables(doc, apiStyle, linksMedia),
         }
       : {};
-  const columnNames = columnNamesOf(doc, storage);
+  const columnNames = columnNamesOf(doc, apiStyle, storage);
   return apiStyle === "strapi"
     ? reservedNameGaps(
         doc,

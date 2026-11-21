@@ -3008,7 +3008,10 @@ no gap reported (issue #103).
   type holding the relation (a type `Document`'s is `document_id`), reported at the relation. A
   one-to-one's inverse keeps no column (the key is the owning side's), nor does a one-to-many to a
   built-in type, whose table the host app owns; the Strapi storage layout links either in a table
-  of Strapi's. The Laravel API style reports `createdAt` and `updatedAt`, whose columns are
+  of Strapi's. A to-one polymorphic relation, served only on the Strapi API style over Laravel
+  storage, keeps its link's `<name>_id` and `<name>_type` on the entry's row (one named
+  `document` keeps a second `document_id`); a to-many one keeps its links in a table of their own,
+  and the IR keeps either out of a component. The Laravel API style reports `createdAt` and `updatedAt`, whose columns are
   Laravel's timestamps on every table, a component item's included. On the Laravel storage layout,
   in either API style, an embedded component's columns land on the entry's row, checked against
   the names above, and an item's fields' columns on its item table's rows, checked against that

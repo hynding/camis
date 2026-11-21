@@ -77,9 +77,10 @@ field. A gap is reported only where the target emits the colliding column or key
   inverse and a component's field. The Filament target also checks a to-one relation's key column,
   so a relation named `document` (`document_id`) is refused there, and on the Laravel storage
   layout a one-to-many's key column on its target's rows, named by its inverse (an inverse
-  `document`) or, without one, by the type holding it (a type `Document`). Strapi's Content-Type
-  Builder additionally refuses `status`, `meta` and `entry_id`; camis lets them through, since none
-  is a key of an entry and Strapi reads and writes such a field as it should.
+  `document`) or, without one, by the type holding it (a type `Document`), and a to-one
+  polymorphic relation's `<name>_id` and `<name>_type`. Strapi's Content-Type Builder additionally
+  refuses `status`, `meta` and `entry_id`; camis lets them through, since none is a key of an entry
+  and Strapi reads and writes such a field as it should.
 - `filament` with `apiStyle: "laravel"`: `createdAt` and `updatedAt`, whose columns are Laravel's
   timestamps.
 - `filament` on the Laravel storage layout (either API style): an embedded component's columns on
