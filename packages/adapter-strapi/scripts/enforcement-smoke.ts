@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { materialize } from "@camis/adapter-kernel";
 import { strapiAdapter } from "../src/generate";
 import { ownershipBundle } from "../src/__fixtures__/ownership";
+import { routeProblems, type Granted, type ListedRoute } from "./route-guard";
 import { stopProcessGroup } from "./stop-process-group";
 
 const BASE = "http://127.0.0.1:1337";
@@ -320,6 +321,29 @@ const scenario = async (dir: string): Promise<void> => {
   const carol = await member(dir, "carol", "contributor");
   const blind = await call("GET", "/api/tags?filters[note][id][$null]=true", carol.jwt);
   check("carol's filter through a note she cannot read is refused", blind.status === 400, blind);
+  // Only the query parameters Strapi documents pass for a restricted caller; the publication
+  // cohorts, which test for a version the caller may not read, and an unknown one are refused.
+  for (const query of [
+    "future=1",
+    "publicationFilter=never-published",
+    "hasPublishedVersion=true",
+    "populate[note][publicationFilter]=has-published-version",
+  ]) {
+    const r = await call("GET", `/api/tags?${query}`, alice.jwt);
+    check(`alice's ${query} is refused`, r.status === 400, r.status);
+  }
+  const documented = await list(
+    "/api/tags?filters[label][$eq]=b&sort=label:asc&fields[0]=label&_q=b&status=published" +
+      "&pagination[page]=1&pagination[pageSize]=5&pagination[withCount]=true" +
+      "&populate[note][fields][0]=title&populate[note][sort]=title",
+    bob.jwt,
+  );
+  check(
+    "bob's list with every documented parameter finds his tag",
+    documented.ok && documented.ids.includes(tagId ?? ""),
+    documented.response,
+  );
+
   // Strapi's delete reads filters into its where: a relation filter would decide whether alice's
   // own note is deleted, by a guess at bob's. Both guesses are refused alike.
   const throwaway = await call("POST", "/api/notes", alice.jwt, {
@@ -372,32 +396,25 @@ const routeGuard = (dir: string): void => {
     return;
   }
   const listed = JSON.parse(line.slice("CAMIS_ROUTES ".length)) as {
-    routes: { method: string; path: string; action: string; open: boolean }[];
-    granted: { role: string | null; action: string }[];
+    routes: ListedRoute[];
+    granted: Granted[];
   };
   const allowlist = JSON.parse(
     readFileSync(new URL("./content-api-allowlist.json", import.meta.url), "utf8"),
   ) as Record<string, string>;
-  const holders = new Map<string, string[]>();
-  for (const g of listed.granted)
-    holders.set(g.action, [...(holders.get(g.action) ?? []), g.role ?? "?"]);
   check("Strapi lists content API routes", listed.routes.length > 0, listed.routes.length);
-  for (const route of listed.routes) {
-    const roles = holders.get(route.action) ?? [];
-    if (!route.open && roles.length === 0) continue;
-    const who = route.open ? "anyone (auth: false)" : roles.join(", ");
-    check(
-      `${route.method} ${route.path} (${route.action}, ${who}) is allowlisted`,
-      Object.prototype.hasOwnProperty.call(allowlist, route.action),
-      route,
-    );
-  }
-  for (const action of holders.keys())
-    check(
-      `granted action ${action} names a registered route`,
-      listed.routes.some((r) => r.action === action),
-      action,
-    );
+  const problems = routeProblems(listed.routes, listed.granted, allowlist);
+  check("every content API route a role can reach is allowlisted", problems.length === 0, problems);
+  const holders = new Set(listed.granted.map((g) => g.action));
+  const actions = new Set(
+    listed.routes.flatMap((r) =>
+      [r.handler, ...(r.auth === false || r.auth === null ? [] : (r.auth.scope ?? []))]
+        .filter((a): a is string => a !== null)
+        .map((a) => (a.includes("::") ? a : `${r.namespace}.${a}`)),
+    ),
+  );
+  for (const action of holders)
+    check(`granted action ${action} names a registered route`, actions.has(action), action);
 };
 
 const dir = await mkdtemp(join(tmpdir(), "camis-enforcement-"));

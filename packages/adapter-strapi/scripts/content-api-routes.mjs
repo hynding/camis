@@ -18,12 +18,18 @@ const main = async () => {
     for (const router of list) {
       if (router.type !== "content-api") continue;
       for (const route of router.routes ?? []) {
-        const handler = typeof route.handler === "string" ? route.handler : "<function>";
+        const auth = route.config?.auth;
         routes.push({
           method: route.method,
           path: route.path,
-          action: handler.includes("::") ? handler : `${namespace}.${handler}`,
-          open: route.config?.auth === false,
+          namespace,
+          handler: typeof route.handler === "string" ? route.handler : null,
+          auth:
+            auth === false
+              ? false
+              : Array.isArray(auth?.scope)
+                ? { scope: auth.scope.map(String) }
+                : null,
         });
       }
     }
