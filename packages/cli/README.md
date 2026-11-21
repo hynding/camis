@@ -163,7 +163,8 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
   `strapi-enforcement-boot` CI job runs the ownership fixture against a real
   Strapi 5 on sqlite (list, entry, owner, `GET /api/users`, populate, filter, two relation filters,
   sort, connect, a file's related entries, taking a pinned tag, the refused `$not` and `$null`
-  filters, a component's populate filter), not zones, locales, drafts, MySQL or Postgres.
+  filters, a component's populate filter, a tag with no note answering as one with a hidden
+  note), not zones, locales, drafts, MySQL or Postgres.
 
 - `protected` (optional) is a directory mirrored into every target's `out` after generation —
   the home for hand-written seams (`routes/api-custom.php`, protected controller subclasses,

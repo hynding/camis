@@ -12,6 +12,13 @@ const shared: Expression = {
   right: { kind: "lit", value: true },
 };
 
+/** A null literal: the note has no owner. */
+const unowned: Expression = {
+  kind: "eq",
+  left: { kind: "var", name: "record.ownerId" },
+  right: { kind: "lit", value: null },
+};
+
 const unshared: Expression = {
   kind: "ne",
   left: { kind: "var", name: "record.shared" },
@@ -21,8 +28,8 @@ const unshared: Expression = {
 /**
  * Notes owned by the account that made them: members manage their own, guests read the shared
  * ones, reviewers read every note but edit only their own, contributors may only add private
- * notes (a note is shared unless it says otherwise) and read tags, and the admin role does
- * anything. Tags reach
+ * notes (a note is shared unless it says otherwise) and read tags, drafters read the notes no one
+ * owns, and the admin role does anything. Tags reach
  * notes directly, through a parent tag, and through a repeatable reference component. A note
  * belongs to a category (whose `notes` inverse a reviewer may write), pins tags (each tag pinned on
  * one note at most: `Tag.pinnedOn`, whose inverse is `Note.pinned`), and has an attachment.
@@ -113,6 +120,13 @@ export const ownershipBundle: IrBundle = {
           condition: unshared,
           assign: { owner: "user.id" },
         },
+        { contentType: "Tag", actions: ["read"] },
+      ],
+    },
+    {
+      name: "drafter",
+      grants: [
+        { contentType: "Note", actions: ["read"], condition: unowned },
         { contentType: "Tag", actions: ["read"] },
       ],
     },

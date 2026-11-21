@@ -2738,7 +2738,9 @@ relation write, and a database seeded once kept it.
     "no linked entry" answered unlike "a linked entry you cannot read". Every scope on a joined
     relation is therefore `{ $and: [client, { id: { $notNull: true } }, scope] }`, needing a real
     joined row, and the filter of a role with no read is `id IS NULL AND id IS NOT NULL`, which no
-    row satisfies, the all-NULL one included (`id IS NULL` alone matched it). `$ne`, `$notIn` and
+    row satisfies, the all-NULL one included (`id IS NULL` alone matched it; over HTTP Strapi's
+    own query validation already refuses a filter through a relation whose target the role cannot
+    `find`, so that one is defence in depth, while the null-literal case was reachable). `$ne`, `$notIn` and
     `$notContains` are unknown on a NULL and never matched it; they are covered all the same. A
     populate's own scope and the own type's scope apply to real rows (a populate queries the
     target's rows, a list its own), where `owner IS NULL` is Ring 1's `record.owner == null`;
@@ -2815,9 +2817,11 @@ relation write, and a database seeded once kept it.
   a file's `related` entries are refused; a member cannot take a tag pinned on another
   member's note nor pin one there; a `$not` around the note filter and a `$null` on the note
   relation are 400 while `$notNull` lists only tags with a readable note (`$null=false` the same,
-  `$notNull=false` 400, as strings); a contributor, who reads tags but no note, gets the same
-  answer for a tag with no note as for one with another member's (`[note][id][$null]`,
-  `[note][title][$null]`, and through the component); and a component's
+  `$notNull=false` 400, as strings); a drafter, who reads only the notes no one owns (a
+  null-literal condition), gets the same answer for a tag with no note as for one with another
+  member's (`[note][id][$null]`, `[note][title][$null]`, and through the component), and a
+  contributor, who reads tags but no note, has such a filter refused by Strapi's own query
+  validation; and a component's
   populate filter through its note matches another member's note for its owner only, a sort
   through it 400. Run locally against Strapi 5.48.0 before
   merge, it found two bugs the fake had hidden, each fixed test-first: the bootstrap's admin-panel

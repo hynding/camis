@@ -31,6 +31,15 @@
       ]
     },
     {
+      "type": "drafter",
+      "actions": [
+        "api::note.note.find",
+        "api::note.note.findOne",
+        "api::tag.tag.find",
+        "api::tag.tag.findOne"
+      ]
+    },
+    {
       "type": "reviewer",
       "actions": [
         "api::category.category.find",

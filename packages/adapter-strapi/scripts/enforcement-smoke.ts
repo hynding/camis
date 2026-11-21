@@ -299,21 +299,26 @@ const scenario = async (dir: string): Promise<void> => {
   const notSome = await call("GET", "/api/tags?filters[note][$notNull]=false", alice.jwt);
   check("alice's $notNull=false on the note relation is refused", notSome.status === 400, notSome);
 
-  // A contributor reads tags but no note. A tag with no note joins an all-NULL note row, which
-  // a client's $null matches; it must answer as a tag whose note the contributor cannot read.
-  const carol = await member(dir, "carol", "contributor");
+  // A drafter reads the notes no one owns: its scope, `owner IS NULL`, holds on the all-NULL note
+  // row Strapi's LEFT JOIN gives a tag with no note, as does a client's $null. A tag with no note
+  // must answer as a tag whose note the drafter cannot read.
+  const dana = await member(dir, "dana", "drafter");
   for (const query of [
     "filters[note][id][$null]=true",
     "filters[note][title][$null]=true",
     "filters[refs][note][title][$null]=true",
   ]) {
-    const r = await list(`/api/tags?${query}`, carol.jwt);
+    const r = await list(`/api/tags?${query}`, dana.jwt);
     check(
-      `carol's ${query} answers a tag with no note as one with bob's`,
+      `dana's ${query} answers a tag with no note as one with bob's`,
       r.ok && r.ids.includes(idOf(withRefs)) === r.ids.includes(tagId ?? ""),
       r.response,
     );
   }
+  // A contributor reads tags but no note: Strapi's own query validation refuses the filter.
+  const carol = await member(dir, "carol", "contributor");
+  const blind = await call("GET", "/api/tags?filters[note][id][$null]=true", carol.jwt);
+  check("carol's filter through a note she cannot read is refused", blind.status === 400, blind);
   const link = await call("POST", "/api/tags", alice.jwt, {
     data: { label: "a", note: { connect: [{ documentId: bobNoteId }] } },
   });

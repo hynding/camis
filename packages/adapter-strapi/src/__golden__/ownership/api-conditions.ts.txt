@@ -1144,6 +1144,13 @@ const CONDITIONS: Record<string, Record<string, Condition>> = {
       },
       filter: {"kind":"eq","variable":"record.shared","value":{"kind":"literal","value":true}},
     },
+    "camis-cond-9cfe72a8": {
+      test: (data) => {
+        const result = r.eq(() => r.var(data, "record.ownerId"), () => r.lit(null));
+        return result.ok === true && result.value === true;
+      },
+      filter: {"kind":"eq","variable":"record.ownerId","value":{"kind":"literal","value":null}},
+    },
   },
   "api::category.category": {},
   "api::tag.tag": {},
@@ -1169,6 +1176,10 @@ const RULES: Record<string, TypeRules> = {
       "contributor": {
         create: [CONDITIONS["api::note.note"]!["camis-cond-59469652"]!],
         assign: ["owner"],
+      },
+      "drafter": {
+        read: [CONDITIONS["api::note.note"]!["camis-cond-9cfe72a8"]!],
+        assign: [],
       },
       "manager": {
         read: true,

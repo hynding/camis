@@ -72,6 +72,7 @@ describe("content API enforcement golden", () => {
       "downgrade conditionContext Note.public",
       "downgrade conditionContext Note.member",
       "downgrade conditionContext Note.contributor",
+      "downgrade conditionContext Note.drafter",
       "downgrade conditionContext Note.reviewer",
       "downgrade userRelationWrite Note.reviewer",
       "downgrade userRelationWrite Note.manager",
