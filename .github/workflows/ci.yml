@@ -20,6 +20,27 @@ jobs:
       - run: pnpm -r typecheck
       - run: pnpm -r test
 
+  strapi-plugin-camis:
+    # The Strapi plugin that pushes to and pulls from CAMIS; not a pnpm workspace member, since it
+    # depends on Strapi itself. Its CAMIS endpoints are tested in the Filament boot job.
+    name: strapi-plugin-camis · typecheck · test · build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: integrations/strapi-plugin-camis
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: npm
+          cache-dependency-path: integrations/strapi-plugin-camis/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm run verify
+
   admin-roles-databases:
     # `--admin-roles-from` on a Strapi project that runs on MySQL or PostgreSQL: the reader's
     # tests load strapi-php's recorded admin tables into each server and import them.
