@@ -130,8 +130,19 @@ export type Verdict = "allow" | "notFound" | "forbidden";
 const GUEST_ROLE = "public";
 /** A request users-permissions authenticated with no session: the public role's. */
 const GUEST_STATE = { auth: { strategy: { name: "users-permissions" } } };
-/** A filter no row satisfies: every entry has an id. */
-const NO_ROWS: Record<string, unknown> = { id: { $null: true } };
+/**
+ * A filter no row satisfies, not even the all-NULL row a LEFT JOIN gives an entry with no link:
+ * `id IS NULL` alone would match that one.
+ */
+const NO_ROWS: Record<string, unknown> = {
+  $and: [{ id: { $null: true } }, { id: { $notNull: true } }],
+};
+/**
+ * Beside a scope on a joined relation: Strapi LEFT JOINs a filtered relation, so an entry with no
+ * link joins an all-NULL row, which a scope may satisfy (`owner IS NULL`) as may the client's own
+ * filter (`title IS NULL`); "none" and "one you cannot read" must answer alike.
+ */
+const LINKED: Record<string, unknown> = { id: { $notNull: true } };
 
 const field = (source: unknown, key: string): unknown =>
   typeof source === "object" && source !== null
@@ -546,17 +557,31 @@ const relationFilter = (
   if (!client.ok) return client;
   const inner = scopeFilters(tables, target, client.value, state, negated);
   if (!inner.ok) return inner;
-  return { ok: true, value: both(inner.value, scope) ?? inner.value };
+  if (scope === null) return inner;
+  const present = both(inner.value, null);
+  return {
+    ok: true,
+    value: { $and: [...(present === undefined ? [] : [present]), LINKED, scope] },
+  };
 };
 
 const GROUPS = ["$and", "$or", "$not"];
+
+/** A boolean as Strapi's parseType reads one from a query string; undefined for anything else. */
+const parseBoolean = (value: unknown): boolean | undefined => {
+  if (typeof value === "boolean") return value;
+  if (["true", "t", "1", 1].includes(value as string | number)) return true;
+  if (["false", "f", "0", 0].includes(value as string | number)) return false;
+  return undefined;
+};
 
 /**
  * A relation's filter as one on the related rows' attributes. Strapi reads a bare value, or a
  * lone operator, on the relation itself as a test of the related id; written so, it can sit
  * beside the scope. "Has none" (`$null`) across a conditioned relation is refused: it would count
  * an entry the caller cannot read as none, and only a negation could ask for "none readable".
- * `$notNull` asks for a readable entry. Strapi tests either operator's value for truth.
+ * `$notNull` asks for a readable entry. Either operator's value is read as Strapi's parseType reads
+ * a boolean ("true", "t", "1", "false", "f", "0"); anything else is refused rather than guessed.
  */
 const relationTest = (key: string, value: unknown, conditioned: boolean): Checked<unknown> => {
   if (!isRecord(value)) return { ok: true, value: { id: value } };
@@ -568,8 +593,10 @@ const relationTest = (key: string, value: unknown, conditioned: boolean): Checke
   const operator = operators[0]!;
   if (GROUPS.includes(operator)) return { ok: true, value };
   if (operator === "$null" || operator === "$notNull") {
-    const none = operator === "$null" ? Boolean(value[operator]) : !value[operator];
     if (!conditioned) return { ok: true, value: { id: value } };
+    const flag = parseBoolean(value[operator]);
+    if (flag === undefined) return refuse(`Invalid ${operator} on the relation ${key}`);
+    const none = operator === "$null" ? flag : !flag;
     if (none) return refuse(`Invalid $null on the relation ${key}`);
     return { ok: true, value: { id: { $notNull: true } } };
   }
