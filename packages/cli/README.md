@@ -154,8 +154,10 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
     one entry, and a `set` stands alone. Any `set` but `null` replaces the relation, one entry
     included, so every entry it drops is checked. The check covers every collection type camis
     serves, including each with a relation or media field that a restricted role or an open route
-    writes (served for this alone, its reads and deletes stay Strapi's); single types, the
-    built-in user and the media library are served by Strapi and its plugins, unchecked.
+    writes (served for this alone, its reads and deletes stay Strapi's), and each such single
+    type, whose update is checked over Strapi's own single type controller; the built-in user and
+    the media library are served by their plugins, unchecked (a non-admin user write is an
+    error; the upload API takes only its documented fields).
   - The upload API, once a role the rules restrict holds a file grant (a generated
     `src/extensions/upload/strapi-server.ts` wraps the plugin's content API controller): `POST
     /api/upload` takes only `fileInfo`, `ref`, `refId` and `field` (any other body field, `path`

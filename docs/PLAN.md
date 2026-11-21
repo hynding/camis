@@ -2835,15 +2835,20 @@ relation write, and a database seeded once kept it.
     is fixed by this one reading. `runtime/engine.test.ts` writes every row id form on Strapi's own
     entity manager, to-many and to-one, and compares the links left with the change predicted.
   - **Where the body check applies.** Every collection type served by the generated controller:
-    besides the types above, each collection type with a relation or media field (its own, an
+    besides the types above, each content type with a relation or media field (its own, an
     embedded component's, or an inverse Strapi gives it) that a restricted role creates or
-    updates, or an `auth: false` route opens for either (`linkWritten`, `api-shapes.ts`). A type
-    served only for this (no rules, no reach, no mirrored link) leaves its reads and deletes to
-    Strapi's own controller. Not checked, as their writes are not served by camis: single types
-    (Strapi's single type controller; a media field there is an error, a relation field is not,
-    so a restricted writer's `__pivot` reaches a single type's join rows), the built-in user (a
-    non-admin write is an `apiUserWrite` error) and the media library (the upload API takes only
-    the documented `fileInfo` fields); admin roles and API tokens; GraphQL.
+    updates, or an `auth: false` route opens for either (`linkWritten`, `api-shapes.ts`). A
+    collection type served only for this (no rules, no reach, no mirrored link) leaves its reads
+    and deletes to Strapi's own controller. A single type is served the same way by
+    `bodyCheckedSingle` (`api-controller.ts`, listed in `singles`): Strapi's single type
+    controller with only the update of a caller that is not an admin role or an API token (or
+    anyone's, on an open route) checked by `writeShape` first, so a `__pivot` cannot name another
+    row of the single type (a locale, the published version) or an unchecked target there; its
+    find and delete are Strapi's. The single type errors stay (a media field a restricted role
+    writes; a reach into a conditioned type it reads; a mirrored relation into a type it does not
+    update outright). Not checked: the built-in user (a non-admin write is an `apiUserWrite`
+    error) and the media library (the upload API takes only the documented `fileInfo` fields);
+    admin roles and API tokens; GraphQL.
   - Not narrowed, as on Strapi and the Filament target: admin roles and API tokens (Phase 25). An
     `auth: false` action (Phase 57) serves its own type's rows to anyone, and its reach is decided
     as the public role's, so a reach-only type's open route still answers. A session whose role is
@@ -3069,7 +3074,8 @@ Built from the plugin's source (`controllers/content-api.js`, `services/upload.j
   while the plain connect is 201; a reviewer who reads but does not update the note holding a
   file cannot link it (403) and still updates her own note; a reviewer's `set` of her own note,
   by documentId and by row id, on a category holding another member's note is 403 and the
-  category keeps that note.
+  category keeps that note; on the fixture's single type (`Front`, which reviewers update), a
+  relation `connect` item with a `__pivot` is 400 and links nothing, while a plain write is 200.
 
 Known limits: the upload API is enforced for the content API only (GraphQL's upload mutations, if a
 project adds the plugin, are not); an IR relation (not a media field) to the media library's type
@@ -3085,7 +3091,8 @@ change and attach verdicts; media value forms, components and zones; `__pivot`, 
 depth); `runtime/engine.test.ts` (the real entity manager writes a `__pivot`-named entry into the
 join row; camis refuses the body; every accepted relation value leaves the links `relationChange`
 predicts); `enforcement-behaviour.test.ts` (a rule-less type served for the body check: writes
-pass, a `__pivot` is 400, reads and deletes are Strapi's); `upload-behaviour.test.ts`
+pass, a `__pivot` is 400, reads and deletes are Strapi's; the single type's update the same over
+Strapi's single type controller, an admin role's and a token's passed on); `upload-behaviour.test.ts`
 (the emitted extension and controllers against a fake upload plugin and query engine: nothing
 stored, replaced or deleted on any refusal); `api-enforcement.test.ts` (the lifted error, the
 single type error with and without file grants and for an open action, the tables, the media
