@@ -127,6 +127,29 @@ describe("toRecordFilter", () => {
       ],
     });
   });
+  // A part that reads only the caller is the same for every row: a target decides it per request
+  // with Ring 1 itself, before the query, and filters by the rest.
+  it("keeps a part that reads no record variable as a caller test, decided before the query", () => {
+    const role: Expression = { kind: "eq", left: v("user.role"), right: lit("editor") };
+    expect(toRecordFilter(role, typeOf, everyUser)).toEqual({ kind: "caller", expression: role });
+    const mixed: Expression = { kind: "and", args: [eq(v("record.ownerId"), v("user.id")), role] };
+    expect(toRecordFilter(mixed, typeOf, everyUser)).toEqual({
+      kind: "and",
+      args: [
+        { kind: "eq", variable: "record.ownerId", value: { kind: "user", variable: "user.id" } },
+        { kind: "caller", expression: role },
+      ],
+    });
+    const notRole: Expression = { kind: "not", arg: role };
+    expect(toRecordFilter(notRole, typeOf, everyUser)).toEqual({
+      kind: "caller",
+      expression: notRole,
+    });
+  });
+  it("keeps no caller test for a user variable the target cannot bind", () => {
+    const role: Expression = { kind: "eq", left: v("user.role"), right: lit("editor") };
+    expect(toRecordFilter(role, typeOf, ["user.id"])).toBeNull();
+  });
   it("is null when any part is outside the subset", () => {
     const e: Expression = {
       kind: "and",
