@@ -519,18 +519,18 @@ describe("a reach the Strapi content API cannot narrow fails the build", () => {
     ];
     expect(errors(spot, writer)).toEqual([
       {
-        feature: "apiPolymorphicReach",
-        location: { contentType: "Board", rule: "member" },
-        severity: "error",
-        message:
-          'role "member" writes "Board", whose polymorphic relation Board.subjects can reach "Note", which it reads under a condition; the Strapi target cannot narrow a polymorphic populate or write',
-      },
-      {
         feature: "apiRelationReach",
         location: { contentType: "Spot", rule: "member" },
         severity: "error",
         message:
           'role "member" writes single type "Spot", which reaches "Note" (read under a condition) through Spot.spotlight; the Strapi target does not narrow a single type\'s populate or relation writes',
+      },
+      {
+        feature: "apiPolymorphicReach",
+        location: { contentType: "Board", rule: "member" },
+        severity: "error",
+        message:
+          'role "member" writes "Board", whose polymorphic relation Board.subjects can reach "Note", which it reads under a condition; the Strapi target cannot narrow a polymorphic populate or write',
       },
     ]);
     // An open create or update route writes as the public role.
@@ -546,8 +546,8 @@ describe("a reach the Strapi content API cannot narrow fails the build", () => {
       { name: "public", grants: [{ contentType: "Note", actions: ["read"], condition: owned }] },
     ];
     expect(errors(opened, guest).map((g) => [g.feature, g.location])).toEqual([
-      ["apiPolymorphicReach", { contentType: "Board", rule: "public" }],
       ["apiRelationReach", { contentType: "Spot", rule: "public" }],
+      ["apiPolymorphicReach", { contentType: "Board", rule: "public" }],
     ]);
   });
 });

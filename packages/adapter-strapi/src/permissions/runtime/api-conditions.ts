@@ -112,12 +112,14 @@ export interface Uploads {
 }
 
 /**
- * How an attribute is written: a scalar (Strapi validates its value), a relation, a polymorphic
- * relation (whose items name their `__type`), a media field, a component or a dynamic zone.
+ * How an attribute is written: a scalar (Strapi validates its value), a relation (to one entry at
+ * most, or to many), a polymorphic relation (whose items name their `__type`), a media field, a
+ * component or a dynamic zone.
  */
 export type AttributeShape =
   | "scalar"
   | "relation"
+  | "toOneRelation"
   | "polymorphic"
   | "media"
   | { component: string; repeatable: boolean }
@@ -1080,8 +1082,12 @@ export const writeShape = (
       if (shape === "scalar") continue;
       if (shape === "media") {
         if (relationChange(value, "media") === null) return `Invalid media value for ${at}`;
-      } else if (shape === "relation" || shape === "polymorphic") {
-        if (relationChange(value, shape) === null) return `Invalid relation value for ${at}`;
+      } else if (shape === "relation" || shape === "toOneRelation" || shape === "polymorphic") {
+        const change = relationChange(value, shape === "polymorphic" ? shape : "relation");
+        if (change === null) return `Invalid relation value for ${at}`;
+        // Strapi keeps the last entry of a to-one write: the others would go unread as written.
+        if (shape === "toOneRelation" && count(change.connect) > 1)
+          return `Invalid relation value for ${at}: one entry at most`;
       } else if ("component" in shape) {
         // Strapi clears a component or a dynamic zone written as null.
         if (value === null) continue;

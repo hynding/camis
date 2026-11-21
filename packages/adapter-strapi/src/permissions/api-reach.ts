@@ -7,7 +7,7 @@ import {
   type Field,
   type IrDocument,
 } from "@camis/ir-schema";
-import type { Role } from "@camis/permissions";
+import { PUBLIC_ROLE, type Role } from "@camis/permissions";
 import { componentUid, strapiNames } from "@camis/strapi-schema";
 import type { ApiHolder, ApiHolderLink, ApiTypeRules } from "./api-enforcement";
 import { codePointOrder } from "./code-point-order";
@@ -215,6 +215,23 @@ export const embedded = (doc: IrDocument, fields: readonly Field[]): Component[]
 const readsType = (role: Role, ct: string): boolean =>
   role.grants.some((g) => g.contentType === ct && g.actions.includes("read"));
 
+/**
+ * How a role reaches a type's links: by reading it, or by writing it (a write's response is
+ * populated like a read, and a single type's or a polymorphic link is written unchecked); an
+ * `auth: false` create or update route writes as the public role. Null when it does neither.
+ */
+const touches = (role: Role, ct: ContentType): "reads" | "writes" | null => {
+  if (readsType(role, ct.name)) return "reads";
+  const writes =
+    role.grants.some(
+      (g) =>
+        g.contentType === ct.name && (g.actions.includes("create") || g.actions.includes("update")),
+    ) ||
+    (role.name === PUBLIC_ROLE &&
+      (ct.options?.publicApiActions ?? []).some((a) => a === "create" || a === "update"));
+  return writes ? "writes" : null;
+};
+
 export interface ApiReach {
   holders: Record<string, ApiHolder>;
   /** The nodes that reach a conditioned type. */
@@ -224,7 +241,7 @@ export interface ApiReach {
 
 /**
  * The reach of every type some non-admin role reads under a condition, and the errors for a
- * reach the generated controllers cannot narrow: a polymorphic relation (which may point at any
+ * reach the generated controllers cannot narrow, from a type a role reads or writes: a polymorphic relation (which may point at any
  * type), a relation the users-permissions or upload plugin serves, and a single type (which camis
  * serves through Strapi's own controller).
  */
@@ -252,9 +269,11 @@ export const projectReach = (doc: IrDocument, roles: Role[], types: ApiTypeRules
     const mine = [...conditionedFor.get(role.name)!].sort();
     if (mine.length === 0) continue;
     for (const ct of doc.contentTypes) {
-      if (ct.builtin !== undefined || !readsType(role, ct.name)) continue;
-      gaps.push(...polymorphicGaps(doc, role.name, ct, mine, reachFrom));
-      if (ct.kind === "single") gaps.push(...singleGaps(role.name, ct, mine, nodes, reachFrom));
+      const how = ct.builtin === undefined ? touches(role, ct) : null;
+      if (how === null) continue;
+      gaps.push(...polymorphicGaps(doc, role.name, how, ct, mine, reachFrom));
+      if (ct.kind === "single")
+        gaps.push(...singleGaps(role.name, how, ct, mine, nodes, reachFrom));
     }
     gaps.push(...builtinGaps(doc, byName, role, mine, reachFrom));
   }
@@ -268,10 +287,11 @@ export const projectReach = (doc: IrDocument, roles: Role[], types: ApiTypeRules
   };
 };
 
-/** A polymorphic relation of a type the role reads (or of a component it embeds). */
+/** A polymorphic relation of a type the role reads or writes (or of a component it embeds). */
 const polymorphicGaps = (
   doc: IrDocument,
   role: string,
+  how: "reads" | "writes",
   ct: ContentType,
   mine: readonly string[],
   reachFrom: (key: NodeKey) => Set<string>,
@@ -295,7 +315,7 @@ const polymorphicGaps = (
             ct.name,
             role,
             "apiPolymorphicReach",
-            `role "${role}" reads "${ct.name}", whose polymorphic relation ${owner}.${f.name} can reach "${target}", which it reads under a condition; the Strapi target cannot narrow a polymorphic populate or write`,
+            `role "${role}" ${how} "${ct.name}", whose polymorphic relation ${owner}.${f.name} can reach "${target}", which it reads under a condition; the Strapi target cannot narrow a polymorphic populate or write`,
           ),
         );
     }
@@ -306,6 +326,7 @@ const polymorphicGaps = (
 /** A single type's reach, which Strapi's own single-type controller serves unnarrowed. */
 const singleGaps = (
   role: string,
+  how: "reads" | "writes",
   ct: ContentType,
   mine: readonly string[],
   nodes: ReadonlyMap<NodeKey, Node>,
@@ -320,7 +341,7 @@ const singleGaps = (
           ct.name,
           role,
           "apiRelationReach",
-          `role "${role}" reads single type "${ct.name}", which reaches "${target}" (read under a condition) through ${ct.name}.${edge.attribute}; the Strapi target does not narrow a single type's populate or relation writes`,
+          `role "${role}" ${how} single type "${ct.name}", which reaches "${target}" (read under a condition) through ${ct.name}.${edge.attribute}; the Strapi target does not narrow a single type's populate or relation writes`,
         ),
       );
   }

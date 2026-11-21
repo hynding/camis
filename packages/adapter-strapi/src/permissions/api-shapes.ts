@@ -1,4 +1,10 @@
-import { fieldApiName, type ContentType, type Field, type IrDocument } from "@camis/ir-schema";
+import {
+  fieldApiName,
+  type ContentType,
+  type Field,
+  type IrDocument,
+  type RelationKind,
+} from "@camis/ir-schema";
 import type { Role } from "@camis/permissions";
 import { componentUids, strapiNames, synthesizedInverses } from "@camis/strapi-schema";
 import { embedded } from "./api-reach";
@@ -14,13 +20,20 @@ import { codePointOrder } from "./code-point-order";
 export type ApiAttributeShape =
   | "scalar"
   | "relation"
+  | "toOneRelation"
   | "polymorphic"
   | "media"
   | { component: string; repeatable: boolean }
   | { zone: string[] };
 
+/** Strapi's "relates to one" kinds, whose write keeps the last entry it names. */
+const TO_ONE: readonly unknown[] = ["oneToOne", "manyToOne"] satisfies RelationKind[];
+const relationShape = (kind: unknown): ApiAttributeShape =>
+  TO_ONE.includes(kind) ? "toOneRelation" : "relation";
+
 const shapeOf = (f: Field, uids: ReadonlyMap<string, string>): ApiAttributeShape => {
-  if (f.type === "relation" || f.type === "polymorphicInverse") return "relation";
+  if (f.type === "relation") return relationShape(f.relationKind);
+  if (f.type === "polymorphicInverse") return "relation";
   if (f.type === "polymorphicRelation") return "polymorphic";
   if (f.type === "media") return "media";
   if (f.type === "component")
@@ -52,10 +65,12 @@ export const projectShapes = (
       strapiNames(ct).uid,
       ordered([
         ...attributes(ct.fields),
-        ...Object.keys(inverses.get(ct.name) ?? {}).map((name): [string, ApiAttributeShape] => [
-          name,
-          "relation",
-        ]),
+        ...Object.entries(inverses.get(ct.name) ?? {}).map(
+          ([name, attribute]): [string, ApiAttributeShape] => [
+            name,
+            relationShape((attribute as { relation?: unknown }).relation),
+          ],
+        ),
       ]),
     ]),
     ...[...components.values()].map((c): [string, Record<string, ApiAttributeShape>] => [
