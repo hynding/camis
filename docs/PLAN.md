@@ -2709,10 +2709,13 @@ no gap reported (issue #103).
   name the target keeps however many of its names (a key and its key column) map onto it, and its
   inverse apart, so `updatedBy` with inverse `updatedBy` is reported on both types. `ir-core`'s
   `reservedNameGaps(doc, target, reserved, namesOf, options)` walks the fields; each target says how
-  it maps a field's names and which it keeps, and whether a built-in type's fields are checked
+  it maps a field's names and which it keeps, and whether a built-in type's own fields are checked
   (`builtins`): Strapi and Filament map a built-in type onto a model of their own (users-permissions'
-  user, the host app's `users` or Strapi's `up_users`) and generate nothing from its fields, while
-  Express emits it as a plain table with the same timestamps, so only Express checks it.
+  user, the host app's `users` or Strapi's `up_users`) and generate nothing from its own fields,
+  while Express emits it as a plain table with the same timestamps, so only Express checks them.
+  A built-in type's relations' inverses are checked on every target: they land on the related
+  type, which each generates (`User.notes` with inverse `createdBy` is a second `created_by_id` on
+  the Filament Strapi API style's `notes`, and an inverse `publishedAt` overwrites Strapi's key).
 - **Strapi** (`@camis/strapi-schema`'s `STRAPI_RESERVED_NAMES`, `strapiReservedNameGaps`). What
   camis refuses: the keys of the entry itself, `documentId`, `createdAt`, `updatedAt`,
   `publishedAt`, `createdBy`, `updatedBy`, `locale`, `localizations`, and the

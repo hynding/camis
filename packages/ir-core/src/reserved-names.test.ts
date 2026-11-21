@@ -91,19 +91,21 @@ describe("reservedNameGaps", () => {
                   name: "people",
                   relationKind: "oneToMany",
                   target: "Person",
-                  inverse: "stamped",
+                  inverse: "stampedAt",
                 },
               ],
             },
       ),
     };
     const gaps = reservedNameGaps(owning, "the Test target", RESERVED, snakeNames);
-    expect(gaps.filter((g) => g.location.contentType === "Person")).toEqual([
+    expect(
+      gaps.filter((g) => g.location.field === "stampedAt" && g.location.contentType === "Person"),
+    ).toEqual([
       {
         feature: "reservedFieldName",
-        location: { contentType: "Person", field: "stamped" },
+        location: { contentType: "Person", field: "stampedAt" },
         severity: "error",
-        message: `inverse "stamped" of relation "User.people" collides with the Test target's own "stamped"; rename it`,
+        message: `inverse "stampedAt" of relation "User.people" collides with the Test target's own "stampedAt"; rename it`,
       },
     ]);
     expect(gaps.some((g) => g.location.contentType === "User")).toBe(false);

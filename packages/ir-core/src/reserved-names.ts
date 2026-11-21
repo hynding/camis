@@ -47,8 +47,10 @@ export interface ItemTable {
 
 export interface ReservedNameOptions {
   /**
-   * Check a built-in content type's fields too: a target that emits a built-in type's columns
-   * from the IR, as it does any type's, must. One that maps it onto its own model does not.
+   * Check a built-in content type's own fields too: a target that emits a built-in type's columns
+   * from the IR, as it does any type's, must. One that maps it onto its own model generates
+   * nothing from them. Either way a built-in type's relations' inverses are checked: they land on
+   * the related type, which the target generates.
    */
   builtins?: boolean;
   /**
@@ -129,7 +131,10 @@ export const reservedNameGaps = (
     names.flatMap((name): CapabilityGap[] => {
       const own = kept.get(name.mapped);
       const location = locate(name);
-      const key = [locationKey(location), name.inverse === true, own].join("\0");
+      // An inverse is told apart by its relation, which its description names.
+      const key = [locationKey(location), name.inverse === true ? described(name) : "", own].join(
+        "\0",
+      );
       if (own === undefined || reported.has(key)) return [];
       reported.add(key);
       return [
@@ -172,27 +177,36 @@ export const reservedNameGaps = (
   };
 
   // A field is located where it is declared, its inverse on the type it lands on.
-  const ownGaps = (holderName: string, field: Field, holder: FieldHolder): CapabilityGap[] => {
+  const ownGaps = (
+    holderName: string,
+    field: Field,
+    holder: FieldHolder,
+    checked: (name: TargetName) => boolean = () => true,
+  ): CapabilityGap[] => {
     const at: IrErrorLocation =
       holder === "contentType" ? { contentType: holderName } : { component: holderName };
     const locate = (name: TargetName): IrErrorLocation =>
       name.inverse === true && field.type === "relation"
         ? { contentType: field.target, field: field.inverse ?? name.spelled }
         : { ...at, field: field.name };
-    return gaps(namesOf(field, holder), reserved, locate, (name) =>
+    return gaps(namesOf(field, holder).filter(checked), reserved, locate, (name) =>
       describe(holderName, field, name),
     );
   };
 
+  // A built-in type's inverses only, unless the target generates its own fields too: they land on
+  // the related type.
+  const builtinGaps = (contentType: string, field: Field): CapabilityGap[] =>
+    ownGaps(contentType, field, "contentType", (name) => name.inverse === true);
+
   return [
-    ...doc.contentTypes
-      .filter((ct) => options.builtins === true || ct.builtin === undefined)
-      .flatMap((ct) =>
-        ct.fields.flatMap((field) => [
-          ...ownGaps(ct.name, field, "contentType"),
-          ...entryColumnGaps(ct.name, field),
-        ]),
+    ...doc.contentTypes.flatMap((ct) =>
+      ct.fields.flatMap((field) =>
+        options.builtins === true || ct.builtin === undefined
+          ? [...ownGaps(ct.name, field, "contentType"), ...entryColumnGaps(ct.name, field)]
+          : builtinGaps(ct.name, field),
       ),
+    ),
     ...doc.components.flatMap((c) =>
       c.fields.flatMap((field) => ownGaps(c.name, field, "component")),
     ),
