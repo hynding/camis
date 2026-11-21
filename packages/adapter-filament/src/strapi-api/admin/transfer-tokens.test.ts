@@ -52,15 +52,15 @@ describe("transfer tokens", () => {
 
   it("refuses a missing, expired or out-of-scope token before saying no socket is kept", async () => {
     const runner = content("app/Http/Controllers/Admin/StrapiTransferRunner.php");
-    expect(runner).toContain(
+    expect(runner).toContain("StrapiTransferTokens::demand($request, $scope);");
+    expect(runner).toContain("throw new StrapiError(501, 'NotImplementedError', ");
+    expect(runner.indexOf("demand(")).toBeLessThan(runner.indexOf("NotImplementedError"));
+    const tokens = content("app/Support/StrapiTransferTokens.php");
+    expect(tokens).toContain(
       "throw new StrapiError(401, 'UnauthorizedError', 'Missing or invalid credentials');",
     );
-    expect(runner).toContain("throw new StrapiError(403, 'ForbiddenError', 'Forbidden');");
-    expect(runner).toContain("throw new StrapiError(501, 'NotImplementedError', ");
-    expect(runner.indexOf("ForbiddenError")).toBeLessThan(runner.indexOf("NotImplementedError"));
-    expect(content("app/Support/StrapiTransferTokens.php")).toContain(
-      "throw new StrapiError(401, 'UnauthorizedError', 'Token expired');",
-    );
+    expect(tokens).toContain("throw new StrapiError(403, 'ForbiddenError', 'Forbidden');");
+    expect(tokens).toContain("throw new StrapiError(401, 'UnauthorizedError', 'Token expired');");
     await expect(runner).toMatchFileSnapshot("../__golden__/strapi-api/StrapiTransferRunner.php");
   });
 
@@ -75,7 +75,7 @@ describe("transfer tokens", () => {
     ])
       expect(routes).toContain(route);
     const push = content("app/Http/Controllers/Admin/StrapiTransferPush.php");
-    expect(push).toContain("StrapiTransferTokens::allows($token, 'push')");
+    expect(push).toContain("StrapiTransferTokens::demand($request, 'push');");
     expect(push).toContain("$import->schemaDiffs()");
     expect(push).toContain("throw new StrapiError(413, 'PayloadTooLargeError'");
     await expect(push).toMatchFileSnapshot("../__golden__/strapi-api/StrapiTransferPush.php");
@@ -86,7 +86,7 @@ describe("transfer tokens", () => {
       "Route::get('/admin/transfer/pull', [StrapiTransferPull::class, 'export']);",
     );
     const pull = content("app/Http/Controllers/Admin/StrapiTransferPull.php");
-    expect(pull).toContain("StrapiTransferTokens::allows($token, 'pull')");
+    expect(pull).toContain("StrapiTransferTokens::demand($request, 'pull');");
     expect(pull).toContain("StrapiExport::write(");
     expect(pull).toContain("->deleteFileAfterSend()");
     await expect(pull).toMatchFileSnapshot("../__golden__/strapi-api/StrapiTransferPull.php");

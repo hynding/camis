@@ -26,14 +26,9 @@ final class StrapiTransferRunner
 
     private function refuse(Request $request, string $scope): never
     {
-        $token = StrapiTransferTokens::authenticate($request);
-        if ($token === null) {
-            throw new StrapiError(401, 'UnauthorizedError', 'Missing or invalid credentials');
-        }
-        if (! StrapiTransferTokens::allows($token, $scope)) {
-            throw new StrapiError(403, 'ForbiddenError', 'Forbidden');
-        }
+        StrapiTransferTokens::demand($request, $scope);
         throw new StrapiError(501, 'NotImplementedError', 'Remote data transfer needs a server that keeps a WebSocket open, which this PHP host does not: '
+            .'push or pull over plain HTTP with strapi-plugin-camis (/admin/transfer/push, /admin/transfer/pull), or '
             .'export an archive with `php artisan strapi:export` (or the admin\'s Data transfer page) and load it with `strapi import`, or the other way round.');
     }
 }

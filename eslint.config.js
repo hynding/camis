@@ -12,6 +12,7 @@ export default tseslint.config(
       "**/node_modules/**",
       "vendor/**",
       "apps/**",
+      "integrations/**",
       "generated/**",
       "**/__golden__/**",
       "coverage/**",

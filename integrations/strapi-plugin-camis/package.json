@@ -1,0 +1,88 @@
+{
+  "name": "strapi-plugin-camis",
+  "version": "0.1.0",
+  "description": "Push a Strapi project's content, media and settings to CAMIS, and pull them back.",
+  "keywords": [
+    "strapi",
+    "strapi-plugin",
+    "camis",
+    "migration",
+    "data-transfer"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hynding/camis.git",
+    "directory": "integrations/strapi-plugin-camis"
+  },
+  "type": "commonjs",
+  "exports": {
+    "./package.json": "./package.json",
+    "./strapi-admin": {
+      "types": "./dist/admin/src/index.d.ts",
+      "source": "./admin/src/index.ts",
+      "import": "./dist/admin/index.mjs",
+      "require": "./dist/admin/index.js",
+      "default": "./dist/admin/index.js"
+    },
+    "./strapi-server": {
+      "types": "./dist/server/src/index.d.ts",
+      "source": "./server/src/index.ts",
+      "import": "./dist/server/index.mjs",
+      "require": "./dist/server/index.js",
+      "default": "./dist/server/index.js"
+    }
+  },
+  "bin": {
+    "strapi-plugin-camis": "./bin/strapi-plugin-camis.js"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "strapi-server.js",
+    "strapi-admin.js"
+  ],
+  "scripts": {
+    "build": "strapi-plugin build",
+    "watch": "strapi-plugin watch",
+    "verify": "strapi-plugin verify",
+    "typecheck": "tsc -p server/tsconfig.json --noEmit && tsc -p admin/tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "strapi": {
+    "kind": "plugin",
+    "name": "camis",
+    "displayName": "CAMIS",
+    "description": "Push this project to CAMIS, and pull it back."
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@strapi/data-transfer": "^5.63.0",
+    "@strapi/sdk-plugin": "^6.1.1",
+    "@strapi/strapi": "^5.63.0",
+    "@strapi/typescript-utils": "^5.63.0",
+    "@types/node": "^22.20.5",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.30.6",
+    "styled-components": "^6.6.0",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9"
+  },
+  "dependencies": {
+    "@strapi/design-system": "^2.3.1",
+    "@strapi/icons": "^2.3.1"
+  },
+  "peerDependencies": {
+    "@strapi/data-transfer": "^5.0.0",
+    "@strapi/strapi": "^5.0.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "react-router-dom": "^6.0.0",
+    "styled-components": "^6.0.0"
+  }
+}
