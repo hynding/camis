@@ -86,27 +86,55 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
   `users-permissions.user.find` — Strapi validates a relation write against the target's `find`
   scope, so without it the write is rejected; this is reported as a `userRelationWrite` gap
   because it also exposes `GET /api/users`. The bootstrap revokes what camis no longer grants: its
-  `api::` actions and the plugin actions `api-roles.json` lists as `managed` (`user.find`), never
-  another plugin action. A content type whose relation inverts onto the user
+  `api::` actions, and a `plugin::` action only when an earlier boot of the bootstrap created it
+  (recorded per role in Strapi's core store, `strapi.store({ type: "plugin", name: "camis" })`,
+  key `granted-plugin-actions`), never one Strapi or an administrator granted. A database seeded by
+  a camis version before that record existed keeps its `user.find` until it is removed by hand. A
+  content type whose relation inverts onto the user
   also gets a generated `src/extensions/users-permissions/strapi-server.ts`, declaring the other
   side of that relation on the plugin's own content type.
-  A grant's `condition` and `assign` are enforced on the Strapi content API for every collection
-  type a non-admin role holds under one: a generated controller over Strapi's core controller
-  (`src/permissions/api-controller.ts`, deciding through `src/permissions/api-conditions.ts`)
-  narrows `find` with the role's read condition in the query (`$and`-ed with the client's filters,
-  so pages and counts hold only readable rows), evaluates the Ring 1 condition on the stored entry
-  before `findOne` (404 when unreadable), `update` and `delete` (404 when unreadable, 403 when
-  readable but not changeable), checks `create`, sets each assigned relation from the session user
-  on create and drops it from an update body. The role is the session's users-permissions role, the
-  public role without a session; admin roles, API tokens and `auth: false` actions are not
-  narrowed. A condition it cannot enforce fails the build (`apiGrantCondition`, `error`): a read
-  condition outside `eq`/`and`/`or` over `record.<field>`/`record.<relation>Id` vs a literal or
+  A grant's `condition` and `assign` are enforced on the Strapi content API by a generated
+  controller over Strapi's core controller (`src/permissions/api-controller.ts`, deciding through
+  `src/permissions/api-conditions.ts`) on every collection type a non-admin role holds under one,
+  and on every collection type that reaches such a type through a relation, an inverse, a component
+  or a dynamic zone. Enforced:
+
+  - `find` is narrowed by the role's read condition in the query (`$and`-ed with the client's
+    filters, so pages and counts hold only readable rows); `findOne` (404 when unreadable),
+    `update` and `delete` (404 when unreadable, 403 when readable but not changeable) evaluate the
+    Ring 1 condition on every stored row of the entry (each version and locale) first.
+  - `create` evaluates the role's create condition on the fields sent, an omitted field read as its
+    IR `default`; each assigned relation is set from the session user on create and dropped from an
+    update body. A restricted caller's create or update whose `data` is not an object is 400.
+  - A `populate` into a conditioned type, at any depth and in any form (`*`, strings, dotted paths,
+    arrays, objects, components, dynamic zones and their `on` fragments), carries that type's read
+    filter (`$and`-ed with any filter of the client's); a relation filter through one is narrowed
+    the same way; a sort through one is refused with 400, since its join cannot carry a filter; a
+    write linking an entry of one (document id, row id, `connect`, `set`, in components and zones)
+    is 403 unless the caller may read every row of it.
+  - The role is the session's users-permissions role, the public role without a session; a role
+    the IR does not grant the type, a session whose role was not loaded and an unknown strategy are
+    refused. Admin roles, API tokens and `auth: false` actions are not narrowed.
+
+  The build fails (`error`) where it cannot enforce: `apiGrantCondition` for a read condition
+  outside `eq`/`and`/`or` over `record.<field>`/`record.<relation>Id` vs a literal or
   `user.id`/`user.email`/`user.role`, an update/delete condition reading another variable, a create
   condition reading a relation the client writes, or a condition on a single type, the built-in
-  user or the media library. Not enforced, and reported as `apiPopulateScope`: a `populate` or
-  relation filter that reaches a conditioned type through another type's relation. GraphQL (if
-  added by hand) and a `protected/` file replacing a generated controller bypass it too. This
-  enforcement has been tested against a fake of the Strapi surface it uses, not a running Strapi.
+  user or the media library; `apiPolymorphicReach` when a role reads a type with a polymorphic
+  relation while it reads some type under a condition; `apiRelationReach` for a reach from the
+  built-in user or media library (their plugins serve it) or from a single type (served by Strapi's
+  own controller). The admin-panel copy of a non-admin role cannot read `record.*`, so there its
+  condition denies every entry (`conditionContext`, downgrade). Not enforced: GraphQL (if added by
+  hand) and a `protected/` file replacing a generated controller; a publish condition apart from
+  update's. On MySQL a string comparison follows the column's collation, whose defaults ignore case
+  (and mostly accents), so a list or populate filter may let through rows Ring 1 would deny
+  (`user.email == "A@x"` matches `a@x`); entry checks run Ring 1 and are exact. Closing that needs a
+  binary comparison (`BINARY col = ?` or a `_bin` collation on the columns), which Strapi's filter
+  syntax cannot express. The enforcement is unit-tested against a fake of the Strapi surface it
+  uses; the `strapi-enforcement-boot` CI job runs the ownership fixture against a real Strapi 5 on
+  sqlite (list, entry, owner, `GET /api/users`, populate, filter, sort and connect through a
+  relation), not components, zones, locales, drafts, MySQL or Postgres.
+
 - `protected` (optional) is a directory mirrored into every target's `out` after generation —
   the home for hand-written seams (`routes/api-custom.php`, protected controller subclasses,
   hook implementations) so the generated app itself can stay git-ignored.

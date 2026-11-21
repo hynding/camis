@@ -2688,49 +2688,100 @@ relation write, and a database seeded once kept it.
 - **Strapi target.** A collection type a non-admin role holds under a condition or an assign gets a
   generated controller over the core one (`src/api/<type>/controllers/<type>.ts`), built from
   `src/permissions/api-controller.ts` and the pure decisions of `src/permissions/api-conditions.ts`
-  (the Ring 1 runtime, the decisions, and the project's `RULES`). The role is
-  `ctx.state.user.role.type`; a request without a session is the public role.
-  - `find` runs Strapi's core find with the role's read condition `$and`-ed with the client's
+  (the Ring 1 runtime, the decisions, and the project's `TABLES`: per-type `RULES`, each type's
+  conditions compiled for its own fields, and `HOLDERS`). The role is `ctx.state.user.role.type`;
+  a request without a session is the public role. Role names and attribute names are looked up as
+  own properties only, so a role named `constructor` is a stranger.
+  - `find` runs the document service with the role's read condition `$and`-ed with the client's
     filters, so paging and counts hold only rows the caller may read and no filter widens them.
   - `findOne`, `update`, `delete` load every row of the entry (each version and locale) through the
-    query engine and evaluate Ring 1 over `record.*` and `user.*` before the core action: an entry
-    the caller may not read is 404 `NotFoundError`, as the Filament target answers; one it may read
-    but not change is 403 `ForbiddenError`. A guest's comparison with a user variable denies.
-  - `create` evaluates the role's create condition on the fields sent (an assigned relation as the
-    caller's id), drops the assigned fields from the body and sets each from the session after
-    Strapi's validation, so the role need not read the user type; `update` drops them, so ownership
-    cannot move. A token or an open route leaves an assigned owner unset.
+    query engine and evaluate Ring 1 over `record.*` and `user.*` before acting: an entry the caller
+    may not read is 404 `NotFoundError`, as the Filament target answers; one it may read but not
+    change is 403 `ForbiddenError`. A guest's comparison with a user variable denies.
+  - `create` evaluates the role's create condition on the fields sent, an omitted field as its IR
+    `default` (which Strapi fills), an assigned relation as the caller's id; it drops the assigned
+    fields from the body and sets each from the session after Strapi's validation, so the role need
+    not read the user type; `update` drops them, so ownership cannot move. A token or an open route
+    leaves an assigned owner unset. A restricted caller's create or update whose `data` is not an
+    object is 400 before Strapi sees it.
+  - **Reach.** Every content type and component with a path (relation, relation inverse, component,
+    dynamic zone) to a type some role reads under a condition is a holder; a reaching collection
+    type gets the controller too, with no rules of its own. For a restricted caller, a populate of
+    a conditioned type — at any depth, in any form (`*`, comma lists, dotted paths, arrays,
+    objects, a zone's shared `populate` or `on` fragments) — carries its read filter, `$and`-ed with
+    the client's populate filter; a relation filter through one is narrowed the same way, so it is
+    no oracle; a sort through one (top level or inside a populate) is refused with 400, since its
+    join carries no filter; a write that links an entry of one (document id, row id, `connect`,
+    `set`, plain arrays; in components and zones; `disconnect` ignored) loads its rows and is 403
+    unless the caller may read every one of them, the same answer for one that does not exist.
   - Not narrowed, as on Strapi and the Filament target: admin roles, API tokens (Phase 25) and
     `auth: false` actions (Phase 57). A session whose role is not loaded, a role the IR does not
     grant the type, and an unknown strategy are refused.
-- **Gaps.** A condition the content API cannot enforce is an `error` `apiGrantCondition` (the build
-  fails), located by type and role: a read condition outside the filter subset, an update/delete
-  condition reading a variable an entry lacks, a create condition reading a relation the client
-  writes, any condition on a single type or on the built-in user or media library. An admin role's
-  condition stays a downgrade (admin panel only). A non-admin grant's `record.*` no longer reports
-  `conditionContext`. A populate or relation filter through a relation to a conditioned type is not
-  narrowed: `apiPopulateScope` (downgrade), per role.
+- **Gaps.** What the content API cannot enforce fails the build (`error`), located by type and
+  role. `apiGrantCondition`: a read condition outside the filter subset, an update/delete condition
+  reading a variable an entry lacks, a create condition reading a relation the client writes, any
+  condition on a single type or on the built-in user or media library. `apiPolymorphicReach`: a role
+  reads a type with a polymorphic relation (its own or a component's), or a polymorphic inverse
+  that reaches a conditioned type, while it reads some type under a condition — a polymorphic
+  populate takes no per-target filter. `apiRelationReach`: a relation from the built-in user or
+  media library (its own, or an inverse onto it) reaches a type the role reads under a condition,
+  since their plugins serve it; or a single type the role reads reaches one, since Strapi's own
+  single-type controller serves it. An admin role's condition stays a downgrade (admin panel only).
+  The admin-panel copy of a non-admin role cannot read `record.*`, so its condition there denies
+  every entry: `conditionContext` (downgrade) says so, as the adapter already projects every role
+  onto an admin role.
 - **users-permissions.** A role whose grants on a type assign every user relation of it no longer
-  gets `user.find` (nor the `userRelationWrite` gap). `api-roles.json` lists the plugin actions camis
-  manages (`managed`: `user.find` when the IR has a built-in user), and the bootstrap revokes those
-  as it revokes `api::` actions; every other `plugin::` row is left alone.
+  gets `user.find` (nor the `userRelationWrite` gap). The bootstrap revokes every `api::` action it
+  no longer grants and a `plugin::` action only when an earlier boot of it created that action for
+  that role, as recorded in Strapi's core store (`strapi.store({ type: "plugin", name: "camis" })`,
+  key `granted-plugin-actions`); an action Strapi or an administrator granted is never touched,
+  even one camis also grants. The public role's registration actions and its IR grants are granted
+  in one pass, so neither revokes the other.
+- **CI.** `strapi-enforcement-boot` (pull requests touching `adapter-strapi` or `permissions`, and
+  on demand) runs `scripts/enforcement-smoke.ts`: it boots the ownership fixture on Strapi 5 and
+  sqlite, registers two accounts and moves them to the member role in the database, then checks
+  over HTTP that another member's note is not listed, read, updated or deleted, a client-supplied
+  owner is overridden, the member role has no `GET /api/users`, a tag's populate (`note`, `*`,
+  with `fields`), relation filter and sort do not reach another member's note for a member or a
+  guest, and connecting it is 403 and writes nothing. Run locally against Strapi 5.48.0 before
+  merge, it found two bugs the fake had hidden, each fixed test-first: the bootstrap's admin-panel
+  permission without conditions crashed the boot on sqlite, and a refused relation write still
+  created the entry, since Strapi's response helpers return nothing.
 
-Known limits: not run against a live Strapi (Strapi cannot be installed in the build sandbox); the
-decisions and the controller run against a fake of the surface they use, and the emitted files are
-type-checked under the generated tsconfig with `@strapi/strapi` stubbed. Populate, relation filters,
-GraphQL (if a project adds the plugin), and a hand-written controller in `protected/` that replaces
-the generated one bypass the enforcement. A publish condition is not enforced apart from update's.
-A create condition reads the fields as sent, not Strapi's defaults; the Filament target authorizes
-a create by role alone, so there a failing create condition is not refused. Stored dates compare as ISO
-strings; a `bigInteger` comes back from Strapi as a string, so a condition comparing one with a
-number denies on an entry while a list filter matches it.
+Known limits:
+- MySQL compares strings under the column's collation, and its default collations ignore case (most
+  also accents), where Ring 1 compares code points: a list, populate or relation filter on a string
+  condition may let through rows Ring 1 would deny there (`user.email == "A@x"` matches `a@x`);
+  entry checks (`findOne`, `update`, `delete`, linked entries) evaluate Ring 1 and are exact.
+  Closing it needs a binary comparison (`BINARY col = ?`, or a `_bin` collation on those columns),
+  which Strapi's filter syntax cannot express; it would mean a raw-query path or a schema
+  collation option, not attempted here. sqlite and Postgres compare exactly.
+- A database seeded by an earlier camis version (before the core-store record) keeps a
+  `user.find` it granted until it is removed by hand: the bootstrap cannot tell it from an
+  administrator's.
+- GraphQL (if a project adds the plugin) and a hand-written controller in `protected/` that
+  replaces the generated one bypass the enforcement. A publish condition is not enforced apart from
+  update's.
+- The Filament target authorizes a create by role alone, so there a failing create condition is not
+  refused. Stored dates compare as ISO strings; a `bigInteger` comes back from Strapi as a string,
+  so a condition comparing one with a number denies on an entry while a list filter matches it.
+- The Strapi surface the controllers use (core-controller prototype and `super`, `ctx.state`
+  shape, document-service `find`/`findOne`/`create`/`update` params, query-engine `findMany`
+  `where`/`select`/`populate`, populate `filters` and zone `on`, relation `set`/`connect` syntax,
+  `ctx.badRequest`, `strapi.store`) is exercised by the unit tests against a fake; the boot job
+  covers on a real Strapi only the paths it names (sqlite; no components, zones, nested or dotted
+  populate, locales, drafts, MySQL or Postgres).
 
-Exit: `record-filter.test.ts`; `api-enforcement.test.ts` (rules, every error gap, populate gap);
-`enforcement-behaviour.test.ts` (the emitted modules against a fake core controller, document
-service and query engine: another member's note is not listed, read, updated or deleted, a client
-filter cannot widen the list, an owner is assigned on create and kept on update, reviewer 403,
-guest, admin, token, unknown role, roleless session); `enforcement-compile.test.ts`;
-`bootstrap-revoke.test.ts`; goldens under `__golden__/ownership/`, idempotent.
+Exit: `record-filter.test.ts`; `api-enforcement.test.ts` (rules, per-type filters, defaults,
+holders, every error gap); `runtime/api-conditions.test.ts` (populate normalisation and scoping,
+filter scoping, sort refusal, relation refs, prototype role names); `enforcement-behaviour.test.ts`
+(the emitted modules against a fake core controller, document service and query engine: another
+member's note is not listed, read, updated or deleted, a client filter cannot widen the list, an
+owner is assigned on create and kept on update, draft/published rows that disagree, non-object
+data, a create condition with a default, a guest create, populate/filter/sort/connect through a
+tag, reviewer 403, guest, admin, token, unknown and prototype-named roles, roleless session);
+`enforcement-compile.test.ts`; `bootstrap-revoke.test.ts`; `project.test.ts`; goldens under
+`__golden__/ownership/`, idempotent; the `strapi-enforcement-boot` CI job.
 
 ---
 
