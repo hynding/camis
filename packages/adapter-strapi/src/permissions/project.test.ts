@@ -63,9 +63,10 @@ describe("projectPermissions", () => {
     expect(out.roles[0]!.description).toBe("editorial staff");
   });
 
-  it("gaps a predicate that references vars outside user.*", () => {
+  it("gaps an admin role's predicate that references vars outside user.*", () => {
     const r: Role = {
       name: "R",
+      admin: true,
       grants: [
         {
           contentType: "Article",
@@ -76,6 +77,29 @@ describe("projectPermissions", () => {
     };
     const out = projectPermissions(doc, [r]);
     expect(out.gaps.map((g) => g.feature)).toContain("conditionContext");
+  });
+  // A non-admin role's grant is enforced by the content API, which reads record.*; camis still
+  // seeds its admin-panel copy, whose handler sees only the user, so that copy denies every entry.
+  it("warns that a non-admin role's record.* condition denies everything in its admin-panel copy", () => {
+    const r: Role = {
+      name: "R",
+      grants: [
+        {
+          contentType: "Article",
+          actions: ["read"],
+          condition: { kind: "var", name: "record.ownerId" },
+        },
+      ],
+    };
+    expect(projectPermissions(doc, [r]).gaps).toEqual([
+      {
+        feature: "conditionContext",
+        location: { contentType: "Article", rule: "R" },
+        severity: "downgrade",
+        message:
+          'the admin-panel copy of role "R" cannot read record.ownerId, so in the admin panel its condition denies every entry; the content API enforces it',
+      },
+    ]);
   });
   it("gaps publish on a non-draftPublish type", () => {
     const r: Role = { name: "R", grants: [{ contentType: "Article", actions: ["publish"] }] };
@@ -307,6 +331,72 @@ describe("projectApiRoles", () => {
     expect(noRelation.roles[0]!.actions).not.toContain("plugin::users-permissions.user.find");
   });
 
+  // The server fills an assigned owner from the session, so the client never writes the user
+  // relation and Strapi never checks it against the user type's find scope.
+  it("does not grant user.find when the role's assign covers every user relation it writes", () => {
+    const withUser: IrDocument = {
+      version: 1,
+      contentTypes: [
+        {
+          name: "Note",
+          kind: "collection",
+          fields: [{ type: "relation", name: "owner", relationKind: "manyToOne", target: "User" }],
+        },
+        {
+          name: "User",
+          kind: "collection",
+          builtin: "user",
+          fields: [{ type: "string", name: "username" }],
+        },
+      ],
+      components: [],
+    };
+    const out = projectApiRoles(withUser, [
+      {
+        name: "authenticated",
+        grants: [
+          { contentType: "Note", actions: ["create", "update"], assign: { owner: "user.id" } },
+        ],
+      },
+    ]);
+    expect(out.roles[0]!.actions).not.toContain("plugin::users-permissions.user.find");
+    expect(out.gaps.map((g) => g.feature)).not.toContain("userRelationWrite");
+  });
+  it("still grants user.find when another user relation of the type is written by the client", () => {
+    const twoRelations: IrDocument = {
+      version: 1,
+      contentTypes: [
+        {
+          name: "Note",
+          kind: "collection",
+          fields: [
+            { type: "relation", name: "owner", relationKind: "manyToOne", target: "User" },
+            { type: "relation", name: "reviewer", relationKind: "manyToOne", target: "User" },
+          ],
+        },
+        {
+          name: "User",
+          kind: "collection",
+          builtin: "user",
+          fields: [{ type: "string", name: "username" }],
+        },
+      ],
+      components: [],
+    };
+    const out = projectApiRoles(twoRelations, [
+      {
+        name: "authenticated",
+        grants: [{ contentType: "Note", actions: ["create"], assign: { owner: "user.id" } }],
+      },
+    ]);
+    expect(out.roles[0]!.actions).toContain("plugin::users-permissions.user.find");
+    expect(out.gaps.map((g) => g.feature)).toContain("userRelationWrite");
+  });
+  // Which plugin actions the bootstrap may revoke is now what it granted itself, kept in Strapi's
+  // store (bootstrap-revoke.test.ts), not a list camis declares for every database.
+  it("declares no managed plugin actions", () => {
+    expect(projectApiRoles(doc, [])).not.toHaveProperty("managed");
+  });
   it("lists the public actions needed for registration and login, in that order", () => {
     const out = projectApiRoles(doc, [editor]);
     expect(out.public).toEqual([
@@ -314,17 +404,11 @@ describe("projectApiRoles", () => {
       "plugin::users-permissions.auth.callback",
     ]);
   });
-  it("gaps a conditioned grant as unconditioned at the users-permissions API", () => {
+  // The condition is enforced by the generated controller (api-enforcement), not by the
+  // users-permissions action, so the action projection itself reports nothing about it.
+  it("leaves a conditioned grant's enforcement to the generated controller", () => {
     const out = projectApiRoles(doc, [editor]);
-    expect(out.gaps).toEqual([
-      {
-        feature: "apiGrantCondition",
-        location: { contentType: "Article", rule: "Editor" },
-        severity: "downgrade",
-        message:
-          '"Editor" grant on "Article" is unconditioned at the users-permissions API; conditions apply to the admin panel only',
-      },
-    ]);
+    expect(out.gaps).toEqual([]);
   });
   it("does not gap a field rule's condition at the API level", () => {
     const r: Role = {

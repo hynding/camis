@@ -2,6 +2,8 @@ import { stableJson, type GeneratedFile } from "@camis/adapter-kernel";
 import type { CapabilityGap, IrDocument } from "@camis/ir-schema";
 import type { Role } from "@camis/permissions";
 import { permissionsIndexTs } from "../skeleton/templates";
+import { emitApiEnforcementFiles, enforcedControllerSource } from "./api-enforcement-emit";
+import { projectApiEnforcement } from "./api-enforcement";
 import { emitConditionsModule } from "./conditions";
 import { projectApiRoles, projectPermissions } from "./project";
 
@@ -10,12 +12,15 @@ export interface PermissionEmission {
   gaps: CapabilityGap[];
   /** Replacement bootstrap when permissions are emitted (else undefined → keep skeleton default). */
   indexContent?: string;
+  /** Replacement controller per content type uid whose content API actions are enforced. */
+  controllers: Map<string, string>;
 }
 
 export const emitPermissions = (doc: IrDocument, roles: Role[]): PermissionEmission => {
-  if (roles.length === 0) return { files: [], gaps: [] };
+  if (roles.length === 0) return { files: [], gaps: [], controllers: new Map() };
   const { roles: emittedRoles, conditions, gaps } = projectPermissions(doc, roles);
   const apiRoles = projectApiRoles(doc, roles);
+  const enforcement = projectApiEnforcement(doc, roles);
   const files: GeneratedFile[] = [
     { path: "src/permissions/roles.json", content: stableJson(emittedRoles) },
     {
@@ -29,9 +34,11 @@ export const emitPermissions = (doc: IrDocument, roles: Role[]): PermissionEmiss
       content: emitConditionsModule(conditions),
     });
   }
+  files.push(...emitApiEnforcementFiles(enforcement));
   return {
     files,
-    gaps: [...gaps, ...apiRoles.gaps],
+    gaps: [...gaps, ...apiRoles.gaps, ...enforcement.gaps],
     indexContent: permissionsIndexTs(conditions.length > 0),
+    controllers: new Map(enforcement.types.map((t) => [t.uid, enforcedControllerSource(t.uid)])),
   };
 };

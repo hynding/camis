@@ -114,12 +114,104 @@ field. A gap is reported only where the target emits the colliding column or key
   target, the generated bootstrap (`src/index.ts`) also grants users-permissions API actions per
   role from `src/permissions/api-roles.json`: the `public` role always gets
   `users-permissions.auth.register` and `.auth.callback`, and a role that creates or updates a
-  content type owning a relation to the built-in user additionally gets
+  content type owning a relation to the built-in user its grants do not `assign` additionally gets
   `users-permissions.user.find` — Strapi validates a relation write against the target's `find`
   scope, so without it the write is rejected; this is reported as a `userRelationWrite` gap
-  because it also exposes `GET /api/users`. A content type whose relation inverts onto the user
+  because it also exposes `GET /api/users`. The bootstrap revokes what camis no longer grants: its
+  `api::` actions, and a `plugin::` action only when an earlier boot of the bootstrap created it
+  (recorded per role in Strapi's core store, `strapi.store({ type: "plugin", name: "camis" })`,
+  key `granted-plugin-actions`), never one Strapi or an administrator granted; a role type taken
+  out of the IR loses every action camis granted it (the role itself stays). A database seeded by
+  a camis version before that record existed keeps its `user.find` until it is removed by hand. A
+  content type whose relation inverts onto the user
   also gets a generated `src/extensions/users-permissions/strapi-server.ts`, declaring the other
   side of that relation on the plugin's own content type.
+  A grant's `condition` and `assign` are enforced on the Strapi content API by a generated
+  controller over Strapi's core controller (`src/permissions/api-controller.ts`, deciding through
+  `src/permissions/api-conditions.ts`) on every collection type a non-admin role holds under one;
+  on every collection type that reaches such a type through a relation, an inverse, a localized
+  type's `localizations`, a component, a dynamic zone or a media field; and on every collection
+  type with a relation both sides declare into a type with rules. Enforced:
+
+  - `find` is narrowed by the role's read condition in the query (`$and`-ed with the client's
+    filters, so pages and counts hold only readable rows); `findOne` (404 when unreadable),
+    `update` and `delete` (404 when unreadable, 403 when readable but not changeable) evaluate the
+    Ring 1 condition on every stored row of the entry (each version and locale) first.
+  - A restricted caller's delete may carry only `locale` and `status` query parameters (400
+    otherwise): Strapi reads a delete's filters into the where that picks the rows it deletes, so a
+    relation filter there would answer a guess. An update's `filters` are 400 too, so the check
+    holds whatever Strapi does with them (5.48 ignores them). Every other request takes only the
+    query parameters Strapi 5.48 documents, and a populate that reaches a conditioned type only
+    the options it reads; anything
+    else, `publicationFilter` and `hasPublishedVersion` included (they test for a version the
+    caller may not read), is 400.
+  - `create` evaluates the role's create condition on the fields sent, an omitted field read as its
+    IR `default`; each assigned relation is set from the session user on create and dropped from an
+    update body. A restricted caller's create or update whose `data` is not an object is 400.
+  - A `populate` into a conditioned type, at any depth and in any form (`*`, strings, dotted paths,
+    arrays, objects, components, dynamic zones and their `on` fragments, `localizations`), carries
+    that type's read filter (`$and`-ed with any filter of the client's); a relation filter through
+    one is narrowed the same way, each relation filter its own item of an `$and` so Strapi's merge
+    of nested filters cannot drop one, and so are the filters of a component's populate and of a
+    zone's `on` fragments; a sort through one (a populate's included) is refused with 400, since
+    its join cannot carry a filter. Populating a file's `related` entries under any media field is
+    refused with 400 (they may be entries of any type).
+  - Refused with 400 for a restricted caller, as filters SQL could turn into an oracle or Strapi
+    cannot run: a `$not` whose subtree crosses a relation into a conditioned type (SQL's NOT of an
+    unknown is unknown, so an entry with a NULL owner would answer a guess), at the top level or in
+    a populate; `$null` (or `$notNull: false`) on a relation into a conditioned type, which would
+    count an unreadable entry as none; a relation filter mixing an operator with attributes, or
+    with a second operator. A bare value, a list or a lone operator on a relation
+    (`filters[note][$in][0]=5`) tests the related id, under the scope; `$notNull` asks for a
+    readable entry; either operator's value is read as Strapi reads a boolean (`true`/`t`/`1`,
+    `false`/`f`/`0`), anything else 400. A `$not` inside a relation's own filter, `$ne`, `$notIn`
+    and `$null` on a related attribute, and `$or` are allowed: the scope stays in a positive `$and`
+    there, beside `id IS NOT NULL`, so an entry with no link (which Strapi's LEFT JOIN gives an
+    all-NULL row) answers as one linked to an entry the caller cannot read.
+  - A write linking an entry of a conditioned type (document id, row id, `connect`, `set`, in
+    components and zones) is 403 unless the caller may read every row of it. Where both sides
+    declare the link, it shows on the other entry, so each entry it connects, disconnects or drops
+    by replacement (`set`, a list, `null`, or any write of a to-one side) must be one the caller
+    may update; a many-to-many link only one side declares needs read alone. Linking an entry
+    whose other side holds one entry at most (a bidirectional oneToOne or oneToMany) takes it from
+    its last holder, which must be one the caller may update when its type has rules.
+  - The role is the session's users-permissions role, the public role without a session; a role
+    the IR does not grant the type, a session whose role was not loaded and an unknown strategy are
+    refused. Admin roles and API tokens are not narrowed; an `auth: false` action serves its own
+    type's rows to anyone, but its reach into a conditioned type is the public role's.
+
+  The build fails (`error`) where it cannot enforce: `apiGrantCondition` for a read condition
+  outside `eq`/`and`/`or` over `record.<field>`/`record.<relation>Id` vs a literal or
+  `user.id`/`user.email`/`user.role`, an update/delete condition reading another variable, a create
+  condition reading a relation the client writes, or a condition on a single type, the built-in
+  user or the media library; `apiPolymorphicReach` when a role reads a type with a polymorphic
+  relation while it reads some type under a condition; `apiRelationReach` for a reach from the
+  built-in user, from the media library (a role that reads files, whose `related` entries reach a
+  type it reads under a condition) or from a single type, and for a role that writes the built-in
+  user or a single type whose relation both sides declare into a type it does not update outright
+  (the plugin's or Strapi's own controller serves those), and for a role that may create, update
+  or delete files while a type with a media field is one it does not update outright (the upload
+  API attaches, replaces or deletes a file on any entry unchecked); `apiUserWrite` for a non-admin
+  role that may create or update the built-in user (users-permissions sets any user's role and
+  password from the body), whatever else it holds. The admin-panel copy of a non-admin role
+  cannot read `record.*`, so there its condition denies every entry (`conditionContext`,
+  downgrade). Not enforced: GraphQL (if added by hand) and a `protected/` file replacing a
+  generated controller; a publish condition apart from update's; deleting an entry, which drops
+  its links and so changes the entries at their other ends without asking for update on them. On
+  MySQL a string comparison follows the column's collation, whose defaults ignore case (and mostly
+  accents), so a list or populate filter may let through rows Ring 1 would deny
+  (`user.email == "A@x"` matches `a@x`); entry checks run Ring 1 and are exact. Closing that needs
+  a binary comparison (`BINARY col = ?` or a `_bin` collation on the columns), which Strapi's
+  filter syntax cannot express. The enforcement is unit-tested against a fake of the Strapi
+  surface it uses, and its scoped queries run on Strapi's own query engine over sqlite; the
+  `strapi-enforcement-boot` CI job runs the ownership fixture against a real
+  Strapi 5 on sqlite (list, entry, owner, `GET /api/users`, populate, filter, two relation filters,
+  sort, connect, a file's related entries, taking a pinned tag, the refused `$not` and `$null`
+  filters, a component's populate filter, a tag with no note answering as one with a hidden
+  note, a delete or update filtered by a guess), not zones, locales, drafts, MySQL or Postgres;
+  it also fails unless every content API route a role can reach is in
+  `scripts/content-api-allowlist.json` with a reason.
+
 - `protected` (optional) is a directory mirrored into every target's `out` after generation —
   the home for hand-written seams (`routes/api-custom.php`, protected controller subclasses,
   hook implementations) so the generated app itself can stay git-ignored.
@@ -205,4 +297,4 @@ go in `routes/api-custom.php` — seed-mode, written once, never overwritten.
 Ownership conditions: owning relations (`manyToOne`/`oneToOne`) expose their FK to Ring-1
 conditions as `record.<name>Id`, so a grant condition like
 `{"kind":"eq","left":{"kind":"var","name":"record.ownerId"},"right":{"kind":"var","name":"user.id"}}`
-enforces record-level ownership on both PHP and Express backends (fail-closed).
+enforces record-level ownership on the PHP, Express and Strapi backends (fail-closed).

@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "lint": "eslint .",
-    "smoke": "tsx scripts/boot-smoke.ts"
+    "smoke": "tsx scripts/boot-smoke.ts",
+    "enforcement-smoke": "tsx scripts/enforcement-smoke.ts"
   },
   "dependencies": {
     "@camis/adapter-kernel": "workspace:*",
@@ -24,7 +25,9 @@
     "pg": "^8.23.1"
   },
   "devDependencies": {
+    "@strapi/database": "5.48.0",
     "@types/pg": "^8.23.1",
+    "better-sqlite3": "^12.11.1",
     "tsx": "^4.22.4"
   }
 }
