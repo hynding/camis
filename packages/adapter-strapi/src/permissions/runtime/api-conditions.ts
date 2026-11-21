@@ -42,6 +42,10 @@ export interface RecordVariable {
 }
 
 export interface TypeRules {
+  /** The type has rules of its own; otherwise it is served only for what it reaches. */
+  own: boolean;
+  /** Field defaults Strapi fills on create when a field is omitted, by record variable. */
+  defaults: Readonly<Record<string, Value>>;
   /** The record variables the type's conditions read. */
   variables: Readonly<Record<string, RecordVariable>>;
   /** Core actions the router opens with `auth: false`: Strapi asks no role there. */
@@ -51,6 +55,34 @@ export interface TypeRules {
   /** Roles flagged admin, which no condition restricts. */
   admins: readonly string[];
   roles: Readonly<Record<string, RoleRules>>;
+}
+
+/** How a type or component reaches a conditioned type: a relation, a component, a zone. */
+export type HolderLink = { relation: string } | { component: string } | { zone: readonly string[] };
+
+export interface Holder {
+  /** Every attribute `populate=*` populates. */
+  populatable: readonly string[];
+  /** The attributes that lead to a conditioned type, directly or further on. */
+  links: Readonly<Record<string, HolderLink>>;
+}
+
+/** The project's rules per type uid, and the holders (types and components) that reach. */
+export interface Tables {
+  rules: Readonly<Record<string, TypeRules>>;
+  holders: Readonly<Record<string, Holder>>;
+}
+
+/** A result or why there is none; both sides name both fields, so either reads without narrowing. */
+export type Checked<T> =
+  | { ok: true; value: T; message?: undefined }
+  | { ok: false; value?: undefined; message: string };
+
+/** The entries of a conditioned type a write links, by document id or row id. */
+export interface RelationRef {
+  target: string;
+  documentIds: string[];
+  ids: number[];
 }
 
 export interface SessionUser {
@@ -83,6 +115,16 @@ const field = (source: unknown, key: string): unknown =>
   typeof source === "object" && source !== null
     ? (source as Record<string, unknown>)[key]
     : undefined;
+
+/**
+ * A table's own entry for a key a caller chose (a role name, an attribute name), never one
+ * inherited from Object.prototype: a role named "constructor" names no rules.
+ */
+const own = <T>(table: Readonly<Record<string, T>> | undefined, key: string): T | undefined =>
+  table !== undefined && Object.prototype.hasOwnProperty.call(table, key) ? table[key] : undefined;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
 /** A stored value as Ring 1 sees it: a date as its ISO string, anything without a form as null. */
 const asValue = (raw: unknown): Value => {
@@ -117,19 +159,20 @@ export const callerOf = (rules: TypeRules, state: unknown, action: string): Call
       email: asValue(field(sessionUser, "email")),
       role,
     };
-    const roleRules = rules.roles[role] ?? null;
-    const assign = roleRules?.assign ?? [];
+    const roleRules = own(rules.roles, role) ?? null;
+    // A role the rules do not name keeps no field of the type's assigned ones either.
+    const assign = roleRules?.assign ?? rules.assign;
     if (rules.admins.includes(role)) return { kind: "unrestricted", user, assign };
     return { kind: "role", role, user, rules: roleRules, assign };
   }
   if (strategyOf(state) === "users-permissions") {
-    const roleRules = rules.roles[GUEST_ROLE] ?? null;
+    const roleRules = own(rules.roles, GUEST_ROLE) ?? null;
     return {
       kind: "role",
       role: GUEST_ROLE,
       user: null,
       rules: roleRules,
-      assign: roleRules?.assign ?? [],
+      assign: roleRules?.assign ?? rules.assign,
     };
   }
   return { kind: "refused" };
@@ -183,7 +226,7 @@ const strapiFilter = (
  * it. A role reading under several conditions reads the rows any of them lets through.
  */
 export const listFilter = (rules: TypeRules, caller: Caller): Record<string, unknown> | null => {
-  if (caller.kind === "unrestricted") return null;
+  if (caller.kind === "unrestricted" || !rules.own) return null;
   if (caller.kind === "refused") return NO_ROWS;
   const holding = caller.rules?.read;
   if (holding === undefined) return NO_ROWS;
@@ -236,7 +279,7 @@ export const recordVerdict = (
   action: RecordAction,
   rows: readonly unknown[],
 ): Verdict => {
-  if (caller.kind === "unrestricted") return "allow";
+  if (caller.kind === "unrestricted" || !rules.own) return "allow";
   if (caller.kind === "refused") return "forbidden";
   if (rows.length === 0) return "notFound";
   const user = userData(caller.user);
@@ -250,16 +293,23 @@ export const recordVerdict = (
   return holding !== undefined && data.every((d) => holds(holding, d)) ? "allow" : "forbidden";
 };
 
+/** A field as a create sends it, or the default Strapi fills when it is omitted. */
+const sentOrDefault = (rules: TypeRules, name: string, data: unknown, key: string): Value => {
+  const sent = isRecord(data) ? own(data, key) : undefined;
+  if (sent !== undefined) return asValue(sent);
+  return own(rules.defaults, name) ?? null;
+};
+
 /**
  * Whether the caller may create an entry from `data` (assigned fields already removed): its
- * fields as sent, and each assigned relation as the caller's own id.
+ * fields as sent (an omitted one as its default), and each assigned relation as the caller's id.
  */
 export const createVerdict = (
   rules: TypeRules,
   caller: Caller,
   data: unknown,
 ): "allow" | "forbidden" => {
-  if (caller.kind === "unrestricted") return "allow";
+  if (caller.kind === "unrestricted" || !rules.own) return "allow";
   if (caller.kind === "refused") return "forbidden";
   const holding = caller.rules?.create;
   if (holding === undefined) return "forbidden";
@@ -270,7 +320,7 @@ export const createVerdict = (
       ? caller.assign.includes(variable.field)
         ? (caller.user?.id ?? null)
         : null
-      : asValue(field(data, variable.field) ?? null);
+      : sentOrDefault(rules, name, data, variable.field);
   }
   return holds(holding, { ...record, ...userData(caller.user) }) ? "allow" : "forbidden";
 };
@@ -290,4 +340,357 @@ export const assignedValues = (caller: Caller): Record<string, unknown> => {
     return {};
   const documentId = caller.user.documentId;
   return Object.fromEntries(caller.assign.map((f) => [f, { set: [{ documentId }] }]));
+};
+
+/** The caller as a type it reaches sees it: no route of that type is open to it here. */
+const reachCaller = (tables: Tables, uid: string, state: unknown): Caller | undefined => {
+  const rules = own(tables.rules, uid);
+  return rules === undefined || !rules.own ? undefined : callerOf(rules, state, "");
+};
+
+/** The filter a populate or a relation filter into `uid` carries for the caller; null: none. */
+const reachScope = (
+  tables: Tables,
+  uid: string,
+  state: unknown,
+): Record<string, unknown> | null => {
+  const caller = reachCaller(tables, uid, state);
+  return caller === undefined ? null : listFilter(own(tables.rules, uid)!, caller);
+};
+
+const both = (
+  a: unknown,
+  scope: Record<string, unknown> | null,
+): Record<string, unknown> | undefined => {
+  const present = a !== undefined && a !== null && !(isRecord(a) && Object.keys(a).length === 0);
+  if (scope === null) return present ? (a as Record<string, unknown>) : undefined;
+  return present ? { $and: [a, scope] } : scope;
+};
+
+/** A populate in any of Strapi's forms as `{ attribute: true | options }`. */
+const normalisePopulate = (
+  tables: Tables,
+  holder: string,
+  populate: unknown,
+): Record<string, unknown> => {
+  const out: Record<string, unknown> = {};
+  const add = (path: string[], entry: unknown): void => {
+    const [head, ...rest] = path;
+    if (head === undefined || head === "") return;
+    if (rest.length === 0) {
+      out[head] = merge(own(out, head), entry);
+      return;
+    }
+    const existing = own(out, head);
+    const options = isRecord(existing) ? existing : {};
+    out[head] = { ...options, populate: merge(options.populate, toPaths(rest)) };
+  };
+  const toPaths = (path: string[]): Record<string, unknown> =>
+    path.length === 1 ? { [path[0]!]: true } : { [path[0]!]: { populate: toPaths(path.slice(1)) } };
+  const fromString = (text: string): void => {
+    for (const part of text.split(",")) {
+      const trimmed = part.trim();
+      if (trimmed === "*") {
+        for (const attribute of own(tables.holders, holder)?.populatable ?? [])
+          add([attribute], true);
+      } else add(trimmed.split("."), true);
+    }
+  };
+  if (populate === true) fromString("*");
+  else if (typeof populate === "string") fromString(populate);
+  else if (Array.isArray(populate)) {
+    for (const item of populate) if (typeof item === "string") fromString(item);
+  } else if (isRecord(populate)) {
+    for (const [key, entry] of Object.entries(populate)) {
+      if (entry === false) continue;
+      add([key], entry === "*" ? true : entry);
+    }
+  }
+  return out;
+};
+
+/** Two populate entries for one attribute as one: options merged, nested populates merged. */
+const merge = (a: unknown, b: unknown): unknown => {
+  if (a === undefined || a === true)
+    return b === undefined ? a : b === true && a === true ? true : b;
+  if (b === undefined || b === true) return a;
+  if (isRecord(a) && isRecord(b)) {
+    const merged: Record<string, unknown> = { ...a, ...b };
+    if (a.populate !== undefined && b.populate !== undefined)
+      merged.populate = { ...asObject(a.populate), ...asObject(b.populate) };
+    return merged;
+  }
+  return b;
+};
+const asObject = (value: unknown): Record<string, unknown> =>
+  isRecord(value) ? value : { "*": value };
+
+/** The paths a sort names, each as its attribute segments. */
+const sortPaths = (sort: unknown): string[][] => {
+  if (typeof sort === "string")
+    return sort
+      .split(",")
+      .map((s) => s.trim().split(":")[0]!.split("."))
+      .filter((p) => p[0] !== "");
+  if (Array.isArray(sort)) return sort.flatMap(sortPaths);
+  if (isRecord(sort))
+    return Object.entries(sort).flatMap(([key, value]) =>
+      isRecord(value) ? sortPaths(value).map((p) => [key, ...p]) : [[key]],
+    );
+  return [];
+};
+
+/** Whether a sort path crosses a relation into a type the caller reads under a condition. */
+const sortLeaks = (tables: Tables, holder: string, path: string[], state: unknown): boolean => {
+  const [head, ...rest] = path;
+  if (head === undefined || rest.length === 0) return false;
+  const link = own(own(tables.holders, holder)?.links, head);
+  if (link === undefined) return false;
+  if ("relation" in link) {
+    if (reachScope(tables, link.relation, state) !== null) return true;
+    return sortLeaks(tables, link.relation, rest, state);
+  }
+  if ("component" in link) return sortLeaks(tables, link.component, rest, state);
+  return false;
+};
+
+/** A filter with every relation into a conditioned type narrowed to the rows the caller reads. */
+const scopeFilters = (
+  tables: Tables,
+  holder: string,
+  filters: unknown,
+  state: unknown,
+): unknown => {
+  if (Array.isArray(filters)) return filters.map((f) => scopeFilters(tables, holder, f, state));
+  if (!isRecord(filters)) return filters;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(filters)) {
+    const link = own(own(tables.holders, holder)?.links, key);
+    if (key === "$and" || key === "$or" || key === "$not") {
+      out[key] = scopeFilters(tables, holder, value, state);
+    } else if (link === undefined || key.startsWith("$")) {
+      out[key] = value;
+    } else if ("relation" in link) {
+      const inner = scopeFilters(tables, link.relation, value, state);
+      out[key] = both(inner, reachScope(tables, link.relation, state)) ?? inner;
+    } else if ("component" in link) {
+      out[key] = scopeFilters(tables, link.component, value, state);
+    } else out[key] = value;
+  }
+  return out;
+};
+
+/** One populate entry for an attribute of `holder`, scoped; a message when it cannot be. */
+const scopeEntry = (
+  tables: Tables,
+  link: HolderLink,
+  entry: unknown,
+  state: unknown,
+): Checked<unknown> => {
+  const options = isRecord(entry) ? entry : {};
+  if ("zone" in link) {
+    const fragments: Record<string, unknown> = {};
+    const shared = options.populate;
+    const on = isRecord(options.on) ? options.on : {};
+    if (shared === undefined && !isRecord(options.on)) return { ok: true, value: entry };
+    for (const component of link.zone) {
+      const fragment =
+        own(on, component) ?? (shared === undefined ? undefined : { populate: shared });
+      if (fragment === undefined) continue;
+      const scoped = scopeEntry(tables, { component }, fragment, state);
+      if (!scoped.ok) return { ok: false, message: scoped.message };
+      fragments[component] = scoped.value;
+    }
+    const rest = Object.fromEntries(
+      Object.entries(options).filter(([key]) => key !== "populate" && key !== "on"),
+    );
+    return { ok: true, value: { ...rest, on: fragments } };
+  }
+  const target = "relation" in link ? link.relation : link.component;
+  const out: Record<string, unknown> = { ...options };
+  if (options.populate !== undefined) {
+    const nested = scopePopulate(tables, target, options.populate, state);
+    if (!nested.ok) return { ok: false, message: nested.message };
+    out.populate = nested.value;
+  }
+  if ("relation" in link) {
+    if (sortPaths(options.sort).some((p) => sortLeaks(tables, target, p, state)))
+      return { ok: false, message: `Invalid sort through a relation in populate` };
+    const filters =
+      options.filters === undefined
+        ? undefined
+        : scopeFilters(tables, target, options.filters, state);
+    const scoped = both(filters, reachScope(tables, target, state));
+    if (scoped !== undefined) out.filters = scoped;
+  }
+  return { ok: true, value: Object.keys(out).length === 0 ? true : out };
+};
+
+const scopePopulate = (
+  tables: Tables,
+  holder: string,
+  populate: unknown,
+  state: unknown,
+): Checked<Record<string, unknown>> => {
+  const normalised = normalisePopulate(tables, holder, populate);
+  const links = own(tables.holders, holder)?.links;
+  for (const [key, entry] of Object.entries(normalised)) {
+    const link = own(links, key);
+    if (link === undefined) continue;
+    const scoped = scopeEntry(tables, link, entry, state);
+    if (!scoped.ok) return { ok: false, message: scoped.message };
+    normalised[key] = scoped.value;
+  }
+  return { ok: true, value: normalised };
+};
+
+/**
+ * A sanitized query of `uid` with every relation into a conditioned type narrowed for the
+ * caller: each populate of one carries that type's filter (`$and` with the client's), at any
+ * depth and whatever form the populate takes; each relation filter through one is narrowed the
+ * same way, so it is no oracle; a sort through one is refused, since its join carries no filter.
+ * A caller no role restricts gets the query back as it is.
+ */
+export const scopeQuery = (
+  tables: Tables,
+  uid: string,
+  state: unknown,
+  query: Record<string, unknown>,
+): Checked<Record<string, unknown>> => {
+  if (own(tables.holders, uid) === undefined) return { ok: true, value: query };
+  const rules = own(tables.rules, uid);
+  if (rules === undefined || callerOf(rules, state, "").kind === "unrestricted")
+    return { ok: true, value: query };
+  if (sortPaths(query.sort).some((p) => sortLeaks(tables, uid, p, state)))
+    return { ok: false, message: "Invalid sort through a relation" };
+  const out: Record<string, unknown> = { ...query };
+  if (query.populate !== undefined) {
+    const populate = scopePopulate(tables, uid, query.populate, state);
+    if (!populate.ok) return { ok: false, message: populate.message };
+    out.populate = populate.value;
+  }
+  if (query.filters !== undefined) out.filters = scopeFilters(tables, uid, query.filters, state);
+  return { ok: true, value: out };
+};
+
+/** The entries one relation value links: document ids and row ids; null for a shape it cannot read. */
+const linked = (value: unknown): { documentIds: string[]; ids: number[] } | null => {
+  const documentIds: string[] = [];
+  const ids: number[] = [];
+  const item = (v: unknown): boolean => {
+    if (typeof v === "string") documentIds.push(v);
+    else if (typeof v === "number") ids.push(v);
+    else if (isRecord(v) && typeof own(v, "documentId") === "string")
+      documentIds.push(v.documentId as string);
+    else if (isRecord(v) && typeof own(v, "id") === "number") ids.push(v.id as number);
+    else return false;
+    return true;
+  };
+  if (value === null || value === undefined) return { documentIds, ids };
+  if (Array.isArray(value)) return value.every(item) ? { documentIds, ids } : null;
+  if (isRecord(value) && ("connect" in value || "set" in value || "disconnect" in value)) {
+    // A disconnect only drops a link, which reveals and grants nothing.
+    for (const key of ["connect", "set"]) {
+      const list = own(value, key);
+      if (list === undefined) continue;
+      if (!Array.isArray(list) || !list.every(item)) return null;
+    }
+    return { documentIds, ids };
+  }
+  return item(value) ? { documentIds, ids } : null;
+};
+
+/**
+ * The entries of conditioned types a write's data links, through relations at any depth of its
+ * components and zones, for those the caller reads under a condition; a message for a relation
+ * value of a shape it cannot read.
+ */
+export const relationRefs = (
+  tables: Tables,
+  uid: string,
+  state: unknown,
+  data: Record<string, unknown>,
+): Checked<RelationRef[]> => {
+  const refs = new Map<string, RelationRef>();
+  const walk = (holder: string, values: unknown): string | undefined => {
+    if (!isRecord(values)) return undefined;
+    const links = own(tables.holders, holder)?.links;
+    for (const [key, value] of Object.entries(values)) {
+      const link = own(links, key);
+      if (link === undefined) continue;
+      if ("relation" in link) {
+        if (reachScope(tables, link.relation, state) === null) continue;
+        const entries = linked(value);
+        if (entries === null) return `Invalid relation value for ${key}`;
+        if (entries.documentIds.length + entries.ids.length === 0) continue;
+        const ref = refs.get(link.relation) ?? { target: link.relation, documentIds: [], ids: [] };
+        ref.documentIds.push(...entries.documentIds);
+        ref.ids.push(...entries.ids);
+        refs.set(link.relation, ref);
+      } else if ("component" in link) {
+        for (const item of Array.isArray(value) ? value : [value]) {
+          const problem = walk(link.component, item);
+          if (problem !== undefined) return problem;
+        }
+      } else if (Array.isArray(value)) {
+        for (const item of value) {
+          const component = isRecord(item) ? own(item, "__component") : undefined;
+          if (typeof component !== "string" || !link.zone.includes(component)) continue;
+          const problem = walk(component, item);
+          if (problem !== undefined) return problem;
+        }
+      }
+    }
+    return undefined;
+  };
+  const problem = walk(uid, data);
+  return problem === undefined
+    ? { ok: true, value: [...refs.values()] }
+    : { ok: false, message: problem };
+};
+
+/** What to load of the rows a write links, to decide on them. */
+export const refsQuery = (tables: Tables, ref: RelationRef): Record<string, unknown> => {
+  const query = recordQuery(own(tables.rules, ref.target)!, "");
+  return {
+    ...query,
+    select: [...(query.select as string[]), "documentId"],
+    where: { $or: [{ documentId: { $in: ref.documentIds } }, { id: { $in: ref.ids } }] },
+  };
+};
+
+/**
+ * Whether the caller may link every entry `ref` names: each must exist and every row of it
+ * (each version and locale) be one the caller may read. One it cannot find is refused the same
+ * way, so the answer tells nothing of what exists.
+ */
+export const refsVerdict = (
+  tables: Tables,
+  state: unknown,
+  ref: RelationRef,
+  rows: readonly unknown[],
+): "allow" | "forbidden" => {
+  const rules = own(tables.rules, ref.target);
+  const caller = reachCaller(tables, ref.target, state);
+  if (rules === undefined || caller === undefined) return "allow";
+  const documents = new Map<unknown, unknown[]>();
+  for (const row of rows) {
+    const documentId = field(row, "documentId");
+    documents.set(documentId, [...(documents.get(documentId) ?? []), row]);
+  }
+  const named = [
+    ...ref.documentIds,
+    ...ref.ids.map((id) =>
+      field(
+        rows.find((row) => field(row, "id") === id),
+        "documentId",
+      ),
+    ),
+  ];
+  return named.every((documentId) => {
+    const entry = documentId === undefined ? undefined : documents.get(documentId);
+    return entry !== undefined && recordVerdict(rules, caller, "read", entry) === "allow";
+  })
+    ? "allow"
+    : "forbidden";
 };

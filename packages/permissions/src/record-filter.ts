@@ -91,7 +91,7 @@ export const recordVariables = (ct: ContentType): Map<string, RecordVariable> =>
   return variables;
 };
 
-/** Whether a field of `type` equals `value` exactly as Ring 1 would, with no type mismatch. */
+/** Whether a field of `type` and `value` are of one kind, so neither side is coerced. */
 const comparable = (type: FieldType, value: RecordOperand): boolean => {
   if (value.kind === "user")
     return USER_VARIABLES[value.variable] === "number" ? NUMERIC.has(type) : STRINGY.has(type);
@@ -118,9 +118,12 @@ const operand = (
 const isRecord = (o: object): o is { variable: string; type: FieldType } => "type" in o;
 
 /**
- * A `record.* == literal | user.*` equality (either order) whose answer a query gives exactly as
- * Ring 1 does, or null. `typeOf` types the record variables the target can query; `users` names
- * the user variables it can bind.
+ * A `record.* == literal | user.*` equality (either order) between operands of one kind, so a
+ * query answers it as Ring 1 does, or null. `typeOf` types the record variables the target can
+ * query; `users` names the user variables it can bind. One limit is the database's, not the
+ * filter's: a string equality is compared under the column's collation, and MySQL's default
+ * collations ignore case (and, for most, accents), where Ring 1 compares code points; on MySQL a
+ * string condition may match more rows than Ring 1 would. Targets document this where they use it.
  */
 export const recordEquality = (
   expr: Expression,

@@ -12,6 +12,5 @@
   "public": [
     "plugin::users-permissions.auth.register",
     "plugin::users-permissions.auth.callback"
-  ],
-  "managed": []
+  ]
 }

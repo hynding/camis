@@ -25,11 +25,7 @@ export const emitPermissions = (doc: IrDocument, roles: Role[]): PermissionEmiss
     { path: "src/permissions/roles.json", content: stableJson(emittedRoles) },
     {
       path: "src/permissions/api-roles.json",
-      content: stableJson({
-        roles: apiRoles.roles,
-        public: apiRoles.public,
-        managed: apiRoles.managed,
-      }),
+      content: stableJson({ roles: apiRoles.roles, public: apiRoles.public }),
     },
   ];
   if (conditions.length > 0) {

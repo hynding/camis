@@ -52,12 +52,19 @@ const shape = (
   const schema = SCHEMA[uid] ?? {};
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(row)) if (!(key in schema)) out[key] = value;
+  // A string or a list names attributes to populate whole (the only forms the core reaches here).
+  const names = (list: string[]): Record<string, unknown> =>
+    Object.fromEntries(
+      list.flatMap((n) => (n === "*" ? Object.keys(schema) : [n])).map((k) => [k, true]),
+    );
   const entries: Record<string, unknown> =
-    populate === "*"
-      ? Object.fromEntries(Object.keys(schema).map((k) => [k, true]))
-      : typeof populate === "object" && populate !== null
-        ? (populate as Record<string, unknown>)
-        : {};
+    typeof populate === "string"
+      ? names(populate.split(","))
+      : Array.isArray(populate)
+        ? names(populate as string[])
+        : typeof populate === "object" && populate !== null
+          ? (populate as Record<string, unknown>)
+          : {};
   for (const [key, entry] of Object.entries(entries)) {
     const link = schema[key];
     if (link === undefined || entry === false) continue;

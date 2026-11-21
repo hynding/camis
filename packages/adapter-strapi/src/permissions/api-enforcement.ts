@@ -16,6 +16,7 @@ import {
 } from "@camis/permissions";
 import { strapiNames } from "@camis/strapi-schema";
 import { CORE_ACTIONS } from "../hooks/route-hooks";
+import { projectReach, typeKey } from "./api-reach";
 import { conditionName } from "./condition-name";
 
 /** The actions the content API serves an entry through, which a condition may narrow. */
@@ -40,6 +41,12 @@ export type ApiRoleRules = Partial<Record<EnforcedAction, ApiHolding>> & {
 export interface ApiTypeRules {
   contentType: string;
   uid: string;
+  /** The type has grants a condition or assign touches; otherwise it is served for its reach. */
+  own: boolean;
+  /** The type's conditions, each with its row filter compiled for the type's own fields. */
+  conditions: ApiCondition[];
+  /** The defaults Strapi fills for an omitted field, by the record variable reading it. */
+  defaults: Record<string, string | number | boolean>;
   /** Each record variable the type's conditions read, as the Strapi attribute holding it. */
   variables: Record<string, { field: string; relation: boolean }>;
   /** Core actions the router opens with `auth: false`. */
@@ -50,9 +57,19 @@ export interface ApiTypeRules {
   roles: Record<string, ApiRoleRules>;
 }
 
+/** How a holder's attribute leads towards a conditioned type. */
+export type ApiHolderLink = { relation: string } | { component: string } | { zone: string[] };
+
+/** A content type or component that reaches a conditioned type, by its Strapi uid. */
+export interface ApiHolder {
+  /** Every attribute `populate=*` populates. */
+  populatable: string[];
+  links: Record<string, ApiHolderLink>;
+}
+
 export interface ApiEnforcement {
-  conditions: ApiCondition[];
   types: ApiTypeRules[];
+  holders: Record<string, ApiHolder>;
   gaps: CapabilityGap[];
 }
 
@@ -131,20 +148,6 @@ const unenforceable = (
     : undefined;
 };
 
-/** Where a populate or a relation filter reaches `target` from: `Type.field`, sorted. */
-const reachingRelations = (doc: IrDocument, target: string): string[] => {
-  const sources: string[] = [];
-  for (const holder of [...doc.contentTypes, ...doc.components]) {
-    for (const f of holder.fields) {
-      if (f.type !== "relation") continue;
-      if (f.target === target) sources.push(`${holder.name}.${f.name}`);
-      if (holder.name === target && f.inverse !== undefined)
-        sources.push(`${f.target}.${f.inverse}`);
-    }
-  }
-  return [...new Set(sources)].sort();
-};
-
 const addHolding = (
   holdings: Map<EnforcedAction, ApiHolding>,
   action: EnforcedAction,
@@ -164,7 +167,6 @@ const addHolding = (
  */
 export const projectApiEnforcement = (doc: IrDocument, roles: Role[]): ApiEnforcement => {
   const byName = new Map(doc.contentTypes.map((ct) => [ct.name, ct]));
-  const conditions = new Map<string, ApiCondition>();
   const gaps: CapabilityGap[] = [];
   const admins = roles
     .filter((r) => !restricts(r))
@@ -218,6 +220,7 @@ export const projectApiEnforcement = (doc: IrDocument, roles: Role[]): ApiEnforc
   const types: ApiTypeRules[] = [];
   for (const ct of doc.contentTypes.filter((c) => enforced.has(c.name))) {
     const vars = strapiVariables(ct);
+    const conditions = new Map<string, ApiCondition>();
     const ruleSet: Record<string, ApiRoleRules> = {};
     const read = new Set<string>();
     const typeAssign = new Set<string>();
@@ -254,10 +257,14 @@ export const projectApiEnforcement = (doc: IrDocument, roles: Role[]): ApiEnforc
       };
     }
     const core = CORE_ACTIONS.collection;
+    const variables = [...read].sort();
     types.push({
       contentType: ct.name,
       uid: strapiNames(ct).uid,
-      variables: Object.fromEntries([...read].sort().map((v) => [v, vars.attribute(v)!] as const)),
+      own: true,
+      conditions: [...conditions.values()].sort((a, b) => a.name.localeCompare(b.name)),
+      defaults: defaultsOf(ct, variables),
+      variables: Object.fromEntries(variables.map((v) => [v, vars.attribute(v)!] as const)),
       open: (ct.options?.publicApiActions ?? [])
         .map((a) => core[a])
         .filter((a): a is string => a !== undefined),
@@ -265,36 +272,50 @@ export const projectApiEnforcement = (doc: IrDocument, roles: Role[]): ApiEnforc
       admins,
       roles: ruleSet,
     });
-    gaps.push(...populateGaps(doc, ct, ruleSet));
   }
 
+  const reach = projectReach(doc, roles, types);
+  gaps.push(...reach.gaps);
+  const served = doc.contentTypes.filter(
+    (ct) =>
+      enforced.has(ct.name) ||
+      (ct.kind === "collection" && ct.builtin === undefined && reach.reaching.has(typeKey(ct))),
+  );
   return {
-    conditions: [...conditions.values()].sort((a, b) => a.name.localeCompare(b.name)),
-    types,
+    types: served.map(
+      (ct) =>
+        types.find((t) => t.contentType === ct.name) ?? {
+          contentType: ct.name,
+          uid: strapiNames(ct).uid,
+          own: false,
+          conditions: [],
+          defaults: {},
+          variables: {},
+          open: [],
+          assign: [],
+          admins,
+          roles: {},
+        },
+    ),
+    holders: reach.holders,
     gaps,
   };
 };
 
-/** One downgrade per role reading `ct` under a condition another type's relation reaches around. */
-const populateGaps = (
-  doc: IrDocument,
+/** The defaults of the scalar fields the conditions read, which Strapi fills on create. */
+const defaultsOf = (
   ct: ContentType,
-  ruleSet: Record<string, ApiRoleRules>,
-): CapabilityGap[] => {
-  const sources = reachingRelations(doc, ct.name);
-  if (sources.length === 0) return [];
-  const path = `/api/${strapiNames(ct).pluralName}`;
-  return Object.entries(ruleSet)
-    .filter(([, rules]) => Array.isArray(rules.read))
-    .map(([role]) => role)
-    .sort()
-    .map((role) =>
-      gap(
-        ct.name,
-        role,
-        "downgrade",
-        `role "${role}" reads "${ct.name}" under a condition the content API enforces on ${path} only: a populate or relation filter through ${sources.join(", ")} is not narrowed by it`,
-        "apiPopulateScope",
-      ),
-    );
+  variables: readonly string[],
+): Record<string, string | number | boolean> => {
+  const records = recordVariables(ct);
+  const defaults: Record<string, string | number | boolean> = {};
+  for (const name of variables) {
+    const variable = records.get(name);
+    if (variable === undefined || variable.relation) continue;
+    const f = ct.fields.find((g) => g.name === variable.field);
+    const value = f !== undefined && "default" in f ? f.default : undefined;
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean")
+      defaults[name] = value;
+  }
+  return defaults;
 };

@@ -17,8 +17,15 @@
         "api::note.note.find",
         "api::note.note.findOne",
         "api::note.note.update",
+        "api::tag.tag.create",
         "api::tag.tag.find",
         "api::tag.tag.findOne"
+      ]
+    },
+    {
+      "type": "contributor",
+      "actions": [
+        "api::note.note.create"
       ]
     },
     {
@@ -46,8 +53,5 @@
   "public": [
     "plugin::users-permissions.auth.register",
     "plugin::users-permissions.auth.callback"
-  ],
-  "managed": [
-    "plugin::users-permissions.user.find"
   ]
 }

@@ -63,9 +63,6 @@ export const projectPermissions = (doc: IrDocument, roles: Role[]): ProjectionRe
   ): string => {
     const name = conditionName(predicate);
     conditions.set(name, predicate);
-    // A non-admin role's grant condition is enforced by the content API, which reads record.*;
-    // only where the admin panel is the sole enforcer does its user-only context matter.
-    if (!adminPanelOnly) return name;
     const escaping = freeVars(predicate).filter(
       (v) => !USER_CONTEXT.includes(v as (typeof USER_CONTEXT)[number]),
     );
@@ -78,7 +75,12 @@ export const projectPermissions = (doc: IrDocument, roles: Role[]): ProjectionRe
           ...(where.field !== undefined ? { field: where.field } : {}),
         },
         severity: "downgrade",
-        message: `condition references ${escaping.join(", ")} outside the user.* context; it will deny at runtime`,
+        // A non-admin role's grant condition is enforced by the content API, which reads
+        // record.*; camis still seeds the role's admin-panel copy, whose handler sees only the
+        // user, as it does every role's.
+        message: adminPanelOnly
+          ? `condition references ${escaping.join(", ")} outside the user.* context; it will deny at runtime`
+          : `the admin-panel copy of role "${where.rule}" cannot read ${escaping.join(", ")}, so in the admin panel its condition denies every entry; the content API enforces it`,
       });
     }
     return name;
@@ -165,11 +167,6 @@ export interface ApiRoleGrant {
 export interface ApiRoleProjection {
   roles: ApiRoleGrant[];
   public: string[];
-  /**
-   * The plugin actions camis grants on its own account, which the bootstrap therefore also
-   * revokes from a role it no longer grants them to; every other plugin action is Strapi's.
-   */
-  managed: string[];
   gaps: CapabilityGap[];
 }
 
@@ -252,7 +249,6 @@ export const projectApiRoles = (doc: IrDocument, roles: Role[]): ApiRoleProjecti
   return {
     roles: projected,
     public: [...PUBLIC_API_ACTIONS],
-    managed: builtinUsers.size > 0 ? [USER_RELATION_WRITE_ACTION] : [],
     gaps,
   };
 };

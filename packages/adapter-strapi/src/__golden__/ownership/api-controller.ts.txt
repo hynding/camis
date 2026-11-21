@@ -6,16 +6,22 @@ import {
   listFilter,
   recordQuery,
   recordVerdict,
+  refsQuery,
+  refsVerdict,
+  relationRefs,
+  scopeQuery,
   scopedFilters,
   withoutAssigned,
+  type Caller,
   type RecordAction,
-  type TypeRules,
+  type Tables,
 } from "./api-conditions";
 
-// The core controller methods a content type with row conditions or assigned fields is served
-// by, copied into each generated Strapi project as src/permissions/api-controller.ts. A type's
-// generated controller passes them to factories.createCoreController, which puts Strapi's own
-// core controller under them as their prototype: `super` is that core controller.
+// The core controller methods a content type with row conditions, assigned fields or a relation
+// into a conditioned type is served by, copied into each generated Strapi project as
+// src/permissions/api-controller.ts. A type's generated controller passes them to
+// factories.createCoreController, which puts Strapi's own core controller under them as their
+// prototype: `super` is that core controller.
 
 interface RequestContext {
   params?: { id?: unknown };
@@ -24,6 +30,7 @@ interface RequestContext {
   status?: number;
   notFound: () => unknown;
   forbidden: () => unknown;
+  badRequest: (message?: string) => unknown;
 }
 
 /** The parts of Strapi's core controller these methods build on. */
@@ -36,30 +43,44 @@ interface CoreController {
   transformResponse(data: unknown, meta?: unknown): unknown;
 }
 
-/** The parts of Strapi itself they use: the type's service and the query engine. */
+/** The parts of Strapi itself they use: the type's document service and the query engine. */
 interface StrapiServices {
   db: { query(uid: string): { findMany(params: object): Promise<unknown[]> } };
   service(uid: string): {
     find(params: object): Promise<{ results: unknown; pagination: unknown }>;
+    findOne(documentId: string, params: object): Promise<unknown>;
     create(params: object): Promise<unknown>;
+    update(documentId: string, params: object): Promise<unknown>;
   };
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+/** The body's data when it is an object; undefined for a missing or malformed payload. */
+const requestData = (ctx: RequestContext): Record<string, unknown> | undefined => {
+  const body = ctx.request?.body;
+  return isObject(body) && isObject(body.data) ? body.data : undefined;
+};
+
+/** The body with its data replaced, so Strapi's own methods read the data as decided here. */
+const replaceData = (ctx: RequestContext, data: Record<string, unknown>): void => {
+  if (ctx.request !== undefined) ctx.request.body = { ...(ctx.request.body as object), data };
+};
+
 /**
  * The type's find, findOne, create, update and delete, each deciding on the caller's role before
  * Strapi's own: a list narrowed in the query (so paging and counts hold only what the caller may
- * read), an entry checked before it is read, changed or deleted, and assigned fields filled from
- * the session on create and left out of an update.
+ * read), an entry checked before it is read, changed or deleted, assigned fields filled from the
+ * session on create and left out of an update, and every relation into a conditioned type
+ * narrowed in populate and filters, and checked in writes.
  */
-export const enforcedController = (strapiInstance: unknown, uid: string, rules: TypeRules) => {
+export const enforcedController = (strapiInstance: unknown, uid: string, tables: Tables) => {
   const strapi = strapiInstance as StrapiServices;
+  const rules = tables.rules[uid]!;
 
-  const verdict = async (ctx: RequestContext, action: string, as: RecordAction) => {
-    const caller = callerOf(rules, ctx.state, action);
-    if (caller.kind === "unrestricted") return "allow";
+  const verdict = async (caller: Caller, ctx: RequestContext, as: RecordAction) => {
+    if (caller.kind === "unrestricted" || !rules.own) return "allow";
     if (caller.kind === "refused") return "forbidden";
     const rows = await strapi.db
       .query(uid)
@@ -67,72 +88,129 @@ export const enforcedController = (strapiInstance: unknown, uid: string, rules: 
     return recordVerdict(rules, caller, as, rows);
   };
 
-  /** The body with the caller's assigned fields left out, or unchanged when it has no data. */
-  const stripBody = (ctx: RequestContext, action: string): void => {
-    const body = ctx.request?.body;
-    if (ctx.request === undefined || !isObject(body) || !isObject(body.data)) return;
-    ctx.request.body = {
-      ...body,
-      data: withoutAssigned(callerOf(rules, ctx.state, action), body.data),
-    };
+  /** The validated, sanitized query, narrowed for the caller; a 400 when it cannot be. */
+  const query = async (
+    controller: CoreController,
+    ctx: RequestContext,
+  ): Promise<Record<string, unknown> | { refused: unknown }> => {
+    await controller.validateQuery(ctx);
+    const sanitized = await controller.sanitizeQuery(ctx);
+    const scoped = scopeQuery(tables, uid, ctx.state, sanitized);
+    return scoped.ok ? scoped.value : { refused: ctx.badRequest(scoped.message) };
+  };
+
+  /**
+   * A 403 when the data links an entry of a conditioned type the caller may not read (or one
+   * that does not exist), a 400 for a relation value it cannot read; undefined to go on.
+   */
+  const linksRefused = async (ctx: RequestContext, data: Record<string, unknown>) => {
+    const refs = relationRefs(tables, uid, ctx.state, data);
+    if (!refs.ok) return ctx.badRequest(refs.message);
+    for (const ref of refs.value) {
+      const rows = await strapi.db.query(ref.target).findMany(refsQuery(tables, ref));
+      if (refsVerdict(tables, ctx.state, ref, rows) === "forbidden") return ctx.forbidden();
+    }
+    return undefined;
   };
 
   return {
     async find(this: CoreController, ctx: RequestContext) {
-      const scope = listFilter(rules, callerOf(rules, ctx.state, "find"));
-      if (scope === null) return super.find(ctx);
-      await this.validateQuery(ctx);
-      const query = await this.sanitizeQuery(ctx);
+      const caller = callerOf(rules, ctx.state, "find");
+      if (caller.kind === "refused") return ctx.forbidden();
+      if (caller.kind === "unrestricted") return super.find(ctx);
+      const scoped = await query(this, ctx);
+      if ("refused" in scoped) return scoped.refused;
+      const scope = listFilter(rules, caller);
+      const filters = scope === null ? scoped.filters : scopedFilters(scoped.filters, scope);
       const { results, pagination } = await strapi
         .service(uid)
-        .find({ ...query, filters: scopedFilters(query.filters, scope) });
+        .find({ ...scoped, ...(filters === undefined ? {} : { filters }) });
       const sanitized = await this.sanitizeOutput(results, ctx);
       return this.transformResponse(sanitized, { pagination });
     },
 
-    async findOne(ctx: RequestContext) {
-      const answer = await verdict(ctx, "findOne", "read");
+    async findOne(this: CoreController, ctx: RequestContext) {
+      const caller = callerOf(rules, ctx.state, "findOne");
+      if (caller.kind === "refused") return ctx.forbidden();
+      if (caller.kind === "unrestricted") return super.findOne(ctx);
+      const answer = await verdict(caller, ctx, "read");
       if (answer === "notFound") return ctx.notFound();
       if (answer === "forbidden") return ctx.forbidden();
-      return super.findOne(ctx);
+      const scoped = await query(this, ctx);
+      if ("refused" in scoped) return scoped.refused;
+      const entity = await strapi.service(uid).findOne(String(ctx.params?.id ?? ""), scoped);
+      if (entity === null || entity === undefined) return ctx.notFound();
+      const sanitized = await this.sanitizeOutput(entity, ctx);
+      return this.transformResponse(sanitized);
     },
 
     async create(this: CoreController, ctx: RequestContext) {
       const caller = callerOf(rules, ctx.state, "create");
       if (caller.kind === "refused") return ctx.forbidden();
-      const body = ctx.request?.body;
-      // Strapi's own create answers a missing payload.
-      if (ctx.request === undefined || !isObject(body) || !isObject(body.data))
-        return super.create(ctx);
-      const data = withoutAssigned(caller, body.data);
+      const sent = requestData(ctx);
+      if (sent === undefined) {
+        // A restricted caller's create is decided here, so a payload it cannot read is refused
+        // here; Strapi's own create answers anyone else's.
+        return caller.kind === "role"
+          ? ctx.badRequest("Missing or invalid data")
+          : super.create(ctx);
+      }
+      const data = withoutAssigned(caller, sent);
       if (createVerdict(rules, caller, data) === "forbidden") return ctx.forbidden();
-      ctx.request.body = { ...body, data };
+      if (caller.kind === "role") {
+        const refused = await linksRefused(ctx, data);
+        if (refused !== undefined) return refused;
+      }
+      replaceData(ctx, data);
       const assigned = assignedValues(caller);
-      if (Object.keys(assigned).length === 0) return super.create(ctx);
+      if (caller.kind === "unrestricted" && Object.keys(assigned).length === 0)
+        return super.create(ctx);
       // The assigned relation is added after validation: the role need not read the user type,
       // which Strapi's validator would demand of a relation the client wrote.
-      await this.validateQuery(ctx);
-      const query = await this.sanitizeQuery(ctx);
+      const scoped = await query(this, ctx);
+      if ("refused" in scoped) return scoped.refused;
       if (this.validateInput !== undefined) await this.validateInput(data, ctx);
       const input = await this.sanitizeInput(data, ctx);
       const entity = await strapi
         .service(uid)
-        .create({ ...query, data: { ...input, ...assigned } });
+        .create({ ...scoped, data: { ...input, ...assigned } });
       const sanitized = await this.sanitizeOutput(entity, ctx);
       ctx.status = 201;
       return this.transformResponse(sanitized);
     },
 
-    async update(ctx: RequestContext) {
-      const answer = await verdict(ctx, "update", "update");
+    async update(this: CoreController, ctx: RequestContext) {
+      const caller = callerOf(rules, ctx.state, "update");
+      if (caller.kind === "refused") return ctx.forbidden();
+      const sent = requestData(ctx);
+      if (caller.kind === "unrestricted") {
+        if (sent !== undefined) replaceData(ctx, withoutAssigned(caller, sent));
+        return super.update(ctx);
+      }
+      if (sent === undefined) return ctx.badRequest("Missing or invalid data");
+      const answer = await verdict(caller, ctx, "update");
       if (answer === "notFound") return ctx.notFound();
       if (answer === "forbidden") return ctx.forbidden();
-      stripBody(ctx, "update");
-      return super.update(ctx);
+      const data = withoutAssigned(caller, sent);
+      const refused = await linksRefused(ctx, data);
+      if (refused !== undefined) return refused;
+      replaceData(ctx, data);
+      const scoped = await query(this, ctx);
+      if ("refused" in scoped) return scoped.refused;
+      if (this.validateInput !== undefined) await this.validateInput(data, ctx);
+      const input = await this.sanitizeInput(data, ctx);
+      const entity = await strapi
+        .service(uid)
+        .update(String(ctx.params?.id ?? ""), { ...scoped, data: input });
+      if (entity === null || entity === undefined) return ctx.notFound();
+      const sanitized = await this.sanitizeOutput(entity, ctx);
+      return this.transformResponse(sanitized);
     },
 
     async delete(ctx: RequestContext) {
-      const answer = await verdict(ctx, "delete", "delete");
+      const caller = callerOf(rules, ctx.state, "delete");
+      if (caller.kind === "refused") return ctx.forbidden();
+      const answer = await verdict(caller, ctx, "delete");
       if (answer === "notFound") return ctx.notFound();
       if (answer === "forbidden") return ctx.forbidden();
       return super.delete(ctx);
