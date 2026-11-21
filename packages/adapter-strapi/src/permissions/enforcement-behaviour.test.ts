@@ -283,7 +283,11 @@ const coreController = (uid: string) => ({
   },
   async delete(ctx: Context) {
     calls.push(`core.delete ${uid}`);
-    tables[uid] = rowsOf(uid).filter((r) => r.documentId !== ctx.params.id);
+    // Strapi's deleteDocument reads the query's filters into its where, beside the document id.
+    const filters = ctx.query.filters as Filter | undefined;
+    tables[uid] = rowsOf(uid).filter(
+      (r) => r.documentId !== ctx.params.id || (filters !== undefined && !matches(r, filters)),
+    );
     return { data: null };
   },
 });
@@ -405,6 +409,39 @@ describe("a member, who manages only the notes it owns", () => {
   it("deletes its own note", async () => {
     await notes().delete(context(member(), { params: { id: "mine" } }));
     expect(rowsOf(NOTE).map((r) => r.documentId)).toEqual(["theirs", "open"]);
+  });
+  // Strapi's delete reads the query's filters into its where, and its update finds the row to
+  // write by them (creating a new one when none matches): a filter through a relation would
+  // decide whether an entry the caller may change is changed, an oracle on what it reaches.
+  it("refuses a delete query beyond locale and status, and filters on an update", async () => {
+    for (const title of ["theirs", "wrong"]) {
+      for (const query of [
+        { filters: { category: { notes: { title: { $eq: title } } } } },
+        { filters: { $not: { pinned: { note: { title: { $eq: title } } } } } },
+      ]) {
+        const del = context(member(), { params: { id: "mine" }, query });
+        await notes().delete(del);
+        expect(del.status, JSON.stringify(query)).toBe(400);
+        const upd = context(member(), {
+          params: { id: "mine" },
+          query,
+          request: { body: { data: { title: "edited" } } },
+        });
+        await notes().update(upd);
+        expect(upd.status, JSON.stringify(query)).toBe(400);
+      }
+    }
+    for (const query of [{ populate: "*" }, { sort: "title" }, { fields: ["title"] }]) {
+      const del = context(member(), { params: { id: "mine" }, query });
+      await notes().delete(del);
+      expect(del.status, JSON.stringify(query)).toBe(400);
+    }
+    expect(byDocument(NOTE, "mine")).toMatchObject({ title: "mine" });
+    expect(calls.filter((c) => c.startsWith("core.delete") || c.startsWith("core.update"))).toEqual(
+      [],
+    );
+    await notes().delete(context(member(), { params: { id: "mine" }, query: { locale: "en" } }));
+    expect(byDocument(NOTE, "mine")).toBeUndefined();
   });
   // A draft and its published version are two rows of one entry: both must pass.
   it("is refused an entry whose draft it owns but whose published version it does not", async () => {

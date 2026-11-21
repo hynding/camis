@@ -493,3 +493,71 @@ describe("a reach the Strapi content API cannot narrow fails the build", () => {
     ]);
   });
 });
+
+// The plugins serve the built-in user and media library with no check of camis's: a write there
+// must not reach what the rules guard.
+describe("writes the users-permissions and upload plugins serve unchecked fail the build", () => {
+  const withFile: IrDocument = {
+    ...doc,
+    contentTypes: [
+      ...doc.contentTypes,
+      { name: "File", kind: "collection", builtin: "file", fields: [] },
+    ],
+  };
+  const writer = (contentType: string, actions: Role["grants"][number]["actions"]): Role[] => [
+    ...roles.filter((r) => r.name !== "member"),
+    {
+      ...roles.find((r) => r.name === "member")!,
+      grants: [...roles.find((r) => r.name === "member")!.grants, { contentType, actions }],
+    },
+  ];
+  const featured = (d: IrDocument, rs: Role[], feature: string) =>
+    errors(d, rs).filter((g) => g.feature === feature);
+
+  // POST /api/upload with ref, refId and field attaches the new file to any entry, `?id=`
+  // replaces a file wherever it is attached, and DELETE removes it from every entry.
+  it("a role that writes the media library while some type with a media field is not one it updates outright", () => {
+    for (const actions of [["create"], ["update"], ["delete"]] as const) {
+      expect(featured(withFile, writer("File", [...actions]), "apiRelationReach")).toEqual([
+        {
+          feature: "apiRelationReach",
+          location: { contentType: "Note", rule: "member" },
+          severity: "error",
+          message: `role "member" may ${actions[0]} files, and Strapi's upload API attaches, replaces or deletes a file on any entry (ref, refId and field on POST /api/upload, ?id=, DELETE /api/upload/files/:id) with no check: that changes Note.attachment on entries of "Note", which it does not update outright`,
+        },
+      ]);
+    }
+    const outright = writer("File", ["create"]).map((r) =>
+      r.name === "member"
+        ? { ...r, grants: [...r.grants, { contentType: "Note", actions: ["update" as const] }] }
+        : r,
+    );
+    expect(featured(withFile, outright, "apiRelationReach")).toEqual([]);
+    expect(featured(withFile, writer("File", ["read"]), "apiRelationReach")).toEqual([]);
+  });
+
+  // users-permissions' user update and create take any role and password from the body.
+  it("a non-admin role that creates or updates the built-in user", () => {
+    for (const action of ["create", "update"] as const) {
+      expect(featured(doc, writer("User", [action]), "apiUserWrite")).toEqual([
+        {
+          feature: "apiUserWrite",
+          location: { contentType: "User", rule: "member" },
+          severity: "error",
+          message: `role "member" may ${action} the built-in user, and Strapi's users-permissions ${action === "update" ? "update (PUT /api/users/:id)" : "create (POST /api/users)"} sets the role and password of any user from the body: the caller could take any other role, and every grant the rules guard`,
+        },
+      ]);
+    }
+    expect(featured(doc, writer("User", ["read", "delete"]), "apiUserWrite")).toEqual([]);
+    const everything: Role[] = [
+      {
+        name: "member",
+        grants: doc.contentTypes.map((ct) => ({
+          contentType: ct.name,
+          actions: ["create", "read", "update", "delete"] as const,
+        })) as Role["grants"],
+      },
+    ];
+    expect(featured(doc, everything, "apiUserWrite")).toEqual([]);
+  });
+});
