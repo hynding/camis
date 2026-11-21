@@ -175,7 +175,9 @@ export default {
       const existing = await strapi.query("admin::role").findOne({ where: { name: role.name } });
       const record = existing ?? (await strapi.query("admin::role").create({ data: { name: role.name, description: role.description } }));
       for (const p of role.permissions) {
-        await strapi.query("admin::permission").create({ data: { ...p, role: record.id } });
+        // Explicit even when empty: Strapi 5's query engine binds the json default unserialised,
+        // which sqlite refuses.
+        await strapi.query("admin::permission").create({ data: { conditions: [], ...p, role: record.id } });
       }
     }
     // The plugin actions an earlier boot of this bootstrap created, per role type, kept in
