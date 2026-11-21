@@ -622,8 +622,8 @@ const uploads = async (dir: string, alice: Account, bob: Account): Promise<void>
   });
   check("alice's plain connect item links her note", ownTag.status === 201, ownTag);
 
-  // A reviewer reads every note and updates only its own, and holds no file grant: Strapi needs
-  // none to link a stored file, so reading bob's note must not let it link his file.
+  // A reviewer reads every note and updates only its own, and holds no file write grant: Strapi
+  // needs none to link a stored file, so reading bob's note must not let it link his file.
   const rita = await member(dir, "rita", "reviewer");
   const ritas = await note(alice, "rita's note");
   run(
@@ -640,6 +640,22 @@ const uploads = async (dir: string, alice: Account, bob: Account): Promise<void>
     data: { title: "rita's own" },
   });
   check("rita updates her own note", retitle.status === 200, retitle);
+
+  // Rita reads the media library: Strapi returns a file's related entries whole when it can read
+  // none of them (bob's note was one), so any populate of them is refused.
+  const files = await call("GET", "/api/upload/files", rita.jwt);
+  check("rita lists the media library", files.status === 200, files);
+  for (const path of [
+    "/api/upload/files?populate=related",
+    "/api/upload/files?populate=*",
+    "/api/upload/files?populate[0]=related.owner",
+    `/api/upload/files/${fileOfBob}?populate=related`,
+    `/api/upload/files/${fileOfBob}?populate[related][populate]=*`,
+    `/api/upload/files/${fileOfBob}?populate[related][on][api::note.note]=true`,
+  ]) {
+    const r = await call("GET", path, rita.jwt);
+    check(`rita's ${path} is 400`, r.status === 400, r);
+  }
 
   // Strapi replaces a relation for any set it finds truthy, one entry included: a set naming only
   // rita's note drops alice's from the category, which rita may not update.
@@ -797,8 +813,72 @@ const openPolymorphicGaps = (): void => {
   );
 };
 
+/**
+ * An open route is open whatever roles the IR names, none included; and Strapi keeps a polymorphic
+ * list whole when it can read none of its entries, so a role reading one with no condition
+ * anywhere fails the build too.
+ */
+const unconditionedGaps = (): void => {
+  const board = (publicApiActions?: ("list" | "read")[]) => ({
+    name: "Board",
+    kind: "collection" as const,
+    ...(publicApiActions === undefined ? {} : { options: { publicApiActions } }),
+    fields: [{ type: "polymorphicRelation" as const, name: "subjects", many: true }],
+  });
+  const noRoles = strapiAdapter.generate(
+    {
+      document: {
+        ...ownershipBundle.document,
+        contentTypes: [...ownershipBundle.document.contentTypes, board(["list"])],
+      },
+      roles: [],
+    },
+    { projectName: "notes" },
+  );
+  check(
+    "with no roles, an open list of a type with a polymorphic relation fails the build",
+    noRoles.gaps.gaps.some(
+      (g) =>
+        g.severity === "error" &&
+        g.feature === "apiPolymorphicReach" &&
+        g.location.contentType === "Board",
+    ),
+    noRoles.gaps.gaps,
+  );
+  check(
+    "with no roles, an open route still has each type leading to a media field served",
+    noRoles.files.some(
+      (f) =>
+        f.path === "src/api/note/controllers/note.ts" && f.content.includes("enforcedController"),
+    ),
+    noRoles.files.map((f) => f.path),
+  );
+  const viewer = strapiAdapter.generate(
+    {
+      document: {
+        ...ownershipBundle.document,
+        contentTypes: [...ownershipBundle.document.contentTypes, board()],
+      },
+      roles: [{ name: "viewer", grants: [{ contentType: "Board", actions: ["read"] }] }],
+    },
+    { projectName: "notes" },
+  );
+  check(
+    "a role reading a type with a polymorphic relation, no condition anywhere, fails the build",
+    viewer.gaps.gaps.some(
+      (g) =>
+        g.severity === "error" &&
+        g.feature === "apiPolymorphicReach" &&
+        g.location.contentType === "Board" &&
+        g.location.rule === "viewer",
+    ),
+    viewer.gaps.gaps,
+  );
+};
+
 writerGaps();
 openPolymorphicGaps();
+unconditionedGaps();
 const dir = await mkdtemp(join(tmpdir(), "camis-enforcement-"));
 try {
   await materialize(strapiAdapter.generate(ownershipBundle, { projectName: "notes" }), dir);

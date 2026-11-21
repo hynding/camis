@@ -3,6 +3,7 @@ import type { Expression } from "@camis/expr";
 import type { IrDocument } from "@camis/ir-schema";
 import type { Role } from "@camis/permissions";
 import { ownershipBundle } from "../__fixtures__/ownership";
+import { strapiAdapter } from "../generate";
 import { projectApiEnforcement } from "./api-enforcement";
 import { projectUploads } from "./api-upload-enforcement";
 
@@ -342,7 +343,7 @@ describe("a reach the Strapi content API cannot narrow fails the build", () => {
         location: { contentType: "Tag", rule: "member" },
         severity: "error",
         message:
-          'role "member" reads "Tag", whose polymorphic relation Tag.about can reach "Note", which it reads under a condition; the Strapi target cannot narrow a polymorphic populate or write',
+          'role "member" reads "Tag", whose polymorphic relation Tag.about can return entries of any type, ones the role holds no grant on or reads only under a condition included: Strapi leaves a polymorphic populate unchecked when it can read none of its entries, so the Strapi target cannot narrow it or a polymorphic write',
       },
     ]);
   });
@@ -530,7 +531,7 @@ describe("a reach the Strapi content API cannot narrow fails the build", () => {
         location: { contentType: "Board", rule: "member" },
         severity: "error",
         message:
-          'role "member" writes "Board", whose polymorphic relation Board.subjects can reach "Note", which it reads under a condition; the Strapi target cannot narrow a polymorphic populate or write',
+          'role "member" writes "Board", whose polymorphic relation Board.subjects can return entries of any type, ones the role holds no grant on or reads only under a condition included: Strapi leaves a polymorphic populate unchecked when it can read none of its entries, so the Strapi target cannot narrow it or a polymorphic write',
       },
     ]);
     // An open create or update route writes as the public role.
@@ -625,6 +626,96 @@ describe("a reach the Strapi content API cannot narrow fails the build", () => {
     ]);
     expect(openGaps(opening(["delete" as "list"]), [])).toEqual([]);
     expect(openGaps(poly, [])).toEqual([]);
+  });
+  // Strapi's sanitizer keeps a polymorphic list untouched when it can read none of its entries
+  // (seen on 5.48), so a role with no condition anywhere still gets entries of types it holds no
+  // grant on: every non-admin reader or writer of a polymorphic relation or inverse fails the build.
+  it("a polymorphic relation or inverse, at any depth, on a type any non-admin role reads or writes", () => {
+    const poly: IrDocument = {
+      ...doc,
+      contentTypes: [
+        ...doc.contentTypes,
+        {
+          name: "Board",
+          kind: "collection",
+          fields: [{ type: "polymorphicRelation", name: "subjects", many: true }],
+        },
+        {
+          name: "Wall",
+          kind: "collection",
+          fields: [
+            {
+              type: "polymorphicInverse",
+              name: "boards",
+              target: "Board",
+              via: "subjects",
+              many: true,
+            },
+          ],
+        },
+        {
+          name: "Box",
+          kind: "collection",
+          fields: [{ type: "component", name: "frame", component: "Holder", repeatable: false }],
+        },
+      ],
+      components: [
+        ...doc.components,
+        {
+          name: "Pointer",
+          fields: [{ type: "polymorphicRelation", name: "target", many: false }],
+        } as unknown as IrDocument["components"][number],
+        {
+          name: "Holder",
+          fields: [{ type: "component", name: "inner", component: "Pointer", repeatable: true }],
+        },
+      ],
+    };
+    const plain: Role[] = [
+      {
+        name: "viewer",
+        grants: [
+          { contentType: "Board", actions: ["read"] },
+          { contentType: "Wall", actions: ["read"] },
+        ],
+      },
+      { name: "editor", grants: [{ contentType: "Box", actions: ["create"] }] },
+      { name: "tagger", grants: [{ contentType: "Tag", actions: ["read"] }] },
+      {
+        name: "boss",
+        admin: true,
+        grants: [{ contentType: "Board", actions: ["read", "create", "update"] }],
+      },
+    ];
+    expect(errors(poly, plain)).toEqual([
+      {
+        feature: "apiPolymorphicReach",
+        location: { contentType: "Board", rule: "viewer" },
+        severity: "error",
+        message:
+          'role "viewer" reads "Board", whose polymorphic relation Board.subjects can return entries of any type, ones the role holds no grant on or reads only under a condition included: Strapi leaves a polymorphic populate unchecked when it can read none of its entries, so the Strapi target cannot narrow it or a polymorphic write',
+      },
+      {
+        feature: "apiPolymorphicReach",
+        location: { contentType: "Wall", rule: "viewer" },
+        severity: "error",
+        message:
+          'role "viewer" reads "Wall", whose polymorphic relation Wall.boards can return entries of any type, ones the role holds no grant on or reads only under a condition included: Strapi leaves a polymorphic populate unchecked when it can read none of its entries, so the Strapi target cannot narrow it or a polymorphic write',
+      },
+      {
+        feature: "apiPolymorphicReach",
+        location: { contentType: "Box", rule: "editor" },
+        severity: "error",
+        message:
+          'role "editor" writes "Box", whose polymorphic relation Pointer.target can return entries of any type, ones the role holds no grant on or reads only under a condition included: Strapi leaves a polymorphic populate unchecked when it can read none of its entries, so the Strapi target cannot narrow it or a polymorphic write',
+      },
+    ]);
+    expect(
+      errors(
+        poly,
+        plain.filter((r) => r.name === "tagger" || r.admin === true),
+      ),
+    ).toEqual([]);
   });
   // A file's `related` entries are polymorphic too: every type with a media field, at any depth,
   // is served so a populate of them is refused, whether or not a conditioned type holds media.
@@ -797,6 +888,31 @@ describe("writes the users-permissions and upload plugins serve unchecked fail t
     }));
     expect(projectApiEnforcement(doc, readOnly).uploads).toBeNull();
   });
+  // The upload plugin returns a file's related entries, of any type, to whoever reads the media
+  // library: its find and findOne are wrapped for every restricted reader, uploaders recorded or not.
+  it("tables the upload checks, and emits the extension, when a restricted role reads the media library", () => {
+    const readOnly = roles.map((r) => ({
+      ...r,
+      grants: r.grants
+        .filter((g) => g.contentType !== "File")
+        .map((g) => ({ ...g, actions: g.actions.filter((a) => a === "read") })),
+    }));
+    const reader = readOnly.map((r) =>
+      r.name === "reviewer"
+        ? { ...r, grants: [...r.grants, { contentType: "File", actions: ["read" as const] }] }
+        : r,
+    );
+    expect(projectApiEnforcement(doc, reader).uploads).toMatchObject({ uploaderRecorded: false });
+    const extension = strapiAdapter
+      .generate({ document: doc, roles: reader }, { projectName: "notes" })
+      .files.find((f) => f.path === "src/extensions/upload/strapi-server.ts")?.content;
+    expect(extension).toContain("enforcedUpload");
+    expect(extension).not.toContain("camisUploader");
+    const boss: Role[] = [
+      { name: "boss", admin: true, grants: [{ contentType: "File", actions: ["read"] }] },
+    ];
+    expect(projectApiEnforcement(doc, boss).uploads).toBeNull();
+  });
   it("tables each served type's and component's writable attributes by their form", () => {
     expect(projectApiEnforcement(doc, roles).shapes).toEqual({
       "api::category.category": { label: "scalar", notes: "relation" },
@@ -957,5 +1073,58 @@ describe("writes the users-permissions and upload plugins serve unchecked fail t
       'role "member" may create the built-in user',
       'role "member" may update the built-in user',
     ]);
+  });
+});
+
+// An `auth: false` route is open whatever roles the IR names, none included: with no role at all,
+// the open routes are still enforced, and only an IR with neither emits no enforcement.
+describe("an IR with no roles", () => {
+  const generate = (contentTypes: IrDocument["contentTypes"]) =>
+    strapiAdapter.generate(
+      { document: { ...doc, contentTypes: [...doc.contentTypes, ...contentTypes] }, roles: [] },
+      { projectName: "open" },
+    );
+  const file = (result: ReturnType<typeof generate>, path: string) =>
+    result.files.find((f) => f.path === path)?.content;
+
+  it("fails the build for an open action on a type with a polymorphic relation", () => {
+    const result = generate([
+      {
+        name: "Board",
+        kind: "collection",
+        options: { publicApiActions: ["list", "read"] },
+        fields: [{ type: "polymorphicRelation", name: "subjects", many: true }],
+      },
+    ]);
+    expect(
+      result.gaps.gaps.filter((g) => g.severity === "error").map((g) => [g.feature, g.location]),
+    ).toEqual([["apiPolymorphicReach", { contentType: "Board", rule: "public" }]]);
+  });
+  it("serves an open type with a media field, so a populate of a file's related entries is refused", () => {
+    const result = generate([
+      {
+        name: "Gallery",
+        kind: "collection",
+        options: { publicApiActions: ["list", "read"] },
+        fields: [{ type: "media", name: "cover", multiple: true }],
+      },
+    ]);
+    expect(file(result, "src/api/gallery/controllers/gallery.ts")).toContain("enforcedController");
+    expect(file(result, "src/permissions/api-conditions.ts")).toContain('"api::gallery.gallery"');
+    expect(file(result, "src/permissions/roles.json")).toBeUndefined();
+    expect(file(result, "src/index.ts")).not.toContain("roles.json");
+  });
+  it("emits no enforcement when no route is open either", () => {
+    const result = generate([
+      {
+        name: "Gallery",
+        kind: "collection",
+        fields: [{ type: "media", name: "cover", multiple: true }],
+      },
+    ]);
+    expect(result.files.filter((f) => f.path.startsWith("src/permissions/"))).toEqual([]);
+    expect(file(result, "src/api/gallery/controllers/gallery.ts")).not.toContain(
+      "enforcedController",
+    );
   });
 });

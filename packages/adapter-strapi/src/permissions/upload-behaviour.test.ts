@@ -108,6 +108,9 @@ const uploadController = () => ({
   async find(ctx: Context) {
     ctx.body = tables[FILE];
   },
+  async findOne(ctx: Context) {
+    ctx.body = tables[FILE]!.find((f) => f.id === Number(ctx.params.id));
+  },
   async destroy(ctx: Context) {
     stored.push(`destroy ${ctx.params.id}`);
     tables[FILE] = tables[FILE]!.filter((f) => f.id !== Number(ctx.params.id));
@@ -227,6 +230,71 @@ describe("the upload extension", () => {
       private: true,
       configurable: false,
     });
+  });
+});
+
+// Strapi's sanitizer keeps a file's polymorphic related list whole when it can read none of its
+// entries (seen on 5.48: a role reading only the media library got another user's note), so a
+// restricted caller's populate of it is refused in every form, before the plugin reads anything.
+describe("GET /api/upload/files and /api/upload/files/:id", () => {
+  const guest = { auth: { strategy: { name: "users-permissions" } } };
+  const read = async (state: unknown, populate: unknown, one: boolean) => {
+    const ctx = context(state, {
+      params: one ? { id: "2" } : {},
+      query: populate === undefined ? {} : { populate },
+    });
+    await (one ? upload.findOne(ctx) : upload.find(ctx));
+    return ctx;
+  };
+  const related: unknown[] = [
+    "related",
+    "url, related",
+    "related.keeper",
+    "*",
+    "folder.files.related",
+    ["related"],
+    ["folder", "related.keeper"],
+    { related: true },
+    { related: { populate: "*" } },
+    { related: { on: { [NOTE]: true } } },
+    { "*": true },
+    { folder: { populate: { files: { populate: "related" } } } },
+    { folder: { populate: ["files.related"] } },
+    { folder: { populate: { files: { populate: { related: { fields: ["title"] } } } } } },
+    true,
+  ];
+  it("is 400 for a populate of a file's related entries in any form, reading nothing", async () => {
+    for (const state of [alice(), guest])
+      for (const one of [false, true])
+        for (const populate of related) {
+          const ctx = await read(state, populate, one);
+          expect(ctx.status, `${JSON.stringify(populate)} ${String(one)}`).toBe(400);
+          expect(ctx.body).toBeUndefined();
+        }
+  });
+  it("answers a query that populates no related entries", async () => {
+    for (const populate of [undefined, "folder", ["folder"], { folder: true }, { related: false }])
+      for (const one of [false, true]) {
+        const ctx = await read(alice(), populate, one);
+        expect(ctx.status, JSON.stringify(populate)).toBeUndefined();
+        expect(ctx.body).toBeDefined();
+      }
+  });
+  it("leaves an API token's and an admin role's query to Strapi", async () => {
+    for (const state of [token, user(30, "manager")])
+      for (const one of [false, true]) {
+        const ctx = await read(state, "related", one);
+        expect(ctx.status).toBeUndefined();
+        expect(ctx.body).toBeDefined();
+      }
+  });
+  it("refuses a session whose role was not loaded", async () => {
+    const ctx = await read(
+      { auth: { strategy: { name: "users-permissions" } }, user: { id: 10 } },
+      undefined,
+      false,
+    );
+    expect(ctx.status).toBe(403);
   });
 });
 

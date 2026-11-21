@@ -153,6 +153,7 @@ export const ownershipBundle: IrBundle = {
         { contentType: "Note", actions: ["update", "delete"], condition: owned },
         { contentType: "Category", actions: ["read", "update"] },
         { contentType: "Front", actions: ["update"] },
+        { contentType: "File", actions: ["read"] },
       ],
     },
     {
