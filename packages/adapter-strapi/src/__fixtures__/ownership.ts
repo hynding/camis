@@ -24,7 +24,7 @@ const unshared: Expression = {
  * notes (a note is shared unless it says otherwise), and the admin role does anything. Tags reach
  * notes directly, through a parent tag, and through a repeatable reference component. A note
  * belongs to a category (whose `notes` inverse a reviewer may write), pins tags (each tag pinned on
- * one note at most, `pinnedOn` its inverse), and has an attachment.
+ * one note at most: `Tag.pinnedOn`, whose inverse is `Note.pinned`), and has an attachment.
  */
 export const ownershipBundle: IrBundle = {
   document: {
@@ -54,13 +54,6 @@ export const ownershipBundle: IrBundle = {
             target: "Category",
             inverse: "notes",
           },
-          {
-            type: "relation",
-            name: "pinned",
-            relationKind: "oneToMany",
-            target: "Tag",
-            inverse: "pinnedOn",
-          },
         ],
       },
       { name: "Category", kind: "collection", fields: [{ type: "string", name: "label" }] },
@@ -72,6 +65,14 @@ export const ownershipBundle: IrBundle = {
           { type: "relation", name: "note", relationKind: "manyToOne", target: "Note" },
           { type: "relation", name: "parent", relationKind: "manyToOne", target: "Tag" },
           { type: "component", name: "refs", component: "Reference", repeatable: true },
+          // Owned here: Strapi refuses a bidirectional oneToMany as the owning side.
+          {
+            type: "relation",
+            name: "pinnedOn",
+            relationKind: "manyToOne",
+            target: "Note",
+            inverse: "pinned",
+          },
         ],
       },
     ],
