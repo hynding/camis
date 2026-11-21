@@ -17,6 +17,7 @@ import {
 import { strapiNames } from "@camis/strapi-schema";
 import { CORE_ACTIONS } from "../hooks/route-hooks";
 import { projectReach, typeKey } from "./api-reach";
+import { projectRelationWrites, relationWriteGaps } from "./api-relation-writes";
 import { conditionName } from "./condition-name";
 
 /** The actions the content API serves an entry through, which a condition may narrow. */
@@ -47,6 +48,8 @@ export interface ApiTypeRules {
   conditions: ApiCondition[];
   /** The defaults Strapi fills for an omitted field, by the record variable reading it. */
   defaults: Record<string, string | number | boolean>;
+  /** The relation attributes whose writes change another entry the controllers guard. */
+  relations: Record<string, ApiRelationWrite>;
   /** Each record variable the type's conditions read, as the Strapi attribute holding it. */
   variables: Record<string, { field: string; relation: boolean }>;
   /** Core actions the router opens with `auth: false`. */
@@ -58,7 +61,23 @@ export interface ApiTypeRules {
 }
 
 /** How a holder's attribute leads towards a conditioned type. */
-export type ApiHolderLink = { relation: string } | { component: string } | { zone: string[] };
+export type ApiHolderLink =
+  | { relation: string }
+  | { component: string }
+  | { zone: string[] }
+  /** A media field: the file's `related` entries reach every type a file can be attached to. */
+  | { media: true };
+
+/** What a write through a relation attribute changes besides the entry written. */
+export interface ApiRelationWrite {
+  target: string;
+  /** Both sides declare the link, so it shows on the entry at the other end too. */
+  mirrored: boolean;
+  /** This side holds one entry at most: a write replaces its last link. */
+  toOne: boolean;
+  /** The other side holds one entry at most: linking it takes it from its last holder. */
+  exclusive: boolean;
+}
 
 /** A content type or component that reaches a conditioned type, by its Strapi uid. */
 export interface ApiHolder {
@@ -264,6 +283,7 @@ export const projectApiEnforcement = (doc: IrDocument, roles: Role[]): ApiEnforc
       own: true,
       conditions: [...conditions.values()].sort((a, b) => a.name.localeCompare(b.name)),
       defaults: defaultsOf(ct, variables),
+      relations: {},
       variables: Object.fromEntries(variables.map((v) => [v, vars.attribute(v)!] as const)),
       open: (ct.options?.publicApiActions ?? [])
         .map((a) => core[a])
@@ -275,28 +295,40 @@ export const projectApiEnforcement = (doc: IrDocument, roles: Role[]): ApiEnforc
   }
 
   const reach = projectReach(doc, roles, types);
-  gaps.push(...reach.gaps);
+  gaps.push(...reach.gaps, ...relationWriteGaps(doc, roles, types));
+  const writes = projectRelationWrites(doc, enforced);
+  const core = CORE_ACTIONS.collection;
+  const openOf = (ct: ContentType): string[] =>
+    (ct.options?.publicApiActions ?? [])
+      .map((a) => core[a])
+      .filter((a): a is string => a !== undefined);
   const served = doc.contentTypes.filter(
     (ct) =>
       enforced.has(ct.name) ||
-      (ct.kind === "collection" && ct.builtin === undefined && reach.reaching.has(typeKey(ct))),
+      (ct.kind === "collection" &&
+        ct.builtin === undefined &&
+        (reach.reaching.has(typeKey(ct)) || writes.has(ct.name))),
   );
   return {
-    types: served.map(
-      (ct) =>
-        types.find((t) => t.contentType === ct.name) ?? {
-          contentType: ct.name,
-          uid: strapiNames(ct).uid,
-          own: false,
-          conditions: [],
-          defaults: {},
-          variables: {},
-          open: [],
-          assign: [],
-          admins,
-          roles: {},
-        },
-    ),
+    types: served.map((ct): ApiTypeRules => {
+      const relations = writes.get(ct.name) ?? {};
+      const own = types.find((t) => t.contentType === ct.name);
+      return own !== undefined
+        ? { ...own, relations }
+        : {
+            contentType: ct.name,
+            uid: strapiNames(ct).uid,
+            own: false,
+            conditions: [],
+            defaults: {},
+            relations,
+            variables: {},
+            open: openOf(ct),
+            assign: [],
+            admins,
+            roles: {},
+          };
+    }),
     holders: reach.holders,
     gaps,
   };

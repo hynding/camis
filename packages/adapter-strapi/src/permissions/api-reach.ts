@@ -12,19 +12,26 @@ import { componentUid, strapiNames } from "@camis/strapi-schema";
 import type { ApiHolder, ApiHolderLink, ApiTypeRules } from "./api-enforcement";
 
 // Which content types and components reach a type some role reads under a condition, through
-// relations (and their inverses), components and dynamic zones: each serves the conditioned
-// type's rows in a populate, a relation filter or a relation write, so the generated controllers
-// narrow it there. A reach they cannot narrow is an error.
+// relations (and their inverses), a localized type's localizations, components, dynamic zones and
+// media (a file's `related` entries are every entry it is attached to): each serves the
+// conditioned type's rows in a populate, a relation filter or a relation write, so the generated
+// controllers narrow it there. A reach they cannot narrow is an error.
 
-/** A node of the reach graph: a content type or a component, which may share a name. */
-type NodeKey = `type:${string}` | `component:${string}`;
+/**
+ * A node of the reach graph: a content type or a component, which may share a name, or the upload
+ * plugin's file, whose polymorphic `related` leads to every type and component with a media field.
+ */
+type NodeKey = `type:${string}` | `component:${string}` | "file";
+
+const FILE: NodeKey = "file";
+const FILE_UID = "plugin::upload.file";
 
 export const typeKey = (ct: { name: string }): NodeKey => `type:${ct.name}`;
 const componentKey = (name: string): NodeKey => `component:${name}`;
 
 interface Edge {
   attribute: string;
-  link: "relation" | "component" | "zone";
+  link: "relation" | "component" | "zone" | "media";
   targets: NodeKey[];
 }
 
@@ -70,6 +77,7 @@ const graphOf = (doc: IrDocument): Map<NodeKey, Node> => {
         return [{ attribute, link: "component", targets: [componentKey(f.component)] }];
       if (f.type === "dynamicZone")
         return [{ attribute, link: "zone", targets: f.components.map(componentKey) }];
+      if (f.type === "media") return [{ attribute, link: "media", targets: [FILE] }];
       return [];
     });
   const populatable = (fields: readonly Field[]): string[] =>
@@ -83,7 +91,13 @@ const graphOf = (doc: IrDocument): Map<NodeKey, Node> => {
         ...populatable(ct.fields),
         ...(ct.options?.localized === true ? ["localizations"] : []),
       ],
-      edges: fieldEdges(ct.fields),
+      edges: [
+        ...fieldEdges(ct.fields),
+        // i18n's relation from each locale of an entry to its other locales.
+        ...(ct.options?.localized === true
+          ? [{ attribute: "localizations", link: "relation" as const, targets: [typeKey(ct)] }]
+          : []),
+      ],
     });
   }
   for (const c of doc.components) {
@@ -106,6 +120,15 @@ const graphOf = (doc: IrDocument): Map<NodeKey, Node> => {
       target.edges.push({ attribute: inverse, link: "relation", targets: [typeKey(ct)] });
     }
   }
+  const attached = [...nodes]
+    .filter(([, node]) => node.edges.some((e) => e.link === "media"))
+    .map(([key]) => key);
+  nodes.set(FILE, {
+    uid: FILE_UID,
+    owner: "File",
+    populatable: ["related"],
+    edges: [{ attribute: "related", link: "relation", targets: attached }],
+  });
   for (const node of nodes.values()) node.populatable = [...new Set(node.populatable)].sort();
   return nodes;
 };
@@ -149,12 +172,14 @@ const holdersOf = (
   const uid = (key: NodeKey): string => nodes.get(key)!.uid;
   const holders: [string, ApiHolder][] = [];
   for (const [key, node] of nodes) {
-    if ((reach.get(key)?.size ?? 0) === 0) continue;
+    // The file has no controller of camis's: its reach is a build error instead.
+    if (key === FILE || (reach.get(key)?.size ?? 0) === 0) continue;
     const links: [string, ApiHolderLink][] = [];
     for (const edge of node.edges) {
       const targets = edge.targets.filter(leads);
       if (targets.length === 0) continue;
-      if (edge.link === "zone") links.push([edge.attribute, { zone: targets.map(uid) }]);
+      if (edge.link === "media") links.push([edge.attribute, { media: true }]);
+      else if (edge.link === "zone") links.push([edge.attribute, { zone: targets.map(uid) }]);
       else if (edge.link === "component")
         links.push([edge.attribute, { component: uid(targets[0]!) }]);
       else links.push([edge.attribute, { relation: uid(targets[0]!) }]);
@@ -230,12 +255,14 @@ export const projectReach = (doc: IrDocument, roles: Role[], types: ApiTypeRules
       gaps.push(...polymorphicGaps(doc, role.name, ct, mine, reachFrom));
       if (ct.kind === "single") gaps.push(...singleGaps(role.name, ct, mine, nodes, reachFrom));
     }
-    gaps.push(...builtinGaps(doc, byName, role.name, mine, reachFrom));
+    gaps.push(...builtinGaps(doc, byName, role, mine, reachFrom));
   }
 
   return {
     holders: holdersOf(nodes, reach, conditioned),
-    reaching: new Set([...reach].filter(([, s]) => s.size > 0).map(([k]) => k)),
+    reaching: new Set(
+      [...reach].filter(([key, s]) => key !== FILE && s.size > 0).map(([key]) => key),
+    ),
     gaps,
   };
 };
@@ -303,10 +330,11 @@ const singleGaps = (
 const builtinGaps = (
   doc: IrDocument,
   byName: ReadonlyMap<string, ContentType>,
-  role: string,
+  roleOf: Role,
   mine: readonly string[],
   reachFrom: (key: NodeKey) => Set<string>,
 ): CapabilityGap[] => {
+  const role = roleOf.name;
   const gaps: CapabilityGap[] = [];
   const add = (builtin: ContentType, attribute: string, leadsTo: NodeKey): void => {
     const reached = reachFrom(leadsTo);
@@ -321,6 +349,9 @@ const builtinGaps = (
         ),
       );
   };
+  // The upload plugin serves a file's related entries to a role that reads the media library.
+  const file = doc.contentTypes.find((ct) => ct.builtin === "file");
+  if (file !== undefined && readsType(roleOf, file.name)) add(file, "related", FILE);
   for (const ct of doc.contentTypes) {
     for (const f of ct.fields) {
       if (f.type !== "relation") continue;

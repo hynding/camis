@@ -141,7 +141,7 @@ const tables: Tables = {
       assign: ["owner"],
       admins: ["manager"],
       roles: {
-        member: { read: [owned], create: [owned], assign: ["owner"] },
+        member: { read: [owned], create: [owned], update: [owned], assign: ["owner"] },
         contributor: { create: [unshared], assign: ["owner"] },
         public: { read: [shared], assign: [] },
         reviewer: { read: true, update: [owned], assign: [] },
@@ -176,6 +176,7 @@ const tables: Tables = {
         parent: { relation: TAG },
         refs: { component: REF },
         blocks: { zone: [REF] },
+        pinnedOn: { relation: NOTE },
       },
     },
     [REF]: { populatable: ["note"], links: { note: { relation: NOTE } } },

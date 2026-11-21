@@ -52,9 +52,16 @@ const typeRules = (t: ApiTypeRules): string => {
   const defaults = Object.entries(t.defaults)
     .map(([name, value]) => `${key(name)}: ${JSON.stringify(value)}`)
     .join(", ");
+  const relations = Object.entries(t.relations)
+    .map(
+      ([attribute, r]) =>
+        `      ${key(attribute)}: { target: ${key(r.target)}, mirrored: ${String(r.mirrored)}, toOne: ${String(r.toOne)}, exclusive: ${String(r.exclusive)} },`,
+    )
+    .join("\n");
   return `  ${key(t.uid)}: {
     own: ${String(t.own)},
     defaults: {${defaults === "" ? "" : ` ${defaults} `}},
+    relations: {${relations === "" ? "" : `\n${relations}\n    `}},
     variables: {${variables === "" ? "" : `\n${variables}\n    `}},
     open: ${list(t.open)},
     assign: ${list(t.assign)},
@@ -92,6 +99,7 @@ const conditionsSource = (t: ApiTypeRules): string => {
 const holderLink = (link: ApiHolderLink): string => {
   if ("relation" in link) return `{ relation: ${key(link.relation)} }`;
   if ("component" in link) return `{ component: ${key(link.component)} }`;
+  if ("media" in link) return "{ media: true }";
   return `{ zone: ${list(link.zone)} }`;
 };
 

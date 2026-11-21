@@ -41,11 +41,24 @@ export interface RecordVariable {
   relation: boolean;
 }
 
+/** What a write through a relation attribute changes besides the entry written. */
+export interface RelationWrite {
+  target: string;
+  /** Both sides declare the link, so it shows on the entry at the other end too. */
+  mirrored: boolean;
+  /** This side holds one entry at most: a write replaces its last link. */
+  toOne: boolean;
+  /** The other side holds one entry at most: linking it takes it from its last holder. */
+  exclusive: boolean;
+}
+
 export interface TypeRules {
   /** The type has rules of its own; otherwise it is served only for what it reaches. */
   own: boolean;
   /** Field defaults Strapi fills on create when a field is omitted, by record variable. */
   defaults: Readonly<Record<string, Value>>;
+  /** The relation attributes whose writes change another entry the rules guard. */
+  relations: Readonly<Record<string, RelationWrite>>;
   /** The record variables the type's conditions read. */
   variables: Readonly<Record<string, RecordVariable>>;
   /** Core actions the router opens with `auth: false`: Strapi asks no role there. */
@@ -57,8 +70,15 @@ export interface TypeRules {
   roles: Readonly<Record<string, RoleRules>>;
 }
 
-/** How a type or component reaches a conditioned type: a relation, a component, a zone. */
-export type HolderLink = { relation: string } | { component: string } | { zone: readonly string[] };
+/**
+ * How a type or component reaches a conditioned type: a relation, a component, a zone, or a media
+ * field (whose file's `related` entries are every entry the file is attached to).
+ */
+export type HolderLink =
+  | { relation: string }
+  | { component: string }
+  | { zone: readonly string[] }
+  | { media: true };
 
 export interface Holder {
   /** Every attribute `populate=*` populates. */
@@ -108,6 +128,8 @@ export type Verdict = "allow" | "notFound" | "forbidden";
 
 /** users-permissions' role for a request that carries no session. */
 const GUEST_ROLE = "public";
+/** A request users-permissions authenticated with no session: the public role's. */
+const GUEST_STATE = { auth: { strategy: { name: "users-permissions" } } };
 /** A filter no row satisfies: every entry has an id. */
 const NO_ROWS: Record<string, unknown> = { id: { $null: true } };
 
@@ -454,7 +476,13 @@ const sortLeaks = (tables: Tables, holder: string, path: string[], state: unknow
   return false;
 };
 
-/** A filter with every relation into a conditioned type narrowed to the rows the caller reads. */
+/**
+ * A filter with every relation into a conditioned type narrowed to the rows the caller reads.
+ * Each relation or component filter becomes its own item of an `$and` at its level, with the
+ * scope beside the client's filter on that same relation (so both share its join): Strapi merges
+ * a relation's processed where into its parent with Object.assign, so two of them side by side,
+ * or one beside the client's own `$and`, would otherwise overwrite each other.
+ */
 const scopeFilters = (
   tables: Tables,
   holder: string,
@@ -463,21 +491,35 @@ const scopeFilters = (
 ): unknown => {
   if (Array.isArray(filters)) return filters.map((f) => scopeFilters(tables, holder, f, state));
   if (!isRecord(filters)) return filters;
-  const out: Record<string, unknown> = {};
+  const rest: Record<string, unknown> = {};
+  const lifted: Record<string, unknown>[] = [];
   for (const [key, value] of Object.entries(filters)) {
     const link = own(own(tables.holders, holder)?.links, key);
     if (key === "$and" || key === "$or" || key === "$not") {
-      out[key] = scopeFilters(tables, holder, value, state);
+      rest[key] = scopeFilters(tables, holder, value, state);
     } else if (link === undefined || key.startsWith("$")) {
-      out[key] = value;
+      rest[key] = value;
     } else if ("relation" in link) {
       const inner = scopeFilters(tables, link.relation, value, state);
-      out[key] = both(inner, reachScope(tables, link.relation, state)) ?? inner;
+      lifted.push({ [key]: both(inner, reachScope(tables, link.relation, state)) ?? inner });
     } else if ("component" in link) {
-      out[key] = scopeFilters(tables, link.component, value, state);
-    } else out[key] = value;
+      lifted.push({ [key]: scopeFilters(tables, link.component, value, state) });
+    } else rest[key] = value;
   }
-  return out;
+  if (lifted.length === 0) return rest;
+  return { $and: [...(Object.keys(rest).length > 0 ? [rest] : []), ...lifted] };
+};
+
+/** Whether a file's populate asks for its `related` entries, in any form. */
+const populatesRelated = (populate: unknown): boolean => {
+  const named = (text: string): boolean =>
+    text.split(",").some((part) => ["related", "*"].includes(part.trim().split(".")[0]!));
+  if (populate === true) return true;
+  if (typeof populate === "string") return named(populate);
+  if (Array.isArray(populate)) return populate.some((p) => typeof p === "string" && named(p));
+  if (isRecord(populate))
+    return Object.entries(populate).some(([key, entry]) => entry !== false && named(key));
+  return false;
 };
 
 /** One populate entry for an attribute of `holder`, scoped; a message when it cannot be. */
@@ -488,6 +530,12 @@ const scopeEntry = (
   state: unknown,
 ): Checked<unknown> => {
   const options = isRecord(entry) ? entry : {};
+  if ("media" in link) {
+    // A file's related entries are polymorphic: no filter of one type's narrows them.
+    return populatesRelated(options.populate)
+      ? { ok: false, message: "Invalid populate of a file's related entries" }
+      : { ok: true, value: entry };
+  }
   if ("zone" in link) {
     const fragments: Record<string, unknown> = {};
     const shared = options.populate;
@@ -632,7 +680,7 @@ export const relationRefs = (
           const problem = walk(link.component, item);
           if (problem !== undefined) return problem;
         }
-      } else if (Array.isArray(value)) {
+      } else if ("zone" in link && Array.isArray(value)) {
         for (const item of value) {
           const component = isRecord(item) ? own(item, "__component") : undefined;
           if (typeof component !== "string" || !link.zone.includes(component)) continue;
@@ -661,7 +709,7 @@ export const refsQuery = (tables: Tables, ref: RelationRef): Record<string, unkn
 
 /**
  * Whether the caller may link every entry `ref` names: each must exist and every row of it
- * (each version and locale) be one the caller may read. One it cannot find is refused the same
+ * (each version and locale) be one the caller may read, or update where the link shows on it. One it cannot find is refused the same
  * way, so the answer tells nothing of what exists.
  */
 export const refsVerdict = (
@@ -669,6 +717,7 @@ export const refsVerdict = (
   state: unknown,
   ref: RelationRef,
   rows: readonly unknown[],
+  action: "read" | "update" = "read",
 ): "allow" | "forbidden" => {
   const rules = own(tables.rules, ref.target);
   const caller = reachCaller(tables, ref.target, state);
@@ -689,8 +738,174 @@ export const refsVerdict = (
   ];
   return named.every((documentId) => {
     const entry = documentId === undefined ? undefined : documents.get(documentId);
-    return entry !== undefined && recordVerdict(rules, caller, "read", entry) === "allow";
+    return entry !== undefined && recordVerdict(rules, caller, action, entry) === "allow";
   })
+    ? "allow"
+    : "forbidden";
+};
+
+/**
+ * The state a request's reach is decided for: on an action the router opens with `auth: false`,
+ * which Strapi authenticates no one for, the public role's; otherwise the request's own.
+ */
+export const reachState = (rules: TypeRules, state: unknown, action: string): unknown =>
+  rules.open.includes(action) ? GUEST_STATE : state;
+
+interface Linked {
+  documentIds: string[];
+  ids: number[];
+}
+
+/** One relation value as a write: what it adds, what it drops by name, and whether it replaces. */
+const relationChange = (
+  value: unknown,
+  toOne: boolean,
+): { added: Linked; removed: Linked; replace: boolean } | null => {
+  const removed: Linked = { documentIds: [], ids: [] };
+  if (isRecord(value) && ("connect" in value || "set" in value || "disconnect" in value)) {
+    const connect = linked(own(value, "connect") ?? null);
+    const set = linked(own(value, "set") ?? null);
+    const disconnect = linked(own(value, "disconnect") ?? null);
+    if (connect === null || set === null || disconnect === null) return null;
+    const added: Linked = {
+      documentIds: [...connect.documentIds, ...set.documentIds],
+      ids: [...connect.ids, ...set.ids],
+    };
+    const replace =
+      own(value, "set") !== undefined || (toOne && added.documentIds.length + added.ids.length > 0);
+    return { added, removed: disconnect, replace };
+  }
+  // A shorthand (an id, a list, null) sets the relation to exactly what it names.
+  const added = linked(value);
+  return added === null ? null : { added, removed, replace: true };
+};
+
+/** The checks a relation write needs beyond the entry written, before it is made. */
+export interface WritePlan {
+  /** Entries the write links or unlinks, each to be read, or updated where the link shows. */
+  refs: (RelationRef & { action: "read" | "update" })[];
+  /** Mirrored attributes the write replaces: each entry it drops (not kept) must be updatable. */
+  replaced: { attribute: string; target: string; kept: Linked }[];
+  /** Exclusive attributes: each linked entry's last holder (of this type) must be updatable. */
+  stolen: ({ attribute: string } & Linked)[];
+}
+
+/**
+ * What a write's data asks of the entries it changes besides its own: every entry a reach links
+ * must be readable (`relationRefs`); every entry a mirrored link adds or drops must be updatable,
+ * since the link shows on it; and every entry an exclusive link takes from its last holder of a
+ * type with rules leaves a holder that must be updatable. A caller no role restricts needs none.
+ */
+export const writePlan = (
+  tables: Tables,
+  uid: string,
+  state: unknown,
+  data: Record<string, unknown>,
+): Checked<WritePlan> => {
+  const plan: WritePlan = { refs: [], replaced: [], stolen: [] };
+  const rules = own(tables.rules, uid);
+  if (rules === undefined || callerOf(rules, state, "").kind === "unrestricted")
+    return { ok: true, value: plan };
+  const reads = relationRefs(tables, uid, state, data);
+  if (!reads.ok) return { ok: false, message: reads.message };
+  plan.refs.push(...reads.value.map((ref) => ({ ...ref, action: "read" as const })));
+  for (const [attribute, write] of Object.entries(rules.relations)) {
+    const value = own(data, attribute);
+    if (value === undefined) continue;
+    const change = relationChange(value, write.toOne);
+    if (change === null) return { ok: false, message: `Invalid relation value for ${attribute}` };
+    const target = own(tables.rules, write.target);
+    if (write.mirrored && target?.own === true) {
+      const touched = {
+        documentIds: [...change.added.documentIds, ...change.removed.documentIds],
+        ids: [...change.added.ids, ...change.removed.ids],
+      };
+      if (touched.documentIds.length + touched.ids.length > 0)
+        plan.refs.push({ target: write.target, ...touched, action: "update" });
+      if (change.replace)
+        plan.replaced.push({ attribute, target: write.target, kept: change.added });
+    }
+    if (
+      write.exclusive &&
+      rules.own &&
+      change.added.documentIds.length + change.added.ids.length > 0
+    )
+      plan.stolen.push({ attribute, ...change.added });
+  }
+  return { ok: true, value: plan };
+};
+
+/** What to load of an entry's current links through one attribute. */
+export const currentLinksQuery = (
+  attribute: string,
+  documentId: string,
+): Record<string, unknown> => ({
+  where: { documentId },
+  select: ["id"],
+  populate: { [attribute]: { select: ["id", "documentId"] } },
+});
+
+/** The document ids an entry's rows link through `attribute` that a replacement does not keep. */
+export const droppedLinks = (
+  rows: readonly unknown[],
+  attribute: string,
+  kept: Linked,
+): string[] => {
+  const dropped = new Set<string>();
+  for (const row of rows) {
+    const value = field(row, attribute);
+    for (const item of Array.isArray(value)
+      ? value
+      : value === null || value === undefined
+        ? []
+        : [value]) {
+      const documentId = field(item, "documentId");
+      const id = field(item, "id");
+      if (typeof documentId !== "string") continue;
+      if (
+        kept.documentIds.includes(documentId) ||
+        (typeof id === "number" && kept.ids.includes(id))
+      )
+        continue;
+      dropped.add(documentId);
+    }
+  }
+  return [...dropped];
+};
+
+/** What to load of the entries of this type that hold an entry an exclusive link takes. */
+export const holdersQuery = (
+  rules: TypeRules,
+  stolen: { attribute: string } & Linked,
+  except: string | null,
+): Record<string, unknown> => {
+  const query = recordQuery(rules, "");
+  const linkedHere = {
+    [stolen.attribute]: {
+      $or: [{ documentId: { $in: stolen.documentIds } }, { id: { $in: stolen.ids } }],
+    },
+  };
+  return {
+    ...query,
+    select: [...(query.select as string[]), "documentId"],
+    where: except === null ? linkedHere : { $and: [linkedHere, { documentId: { $ne: except } }] },
+  };
+};
+
+/** Whether the caller may update every entry (each of its rows) among `rows`. */
+export const holdersVerdict = (
+  rules: TypeRules,
+  caller: Caller,
+  rows: readonly unknown[],
+): "allow" | "forbidden" => {
+  const documents = new Map<unknown, unknown[]>();
+  for (const row of rows) {
+    const documentId = field(row, "documentId");
+    documents.set(documentId, [...(documents.get(documentId) ?? []), row]);
+  }
+  return [...documents.values()].every(
+    (entry) => recordVerdict(rules, caller, "update", entry) === "allow",
+  )
     ? "allow"
     : "forbidden";
 };

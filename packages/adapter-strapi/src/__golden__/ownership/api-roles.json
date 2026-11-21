@@ -31,6 +31,9 @@
     {
       "type": "reviewer",
       "actions": [
+        "api::category.category.find",
+        "api::category.category.findOne",
+        "api::category.category.update",
         "api::note.note.delete",
         "api::note.note.find",
         "api::note.note.findOne",
