@@ -1,4 +1,4 @@
-import type { Expression } from "@camis/expr";
+import { freeVars, type Expression } from "@camis/expr";
 import type { ContentType, FieldType } from "@camis/ir-schema";
 
 /**
@@ -21,9 +21,14 @@ export interface RecordEquality {
   value: RecordOperand;
 }
 
-/** A condition every target can answer as a query over its rows instead of row by row. */
+/**
+ * A condition every target can answer as a query over its rows instead of row by row. A `caller`
+ * part reads no record variable, so it holds for every row or none: the target decides it per
+ * request with Ring 1 itself, before the query.
+ */
 export type RecordFilter =
   | ({ kind: "eq" } & RecordEquality)
+  | { kind: "caller"; expression: Expression }
   | { kind: "and" | "or"; args: RecordFilter[] };
 
 export interface RecordVariable {
@@ -133,12 +138,17 @@ export const recordEquality = (
   return { variable: record.variable, value };
 };
 
-/** `eq`/`and`/`or` over record equalities as a filter, or null when any part is outside it. */
+/**
+ * `eq`/`and`/`or` over record equalities and caller tests as a filter, or null when any part is
+ * outside it.
+ */
 export const toRecordFilter = (
   expr: Expression,
   typeOf: (variable: string) => FieldType | undefined,
   users: readonly string[],
 ): RecordFilter | null => {
+  const vars = freeVars(expr);
+  if (vars.every((v) => users.includes(v))) return { kind: "caller", expression: expr };
   if (expr.kind === "and" || expr.kind === "or") {
     const args: RecordFilter[] = [];
     for (const a of expr.args) {
