@@ -82,12 +82,31 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
   target, the generated bootstrap (`src/index.ts`) also grants users-permissions API actions per
   role from `src/permissions/api-roles.json`: the `public` role always gets
   `users-permissions.auth.register` and `.auth.callback`, and a role that creates or updates a
-  content type owning a relation to the built-in user additionally gets
+  content type owning a relation to the built-in user its grants do not `assign` additionally gets
   `users-permissions.user.find` — Strapi validates a relation write against the target's `find`
   scope, so without it the write is rejected; this is reported as a `userRelationWrite` gap
-  because it also exposes `GET /api/users`. A content type whose relation inverts onto the user
+  because it also exposes `GET /api/users`. The bootstrap revokes what camis no longer grants: its
+  `api::` actions and the plugin actions `api-roles.json` lists as `managed` (`user.find`), never
+  another plugin action. A content type whose relation inverts onto the user
   also gets a generated `src/extensions/users-permissions/strapi-server.ts`, declaring the other
   side of that relation on the plugin's own content type.
+  A grant's `condition` and `assign` are enforced on the Strapi content API for every collection
+  type a non-admin role holds under one: a generated controller over Strapi's core controller
+  (`src/permissions/api-controller.ts`, deciding through `src/permissions/api-conditions.ts`)
+  narrows `find` with the role's read condition in the query (`$and`-ed with the client's filters,
+  so pages and counts hold only readable rows), evaluates the Ring 1 condition on the stored entry
+  before `findOne` (404 when unreadable), `update` and `delete` (404 when unreadable, 403 when
+  readable but not changeable), checks `create`, sets each assigned relation from the session user
+  on create and drops it from an update body. The role is the session's users-permissions role, the
+  public role without a session; admin roles, API tokens and `auth: false` actions are not
+  narrowed. A condition it cannot enforce fails the build (`apiGrantCondition`, `error`): a read
+  condition outside `eq`/`and`/`or` over `record.<field>`/`record.<relation>Id` vs a literal or
+  `user.id`/`user.email`/`user.role`, an update/delete condition reading another variable, a create
+  condition reading a relation the client writes, or a condition on a single type, the built-in
+  user or the media library. Not enforced, and reported as `apiPopulateScope`: a `populate` or
+  relation filter that reaches a conditioned type through another type's relation. GraphQL (if
+  added by hand) and a `protected/` file replacing a generated controller bypass it too. This
+  enforcement has been tested against a fake of the Strapi surface it uses, not a running Strapi.
 - `protected` (optional) is a directory mirrored into every target's `out` after generation —
   the home for hand-written seams (`routes/api-custom.php`, protected controller subclasses,
   hook implementations) so the generated app itself can stay git-ignored.
@@ -173,4 +192,4 @@ go in `routes/api-custom.php` — seed-mode, written once, never overwritten.
 Ownership conditions: owning relations (`manyToOne`/`oneToOne`) expose their FK to Ring-1
 conditions as `record.<name>Id`, so a grant condition like
 `{"kind":"eq","left":{"kind":"var","name":"record.ownerId"},"right":{"kind":"var","name":"user.id"}}`
-enforces record-level ownership on both PHP and Express backends (fail-closed).
+enforces record-level ownership on the PHP, Express and Strapi backends (fail-closed).
