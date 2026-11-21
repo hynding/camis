@@ -1,6 +1,13 @@
-import { reservedNameGaps, type ReservedNameOptions, type TargetName } from "@camis/ir-core";
+import { expandComponents } from "@camis/adapter-kernel";
+import {
+  reservedNameGaps,
+  type ItemTable,
+  type ReservedNameOptions,
+  type TargetName,
+} from "@camis/ir-core";
 import type { CapabilityGap, Field, IrDocument } from "@camis/ir-schema";
 import { STRAPI_RESERVED_NAMES, strapiAttributeNames } from "@camis/strapi-schema";
+import { childTableEmit, type ChildTableEmit } from "./components";
 import { snakeColumn } from "./names";
 
 type ApiStyle = "laravel" | "strapi";
@@ -9,6 +16,12 @@ type ApiStyle = "laravel" | "strapi";
 const LARAVEL_TIMESTAMPS: ReadonlyMap<string, string> = new Map([
   ["created_at", "created_at"],
   ["updated_at", "updated_at"],
+]);
+
+/** The same timestamps, which the Strapi API style answers as Strapi's own keys. */
+const STRAPI_TIMESTAMPS: ReadonlyMap<string, string> = new Map([
+  ["created_at", "createdAt"],
+  ["updated_at", "updatedAt"],
 ]);
 
 const NO_COLUMN = new Set<Field["type"]>([
@@ -33,12 +46,12 @@ const columnNames = (field: Field): TargetName[] => {
 };
 
 /**
- * The column an embedded component's field is stored in on the row holding it, named by its path
- * snake_cased and joined (`created` holding `at` is created_at). Only the Strapi API style keeps a
- * relation inside a component, a to-one one by a key column. With a media library (`linksMedia`)
- * a media field links the library's files rather than holding a path column.
+ * The column a component's field is stored in on the row holding it, named by its path from that
+ * row snake_cased and joined (`created` holding `at` is created_at). Only the Strapi API style
+ * keeps a relation inside a component, a to-one one by a key column. With a media library
+ * (`linksMedia`) a media field links the library's files rather than holding a path column.
  */
-const embeddedColumnNames =
+const rowColumnNames =
   (apiStyle: ApiStyle, linksMedia: boolean) =>
   (path: readonly string[], field: Field): TargetName[] => {
     const prefix = path.map(snakeColumn).join("_");
@@ -49,14 +62,43 @@ const embeddedColumnNames =
   };
 
 /**
+ * The item tables the generator emits on the Laravel storage layout, planned as it plans them: a
+ * repeatable component's, nested ones included on the Strapi API style, and on that style a
+ * dynamic zone member's (the Laravel API style keeps a zone in one column of the entry's).
+ */
+const itemTables = (doc: IrDocument, apiStyle: ApiStyle, linksMedia: boolean): ItemTable[] => {
+  const deep = apiStyle === "strapi";
+  const kept = deep ? STRAPI_TIMESTAMPS : LARAVEL_TIMESTAMPS;
+  const rows = (child: ChildTableEmit, holder: string): ItemTable[] => [
+    { component: child.component.name, heldBy: [holder, ...child.path].join("."), kept },
+    ...child.children.flatMap((c) => rows(c, child.component.name)),
+  ];
+  return doc.contentTypes
+    .filter((ct) => ct.builtin === undefined)
+    .flatMap((ct) => {
+      const expansion = expandComponents(
+        doc,
+        ct,
+        deep ? { componentRelations: true, nestedTables: true } : {},
+      );
+      const context = deep ? { doc } : undefined;
+      const tables = [
+        ...expansion.tables,
+        ...(deep ? expansion.zones.flatMap((z) => z.members.map((m) => m.table)) : []),
+      ];
+      return tables.flatMap((t) => rows(childTableEmit(ct, t, linksMedia, context), ct.name));
+    });
+};
+
+/**
  * An `error` gap for each field whose column, or on the Strapi API style whose key on Strapi's wire
  * shape, is one the generated rows keep for themselves: Laravel's timestamps, and on the Strapi API
  * style the names Strapi keeps: the keys it gives every entry (whose columns, document_id,
  * published_at, locale and created_by_id among them, the rows carry too), its discriminator keys
- * and its strapi prefix. On the Laravel storage layout an embedded
- * component's fields are columns of the row holding it, an item's included; the Strapi storage
- * layout keeps a component in a table of its own, as Strapi does. `linksMedia` says whether the
- * project keeps a media library (`mediaPlan`).
+ * and its strapi prefix. On the Laravel storage layout an embedded component's fields are columns
+ * of the row holding it, and an item's fields columns of its item table's rows, which carry the
+ * timestamps too; the Strapi storage layout keeps a component in a table of its own, as Strapi
+ * does. `linksMedia` says whether the project keeps a media library (`mediaPlan`).
  */
 export const filamentReservedNameGaps = (
   doc: IrDocument,
@@ -65,14 +107,29 @@ export const filamentReservedNameGaps = (
   linksMedia: boolean,
 ): CapabilityGap[] => {
   const options: ReservedNameOptions =
-    storage === "laravel" ? { embedded: embeddedColumnNames(apiStyle, linksMedia) } : {};
+    storage === "laravel"
+      ? {
+          columns: rowColumnNames(apiStyle, linksMedia),
+          items: itemTables(doc, apiStyle, linksMedia),
+        }
+      : {};
   return apiStyle === "strapi"
     ? reservedNameGaps(
         doc,
         "the Strapi API style",
         STRAPI_RESERVED_NAMES,
-        (field) => [...strapiAttributeNames(field), ...columnNames(field)],
+        // A component's columns are its rows' (`items`); its keys are Strapi's wherever it is.
+        (field, holder) =>
+          holder === "contentType"
+            ? [...strapiAttributeNames(field), ...columnNames(field)]
+            : strapiAttributeNames(field),
         options,
       )
-    : reservedNameGaps(doc, "the Laravel API style", LARAVEL_TIMESTAMPS, columnNames, options);
+    : reservedNameGaps(
+        doc,
+        "the Laravel API style",
+        LARAVEL_TIMESTAMPS,
+        (field, holder) => (holder === "contentType" ? columnNames(field) : []),
+        options,
+      );
 };

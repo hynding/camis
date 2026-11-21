@@ -252,14 +252,14 @@ describe("Filament target: names its rows and wire shape reserve", () => {
       },
     );
 
-    // The Strapi API style keeps a to-one relation inside a component, by a key column on the row.
+    // The Strapi API style keeps a to-one relation inside a component, by a key column on the row:
+    // the entry's created_by_id is its creator's, while an item's row keeps no creator column.
     it("reports a to-one relation whose key column is created_by_id, on the Strapi API style", () => {
       const by: ComponentFieldT[] = [
         { type: "relation", name: "by", relationKind: "oneToOne", target: "Tag" },
       ];
       expect(reportedFields(stamped(by, true), "strapi")).toEqual([
         { contentType: "Note", component: "Stamp", field: "by" },
-        { component: "Stamp", field: "by" },
       ]);
       // The Laravel API style leaves a relation inside a component out, with a gap of its own.
       expect(reserved(stamped(by, true), "laravel")).toEqual([]);

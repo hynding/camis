@@ -2727,20 +2727,29 @@ no gap reported (issue #103).
 - **Embedded components.** A non-repeatable component's fields are flattened into the row holding
   it, as columns named by their path snake_cased and joined, so a field `created` holding a
   component with a field `at` is a column `created_at`, which a target may keep. With the walker's
-  `embedded` option a target says what an embedded field's column is called, and such a field is
-  reported located at the content type (or component), the component and its field, with the path
-  in the message. A repeatable component or a dynamic zone is rows of a table of its own.
+  `columns` option a target says what a field's column is called by its path from its row, and an
+  embedded field is reported located at the content type, the component and its field, with the
+  path in the message. A repeatable component, or a dynamic zone where the target keeps one as
+  tables, is rows of a table of its own: the target names each item table it emits (`items`), with
+  the names its rows keep, and an item's fields, its embedded components' included, are checked
+  from the item's row, the path restarting there, located at the component and its field. A
+  component's path is checked from no row of its own where the target keeps no table of its items:
+  only embedded, `Note.seo` holding a Seo that embeds Stamp as `created` is `seo_created_at`.
 - **Filament.** The Strapi API style answers Strapi's REST API, so it reports Strapi's names, and
   also a column of its own rows a field's column would repeat: a to-one relation named `document`
   keeps `document_id`. The Laravel API style reports `createdAt` and `updatedAt`, whose columns are
   Laravel's timestamps on every table, a component item's included. On the Laravel storage layout,
-  in either API style, an embedded component's columns land on the entry's row or an item's, both
-  of which carry the timestamps, and are checked against the same names (on the Strapi API style a
-  to-one relation inside one by its key column, `created.by` being `created_by_id`, and a media
-  field only without a media library: the Strapi API style keeps one, whose files a media field
-  links, only when a content type has a media field of its own or a file type is declared, as
-  `mediaPlan` decides; otherwise a media field is a path column). The Strapi storage layout keeps a
-  component in a table of its own, as Strapi does.
+  in either API style, an embedded component's columns land on the entry's row, checked against
+  the names above, and an item's fields' columns on its item table's rows, checked against that
+  row's own: its timestamps. The item tables are those the generator plans (`childTableEmit` over
+  `expandComponents`): a repeatable's, and on the Strapi API style only a repeatable's nested in an
+  item and a dynamic zone member's (the Laravel API style keeps a zone in one column). On the
+  Strapi API style a to-one relation inside a component is a key column, `created.by` being
+  `created_by_id` (the entry's creator, not an item's: an item's row keeps none), and a media field
+  is a column only without a media library: the Strapi API style keeps one, whose files a media
+  field links, only when a content type has a media field of its own or a file type is declared,
+  as `mediaPlan` decides. The Strapi storage layout keeps a component in a table of its own, as
+  Strapi does.
 - **Express** reports `createdAt` and `updatedAt` on a content type, a built-in one included (each
   table's timestamp columns), an embedded component's columns on the entry's table among them; a
   repeatable component's fields are rows of a table without timestamps and collide with none.

@@ -235,7 +235,7 @@ describe("reservedNameGaps, embedded components", () => {
   it("checks an item's columns against its table's names, not the entry's", () => {
     const gaps = reservedNameGaps(embedding, "the Test target", ITEM_KEPT, nothingOwn, {
       columns: joined,
-      items: [{ component: "Stamp", heldBy: "Note.items", kept: KEPT }],
+      items: [{ component: "Stamp", heldBy: "Note.items", kept: new Map() }],
     });
     expect(gaps).toEqual([]);
   });

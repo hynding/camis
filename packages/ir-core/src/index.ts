@@ -5,6 +5,7 @@ export { humanize, pluralize, snakeCase } from "./inflect";
 export { reservedNameGaps } from "./reserved-names";
 export type {
   FieldHolder,
+  ItemTable,
   KeptNames,
   ReservedNameOptions,
   TargetName,

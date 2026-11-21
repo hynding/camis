@@ -29,6 +29,22 @@ export type FieldHolder = "contentType" | "component";
 /** The names a field takes on a target, as that target maps them. */
 export type TargetNames = (field: Field, holder: FieldHolder) => TargetName[];
 
+/**
+ * A table whose rows are a component's items, as a target stores a repeatable component (or a
+ * dynamic zone's member, where it keeps the zone as tables): one per place the target keeps one.
+ */
+export interface ItemTable {
+  /** The component whose items its rows are. */
+  component: string;
+  /** Where the items are held, for the message (`Note.items`). */
+  heldBy: string;
+  /**
+   * Every name a row of it keeps for itself (its timestamps, its key to the row holding it), as
+   * `columns` maps names, to what the target calls each.
+   */
+  kept: KeptNames;
+}
+
 export interface ReservedNameOptions {
   /**
    * Check a built-in content type's fields too: a target that emits a built-in type's columns
@@ -36,24 +52,19 @@ export interface ReservedNameOptions {
    */
   builtins?: boolean;
   /**
-   * The names a field of an embedded (non-repeatable) component takes on the row holding it, by
-   * its path of field names from that row, the holding field first: a target that flattens an
-   * embedded component into prefixed columns says what it calls them. A repeatable component or
-   * a dynamic zone is rows of a table of its own, so nothing under it is embedded. Without it, a
-   * target embeds nothing.
+   * The columns a field takes on a row, by its path of field names from that row: an embedded
+   * (non-repeatable) component's field on the entry's row, the holding field first (`created`
+   * holding `at`), and an item's field, its embedded components' included, on the item's row,
+   * the path restarting there. A repeatable component or a dynamic zone is never embedded: its
+   * items are rows of a table of their own, checked only where `items` names one. Without it, no
+   * column but those `namesOf` gives a content type's own fields is checked.
    */
-  embedded?: (path: readonly string[], field: Field, holder: FieldHolder) => TargetName[];
   columns?: (path: readonly string[], field: Field) => TargetName[];
+  /** The item tables the target stores; none without it. */
   items?: readonly ItemTable[];
 }
 
-export interface ItemTable {
-  component: string;
-  heldBy: string;
-  kept: KeptNames;
-}
-
-/** A field of a component embedded in a row, with its path of field names from that row. */
+/** A field reached from a row through embedded components, with its path of field names. */
 interface EmbeddedField {
   path: string[];
   field: Field;
@@ -70,12 +81,20 @@ const describe = (field: Field, name: TargetName): string => {
 const describeEmbedded = (holderName: string, embedded: EmbeddedField, name: TargetName) =>
   `field "${embedded.field.name}" of component "${embedded.component.name}", embedded in "${[holderName, ...embedded.path.slice(0, -1)].join(".")}" as "${name.spelled}",`;
 
+const describeItem = (item: ItemTable, embedded: EmbeddedField, name: TargetName) =>
+  embedded.path.length === 1
+    ? `field "${embedded.field.name}" of component "${embedded.component.name}", in "${item.heldBy}" as "${name.spelled}",`
+    : describeEmbedded(item.component, embedded, name);
+
+const locationKey = (location: IrErrorLocation): string =>
+  [location.contentType, location.component, location.field].join("\0");
+
 /**
  * An `error` gap for every field whose name, as `target` maps it, is one the target keeps for its
  * own: such a field is overwritten or refused at run time, so generation stops before it is
  * written. `reserved` maps each kept name, as `namesOf` maps names, to what the target calls it.
- * A built-in content type is checked only with `builtins`, and an embedded component's fields,
- * where they land on the row holding it, only with `embedded`.
+ * A built-in content type is checked only with `builtins`; the columns of a row, an embedded
+ * component's on the entry's and an item's on its own, only with `columns` (and `items`).
  */
 export const reservedNameGaps = (
   doc: IrDocument,
@@ -86,28 +105,30 @@ export const reservedNameGaps = (
 ): CapabilityGap[] => {
   const components = new Map(doc.components.map((c) => [c.name, c]));
 
-  const embeddedIn = (field: Field, path: string[]): EmbeddedField[] => {
-    if (field.type !== "component" || field.repeatable) return [];
-    const component = components.get(field.component);
-    if (component === undefined) return []; // unreachable on validated IR
-    return component.fields.flatMap((inner): EmbeddedField[] => {
-      if (inner.type === "component") return embeddedIn(inner, [...path, inner.name]);
-      return [{ path: [...path, inner.name], field: inner, component }];
+  // The fields of `component` that land on the row it is embedded in, through every embedded
+  // component within it; `path` leads from that row to the component.
+  const embeddedIn = (component: Component, path: readonly string[]): EmbeddedField[] =>
+    component.fields.flatMap((field): EmbeddedField[] => {
+      if (field.type !== "component") return [{ path: [...path, field.name], field, component }];
+      const inner = components.get(field.component);
+      if (field.repeatable || inner === undefined) return []; // undefined: unreachable on valid IR
+      return embeddedIn(inner, [...path, field.name]);
     });
-  };
 
-  // One gap per name the target keeps, however many of the field's names map onto it: a key and
-  // its key column (created_by, created_by_id) may both be one name of the target's.
+  // One gap per place and kept name, however many of a field's names, or rows, map onto it: a key
+  // and its key column (created_by, created_by_id) may both be one name of the target's.
+  const reported = new Set<string>();
   const gaps = (
     names: readonly TargetName[],
+    kept: KeptNames,
     location: IrErrorLocation,
     described: (name: TargetName) => string,
-  ): CapabilityGap[] => {
-    const reported = new Set<string>();
-    return names.flatMap((name): CapabilityGap[] => {
-      const own = reserved.get(name.mapped);
-      if (own === undefined || reported.has(own)) return [];
-      reported.add(own);
+  ): CapabilityGap[] =>
+    names.flatMap((name): CapabilityGap[] => {
+      const own = kept.get(name.mapped);
+      const key = `${locationKey(location)}\0${own}`;
+      if (own === undefined || reported.has(key)) return [];
+      reported.add(key);
       return [
         {
           feature: "reservedFieldName",
@@ -117,40 +138,56 @@ export const reservedNameGaps = (
         },
       ];
     });
-  };
 
-  const embeddedGaps = (
-    holderName: string,
-    field: Field,
-    holder: FieldHolder,
-    at: IrErrorLocation,
-  ): CapabilityGap[] => {
-    const embedded = options.embedded;
-    if (embedded === undefined) return [];
-    return embeddedIn(field, [field.name]).flatMap((e) =>
+  const columns = options.columns;
+
+  const entryColumnGaps = (contentType: string, field: Field): CapabilityGap[] => {
+    if (columns === undefined || field.type !== "component" || field.repeatable) return [];
+    const component = components.get(field.component);
+    if (component === undefined) return []; // unreachable on validated IR
+    return embeddedIn(component, [field.name]).flatMap((e) =>
       gaps(
-        embedded(e.path, e.field, holder),
-        { ...at, component: e.component.name, field: e.field.name },
-        (name) => describeEmbedded(holderName, e, name),
+        columns(e.path, e.field),
+        reserved,
+        { contentType, component: e.component.name, field: e.field.name },
+        (name) => describeEmbedded(contentType, e, name),
       ),
     );
   };
 
-  const check = (holderName: string, fields: readonly Field[], holder: FieldHolder) => {
+  const itemColumnGaps = (item: ItemTable): CapabilityGap[] => {
+    const component = components.get(item.component);
+    if (columns === undefined || component === undefined) return [];
+    return embeddedIn(component, []).flatMap((e) =>
+      gaps(
+        columns(e.path, e.field),
+        item.kept,
+        { component: e.component.name, field: e.field.name },
+        (name) => describeItem(item, e, name),
+      ),
+    );
+  };
+
+  const ownGaps = (holderName: string, field: Field, holder: FieldHolder): CapabilityGap[] => {
     const at: IrErrorLocation =
       holder === "contentType" ? { contentType: holderName } : { component: holderName };
-    return fields.flatMap((field) => [
-      ...gaps(namesOf(field, holder), { ...at, field: field.name }, (name) =>
-        describe(field, name),
-      ),
-      ...embeddedGaps(holderName, field, holder, at),
-    ]);
+    return gaps(namesOf(field, holder), reserved, { ...at, field: field.name }, (name) =>
+      describe(field, name),
+    );
   };
 
   return [
     ...doc.contentTypes
       .filter((ct) => options.builtins === true || ct.builtin === undefined)
-      .flatMap((ct) => check(ct.name, ct.fields, "contentType")),
-    ...doc.components.flatMap((c) => check(c.name, c.fields, "component")),
+      .flatMap((ct) =>
+        ct.fields.flatMap((field) => [
+          ...ownGaps(ct.name, field, "contentType"),
+          ...entryColumnGaps(ct.name, field),
+        ]),
+      ),
+    ...doc.components.flatMap((c) =>
+      c.fields.flatMap((field) => ownGaps(c.name, field, "component")),
+    ),
+    ...(options.items ?? []).flatMap(itemColumnGaps),
   ];
 };

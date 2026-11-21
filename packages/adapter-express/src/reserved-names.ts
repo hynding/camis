@@ -34,7 +34,6 @@ export const expressReservedNameGaps = (doc: IrDocument): CapabilityGap[] =>
     {
       builtins: true,
       // A relation inside a component is left out on this target, with a gap of its own.
-      embedded: (path, field, holder) =>
-        holder === "contentType" && field.type !== "relation" ? [embeddedColumn(path)] : [],
+      columns: (path, field) => (field.type !== "relation" ? [embeddedColumn(path)] : []),
     },
   );
