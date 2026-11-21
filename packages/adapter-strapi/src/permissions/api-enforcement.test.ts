@@ -37,17 +37,20 @@ describe("projectApiEnforcement", () => {
     expect(out.holders).toEqual({
       "api::category.category": {
         populatable: ["notes"],
+        unwalked: ["createdBy", "updatedBy"],
         links: { notes: { relation: "api::note.note" } },
       },
       // The single type reaches notes through its category; no role reads it.
       "api::front.front": {
         populatable: ["featured"],
+        unwalked: ["createdBy", "updatedBy"],
         links: { featured: { relation: "api::category.category" } },
       },
       // A file's `related` entries are any entry it is attached to: a note's attachment leads
       // back to notes.
       "api::note.note": {
         populatable: ["attachment", "category", "owner", "pinned"],
+        unwalked: ["createdBy", "updatedBy"],
         links: {
           attachment: { media: true },
           category: { relation: "api::category.category" },
@@ -57,6 +60,7 @@ describe("projectApiEnforcement", () => {
       },
       "api::tag.tag": {
         populatable: ["note", "parent", "pinnedOn", "refs"],
+        unwalked: ["createdBy", "updatedBy"],
         links: {
           note: { relation: "api::note.note" },
           parent: { relation: "api::tag.tag" },
@@ -66,11 +70,17 @@ describe("projectApiEnforcement", () => {
       },
       "shared.reference": {
         populatable: ["image", "note"],
+        unwalked: [],
         links: { image: { media: true }, note: { relation: "api::note.note" } },
       },
       // The user is walked beneath every relation to it: what lies under it (its role) is not
-      // passed on unchecked, whatever it reaches.
-      "plugin::users-permissions.user": { populatable: [], links: {} },
+      // passed on unchecked, whatever it reaches. A content type's admin relations and the
+      // user's role are Strapi's own attributes, which the graph does not walk.
+      "plugin::users-permissions.user": {
+        populatable: [],
+        unwalked: ["createdBy", "role", "updatedBy"],
+        links: {},
+      },
     });
   });
   // A write through a relation both sides show changes the entry on the other side too; one
@@ -754,10 +764,12 @@ describe("a reach the Strapi content API cannot narrow fails the build", () => {
     );
     expect(out.holders["api::gallery.gallery"]).toEqual({
       populatable: ["cover"],
+      unwalked: ["createdBy", "updatedBy"],
       links: { cover: { media: true } },
     });
     expect(out.holders["api::home.home"]).toEqual({
       populatable: ["logo"],
+      unwalked: ["createdBy", "updatedBy"],
       links: { logo: { media: true } },
     });
     expect(out.types.map((t) => t.contentType)).toEqual(
@@ -1116,10 +1128,12 @@ describe("a polymorphic relation no role reaches", () => {
     expect(out.gaps.filter((g) => g.severity === "error")).toEqual([]);
     expect(out.holders["api::board.board"]).toEqual({
       populatable: ["subjects"],
+      unwalked: ["createdBy", "updatedBy"],
       links: { subjects: { polymorphic: true } },
     });
     expect(out.holders["api::shelf.shelf"]).toEqual({
       populatable: ["board"],
+      unwalked: ["createdBy", "updatedBy"],
       links: { board: { relation: "api::board.board" } },
     });
     expect(out.types.map((t) => t.contentType)).toEqual(expect.arrayContaining(["Board", "Shelf"]));
@@ -1168,6 +1182,7 @@ describe("the built-in user in the reach graph", () => {
     const out = projectApiEnforcement(via, roles);
     expect(out.holders["api::album.album"]).toEqual({
       populatable: ["curator"],
+      unwalked: ["createdBy", "updatedBy"],
       links: { curator: { relation: "plugin::users-permissions.user" } },
     });
     expect(out.holders["plugin::users-permissions.user"]?.links).toEqual({

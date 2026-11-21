@@ -412,9 +412,14 @@ describe("scopeQuery: a localized type's localizations reach like any relation",
       ...tables.holders,
       [TAG]: {
         populatable: ["localizations", "note"],
+        unwalked: ["createdBy", "updatedBy"],
         links: { localizations: { relation: TAG }, note: { relation: NOTE } },
       },
-      [NOTE]: { populatable: ["localizations"], links: { localizations: { relation: NOTE } } },
+      [NOTE]: {
+        populatable: ["localizations"],
+        unwalked: ["createdBy", "updatedBy"],
+        links: { localizations: { relation: NOTE } },
+      },
     },
   };
   const run = (uid: string, query: Record<string, unknown>) =>
@@ -999,6 +1004,7 @@ describe("an API token", () => {
     holders: {
       ...tables.holders,
       [TAG]: {
+        ...tables.holders[TAG]!,
         populatable: [...tables.holders[TAG]!.populatable, "subject"],
         links: { ...tables.holders[TAG]!.links, subject: { polymorphic: true } },
       },
@@ -1046,11 +1052,20 @@ describe("a populate through the built-in user", () => {
     holders: {
       ...tables.holders,
       [TAG]: {
+        ...tables.holders[TAG]!,
         populatable: [...tables.holders[TAG]!.populatable, "author"],
         links: { ...tables.holders[TAG]!.links, author: { relation: USER } },
       },
-      [USER]: { populatable: ["boards"], links: { boards: { relation: BOARD } } },
-      [BOARD]: { populatable: ["subjects"], links: { subjects: { polymorphic: true } } },
+      [USER]: {
+        populatable: ["boards"],
+        unwalked: ["createdBy", "role", "updatedBy"],
+        links: { boards: { relation: BOARD } },
+      },
+      [BOARD]: {
+        populatable: ["subjects"],
+        unwalked: ["createdBy", "updatedBy"],
+        links: { subjects: { polymorphic: true } },
+      },
     },
   };
   it("refuses a polymorphic relation beneath it, for a role and a guest, in any form", () => {
@@ -1082,6 +1097,63 @@ describe("a populate through the built-in user", () => {
         { populate: { author: { filters: { boards: { title: { $eq: "b" } } } } } },
         { populate: { author: { sort: "username" } } },
         { filters: { author: { username: "a" } } },
+      ])
+        expect(scopeQuery(viaUser, TAG, state, query).ok, JSON.stringify(query)).toBe(true);
+    }
+  });
+  // The generated tables name each relation Strapi adds that the graph does not walk, so a
+  // filter through one is refused whatever its value: `role: 3` or `$in` on it is a role-id oracle.
+  it("refuses any filter on a relation camis does not walk, whatever its value", () => {
+    for (const state of [member, guest]) {
+      for (const filters of [
+        { role: 3 },
+        { role: "3" },
+        { role: { $eq: 3 } },
+        { role: { $in: [4] } },
+        { role: { $null: true } },
+        { role: { $notNull: true } },
+        { $or: [{ role: 3 }, { username: "a" }] },
+        { $and: [{ role: { $ne: 3 } }] },
+        { $not: { role: { $eq: 3 } } },
+        { createdBy: { $eq: 1 } },
+        { updatedBy: { id: 1 } },
+      ]) {
+        const query = { populate: { author: { filters } } };
+        expect(scopeQuery(viaUser, TAG, state, query).ok, JSON.stringify(query)).toBe(false);
+      }
+      for (const filters of [{ createdBy: 1 }, { $or: [{ updatedBy: { $null: true } }] }])
+        expect(scopeQuery(viaUser, TAG, state, { filters }).ok, JSON.stringify(filters)).toBe(
+          false,
+        );
+    }
+  });
+  it("passes filters on own fields and known relations, and the ordinary query parameters", () => {
+    for (const state of [member, guest]) {
+      for (const filters of [
+        { id: 3 },
+        { id: { $in: [3, 4] } },
+        { documentId: "abc" },
+        { createdAt: { $gt: "2026-01-01" } },
+        { publishedAt: { $null: true } },
+        { username: { $in: ["a", "b"] } },
+        { blocked: { $null: false } },
+        { $or: [{ username: "a" }, { id: 2 }] },
+        { $and: [{ username: { $ne: "a" } }] },
+        { $not: { username: "a" } },
+        { boards: { title: { $eq: "b" } } },
+        { boards: { id: { $in: [1] } } },
+      ]) {
+        const query = { populate: { author: { filters, sort: "createdAt:desc" } } };
+        expect(scopeQuery(viaUser, TAG, state, query).ok, JSON.stringify(query)).toBe(true);
+      }
+      for (const query of [
+        { filters: { label: "a", id: { $in: [1] }, documentId: "d", createdAt: { $null: false } } },
+        { filters: { refs: { label: { $eq: "r" } } } },
+        { filters: { blocks: { $null: true } } },
+        { filters: { cover: { $null: true } } },
+        { filters: { $or: [{ parent: { label: "p" } }, { publishedAt: { $notNull: true } }] } },
+        { filters: { author: { username: "a" } } },
+        { sort: ["createdAt:desc", "label"], locale: "fr", _q: "find" },
       ])
         expect(scopeQuery(viaUser, TAG, state, query).ok, JSON.stringify(query)).toBe(true);
     }
