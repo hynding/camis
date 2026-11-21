@@ -56,8 +56,8 @@ describe("projectApiEnforcement", () => {
         },
       },
       "shared.reference": {
-        populatable: ["note"],
-        links: { note: { relation: "api::note.note" } },
+        populatable: ["image", "note"],
+        links: { image: { media: true }, note: { relation: "api::note.note" } },
       },
     });
   });
@@ -290,18 +290,11 @@ describe("conditions the Strapi content API cannot enforce fail the build", () =
     ]);
   });
   it("a condition on the built-in user or the media library, which their plugins serve", () => {
-    const withFile: IrDocument = {
-      ...doc,
-      contentTypes: [
-        ...doc.contentTypes,
-        { name: "File", kind: "collection", builtin: "file", fields: [] },
-      ],
-    };
     const self: Expression = { kind: "eq", left: v("record.id"), right: v("user.id") };
-    expect(errors(withFile, grant("User", ["read"], self)).map((g) => g.message)).toEqual([
+    expect(errors(doc, grant("User", ["read"], self)).map((g) => g.message)).toEqual([
       'role "member" holds "User" under a condition, which the users-permissions plugin serves unconditioned; the Strapi target cannot enforce it',
     ]);
-    expect(errors(withFile, grant("File", ["read"], self)).map((g) => g.message)).toEqual([
+    expect(errors(doc, grant("File", ["read"], self)).map((g) => g.message)).toEqual([
       'role "member" holds "File" under a condition, which the upload plugin serves unconditioned; the Strapi target cannot enforce it',
     ]);
   });
@@ -374,17 +367,10 @@ describe("a reach the Strapi content API cannot narrow fails the build", () => {
   });
   // The upload plugin serves a file's `related` entries, which may be notes, unnarrowed.
   it("a role reading the media library while a file can be attached to a type it reads under a condition", () => {
-    const withFile: IrDocument = {
-      ...doc,
-      contentTypes: [
-        ...doc.contentTypes,
-        { name: "File", kind: "collection", builtin: "file", fields: [] },
-      ],
-    };
     const reader: Role[] = [
       { ...member[0]!, grants: [...member[0]!.grants, { contentType: "File", actions: ["read"] }] },
     ];
-    expect(errors(withFile, reader)).toEqual([
+    expect(errors(doc, reader)).toEqual([
       {
         feature: "apiRelationReach",
         location: { contentType: "Note", rule: "member" },
@@ -497,13 +483,6 @@ describe("a reach the Strapi content API cannot narrow fails the build", () => {
 // The plugins serve the built-in user and media library with no check of camis's: a write there
 // must not reach what the rules guard.
 describe("writes the users-permissions and upload plugins serve unchecked fail the build", () => {
-  const withFile: IrDocument = {
-    ...doc,
-    contentTypes: [
-      ...doc.contentTypes,
-      { name: "File", kind: "collection", builtin: "file", fields: [] },
-    ],
-  };
   const writer = (contentType: string, actions: Role["grants"][number]["actions"]): Role[] => [
     ...roles.filter((r) => r.name !== "member"),
     {
@@ -518,26 +497,70 @@ describe("writes the users-permissions and upload plugins serve unchecked fail t
         (feature !== "apiRelationReach" || g.message.includes("upload API")),
     );
 
-  // POST /api/upload with ref, refId and field attaches the new file to any entry, `?id=`
-  // replaces a file wherever it is attached, and DELETE removes it from every entry.
-  it("a role that writes the media library while some type with a media field is not one it updates outright", () => {
-    for (const actions of [["create"], ["update"], ["delete"]] as const) {
-      expect(featured(withFile, writer("File", [...actions]), "apiRelationReach")).toEqual([
-        {
-          feature: "apiRelationReach",
-          location: { contentType: "Note", rule: "member" },
-          severity: "error",
-          message: `role "member" may ${actions[0]} files, and Strapi's upload API attaches, replaces or deletes a file on any entry (ref, refId and field on POST /api/upload, ?id=, DELETE /api/upload/files/:id) with no check: that changes Note.attachment on entries of "Note", which it does not update outright`,
-        },
-      ]);
-    }
-    const outright = writer("File", ["create"]).map((r) =>
-      r.name === "member"
-        ? { ...r, grants: [...r.grants, { contentType: "Note", actions: ["update" as const] }] }
-        : r,
-    );
-    expect(featured(withFile, outright, "apiRelationReach")).toEqual([]);
-    expect(featured(withFile, writer("File", ["read"]), "apiRelationReach")).toEqual([]);
+  // The generated upload extension decides each upload API write on the entries it changes: an
+  // attach needs update on the entry, a replace or delete update on every entry the file is on.
+  it("no longer fails the build for a role that writes the media library: the upload API is enforced", () => {
+    for (const actions of [["create"], ["update"], ["delete"]] as const)
+      expect(featured(doc, writer("File", [...actions]), "apiRelationReach")).toEqual([]);
+  });
+  // Strapi's own single type controller links any stored file id to the entry, unchecked.
+  it("still fails it for a single type with a media field that a restricted role writes", () => {
+    const single: IrDocument = {
+      ...doc,
+      contentTypes: [
+        ...doc.contentTypes,
+        { name: "Home", kind: "single", fields: [{ type: "media", name: "banner" }] },
+      ],
+    };
+    expect(featured(single, writer("Home", ["update"]), "apiRelationReach")).toEqual([
+      {
+        feature: "apiRelationReach",
+        location: { contentType: "Home", rule: "member" },
+        severity: "error",
+        message:
+          'role "member" may update single type "Home", whose media field Home.banner Strapi\'s own single type controller links to any stored file id: the upload API\'s rule (a file the caller uploaded, or one on an entry it may read) does not hold there',
+      },
+    ]);
+    expect(featured(single, writer("Home", ["read"]), "apiRelationReach")).toEqual([]);
+    // With no restricted role writing files there is no upload enforcement to fall short of.
+    const noFiles = writer("Home", ["update"]).map((r) => ({
+      ...r,
+      grants: r.grants.filter((g) => g.contentType !== "File"),
+    }));
+    expect(featured(single, noFiles, "apiRelationReach")).toEqual([]);
+  });
+  it("tables what the upload checks need: media fields at any depth, outright readers and updaters", () => {
+    expect(projectApiEnforcement(doc, roles).uploads).toEqual({
+      admins: ["manager"],
+      holders: {
+        "api::note.note": { fields: ["attachment"], nested: {} },
+        "api::tag.tag": { fields: [], nested: { refs: { component: "shared.reference" } } },
+        "shared.reference": { fields: ["image"], nested: {} },
+      },
+      grants: {
+        "api::note.note": { read: ["reviewer"], update: [] },
+        "api::tag.tag": { read: ["contributor", "drafter", "member", "public"], update: [] },
+      },
+    });
+    const noFiles = roles.map((r) => ({
+      ...r,
+      grants: r.grants.filter((g) => g.contentType !== "File"),
+    }));
+    expect(projectApiEnforcement(doc, noFiles).uploads).toBeNull();
+  });
+  // Its media field links any stored file id unless the generated controller checks it.
+  it("serves each collection type with a media field that a restricted role writes", () => {
+    const album: IrDocument = {
+      ...doc,
+      contentTypes: [
+        ...doc.contentTypes,
+        { name: "Album", kind: "collection", fields: [{ type: "media", name: "cover" }] },
+      ],
+    };
+    const served = (rs: Role[]) =>
+      projectApiEnforcement(album, rs).types.map((t) => [t.contentType, t.own]);
+    expect(served(writer("Album", ["create"]))).toContainEqual(["Album", false]);
+    expect(served(writer("Album", ["read"])).map(([name]) => name)).not.toContain("Album");
   });
 
   // users-permissions' user update and create take any role and password from the body.

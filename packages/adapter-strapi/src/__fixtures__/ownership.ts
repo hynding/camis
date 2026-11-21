@@ -32,7 +32,9 @@ const unshared: Expression = {
  * owns, and the admin role does anything. Tags reach
  * notes directly, through a parent tag, and through a repeatable reference component. A note
  * belongs to a category (whose `notes` inverse a reviewer may write), pins tags (each tag pinned on
- * one note at most: `Tag.pinnedOn`, whose inverse is `Note.pinned`), and has an attachment.
+ * one note at most: `Tag.pinnedOn`, whose inverse is `Note.pinned`), and has an attachment; a
+ * reference has an image. Members upload files and delete them, which the upload API allows only
+ * on entries they may update or files they uploaded.
  */
 export const ownershipBundle: IrBundle = {
   document: {
@@ -47,6 +49,7 @@ export const ownershipBundle: IrBundle = {
           { type: "email", name: "email" },
         ],
       },
+      { name: "File", kind: "collection", builtin: "file", fields: [] },
       {
         name: "Note",
         kind: "collection",
@@ -87,7 +90,10 @@ export const ownershipBundle: IrBundle = {
     components: [
       {
         name: "Reference",
-        fields: [{ type: "relation", name: "note", relationKind: "manyToOne", target: "Note" }],
+        fields: [
+          { type: "relation", name: "note", relationKind: "manyToOne", target: "Note" },
+          { type: "media", name: "image" },
+        ],
       },
     ],
   },
@@ -109,6 +115,7 @@ export const ownershipBundle: IrBundle = {
           assign: { owner: "user.id" },
         },
         { contentType: "Tag", actions: ["create", "read"] },
+        { contentType: "File", actions: ["create", "delete"] },
       ],
     },
     {

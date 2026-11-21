@@ -79,6 +79,49 @@ const pollUntilUp = async (timeoutMs: number): Promise<boolean> => {
   return false;
 };
 
+interface Database {
+  prepare(sql: string): {
+    run(...args: unknown[]): { changes: number };
+    all(...args: unknown[]): Record<string, unknown>[];
+  };
+  close(): void;
+}
+
+/** The project's sqlite database, opened with the better-sqlite3 it installed. */
+const database = (dir: string): Database => {
+  const require = createRequire(join(dir, "package.json"));
+  const Sqlite = require("better-sqlite3") as new (file: string) => Database;
+  return new Sqlite(join(dir, ".tmp", "data.db"));
+};
+
+/** Rows of a query on the project's database, which stays closed between requests. */
+const select = (dir: string, sql: string, ...args: unknown[]): Record<string, unknown>[] => {
+  const db = database(dir);
+  try {
+    return db.prepare(sql).all(...args);
+  } finally {
+    db.close();
+  }
+};
+
+/** A body for POST /api/upload: its text fields, and one small file unless `file` is false. */
+const form = (fields: Record<string, string>, file = true): FormData => {
+  const body = new FormData();
+  if (file) body.append("files", new Blob(["camis"], { type: "text/plain" }), "note.txt");
+  for (const [key, value] of Object.entries(fields)) body.append(key, value);
+  return body;
+};
+
+const send = async (method: string, path: string, jwt: string, body?: FormData) => {
+  const res = await fetch(`${BASE}${path}`, {
+    method,
+    headers: { authorization: `Bearer ${jwt}` },
+    ...(body === undefined ? {} : { body }),
+  });
+  const text = await res.text();
+  return { status: res.status, body: text === "" ? null : (JSON.parse(text) as unknown) };
+};
+
 /** A registered account (which users-permissions puts in its default role), moved to `role`. */
 const member = async (dir: string, name: string, role = "member") => {
   const registered = await call("POST", "/api/auth/local/register", undefined, {
@@ -90,12 +133,7 @@ const member = async (dir: string, name: string, role = "member") => {
     throw new Error(`register ${name}: ${JSON.stringify(registered)}`);
   // users-permissions has no API to change a user's role short of the admin panel, so move the
   // account in the database. The JWT names only the user; its role is loaded on every request.
-  const require = createRequire(join(dir, "package.json"));
-  const Database = require("better-sqlite3") as new (file: string) => {
-    prepare(sql: string): { run(...args: unknown[]): { changes: number } };
-    close(): void;
-  };
-  const db = new Database(join(dir, ".tmp", "data.db"));
+  const db = database(dir);
   try {
     const moved = db
       .prepare(
@@ -369,6 +407,8 @@ const scenario = async (dir: string): Promise<void> => {
   );
   check("alice's update filtered by a guess is refused", updateGuess.status === 400, updateGuess);
 
+  await uploads(dir, alice, bob);
+
   const link = await call("POST", "/api/tags", alice.jwt, {
     data: { label: "a", note: { connect: [{ documentId: bobNoteId }] } },
   });
@@ -380,6 +420,137 @@ const scenario = async (dir: string): Promise<void> => {
     after.status === 200 && !rows(after).some((t) => t.label === "a" || t.label === "a2"),
     after,
   );
+};
+
+interface Account {
+  jwt: string;
+  id: number;
+}
+
+/**
+ * The upload API for a member, who may upload and delete files: a new file attaches only to an
+ * entry the caller may update, a replace or delete needs update on every entry the file is on
+ * (or, unattached, that the caller uploaded it), and an entry links only a file the caller
+ * uploaded or one on an entry it may read.
+ */
+const uploads = async (dir: string, alice: Account, bob: Account): Promise<void> => {
+  const note = async (who: Account, title: string) => {
+    const r = await call("POST", "/api/notes", who.jwt, { data: { title, shared: false } });
+    const data = r.body?.data as { id: number; documentId: string } | undefined;
+    if (r.status !== 201 || data === undefined)
+      throw new Error(`note ${title}: ${JSON.stringify(r)}`);
+    return data;
+  };
+  const files = () => Number(select(dir, "SELECT COUNT(*) AS n FROM files")[0]!.n);
+  const attachedTo = (noteId: number) =>
+    select(
+      dir,
+      "SELECT file_id FROM files_related_mph WHERE related_type = 'api::note.note' AND related_id = ?",
+      noteId,
+    ).map((r) => Number(r.file_id));
+  const created = (r: { body: unknown }): number =>
+    (r.body as { id: number }[] | null)?.[0]?.id ?? 0;
+  const onNote = (id: number) => ({
+    ref: "api::note.note",
+    refId: String(id),
+    field: "attachment",
+  });
+
+  const mine = await note(alice, "alice's upload target");
+  const theirs = await note(bob, "bob's upload target");
+
+  const own = await send("POST", "/api/upload", alice.jwt, form(onNote(mine.id)));
+  check("alice uploads a file to her own note", own.status === 201, own);
+  check(
+    "the file is attached to alice's note",
+    attachedTo(mine.id).includes(created(own)),
+    attachedTo(mine.id),
+  );
+  const uploader = select(dir, "SELECT camis_uploader FROM files WHERE id = ?", created(own));
+  check(
+    "the file records alice as its uploader",
+    uploader[0]?.camis_uploader === alice.id,
+    uploader,
+  );
+
+  const before = files();
+  for (const [what, fields] of [
+    ["to bob's note", onNote(theirs.id)],
+    ["to a note that does not exist", onNote(999_999)],
+    ["to a component's uid", { ref: "shared.reference", refId: "1", field: "image" }],
+    ["to a non-media field", { ...onNote(mine.id), field: "title" }],
+  ] as const) {
+    const r = await send("POST", "/api/upload", alice.jwt, form(fields));
+    check(`alice's upload ${what} is 403`, r.status === 403, r);
+  }
+  for (const [what, fields] of [
+    ["with a documentId refId", { ...onNote(mine.id), refId: mine.documentId }],
+    ["with a path", { path: "elsewhere" }],
+  ] as const) {
+    const r = await send("POST", "/api/upload", alice.jwt, form(fields));
+    check(`alice's upload ${what} is 400`, r.status === 400, r);
+  }
+  check("the refused uploads stored no file", files() === before, { before, after: files() });
+  check(
+    "bob's note has no attachment of alice's",
+    attachedTo(theirs.id).length === 0,
+    attachedTo(theirs.id),
+  );
+
+  const bobs = await send("POST", "/api/upload", bob.jwt, form(onNote(theirs.id)));
+  check("bob uploads a file to his own note", bobs.status === 201, bobs);
+  const loose = await send("POST", "/api/upload", bob.jwt, form({}));
+  check("bob uploads an unattached file", loose.status === 201, loose);
+  const fileOfBob = created(bobs);
+  const looseOfBob = created(loose);
+
+  const replace = await send("POST", `/api/upload?id=${fileOfBob}`, alice.jwt, form({}));
+  check("alice's replace of the file on bob's note is 403", replace.status === 403, replace);
+  const info = await send(
+    "POST",
+    `/api/upload?id=${fileOfBob}`,
+    alice.jwt,
+    form({ fileInfo: JSON.stringify({ name: "alice's now" }) }, false),
+  );
+  check("alice's info update of the file on bob's note is 403", info.status === 403, info);
+  for (const id of [fileOfBob, looseOfBob]) {
+    const del = await send("DELETE", `/api/upload/files/${id}`, alice.jwt);
+    check(`alice's delete of bob's file ${id} is 403`, del.status === 403, del);
+  }
+  check(
+    "bob's file is still on his note",
+    attachedTo(theirs.id).includes(fileOfBob),
+    attachedTo(theirs.id),
+  );
+
+  for (const attachment of [looseOfBob, fileOfBob]) {
+    const put = await call("PUT", `/api/notes/${mine.documentId}`, alice.jwt, {
+      data: { attachment },
+    });
+    check(`alice cannot attach bob's file ${attachment} to her note`, put.status === 403, put);
+    const post = await call("POST", "/api/notes", alice.jwt, {
+      data: { title: "with bob's file", shared: false, attachment },
+    });
+    check(`alice cannot create a note with bob's file ${attachment}`, post.status === 403, post);
+  }
+  check(
+    "alice's note links none of bob's files",
+    !attachedTo(mine.id).some((id) => id === fileOfBob || id === looseOfBob),
+    attachedTo(mine.id),
+  );
+
+  const hers = await send("POST", "/api/upload", alice.jwt, form({}));
+  check("alice uploads an unattached file", hers.status === 201, hers);
+  const attach = await call("PUT", `/api/notes/${mine.documentId}`, alice.jwt, {
+    data: { attachment: created(hers) },
+  });
+  check("alice attaches her own upload to her note", attach.status === 200, attach);
+  const swap = await send("POST", `/api/upload?id=${created(hers)}`, alice.jwt, form({}));
+  check("alice replaces the file on her own note", swap.status === 200, swap);
+  const drop = await send("DELETE", `/api/upload/files/${created(hers)}`, alice.jwt);
+  check("alice deletes the file on her own note", drop.status === 200, drop);
+  const tidy = await send("DELETE", `/api/upload/files/${looseOfBob}`, bob.jwt);
+  check("bob deletes his own unattached file", tidy.status === 200, tidy);
 };
 
 /**
