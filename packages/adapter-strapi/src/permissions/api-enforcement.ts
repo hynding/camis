@@ -19,6 +19,7 @@ import { CORE_ACTIONS } from "../hooks/route-hooks";
 import { projectReach, typeKey } from "./api-reach";
 import { builtinWriteGaps } from "./api-builtin-writes";
 import { projectUploads, type ApiUploads } from "./api-upload-enforcement";
+import { projectShapes, type ApiAttributeShape } from "./api-shapes";
 import { projectRelationWrites, relationWriteGaps } from "./api-relation-writes";
 import { conditionName } from "./condition-name";
 import { codePointOrder } from "./code-point-order";
@@ -92,7 +93,9 @@ export interface ApiHolder {
 export interface ApiEnforcement {
   types: ApiTypeRules[];
   holders: Record<string, ApiHolder>;
-  /** What the upload extension checks; null when no role the rules restrict writes files. */
+  /** The writable attributes of each served type and the components it embeds, by uid. */
+  shapes: Record<string, Record<string, ApiAttributeShape>>;
+  /** What the media checks read; null when no restricted caller writes files or media fields. */
   uploads: ApiUploads | null;
   gaps: CapabilityGap[];
 }
@@ -341,6 +344,7 @@ export const projectApiEnforcement = (doc: IrDocument, roles: Role[]): ApiEnforc
           };
     }),
     holders: reach.holders,
+    shapes: projectShapes(doc, served),
     uploads: uploads.uploads,
     gaps,
   };

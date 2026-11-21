@@ -404,6 +404,7 @@ describe("createVerdict and assigned fields", () => {
 describe("scopeQuery: a localized type's localizations reach like any relation", () => {
   const localized: Tables = {
     rules: tables.rules,
+    shapes: tables.shapes,
     holders: {
       ...tables.holders,
       [TAG]: {

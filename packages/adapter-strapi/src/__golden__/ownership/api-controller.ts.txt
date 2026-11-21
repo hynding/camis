@@ -17,6 +17,7 @@ import {
   scopedFilters,
   withoutAssigned,
   writePlan,
+  writeShape,
   type Caller,
   type RecordAction,
   type RelationRef,
@@ -241,6 +242,10 @@ export const enforcedController = (strapiInstance: unknown, uid: string, tables:
         // here; Strapi's own create answers anyone else's.
         return reach !== null ? ctx.badRequest("Missing or invalid data") : super.create(ctx);
       }
+      if (reach !== null) {
+        const shape = writeShape(tables, uid, sent);
+        if (!shape.ok) return ctx.badRequest(shape.message);
+      }
       const data = withoutAssigned(caller, sent);
       if (createVerdict(rules, caller, data) === "forbidden") return ctx.forbidden();
       if (reach !== null && (await writeRefused(ctx, reach, data, null))) return undefined;
@@ -271,6 +276,8 @@ export const enforcedController = (strapiInstance: unknown, uid: string, tables:
         return super.update(ctx);
       }
       if (sent === undefined) return ctx.badRequest("Missing or invalid data");
+      const shape = writeShape(tables, uid, sent);
+      if (!shape.ok) return ctx.badRequest(shape.message);
       // Strapi 5.48's update ignores filters (only delete reads them into its where); they are
       // refused all the same, so the check holds whatever a later Strapi does with them.
       if (ctx.query?.filters !== undefined) return ctx.badRequest("Invalid filters on an update");

@@ -312,7 +312,7 @@ describe("POST /api/upload?id= (replace, or update a file's info) and DELETE /ap
     return ctx;
   };
   it("is 403 for a file on another's entry or another's unattached file, changing nothing", async () => {
-    for (const id of ["2", "3", "5", "99"]) {
+    for (const id of ["2", "3", "99"]) {
       const withFile = context(alice(), { query: { id }, request: { body: {}, files: aFile } });
       await upload.upload(withFile);
       expect(withFile.status, `replace ${id}`).toBe(403);

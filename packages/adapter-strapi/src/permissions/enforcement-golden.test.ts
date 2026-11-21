@@ -96,6 +96,23 @@ describe("content API enforcement golden", () => {
       "downgrade userRelationWrite Note.manager",
     ]);
   });
+  // Strapi links a stored file through a media field with no upload permission, so the media
+  // checks run without file grants; only the uploader record needs the extension.
+  it("with no role writing files, tables the media checks but emits no upload extension", () => {
+    const noFiles = {
+      ...ownershipBundle,
+      roles: ownershipBundle.roles.map((r) => ({
+        ...r,
+        grants: r.grants.filter((g) => g.contentType !== "File"),
+      })),
+    };
+    const files = strapiAdapter.generate(noFiles, { projectName: "notes" });
+    expect(file(files, "src/extensions/upload/strapi-server.ts")).toBeUndefined();
+    expect(emitted(files, "src/permissions/api-conditions.ts")).toContain(
+      "uploaderRecorded: false,",
+    );
+    expect(file(files, "src/permissions/api-upload-controller.ts")).toBeDefined();
+  });
   it("regeneration is idempotent", () => {
     expect(strapiAdapter.generate(ownershipBundle, { projectName: "notes" })).toEqual(result);
   });

@@ -11,6 +11,7 @@ import type {
   ApiTypeRules,
 } from "./api-enforcement";
 import type { ApiMediaHolder, ApiUploads } from "./api-upload-enforcement";
+import type { ApiAttributeShape } from "./api-shapes";
 import { handlerBody } from "./conditions";
 
 export const API_CONDITIONS_PATH = "src/permissions/api-conditions.ts";
@@ -143,6 +144,7 @@ const uploadsSource = (uploads: ApiUploads): string => {
 /** What the upload API's checks read: media fields, and who holds each type outright. */
 const UPLOADS: Uploads = {
   admins: ADMIN_ROLES,
+  uploaderRecorded: ${String(uploads.uploaderRecorded)},
   holders: {
 ${holders}
   },
@@ -153,10 +155,28 @@ ${grants}
 `;
 };
 
+const shapeSource = (shape: ApiAttributeShape): string => {
+  if (typeof shape === "string") return key(shape);
+  return "component" in shape
+    ? `{ component: ${key(shape.component)}, repeatable: ${String(shape.repeatable)} }`
+    : `{ zone: ${list(shape.zone)} }`;
+};
+
+const shapesSource = (shapes: ApiEnforcement["shapes"]): string =>
+  Object.entries(shapes)
+    .map(([uid, attributes]) => {
+      const lines = Object.entries(attributes)
+        .map(([attribute, shape]) => `    ${key(attribute)}: ${shapeSource(shape)},`)
+        .join("\n");
+      return `  ${key(uid)}: {\n${lines}\n  },`;
+    })
+    .join("\n");
+
 const rulesSource = (enforcement: ApiEnforcement): string => {
   const admins = enforcement.types[0]?.admins ?? enforcement.uploads?.admins ?? [];
   const holders = holdersSource(enforcement.holders);
   const uploads = enforcement.uploads;
+  const shapes = shapesSource(enforcement.shapes);
   return `// The project's rules: generated from the IR's roles.
 
 /** Each type's conditions by name, each filter compiled for that type's fields. */
@@ -172,8 +192,11 @@ ${enforcement.types.map(typeRules).join("\n")}
 
 /** The types and components that reach a type some role reads under a condition. */
 const HOLDERS: Record<string, Holder> = {${holders === "" ? "" : `\n${holders}\n`}};
+
+/** The writable attributes of each served type and every component it embeds. */
+const SHAPES: Record<string, Record<string, AttributeShape>> = {${shapes === "" ? "" : `\n${shapes}\n`}};
 ${uploads === null ? "" : uploadsSource(uploads)}
-export const TABLES: Tables = { rules: RULES, holders: HOLDERS${uploads === null ? "" : ", uploads: UPLOADS"} };
+export const TABLES: Tables = { rules: RULES, holders: HOLDERS, shapes: SHAPES${uploads === null ? "" : ", uploads: UPLOADS"} };
 `;
 };
 
@@ -241,7 +264,7 @@ export const emitApiEnforcementFiles = (enforcement: ApiEnforcement): GeneratedF
           path: API_UPLOAD_CONTROLLER_PATH,
           content: withMarker(runtime("api-upload-controller.ts")),
         },
-        ...(enforcement.uploads === null
-          ? []
-          : [{ path: UPLOAD_EXTENSION_PATH, content: uploadExtensionSource() }]),
+        ...(enforcement.uploads?.uploaderRecorded === true
+          ? [{ path: UPLOAD_EXTENSION_PATH, content: uploadExtensionSource() }]
+          : []),
       ];

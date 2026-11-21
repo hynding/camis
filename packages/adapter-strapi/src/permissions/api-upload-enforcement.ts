@@ -13,8 +13,9 @@ import { codePointOrder } from "./code-point-order";
 
 // The upload plugin attaches, replaces and deletes files on entries (`ref`, `refId` and `field` on
 // POST /api/upload, `?id=`, DELETE /api/upload/files/:id), and any entry write links a stored file
-// by its id. Once a role the rules restrict writes files, the generated upload extension decides
-// each of those on the entries it changes, and the entry controllers check each file linked.
+// by its id, with no upload permission. Wherever a restricted caller writes a type with a media
+// field, the entry controllers check each file linked; once a restricted role writes files, the
+// generated upload extension also decides each upload API write on the entries it changes.
 
 /** A type's or component's media fields, and its attributes that hold one further down. */
 export interface ApiMediaHolder {
@@ -24,6 +25,8 @@ export interface ApiMediaHolder {
 
 export interface ApiUploads {
   admins: string[];
+  /** A restricted role writes files: the upload extension records each file's uploader. */
+  uploaderRecorded: boolean;
   /** Every content type and component with a media field at some depth, by uid. */
   holders: Record<string, ApiMediaHolder>;
   /** Each content type with a media field: the roles holding read and update on it outright. */
@@ -31,7 +34,7 @@ export interface ApiUploads {
 }
 
 export interface UploadEnforcement {
-  /** Null when no role the rules restrict writes files: the upload API is left as Strapi has it. */
+  /** Null when no restricted caller writes files or a type with a media field. */
   uploads: ApiUploads | null;
   /** The collection types with a media field a restricted caller writes, which camis serves. */
   served: Set<string>;
@@ -95,14 +98,20 @@ const sorted = <T>(entries: [string, T][]): Record<string, T> =>
 const writes = (role: Role, ct: ContentType): boolean => holds(role, ct.name, ["create", "update"]);
 
 /**
- * A single type with a media field that a restricted role writes: Strapi's own single type
- * controller serves the write, and links any stored file id it names.
+ * A single type with a media field that a restricted role (or an `auth: false` route) writes:
+ * Strapi's own single type controller serves the write, and links any stored file id it names.
  */
-const singleGap = (role: Role, ct: ContentType, fields: string[]): CapabilityGap => ({
+const singleGap = (
+  rule: string,
+  who: string,
+  verb: "create" | "update",
+  ct: ContentType,
+  fields: string[],
+): CapabilityGap => ({
   feature: "apiRelationReach",
-  location: { contentType: ct.name, rule: role.name },
+  location: { contentType: ct.name, rule },
   severity: "error",
-  message: `role "${role.name}" may ${holds(role, ct.name, ["update"]) ? "update" : "create"} single type "${ct.name}", whose media field ${fields.join(", ")} Strapi's own single type controller links to any stored file id: the upload API's rule (a file the caller uploaded, or one on an entry it may read) does not hold there`,
+  message: `${who} may ${verb} single type "${ct.name}", whose media field ${fields.join(", ")} Strapi's own single type controller links to any stored file id: the rule camis holds a media link to (a file the caller uploaded through the upload API, or one on an entry it may update) does not hold there`,
 });
 
 /** The media fields of a type, its own or an embedded component's, as `Type.field`. */
@@ -113,14 +122,18 @@ const mediaFieldNames = (doc: IrDocument, ct: ContentType): string[] => [
   ),
 ];
 
-/** What the upload checks need, the types they make camis serve, and where they cannot hold. */
+/**
+ * What the media checks need, the types they make camis serve, and where they cannot hold. Strapi
+ * links a stored file through a media field with no upload permission, so the checks run wherever
+ * a restricted role (or an `auth: false` route) writes a type with one, file grants or not; a role
+ * that writes files adds the upload extension, which records uploaders.
+ */
 export const projectUploads = (doc: IrDocument, roles: readonly Role[]): UploadEnforcement => {
   const file = doc.contentTypes.find((ct) => ct.builtin === "file");
   const restricted = roles.filter(restricts);
   const writers = restricted.filter(
     (r) => file !== undefined && holds(r, file.name, ["create", "update", "delete"]),
   );
-  if (writers.length === 0) return { uploads: null, served: new Set(), gaps: [] };
   const holding = mediaComponents(doc);
   const types = doc.contentTypes
     .filter((ct) => ct.builtin === undefined)
@@ -128,26 +141,57 @@ export const projectUploads = (doc: IrDocument, roles: readonly Role[]): UploadE
       const holder = holderOf(ct.fields, holding);
       return holder === null ? [] : [{ ct, holder }];
     });
+  const open = (ct: ContentType): ("create" | "update")[] =>
+    (ct.options?.publicApiActions ?? []).filter(
+      (a): a is "create" | "update" => a === "create" || a === "update",
+    );
+  const written = types.filter(
+    ({ ct }) => restricted.some((r) => writes(r, ct)) || open(ct).length > 0,
+  );
+  if (writers.length === 0 && written.length === 0)
+    return { uploads: null, served: new Set(), gaps: [] };
   const roleNames = (ct: ContentType, action: Action): string[] =>
     restricted
       .filter((r) => holds(r, ct.name, [action], true))
       .map((r) => r.name)
       .sort(codePointOrder);
-  const openWrites = (ct: ContentType): boolean =>
-    (ct.options?.publicApiActions ?? []).some((a) => a === "create" || a === "update");
-  const gaps = types
+  const gaps = written
     .filter(({ ct }) => ct.kind === "single")
-    .flatMap(({ ct }) =>
-      restricted
-        .filter((r) => writes(r, ct))
-        .map((r) => singleGap(r, ct, mediaFieldNames(doc, ct))),
-    );
+    .flatMap(({ ct }) => {
+      const fields = mediaFieldNames(doc, ct);
+      const opened = open(ct);
+      return [
+        ...restricted
+          .filter((r) => writes(r, ct))
+          .map((r) =>
+            singleGap(
+              r.name,
+              `role "${r.name}"`,
+              holds(r, ct.name, ["update"]) ? "update" : "create",
+              ct,
+              fields,
+            ),
+          ),
+        ...(opened.length === 0
+          ? []
+          : [
+              singleGap(
+                "public",
+                "anyone (an auth: false route)",
+                opened.includes("update") ? "update" : "create",
+                ct,
+                fields,
+              ),
+            ]),
+      ];
+    });
   return {
     uploads: {
       admins: roles
         .filter((r) => !restricts(r))
         .map((r) => r.name)
         .sort(codePointOrder),
+      uploaderRecorded: writers.length > 0,
       holders: sorted([
         ...types.map(({ ct, holder }) => [strapiNames(ct).uid, holder] as [string, ApiMediaHolder]),
         ...[...holding.values()].flatMap((c): [string, ApiMediaHolder][] => {
@@ -162,14 +206,7 @@ export const projectUploads = (doc: IrDocument, roles: readonly Role[]): UploadE
         ]),
       ),
     },
-    served: new Set(
-      types
-        .filter(
-          ({ ct }) =>
-            ct.kind === "collection" && (restricted.some((r) => writes(r, ct)) || openWrites(ct)),
-        )
-        .map(({ ct }) => ct.name),
-    ),
+    served: new Set(written.filter(({ ct }) => ct.kind === "collection").map(({ ct }) => ct.name)),
     gaps,
   };
 };

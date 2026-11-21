@@ -1,7 +1,9 @@
 import {
   callerOf,
+  mediaIds,
   own,
   recordVerdict,
+  rowId,
   type Caller,
   type Checked,
   type Tables,
@@ -48,12 +50,6 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const field = (source: unknown, key: string): unknown =>
   isRecord(source) ? source[key] : undefined;
-
-/** A positive row id, as a number or the digits a query string or multipart field carries. */
-const rowId = (value: unknown): number | null => {
-  if (typeof value === "number") return Number.isInteger(value) && value > 0 ? value : null;
-  return typeof value === "string" && /^[1-9][0-9]*$/.test(value) ? Number(value) : null;
-};
 
 const refuse = (message: string): { ok: false; message: string } => ({ ok: false, message });
 
@@ -143,11 +139,12 @@ export const entryVerdict = (
   return caller.kind === "role" && grants[action].includes(caller.role);
 };
 
-/** Whether the caller's session user uploaded the file. */
+/** Whether the caller's session user uploaded the file, where uploaders are recorded. */
 const uploadedBy = (uploads: Uploads, state: unknown, file: StoredFile): boolean => {
   const caller = uploadCaller(uploads, state);
   const user = caller.kind === "refused" ? null : caller.user;
   return (
+    uploads.uploaderRecorded &&
     user !== null &&
     user.id !== null &&
     file.uploader !== null &&
@@ -157,59 +154,33 @@ const uploadedBy = (uploads: Uploads, state: unknown, file: StoredFile): boolean
 };
 
 /**
- * Whether the caller may replace or delete a stored file (or change its info): every entry it is
- * attached to must be one the caller may update; an unattached file only its uploader may change.
+ * Whether the caller may replace or delete a stored file (or change its info): its uploader always
+ * may, wherever it is attached; anyone else only a file attached to entries, every one of which
+ * the caller may update. Linking a file needs as much (attachVerdict), so no one takes a file
+ * from its uploader by linking it, nor from an entry's updaters without being one.
  */
 export const changeVerdict = (tables: Tables, state: unknown, file: StoredFile | null): boolean => {
   const uploads = tables.uploads;
   if (uploads === undefined || file === null) return false;
   if (uploadCaller(uploads, state).kind === "unrestricted") return true;
-  if (file.related.length === 0) return uploadedBy(uploads, state, file);
-  return file.related.every((r) => entryVerdict(tables, r.uid, state, "update", r.rows));
+  if (uploadedBy(uploads, state, file)) return true;
+  return (
+    file.related.length > 0 &&
+    file.related.every((r) => entryVerdict(tables, r.uid, state, "update", r.rows))
+  );
 };
 
 /**
  * Whether the caller may link a stored file to an entry through a media field: it uploaded the
- * file, or the file is on an entry the caller may read (or update), so linking it shows nothing
- * new.
+ * file, or the file is on an entry the caller may update. Reading an entry is not enough: the link
+ * would let the reader hold a file it has no say over, and Strapi's url is all reading needs.
  */
 export const attachVerdict = (tables: Tables, state: unknown, file: StoredFile | null): boolean => {
   const uploads = tables.uploads;
   if (uploads === undefined || file === null) return false;
   if (uploadCaller(uploads, state).kind === "unrestricted") return true;
   if (uploadedBy(uploads, state, file)) return true;
-  return file.related.some(
-    (r) =>
-      entryVerdict(tables, r.uid, state, "read", r.rows) ||
-      entryVerdict(tables, r.uid, state, "update", r.rows),
-  );
-};
-
-/**
- * The row ids one media value links, in the forms Strapi 5.48's database layer reads (an id, a
- * list, an object with an id, connect and set lists; a string there is a row id); null for any
- * other form, a documentId among them, which Strapi would store as a broken link or refuse.
- */
-const mediaIds = (value: unknown): number[] | null => {
-  const item = (v: unknown): number | null => rowId(isRecord(v) ? own(v, "id") : v);
-  const list = (v: unknown): number[] | null => {
-    if (v === null || v === undefined) return [];
-    if (!Array.isArray(v)) return null;
-    const ids = v.map(item);
-    return ids.every((id): id is number => id !== null) ? ids : null;
-  };
-  if (value === null || value === undefined) return [];
-  if (Array.isArray(value)) return list(value);
-  if (isRecord(value) && own(value, "id") === undefined) {
-    const keys = Object.keys(value);
-    if (!keys.every((k) => ["connect", "set", "disconnect", "options"].includes(k))) return null;
-    // A disconnect only drops a link, which shows and grants nothing.
-    const connect = list(own(value, "connect"));
-    const set = list(own(value, "set"));
-    return connect === null || set === null ? null : [...connect, ...set];
-  }
-  const id = item(value);
-  return id === null ? null : [id];
+  return file.related.some((r) => entryVerdict(tables, r.uid, state, "update", r.rows));
 };
 
 /**
@@ -256,10 +227,10 @@ export const mediaFileIds = (
   return problem === undefined ? { ok: true, value: ids } : refuse(problem);
 };
 
-/** What to load of a stored file: its uploader and the entries it is attached to. */
-export const fileQuery = (id: number): Record<string, unknown> => ({
+/** What to load of a stored file: its uploader, where recorded, and the entries it is attached to. */
+export const fileQuery = (id: number, uploaderRecorded: boolean): Record<string, unknown> => ({
   where: { id },
-  select: ["id", UPLOADER],
+  select: uploaderRecorded ? ["id", UPLOADER] : ["id"],
   populate: { related: true },
 });
 

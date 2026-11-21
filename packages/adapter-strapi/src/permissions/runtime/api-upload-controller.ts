@@ -72,7 +72,8 @@ export const loadFile = async (
   tables: Tables,
   id: number,
 ): Promise<StoredFile | null> => {
-  const [file] = await strapi.db.query(FILE_UID).findMany(fileQuery(id));
+  const recorded = tables.uploads?.uploaderRecorded ?? false;
+  const [file] = await strapi.db.query(FILE_UID).findMany(fileQuery(id, recorded));
   if (file === undefined) return null;
   const known = (uid: string): boolean =>
     tables.uploads !== undefined && own(tables.uploads.grants, uid) !== undefined;
