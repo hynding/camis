@@ -924,6 +924,22 @@ describe("writeShape: a restricted caller's write names only the type's writable
     ])
       expect(shape(data).ok, JSON.stringify(data)).toBe(false);
   });
+  // Strapi keeps only the last entry of a to-one write, and decides on what it keeps: more than
+  // one entry there would carry entries no check reads as written.
+  it("refuses more than one entry on a to-one relation, at any depth", () => {
+    for (const note of [["d1", "d2"], { connect: [1, 2] }, { set: [1, 2] }, [{ id: 1 }, 2]])
+      expect(shape({ note }), JSON.stringify(note)).toEqual({
+        ok: false,
+        message: "Invalid relation value for note: one entry at most",
+      });
+    expect(shape({ refs: [{ note: [1, 2] }] })).toEqual({
+      ok: false,
+      message: "Invalid relation value for refs.note: one entry at most",
+    });
+    for (const note of [["d1"], { connect: [1], disconnect: [2] }, { set: 1 }, null, []])
+      expect(shape({ note }), JSON.stringify(note)).toEqual({ ok: true, value: true });
+    expect(shape({ notes: [1, 2, 3] }, CATEGORY)).toEqual({ ok: true, value: true });
+  });
   it("refuses a relation, media or polymorphic value of any form but Strapi's documented ones", () => {
     expect(shape({ attachment: { connect: [{ id: 3, __pivot: { file_id: 9 } }] } }, NOTE)).toEqual({
       ok: false,

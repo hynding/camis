@@ -733,6 +733,36 @@ const routeGuard = (dir: string): void => {
     check(`granted action ${action} names a registered route`, actions.has(action), action);
 };
 
+/**
+ * A role that writes a single type without reading it still reaches what the type links: Strapi's
+ * single type controller populates a write's response and links what it is told, unnarrowed. The
+ * build must fail for it, before any project boots.
+ */
+const writerGaps = (): void => {
+  const writesFront = {
+    ...ownershipBundle,
+    roles: ownershipBundle.roles.map((r) =>
+      r.name === "member"
+        ? { ...r, grants: [...r.grants, { contentType: "Front", actions: ["update" as const] }] }
+        : r,
+    ),
+  };
+  const errors = strapiAdapter
+    .generate(writesFront, { projectName: "notes" })
+    .gaps.filter((g) => g.severity === "error");
+  check(
+    "a member that writes the single type without reading it fails the build",
+    errors.some(
+      (g) =>
+        g.feature === "apiRelationReach" &&
+        g.location.contentType === "Front" &&
+        g.location.rule === "member",
+    ),
+    errors,
+  );
+};
+
+writerGaps();
 const dir = await mkdtemp(join(tmpdir(), "camis-enforcement-"));
 try {
   await materialize(strapiAdapter.generate(ownershipBundle, { projectName: "notes" }), dir);

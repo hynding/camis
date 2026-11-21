@@ -485,6 +485,71 @@ describe("a reach the Strapi content API cannot narrow fails the build", () => {
       },
     ]);
   });
+  // A write's response is populated like a read (`?populate=` on PUT or POST), and on a single
+  // type or through a polymorphic relation the link it makes is not checked either: writing the
+  // holder reaches what reading it would.
+  it("a role that writes, without reading, a single type or a polymorphic holder that reaches a conditioned type", () => {
+    const spot: IrDocument = {
+      ...doc,
+      contentTypes: [
+        ...doc.contentTypes,
+        {
+          name: "Spot",
+          kind: "single",
+          fields: [
+            { type: "relation", name: "spotlight", relationKind: "manyToOne", target: "Note" },
+          ],
+        },
+        {
+          name: "Board",
+          kind: "collection",
+          fields: [{ type: "polymorphicRelation", name: "subjects", many: true }],
+        },
+      ],
+    };
+    const writer: Role[] = [
+      {
+        ...member[0]!,
+        grants: [
+          ...member[0]!.grants,
+          { contentType: "Spot", actions: ["update"] },
+          { contentType: "Board", actions: ["create", "update"] },
+        ],
+      },
+    ];
+    expect(errors(spot, writer)).toEqual([
+      {
+        feature: "apiPolymorphicReach",
+        location: { contentType: "Board", rule: "member" },
+        severity: "error",
+        message:
+          'role "member" writes "Board", whose polymorphic relation Board.subjects can reach "Note", which it reads under a condition; the Strapi target cannot narrow a polymorphic populate or write',
+      },
+      {
+        feature: "apiRelationReach",
+        location: { contentType: "Spot", rule: "member" },
+        severity: "error",
+        message:
+          'role "member" writes single type "Spot", which reaches "Note" (read under a condition) through Spot.spotlight; the Strapi target does not narrow a single type\'s populate or relation writes',
+      },
+    ]);
+    // An open create or update route writes as the public role.
+    const opened: IrDocument = {
+      ...spot,
+      contentTypes: spot.contentTypes.map((ct) =>
+        ct.name === "Spot" || ct.name === "Board"
+          ? { ...ct, options: { publicApiActions: ["update" as const] } }
+          : ct,
+      ),
+    };
+    const guest: Role[] = [
+      { name: "public", grants: [{ contentType: "Note", actions: ["read"], condition: owned }] },
+    ];
+    expect(errors(opened, guest).map((g) => [g.feature, g.location])).toEqual([
+      ["apiPolymorphicReach", { contentType: "Board", rule: "public" }],
+      ["apiRelationReach", { contentType: "Spot", rule: "public" }],
+    ]);
+  });
 });
 
 // The plugins serve the built-in user and media library with no check of camis's: a write there
@@ -586,23 +651,23 @@ describe("writes the users-permissions and upload plugins serve unchecked fail t
   it("tables each served type's and component's writable attributes by their form", () => {
     expect(projectApiEnforcement(doc, roles).shapes).toEqual({
       "api::category.category": { label: "scalar", notes: "relation" },
-      "api::front.front": { featured: "relation", headline: "scalar" },
+      "api::front.front": { featured: "toOneRelation", headline: "scalar" },
       "api::note.note": {
         attachment: "media",
-        category: "relation",
-        owner: "relation",
+        category: "toOneRelation",
+        owner: "toOneRelation",
         pinned: "relation",
         shared: "scalar",
         title: "scalar",
       },
       "api::tag.tag": {
         label: "scalar",
-        note: "relation",
-        parent: "relation",
-        pinnedOn: "relation",
+        note: "toOneRelation",
+        parent: "toOneRelation",
+        pinnedOn: "toOneRelation",
         refs: { component: "shared.reference", repeatable: true },
       },
-      "shared.reference": { image: "media", note: "relation" },
+      "shared.reference": { image: "media", note: "toOneRelation" },
     });
   });
   // Its media field links any stored file id unless the generated controller checks it.
@@ -656,7 +721,7 @@ describe("writes the users-permissions and upload plugins serve unchecked fail t
         relations: {},
         roles: {},
       });
-      expect(out.shapes["api::bookmark.bookmark"]).toEqual({ parent: "relation" });
+      expect(out.shapes["api::bookmark.bookmark"]).toEqual({ parent: "toOneRelation" });
     }
     expect(servedOf(bookmark(link, true), roles)).toBeDefined();
     // Read alone, or no link to write, or an admin role only: Strapi's own controller serves it.
@@ -683,7 +748,10 @@ describe("writes the users-permissions and upload plugins serve unchecked fail t
       roles: {},
       relations: {},
     });
-    expect(out.shapes["api::front.front"]).toEqual({ featured: "relation", headline: "scalar" });
+    expect(out.shapes["api::front.front"]).toEqual({
+      featured: "toOneRelation",
+      headline: "scalar",
+    });
     expect(out.gaps.filter((g) => g.location.contentType === "Front")).toEqual([]);
     const noWriter = roles.map((r) =>
       r.name === "reviewer"
