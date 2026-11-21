@@ -2703,8 +2703,11 @@ no gap reported (issue #103).
   (`reserved_field_name`). The other names are one target's concept, so the adapter that owns the
   name reports it: an `error`-severity `reservedFieldName` gap, located at the content type (or
   component) and the field, so `camis generate`/`camis build` stop before writing. `ir-core`'s
-  `reservedNameGaps(doc, target, reserved, namesOf)` walks the fields; each target says how it maps
-  a field's names and which it keeps. A built-in type is the target's own and is not checked.
+  `reservedNameGaps(doc, target, reserved, namesOf, options)` walks the fields; each target says how
+  it maps a field's names and which it keeps, and whether a built-in type's fields are checked
+  (`builtins`): Strapi and Filament map a built-in type onto a model of their own (users-permissions'
+  user, the host app's `users` or Strapi's `up_users`) and generate nothing from its fields, while
+  Express emits it as a plain table with the same timestamps, so only Express checks it.
 - **Strapi** (`@camis/strapi-schema`'s `STRAPI_RESERVED_NAMES`, `strapiReservedNameGaps`):
   `documentId`, `createdAt`, `updatedAt`, `publishedAt`, `createdBy`, `updatedBy`, `locale`,
   `localizations`, and the `created_by_id`/`updated_by_id` key columns, compared snake_cased as
@@ -2716,8 +2719,8 @@ no gap reported (issue #103).
   also a column of its own rows a field's column would repeat: a to-one relation named `document`
   keeps `document_id`. The Laravel API style reports `createdAt` and `updatedAt`, whose columns are
   Laravel's timestamps on every table, a component item's included.
-- **Express** reports `createdAt` and `updatedAt` on a content type (each table's timestamp
-  columns); a component's fields are prefixed columns, or rows of a table without timestamps.
+- **Express** reports `createdAt` and `updatedAt` on a content type, a built-in one included (each
+  table's timestamp columns); a component's fields are prefixed columns, or rows of a table without timestamps.
 - **Import.** A Strapi project's schema.json never carries these names (Strapi adds them itself and
   its builder refuses them), so it imports and generates as before. One edited by hand to carry one
   imports as it is, and generation reports it.

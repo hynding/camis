@@ -15,6 +15,14 @@ export type FieldHolder = "contentType" | "component";
 /** The names a field takes on a target, as that target maps them. */
 export type TargetNames = (field: Field, holder: FieldHolder) => TargetName[];
 
+export interface ReservedNameOptions {
+  /**
+   * Check a built-in content type's fields too: a target that emits a built-in type's columns
+   * from the IR, as it does any type's, must. One that maps it onto its own model does not.
+   */
+  builtins?: boolean;
+}
+
 const describe = (field: Field, name: TargetName): string => {
   if (name.inverse === true) return `inverse "${name.spelled}" of relation "${field.name}"`;
   return name.spelled === field.name
@@ -26,13 +34,14 @@ const describe = (field: Field, name: TargetName): string => {
  * An `error` gap for every field whose name, as `target` maps it, is one the target keeps for its
  * own: such a field is overwritten or refused at run time, so generation stops before it is
  * written. `reserved` maps each kept name, as `namesOf` maps names, to what the target calls it.
- * A built-in content type is the target's own and is not checked.
+ * A built-in content type is checked only with `builtins`.
  */
 export const reservedNameGaps = (
   doc: IrDocument,
   target: string,
   reserved: ReadonlyMap<string, string>,
   namesOf: TargetNames,
+  options: ReservedNameOptions = {},
 ): CapabilityGap[] => {
   const check = (fields: readonly Field[], holder: FieldHolder, location: IrErrorLocation) =>
     fields.flatMap((field) => {
@@ -53,7 +62,7 @@ export const reservedNameGaps = (
     });
   return [
     ...doc.contentTypes
-      .filter((ct) => ct.builtin === undefined)
+      .filter((ct) => options.builtins === true || ct.builtin === undefined)
       .flatMap((ct) => check(ct.fields, "contentType", { contentType: ct.name })),
     ...doc.components.flatMap((c) => check(c.fields, "component", { component: c.name })),
   ];
