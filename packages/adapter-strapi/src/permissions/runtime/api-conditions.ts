@@ -638,6 +638,8 @@ const scopeEntry = (
       const fragment =
         own(on, component) ?? (shared === undefined ? undefined : { populate: shared });
       if (fragment === undefined) continue;
+      const unknown = unknownParameter(fragment, POPULATE_PARAMETERS);
+      if (unknown !== undefined) return refuse(`Invalid populate parameter ${unknown}`);
       const scoped = scopeEntry(tables, { component }, fragment, state);
       if (!scoped.ok) return { ok: false, message: scoped.message };
       fragments[component] = scoped.value;
@@ -671,6 +673,46 @@ const scopeEntry = (
   return { ok: true, value: Object.keys(out).length === 0 ? true : out };
 };
 
+/**
+ * The query parameters Strapi 5.48's content API accepts (ALLOWED_QUERY_PARAM_KEYS) that a
+ * restricted caller may send: all but `publicationFilter` and `hasPublishedVersion`, whose cohorts
+ * compile to an EXISTS over the document's other version, one the caller may not read. Anything
+ * else, a parameter a later Strapi adds included, is refused until reviewed.
+ */
+const QUERY_PARAMETERS = [
+  "filters",
+  "sort",
+  "fields",
+  "populate",
+  "status",
+  "locale",
+  "page",
+  "pageSize",
+  "start",
+  "limit",
+  "_q",
+  "pagination",
+  "count",
+  "ordering",
+];
+/** A populate's options Strapi 5.48 reads (convertNestedPopulate, and a zone's `on`). */
+const POPULATE_PARAMETERS = [
+  "sort",
+  "filters",
+  "fields",
+  "populate",
+  "count",
+  "ordering",
+  "page",
+  "pageSize",
+  "start",
+  "limit",
+  "on",
+];
+
+const unknownParameter = (options: unknown, known: readonly string[]): string | undefined =>
+  isRecord(options) ? Object.keys(options).find((key) => !known.includes(key)) : undefined;
+
 const scopePopulate = (
   tables: Tables,
   holder: string,
@@ -680,6 +722,8 @@ const scopePopulate = (
   const normalised = normalisePopulate(tables, holder, populate);
   const links = own(tables.holders, holder)?.links;
   for (const [key, entry] of Object.entries(normalised)) {
+    const unknown = unknownParameter(entry, POPULATE_PARAMETERS);
+    if (unknown !== undefined) return refuse(`Invalid populate parameter ${unknown}`);
     const link = own(links, key);
     if (link === undefined) continue;
     const scoped = scopeEntry(tables, link, entry, state);
@@ -694,8 +738,9 @@ const scopePopulate = (
  * caller: each populate of one carries that type's filter (`$and` with the client's), at any
  * depth and whatever form the populate takes; each relation filter through one is narrowed the
  * same way, a component's populate filters included, so it is no oracle; a sort through one is
- * refused, since its join carries no filter, and so is a `$not` around one or a `$null` on one.
- * A caller no role restricts gets the query back as it is.
+ * refused, since its join carries no filter, and so is a `$not` around one or a `$null` on one;
+ * so is any parameter outside QUERY_PARAMETERS (or POPULATE_PARAMETERS in a populate), on every
+ * type with rules or a reach. A caller no role restricts gets the query back as it is.
  */
 export const scopeQuery = (
   tables: Tables,
@@ -703,10 +748,12 @@ export const scopeQuery = (
   state: unknown,
   query: Record<string, unknown>,
 ): Checked<Record<string, unknown>> => {
-  if (own(tables.holders, uid) === undefined) return { ok: true, value: query };
   const rules = own(tables.rules, uid);
   if (rules === undefined || callerOf(rules, state, "").kind === "unrestricted")
     return { ok: true, value: query };
+  const unknown = unknownParameter(query, QUERY_PARAMETERS);
+  if (unknown !== undefined) return refuse(`Invalid query parameter ${unknown}`);
+  if (own(tables.holders, uid) === undefined) return { ok: true, value: query };
   if (sortPaths(query.sort).some((p) => sortLeaks(tables, uid, p, state)))
     return { ok: false, message: "Invalid sort through a relation" };
   const out: Record<string, unknown> = { ...query };
