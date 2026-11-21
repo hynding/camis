@@ -22,6 +22,7 @@ export interface TargetName {
 /** What a target calls each name it keeps, by that name as the target maps names; a Map is one. */
 export interface KeptNames {
   get(mapped: string): string | undefined;
+  prefixOf?(mapped: string): string | undefined;
 }
 
 export type FieldHolder = "contentType" | "component";

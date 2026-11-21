@@ -200,20 +200,20 @@ describe("strapiReservedNameGaps", () => {
   // Strapi keeps the strapi prefix for its own columns and attributes (review workflows'
   // strapi_stage and strapi_assignee among them), with one or two leading underscores too.
   it.each([
-    ["strapiStage", undefined],
-    ["strapiness", undefined],
-    ["stage", "strapi_stage"],
-    ["stage", "_strapi_stage"],
-    ["stage", "__strapiStage"],
-    ["stage", "StrapiStage"],
-  ])("reports a field %s (API key %s) named with Strapi's own prefix", (name, api) => {
+    ["strapiStage", undefined, "strapi"],
+    ["strapiness", undefined, "strapi"],
+    ["stage", "strapi_stage", "strapi"],
+    ["stage", "_strapi_stage", "_strapi"],
+    ["stage", "__strapiStage", "__strapi"],
+    ["stage", "StrapiStage", "strapi"],
+  ])("reports a field %s (API key %s) named with Strapi's own prefix", (name, api, prefix) => {
     const field: Field =
       api === undefined ? { type: "string", name } : { type: "string", name, names: { api } };
     const gaps = strapiReservedNameGaps(withFields([field]));
     expect(gaps.map((g) => [g.severity, g.location])).toEqual([
       ["error", { contentType: "Note", field: name }],
     ]);
-    expect(gaps[0]!.message).toContain(`collides with Strapi's own "strapi*"; rename it`);
+    expect(gaps[0]!.message).toContain(`uses Strapi's reserved prefix "${prefix}"; rename it`);
   });
 
   // Strapi's Content-Type Builder also refuses `status` (since 5.48), `meta` and `entry_id`, which

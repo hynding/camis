@@ -169,6 +169,27 @@ describe("reservedNameGaps", () => {
     ]);
   });
 
+  it("says a name begins with a prefix the target keeps, once per field and prefix", () => {
+    const prefixed = {
+      get: (): string | undefined => undefined,
+      prefixOf: (mapped: string) => (mapped.startsWith("stamp") ? "stamp" : undefined),
+    };
+    const gaps = reservedNameGaps(doc, "the Test target", prefixed, (field, holder) =>
+      holder === "contentType" && field.name === "stampedAt"
+        ? [
+            { spelled: "stampedAt", mapped: "stamped_at" },
+            { spelled: "stamped_at_id", mapped: "stamped_at_id" },
+          ]
+        : [],
+    );
+    expect(gaps.map((g) => [g.location, g.message])).toEqual([
+      [
+        { contentType: "Note", field: "stampedAt" },
+        `field "stampedAt" uses the Test target's reserved prefix "stamp"; rename it`,
+      ],
+    ]);
+  });
+
   // Renaming the field leaves its inverse's collision on Person, so each is reported where it is.
   it("reports a relation and its inverse kept under one name each where it lands", () => {
     const related: IrDocument = {
