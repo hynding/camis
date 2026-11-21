@@ -762,7 +762,43 @@ const writerGaps = (): void => {
   );
 };
 
+/**
+ * On an `auth: false` route Strapi strips an ordinary relation from populate but not a polymorphic
+ * one, which returns entries of any type: an open action on a type with one fails the build.
+ */
+const openPolymorphicGaps = (): void => {
+  const board = {
+    ...ownershipBundle,
+    document: {
+      ...ownershipBundle.document,
+      contentTypes: [
+        ...ownershipBundle.document.contentTypes,
+        {
+          name: "Board",
+          kind: "collection" as const,
+          options: { publicApiActions: ["list" as const, "read" as const] },
+          fields: [{ type: "polymorphicRelation" as const, name: "subjects", many: true }],
+        },
+      ],
+    },
+  };
+  const errors = strapiAdapter
+    .generate(board, { projectName: "notes" })
+    .gaps.gaps.filter((g) => g.severity === "error");
+  check(
+    "an open list of a type with a polymorphic relation fails the build",
+    errors.some(
+      (g) =>
+        g.feature === "apiPolymorphicReach" &&
+        g.location.contentType === "Board" &&
+        g.location.rule === "public",
+    ),
+    errors,
+  );
+};
+
 writerGaps();
+openPolymorphicGaps();
 const dir = await mkdtemp(join(tmpdir(), "camis-enforcement-"));
 try {
   await materialize(strapiAdapter.generate(ownershipBundle, { projectName: "notes" }), dir);

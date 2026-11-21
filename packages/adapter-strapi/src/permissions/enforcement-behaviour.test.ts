@@ -343,10 +343,10 @@ beforeAll(async () => {
     controllers[uid] = createCoreController(uid, ({ strapi: s }) =>
       enforcedController(s, uid, TABLES),
     );
-  const { bodyCheckedSingle } = await import(
+  const { checkedSingle } = await import(
     pathToFileURL(join(dir, "permissions", "api-controller.ts")).href
   );
-  controllers[FRONT] = createCoreController(FRONT, () => bodyCheckedSingle(FRONT, TABLES));
+  controllers[FRONT] = createCoreController(FRONT, () => checkedSingle(FRONT, TABLES));
   // A type with no rules of its own and nothing it reaches, served only so a restricted write's
   // body is checked: members create and update bookmarks, each under a parent bookmark.
   const withBookmarks: IrBundle = {
@@ -852,7 +852,28 @@ describe("a single type a restricted role writes, over Strapi's single type cont
     expect(guest.status).toBe(400);
     expect(calls).toEqual([]);
   });
-  it("leaves an admin role's and an API token's write, and every read and delete, to Strapi", async () => {
+  // A file's related entries are polymorphic: no populate of them is answered, at any depth, on a
+  // read or in a write's response, as on a collection type.
+  it("refuses a populate of a file's related entries, on a read or a write", async () => {
+    const related = {
+      featured: { populate: { notes: { populate: { attachment: { populate: "related" } } } } },
+    };
+    for (const state of [reviewer(), asGuest]) {
+      const read = context(state, { query: { populate: related } });
+      await front().find(read);
+      expect(read.status).toBe(400);
+      const write = context(state, {
+        query: { populate: related },
+        request: { body: { data: { headline: "x" } } },
+      });
+      await front().update(write);
+      expect(write.status).toBe(400);
+    }
+    expect(calls).toEqual([]);
+    await front().find(context(reviewer(), { query: { populate: { featured: true } } }));
+    expect(calls).toEqual([`core.find ${FRONT}`]);
+  });
+  it("leaves an admin role's and an API token's requests, and every delete, to Strapi", async () => {
     const data = { featured: { connect: [{ id: 2, __pivot: { front_id: 9 } }] } };
     for (const state of [asUser(13, "manager"), asToken])
       await front().update(context(state, { request: { body: { data } } }));

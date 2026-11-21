@@ -550,6 +550,150 @@ describe("a reach the Strapi content API cannot narrow fails the build", () => {
       ["apiPolymorphicReach", { contentType: "Board", rule: "public" }],
     ]);
   });
+  // On an `auth: false` route Strapi sanitises with no credentials: it strips an ordinary relation
+  // from populate, but not a polymorphic one, which returns entries of any type (seen on 5.48:
+  // a note the public may not read, and an entry of a type it holds no grant on). So any open
+  // action on a type with one, at any depth, fails the build, whatever roles the IR names.
+  it("any open action on a type with a polymorphic relation, its own or a component's", () => {
+    const poly: IrDocument = {
+      ...doc,
+      contentTypes: [
+        ...doc.contentTypes,
+        {
+          name: "Board",
+          kind: "collection",
+          fields: [{ type: "polymorphicRelation", name: "subjects", many: true }],
+        },
+        {
+          name: "Box",
+          kind: "collection",
+          fields: [
+            { type: "component", name: "frame", component: "Holder", repeatable: false },
+            { type: "dynamicZone", name: "body", components: ["Holder"] },
+          ],
+        },
+      ],
+      components: [
+        ...doc.components,
+        { name: "Pointer", fields: [{ type: "polymorphicRelation", name: "target", many: false }] },
+        {
+          name: "Holder",
+          fields: [{ type: "component", name: "inner", component: "Pointer", repeatable: true }],
+        },
+      ],
+    };
+    const opening = (actions: ("list" | "read" | "create" | "update")[]): IrDocument => ({
+      ...poly,
+      contentTypes: poly.contentTypes.map((ct) =>
+        ct.name === "Board" || ct.name === "Box"
+          ? { ...ct, options: { publicApiActions: actions } }
+          : ct,
+      ),
+    });
+    const openGaps = (d: IrDocument, rs: Role[]) =>
+      errors(d, rs).filter((g) => g.message.includes("auth: false"));
+    const noPublic = roles.filter((r) => r.name !== "public");
+    for (const actions of [["list"], ["read"], ["create"], ["update"]] as const)
+      for (const rs of [roles, noPublic, []])
+        expect(
+          openGaps(opening([...actions]), rs).map((g) => [g.feature, g.location]),
+          `${actions[0]} with ${rs.length} roles`,
+        ).toEqual([
+          ["apiPolymorphicReach", { contentType: "Board", rule: "public" }],
+          ["apiPolymorphicReach", { contentType: "Box", rule: "public" }],
+        ]);
+    expect(openGaps(opening(["list", "read"]), [])).toEqual([
+      {
+        feature: "apiPolymorphicReach",
+        location: { contentType: "Board", rule: "public" },
+        severity: "error",
+        message:
+          '"Board" opens list, read to anyone (an auth: false route), and its polymorphic relation Board.subjects can return entries of any type: Strapi does not narrow a polymorphic populate there, whatever the public role holds',
+      },
+      {
+        feature: "apiPolymorphicReach",
+        location: { contentType: "Box", rule: "public" },
+        severity: "error",
+        message:
+          '"Box" opens list, read to anyone (an auth: false route), and its polymorphic relation Pointer.target can return entries of any type: Strapi does not narrow a polymorphic populate there, whatever the public role holds',
+      },
+    ]);
+    expect(openGaps(opening(["delete" as "list"]), [])).toEqual([]);
+    expect(openGaps(poly, [])).toEqual([]);
+  });
+  // A file's `related` entries are polymorphic too: every type with a media field, at any depth,
+  // is served so a populate of them is refused, whether or not a conditioned type holds media.
+  it("serves every type with a media field, so a populate of a file's related entries is refused", () => {
+    const gallery: IrDocument = {
+      ...doc,
+      contentTypes: [
+        ...doc.contentTypes.map((ct) =>
+          ct.name === "Note" ? { ...ct, fields: ct.fields.filter((f) => f.type !== "media") } : ct,
+        ),
+        {
+          name: "Gallery",
+          kind: "collection",
+          options: { publicApiActions: ["list", "read"] },
+          fields: [{ type: "media", name: "cover", multiple: true }],
+        },
+        {
+          name: "Home",
+          kind: "single",
+          options: { publicApiActions: ["read"] },
+          fields: [{ type: "media", name: "logo" }],
+        },
+      ],
+      components: doc.components.map((c) => ({
+        ...c,
+        fields: c.fields.filter((f) => f.type !== "media"),
+      })),
+    };
+    const out = projectApiEnforcement(
+      gallery,
+      roles.filter((r) => r.name !== "member"),
+    );
+    expect(out.holders["api::gallery.gallery"]).toEqual({
+      populatable: ["cover"],
+      links: { cover: { media: true } },
+    });
+    expect(out.holders["api::home.home"]).toEqual({
+      populatable: ["logo"],
+      links: { logo: { media: true } },
+    });
+    expect(out.types.map((t) => t.contentType)).toEqual(
+      expect.arrayContaining(["Gallery", "Home"]),
+    );
+    expect(out.singles).toContain("api::home.home");
+    expect(out.shapes["api::gallery.gallery"]).toEqual({ cover: "media" });
+    expect(out.shapes["api::home.home"]).toEqual({ logo: "toOneMedia" });
+  });
+  it("tables a polymorphic relation to one entry and a single media field as to-one", () => {
+    const one: IrDocument = {
+      ...doc,
+      contentTypes: [
+        ...doc.contentTypes,
+        {
+          name: "Pin",
+          kind: "collection",
+          fields: [
+            { type: "polymorphicRelation", name: "target", many: false },
+            { type: "polymorphicRelation", name: "targets", many: true },
+            { type: "media", name: "photo", multiple: false },
+            { type: "media", name: "photos", multiple: true },
+          ],
+        },
+      ],
+    };
+    const writes: Role[] = [
+      { name: "editor", grants: [{ contentType: "Pin", actions: ["create"] }] },
+    ];
+    expect(projectApiEnforcement(one, writes).shapes["api::pin.pin"]).toEqual({
+      photo: "toOneMedia",
+      photos: "media",
+      target: "toOnePolymorphic",
+      targets: "polymorphic",
+    });
+  });
 });
 
 // The plugins serve the built-in user and media library with no check of camis's: a write there
@@ -653,7 +797,7 @@ describe("writes the users-permissions and upload plugins serve unchecked fail t
       "api::category.category": { label: "scalar", notes: "relation" },
       "api::front.front": { featured: "toOneRelation", headline: "scalar" },
       "api::note.note": {
-        attachment: "media",
+        attachment: "toOneMedia",
         category: "toOneRelation",
         owner: "toOneRelation",
         pinned: "relation",
@@ -667,7 +811,7 @@ describe("writes the users-permissions and upload plugins serve unchecked fail t
         pinnedOn: "toOneRelation",
         refs: { component: "shared.reference", repeatable: true },
       },
-      "shared.reference": { image: "media", note: "toOneRelation" },
+      "shared.reference": { image: "toOneMedia", note: "toOneRelation" },
     });
   });
   // Its media field links any stored file id unless the generated controller checks it.

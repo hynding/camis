@@ -940,6 +940,33 @@ describe("writeShape: a restricted caller's write names only the type's writable
       expect(shape({ note }), JSON.stringify(note)).toEqual({ ok: true, value: true });
     expect(shape({ notes: [1, 2, 3] }, CATEGORY)).toEqual({ ok: true, value: true });
   });
+  it("refuses more than one entry on a polymorphic relation to one or a single media field", () => {
+    const item = (id: number) => ({ id, __type: NOTE });
+    for (const about of [
+      [item(1), item(2)],
+      { connect: [item(1), item(2)] },
+      { set: [item(1), item(2)] },
+    ])
+      expect(shape({ about }), JSON.stringify(about)).toEqual({
+        ok: false,
+        message: "Invalid relation value for about: one entry at most",
+      });
+    for (const cover of [[1, 2], { connect: [1, 2] }, { set: [1, 2] }])
+      expect(shape({ cover }), JSON.stringify(cover)).toEqual({
+        ok: false,
+        message: "Invalid media value for cover: one entry at most",
+      });
+    for (const data of [
+      { about: [item(1)] },
+      { about: null },
+      { about: [] },
+      { cover: 1 },
+      { cover: null },
+      { cover: [] },
+      { subject: [item(1), item(2)] },
+    ])
+      expect(shape(data), JSON.stringify(data)).toEqual({ ok: true, value: true });
+  });
   it("refuses a relation, media or polymorphic value of any form but Strapi's documented ones", () => {
     expect(shape({ attachment: { connect: [{ id: 3, __pivot: { file_id: 9 } }] } }, NOTE)).toEqual({
       ok: false,

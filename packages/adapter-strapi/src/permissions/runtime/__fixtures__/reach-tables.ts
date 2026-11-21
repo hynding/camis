@@ -101,6 +101,8 @@ export const tables: Tables = {
       blocks: { zone: [REF] },
       pinnedOn: "toOneRelation",
       subject: "polymorphic",
+      about: "toOnePolymorphic",
+      cover: "toOneMedia",
     },
     [REF]: { label: "scalar", note: "toOneRelation", image: "media" },
   },
