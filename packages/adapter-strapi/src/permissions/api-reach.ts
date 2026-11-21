@@ -10,6 +10,7 @@ import {
 import { PUBLIC_ROLE, type Role } from "@camis/permissions";
 import { componentUid, strapiNames } from "@camis/strapi-schema";
 import type { ApiHolder, ApiHolderLink, ApiTypeRules } from "./api-enforcement";
+import { PLUGIN_USER_UID } from "./actions";
 import { codePointOrder } from "./code-point-order";
 
 // Which content types and components reach a type some role reads under a condition, through
@@ -32,7 +33,7 @@ const POLYMORPHIC: NodeKey = "polymorphic";
  * conditioned types: a populate of one takes no per-type filter and returns entries of any type,
  * one the caller holds no grant on included (Strapi's sanitizer keeps such a list whole when it
  * can read none of its entries). Every node that leads to one reaches it, so its populate is
- * checked: refused for a role and for a custom API token alike.
+ * checked: refused for a role and the public role alike.
  */
 const ANY_TYPE = "any type";
 const FILE_UID = "plugin::upload.file";
@@ -80,7 +81,8 @@ const graphOf = (doc: IrDocument): Map<NodeKey, Node> => {
       const attribute = fieldApiName(f);
       if (f.type === "relation") {
         const target = byName.get(f.target);
-        return target === undefined || target.builtin !== undefined
+        // The built-in user is a node (its inverses lead on); the media library's file is not.
+        return target === undefined || (target.builtin !== undefined && target.builtin !== "user")
           ? []
           : [{ attribute, link: "relation", targets: [typeKey(target)] }];
       }
@@ -96,6 +98,15 @@ const graphOf = (doc: IrDocument): Map<NodeKey, Node> => {
   const populatable = (fields: readonly Field[]): string[] =>
     fields.filter((f) => POPULATABLE.has(f.type)).map(fieldApiName);
   for (const ct of doc.contentTypes) {
+    // users-permissions serves the user and camis emits none of its own fields, but a relation to
+    // it leads on through its inverses: a node with those alone.
+    if (ct.builtin === "user")
+      nodes.set(typeKey(ct), {
+        uid: PLUGIN_USER_UID,
+        owner: ct.name,
+        populatable: [],
+        edges: [],
+      });
     if (ct.builtin !== undefined) continue;
     nodes.set(typeKey(ct), {
       uid: strapiNames(ct).uid,

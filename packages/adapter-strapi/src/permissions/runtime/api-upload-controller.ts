@@ -1,4 +1,11 @@
-import { own, populatesRelated, recordQuery, type Tables } from "./api-conditions";
+import {
+  CUSTOM_TOKEN_REFUSAL,
+  customToken,
+  own,
+  populatesRelated,
+  recordQuery,
+  type Tables,
+} from "./api-conditions";
 import {
   FILE_UID,
   UPLOADER,
@@ -25,7 +32,7 @@ interface UploadContext {
   state?: unknown;
   request?: { body?: unknown };
   body?: unknown;
-  forbidden: () => unknown;
+  forbidden: (message?: string) => unknown;
   badRequest: (message?: string) => unknown;
 }
 
@@ -97,10 +104,11 @@ const createdIds = (body: unknown): number[] =>
 /**
  * The plugin's content API controller factory, with every action decided first for a caller the
  * rules restrict: a read populates no file's related entries, which may be of any type and which
- * Strapi returns whole when it can read none of them; an upload attaches only to a content type's own media field on an entry the
- * caller may update; a replace, an info update or a delete needs update on every entry the file is
- * attached to, or, for an unattached file, that the caller uploaded it. Every upload with a session
- * records its uploader. An API token and an admin role pass to the plugin as they are.
+ * Strapi returns whole when it can read none of them; an upload attaches only to a content type's
+ * own media field on an entry the caller may update; a replace, an info update or a delete needs
+ * update on every entry the file is attached to, or, for an unattached file, that the caller
+ * uploaded it. Every upload with a session records its uploader. A full-access or read-only API
+ * token and an admin role pass to the plugin as they are; a custom API token is refused.
  */
 export const enforcedUpload =
   (factory: unknown, tables: Tables) =>
@@ -124,10 +132,10 @@ export const enforcedUpload =
 
     /** A read, refused first when its populate reaches a file's related entries. */
     const read = async (ctx: UploadContext, action: "find" | "findOne"): Promise<unknown> => {
+      if (customToken(ctx.state)) return ctx.forbidden(CUSTOM_TOKEN_REFUSAL);
       const caller = uploadCaller(uploads, ctx.state);
       if (caller.kind === "refused") return ctx.forbidden();
-      const checked = caller.kind === "role" || (caller.kind === "unrestricted" && caller.custom);
-      if (checked && populatesRelated(ctx.query?.populate ?? false))
+      if (caller.kind === "role" && populatesRelated(ctx.query?.populate ?? false))
         return ctx.badRequest("Invalid populate of a file's related entries");
       return core[action].call(core, ctx);
     };
@@ -144,6 +152,7 @@ export const enforcedUpload =
       },
 
       async upload(ctx: UploadContext) {
+        if (customToken(ctx.state)) return ctx.forbidden(CUSTOM_TOKEN_REFUSAL);
         const caller = uploadCaller(uploads, ctx.state);
         if (caller.kind === "refused") return ctx.forbidden();
         const request = uploadRequest(ctx.query, ctx.request?.body);
@@ -178,6 +187,7 @@ export const enforcedUpload =
       },
 
       async destroy(ctx: UploadContext) {
+        if (customToken(ctx.state)) return ctx.forbidden(CUSTOM_TOKEN_REFUSAL);
         if (uploadCaller(uploads, ctx.state).kind === "refused") return ctx.forbidden();
         if (uploadCaller(uploads, ctx.state).kind === "role") {
           const id = ctx.params?.id;

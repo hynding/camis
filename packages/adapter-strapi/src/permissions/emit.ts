@@ -11,6 +11,9 @@ import { projectApiEnforcement, type ApiEnforcement } from "./api-enforcement";
 import { emitConditionsModule } from "./conditions";
 import { projectApiRoles, projectPermissions } from "./project";
 
+/** The condition module of roles with no condition: the bootstrap registers none. */
+const NO_CONDITIONS = "export const conditions: unknown[] = [];\n";
+
 export interface PermissionEmission {
   files: GeneratedFile[];
   gaps: CapabilityGap[];
@@ -57,12 +60,11 @@ export const emitPermissions = (doc: IrDocument, roles: Role[]): PermissionEmiss
       content: stableJson({ roles: apiRoles.roles, public: apiRoles.public }),
     },
   ];
-  if (conditions.length > 0) {
-    files.push({
-      path: "src/permissions/conditions.ts",
-      content: emitConditionsModule(conditions),
-    });
-  }
+  // The bootstrap imports the module whether or not any role has a condition.
+  files.push({
+    path: "src/permissions/conditions.ts",
+    content: conditions.length > 0 ? emitConditionsModule(conditions) : NO_CONDITIONS,
+  });
   files.push(...emitApiEnforcementFiles(enforcement));
   return {
     files,

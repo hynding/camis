@@ -2896,7 +2896,19 @@ relation write, and a database seeded once kept it.
     Only an IR with neither a non-admin role nor an open route emits no enforcement. Every type with
     a polymorphic relation or inverse at any depth, and every type leading to one, is served once
     the rules restrict anyone (a polymorphic link in its holder), and a populate of it is refused
-    (400 "Invalid populate of a polymorphic relation"), for a role as for a custom token.
+    (400 "Invalid populate of a polymorphic relation"). For roles and open routes this is a runtime
+    refusal on top of the build error: a role reading the polymorphic type itself fails the build,
+    and otherwise Strapi strips the ordinary relation leading to it, which camis does not rest on.
+    The built-in user is a node of the reach graph with its inverses as edges (users-permissions
+    serves it, but a relation to it leads on: a board's author to the author's boards), so a
+    populate through it is walked, and a type reaching a polymorphic relation or a conditioned type
+    only through it is served; a nested populate beneath an attribute the graph does not know (the
+    user's `role`, an admin's `createdBy`) is refused (400 "Invalid populate beneath …") rather than
+    passed on unchecked. Live on 5.48: a role's `GET
+    /api/albums?populate[curator][populate][boards][populate]=subjects` (and `=*`, and
+    `[curator][populate][role][populate]=users`) and the same through an open route
+    (`/api/galleries?populate[owner]…`) are 400; `populate[curator][populate]=boards` and `=role`
+    are 200.
   - **API tokens.** Strapi 5.48 authenticates a content API token with the strategy
     `content-api-token` (`@strapi/admin` `strategies/content-api-token.js`) and leaves
     `ctx.state.auth` as `{ strategy, credentials, ability }`, `credentials` the stored token, its
@@ -2907,20 +2919,23 @@ relation write, and a database seeded once kept it.
     applies (a token stands for no role and no user) and either reads every type, so Strapi's
     sanitizer never meets a polymorphic list none of whose entries it may read (seen live: a
     read-only token's `GET /api/boards?populate=subjects` returns the Secret it may read through
-    `/api/secrets` anyway, and its create is 403, Strapi's). A custom token is checked against its
-    own scopes by Strapi and no row condition applies to it either, but Strapi's
-    `handleMorphElements` checks each polymorphic entry against its ability and keeps the list whole
-    when none passes (seen on 5.48: a custom token holding only `api::board.board.find` got a Secret
-    from `GET /api/boards?populate=subjects`); so on every served type (`enforcedController`'s find,
-    findOne, create and update, `checkedSingle`'s find and update) and on the upload API's `find`
-    and `findOne`, its populate of a polymorphic relation or a file's `related` entries, in any form
-    and depth, is refused with the same 400 as a role's, and nothing else of its request is changed.
-    An `auth: false` route authenticates no one, so a token sent there is an anonymous request,
-    decided as the public role's. Limitation: where the rules restrict no one (no non-admin role and
-    no open route) camis emits no enforcement, so there a custom token's polymorphic populate is
-    subject to Strapi's sanitizer as it is; a generated policy on every core route would close it,
-    but routers camis does not otherwise touch are read back by the importer, so it is not built
-    here.
+    `/api/secrets` anyway, and its create is 403, Strapi's). **Custom tokens are not supported on
+    enforced routes.** Strapi checks one against its own scopes, but its `handleMorphElements`
+    checks each polymorphic entry against the token's ability and keeps the list whole when none
+    passes, at any depth of any type: a populate check on served types alone was shown not to hold
+    (seventh review round: a custom token reached a Secret through the built-in user, `GET
+    /api/boards?populate[author][populate][boards][populate]=subjects`, the same through an album's
+    curator, the single type's pin and a PUT's response). So every route camis serves refuses a
+    custom token with 403 "A custom API token is not supported on this route: use a full-access or
+    read-only token" before anything else: every action of `enforcedController`, `checkedSingle`'s
+    find, update and delete, and the upload API's `find`, `findOne`, `upload` and `destroy`
+    (fail-closed, as before the sixth round, now deliberate). On routes camis does not wrap
+    (`/api/users*`, and everything where the rules restrict no one, as no enforcement is emitted
+    there) a custom token is subject to Strapi's polymorphic sanitizer behaviour (live: a custom
+    token holding `user.find` got the Secret through `GET
+    /api/users?populate[boards][populate]=subjects`), tracked in issue #111. An `auth: false` route
+    authenticates no one, so a token sent there is an anonymous request, decided as the public
+    role's.
   - **Route sweep (fifth review round).** Every route a non-admin or anonymous caller can reach, and
     whether a polymorphic or relation populate reaches Strapi unchecked there (live probes on 5.48,
     sqlite, with a role holding File and User read beside the ownership fixture's roles):
@@ -2932,14 +2947,14 @@ relation write, and a database seeded once kept it.
     | Single type (`find`, `update`) | none when served (`checkedSingle`); a single type reaching a conditioned type fails the build | 400 for `related` |
     | Upload `find`, `findOne` | none: `related` refused in every form (`populatesRelated`); `folder` is Strapi's "Invalid key" for a role that cannot read folders | was 200 with another user's note; now 400 |
     | Upload `upload`, `?id=`, `destroy` | none: the plugin answers with the stored file, populating nothing from the query (`findOne(id)` with no populate) | not populated |
-    | `GET /api/users`, `/api/users/:id`, `/api/users/count` | none: an inverse onto the user that reaches a conditioned type fails the build (`apiRelationReach`); otherwise Strapi strips a relation the role may not read; user fields of the IR's own are not emitted, so a user holds no media | `?populate=*`, `=role`, `[secrets][populate]=keeper` returned no relation |
+    | `GET /api/users`, `/api/users/:id`, `/api/users/count` | for a role, none: an inverse onto the user that reaches a conditioned type fails the build (`apiRelationReach`), a role reading a polymorphic type fails it too, and otherwise Strapi strips a relation the role may not read (user fields of the IR's own are not emitted, so a user holds no media); camis does not wrap these routes, so for a custom API token a polymorphic populate through an inverse reaches Strapi (issue #111) | role: `?populate=*`, `=role`, `[secrets][populate]=keeper` and `/api/users/:id?populate[boards][populate]=subjects` returned no relation; custom token: `?populate[boards][populate]=subjects` returned a Secret |
     | `GET /api/users/me` | the same (Strapi's default for the authenticated role; camis grants it only when a role lists it) | `?populate=secrets`, `=*`, `=role`, `[role][populate]=permissions` returned no relation, `role` included |
     | `/api/auth/*` | none: they answer with the sanitized user, populating nothing from the query | `POST /api/auth/local?populate=*` populates nothing |
     | i18n `GET /api/i18n/locales` | none: locales hold no relation; 403 unless a role is granted it | 403 |
     | Other allowlisted plugin routes | none: `scripts/content-api-allowlist.json` names only the content API and the users-permissions and upload routes above | — |
-    | Any served route, upload `find`/`findOne`, with a content API token (sixth round) | full-access and read-only: passed unchanged, every type readable to them; custom: a polymorphic or `related` populate refused, nothing else changed; a type camis does not serve (only where the rules restrict no one): Strapi's sanitizer | full-access 200 with `related`; read-only 200 on reads, 403 on a create; custom 200 on its granted list, 400 on `related`, `*` and a polymorphic populate (`subjects`, its `on` form), 403 where it holds no scope |
-  - Not narrowed, as on Strapi and the Filament target: admin roles and API tokens (Phase 25; a
-    custom token's polymorphic populate excepted, above). An
+    | Any served route and the upload API, with a content API token (sixth and seventh rounds) | full-access and read-only: passed unchanged, every type readable to them; custom: refused (403) on every route camis serves; on a route camis does not serve (`/api/users*`; an unserved type, which leads to no polymorphic relation, media field or conditioned type where the rules restrict anyone, and every type where they restrict no one): Strapi's sanitizer, issue #111 | full-access 200 with `related`; read-only 200 on reads, 403 on a create; custom 403 "A custom API token is not supported…" on a served list, the single type, a PUT and the upload list |
+  - Not narrowed, as on Strapi and the Filament target: admin roles and full-access and read-only
+    API tokens (Phase 25; a custom token is refused, above). An
     `auth: false` action (Phase 57) serves its own type's rows to anyone, and its reach is decided
     as the public role's, so a reach-only type's open route still answers. A session whose role is
     not loaded, a role the IR does not grant the type, and an unknown strategy are refused.
@@ -3090,12 +3105,12 @@ Built from the plugin's source (`controllers/content-api.js`, `services/upload.j
   deciding `find` and `findOne` (no populate of a file's `related` entries, in any form or depth:
   `populatesRelated`, the check the entry controllers run under a media field) and `upload` and
   `destroy` first for a caller the rules restrict (a session's role, the public role without one);
-  an admin role and a full-access or read-only API token pass, a custom token's `find` and `findOne`
-  refuse a populate of `related` as a role's do (Phase 94, **API tokens**), and a session whose role
-  was not loaded is 403. Every refusal comes before the plugin stores, replaces or deletes a file.
-  The extension is emitted wherever the rules restrict anyone (a non-admin role or an open route),
-  since a custom token may hold the upload API's scopes whatever the roles; `camisUploader` only
-  once a restricted role writes files.
+  an admin role and a full-access or read-only API token pass, a custom token is refused (403) on
+  all four (Phase 94, **API tokens**), and a session whose role was not loaded is 403. Every refusal
+  comes before the plugin stores, replaces or deletes a file. The extension is emitted wherever the
+  rules restrict anyone (a non-admin role or an open route), since a custom token may hold the
+  upload API's scopes whatever the roles and must meet the refusal; `camisUploader` only once a
+  restricted role writes files.
 - **`POST /api/upload`** (the decisions are `src/permissions/api-uploads.ts`, pure):
   - Query parameters other than `id` and body fields other than `fileInfo`, `ref`, `refId` and
     `field` are 400: the upload keeps every other field as a meta of the stored file (`path` among
@@ -3231,7 +3246,17 @@ refused); `enforcement-behaviour.test.ts` and `upload-behaviour.test.ts` (full-a
 pass, custom refused on find, findOne, create, a deep populate, the single type and the upload API's
 reads); `api-enforcement.test.ts` (a polymorphic type no role reaches is served with every type
 leading to it, not where the rules restrict no one); the boot job creates real tokens (full-access,
-read-only, custom) and checks the strategy name against the installed Strapi.
+read-only, custom) and checks the strategy name against the installed Strapi. Added with the seventh
+review round: a custom token is refused (403) on every action of every served type, the single type
+and the upload API (`enforcement-behaviour.test.ts`, `upload-behaviour.test.ts`,
+`runtime/api-conditions.test.ts`, which no longer has a custom-token populate walk); a populate
+through the built-in user is walked and one beneath an attribute the graph does not know is refused,
+for a role and a guest (`runtime/api-conditions.test.ts`); the user is a reach graph node and a type
+reaching through it is served (`api-enforcement.test.ts`); roles without any condition still emit
+`src/permissions/conditions.ts`, and every relative import of the bootstrap names an emitted file
+(`api-enforcement.test.ts`; such a project failed to boot with "Cannot find module
+'./permissions/conditions'"); the boot job's custom token gets 403, with the message, on
+`/api/notes`, `/api/front` and `/api/upload/files`.
 
 ---
 

@@ -150,8 +150,9 @@ export const projectUploads = (doc: IrDocument, roles: readonly Role[]): UploadE
     ({ ct }) => restricted.some((r) => writes(r, ct)) || open(ct).length > 0,
   );
   // The upload API's find and findOne return a file's related entries, of any type, to a role that
-  // reads files or a custom API token holding their scope, which generation cannot see: wherever
-  // the rules restrict anyone (a non-admin role, an open route), the extension checks them.
+  // reads files, and a custom API token may hold their scope, which generation cannot see: wherever
+  // the rules restrict anyone (a non-admin role, an open route), the extension checks the one and
+  // refuses the other.
   const guarded =
     restricted.length > 0 ||
     doc.contentTypes.some((ct) => (ct.options?.publicApiActions ?? []).length > 0);

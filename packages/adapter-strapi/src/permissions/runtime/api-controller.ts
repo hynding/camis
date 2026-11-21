@@ -2,6 +2,8 @@ import {
   assignedValues,
   callerOf,
   createVerdict,
+  customToken,
+  CUSTOM_TOKEN_REFUSAL,
   currentLinksQuery,
   droppedLinks,
   holdersQuery,
@@ -38,7 +40,7 @@ interface RequestContext {
   request?: { body?: unknown };
   status?: number;
   notFound: () => unknown;
-  forbidden: () => unknown;
+  forbidden: (message?: string) => unknown;
   badRequest: (message?: string) => unknown;
 }
 
@@ -89,6 +91,24 @@ const replaceData = (ctx: RequestContext, data: Record<string, unknown>): void =
   if (ctx.request !== undefined) ctx.request.body = { ...(ctx.request.body as object), data };
 };
 
+type Method = (this: CoreController, ctx: RequestContext) => Promise<unknown>;
+
+/**
+ * The methods, each refusing a custom API token (403) before anything else: Strapi checks one
+ * against its own scopes, and its sanitizer keeps a polymorphic list whole when the token may read
+ * none of its entries, at any depth of any type. Wrapped in place, since each method's `super` is
+ * the object Strapi puts its core controller under.
+ */
+const refusingCustomTokens = <T extends Record<string, Method>>(methods: T): T => {
+  for (const name of Object.keys(methods) as (keyof T)[]) {
+    const method = methods[name] as Method;
+    methods[name] = async function (this: CoreController, ctx: RequestContext) {
+      return customToken(ctx.state) ? ctx.forbidden(CUSTOM_TOKEN_REFUSAL) : method.call(this, ctx);
+    } as T[keyof T];
+  }
+  return methods;
+};
+
 /**
  * The type's find, findOne, create, update and delete, each deciding on the caller's role before
  * Strapi's own: a list narrowed in the query (so paging and counts hold only what the caller may
@@ -124,18 +144,6 @@ export const enforcedController = (strapiInstance: unknown, uid: string, tables:
       : rules.open.includes(action)
         ? reachState(rules, ctx.state, action)
         : null;
-
-  /**
-   * Whether a custom API token's populate of a polymorphic relation or a file's related entries,
-   * which Strapi's own methods would answer whole, was refused (the 400 already set).
-   */
-  const customRefused = (caller: Caller, ctx: RequestContext): boolean => {
-    if (caller.kind !== "unrestricted" || !caller.custom) return false;
-    const checked = scopeQuery(tables, uid, ctx.state, ctx.query ?? {});
-    if (checked.ok) return false;
-    ctx.badRequest(checked.message);
-    return true;
-  };
 
   /** The validated, sanitized query, narrowed for `state`; a 400 when it cannot be. */
   const query = async (
@@ -214,13 +222,13 @@ export const enforcedController = (strapiInstance: unknown, uid: string, tables:
     return false;
   };
 
-  return {
+  return refusingCustomTokens({
     async find(this: CoreController, ctx: RequestContext) {
       if (bodyOnly) return super.find(ctx);
       const caller = callerOf(rules, ctx.state, "find");
       if (caller.kind === "refused") return ctx.forbidden();
       const reach = reachOf(caller, ctx, "find");
-      if (reach === null) return customRefused(caller, ctx) ? undefined : super.find(ctx);
+      if (reach === null) return super.find(ctx);
       const scoped = await query(this, ctx, reach);
       if ("refused" in scoped) return scoped.refused;
       const scope = listFilter(rules, caller);
@@ -237,7 +245,7 @@ export const enforcedController = (strapiInstance: unknown, uid: string, tables:
       const caller = callerOf(rules, ctx.state, "findOne");
       if (caller.kind === "refused") return ctx.forbidden();
       const reach = reachOf(caller, ctx, "findOne");
-      if (reach === null) return customRefused(caller, ctx) ? undefined : super.findOne(ctx);
+      if (reach === null) return super.findOne(ctx);
       const answer = await verdict(caller, ctx, "read");
       if (answer === "notFound") return ctx.notFound();
       if (answer === "forbidden") return ctx.forbidden();
@@ -253,7 +261,6 @@ export const enforcedController = (strapiInstance: unknown, uid: string, tables:
       const caller = callerOf(rules, ctx.state, "create");
       if (caller.kind === "refused") return ctx.forbidden();
       const reach = reachOf(caller, ctx, "create");
-      if (customRefused(caller, ctx)) return undefined;
       const sent = requestData(ctx);
       if (sent === undefined) {
         // A restricted caller's create is decided here, so a payload it cannot read is refused
@@ -288,7 +295,6 @@ export const enforcedController = (strapiInstance: unknown, uid: string, tables:
       const caller = callerOf(rules, ctx.state, "update");
       if (caller.kind === "refused") return ctx.forbidden();
       const reach = reachOf(caller, ctx, "update");
-      if (customRefused(caller, ctx)) return undefined;
       const sent = requestData(ctx);
       if (reach === null) {
         if (sent !== undefined) replaceData(ctx, withoutAssigned(caller, sent));
@@ -330,7 +336,7 @@ export const enforcedController = (strapiInstance: unknown, uid: string, tables:
       if (answer === "forbidden") return ctx.forbidden();
       return super.delete(ctx);
     },
-  };
+  });
 };
 
 /**
@@ -338,7 +344,8 @@ export const enforcedController = (strapiInstance: unknown, uid: string, tables:
  * caller (a session's role, the public role, or anyone on an `auth: false` route) the query is
  * checked by `scopeQuery` (a populate of a file's related entries, or a parameter Strapi has not
  * documented, is a 400) and an update's body by `writeShape`; the request then goes to Strapi's
- * own method as it came. Every other request and action is Strapi's.
+ * own method as it came. Every other request and action is Strapi's, but a custom API token's,
+ * which is refused.
  */
 export const checkedSingle = (uid: string, tables: Tables) => {
   const rules = tables.rules[uid]!;
@@ -353,23 +360,14 @@ export const checkedSingle = (uid: string, tables: Tables) => {
     const scoped = scopeQuery(tables, uid, state, ctx.query ?? {});
     return scoped.ok ? undefined : scoped.message;
   };
-  /** A custom API token's query, checked for a polymorphic populate alone (scopeQuery). */
-  const customQuery = (ctx: RequestContext, action: string): string | undefined => {
-    const caller = callerOf(rules, ctx.state, action);
-    return caller.kind === "unrestricted" && caller.custom
-      ? refusedQuery(ctx, ctx.state)
-      : undefined;
-  };
-  return {
+  return refusingCustomTokens({
     async find(this: CoreController, ctx: RequestContext) {
       const state = checkedAs(ctx, "find");
-      const refused = state === null ? customQuery(ctx, "find") : refusedQuery(ctx, state);
+      const refused = state === null ? undefined : refusedQuery(ctx, state);
       return refused === undefined ? super.find(ctx) : ctx.badRequest(refused);
     },
     async update(this: CoreController, ctx: RequestContext) {
       const state = checkedAs(ctx, "update");
-      const custom = state === null ? customQuery(ctx, "update") : undefined;
-      if (custom !== undefined) return ctx.badRequest(custom);
       if (state !== null) {
         const sent = requestData(ctx);
         if (sent === undefined) return ctx.badRequest("Missing or invalid data");
@@ -380,5 +378,8 @@ export const checkedSingle = (uid: string, tables: Tables) => {
       }
       return super.update(ctx);
     },
-  };
+    async delete(this: CoreController, ctx: RequestContext) {
+      return super.delete(ctx);
+    },
+  });
 };
