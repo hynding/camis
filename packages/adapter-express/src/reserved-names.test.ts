@@ -107,6 +107,53 @@ describe("Express target: names its tables reserve", () => {
     expect(reserved(embedding(true))).toEqual([]);
   });
 
+  // An item table's rows keep a key to their entry, `<type>_id`, beside the item's columns.
+  it("reports an item's field whose column is the key to its entry, located", () => {
+    const bundle: IrBundle = {
+      document: {
+        version: 1,
+        contentTypes: [
+          {
+            name: "Note",
+            kind: "collection",
+            fields: [{ type: "component", name: "items", component: "Item", repeatable: true }],
+          },
+          {
+            name: "Post",
+            kind: "collection",
+            fields: [{ type: "component", name: "items", component: "Item", repeatable: true }],
+          },
+        ],
+        components: [
+          {
+            name: "Item",
+            fields: [
+              { type: "integer", name: "noteId" },
+              { type: "integer", name: "position" },
+              { type: "component", name: "post", component: "Ref", repeatable: false },
+            ],
+          },
+          { name: "Ref", fields: [{ type: "integer", name: "id" }] },
+        ],
+      },
+      roles: [],
+    };
+    expect(reserved(bundle)).toEqual([
+      {
+        feature: "reservedFieldName",
+        location: { component: "Item", field: "noteId" },
+        severity: "error",
+        message: `field "noteId" of component "Item", in "Note.items" as "note_id", collides with the Express target's own "note_id"; rename it`,
+      },
+      {
+        feature: "reservedFieldName",
+        location: { component: "Ref", field: "id" },
+        severity: "error",
+        message: `field "id" of component "Ref", embedded in "Item.post" as "post_id", collides with the Express target's own "post_id"; rename it`,
+      },
+    ]);
+  });
+
   // A built-in type is a plain table with the same timestamps, its fields columns like any other's.
   it.each([
     ["user", "updatedAt"],

@@ -420,6 +420,111 @@ describe("Filament target: names its rows and wire shape reserve", () => {
     });
   });
 
+  // An item table's rows keep a key to the row holding them, `<type>_id` (`<parent model>_id` in a
+  // nested one), and a dynamic zone member's their place in the zone, `position`.
+  describe("item tables", () => {
+    const holding = (holder: Field, components: IrBundle["document"]["components"]): IrBundle => ({
+      document: {
+        version: 1,
+        contentTypes: [
+          { name: "Note", kind: "collection", fields: [holder] },
+          {
+            name: "Post",
+            kind: "collection",
+            fields: [{ type: "component", name: "items", component: "Item", repeatable: true }],
+          },
+          { name: "Tag", kind: "collection", fields: [{ type: "string", name: "label" }] },
+        ],
+        components,
+      },
+      roles: [],
+    });
+    const items: Field = { type: "component", name: "items", component: "Item", repeatable: true };
+
+    it.each(["laravel", "strapi"] as const)(
+      "reports an item's field whose column is the key to its entry, in the %s API style",
+      (apiStyle) => {
+        const bundle = holding(items, [
+          {
+            name: "Item",
+            fields: [
+              { type: "integer", name: "noteId" },
+              { type: "integer", name: "position" },
+            ],
+          },
+        ]);
+        expect(reserved(bundle, apiStyle).map((g) => [g.severity, g.location, g.message])).toEqual([
+          [
+            "error",
+            { component: "Item", field: "noteId" },
+            `field "noteId" of component "Item", in "Note.items" as "note_id", collides with the ${apiStyle === "laravel" ? "Laravel" : "Strapi"} API style's own "note_id"; rename it`,
+          ],
+        ]);
+      },
+    );
+
+    it("reports an embedded field of an item whose path is the key to its entry", () => {
+      const bundle = holding(items, [
+        {
+          name: "Item",
+          fields: [{ type: "component", name: "note", component: "Ref", repeatable: false }],
+        },
+        { name: "Ref", fields: [{ type: "integer", name: "id" }] },
+      ]);
+      expect(reportedFields(bundle, "laravel")).toEqual([{ component: "Ref", field: "id" }]);
+    });
+
+    // The Strapi API style keeps a to-one relation inside an item by its key column.
+    it("reports an item's to-one relation whose key column is the key to its entry", () => {
+      const bundle = holding(items, [
+        {
+          name: "Item",
+          fields: [{ type: "relation", name: "note", relationKind: "oneToOne", target: "Tag" }],
+        },
+      ]);
+      expect(reportedFields(bundle, "strapi")).toEqual([{ component: "Item", field: "note" }]);
+      expect(reserved(bundle, "laravel")).toEqual([]);
+    });
+
+    it("reports a dynamic zone member's field whose column is its key or its place", () => {
+      const bundle = holding({ type: "dynamicZone", name: "body", components: ["Block"] }, [
+        {
+          name: "Block",
+          fields: [
+            { type: "integer", name: "position" },
+            { type: "integer", name: "noteId" },
+          ],
+        },
+        { name: "Item", fields: [{ type: "string", name: "label" }] },
+      ]);
+      expect(reportedFields(bundle, "strapi")).toEqual([
+        { component: "Block", field: "position" },
+        { component: "Block", field: "noteId" },
+      ]);
+      expect(reserved(bundle, "laravel")).toEqual([]);
+    });
+
+    it("reports a nested item's field whose column is the key to the item holding it", () => {
+      const bundle = holding(items, [
+        {
+          name: "Item",
+          fields: [{ type: "component", name: "sub", component: "Sub", repeatable: true }],
+        },
+        {
+          name: "Sub",
+          fields: [
+            { type: "integer", name: "noteItemsId" },
+            { type: "integer", name: "noteId" },
+          ],
+        },
+      ]);
+      expect(reportedFields(bundle, "strapi")).toEqual([
+        { component: "Sub", field: "noteItemsId" },
+      ]);
+      expect(reserved(bundle, "laravel")).toEqual([]);
+    });
+  });
+
   // The Laravel-style fixtures keep a `publishedAt` field of their own, which only the Strapi API
   // style keeps for itself. They are booted in the Laravel API style only, and a test that runs
   // one in the Strapi API style takes it through `forStrapiApiStyle`, which renames that field. Only
