@@ -2800,30 +2800,31 @@ relation write, and a database seeded once kept it.
     (including a unidirectional many-to-many, and every relation in a component) changes nothing at
     the other end and needs read alone. A collection type with a mirrored relation into a type with
     rules is served by the controller too.
-  - **The write body's shape (a fix to this phase, carried by Phase 95's PR).** As first merged,
-    a relation item was checked by the entry it named and then passed to Strapi whole, and the
-    database layer spreads an item's `__pivot` into the join row after the ids
-    (`{ note_id, tag_id, ...on, ...item.__pivot }` in `attachRelations`/`updateRelations`), so
-    `{ connect: [{ id: 2, __pivot: { note_id: 9 } }] }` linked entry 9, never checked: the
-    `__pivot` hole was in code already on master. Now a restricted caller's create or update body
-    is first checked against the type's attributes at every depth (the generated `SHAPES` table,
-    `projectShapes` in `api-shapes.ts`; `writeShape` in `api-conditions.ts`), and anything else is
-    400 before any decision: a key that is no attribute of the type or component (top-level
-    `documentId`, `locale`, `publishedAt`, `createdBy`, `localizations` on an unlocalized type,
-    `__pivot`, `__temp_key__`, …); a relation item other than a row id (a number or plain digits),
-    a documentId (a string `parseInt` cannot read: Strapi takes `"5abc"` as row id `"5abc"`,
-    which MySQL casts to 5), or an object with exactly one of `id`/`documentId` and only `locale`,
-    `status` (`draft`/`published`) and `position` beside it (`before`/`after` naming an entry,
-    which must be one the caller may read on every row of its document, `start`/`end` booleans,
-    and the `locale` and `status` Strapi looks the anchor up in, plus `__type` on a polymorphic
-    relation); `__type` only, and always, on a polymorphic item; an operation object other than a
-    non-empty set of `connect`, `set`, `disconnect` and `options` (`{ strict: boolean }` alone);
-    a `set` beside a `connect` or a `disconnect` (Strapi applies only the set, yet its document
-    service still looks up the others' entries); more than one entry on a to-one relation, at
-    any depth (`toOneRelation` in `SHAPES`: Strapi keeps the last and checks only what it keeps); a component item with keys other than
-    its attributes and a positive integer `id` (Strapi's `deleteOldComponents` refuses an id not
-    on the entry); a zone item whose `__component` is not one of the zone's. `null` clears a
-    component, a repeatable component or a zone, as in Strapi.
+  - **The write body's shape (a fix to this phase, carried by Phase 95's PR).** As first merged, a
+    relation item was checked by the entry it named and then passed to Strapi whole, and the
+    database layer spreads an item's `__pivot` into the join row after the ids (`{ note_id, tag_id,
+    ...on, ...item.__pivot }` in `attachRelations`/`updateRelations`), so `{ connect: [{ id: 2,
+    __pivot: { note_id: 9 } }] }` linked entry 9, never checked: the `__pivot` hole was in code
+    already on master. Now a restricted caller's create or update body is first checked against the
+    type's attributes at every depth (the generated `SHAPES` table, `projectShapes` in
+    `api-shapes.ts`; `writeShape` in `api-conditions.ts`), and anything else is 400 before any
+    decision: a key that is no attribute of the type or component (top-level `documentId`, `locale`,
+    `publishedAt`, `createdBy`, `localizations` on an unlocalized type, `__pivot`, `__temp_key__`,
+    …); a relation item other than a row id (a number or plain digits), a documentId (a string
+    `parseInt` cannot read: Strapi takes `"5abc"` as row id `"5abc"`, which MySQL casts to 5), or an
+    object with exactly one of `id`/`documentId` and only `locale`, `status` (`draft`/`published`)
+    and `position` beside it (`before`/`after` naming an entry, which must be one the caller may
+    read on every row of its document, `start`/`end` booleans, and the `locale` and `status` Strapi
+    looks the anchor up in, plus `__type` on a polymorphic relation); `__type` only, and always, on
+    a polymorphic item; an operation object other than a non-empty set of `connect`, `set`,
+    `disconnect` and `options` (`{ strict: boolean }` alone); a `set` beside a `connect` or a
+    `disconnect` (Strapi applies only the set, yet its document service still looks up the others'
+    entries); more than one entry on a to-one relation, a polymorphic relation to one or a single
+    media field, at any depth (`toOneRelation`, `toOnePolymorphic`, `toOneMedia` in `SHAPES`: Strapi
+    keeps the last and checks only what it keeps); a component item with keys other than its
+    attributes and a positive integer `id` (Strapi's `deleteOldComponents` refuses an id not on the
+    entry); a zone item whose `__component` is not one of the zone's. `null` clears a component, a
+    repeatable component or a zone, as in Strapi.
   - **One reading of a relation value.** `relationChange` (`api-conditions.ts`) turns every value
     the body check accepts into the change Strapi makes, `{ mode: replace | change, connect,
     disconnect, anchors }`, and the body check, the reach check, the write plan and the media
@@ -2849,45 +2850,66 @@ relation write, and a database seeded once kept it.
     update outright). Not checked: the built-in user (a non-admin write is an `apiUserWrite`
     error) and the media library (the upload API takes only the documented `fileInfo` fields);
     admin roles and API tokens; GraphQL.
-  - **A write's response.** A create or update on a served collection type answers through the
-    same scoped query as a read (`scopeQuery` under the caller's reach), so `?populate=` on a POST
-    or PUT is narrowed as on a GET, whether or not the role reads the type. The paths that are not
-    narrowed fail the build for a writer as for a reader: a polymorphic relation and a single
-    type's reach. The upload API refuses every query parameter but `id`, and a non-admin write of
-    the built-in user is an error.
+  - **A write's response.** A create or update on a served type answers through the same scoped
+    query as a read (`scopeQuery` under the caller's reach, the public role's on an open route),
+    so `?populate=` on a POST or PUT is narrowed as on a GET, whether or not the role reads the
+    type; a served single type's find and update are checked the same way (`checkedSingle`). Every
+    path that is not narrowed fails the build, for a reader, a writer and an open route alike: a
+    polymorphic relation (`apiPolymorphicReach`) and a single type's reach into a conditioned type
+    (`apiRelationReach`). A file's `related` entries are polymorphic too: every type with a media
+    field at any depth, and every type leading to one, is served, and a populate of `related`
+    under a media field is refused, whether or not a conditioned type holds media (seen on 5.48:
+    an anonymous `GET /api/galleries?populate[cover][populate]=related` on an open route returned
+    an entry of a type the public holds no grant on; now 400, nested and `*` forms included). The
+    upload API refuses every query parameter but `id`, and a non-admin write of the built-in user
+    is an error.
+  - **Open routes.** An `auth: false` action on a type with a polymorphic relation (its own, or a
+    component's or zone's at any depth) fails the build whatever roles the IR names: Strapi
+    sanitises such a request with no credentials, which strips an ordinary relation from populate
+    but not a polymorphic one (seen on 5.48: an anonymous list returned a note the public may not
+    read and an entry of a type it holds no grant on). An open type camis does not serve has no
+    media field, no polymorphic relation and no reach into a conditioned type; its query reaches
+    Strapi as sent, and each part is safe there: `populate` of an ordinary relation is stripped
+    and a relation in `filters` or `sort` is a 400 (Strapi's own sanitiser and validator, seen on
+    5.48), `fields` names only its own attributes, and pagination, `locale`, `status`, `_q`,
+    `publicationFilter` and `hasPublishedVersion` choose among its own rows, which the route serves
+    to anyone already. An open create or update on a single type that reaches a conditioned type
+    is an error too: that is conservative, as Strapi strips an ordinary relation from such a
+    request's populate and refuses it in the body ("Invalid key", seen on 5.48), but camis does
+    not rest on Strapi's sanitiser for it.
   - Not narrowed, as on Strapi and the Filament target: admin roles and API tokens (Phase 25). An
     `auth: false` action (Phase 57) serves its own type's rows to anyone, and its reach is decided
     as the public role's, so a reach-only type's open route still answers. A session whose role is
     not loaded, a role the IR does not grant the type, and an unknown strategy are refused.
-- **Gaps.** What the content API cannot enforce fails the build (`error`), located by type and
-  role. `apiGrantCondition`: a read condition outside the filter subset, an update/delete condition
+- **Gaps.** What the content API cannot enforce fails the build (`error`), located by type and role.
+  `apiGrantCondition`: a read condition outside the filter subset, an update/delete condition
   reading a variable an entry lacks, a create condition reading a relation the client writes, any
   condition on a single type or on the built-in user or media library. `apiPolymorphicReach`: a role
   reads or writes (creates or updates) a type with a polymorphic relation (its own or a
   component's), or a polymorphic inverse that reaches a conditioned type, while it reads some type
   under a condition — a polymorphic populate takes no per-target filter, a write's response is
-  populated like a read, and a polymorphic link is written unchecked; an `auth: false` create or
-  update route counts as the public role writing. `apiRelationReach`: a relation from the built-in user or
-  media library (its own, or an inverse onto it) reaches a type the role reads under a condition,
-  since their plugins serve it; a role that reads the media library while a file's `related`
-  entries reach a type it reads under a condition; a single type the role reads or writes (or an
-  `auth: false` route opens for create or update, as the public role) reaches one, since Strapi's
-  own single-type controller serves it, populating a write's response and linking unchecked (a
-  review showed a member with update alone on a single type link another member's private note
-  and read it back in the response); or a role writes the built-in user or a single
-  type whose mirrored relation changes entries of a type it does not update outright; or a
-  restricted role writes, or an `auth: false` action opens for create or update, a single type
-  with a media field (its own or an embedded component's), since Strapi's own single type
-  controller links any stored file id there (Phase 95; file grants or not). A role that writes files was itself an error here (the upload API attached, replaced or
-  deleted a file on any entry: seen on Strapi 5.48, a member attached a file to another member's
-  private note); Phase 95 enforces the upload API and lifts it. `apiUserWrite`: a non-admin role
-  may create or update the built-in user (no grant set of its own exempts it: another role may
-  hold an endpoint or plugin service it lacks), since users-permissions' `PUT /api/users/:id` and `POST /api/users` set the role and
-  password of any user from the body, so the caller could take any other role. An admin
-  role's condition stays a downgrade (admin panel only).
-  The admin-panel copy of a non-admin role cannot read `record.*`, so its condition there denies
-  every entry: `conditionContext` (downgrade) says so, as the adapter already projects every role
-  onto an admin role.
+  populated like a read, and a polymorphic link is written unchecked; and any `auth: false` action
+  on a type with a polymorphic relation at any depth, whatever roles exist. `apiRelationReach`: a
+  relation from the built-in user or media library (its own, or an inverse onto it) reaches a type
+  the role reads under a condition, since their plugins serve it; a role that reads the media
+  library while a file's `related` entries reach a type it reads under a condition; a single type
+  the role reads or writes reaches one, since its relation writes are not checked (a review showed a
+  member with update alone on a single type link another member's private note and read it back in
+  the response); an `auth: false` create or update route on such a single type counts as the public
+  role writing, which is conservative (Strapi strips an ordinary relation on such a route) but kept;
+  or a role writes the built-in user or a single type whose mirrored relation changes entries of a
+  type it does not update outright; or a restricted role writes, or an `auth: false` action opens
+  for create or update, a single type with a media field (its own or an embedded component's), since
+  Strapi's own single type controller links any stored file id there (Phase 95; file grants or not).
+  A role that writes files was itself an error here (the upload API attached, replaced or deleted a
+  file on any entry: seen on Strapi 5.48, a member attached a file to another member's private
+  note); Phase 95 enforces the upload API and lifts it. `apiUserWrite`: a non-admin role may create
+  or update the built-in user (no grant set of its own exempts it: another role may hold an endpoint
+  or plugin service it lacks), since users-permissions' `PUT /api/users/:id` and `POST /api/users`
+  set the role and password of any user from the body, so the caller could take any other role. An
+  admin role's condition stays a downgrade (admin panel only). The admin-panel copy of a non-admin
+  role cannot read `record.*`, so its condition there denies every entry: `conditionContext`
+  (downgrade) says so, as the adapter already projects every role onto an admin role.
 - **users-permissions.** A role whose grants on a type assign every user relation of it no longer
   gets `user.find` (nor the `userRelationWrite` gap). The bootstrap revokes every `api::` action it
   no longer grants and a `plugin::` action only when an earlier boot of it created that action for
