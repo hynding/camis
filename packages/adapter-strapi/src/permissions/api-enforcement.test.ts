@@ -4,6 +4,7 @@ import type { IrDocument } from "@camis/ir-schema";
 import type { Role } from "@camis/permissions";
 import { ownershipBundle } from "../__fixtures__/ownership";
 import { projectApiEnforcement } from "./api-enforcement";
+import { projectUploads } from "./api-upload-enforcement";
 
 const { document: doc, roles } = ownershipBundle;
 const v = (name: string): Expression => ({ kind: "var", name });
@@ -557,10 +558,15 @@ describe("writes the users-permissions and upload plugins serve unchecked fail t
         { name: "Album", kind: "collection", fields: [{ type: "media", name: "cover" }] },
       ],
     };
-    const served = (rs: Role[]) =>
-      projectApiEnforcement(album, rs).types.map((t) => [t.contentType, t.own]);
-    expect(served(writer("Album", ["create"]))).toContainEqual(["Album", false]);
-    expect(served(writer("Album", ["read"])).map(([name]) => name)).not.toContain("Album");
+    const served = projectApiEnforcement(album, writer("Album", ["create"])).types;
+    expect(served.map((t) => [t.contentType, t.own])).toContainEqual(["Album", false]);
+    expect([...projectUploads(album, writer("Album", ["create"])).served]).toEqual([
+      "Note",
+      "Tag",
+      "Album",
+    ]);
+    // Reading it alone writes no link (its media reach may still have it served).
+    expect([...projectUploads(album, writer("Album", ["read"])).served]).toEqual(["Note", "Tag"]);
   });
 
   // users-permissions' user update and create take any role and password from the body.

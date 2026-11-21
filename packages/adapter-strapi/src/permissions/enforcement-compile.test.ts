@@ -17,6 +17,9 @@ describe("the emitted enforcement compiles under the generated project's tsconfi
     for (const path of [
       "src/permissions/api-conditions.ts",
       "src/permissions/api-controller.ts",
+      "src/permissions/api-uploads.ts",
+      "src/permissions/api-upload-controller.ts",
+      "src/extensions/upload/strapi-server.ts",
       "src/api/note/controllers/note.ts",
       "src/api/tag/controllers/tag.ts",
     ]) {

@@ -316,7 +316,12 @@ beforeAll(async () => {
   dir = await mkdtemp(join(tmpdir(), "camis-enforcement-"));
   const result = strapiAdapter.generate(ownershipBundle, { projectName: "notes" });
   await mkdir(join(dir, "permissions"));
-  for (const name of ["api-conditions.ts", "api-controller.ts"]) {
+  for (const name of [
+    "api-conditions.ts",
+    "api-controller.ts",
+    "api-uploads.ts",
+    "api-upload-controller.ts",
+  ]) {
     const content = result.files.find((f) => f.path === `src/permissions/${name}`)!.content;
     await writeFile(join(dir, "permissions", name), content);
   }

@@ -27,6 +27,21 @@ describe("content API enforcement golden", () => {
       "../__golden__/ownership/api-controller.ts.txt",
     );
   });
+  it("api-uploads.ts (the upload API's decisions) matches the golden", async () => {
+    await expect(emitted(result, "src/permissions/api-uploads.ts")).toMatchFileSnapshot(
+      "../__golden__/ownership/api-uploads.ts.txt",
+    );
+  });
+  it("api-upload-controller.ts (the upload controller wrapper) matches the golden", async () => {
+    await expect(emitted(result, "src/permissions/api-upload-controller.ts")).toMatchFileSnapshot(
+      "../__golden__/ownership/api-upload-controller.ts.txt",
+    );
+  });
+  it("the upload extension records the uploader and wraps the plugin's controller", async () => {
+    await expect(emitted(result, "src/extensions/upload/strapi-server.ts")).toMatchFileSnapshot(
+      "../__golden__/ownership/upload.strapi-server.ts.txt",
+    );
+  });
   it("an enforced type's controller wraps the core controller with its rules", async () => {
     await expect(emitted(result, "src/api/note/controllers/note.ts")).toMatchFileSnapshot(
       "../__golden__/ownership/note.controller.ts.txt",
@@ -46,6 +61,9 @@ describe("content API enforcement golden", () => {
     for (const path of [
       "src/permissions/api-conditions.ts",
       "src/permissions/api-controller.ts",
+      "src/permissions/api-uploads.ts",
+      "src/permissions/api-upload-controller.ts",
+      "src/extensions/upload/strapi-server.ts",
       "src/api/note/controllers/note.ts",
       "src/api/tag/controllers/tag.ts",
       "src/api/category/controllers/category.ts",

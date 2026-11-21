@@ -302,7 +302,7 @@ describe("POST /api/upload with no ref", () => {
 });
 
 describe("POST /api/upload?id= (replace, or update a file's info) and DELETE /api/upload/files/:id", () => {
-  const replace = (id: string, files: unknown = aFile) =>
+  const replace = (id: string, files: unknown) =>
     upload.upload(context(alice(), { query: { id }, request: { body: {}, files } as never }));
   const destroy = async (id: string) => {
     const ctx = context(alice(), { params: { id } });
@@ -323,8 +323,8 @@ describe("POST /api/upload?id= (replace, or update a file's info) and DELETE /ap
     expect(tables[FILE]!.map((f) => f.id)).toEqual([1, 2, 3, 4, 5]);
   });
   it("allows the caller's own unattached file and a file on an entry it may update", async () => {
-    await replace("1");
-    await replace("4");
+    await replace("1", aFile);
+    await replace("4", aFile);
     await replace("4", undefined);
     expect((await destroy("1")).status).toBeUndefined();
     expect(stored).toEqual(["replace 1", "replace 4", "info 4", "destroy 1"]);

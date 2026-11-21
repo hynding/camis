@@ -10,6 +10,8 @@
   "api::category.category.find": "enforcedController.find on a reach-only type: populate and relation filters into notes scoped by scopeQuery",
   "api::category.category.findOne": "enforcedController.findOne on a reach-only type: populate and filters into notes scoped by scopeQuery",
   "api::category.category.update": "enforcedController.update on a reach-only type: each note its mirrored link adds, drops or replaces must be updatable (writePlan)",
+  "plugin::upload.content-api.upload": "enforcedUpload.upload: body fields beyond fileInfo, ref, refId and field refused; ref, refId and field attach only to a content type's own media field on an entry the caller may update (checked before the file is stored); ?id= needs update on every entry the file is on, or an unattached file the caller uploaded; the uploader is recorded",
+  "plugin::upload.content-api.destroy": "enforcedUpload.destroy: update on every entry the file is attached to, or an unattached file the caller uploaded, checked before the plugin deletes it",
   "plugin::users-permissions.user.find": "granted by the userRelationWrite downgrade to a role that writes the owner relation itself; it lists every user's username and email, as the gap says",
   "plugin::users-permissions.user.me": "Strapi's default for the authenticated role: the caller's own account only",
   "plugin::users-permissions.auth.callback": "login (and provider callback): issues a session for credentials the caller holds",

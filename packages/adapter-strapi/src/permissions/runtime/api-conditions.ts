@@ -87,10 +87,30 @@ export interface Holder {
   links: Readonly<Record<string, HolderLink>>;
 }
 
+/** A type's or component's media fields, and its attributes that hold one further down. */
+export interface MediaHolder {
+  fields: readonly string[];
+  nested: Readonly<Record<string, { component: string } | { zone: readonly string[] }>>;
+}
+
+/** What the upload API's checks read: present when a role the rules restrict writes files. */
+export interface Uploads {
+  /** Roles flagged admin, which no check restricts. */
+  admins: readonly string[];
+  /** Every content type and component with a media field at some depth, by uid. */
+  holders: Readonly<Record<string, MediaHolder>>;
+  /**
+   * Each content type with a media field, by uid: the roles holding read and update on it
+   * outright, which decide on its entries when it has no rules of its own.
+   */
+  grants: Readonly<Record<string, { read: readonly string[]; update: readonly string[] }>>;
+}
+
 /** The project's rules per type uid, and the holders (types and components) that reach. */
 export interface Tables {
   rules: Readonly<Record<string, TypeRules>>;
   holders: Readonly<Record<string, Holder>>;
+  uploads?: Uploads;
 }
 
 /** A result or why there is none; both sides name both fields, so either reads without narrowing. */
@@ -153,7 +173,10 @@ const field = (source: unknown, key: string): unknown =>
  * A table's own entry for a key a caller chose (a role name, an attribute name), never one
  * inherited from Object.prototype: a role named "constructor" names no rules.
  */
-const own = <T>(table: Readonly<Record<string, T>> | undefined, key: string): T | undefined =>
+export const own = <T>(
+  table: Readonly<Record<string, T>> | undefined,
+  key: string,
+): T | undefined =>
   table !== undefined && Object.prototype.hasOwnProperty.call(table, key) ? table[key] : undefined;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>

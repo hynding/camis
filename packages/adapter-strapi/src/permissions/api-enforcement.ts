@@ -18,6 +18,7 @@ import { strapiNames } from "@camis/strapi-schema";
 import { CORE_ACTIONS } from "../hooks/route-hooks";
 import { projectReach, typeKey } from "./api-reach";
 import { builtinWriteGaps } from "./api-builtin-writes";
+import { projectUploads, type ApiUploads } from "./api-upload-enforcement";
 import { projectRelationWrites, relationWriteGaps } from "./api-relation-writes";
 import { conditionName } from "./condition-name";
 import { codePointOrder } from "./code-point-order";
@@ -91,6 +92,8 @@ export interface ApiHolder {
 export interface ApiEnforcement {
   types: ApiTypeRules[];
   holders: Record<string, ApiHolder>;
+  /** What the upload extension checks; null when no role the rules restrict writes files. */
+  uploads: ApiUploads | null;
   gaps: CapabilityGap[];
 }
 
@@ -297,10 +300,12 @@ export const projectApiEnforcement = (doc: IrDocument, roles: Role[]): ApiEnforc
   }
 
   const reach = projectReach(doc, roles, types);
+  const uploads = projectUploads(doc, roles);
   gaps.push(
     ...reach.gaps,
     ...relationWriteGaps(doc, roles, types),
     ...builtinWriteGaps(doc, roles),
+    ...uploads.gaps,
   );
   const writes = projectRelationWrites(doc, enforced);
   const core = CORE_ACTIONS.collection;
@@ -313,7 +318,7 @@ export const projectApiEnforcement = (doc: IrDocument, roles: Role[]): ApiEnforc
       enforced.has(ct.name) ||
       (ct.kind === "collection" &&
         ct.builtin === undefined &&
-        (reach.reaching.has(typeKey(ct)) || writes.has(ct.name))),
+        (reach.reaching.has(typeKey(ct)) || writes.has(ct.name) || uploads.served.has(ct.name))),
   );
   return {
     types: served.map((ct): ApiTypeRules => {
@@ -336,6 +341,7 @@ export const projectApiEnforcement = (doc: IrDocument, roles: Role[]): ApiEnforc
           };
     }),
     holders: reach.holders,
+    uploads: uploads.uploads,
     gaps,
   };
 };

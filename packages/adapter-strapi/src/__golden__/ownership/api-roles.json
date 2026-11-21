@@ -19,7 +19,9 @@
         "api::note.note.update",
         "api::tag.tag.create",
         "api::tag.tag.find",
-        "api::tag.tag.findOne"
+        "api::tag.tag.findOne",
+        "plugin::upload.content-api.destroy",
+        "plugin::upload.content-api.upload"
       ]
     },
     {

@@ -21,6 +21,8 @@ import {
   type RelationRef,
   type Tables,
 } from "./api-conditions";
+import { loadFile } from "./api-upload-controller";
+import { attachVerdict, mediaFileIds } from "./api-uploads";
 
 // The core controller methods a content type with row conditions, assigned fields or a relation
 // into a conditioned type is served by, copied into each generated Strapi project as
@@ -146,9 +148,11 @@ export const enforcedController = (strapiInstance: unknown, uid: string, tables:
   /**
    * Whether the write is refused, the response already set: a 403 when the data links an entry
    * of a conditioned type the caller may not read (or one that does not exist), changes an entry
-   * through a link it shows that the caller may not update (adding, dropping or replacing it), or
-   * takes an entry from a last holder the caller may not update; a 400 for a relation value it
-   * cannot read. A boolean, since Strapi's response helpers return nothing.
+   * through a link it shows that the caller may not update (adding, dropping or replacing it),
+   * takes an entry from a last holder the caller may not update, or links a stored file through a
+   * media field that the caller neither uploaded nor may read on an entry it is attached to; a 400
+   * for a relation or media value it cannot read. A boolean, since Strapi's response helpers
+   * return nothing.
    */
   const writeRefused = async (
     ctx: RequestContext,
@@ -175,6 +179,17 @@ export const enforcedController = (strapiInstance: unknown, uid: string, tables:
     for (const stolen of plan.value.stolen) {
       const rows = await strapi.db.query(uid).findMany(holdersQuery(rules, stolen, documentId));
       if (holdersVerdict(rules, callerOf(rules, state, ""), rows) === "forbidden") {
+        ctx.forbidden();
+        return true;
+      }
+    }
+    const files = mediaFileIds(tables, uid, state, data);
+    if (!files.ok) {
+      ctx.badRequest(files.message);
+      return true;
+    }
+    for (const id of files.value) {
+      if (!attachVerdict(tables, state, await loadFile(strapi, tables, id))) {
         ctx.forbidden();
         return true;
       }
