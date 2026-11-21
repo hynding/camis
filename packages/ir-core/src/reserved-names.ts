@@ -44,7 +44,10 @@ export type TargetNames = (field: Field, holder: FieldHolder) => TargetName[];
 export interface ItemTable {
   /** The component whose items its rows are. */
   component: string;
-  /** Where the items are held, for the message (`Note.items`). */
+  /**
+   * Where the items are held, for the message: the place from the entry's type, through the item
+   * holding a nested table (`Note.items`, `Note.items.subs`).
+   */
   heldBy: string;
   /**
    * Every name a row of it keeps for itself (its timestamps, its key to the row holding it), as
@@ -97,7 +100,7 @@ const describeEmbedded = (holderName: string, embedded: EmbeddedField, name: Tar
 const describeItem = (item: ItemTable, embedded: EmbeddedField, name: TargetName) =>
   embedded.path.length === 1
     ? `field "${embedded.field.name}" of component "${embedded.component.name}", in "${item.heldBy}" as "${name.spelled}",`
-    : describeEmbedded(item.component, embedded, name);
+    : describeEmbedded(item.heldBy, embedded, name);
 
 const locationKey = (location: IrErrorLocation): string =>
   [location.contentType, location.component, location.field].join("\0");
@@ -109,7 +112,8 @@ const locationKey = (location: IrErrorLocation): string =>
  * A built-in content type's own names are checked only with `builtins`, its relations' inverses
  * always; the columns of a row, an embedded component's on the entry's and an item's on its own,
  * only with `columns` (and `items`). The location has one component: an item's embedded field is
- * located at its own component, and the message names the item holding it.
+ * located at its own component, and the message names its place from the item table's
+ * (`Note.items.created`).
  */
 export const reservedNameGaps = (
   doc: IrDocument,

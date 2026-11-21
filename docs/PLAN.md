@@ -3036,8 +3036,10 @@ no gap reported (issue #103).
   its timestamps, its key to the row holding it, `<type>_id` (`<parent model>_id` in a nested
   table, `note_items_id`), and a dynamic zone member's its place, `position` (on the Strapi API
   style, where a zone is tables); an item's field whose column repeats either is reported, located
-  at the component and its field, with the item table's place in the message. A repeatable item's
-  rows keep no `position`, and none keeps the entry's own columns (`document_id`, `created_by_id`).
+  at the component and its field, with its place from the entry's type in the message (in
+  `Note.items.sub`, a nested table's item; embedded in `Note.items.created`, an item's embedded
+  component's field). A repeatable item's rows keep no `position`, and none keeps the entry's own
+  columns (`document_id`, `created_by_id`).
 - **Import.** A Strapi project's schema.json never carries these names (Strapi adds them itself and
   its builder refuses them), so it imports and generates as before. One edited by hand to carry one
   imports as it is, and generation reports it.

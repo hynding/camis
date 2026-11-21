@@ -108,18 +108,24 @@ const rowColumnNames =
 const itemTables = (doc: IrDocument, apiStyle: ApiStyle, linksMedia: boolean): ItemTable[] => {
   const deep = apiStyle === "strapi";
   const timestamps = deep ? STRAPI_TIMESTAMPS : LARAVEL_TIMESTAMPS;
-  const rows = (child: ChildTableEmit, holder: string): ItemTable[] => [
-    {
-      component: child.component.name,
-      heldBy: [holder, ...child.path].join("."),
-      kept: new Map([
-        ...timestamps,
-        [child.fk, child.fk],
-        ...(child.ordered === true ? [[ITEM_POSITION_COLUMN, ITEM_POSITION_COLUMN] as const] : []),
-      ]),
-    },
-    ...child.children.flatMap((c) => rows(c, child.component.name)),
-  ];
+  // `holder` is the place of the row holding the items: the entry's type, or a nested table's item.
+  const rows = (child: ChildTableEmit, holder: string): ItemTable[] => {
+    const heldBy = [holder, ...child.path].join(".");
+    return [
+      {
+        component: child.component.name,
+        heldBy,
+        kept: new Map([
+          ...timestamps,
+          [child.fk, child.fk],
+          ...(child.ordered === true
+            ? [[ITEM_POSITION_COLUMN, ITEM_POSITION_COLUMN] as const]
+            : []),
+        ]),
+      },
+      ...child.children.flatMap((c) => rows(c, heldBy)),
+    ];
+  };
   return doc.contentTypes
     .filter((ct) => ct.builtin === undefined)
     .flatMap((ct) => {
