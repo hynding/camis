@@ -99,6 +99,28 @@ describe("Filament target: names its rows and wire shape reserve", () => {
       ]);
     });
 
+    // Served over Laravel storage, a to-one polymorphic relation keeps `<name>_id` and
+    // `<name>_type` on the entry's row; a to-many one keeps its links in a table of their own.
+    it("reports a to-one polymorphic relation whose link column is one of the row's own", () => {
+      const bundle = withFields([
+        { type: "polymorphicRelation", name: "document", many: false },
+        { type: "polymorphicRelation", name: "subjects", many: true },
+      ]);
+      expect(reserved(bundle, "strapi").map((g) => [g.location, g.message])).toEqual([
+        [
+          { contentType: "Note", field: "document" },
+          `field "document", as "document_id", collides with the Strapi API style's own "documentId"; rename it`,
+        ],
+      ]);
+      expect(reserved(bundle, "laravel")).toEqual([]);
+      expect(reserved(bundle, "strapi", "strapi")).toEqual([]);
+    });
+
+    it("leaves a to-many polymorphic relation, whose links are rows of a table of their own", () => {
+      const bundle = withFields([{ type: "polymorphicRelation", name: "document", many: true }]);
+      expect(reserved(bundle, "strapi")).toEqual([]);
+    });
+
     // A one-to-many's key is a column of the related type's rows on the Laravel storage layout,
     // named by its inverse: an inverse `document` is a second document_id on tags.
     it("reports a one-to-many's inverse whose key column on the related rows is one of theirs", () => {
