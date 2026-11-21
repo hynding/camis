@@ -254,11 +254,36 @@ describe("Filament target: names its rows and wire shape reserve", () => {
       expect(reserved(stamped(by, false), "laravel")).toEqual([]);
     });
 
-    // With a media library, which the Strapi API style keeps, a media field links its files.
-    it("leaves a media field, which is a column on the Laravel API style only", () => {
+    // The Strapi API style keeps a media library only when a content type has a media field of its
+    // own or the document declares a file type (`mediaPlan`); without one a media field inside a
+    // component is a path column, as on the Laravel API style, on the entry's row and on an item's.
+    it.each(["laravel", "strapi"] as const)(
+      "reports a media field, a column without a media library, in the %s API style",
+      (apiStyle) => {
+        const media: ComponentFieldT[] = [{ type: "media", name: "at" }];
+        expect(reportedFields(stamped(media, true), apiStyle)).toEqual([
+          { contentType: "Note", component: "Stamp", field: "at" },
+          { component: "Stamp", field: "at" },
+        ]);
+      },
+    );
+
+    // With a media library a media field links its files from the row: no column.
+    it("leaves a media field that links the media library's files, on the Strapi API style", () => {
       const media: ComponentFieldT[] = [{ type: "media", name: "at" }];
-      expect(reserved(stamped(media, false), "strapi")).toEqual([]);
-      expect(reportedFields(stamped(media, false), "laravel")).toEqual([
+      const bundle = stamped(media, true);
+      const withLibrary: IrBundle = {
+        ...bundle,
+        document: {
+          ...bundle.document,
+          contentTypes: [
+            ...bundle.document.contentTypes,
+            { name: "File", kind: "collection", builtin: "file", fields: [] },
+          ],
+        },
+      };
+      expect(reserved(withLibrary, "strapi")).toEqual([]);
+      expect(reportedFields(withLibrary, "laravel")).toEqual([
         { contentType: "Note", component: "Stamp", field: "at" },
         { component: "Stamp", field: "at" },
       ]);
