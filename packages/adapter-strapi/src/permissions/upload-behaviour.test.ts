@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { strapiAdapter } from "../generate";
 import { ownershipBundle } from "../__fixtures__/ownership";
+import { tokenState } from "../__fixtures__/token-states";
 
 // The generated upload extension and entry controllers run against a small fake of the parts of
 // Strapi they use: the upload plugin's content API controller (which stores whatever it is
@@ -214,7 +215,7 @@ const user = (id: number, role: string) => ({
   user: { id, documentId: `user-${id}`, role: { type: role } },
 });
 const alice = () => user(10, "member");
-const token = { auth: { strategy: { name: "api-token" } } };
+const token = tokenState("full-access");
 const aFile = { files: { originalFilename: "a.txt", size: 1 } };
 
 const post = async (state: unknown, body: unknown, query: Record<string, unknown> = {}) => {
@@ -280,8 +281,18 @@ describe("GET /api/upload/files and /api/upload/files/:id", () => {
         expect(ctx.body).toBeDefined();
       }
   });
-  it("leaves an API token's and an admin role's query to Strapi", async () => {
-    for (const state of [token, user(30, "manager")])
+  it("refuses a custom API token's populate of related entries as a role's", async () => {
+    for (const one of [false, true])
+      for (const populate of related) {
+        const ctx = await read(tokenState("custom"), populate, one);
+        expect(ctx.status, `${JSON.stringify(populate)} ${String(one)}`).toBe(400);
+        expect(ctx.body).toBeUndefined();
+      }
+    const plain = await read(tokenState("custom"), "folder", false);
+    expect(plain.body).toBeDefined();
+  });
+  it("leaves a full-access or read-only API token's and an admin role's query to Strapi", async () => {
+    for (const state of [token, tokenState("read-only"), user(30, "manager")])
       for (const one of [false, true]) {
         const ctx = await read(state, "related", one);
         expect(ctx.status).toBeUndefined();

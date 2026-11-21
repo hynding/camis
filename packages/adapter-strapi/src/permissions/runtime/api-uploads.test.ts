@@ -14,6 +14,7 @@ import {
   type StoredFile,
 } from "./api-uploads";
 import { NOTE, REF, TAG, tables } from "./__fixtures__/reach-tables";
+import { tokenState } from "../../__fixtures__/token-states";
 
 const HOME = "api::home.home";
 const withUploads: Tables = {
@@ -42,7 +43,7 @@ const session = (id: number, role: string) => ({
 });
 const alice = session(7, "member");
 const guest = { auth: { strategy: { name: "users-permissions" } } };
-const token = { auth: { strategy: { name: "api-token" } } };
+const token = tokenState("full-access");
 const noRole = { user: { id: 7, documentId: "user-7" } };
 
 /** A note's rows (each version and locale), as recordQuery loads them. */

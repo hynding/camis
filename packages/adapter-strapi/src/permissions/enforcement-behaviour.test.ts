@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import { strapiAdapter } from "../generate";
 import { ownershipBundle } from "../__fixtures__/ownership";
 import type { IrBundle } from "@camis/permissions";
+import { tokenState } from "../__fixtures__/token-states";
 
 // Strapi cannot be booted here, so the emitted enforcement modules run against a small fake of
 // the surface they use: the request context, the core controller Strapi builds them on, its
@@ -117,7 +118,7 @@ const asUser = (id: number, role: string) => ({
   user: user(id, role),
 });
 const asGuest = { auth: { strategy: { name: "users-permissions" }, credentials: null } };
-const asToken = { auth: { strategy: { name: "api-token" }, credentials: { type: "full-access" } } };
+const asToken = tokenState("full-access");
 const member = () => asUser(10, "member");
 
 const tables: Record<string, Row[]> = {};
@@ -742,6 +743,49 @@ describe("callers no role restricts", () => {
   });
 });
 
+// A content API token stands for no role: a full-access or read-only one reads every type, so its
+// requests are Strapi's as they come; a custom one is checked against its own scopes by Strapi,
+// whose sanitizer keeps a polymorphic list whole when the token may read none of its entries, so a
+// populate of a file's related entries is refused for it as for a role, and nothing else is.
+describe("API tokens, by their type", () => {
+  const related = { attachment: { populate: { related: true } } };
+  it("passes a full-access or read-only token's request to Strapi, related entries included", async () => {
+    for (const type of ["full-access", "read-only"] as const) {
+      const ctx = context(tokenState(type), { query: { populate: related } });
+      await notes().find(ctx);
+      expect(ctx.status, type).toBeUndefined();
+    }
+    expect(calls).toEqual([`core.find ${NOTE}`, `core.find ${NOTE}`]);
+  });
+  it("refuses a custom token's populate of a file's related entries, on a read or a write", async () => {
+    const custom = tokenState("custom");
+    for (const method of ["find", "findOne"] as const) {
+      const ctx = context(custom, { params: { id: "mine" }, query: { populate: related } });
+      await notes()[method](ctx);
+      expect(ctx.status, method).toBe(400);
+    }
+    const write = context(custom, {
+      query: { populate: related },
+      request: { body: { data: { title: "t" } } },
+    });
+    await notes().create(write);
+    expect(write.status).toBe(400);
+    const deep = context(custom, {
+      query: { populate: { note: { populate: { attachment: { populate: "related" } } } } },
+    });
+    await tags().find(deep);
+    expect(deep.status).toBe(400);
+    expect(calls).toEqual([]);
+  });
+  it("leaves a custom token's other requests to Strapi, unnarrowed", async () => {
+    const custom = tokenState("custom");
+    expect(
+      documentIds(await notes().find(context(custom, { query: { populate: "attachment" } }))),
+    ).toEqual(["mine", "theirs", "open"]);
+    expect(calls).toEqual([`core.find ${NOTE}`]);
+  });
+});
+
 describe("callers the rules do not know are refused", () => {
   it("a role the IR does not grant the type lists nothing and edits nothing", async () => {
     expect(documentIds(await notes().find(context(asUser(13, "stranger"))))).toEqual([]);
@@ -871,6 +915,12 @@ describe("a single type a restricted role writes, over Strapi's single type cont
     }
     expect(calls).toEqual([]);
     await front().find(context(reviewer(), { query: { populate: { featured: true } } }));
+    expect(calls).toEqual([`core.find ${FRONT}`]);
+    calls.length = 0;
+    const custom = context(tokenState("custom"), { query: { populate: related } });
+    await front().find(custom);
+    expect(custom.status).toBe(400);
+    await front().find(context(tokenState("read-only"), { query: { populate: related } }));
     expect(calls).toEqual([`core.find ${FRONT}`]);
   });
   it("leaves an admin role's and an API token's requests, and every delete, to Strapi", async () => {

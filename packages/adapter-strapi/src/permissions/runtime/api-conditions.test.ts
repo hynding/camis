@@ -24,6 +24,7 @@ import {
   type TypeRules,
 } from "./api-conditions";
 import { CATEGORY, NOTE, REF, TAG, owned, tables } from "./__fixtures__/reach-tables";
+import { tokenState } from "../../__fixtures__/token-states";
 
 const isEditor: Condition = {
   test: (data: RecordData) => data["user.role"] === "editor",
@@ -117,7 +118,7 @@ describe("recordData and recordVerdict", () => {
 const member = session("member");
 const MINE = { owner: { id: { $eq: 7 } } };
 const SHARED = { shared: { $eq: true } };
-const token = { auth: { strategy: { name: "api-token" } } };
+const token = tokenState("full-access");
 
 const scoped = (state: unknown, query: Record<string, unknown>) => {
   const result = scopeQuery(tables, TAG, state, query);
@@ -982,5 +983,75 @@ describe("writeShape: a restricted caller's write names only the type's writable
     });
     for (const subject of [[{ id: 3 }], [{ id: 3, __type: NOTE, __pivot: { field: "x" } }], 3])
       expect(shape({ subject }).ok, JSON.stringify(subject)).toBe(false);
+  });
+});
+
+// Strapi 5.48 names its content API token strategy `content-api-token` and keeps the token's type
+// in `credentials`. A full-access or read-only token reads every type, so Strapi's sanitizer never
+// meets a polymorphic list it can read none of: it passes as it is. A custom token holds no role
+// (no row condition applies) but Strapi checks each polymorphic entry against its ability and
+// keeps the list whole when none passes, so its populate of one, or of a file's related entries,
+// is refused as a role's is.
+describe("an API token", () => {
+  const poly: Tables = {
+    ...tables,
+    holders: {
+      ...tables.holders,
+      [TAG]: {
+        populatable: [...tables.holders[TAG]!.populatable, "subject"],
+        links: { ...tables.holders[TAG]!.links, subject: { polymorphic: true } },
+      },
+    },
+  };
+  const custom = tokenState("custom");
+  it("is known by the strategy Strapi 5.48 names and by its type", () => {
+    for (const type of ["full-access", "read-only"] as const)
+      expect(callerOf(rules, tokenState(type), "find")).toEqual({
+        kind: "unrestricted",
+        user: null,
+        assign: rules.assign,
+        custom: false,
+      });
+    expect(callerOf(rules, custom, "find")).toEqual({
+      kind: "unrestricted",
+      user: null,
+      assign: rules.assign,
+      custom: true,
+    });
+  });
+  it("is refused under another strategy name or with a type Strapi does not issue", () => {
+    expect(callerOf(rules, { auth: { strategy: { name: "api-token" } } }, "find").kind).toBe(
+      "refused",
+    );
+    const odd = { auth: { strategy: { name: "content-api-token" }, credentials: { type: "x" } } };
+    expect(callerOf(rules, odd, "find").kind).toBe("refused");
+  });
+  it("passes a full-access or read-only token's query as it is, related entries included", () => {
+    for (const type of ["full-access", "read-only"] as const) {
+      const query = { populate: { note: { populate: { attachment: { populate: "related" } } } } };
+      expect(scopeQuery(poly, TAG, tokenState(type), query)).toEqual({ ok: true, value: query });
+      expect(scopeQuery(poly, TAG, tokenState(type), { populate: "subject" }).ok).toBe(true);
+    }
+  });
+  it("refuses a custom token's populate of a polymorphic relation or a file's related entries", () => {
+    for (const populate of [
+      "subject",
+      "*",
+      ["subject"],
+      { subject: true },
+      { note: { populate: { attachment: { populate: "related" } } } },
+      "note.attachment.related",
+    ])
+      expect(scopeQuery(poly, TAG, custom, { populate }).ok, JSON.stringify(populate)).toBe(false);
+  });
+  it("leaves a custom token's other populates and filters as sent: no row condition applies", () => {
+    const query = {
+      populate: { note: { populate: ["attachment"] } },
+      filters: { note: { id: 3 } },
+    };
+    expect(scopeQuery(poly, TAG, custom, query)).toEqual({ ok: true, value: query });
+  });
+  it("refuses a polymorphic populate for a role too", () => {
+    expect(scopeQuery(poly, TAG, member, { populate: "subject" }).ok).toBe(false);
   });
 });

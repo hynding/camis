@@ -3,6 +3,7 @@
 // against a real Strapi 5 (the unit tests run them against a fake of its surface only).
 // Runs in the gated CI job; cannot run in the restricted dev sandbox (npm denied).
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { createHmac, randomBytes } from "node:crypto";
 import { copyFileSync, readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -418,6 +419,7 @@ const scenario = async (dir: string): Promise<void> => {
   check("alice's update filtered by a guess is refused", updateGuess.status === 400, updateGuess);
 
   await uploads(dir, alice, bob);
+  await tokens(dir);
 
   const link = await call("POST", "/api/tags", alice.jwt, {
     data: { label: "a", note: { connect: [{ documentId: bobNoteId }] } },
@@ -719,6 +721,128 @@ const uploads = async (dir: string, alice: Account, bob: Account): Promise<void>
  * one open to anyone) must be in content-api-allowlist.json, which names where it is enforced or
  * why it is safe: a route a new Strapi version, plugin or grant adds fails here until reviewed.
  */
+/**
+ * A content API token, stored as Strapi 5.48's admin stores one (the access key hashed with the
+ * project's API_TOKEN_SALT, a custom token's actions as its permissions); its key.
+ */
+const token = (dir: string, type: string, actions: string[] = []): string => {
+  const salt = /^API_TOKEN_SALT=(.*)$/m.exec(readFileSync(join(dir, ".env"), "utf8"))![1]!;
+  const key = randomBytes(32).toString("hex");
+  const now = Date.now();
+  const name = `${type}-${now}-${randomBytes(4).toString("hex")}`;
+  run(
+    dir,
+    "INSERT INTO strapi_api_tokens (document_id, name, description, kind, type, access_key, created_at, updated_at, published_at) VALUES (?, ?, '', 'content-api', ?, ?, ?, ?, ?)",
+    name,
+    name,
+    type,
+    createHmac("sha512", salt).update(key).digest("hex"),
+    now,
+    now,
+    now,
+  );
+  const tokenId = select(dir, "SELECT id FROM strapi_api_tokens WHERE name = ?", name)[0]!.id;
+  for (const action of actions) {
+    const permission = `${name}-${action}`;
+    run(
+      dir,
+      "INSERT INTO strapi_api_token_permissions (document_id, action, created_at, updated_at, published_at) VALUES (?, ?, ?, ?, ?)",
+      permission,
+      action,
+      now,
+      now,
+      now,
+    );
+    const permissionId = select(
+      dir,
+      "SELECT id FROM strapi_api_token_permissions WHERE document_id = ?",
+      permission,
+    )[0]!.id;
+    run(
+      dir,
+      "INSERT INTO strapi_api_token_permissions_token_lnk (api_token_permission_id, api_token_id) VALUES (?, ?)",
+      permissionId,
+      tokenId,
+    );
+  }
+  return key;
+};
+
+/**
+ * Content API tokens, created in the booted project. The strategy name camis recognises is the one
+ * the installed Strapi registers, so a rename fails here rather than in production. A full-access
+ * or read-only token reads every type as Strapi serves it; a custom token's populate of a file's
+ * related entries is refused (Strapi keeps that polymorphic list whole when the token may read
+ * none of its entries), and Strapi refuses what it holds no scope for.
+ */
+const tokens = async (dir: string): Promise<void> => {
+  const require = createRequire(join(dir, "package.json"));
+  const strategy = (
+    require("@strapi/admin/dist/server/server/src/strategies/content-api-token.js") as {
+      default: { name: string };
+    }
+  ).default.name;
+  check(
+    "camis recognises the token strategy the installed Strapi registers",
+    readFileSync(join(dir, "src/permissions/api-conditions.ts"), "utf8").includes(
+      `TOKEN_STRATEGY = ${JSON.stringify(strategy)}`,
+    ),
+    strategy,
+  );
+  const related = "populate[attachment][populate]=related";
+  const full = token(dir, "full-access");
+  for (const path of [
+    "/api/notes",
+    `/api/notes?${related}`,
+    "/api/upload/files",
+    "/api/upload/files?populate=related",
+  ]) {
+    const r = await call("GET", path, full);
+    check(`a full-access token's GET ${path} is 200`, r.status === 200, r);
+  }
+  const readOnly = token(dir, "read-only");
+  for (const path of [
+    "/api/notes",
+    `/api/notes?${related}`,
+    "/api/upload/files?populate=related",
+  ]) {
+    const r = await call("GET", path, readOnly);
+    check(`a read-only token's GET ${path} is 200`, r.status === 200, r);
+  }
+  const readOnlyWrite = await call("POST", "/api/tags", readOnly, { data: { label: "ro" } });
+  check("a read-only token's create is refused", readOnlyWrite.status === 403, readOnlyWrite);
+  const custom = token(dir, "custom", [
+    "api::note.note.find",
+    "plugin::upload.content-api.find",
+    "plugin::upload.content-api.findOne",
+  ]);
+  const everyNote = await call("GET", "/api/notes?pagination[pageSize]=100", custom);
+  const allNotes = Number(
+    select(
+      dir,
+      "SELECT COUNT(DISTINCT document_id) AS n FROM notes WHERE published_at IS NOT NULL",
+    )[0]!.n,
+  );
+  check(
+    "a custom token lists every note: no row condition applies",
+    everyNote.status === 200 && rows(everyNote).length === allNotes,
+    { status: everyNote.status, listed: rows(everyNote).length, allNotes },
+  );
+  for (const path of [
+    `/api/notes?${related}`,
+    "/api/notes?populate[attachment][populate]=*",
+    "/api/upload/files?populate=related",
+    "/api/upload/files?populate=*",
+  ]) {
+    const r = await call("GET", path, custom);
+    check(`a custom token's GET ${path} is 400`, r.status === 400, r);
+  }
+  const files = await call("GET", "/api/upload/files", custom);
+  check("a custom token lists the media library", files.status === 200, files);
+  const ungranted = await call("GET", "/api/tags", custom);
+  check("a custom token without the tag scope is 403", ungranted.status === 403, ungranted);
+};
+
 const routeGuard = (dir: string): void => {
   copyFileSync(new URL("./content-api-routes.mjs", import.meta.url), join(dir, "camis-routes.mjs"));
   const run = spawnSync("node", ["camis-routes.mjs"], { cwd: dir, encoding: "utf8" });

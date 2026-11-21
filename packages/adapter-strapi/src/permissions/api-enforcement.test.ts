@@ -1077,6 +1077,49 @@ describe("writes the users-permissions and upload plugins serve unchecked fail t
   });
 });
 
+// A custom API token holds no role, and Strapi keeps a polymorphic list whole when the token may
+// read none of its entries: wherever the rules restrict anyone, every type with a polymorphic
+// relation or inverse, and every type leading to one, is served so a populate of it is refused.
+describe("a polymorphic relation no role reaches", () => {
+  const shelf: IrDocument = {
+    ...doc,
+    contentTypes: [
+      ...doc.contentTypes,
+      {
+        name: "Board",
+        kind: "collection",
+        fields: [{ type: "polymorphicRelation", name: "subjects", many: true }],
+      },
+      {
+        name: "Shelf",
+        kind: "collection",
+        fields: [{ type: "relation", name: "board", relationKind: "manyToOne", target: "Board" }],
+      },
+    ],
+  };
+  it("is served, with every type leading to it, its populate a polymorphic link", () => {
+    const out = projectApiEnforcement(shelf, roles);
+    expect(out.gaps.filter((g) => g.severity === "error")).toEqual([]);
+    expect(out.holders["api::board.board"]).toEqual({
+      populatable: ["subjects"],
+      links: { subjects: { polymorphic: true } },
+    });
+    expect(out.holders["api::shelf.shelf"]).toEqual({
+      populatable: ["board"],
+      links: { board: { relation: "api::board.board" } },
+    });
+    expect(out.types.map((t) => t.contentType)).toEqual(expect.arrayContaining(["Board", "Shelf"]));
+  });
+  it("is not served where the rules restrict no one", () => {
+    expect(
+      projectApiEnforcement(
+        shelf,
+        roles.filter((r) => r.admin === true),
+      ).types,
+    ).toEqual([]);
+  });
+});
+
 // An `auth: false` route is open whatever roles the IR names, none included: with no role at all,
 // the open routes are still enforced, and only an IR with neither emits no enforcement.
 describe("an IR with no roles", () => {
