@@ -1174,6 +1174,83 @@ describe("the built-in user in the reach graph", () => {
   });
 });
 
+// The IR may name more than one built-in user (or file) type; each is the same Strapi type, so
+// their inverses share one node, and a grant on any of them is a grant on that type.
+describe("two built-in user types and two built-in file types", () => {
+  const twice: IrDocument = {
+    ...doc,
+    contentTypes: [
+      ...doc.contentTypes,
+      { name: "Member", kind: "collection", builtin: "user", fields: [] },
+      { name: "Upload", kind: "collection", builtin: "file", fields: [] },
+      {
+        name: "Album",
+        kind: "collection",
+        fields: [
+          { type: "media", name: "art" },
+          {
+            type: "relation",
+            name: "curator",
+            relationKind: "manyToOne",
+            target: "Member",
+            inverse: "albums",
+          },
+        ],
+      },
+      {
+        name: "Post",
+        kind: "collection",
+        fields: [
+          {
+            type: "relation",
+            name: "writer",
+            relationKind: "manyToOne",
+            target: "User",
+            inverse: "posts",
+          },
+        ],
+      },
+    ],
+  };
+  it("merges every built-in user's inverses into one holder", () => {
+    const out = projectApiEnforcement(twice, roles);
+    expect(out.holders["plugin::users-permissions.user"]?.links).toMatchObject({
+      albums: { relation: "api::album.album" },
+    });
+    expect(out.holders["plugin::users-permissions.user"]?.populatable).toEqual(
+      expect.arrayContaining(["albums", "posts"]),
+    );
+    expect(out.holders["api::post.post"]?.links).toEqual({
+      writer: { relation: "plugin::users-permissions.user" },
+    });
+  });
+  it("decides a grant on any of them as one on the built-in type", () => {
+    const writer: Role[] = [
+      { name: "member", grants: [{ contentType: "Member", actions: ["update"] }] },
+    ];
+    expect(errors(twice, writer).map((g) => g.feature)).toContain("apiUserWrite");
+    const reader: Role[] = [
+      {
+        name: "member",
+        grants: [
+          { contentType: "Note", actions: ["read"], condition: owned },
+          { contentType: "Upload", actions: ["read"] },
+        ],
+      },
+    ];
+    expect(errors(twice, reader).map((g) => [g.feature, g.location.contentType])).toContainEqual([
+      "apiRelationReach",
+      "Note",
+    ]);
+    const uploader: Role[] = [
+      { name: "member", grants: [{ contentType: "Upload", actions: ["create"] }] },
+    ];
+    expect(projectApiEnforcement(twice, uploader).uploads).toMatchObject({
+      uploaderRecorded: true,
+    });
+  });
+});
+
 // A role with no condition needs no condition module, but the bootstrap imports one.
 describe("roles without any condition", () => {
   it("still emit the condition module the bootstrap imports, and every import it names", () => {

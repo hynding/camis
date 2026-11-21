@@ -904,7 +904,7 @@ describe("a single type a restricted role writes, over Strapi's single type cont
     await front().find(context(reviewer(), { query: { populate: { featured: true } } }));
     expect(calls).toEqual([`core.find ${FRONT}`]);
     calls.length = 0;
-    for (const method of ["find", "update"] as const) {
+    for (const method of ["find", "update", "delete"] as const) {
       const custom = context(tokenState("custom"), {
         request: { body: { data: { headline: "x" } } },
       });

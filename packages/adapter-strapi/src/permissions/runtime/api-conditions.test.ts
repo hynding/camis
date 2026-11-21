@@ -1064,6 +1064,28 @@ describe("a populate through the built-in user", () => {
           false,
         );
   });
+  // Strapi does not check a populate's filters against the caller's grants: a filter through the
+  // user's role would answer whether another user holds it (seen on 5.48).
+  it("refuses a filter or sort through an attribute camis does not know, in a populate or at the top", () => {
+    for (const state of [member, guest]) {
+      for (const query of [
+        { populate: { author: { filters: { role: { name: { $eq: "viewer" } } } } } },
+        { populate: { author: { filters: { $or: [{ role: { type: "x" } }] } } } },
+        { populate: { author: { sort: "role.name" } } },
+        { populate: { author: { sort: ["role.name:asc"] } } },
+        { filters: { author: { role: { name: "viewer" } } } },
+        { sort: "author.role.name" },
+      ])
+        expect(scopeQuery(viaUser, TAG, state, query).ok, JSON.stringify(query)).toBe(false);
+      for (const query of [
+        { populate: { author: { filters: { username: { $eq: "a" } } } } },
+        { populate: { author: { filters: { boards: { title: { $eq: "b" } } } } } },
+        { populate: { author: { sort: "username" } } },
+        { filters: { author: { username: "a" } } },
+      ])
+        expect(scopeQuery(viaUser, TAG, state, query).ok, JSON.stringify(query)).toBe(true);
+    }
+  });
   it("refuses a populate beneath an attribute camis does not know, and passes one up to it", () => {
     expect(
       scopeQuery(viaUser, TAG, member, {
