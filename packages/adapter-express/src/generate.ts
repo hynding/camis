@@ -32,6 +32,7 @@ import { resolveRelations } from "./relations";
 import { emitRoutes } from "./routes";
 import { emitSchemaFile } from "./schema";
 import { skeletonFiles } from "./skeleton";
+import { expressReservedNameGaps } from "./reserved-names";
 
 // "  author_id: integer('author_id').references(...)," → "author_id"
 const fkNames = (lines: string[]): string[] => lines.map((l) => l.trim().split(":")[0]!.trim());
@@ -65,6 +66,7 @@ export const expressAdapterFor = (dialect: Dialect): GenerateAdapter => ({
     const links = morphLinks(doc);
     const secured = ir.roles.length > 0;
     const gaps: CapabilityGap[] = [
+      ...expressReservedNameGaps(doc),
       ...privateFieldGaps(doc, "the Express target"),
       ...customCodeGaps(doc),
       ...apiActionGaps(doc),

@@ -59,6 +59,31 @@ components, and repeatables nested inside repeatables, are reported as downgrade
 Exit codes: `0` on success (capability *downgrades* are warnings); non-zero on a validation failure,
 an unreadable/invalid config, an unknown command, or an `error`-severity capability gap.
 
+A field named as a target names its own keys or columns is such an error (`reservedFieldName`,
+located at the content type or component and the field, before anything is written), since the
+target would overwrite or refuse it. Names are compared as the target maps them, so
+`published_at` and `PublishedAt` (an imported API key) are caught as `publishedAt` is. Where a
+target flattens a non-repeatable component into the row holding it, its fields' columns are named
+by their path (`created` holding `at` is `created_at`) and checked too, located at the content type
+(or component), the component and its field:
+
+- `strapi`, and `filament` with `apiStyle: "strapi"`: `documentId`, `createdAt`, `updatedAt`,
+  `publishedAt`, `createdBy`, `updatedBy`, `locale`, `localizations` (and `createdById`,
+  `updatedById`), the API keys `__component` and `__contentType`, and any name starting with
+  `strapi`, `_strapi` or `__strapi`, compared snake_cased; for a field, its API key, a relation's
+  inverse and a component's field. The Filament target also checks a to-one relation's key column,
+  so a relation named `document` (`document_id`) is refused there. Strapi's Content-Type Builder
+  additionally refuses `status`, `meta` and `entry_id`; camis lets them through, since none is a key
+  of an entry and Strapi reads and writes such a field as it should.
+- `filament` with `apiStyle: "laravel"`: `createdAt` and `updatedAt`, whose columns are Laravel's
+  timestamps, a component's fields included.
+- `filament` on the Laravel storage layout (either API style): an embedded component's columns on
+  the entry's row and on an item's, both of which carry the timestamps.
+- `express`: `createdAt` and `updatedAt` on a content type, a built-in one included, and an
+  embedded component's columns on the entry's table.
+
+`id` is refused by `camis validate` itself, since every target keeps it.
+
 ## camis.config.json
 
 ```json

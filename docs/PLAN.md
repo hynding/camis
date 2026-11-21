@@ -2670,6 +2670,88 @@ and a CAMIS app generated from it: push, pull and the admin page.
 
 ---
 
+## Phase 95 — the Strapi target boots with any mix of conditions (`adapter-strapi`)
+
+A generated Strapi project with roles did not boot on a fresh database (issue #102):
+
+- An admin permission with no condition has no `conditions` key, and Strapi 5's query engine
+  binds that json column unserialised, which sqlite refuses (`SQLite3 can only bind numbers,
+  strings, bigints, buffers, and null`). The bootstrap now creates each admin permission with
+  `conditions: []` beneath its own.
+- `src/index.ts` imported `./permissions/conditions` even when no grant carried a condition and
+  the module was not emitted. The bootstrap now imports and registers the conditions module only
+  with it (`permissionsIndexTs(withConditions)`), so a project with conditions emits the same
+  bootstrap as before, and one without emits no Ring 1 runtime it never runs.
+
+The bootstrap still creates its admin permissions again on every start (issue #100).
+
+Exit: `bootstrap-boot.test.ts` (every module the bootstrap imports is emitted; the bootstrap runs
+against a query engine that refuses an absent `conditions`, for a project with no condition and
+one with conditions on some grants only; the golden of a bootstrap without conditions), which run
+on every pull request. The boot smoke (`pnpm --filter @camis/adapter-strapi smoke`) boots both
+notes projects on fresh sqlite databases besides the blog, and reads their public notes (200); it
+runs by hand, or in the `strapi-boot-smoke` workflow, which runs nightly or when dispatched, not on
+pull requests.
+
+---
+
+## Phase 96 — field names a target keeps for itself (`ir-core`, `strapi-schema`, `adapter-strapi`, `adapter-filament`, `adapter-express`, `cli`)
+
+The IR accepted fields named `publishedAt` and `updatedAt`, the Strapi target emitted them, and
+Strapi then overwrote the one and refused writes naming the other (`Invalid key updatedAt`), with
+no gap reported (issue #103).
+
+- **Where the rule lives.** Only `id` is kept by every target, and it stays an IR rule
+  (`reserved_field_name`). The other names are one target's concept, so the adapter that owns the
+  name reports it: an `error`-severity `reservedFieldName` gap, located at the content type (or
+  component) and the field, so `camis generate`/`camis build` stop before writing. `ir-core`'s
+  `reservedNameGaps(doc, target, reserved, namesOf, options)` walks the fields; each target says how
+  it maps a field's names and which it keeps, and whether a built-in type's fields are checked
+  (`builtins`): Strapi and Filament map a built-in type onto a model of their own (users-permissions'
+  user, the host app's `users` or Strapi's `up_users`) and generate nothing from its fields, while
+  Express emits it as a plain table with the same timestamps, so only Express checks it.
+- **Strapi** (`@camis/strapi-schema`'s `STRAPI_RESERVED_NAMES`, `strapiReservedNameGaps`). What
+  camis refuses: the keys of the entry itself, `documentId`, `createdAt`, `updatedAt`,
+  `publishedAt`, `createdBy`, `updatedBy`, `locale`, `localizations`, and the
+  `created_by_id`/`updated_by_id` key columns; Strapi's discriminator keys `__component` (which a
+  dynamic zone item's component goes by on the wire, beside the item's own keys) and
+  `__contentType`, which only an API key can spell; and any name with Strapi's `strapi`, `_strapi`
+  or `__strapi` prefix (`strapi_stage`, `strapi_assignee` are its own columns). Names are compared
+  snake_cased as Strapi's Content-Type Builder compares attribute names, so an API key
+  `published_at` or `PublishedAt` is caught. A field's API key, a relation's inverse (Strapi adds it
+  to the related type) and a component's field (the builder refuses it there too) are checked. What
+  Strapi's builder additionally refuses, and camis lets through: `status` (since 5.48), `meta` and
+  `entry_id`, which are not keys of an entry (`meta` sits beside `data` in a response), so such a
+  field reads and writes as it should, and Strapi only warns of `status` when it boots; the blog
+  fixtures keep a `status` and the catalogs a `meta`. Each decision is pinned by a test.
+- **Embedded components.** A non-repeatable component's fields are flattened into the row holding
+  it, as columns named by their path snake_cased and joined, so a field `created` holding a
+  component with a field `at` is a column `created_at`, which a target may keep. With the walker's
+  `embedded` option a target says what an embedded field's column is called, and such a field is
+  reported located at the content type (or component), the component and its field, with the path
+  in the message. A repeatable component or a dynamic zone is rows of a table of its own.
+- **Filament.** The Strapi API style answers Strapi's REST API, so it reports Strapi's names, and
+  also a column of its own rows a field's column would repeat: a to-one relation named `document`
+  keeps `document_id`. The Laravel API style reports `createdAt` and `updatedAt`, whose columns are
+  Laravel's timestamps on every table, a component item's included. On the Laravel storage layout,
+  in either API style, an embedded component's columns land on the entry's row or an item's, both
+  of which carry the timestamps, and are checked against the same names (on the Strapi API style a
+  to-one relation inside one by its key column, `created.by` being `created_by_id`, and a media
+  field not at all, since it links the media library's files). The Strapi storage layout keeps a
+  component in a table of its own, as Strapi does.
+- **Express** reports `createdAt` and `updatedAt` on a content type, a built-in one included (each
+  table's timestamp columns), an embedded component's columns on the entry's table among them; a
+  repeatable component's fields are rows of a table without timestamps and collide with none.
+- **Import.** A Strapi project's schema.json never carries these names (Strapi adds them itself and
+  its builder refuses them), so it imports and generates as before. One edited by hand to carry one
+  imports as it is, and generation reports it.
+
+Exit: `reserved-names.test.ts` in `ir-core`, `strapi-schema`, `adapter-strapi` (with the import
+cases), `adapter-filament` (both API styles) and `adapter-express`, each with its fixtures reporting
+none; `generate.test.ts` in the CLI fails with a located message per name and writes nothing.
+
+---
+
 ## Sequencing rationale (quick reference)
 
 1. **Strapi first** — mature schema validates the IR fastest, with the thinnest adapter.

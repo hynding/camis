@@ -163,19 +163,28 @@ TRANSFER_TOKEN_SALT=camisDevTransferTokenSalt
 JWT_SECRET=camisDevJwtSecret
 `;
 
-export const PERMISSIONS_INDEX_TS = `import { conditions } from "./permissions/conditions";
-import roles from "./permissions/roles.json";
+const CONDITIONS_IMPORT = `import { conditions } from "./permissions/conditions";\n`;
+const REGISTER_CONDITIONS = `    await strapi.admin.services.permission.conditionProvider.registerMany(conditions);\n`;
+
+/**
+ * The bootstrap that seeds roles. It imports and registers the conditions module only when the
+ * project emits one: an import of a module that is not there stops Strapi from booting.
+ */
+export const permissionsIndexTs = (
+  withConditions: boolean,
+): string => `${withConditions ? CONDITIONS_IMPORT : ""}import roles from "./permissions/roles.json";
 import apiRoles from "./permissions/api-roles.json";
 
 export default {
   async register() {},
   async bootstrap({ strapi }: { strapi: any }) {
-    await strapi.admin.services.permission.conditionProvider.registerMany(conditions);
-    for (const role of roles) {
+${withConditions ? REGISTER_CONDITIONS : ""}    for (const role of roles) {
       const existing = await strapi.query("admin::role").findOne({ where: { name: role.name } });
       const record = existing ?? (await strapi.query("admin::role").create({ data: { name: role.name, description: role.description } }));
       for (const p of role.permissions) {
-        await strapi.query("admin::permission").create({ data: { ...p, role: record.id } });
+        // Explicit even when empty: Strapi 5's query engine binds the json default unserialised,
+        // which sqlite refuses.
+        await strapi.query("admin::permission").create({ data: { conditions: [], ...p, role: record.id } });
       }
     }
     const grant = async (type: string, actions: string[]) => {

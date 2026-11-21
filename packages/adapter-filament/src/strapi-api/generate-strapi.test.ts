@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { filamentAdapter } from "../generate";
 import { strapiApiBundle } from "./__fixtures__/strapi-api";
 import { catalog } from "../__fixtures__/catalog";
+import { forStrapiApiStyle } from "../__fixtures__/strapi-api-style";
 
 describe("filamentAdapter apiStyle strapi", () => {
   const result = filamentAdapter.generate(strapiApiBundle, {
@@ -54,12 +55,18 @@ describe("filamentAdapter apiStyle strapi", () => {
 // scopeForUser and every controller free of $request->user(), or an unsecured app would call
 // methods on a null user at runtime.
 describe("filamentAdapter apiStyle strapi without roles", () => {
-  const result = filamentAdapter.generate(catalog, { projectName: "blog", apiStyle: "strapi" });
+  const result = filamentAdapter.generate(forStrapiApiStyle(catalog), {
+    projectName: "blog",
+    apiStyle: "strapi",
+  });
   const models = result.files.filter((f) => f.path.startsWith("app/Models/"));
   const controllers = result.files.filter((f) =>
     f.path.startsWith("app/Http/Controllers/Api/Generated/"),
   );
 
+  it("reports no error gap, so the CLI would generate it", () => {
+    expect(result.gaps.gaps.filter((g) => g.severity === "error")).toEqual([]);
+  });
   it("emits no scopeForUser on any model", () => {
     expect(models.length).toBeGreaterThan(0);
     for (const m of models) expect(m.content).not.toContain("scopeForUser");

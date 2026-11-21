@@ -7,6 +7,7 @@ import { normalize } from "@camis/ir-core";
 import { filamentAdapter } from "../../generate";
 import { catalog } from "../../__fixtures__/catalog";
 import { hooksBundle } from "../../__fixtures__/hooks";
+import { forStrapiApiStyle } from "../../__fixtures__/strapi-api-style";
 import { strapiApiBundle } from "../__fixtures__/strapi-api";
 import { storageBundle } from "./__fixtures__/storage";
 import { expectedSchema } from "./schema-check";
@@ -260,12 +261,16 @@ describe("storageLayout omitted leaves the laravel layout byte-identical", () =>
 // layout emits its own models, so `generate.ts` has to thread the observed set through or every
 // Ring 2 hook on this layout is silently dead.
 describe("storageLayout strapi with a hook", () => {
-  const hooked = filamentAdapter.generate(hooksBundle, {
+  const hooked = filamentAdapter.generate(forStrapiApiStyle(hooksBundle), {
     projectName: "oyl",
     apiStyle: "strapi",
     storageLayout: "strapi",
   });
   const hookedPaths = hooked.files.map((f) => f.path);
+
+  it("reports no error gap, so the CLI would generate it", () => {
+    expect(hooked.gaps.gaps.filter((g) => g.severity === "error")).toEqual([]);
+  });
 
   it("emits the observer file and registers it on the storage model", () => {
     expect(hookedPaths).toContain("app/Observers/ArticleObserver.php");
