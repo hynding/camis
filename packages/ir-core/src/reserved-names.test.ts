@@ -370,7 +370,7 @@ describe("reservedNameGaps, embedded components", () => {
         feature: "reservedFieldName",
         location: { component: "Mark", field: "at" },
         severity: "error",
-        message: `field "at" of component "Mark", embedded in "Stamp.by" as "by_at", collides with the Test target's own "byAt"; rename it`,
+        message: `field "at" of component "Mark", embedded in "Note.items.by" as "by_at", collides with the Test target's own "byAt"; rename it`,
       },
     ]);
   });

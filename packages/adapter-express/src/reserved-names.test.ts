@@ -149,7 +149,7 @@ describe("Express target: names its tables reserve", () => {
         feature: "reservedFieldName",
         location: { component: "Ref", field: "id" },
         severity: "error",
-        message: `field "id" of component "Ref", embedded in "Item.post" as "post_id", collides with the Express target's own "post_id"; rename it`,
+        message: `field "id" of component "Ref", embedded in "Post.items.post" as "post_id", collides with the Express target's own "post_id"; rename it`,
       },
     ]);
   });

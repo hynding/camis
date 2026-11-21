@@ -407,7 +407,7 @@ describe("Filament target: names its rows and wire shape reserve", () => {
           [
             "error",
             { component: "Stamp", field: "at" },
-            `field "at" of component "Stamp", embedded in "Item.created" as "created_at", collides with the ${apiStyle === "laravel" ? "Laravel" : "Strapi"} API style's own "${own}"; rename it`,
+            `field "at" of component "Stamp", embedded in "Note.items.created" as "created_at", collides with the ${apiStyle === "laravel" ? "Laravel" : "Strapi"} API style's own "${own}"; rename it`,
           ],
         ]);
       },
@@ -701,8 +701,11 @@ describe("Filament target: names its rows and wire shape reserve", () => {
           ],
         },
       ]);
-      expect(reportedFields(bundle, "strapi")).toEqual([
-        { component: "Sub", field: "noteItemsId" },
+      expect(reserved(bundle, "strapi").map((g) => [g.location, g.message])).toEqual([
+        [
+          { component: "Sub", field: "noteItemsId" },
+          `field "noteItemsId" of component "Sub", in "Note.items.sub" as "note_items_id", collides with the Strapi API style's own "note_items_id"; rename it`,
+        ],
       ]);
       expect(reserved(bundle, "laravel")).toEqual([]);
     });
