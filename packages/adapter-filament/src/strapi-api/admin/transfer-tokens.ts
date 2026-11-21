@@ -7,7 +7,9 @@ import { runtimePhp } from "../../runtime-php";
  * strategy): a token may push data in, pull it out, or both, through `strapi transfer`'s runner at
  * /admin/transfer/runner/*. The runner itself is a WebSocket, which PHP under FPM cannot keep open,
  * so a valid token is answered as strapi-php answers it there: refused with 501, pointing at the
- * archive commands that move the same data.
+ * archive commands that move the same data. strapi-plugin-camis moves it over plain HTTP instead:
+ * a push token uploads an archive in chunks to /admin/transfer/push, a pull token downloads one
+ * from /admin/transfer/pull.
  */
 
 export const TRANSFER_TOKENS_MIGRATION_PATH =
@@ -29,7 +31,8 @@ export const remoteTransferGap: CapabilityGap = {
   severity: "downgrade",
   message:
     "`strapi transfer --to/--from` needs a server that keeps a WebSocket open, which PHP under FPM does not; " +
-    "transfer tokens are kept and checked, and the data moves as an archive (`php artisan strapi:export`, `strapi import`).",
+    "transfer tokens are kept and checked, and the data moves as an archive: over plain HTTP with strapi-plugin-camis " +
+    "(/admin/transfer/push, /admin/transfer/pull), or by hand (`php artisan strapi:export`, `strapi import`).",
 };
 
 export const emitTransferTokensMigration = (): string =>
@@ -49,6 +52,12 @@ export const emitStrapiTransferTokens = (): string =>
 export const emitStrapiTransferRunner = (): string =>
   runtimePhp(new URL("./php/app/Http/Controllers/Admin/StrapiTransferRunner.php", import.meta.url));
 
+export const emitStrapiTransferPush = (): string =>
+  runtimePhp(new URL("./php/app/Http/Controllers/Admin/StrapiTransferPush.php", import.meta.url));
+
+export const emitStrapiTransferPull = (): string =>
+  runtimePhp(new URL("./php/app/Http/Controllers/Admin/StrapiTransferPull.php", import.meta.url));
+
 /** Strapi's transfer runner when tokens are kept, and the Data transfer page's download link. */
 export const emitTransferRoutes = (secured: boolean): string => `<?php
 
@@ -58,7 +67,12 @@ declare(strict_types=1);
 
 ${[
   ...(secured
-    ? ["App\\Http\\Controllers\\Admin\\StrapiTransferRunner", "App\\Http\\Middleware\\StrapiErrors"]
+    ? [
+        "App\\Http\\Controllers\\Admin\\StrapiTransferPull",
+        "App\\Http\\Controllers\\Admin\\StrapiTransferPush",
+        "App\\Http\\Controllers\\Admin\\StrapiTransferRunner",
+        "App\\Http\\Middleware\\StrapiErrors",
+      ]
     : []),
   "App\\Http\\Controllers\\Admin\\StrapiTransferDownload",
   "Illuminate\\Support\\Facades\\Route",
@@ -73,6 +87,13 @@ ${
 Route::middleware([StrapiErrors::class])->group(function (): void {
     Route::get('/admin/transfer/runner/push', [StrapiTransferRunner::class, 'push']);
     Route::get('/admin/transfer/runner/pull', [StrapiTransferRunner::class, 'pull']);
+    // The same transfers over plain HTTP (strapi-plugin-camis): an archive pushed in chunks, or pulled whole.
+    Route::post('/admin/transfer/push', [StrapiTransferPush::class, 'start']);
+    Route::put('/admin/transfer/push/{id}', [StrapiTransferPush::class, 'append'])->where('id', '[0-9a-f]{32}');
+    Route::post('/admin/transfer/push/{id}/check', [StrapiTransferPush::class, 'check'])->where('id', '[0-9a-f]{32}');
+    Route::post('/admin/transfer/push/{id}/apply', [StrapiTransferPush::class, 'apply'])->where('id', '[0-9a-f]{32}');
+    Route::delete('/admin/transfer/push/{id}', [StrapiTransferPush::class, 'abort'])->where('id', '[0-9a-f]{32}');
+    Route::get('/admin/transfer/pull', [StrapiTransferPull::class, 'export']);
 });
 `
     : ""

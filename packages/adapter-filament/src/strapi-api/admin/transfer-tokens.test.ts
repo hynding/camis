@@ -52,22 +52,51 @@ describe("transfer tokens", () => {
 
   it("refuses a missing, expired or out-of-scope token before saying no socket is kept", async () => {
     const runner = content("app/Http/Controllers/Admin/StrapiTransferRunner.php");
-    expect(runner).toContain(
+    expect(runner).toContain("StrapiTransferTokens::demand($request, $scope);");
+    expect(runner).toContain("throw new StrapiError(501, 'NotImplementedError', ");
+    expect(runner.indexOf("demand(")).toBeLessThan(runner.indexOf("NotImplementedError"));
+    const tokens = content("app/Support/StrapiTransferTokens.php");
+    expect(tokens).toContain(
       "throw new StrapiError(401, 'UnauthorizedError', 'Missing or invalid credentials');",
     );
-    expect(runner).toContain("throw new StrapiError(403, 'ForbiddenError', 'Forbidden');");
-    expect(runner).toContain("throw new StrapiError(501, 'NotImplementedError', ");
-    expect(runner.indexOf("ForbiddenError")).toBeLessThan(runner.indexOf("NotImplementedError"));
-    expect(content("app/Support/StrapiTransferTokens.php")).toContain(
-      "throw new StrapiError(401, 'UnauthorizedError', 'Token expired');",
-    );
+    expect(tokens).toContain("throw new StrapiError(403, 'ForbiddenError', 'Forbidden');");
+    expect(tokens).toContain("throw new StrapiError(401, 'UnauthorizedError', 'Token expired');");
     await expect(runner).toMatchFileSnapshot("../__golden__/strapi-api/StrapiTransferRunner.php");
+  });
+
+  it("takes a pushed archive over plain HTTP in chunks, for strapi-plugin-camis", async () => {
+    const routes = content("routes/transfer.php");
+    for (const route of [
+      "Route::post('/admin/transfer/push', [StrapiTransferPush::class, 'start']);",
+      "Route::put('/admin/transfer/push/{id}', [StrapiTransferPush::class, 'append'])",
+      "Route::post('/admin/transfer/push/{id}/check', [StrapiTransferPush::class, 'check'])",
+      "Route::post('/admin/transfer/push/{id}/apply', [StrapiTransferPush::class, 'apply'])",
+      "Route::delete('/admin/transfer/push/{id}', [StrapiTransferPush::class, 'abort'])",
+    ])
+      expect(routes).toContain(route);
+    const push = content("app/Http/Controllers/Admin/StrapiTransferPush.php");
+    expect(push).toContain("StrapiTransferTokens::demand($request, 'push');");
+    expect(push).toContain("$import->schemaDiffs()");
+    expect(push).toContain("throw new StrapiError(413, 'PayloadTooLargeError'");
+    await expect(push).toMatchFileSnapshot("../__golden__/strapi-api/StrapiTransferPush.php");
+  });
+
+  it("hands a pull token this app's export archive over plain HTTP, for strapi-plugin-camis", async () => {
+    expect(content("routes/transfer.php")).toContain(
+      "Route::get('/admin/transfer/pull', [StrapiTransferPull::class, 'export']);",
+    );
+    const pull = content("app/Http/Controllers/Admin/StrapiTransferPull.php");
+    expect(pull).toContain("StrapiTransferTokens::demand($request, 'pull');");
+    expect(pull).toContain("StrapiExport::write(");
+    expect(pull).toContain("->deleteFileAfterSend()");
+    await expect(pull).toMatchFileSnapshot("../__golden__/strapi-api/StrapiTransferPull.php");
   });
 
   it("reports the remote transfer a PHP host cannot serve", () => {
     const gap = result.gaps.gaps.find((g) => g.feature === "remoteDataTransfer");
     expect(gap?.severity).toBe("downgrade");
     expect(gap?.message).toContain("strapi:export");
+    expect(gap?.message).toContain("strapi-plugin-camis");
   });
 
   it("lists the tokens in the admin's settings, showing a key once", () => {

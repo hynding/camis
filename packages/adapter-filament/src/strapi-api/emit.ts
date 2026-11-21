@@ -157,6 +157,8 @@ import {
 import { emitRoleResourceFiles, emitStrapiRoles, STRAPI_ROLES_PATH } from "./admin/roles-admin";
 import { emitContentTypeBuilder } from "../content-type-builder";
 import {
+  emitStrapiTransferPull,
+  emitStrapiTransferPush,
   emitStrapiTransferRunner,
   emitStrapiTransferTokens,
   emitTransferRoutes,
@@ -682,6 +684,8 @@ const transferTokenFiles = (): GeneratedFile[] => [
     path: "app/Http/Controllers/Admin/StrapiTransferRunner.php",
     content: emitStrapiTransferRunner(),
   },
+  { path: "app/Http/Controllers/Admin/StrapiTransferPush.php", content: emitStrapiTransferPush() },
+  { path: "app/Http/Controllers/Admin/StrapiTransferPull.php", content: emitStrapiTransferPull() },
   ...emitTransferTokenResourceFiles(),
 ];
 

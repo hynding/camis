@@ -88,6 +88,20 @@ final class StrapiTransferTokens
         return $token;
     }
 
+    /** The request's token when it may $scope ('push' or 'pull'), refused as Strapi refuses it otherwise. */
+    public static function demand(Request $request, string $scope): StrapiTransferToken
+    {
+        $token = self::authenticate($request);
+        if ($token === null) {
+            throw new StrapiError(401, 'UnauthorizedError', 'Missing or invalid credentials');
+        }
+        if (! self::allows($token, $scope)) {
+            throw new StrapiError(403, 'ForbiddenError', 'Forbidden');
+        }
+
+        return $token;
+    }
+
     public static function allows(StrapiTransferToken $token, string $scope): bool
     {
         return in_array($scope, $token->permissions ?? [], true);

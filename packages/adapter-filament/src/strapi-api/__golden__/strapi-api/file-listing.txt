@@ -217,6 +217,8 @@ overwrite app/Http/Controllers/Admin/StrapiAdminApiTokens.php
 overwrite app/Http/Controllers/Admin/StrapiAdminController.php
 overwrite app/Http/Controllers/Admin/StrapiAdminTokensController.php
 overwrite app/Http/Controllers/Admin/StrapiTransferDownload.php
+overwrite app/Http/Controllers/Admin/StrapiTransferPull.php
+overwrite app/Http/Controllers/Admin/StrapiTransferPush.php
 overwrite app/Http/Controllers/Admin/StrapiTransferRunner.php
 overwrite app/Http/Controllers/Api/AuthController.php
 overwrite app/Http/Controllers/Api/ConnectController.php

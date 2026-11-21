@@ -208,7 +208,9 @@ Settings › Transfer Tokens makes Strapi's transfer tokens; set \`TRANSFER_TOKE
 Strapi project's own to keep its tokens' hashes (unset, the app key salts them). A token is shown
 once. \`strapi transfer --to/--from\` reaches \`/admin/transfer/runner/*\` and is checked as Strapi
 checks it, but the transfer itself needs a WebSocket server, which PHP under FPM cannot keep, so a
-valid token is answered 501: move the data with \`strapi:export\` and \`strapi:import\` instead.`;
+valid token is answered 501: move the data with \`strapi:export\` and \`strapi:import\` instead,
+or from the Strapi project with strapi-plugin-camis, which pushes to \`/admin/transfer/push\` and
+pulls from \`/admin/transfer/pull\` over plain HTTP with the same tokens.`;
 
 /** What DEPLOY.md adds for the opt-in features this build includes. */
 export interface DeployExtras {

@@ -1004,7 +1004,8 @@ expired, regenerated and revoked token) answers in the boot job as strapi-php an
 SQLite, MySQL and Postgres; `TransferTokensTest.php` covers the admin page, lifespans and the
 hourly last use.
 
-Known gap (reported as `remoteDataTransfer`): `strapi transfer --to/--from` itself. Data moves
+Known gap (reported as `remoteDataTransfer`): `strapi transfer --to/--from` itself (Phase 93's
+strapi-plugin-camis moves the same archive over plain HTTP). Data moves
 as an archive instead, with the commands or, without a shell, with Part 5's page.
 
 **Part 5 — data transfer without a shell.** Settings › Data transfer runs the commands' engines
@@ -2639,6 +2640,33 @@ Phase 64 left the Express target reporting each polymorphic field as unsupported
 
 Exit: `morphs.test.ts` (schema, routes, goldens), `syntax.test.ts`, and the boot smoke's sqlite
 leg, which drives the links over HTTP (`scripts/morph-smoke.ts`).
+
+## Phase 93 — strapi-plugin-camis: push to and pull from CAMIS over HTTP (`adapter-filament`, `integrations/strapi-plugin-camis`)
+
+`strapi transfer --to/--from` needs a WebSocket, which PHP under FPM cannot keep open (Phase 29's
+`remoteDataTransfer` gap). A Strapi plugin carries the same archive over plain HTTP instead.
+
+- **CAMIS.** A transfer token's scopes gate new routes beside the runner's:
+  `POST /admin/transfer/push` starts an upload, `PUT /admin/transfer/push/{id}?offset=N` appends a
+  chunk of at most 6 MiB (the offset must be the bytes held, so a retried chunk is refused with
+  the right size rather than doubled), `POST …/{id}/check` answers `StrapiImport::schemaDiffs()`,
+  `POST …/{id}/apply` (`{only?, exclude?}`) runs `StrapiImport`, `DELETE …/{id}` drops it, and
+  `GET /admin/transfer/pull` streams `StrapiExport`'s gzipped, unencrypted archive. Uploads live
+  apart from the Data transfer page's archives and are dropped after a day.
+  `StrapiTransferTokens::demand()` is the one token check, which the runner shares.
+- **The plugin** (`integrations/strapi-plugin-camis`, npm `strapi-plugin-camis`, not a pnpm
+  workspace member). It writes and restores archives with Strapi's own `@strapi/data-transfer`
+  engine, as `strapi export` and `strapi import` drive it. Push is export, chunked upload, check,
+  apply. Pull is download, then restore, with schema diffs refused unless forced. An empty
+  `options`/`pluginOptions` and the Enterprise types CAMIS does not build are let through. It has
+  an admin page (connection, data kinds, check, push, pull, last 20 transfers; RBAC actions read,
+  push and pull) and a CLI (`npx strapi-plugin-camis check|push|pull`). The content model is not
+  transferred: CAMIS is regenerated from it (`camis import strapi`).
+
+Exit: `transfer-tokens.test.ts` (routes, goldens), `TransferPushPullTest.php` in the boot job
+(chunking, resume, check, apply, only/exclude, scopes, pull round trip), the plugin's vitest suite,
+typecheck, build and `strapi-plugin verify` in CI. Checked by hand against a Strapi 5.63 project
+and a CAMIS app generated from it: push, pull and the admin page.
 
 ---
 
