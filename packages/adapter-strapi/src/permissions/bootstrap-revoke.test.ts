@@ -18,13 +18,17 @@ interface ApiRoles {
 interface Database {
   permissions: PermissionRow[];
   store: Map<string, unknown>;
+  /** What the bootstrap hands Strapi's query engine for each admin-panel permission. */
+  adminPermissions?: Record<string, unknown>[];
 }
 
 /** The generated bootstrap, run against an in-memory users-permissions database. */
 const runBootstrap = async (apiRoles: ApiRoles, db: Database): Promise<void> => {
-  const index = strapiAdapter
-    .generate(ownershipBundle, { projectName: "notes" })
-    .files.find((f) => f.path === "src/index.ts")!.content;
+  const files = strapiAdapter.generate(ownershipBundle, { projectName: "notes" }).files;
+  const index = files.find((f) => f.path === "src/index.ts")!.content;
+  const adminRoles: unknown = JSON.parse(
+    files.find((f) => f.path === "src/permissions/roles.json")!.content,
+  );
   const js = ts
     .transpileModule(index, {
       compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
@@ -63,6 +67,13 @@ const runBootstrap = async (apiRoles: ApiRoles, db: Database): Promise<void> => 
           db.permissions = db.permissions.filter((p) => p.id !== where.id);
         },
       };
+    if (uid === "admin::permission")
+      return {
+        create: async ({ data }: { data: Record<string, unknown> }) => {
+          db.adminPermissions?.push(data);
+          return { id: 1 };
+        },
+      };
     return { findOne: async () => ({ id: 1 }), create: async () => ({ id: 1 }) };
   };
   // Strapi's core store, as `strapi.store({ type, name })` hands it out.
@@ -77,7 +88,7 @@ const runBootstrap = async (apiRoles: ApiRoles, db: Database): Promise<void> => 
     query,
     store,
   };
-  await module([], [], apiRoles).bootstrap({ strapi });
+  await module([], adminRoles, apiRoles).bootstrap({ strapi });
 };
 
 const USER_FIND = "plugin::users-permissions.user.find";
@@ -130,5 +141,17 @@ describe("the generated bootstrap's revoke", () => {
     await runBootstrap(apiRoles, db);
     await runBootstrap(apiRoles, db);
     expect(actionsOf(db, 1)).toEqual(["api::note.note.find", REGISTER]);
+  });
+});
+
+describe("the generated bootstrap's admin-panel permissions", () => {
+  // Strapi 5's query engine binds a json attribute's default ([]) unserialised, which sqlite
+  // refuses: a permission without conditions failed the boot.
+  it("creates every admin permission with its conditions, an empty list when it has none", async () => {
+    const db: Database = { permissions: [], store: new Map(), adminPermissions: [] };
+    await runBootstrap({ roles: [], public: [] }, db);
+    expect(db.adminPermissions!.length).toBeGreaterThan(0);
+    for (const p of db.adminPermissions!)
+      expect(Array.isArray(p.conditions), JSON.stringify(p)).toBe(true);
   });
 });
