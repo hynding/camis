@@ -1086,9 +1086,10 @@ describe("writes the users-permissions and upload plugins serve unchecked fail t
   });
 });
 
-// A custom API token holds no role, and Strapi keeps a polymorphic list whole when the token may
-// read none of its entries: wherever the rules restrict anyone, every type with a polymorphic
-// relation or inverse, and every type leading to one, is served so a populate of it is refused.
+// Strapi keeps a polymorphic list whole when the caller may read none of its entries: wherever the
+// rules restrict anyone, every type with a polymorphic relation or inverse, and every type leading
+// to one, is served so a populate of it is refused at runtime, not left to Strapi stripping the
+// ordinary relation on the way (a role reading the polymorphic type itself fails the build).
 describe("a polymorphic relation no role reaches", () => {
   const shelf: IrDocument = {
     ...doc,
@@ -1126,6 +1127,73 @@ describe("a polymorphic relation no role reaches", () => {
         roles.filter((r) => r.admin === true),
       ).types,
     ).toEqual([]);
+  });
+});
+
+// The built-in user is served by users-permissions, but a relation to it leads on through its
+// inverses (a board's author to the author's boards): the user is a node of the reach graph, so a
+// populate through it is walked, and a type reaching a polymorphic relation only through it is
+// served.
+describe("the built-in user in the reach graph", () => {
+  const via: IrDocument = {
+    ...doc,
+    contentTypes: [
+      ...doc.contentTypes,
+      {
+        name: "Board",
+        kind: "collection",
+        fields: [
+          { type: "polymorphicRelation", name: "subjects", many: true },
+          {
+            type: "relation",
+            name: "author",
+            relationKind: "manyToOne",
+            target: "User",
+            inverse: "boards",
+          },
+        ],
+      },
+      {
+        name: "Album",
+        kind: "collection",
+        fields: [{ type: "relation", name: "curator", relationKind: "manyToOne", target: "User" }],
+      },
+    ],
+  };
+  it("links a relation to the user and the user's inverses, and serves the type reaching through it", () => {
+    const out = projectApiEnforcement(via, roles);
+    expect(out.holders["api::album.album"]).toEqual({
+      populatable: ["curator"],
+      links: { curator: { relation: "plugin::users-permissions.user" } },
+    });
+    expect(out.holders["plugin::users-permissions.user"]?.links).toEqual({
+      boards: { relation: "api::board.board" },
+    });
+    expect(out.types.map((t) => t.contentType)).toContain("Album");
+    expect(out.types.map((t) => t.contentType)).not.toContain("User");
+  });
+});
+
+// A role with no condition needs no condition module, but the bootstrap imports one.
+describe("roles without any condition", () => {
+  it("still emit the condition module the bootstrap imports, and every import it names", () => {
+    const plain = roles.map((r) => ({
+      ...r,
+      grants: r.grants.map((g) => ({ contentType: g.contentType, actions: g.actions })),
+    }));
+    const result = strapiAdapter.generate(
+      { document: doc, roles: plain },
+      { projectName: "plain" },
+    );
+    const paths = new Set(result.files.map((f) => f.path));
+    const index = result.files.find((f) => f.path === "src/index.ts")!.content;
+    const imports = [...index.matchAll(/from "\.\/([^"]+)"/g)].map((m) => `src/${m[1]!}`);
+    expect(imports.length).toBeGreaterThan(0);
+    for (const path of imports)
+      expect(
+        [path, `${path}.ts`].some((p) => paths.has(p)),
+        path,
+      ).toBe(true);
   });
 });
 

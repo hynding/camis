@@ -771,9 +771,7 @@ const token = (dir: string, type: string, actions: string[] = []): string => {
 /**
  * Content API tokens, created in the booted project. The strategy name camis recognises is the one
  * the installed Strapi registers, so a rename fails here rather than in production. A full-access
- * or read-only token reads every type as Strapi serves it; a custom token's populate of a file's
- * related entries is refused (Strapi keeps that polymorphic list whole when the token may read
- * none of its entries), and Strapi refuses what it holds no scope for.
+ * or read-only token reads every type as Strapi serves it; a custom token is refused.
  */
 const tokens = async (dir: string): Promise<void> => {
   const require = createRequire(join(dir, "package.json"));
@@ -817,36 +815,22 @@ const tokens = async (dir: string): Promise<void> => {
   }
   const readOnlyWrite = await call("POST", "/api/tags", readOnly, { data: { label: "ro" } });
   check("a read-only token's create is refused", readOnlyWrite.status === 403, readOnlyWrite);
+  // A custom token is checked against its own scopes by Strapi, whose sanitizer keeps a polymorphic
+  // list whole when the token may read none of its entries: camis refuses it on every route it
+  // serves, whatever it holds.
   const custom = token(dir, "custom", [
     "api::note.note.find",
+    "api::front.front.find",
     "plugin::upload.content-api.find",
-    "plugin::upload.content-api.findOne",
   ]);
-  const everyNote = await call("GET", "/api/notes?pagination[pageSize]=100", custom);
-  const allNotes = Number(
-    select(
-      dir,
-      "SELECT COUNT(DISTINCT document_id) AS n FROM notes WHERE published_at IS NOT NULL",
-    )[0]!.n,
-  );
-  check(
-    "a custom token lists every note: no row condition applies",
-    everyNote.status === 200 && rows(everyNote).length === allNotes,
-    { status: everyNote.status, listed: rows(everyNote).length, allNotes },
-  );
-  for (const path of [
-    `/api/notes?${related}`,
-    "/api/notes?populate[attachment][populate]=*",
-    "/api/upload/files?populate=related",
-    "/api/upload/files?populate=*",
-  ]) {
+  for (const path of ["/api/notes", "/api/front", "/api/upload/files"]) {
     const r = await call("GET", path, custom);
-    check(`a custom token's GET ${path} is 400`, r.status === 400, r);
+    check(
+      `a custom token's GET ${path} is 403, saying why`,
+      r.status === 403 && JSON.stringify(r.body).includes("custom API token"),
+      r,
+    );
   }
-  const files = await call("GET", "/api/upload/files", custom);
-  check("a custom token lists the media library", files.status === 200, files);
-  const ungranted = await call("GET", "/api/tags", custom);
-  check("a custom token without the tag scope is 403", ungranted.status === 403, ungranted);
 };
 
 const routeGuard = (dir: string): void => {

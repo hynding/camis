@@ -281,15 +281,13 @@ describe("GET /api/upload/files and /api/upload/files/:id", () => {
         expect(ctx.body).toBeDefined();
       }
   });
-  it("refuses a custom API token's populate of related entries as a role's", async () => {
+  it("refuses a custom API token's read, populate or not, reading nothing", async () => {
     for (const one of [false, true])
-      for (const populate of related) {
+      for (const populate of [undefined, "folder", "related"]) {
         const ctx = await read(tokenState("custom"), populate, one);
-        expect(ctx.status, `${JSON.stringify(populate)} ${String(one)}`).toBe(400);
+        expect(ctx.status, `${JSON.stringify(populate)} ${String(one)}`).toBe(403);
         expect(ctx.body).toBeUndefined();
       }
-    const plain = await read(tokenState("custom"), "folder", false);
-    expect(plain.body).toBeDefined();
   });
   it("leaves a full-access or read-only API token's and an admin role's query to Strapi", async () => {
     for (const state of [token, tokenState("read-only"), user(30, "manager")])
@@ -357,6 +355,14 @@ describe("POST /api/upload with ref, refId and field", () => {
       const ctx = await post(alice(), body);
       expect(ctx.status, JSON.stringify(body)).toBe(400);
     }
+    expect(stored).toEqual([]);
+  });
+  it("refuses a custom API token's upload and delete, storing and deleting nothing", async () => {
+    const ctx = await post(tokenState("custom"), to("2"));
+    expect(ctx.status).toBe(403);
+    const gone = context(tokenState("custom"), { params: { id: "1" } });
+    await upload.destroy(gone);
+    expect(gone.status).toBe(403);
     expect(stored).toEqual([]);
   });
   it("leaves an API token's upload to Strapi", async () => {

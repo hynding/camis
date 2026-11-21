@@ -13,6 +13,7 @@ import {
   writeShape,
   relationRefs,
   scopeQuery,
+  customToken,
   withoutAssigned,
   type Tables,
   listFilter,
@@ -988,10 +989,10 @@ describe("writeShape: a restricted caller's write names only the type's writable
 
 // Strapi 5.48 names its content API token strategy `content-api-token` and keeps the token's type
 // in `credentials`. A full-access or read-only token reads every type, so Strapi's sanitizer never
-// meets a polymorphic list it can read none of: it passes as it is. A custom token holds no role
-// (no row condition applies) but Strapi checks each polymorphic entry against its ability and
-// keeps the list whole when none passes, so its populate of one, or of a file's related entries,
-// is refused as a role's is.
+// meets a polymorphic list it can read none of: it passes as it is. A custom token is checked
+// against its own scopes by Strapi, whose sanitizer keeps a polymorphic list whole when none of its
+// entries passes, at any depth of any type, the built-in user's included: camis does not support it
+// on a route it serves, and refuses it.
 describe("an API token", () => {
   const poly: Tables = {
     ...tables,
@@ -1003,23 +1004,18 @@ describe("an API token", () => {
       },
     },
   };
-  const custom = tokenState("custom");
   it("is known by the strategy Strapi 5.48 names and by its type", () => {
     for (const type of ["full-access", "read-only"] as const)
       expect(callerOf(rules, tokenState(type), "find")).toEqual({
         kind: "unrestricted",
         user: null,
         assign: rules.assign,
-        custom: false,
       });
-    expect(callerOf(rules, custom, "find")).toEqual({
-      kind: "unrestricted",
-      user: null,
-      assign: rules.assign,
-      custom: true,
-    });
   });
-  it("is refused under another strategy name or with a type Strapi does not issue", () => {
+  it("is refused when custom, under another strategy name, or with a type Strapi does not issue", () => {
+    expect(customToken(tokenState("custom"))).toBe(true);
+    expect(customToken(tokenState("read-only"))).toBe(false);
+    expect(callerOf(rules, tokenState("custom"), "find").kind).toBe("refused");
     expect(callerOf(rules, { auth: { strategy: { name: "api-token" } } }, "find").kind).toBe(
       "refused",
     );
@@ -1033,25 +1029,51 @@ describe("an API token", () => {
       expect(scopeQuery(poly, TAG, tokenState(type), { populate: "subject" }).ok).toBe(true);
     }
   });
-  it("refuses a custom token's populate of a polymorphic relation or a file's related entries", () => {
-    for (const populate of [
-      "subject",
-      "*",
-      ["subject"],
-      { subject: true },
-      { note: { populate: { attachment: { populate: "related" } } } },
-      "note.attachment.related",
-    ])
-      expect(scopeQuery(poly, TAG, custom, { populate }).ok, JSON.stringify(populate)).toBe(false);
+  it("refuses a polymorphic populate for a role and a guest", () => {
+    for (const state of [member, guest])
+      expect(scopeQuery(poly, TAG, state, { populate: "subject" }).ok).toBe(false);
   });
-  it("leaves a custom token's other populates and filters as sent: no row condition applies", () => {
-    const query = {
-      populate: { note: { populate: ["attachment"] } },
-      filters: { note: { id: 3 } },
-    };
-    expect(scopeQuery(poly, TAG, custom, query)).toEqual({ ok: true, value: query });
+});
+
+// The built-in user is served by users-permissions, but a relation to it leads on through its
+// inverses: a populate beneath it is walked like any other, and one beneath an attribute camis
+// does not know (the user's role, an admin's createdBy) is refused rather than passed on unchecked.
+describe("a populate through the built-in user", () => {
+  const USER = "plugin::users-permissions.user";
+  const BOARD = "api::board.board";
+  const viaUser: Tables = {
+    ...tables,
+    holders: {
+      ...tables.holders,
+      [TAG]: {
+        populatable: [...tables.holders[TAG]!.populatable, "author"],
+        links: { ...tables.holders[TAG]!.links, author: { relation: USER } },
+      },
+      [USER]: { populatable: ["boards"], links: { boards: { relation: BOARD } } },
+      [BOARD]: { populatable: ["subjects"], links: { subjects: { polymorphic: true } } },
+    },
+  };
+  it("refuses a polymorphic relation beneath it, for a role and a guest, in any form", () => {
+    for (const state of [member, guest])
+      for (const populate of [
+        { author: { populate: { boards: { populate: "subjects" } } } },
+        { author: { populate: { boards: { populate: "*" } } } },
+        "author.boards.subjects",
+      ])
+        expect(scopeQuery(viaUser, TAG, state, { populate }).ok, JSON.stringify(populate)).toBe(
+          false,
+        );
   });
-  it("refuses a polymorphic populate for a role too", () => {
-    expect(scopeQuery(poly, TAG, member, { populate: "subject" }).ok).toBe(false);
+  it("refuses a populate beneath an attribute camis does not know, and passes one up to it", () => {
+    expect(
+      scopeQuery(viaUser, TAG, member, {
+        populate: { author: { populate: { role: { populate: "users" } } } },
+      }).ok,
+    ).toBe(false);
+    expect(scopeQuery(viaUser, TAG, member, { populate: "author.role.users" }).ok).toBe(false);
+    expect(scopeQuery(viaUser, TAG, member, { populate: "author.role" }).ok).toBe(true);
+    expect(
+      scopeQuery(viaUser, TAG, member, { populate: { author: { populate: "boards" } } }).ok,
+    ).toBe(true);
   });
 });

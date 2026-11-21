@@ -744,9 +744,10 @@ describe("callers no role restricts", () => {
 });
 
 // A content API token stands for no role: a full-access or read-only one reads every type, so its
-// requests are Strapi's as they come; a custom one is checked against its own scopes by Strapi,
-// whose sanitizer keeps a polymorphic list whole when the token may read none of its entries, so a
-// populate of a file's related entries is refused for it as for a role, and nothing else is.
+// requests are Strapi's as they come. A custom one is checked against its own scopes by Strapi,
+// whose sanitizer keeps a polymorphic list whole when the token may read none of its entries, at
+// any depth (the built-in user's inverses included): camis does not support it on a route it
+// serves, and refuses every action before Strapi reads anything.
 describe("API tokens, by their type", () => {
   const related = { attachment: { populate: { related: true } } };
   it("passes a full-access or read-only token's request to Strapi, related entries included", async () => {
@@ -757,32 +758,18 @@ describe("API tokens, by their type", () => {
     }
     expect(calls).toEqual([`core.find ${NOTE}`, `core.find ${NOTE}`]);
   });
-  it("refuses a custom token's populate of a file's related entries, on a read or a write", async () => {
+  it("refuses a custom token every action on every served type, before Strapi", async () => {
     const custom = tokenState("custom");
-    for (const method of ["find", "findOne"] as const) {
-      const ctx = context(custom, { params: { id: "mine" }, query: { populate: related } });
-      await notes()[method](ctx);
-      expect(ctx.status, method).toBe(400);
-    }
-    const write = context(custom, {
-      query: { populate: related },
-      request: { body: { data: { title: "t" } } },
-    });
-    await notes().create(write);
-    expect(write.status).toBe(400);
-    const deep = context(custom, {
-      query: { populate: { note: { populate: { attachment: { populate: "related" } } } } },
-    });
-    await tags().find(deep);
-    expect(deep.status).toBe(400);
+    for (const controller of [notes(), tags(), controllers[BOOKMARK]!] as const)
+      for (const method of ["find", "findOne", "create", "update", "delete"] as const) {
+        const ctx = context(custom, {
+          params: { id: "mine" },
+          request: { body: { data: { title: "t" } } },
+        });
+        await (controller as Record<string, (c: Context) => Promise<unknown>>)[method]!(ctx);
+        expect(ctx.status, method).toBe(403);
+      }
     expect(calls).toEqual([]);
-  });
-  it("leaves a custom token's other requests to Strapi, unnarrowed", async () => {
-    const custom = tokenState("custom");
-    expect(
-      documentIds(await notes().find(context(custom, { query: { populate: "attachment" } }))),
-    ).toEqual(["mine", "theirs", "open"]);
-    expect(calls).toEqual([`core.find ${NOTE}`]);
   });
 });
 
@@ -917,9 +904,13 @@ describe("a single type a restricted role writes, over Strapi's single type cont
     await front().find(context(reviewer(), { query: { populate: { featured: true } } }));
     expect(calls).toEqual([`core.find ${FRONT}`]);
     calls.length = 0;
-    const custom = context(tokenState("custom"), { query: { populate: related } });
-    await front().find(custom);
-    expect(custom.status).toBe(400);
+    for (const method of ["find", "update"] as const) {
+      const custom = context(tokenState("custom"), {
+        request: { body: { data: { headline: "x" } } },
+      });
+      await front()[method](custom);
+      expect(custom.status, method).toBe(403);
+    }
     await front().find(context(tokenState("read-only"), { query: { populate: related } }));
     expect(calls).toEqual([`core.find ${FRONT}`]);
   });
