@@ -109,7 +109,8 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
     otherwise): Strapi reads a delete's filters into the where that picks the rows it deletes, so a
     relation filter there would answer a guess. An update's `filters` are 400 too, so the check
     holds whatever Strapi does with them (5.48 ignores them). Every other request takes only the
-    query parameters Strapi 5.48 documents, and a populate only the options it reads; anything
+    query parameters Strapi 5.48 documents, and a populate that reaches a conditioned type only
+    the options it reads; anything
     else, `publicationFilter` and `hasPublishedVersion` included (they test for a version the
     caller may not read), is 400.
   - `create` evaluates the role's create condition on the fields sent, an omitted field read as its

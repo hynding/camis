@@ -2713,10 +2713,12 @@ relation write, and a database seeded once kept it.
   - **Query parameters by allowlist.** For a restricted caller on a type with rules or a reach,
     `scopeQuery` lets through only the parameters Strapi 5.48's content API accepts
     (`ALLOWED_QUERY_PARAM_KEYS`: `filters`, `sort`, `fields`, `populate`, `status`, `locale`,
-    `page`, `pageSize`, `start`, `limit`, `_q`, `pagination`, `count`, `ordering`) and, in a populate
-    or a zone's `on` fragment, only the options `convertNestedPopulate` reads (`sort`, `filters`,
-    `fields`, `populate`, `count`, `ordering`, `page`, `pageSize`, `start`, `limit`, `on`); anything
-    else is 400, so a parameter a later Strapi adds is refused until reviewed. `publicationFilter`
+    `page`, `pageSize`, `start`, `limit`, `_q`, `pagination`, `count`, `ordering`) and, on each
+    populate path that reaches a conditioned type (a zone's `on` fragment included), only the
+    options `convertNestedPopulate` reads (`sort`, `filters`, `fields`, `populate`, `count`,
+    `ordering`, `page`, `pageSize`, `start`, `limit`, `on`); anything else is 400, so a parameter
+    a later Strapi adds is refused until reviewed. A populate path that reaches no conditioned
+    type is checked at its first level only and passed on as sent. `publicationFilter`
     and `hasPublishedVersion` are refused: their cohorts compile to an EXISTS over the document's
     other version, which would tell whether a version the caller may not read exists.
   - `create` evaluates the role's create condition on the fields sent, an omitted field as its IR
