@@ -37,12 +37,18 @@ describe("content API enforcement golden", () => {
       "../__golden__/ownership/tag.controller.ts.txt",
     );
   });
+  it("a type with no rules of its own that a relation write reaches gets the same wrapper", async () => {
+    await expect(emitted(result, "src/api/category/controllers/category.ts")).toMatchFileSnapshot(
+      "../__golden__/ownership/category.controller.ts.txt",
+    );
+  });
   it("every enforcement file carries the generated marker", () => {
     for (const path of [
       "src/permissions/api-conditions.ts",
       "src/permissions/api-controller.ts",
       "src/api/note/controllers/note.ts",
       "src/api/tag/controllers/tag.ts",
+      "src/api/category/controllers/category.ts",
     ]) {
       expect(file(result, path)?.startsWith("// @camis:generated")).toBe(true);
     }
