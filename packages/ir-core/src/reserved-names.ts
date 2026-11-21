@@ -43,6 +43,14 @@ export interface ReservedNameOptions {
    * target embeds nothing.
    */
   embedded?: (path: readonly string[], field: Field, holder: FieldHolder) => TargetName[];
+  columns?: (path: readonly string[], field: Field) => TargetName[];
+  items?: readonly ItemTable[];
+}
+
+export interface ItemTable {
+  component: string;
+  heldBy: string;
+  kept: KeptNames;
 }
 
 /** A field of a component embedded in a row, with its path of field names from that row. */

@@ -20,11 +20,22 @@ import { storageBundle } from "./strapi-api/storage/__fixtures__/storage";
 
 type ApiStyle = "laravel" | "strapi";
 
+// The component, when there is one, is Note's repeatable `seo`: its items are rows of their own.
 const withFields = (fields: Field[], componentFields: ComponentFieldT[] = []): IrBundle => ({
   document: {
     version: 1,
     contentTypes: [
-      { name: "Note", kind: "collection", fields: [{ type: "string", name: "title" }, ...fields] },
+      {
+        name: "Note",
+        kind: "collection",
+        fields: [
+          { type: "string", name: "title" },
+          ...fields,
+          ...(componentFields.length > 0
+            ? [{ type: "component" as const, name: "seo", component: "Seo", repeatable: true }]
+            : []),
+        ],
+      },
       { name: "Tag", kind: "collection", fields: [{ type: "string", name: "label" }] },
     ],
     components:
@@ -149,7 +160,7 @@ describe("Filament target: names its rows and wire shape reserve", () => {
       ]);
     });
 
-    it("reports a component's field whose column is one", () => {
+    it("reports a component's field whose column on its items' rows is one", () => {
       const bundle = withFields([], [{ type: "dateTime", name: "updatedAt" }]);
       expect(reportedFields(bundle, "laravel")).toEqual([{ component: "Seo", field: "updatedAt" }]);
     });
@@ -246,13 +257,128 @@ describe("Filament target: names its rows and wire shape reserve", () => {
       const by: ComponentFieldT[] = [
         { type: "relation", name: "by", relationKind: "oneToOne", target: "Tag" },
       ];
-      expect(reportedFields(stamped(by, false), "strapi")).toEqual([
+      expect(reportedFields(stamped(by, true), "strapi")).toEqual([
         { contentType: "Note", component: "Stamp", field: "by" },
         { component: "Stamp", field: "by" },
       ]);
       // The Laravel API style leaves a relation inside a component out, with a gap of its own.
-      expect(reserved(stamped(by, false), "laravel")).toEqual([]);
+      expect(reserved(stamped(by, true), "laravel")).toEqual([]);
     });
+
+    // Embedded in Note's `items`, Item's `created.at` is Note's column items_created_at, and
+    // `created.by` its items_created_by_id: only the entry's own `created` lands on created_*.
+    it.each(["laravel", "strapi"] as const)(
+      "checks an embedded component's path from the row holding it only, in the %s API style",
+      (apiStyle) => {
+        const by: ComponentFieldT[] = [
+          { type: "relation", name: "by", relationKind: "oneToOne", target: "Tag" },
+        ];
+        expect(reportedFields(stamped(at, false), apiStyle)).toEqual([
+          { contentType: "Note", component: "Stamp", field: "at" },
+        ]);
+        expect(reportedFields(stamped(by, false), apiStyle)).toEqual(
+          apiStyle === "strapi" ? [{ contentType: "Note", component: "Stamp", field: "by" }] : [],
+        );
+      },
+    );
+
+    // Note.seo embeds Seo, which embeds Stamp as `created`: the column is seo_created_at.
+    const nested = (seo: Field): IrBundle => ({
+      document: {
+        version: 1,
+        contentTypes: [
+          { name: "Note", kind: "collection", fields: [{ type: "string", name: "title" }, seo] },
+        ],
+        components: [
+          {
+            name: "Seo",
+            fields: [
+              { type: "string", name: "metaTitle" },
+              { type: "component", name: "created", component: "Stamp", repeatable: false },
+            ],
+          },
+          { name: "Stamp", fields: at },
+        ],
+      },
+      roles: [],
+    });
+
+    it.each(["laravel", "strapi"] as const)(
+      "leaves a component embedded in a component that is only embedded, in the %s API style",
+      (apiStyle) => {
+        const seo: Field = { type: "component", name: "seo", component: "Seo", repeatable: false };
+        expect(reserved(nested(seo), apiStyle)).toEqual([]);
+      },
+    );
+
+    // As a dynamic zone's member, Seo is a table of its own on the Strapi API style, which keeps
+    // a zone's members' items as rows; the Laravel API style keeps a zone in one column.
+    it("checks a dynamic zone member's paths where its items are rows: the Strapi API style", () => {
+      const zone: Field = { type: "dynamicZone", name: "seo", components: ["Seo"] };
+      expect(reportedFields(nested(zone), "strapi")).toEqual([{ component: "Stamp", field: "at" }]);
+      expect(reserved(nested(zone), "laravel")).toEqual([]);
+    });
+
+    // A repeatable inside an item is a table of its own only on the Strapi API style; the Laravel
+    // API style leaves it out, with a gap of its own.
+    it("checks a repeatable nested in an item where it is a table: the Strapi API style", () => {
+      const bundle: IrBundle = {
+        document: {
+          version: 1,
+          contentTypes: [
+            {
+              name: "Note",
+              kind: "collection",
+              fields: [{ type: "component", name: "items", component: "Item", repeatable: true }],
+            },
+          ],
+          components: [
+            {
+              name: "Item",
+              fields: [{ type: "component", name: "marks", component: "Mark", repeatable: true }],
+            },
+            { name: "Mark", fields: [{ type: "dateTime", name: "updatedAt" }] },
+          ],
+        },
+        roles: [],
+      };
+      expect(reportedFields(bundle, "strapi")).toEqual([{ component: "Mark", field: "updatedAt" }]);
+      expect(reserved(bundle, "laravel")).toEqual([]);
+    });
+
+    // A repeatable inside an embedded component is a table of the entry's: its items are rows.
+    it.each(["laravel", "strapi"] as const)(
+      "checks a repeatable inside an embedded component, in the %s API style",
+      (apiStyle) => {
+        const bundle: IrBundle = {
+          document: {
+            version: 1,
+            contentTypes: [
+              {
+                name: "Note",
+                kind: "collection",
+                fields: [{ type: "component", name: "seo", component: "Seo", repeatable: false }],
+              },
+            ],
+            components: [
+              {
+                name: "Seo",
+                fields: [{ type: "component", name: "list", component: "Stamp", repeatable: true }],
+              },
+              {
+                name: "Stamp",
+                fields: [
+                  { type: "component", name: "created", component: "Mark", repeatable: false },
+                ],
+              },
+              { name: "Mark", fields: at },
+            ],
+          },
+          roles: [],
+        };
+        expect(reportedFields(bundle, apiStyle)).toEqual([{ component: "Mark", field: "at" }]);
+      },
+    );
 
     // The Strapi API style keeps a media library only when a content type has a media field of its
     // own or the document declares a file type (`mediaPlan`); without one a media field inside a

@@ -176,7 +176,7 @@ describe("reservedNameGaps, embedded components", () => {
 
   it("reports a field of an embedded component whose path the target keeps, located", () => {
     const gaps = reservedNameGaps(embedding, "the Test target", KEPT, nothingOwn, {
-      embedded: (path, _field, holder) => (holder === "contentType" ? joined(path) : []),
+      columns: joined,
     });
     expect(gaps).toEqual([
       {
@@ -194,35 +194,82 @@ describe("reservedNameGaps, embedded components", () => {
     ]);
   });
 
-  // A component's own embedded paths are its items' columns where it is repeatable.
-  it("walks a component's embedded components too, telling the holder apart", () => {
+  // Stamp is only embedded unless the target says it stores Stamp's items: `by.at` is then no
+  // column of any row (on Note's it is created_by_at).
+  it("checks a component's paths from no row of its own unless the target stores its items", () => {
     const gaps = reservedNameGaps(embedding, "the Test target", KEPT, nothingOwn, {
-      embedded: (path, _field, holder) => (holder === "component" ? joined(path) : []),
+      columns: joined,
     });
-    expect(gaps.map((g) => [g.location, g.message])).toEqual([
-      [
-        { component: "Mark", field: "at" },
-        `field "at" of component "Mark", embedded in "Stamp.by" as "by_at", collides with the Test target's own "byAt"; rename it`,
-      ],
+    expect(gaps.some((g) => g.location.contentType === undefined)).toBe(false);
+  });
+
+  // The item's own fields and its embedded components' land on the item's row, the path
+  // restarting there, and are checked against what that row keeps.
+  const ITEM_KEPT = new Map([
+    ["at", "at"],
+    ["by_at", "byAt"],
+  ]);
+  const stampItems = (heldBy: string) => ({ component: "Stamp", heldBy, kept: ITEM_KEPT });
+
+  it("checks an item's fields, its embedded components' included, on its item table", () => {
+    const gaps = reservedNameGaps(embedding, "the Test target", KEPT, nothingOwn, {
+      columns: joined,
+      items: [stampItems("Note.items")],
+    });
+    expect(gaps.filter((g) => g.location.contentType === undefined)).toEqual([
+      {
+        feature: "reservedFieldName",
+        location: { component: "Stamp", field: "at" },
+        severity: "error",
+        message: `field "at" of component "Stamp", in "Note.items" as "at", collides with the Test target's own "at"; rename it`,
+      },
+      {
+        feature: "reservedFieldName",
+        location: { component: "Mark", field: "at" },
+        severity: "error",
+        message: `field "at" of component "Mark", embedded in "Stamp.by" as "by_at", collides with the Test target's own "byAt"; rename it`,
+      },
     ]);
   });
 
-  it("hands the target each embedded field with its path from the row", () => {
+  it("checks an item's columns against its table's names, not the entry's", () => {
+    const gaps = reservedNameGaps(embedding, "the Test target", ITEM_KEPT, nothingOwn, {
+      columns: joined,
+      items: [{ component: "Stamp", heldBy: "Note.items", kept: KEPT }],
+    });
+    expect(gaps).toEqual([]);
+  });
+
+  it("reports an item's field once though two item tables keep its column", () => {
+    const gaps = reservedNameGaps(embedding, "the Test target", KEPT, nothingOwn, {
+      columns: joined,
+      items: [stampItems("Note.items"), stampItems("Note.zone")],
+    });
+    expect(gaps.filter((g) => g.location.contentType === undefined)).toHaveLength(2);
+  });
+
+  it("hands the target each column with its path from its row", () => {
     const seen: string[] = [];
     reservedNameGaps(embedding, "the Test target", KEPT, nothingOwn, {
-      embedded: (path, field, holder) => {
-        seen.push(`${holder}:${path.join(".")}:${field.type}`);
+      columns: (path, field) => {
+        seen.push(`${path.join(".")}:${field.type}`);
         return [];
       },
+      items: [stampItems("Note.items")],
     });
     expect(seen).toEqual([
-      "contentType:created.at:dateTime",
-      "contentType:created.by.at:dateTime",
-      "component:by.at:dateTime",
+      "created.at:dateTime",
+      "created.by.at:dateTime",
+      "at:dateTime",
+      "by.at:dateTime",
     ]);
   });
 
-  it("checks no embedded path for a target that embeds none", () => {
-    expect(reservedNameGaps(embedding, "the Test target", KEPT, nothingOwn)).toEqual([]);
+  it("checks no column for a target that names none", () => {
+    expect(
+      reservedNameGaps(embedding, "the Test target", KEPT, nothingOwn, {
+        items: [stampItems("Note.items")],
+      }),
+    ).toEqual([]);
   });
 });
