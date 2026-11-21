@@ -25,17 +25,33 @@ describe("projectApiEnforcement", () => {
   it("also serves every collection type that reaches a conditioned type, with no rules of its own", () => {
     expect(out.types.map((t) => [t.contentType, t.own])).toEqual([
       ["Note", true],
+      ["Category", false],
       ["Tag", false],
     ]);
     expect(out.types.find((t) => t.contentType === "Tag")!.roles).toEqual({});
   });
-  it("maps how each holder reaches a conditioned type: relations, inverses, components", () => {
+  it("maps how each holder reaches a conditioned type: relations, inverses, components, media", () => {
     expect(out.holders).toEqual({
+      "api::category.category": {
+        populatable: ["notes"],
+        links: { notes: { relation: "api::note.note" } },
+      },
+      // A file's `related` entries are any entry it is attached to: a note's attachment leads
+      // back to notes.
+      "api::note.note": {
+        populatable: ["attachment", "category", "owner", "pinned"],
+        links: {
+          attachment: { media: true },
+          category: { relation: "api::category.category" },
+          pinned: { relation: "api::tag.tag" },
+        },
+      },
       "api::tag.tag": {
-        populatable: ["note", "parent", "refs"],
+        populatable: ["note", "parent", "pinnedOn", "refs"],
         links: {
           note: { relation: "api::note.note" },
           parent: { relation: "api::tag.tag" },
+          pinnedOn: { relation: "api::note.note" },
           refs: { component: "shared.reference" },
         },
       },
@@ -44,6 +60,44 @@ describe("projectApiEnforcement", () => {
         links: { note: { relation: "api::note.note" } },
       },
     });
+  });
+  // A write through a relation both sides show changes the entry on the other side too; one
+  // through a relation whose other side holds one entry at most takes it from its last holder.
+  it("lists the relations whose writes change another entry: shown on a conditioned type, or taken from a holder", () => {
+    const relationsOf = (name: string) => out.types.find((t) => t.contentType === name)!.relations;
+    expect(relationsOf("Note")).toEqual({
+      pinned: { target: "api::tag.tag", mirrored: true, toOne: false, exclusive: true },
+    });
+    expect(relationsOf("Category")).toEqual({
+      notes: { target: "api::note.note", mirrored: true, toOne: false, exclusive: true },
+    });
+    expect(relationsOf("Tag")).toEqual({
+      pinnedOn: { target: "api::note.note", mirrored: true, toOne: true, exclusive: false },
+    });
+  });
+  it("makes a localized type reach through its localizations, holder or conditioned", () => {
+    const localized = (name: string): IrDocument => ({
+      ...doc,
+      contentTypes: doc.contentTypes.map((ct) =>
+        ct.name === name ? { ...ct, options: { ...ct.options, localized: true } } : ct,
+      ),
+    });
+    const tag = projectApiEnforcement(localized("Tag"), roles).holders["api::tag.tag"]!;
+    expect(tag.links.localizations).toEqual({ relation: "api::tag.tag" });
+    expect(tag.populatable).toContain("localizations");
+    const note = projectApiEnforcement(localized("Note"), roles).holders["api::note.note"]!;
+    expect(note.links.localizations).toEqual({ relation: "api::note.note" });
+  });
+  // Strapi opens an `auth: false` action to anyone; the controller must still answer it.
+  it("carries a reach-only type's open actions", () => {
+    const open: IrDocument = {
+      ...doc,
+      contentTypes: doc.contentTypes.map((ct) =>
+        ct.name === "Tag" ? { ...ct, options: { publicApiActions: ["list"] } } : ct,
+      ),
+    };
+    const tag = projectApiEnforcement(open, roles).types.find((t) => t.contentType === "Tag")!;
+    expect(tag.open).toEqual(["find"]);
   });
   it("names the field defaults a create condition reads, which Strapi fills when omitted", () => {
     expect(note.defaults).toEqual({ "record.shared": true });
@@ -295,6 +349,101 @@ describe("a reach the Strapi content API cannot narrow fails the build", () => {
         severity: "error",
         message:
           'role "member" reads "Note" under a condition, but User.notes reaches it from a type the users-permissions plugin serves; the Strapi target cannot narrow that populate',
+      },
+    ]);
+  });
+  // The upload plugin serves a file's `related` entries, which may be notes, unnarrowed.
+  it("a role reading the media library while a file can be attached to a type it reads under a condition", () => {
+    const withFile: IrDocument = {
+      ...doc,
+      contentTypes: [
+        ...doc.contentTypes,
+        { name: "File", kind: "collection", builtin: "file", fields: [] },
+      ],
+    };
+    const reader: Role[] = [
+      { ...member[0]!, grants: [...member[0]!.grants, { contentType: "File", actions: ["read"] }] },
+    ];
+    expect(errors(withFile, reader)).toEqual([
+      {
+        feature: "apiRelationReach",
+        location: { contentType: "Note", rule: "member" },
+        severity: "error",
+        message:
+          'role "member" reads "Note" under a condition, but File.related reaches it from a type the upload plugin serves; the Strapi target cannot narrow that populate',
+      },
+    ]);
+  });
+  // Writing User.notes moves notes between users, which the plugin's own controller allows.
+  it("a role that writes a built-in type whose relation another type's conditioned entries show", () => {
+    const inverse: IrDocument = {
+      ...doc,
+      contentTypes: doc.contentTypes.map((ct) =>
+        ct.name === "Note"
+          ? {
+              ...ct,
+              fields: ct.fields.map((f) =>
+                f.name === "owner" && f.type === "relation" ? { ...f, inverse: "notes" } : f,
+              ),
+            }
+          : ct,
+      ),
+    };
+    const writer: Role[] = [
+      {
+        name: "member",
+        grants: [
+          { contentType: "Note", actions: ["update"], condition: owned },
+          { contentType: "User", actions: ["update"] },
+        ],
+      },
+    ];
+    expect(errors(inverse, writer)).toEqual([
+      {
+        feature: "apiRelationReach",
+        location: { contentType: "User", rule: "member" },
+        severity: "error",
+        message:
+          'role "member" writes "User", whose relation User.notes changes entries of "Note", which it does not update outright; the users-permissions plugin serves that write unchecked',
+      },
+    ]);
+  });
+  it("a role that writes a single type whose relation another type's conditioned entries show", () => {
+    const single: IrDocument = {
+      ...doc,
+      contentTypes: [
+        ...doc.contentTypes,
+        {
+          name: "Home",
+          kind: "single",
+          fields: [
+            {
+              type: "relation",
+              name: "featured",
+              relationKind: "manyToOne",
+              target: "Note",
+              inverse: "featuredOn",
+            },
+          ],
+        },
+      ],
+    };
+    const writer: Role[] = [
+      {
+        name: "member",
+        grants: [
+          { contentType: "Note", actions: ["update"], condition: owned },
+          { contentType: "Home", actions: ["update"] },
+        ],
+      },
+    ];
+    expect(errors(single, writer)).toEqual([
+      {
+        feature: "apiRelationReach",
+        location: { contentType: "Home", rule: "member" },
+        severity: "error",
+        message:
+          'role "member" writes single type "Home", whose relation Home.featured changes entries of "Note", which it does not update outright; Strapi\'s own single-type controller serves that write unchecked',
       },
     ]);
   });

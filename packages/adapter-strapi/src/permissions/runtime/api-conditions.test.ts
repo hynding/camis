@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   callerOf,
   createVerdict,
+  currentLinksQuery,
+  droppedLinks,
+  holdersQuery,
+  holdersVerdict,
+  reachState,
   refsVerdict,
+  writePlan,
   relationRefs,
   scopeQuery,
   withoutAssigned,
@@ -33,6 +39,7 @@ const recent: Condition = {
 const rules: TypeRules = {
   own: true,
   defaults: {},
+  relations: {},
   variables: {
     "record.ownerId": { field: "owner", relation: true },
     "record.seenAt": { field: "seenAt", relation: false },
@@ -118,12 +125,14 @@ const unshared: Condition = {
 };
 const NOTE = "api::note.note";
 const TAG = "api::tag.tag";
+const CATEGORY = "api::category.category";
 const REF = "shared.reference";
 const tables: Tables = {
   rules: {
     [NOTE]: {
       own: true,
       defaults: { "record.shared": true },
+      relations: { pinned: { target: TAG, mirrored: true, toOne: false, exclusive: true } },
       variables: {
         "record.ownerId": { field: "owner", relation: true },
         "record.shared": { field: "shared", relation: false },
@@ -135,12 +144,23 @@ const tables: Tables = {
         member: { read: [owned], create: [owned], assign: ["owner"] },
         contributor: { create: [unshared], assign: ["owner"] },
         public: { read: [shared], assign: [] },
-        reviewer: { read: true, assign: [] },
+        reviewer: { read: true, update: [owned], assign: [] },
       },
+    },
+    [CATEGORY]: {
+      own: false,
+      defaults: {},
+      relations: { notes: { target: NOTE, mirrored: true, toOne: false, exclusive: true } },
+      variables: {},
+      open: [],
+      assign: [],
+      admins: ["manager"],
+      roles: {},
     },
     [TAG]: {
       own: false,
       defaults: {},
+      relations: { pinnedOn: { target: NOTE, mirrored: true, toOne: true, exclusive: false } },
       variables: {},
       open: [],
       assign: [],
@@ -159,6 +179,7 @@ const tables: Tables = {
       },
     },
     [REF]: { populatable: ["note"], links: { note: { relation: NOTE } } },
+    [NOTE]: { populatable: ["attachment", "owner"], links: { attachment: { media: true } } },
   },
 };
 const member = session("member");
@@ -224,9 +245,14 @@ describe("scopeQuery: a populate into a conditioned type carries the caller's fi
 });
 
 describe("scopeQuery: filters and sorts through a relation into a conditioned type", () => {
+  // Each relation filter is its own item of an $and at its level: Strapi merges a nested
+  // relation's where into its parent with Object.assign, so two `$and`s side by side would
+  // overwrite each other. The scope stays with the client's filter on that same relation, whose
+  // join it must share.
   it("scopes a relation filter, inside $or/$not and through components, so it is no oracle", () => {
+    const titled = (title: string) => ({ $and: [{ title: { $eq: title } }, MINE] });
     expect(scoped(member, { filters: { note: { title: { $eq: "x" } } } }).filters).toEqual({
-      note: { $and: [{ title: { $eq: "x" } }, MINE] },
+      $and: [{ note: titled("x") }],
     });
     expect(
       scoped(member, {
@@ -237,14 +263,35 @@ describe("scopeQuery: filters and sorts through a relation into a conditioned ty
     ).toEqual({
       $or: [
         { label: { $eq: "a" } },
-        { $not: { refs: { note: { $and: [{ title: { $eq: "x" } }, MINE] } } } },
+        { $not: { $and: [{ refs: { $and: [{ note: titled("x") }] } }] } },
       ],
     });
     expect(
       scoped(member, { filters: { parent: { note: { title: { $eq: "x" } } } } }).filters,
+    ).toEqual({ $and: [{ parent: { $and: [{ note: titled("x") }] } }] });
+  });
+  it("keeps two relation filters at one level, and a client $and beside them, as separate items", () => {
+    const titled = (title: string) => ({ $and: [{ title: { $eq: title } }, MINE] });
+    expect(
+      scoped(member, {
+        filters: {
+          label: { $eq: "a" },
+          note: { title: { $eq: "x" } },
+          parent: { note: { title: { $eq: "y" } } },
+        },
+      }).filters,
     ).toEqual({
-      parent: { note: { $and: [{ title: { $eq: "x" } }, MINE] } },
+      $and: [
+        { label: { $eq: "a" } },
+        { note: titled("x") },
+        { parent: { $and: [{ note: titled("y") }] } },
+      ],
     });
+    expect(
+      scoped(member, {
+        filters: { $and: [{ label: { $eq: "a" } }], note: { title: { $eq: "x" } } },
+      }).filters,
+    ).toEqual({ $and: [{ $and: [{ label: { $eq: "a" } }] }, { note: titled("x") }] });
   });
   // A sort's join cannot carry a filter: the order of unreadable rows would leak.
   it("refuses a sort through a relation into a conditioned type, at the top or in a populate", () => {
@@ -322,5 +369,194 @@ describe("createVerdict and assigned fields", () => {
       expect(listFilter(note, caller), role).toEqual(NO_ROWS);
       expect(withoutAssigned(caller, { owner: 1, title: "x" }), role).toEqual({ title: "x" });
     }
+  });
+});
+
+// i18n adds `localizations`, a relation of a localized type to its own other locales.
+describe("scopeQuery: a localized type's localizations reach like any relation", () => {
+  const localized: Tables = {
+    rules: tables.rules,
+    holders: {
+      ...tables.holders,
+      [TAG]: {
+        populatable: ["localizations", "note"],
+        links: { localizations: { relation: TAG }, note: { relation: NOTE } },
+      },
+      [NOTE]: { populatable: ["localizations"], links: { localizations: { relation: NOTE } } },
+    },
+  };
+  const run = (uid: string, query: Record<string, unknown>) =>
+    scopeQuery(localized, uid, member, query);
+  it("scopes what a holder's localizations populate, filter and sort through", () => {
+    const result = run(TAG, {
+      populate: { localizations: { populate: { note: true } } },
+      filters: { localizations: { note: { title: { $eq: "x" } } } },
+    });
+    expect(result.value).toEqual({
+      populate: { localizations: { populate: { note: { filters: MINE } } } },
+      filters: {
+        $and: [{ localizations: { $and: [{ note: { $and: [{ title: { $eq: "x" } }, MINE] } }] } }],
+      },
+    });
+    expect(run(TAG, { sort: "localizations.note.title:asc" }).ok).toBe(false);
+    expect(run(TAG, { populate: "*" }).value?.populate).toEqual({
+      localizations: true,
+      note: { filters: MINE },
+    });
+  });
+  it("narrows a conditioned type's own other locales to the rows the caller may read", () => {
+    expect(run(NOTE, { populate: "localizations" }).value?.populate).toEqual({
+      localizations: { filters: MINE },
+    });
+    expect(
+      run(NOTE, { filters: { localizations: { title: { $eq: "x" } } } }).value?.filters,
+    ).toEqual({ $and: [{ localizations: { $and: [{ title: { $eq: "x" } }, MINE] } }] });
+    expect(run(NOTE, { sort: "localizations.title" }).ok).toBe(false);
+  });
+});
+
+// The upload plugin's file has a polymorphic `related`: every entry the file is attached to.
+describe("scopeQuery: a file's related entries are refused", () => {
+  it("refuses related under a media populate, in any form, and keeps the rest of the file", () => {
+    for (const populate of [
+      { attachment: { populate: { related: true } } },
+      { attachment: { populate: "*" } },
+      { attachment: { populate: ["related"] } },
+      { attachment: { populate: true } },
+      "attachment.related",
+    ]) {
+      const result = scopeQuery(tables, NOTE, member, { populate });
+      expect(result.ok, JSON.stringify(populate)).toBe(false);
+    }
+    expect(scopeQuery(tables, NOTE, member, { populate: "attachment" }).ok).toBe(true);
+    expect(
+      scopeQuery(tables, NOTE, member, { populate: { attachment: { populate: ["folder"] } } }).ok,
+    ).toBe(true);
+  });
+});
+
+describe("reachState: an open route reaches as a guest", () => {
+  it("answers an `auth: false` action's reach as the public role, any other as the caller", () => {
+    expect(reachState(rules, {}, "findOne")).toEqual({
+      auth: { strategy: { name: "users-permissions" } },
+    });
+    expect(reachState(rules, member, "find")).toBe(member);
+  });
+  it("scopes an open route's populate by the public role's read", () => {
+    const open: Tables = {
+      ...tables,
+      rules: { ...tables.rules, [TAG]: { ...tables.rules[TAG]!, open: ["find"] } },
+    };
+    const state = reachState(open.rules[TAG]!, {}, "find");
+    expect(scopeQuery(open, TAG, state, { populate: "note" }).value?.populate).toEqual({
+      note: { filters: SHARED },
+    });
+  });
+});
+
+// A link both sides show changes the entry on the other side, so writing it needs update there;
+// a link whose other side holds one entry at most takes that entry from its last holder.
+describe("writePlan: a relation write must be allowed on every entry it changes", () => {
+  const reviewer = session("reviewer");
+  const plan = (uid: string, data: Record<string, unknown>, state: unknown = reviewer) => {
+    const result = writePlan(tables, uid, state, data);
+    if (!result.ok) throw new Error(result.message);
+    return result.value;
+  };
+  const none = { documentIds: [], ids: [] };
+  it("needs update on each entry connected or disconnected through a link the target shows", () => {
+    expect(plan(CATEGORY, { notes: { connect: [3], disconnect: ["n2"] } })).toEqual({
+      refs: [{ target: NOTE, documentIds: ["n2"], ids: [3], action: "update" }],
+      replaced: [],
+      stolen: [],
+    });
+  });
+  it("needs update on every entry a replacement drops: set, a list, null", () => {
+    for (const notes of [{ set: [] }, [], null])
+      expect(plan(CATEGORY, { notes }), JSON.stringify(notes)).toEqual({
+        refs: [],
+        replaced: [{ attribute: "notes", target: NOTE, kept: none }],
+        stolen: [],
+      });
+    expect(plan(CATEGORY, { notes: ["n1"] })).toEqual({
+      refs: [{ target: NOTE, documentIds: ["n1"], ids: [], action: "update" }],
+      replaced: [{ attribute: "notes", target: NOTE, kept: { documentIds: ["n1"], ids: [] } }],
+      stolen: [],
+    });
+  });
+  it("replaces a to-one link on connect, and reads what it links through a reach", () => {
+    expect(plan(TAG, { pinnedOn: { connect: ["n1"] } }, member)).toEqual({
+      refs: [
+        { target: NOTE, documentIds: ["n1"], ids: [], action: "read" },
+        { target: NOTE, documentIds: ["n1"], ids: [], action: "update" },
+      ],
+      replaced: [{ attribute: "pinnedOn", target: NOTE, kept: { documentIds: ["n1"], ids: [] } }],
+      stolen: [],
+    });
+  });
+  it("takes an exclusive link's entries from their last holder, which must be the caller's to update", () => {
+    expect(plan(NOTE, { pinned: { connect: ["t1"] } }, member)).toEqual({
+      refs: [],
+      replaced: [],
+      stolen: [{ attribute: "pinned", documentIds: ["t1"], ids: [] }],
+    });
+  });
+  it("plans nothing for a caller no role restricts", () => {
+    expect(plan(CATEGORY, { notes: { set: [] } }, token)).toEqual({
+      refs: [],
+      replaced: [],
+      stolen: [],
+    });
+  });
+  it("loads the current links, and the dropped ones are those not kept", () => {
+    expect(currentLinksQuery("notes", "c1")).toEqual({
+      where: { documentId: "c1" },
+      select: ["id"],
+      populate: { notes: { select: ["id", "documentId"] } },
+    });
+    const rows = [
+      {
+        id: 1,
+        notes: [
+          { id: 3, documentId: "n1" },
+          { id: 4, documentId: "n2" },
+        ],
+      },
+    ];
+    expect(droppedLinks(rows, "notes", { documentIds: ["n1"], ids: [] })).toEqual(["n2"]);
+    expect(droppedLinks(rows, "notes", { documentIds: [], ids: [4] })).toEqual(["n1"]);
+    expect(droppedLinks([{ id: 1, notes: { id: 4, documentId: "n2" } }], "notes", none)).toEqual([
+      "n2",
+    ]);
+  });
+  it("loads the last holders of a taken entry, other than the entry written", () => {
+    const note = tables.rules[NOTE]!;
+    expect(
+      holdersQuery(note, { attribute: "pinned", documentIds: ["t1"], ids: [2] }, "mine"),
+    ).toEqual({
+      select: ["id", "shared", "documentId"],
+      populate: { owner: { select: ["id"] } },
+      where: {
+        $and: [
+          { pinned: { $or: [{ documentId: { $in: ["t1"] } }, { id: { $in: [2] } }] } },
+          { documentId: { $ne: "mine" } },
+        ],
+      },
+    });
+    const caller = callerOf(note, member, "update");
+    const theirs = [{ id: 2, documentId: "theirs", owner: { id: 8 } }];
+    const mine = [{ id: 1, documentId: "mine", owner: { id: 7 } }];
+    expect(holdersVerdict(note, caller, mine)).toBe("allow");
+    expect(holdersVerdict(note, caller, [...mine, ...theirs])).toBe("forbidden");
+    expect(holdersVerdict(note, caller, [])).toBe("allow");
+  });
+  it("checks update, not only read, where the link shows on the entry", () => {
+    const ref = { target: NOTE, documentIds: ["n1"], ids: [] };
+    const theirs = [{ id: 1, documentId: "n1", owner: { id: 8 } }];
+    expect(refsVerdict(tables, reviewer, ref, theirs)).toBe("allow");
+    expect(refsVerdict(tables, reviewer, ref, theirs, "update")).toBe("forbidden");
+    expect(refsVerdict(tables, reviewer, ref, [{ ...theirs[0], owner: { id: 7 } }], "update")).toBe(
+      "allow",
+    );
   });
 });

@@ -22,7 +22,9 @@ const unshared: Expression = {
  * Notes owned by the account that made them: members manage their own, guests read the shared
  * ones, reviewers read every note but edit only their own, contributors may only add private
  * notes (a note is shared unless it says otherwise), and the admin role does anything. Tags reach
- * notes directly, through a parent tag, and through a repeatable reference component.
+ * notes directly, through a parent tag, and through a repeatable reference component. A note
+ * belongs to a category (whose `notes` inverse a reviewer may write), pins tags (each tag pinned on
+ * one note at most, `pinnedOn` its inverse), and has an attachment.
  */
 export const ownershipBundle: IrBundle = {
   document: {
@@ -44,8 +46,24 @@ export const ownershipBundle: IrBundle = {
           { type: "relation", name: "owner", relationKind: "manyToOne", target: "User" },
           { type: "string", name: "title" },
           { type: "boolean", name: "shared", default: true },
+          { type: "media", name: "attachment" },
+          {
+            type: "relation",
+            name: "category",
+            relationKind: "manyToOne",
+            target: "Category",
+            inverse: "notes",
+          },
+          {
+            type: "relation",
+            name: "pinned",
+            relationKind: "oneToMany",
+            target: "Tag",
+            inverse: "pinnedOn",
+          },
         ],
       },
+      { name: "Category", kind: "collection", fields: [{ type: "string", name: "label" }] },
       {
         name: "Tag",
         kind: "collection",
@@ -100,6 +118,7 @@ export const ownershipBundle: IrBundle = {
       grants: [
         { contentType: "Note", actions: ["read"] },
         { contentType: "Note", actions: ["update", "delete"], condition: owned },
+        { contentType: "Category", actions: ["read", "update"] },
       ],
     },
     {

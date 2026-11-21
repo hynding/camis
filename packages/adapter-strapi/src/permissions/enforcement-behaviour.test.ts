@@ -13,16 +13,24 @@ import { ownershipBundle } from "../__fixtures__/ownership";
 
 const NOTE = "api::note.note";
 const TAG = "api::tag.tag";
+const CATEGORY = "api::category.category";
 
 type Row = Record<string, unknown> & { id: number; documentId: string };
 type Filter = Record<string, unknown>;
 
 /** Which attributes of each type are relations (to which type) or repeatable components. */
 const SCHEMA: Record<string, Record<string, { relation: string } | { component: string }>> = {
-  [NOTE]: { owner: { relation: "user" } },
+  [NOTE]: {
+    owner: { relation: "user" },
+    category: { relation: CATEGORY },
+    pinned: { relation: TAG },
+    attachment: { relation: "file" },
+  },
+  [CATEGORY]: { notes: { relation: NOTE } },
   [TAG]: {
     note: { relation: NOTE },
     parent: { relation: TAG },
+    pinnedOn: { relation: NOTE },
     refs: { component: "shared.reference" },
   },
   "shared.reference": { note: { relation: NOTE } },
@@ -35,8 +43,11 @@ const matches = (row: unknown, filter: Filter): boolean =>
     if (key === "$or") return (cond as Filter[]).some((f) => matches(row, f));
     if (key === "$not") return !matches(row, cond as Filter);
     const value = (row as Record<string, unknown> | null)?.[key];
+    if (typeof cond !== "object" || cond === null) return value === cond;
     const ops = cond as Record<string, unknown>;
     if ("$eq" in ops) return value === ops.$eq;
+    if ("$ne" in ops) return value !== ops.$ne;
+    if ("$in" in ops) return (ops.$in as unknown[]).includes(value);
     if ("$null" in ops) return (value === null || value === undefined) === ops.$null;
     // A relation or a component: its own filter applies to the related rows (any of them).
     if (Array.isArray(value)) return value.some((v) => matches(v, ops));
@@ -125,8 +136,15 @@ const seed = (): void => {
   };
   const t2: Row = { id: 2, documentId: "t2", label: "t2", note: open, parent: t1, refs: [] };
   const t3: Row = { id: 3, documentId: "t3", label: "t3", note: mine, parent: null, refs: [] };
+  // theirs pins t1; a category holds theirs.
+  theirs.pinned = [t1];
+  mine.pinned = [];
+  t1.pinnedOn = theirs;
+  const c1: Row = { id: 1, documentId: "c1", label: "c1", notes: [theirs] };
+  const c2: Row = { id: 2, documentId: "c2", label: "c2", notes: [] };
   tables[NOTE] = [mine, theirs, open];
   tables[TAG] = [t1, t2, t3];
+  tables[CATEGORY] = [c1, c2];
 };
 const rowsOf = (uid: string): Row[] => tables[uid]!;
 const byDocument = (uid: string, documentId: unknown) =>
@@ -148,18 +166,8 @@ const resolve = (uid: string, value: unknown): unknown => {
 const strapi = {
   db: {
     query: (uid: string) => ({
-      findMany: async (params: { where: Filter }) => {
-        const where = params.where;
-        if ("documentId" in where)
-          return rowsOf(uid).filter((r) => r.documentId === where.documentId);
-        const [byDoc, byId] = where.$or as [
-          { documentId: { $in: string[] } },
-          { id: { $in: number[] } },
-        ];
-        return rowsOf(uid).filter(
-          (r) => byDoc.documentId.$in.includes(r.documentId) || byId.id.$in.includes(r.id),
-        );
-      },
+      findMany: async (params: { where: Filter }) =>
+        rowsOf(uid).filter((r) => matches(r, params.where)),
     }),
   },
   service: (uid: string) => ({
@@ -309,7 +317,7 @@ beforeAll(async () => {
   const { enforcedController } = await import(
     pathToFileURL(join(dir, "permissions", "api-controller.ts")).href
   );
-  for (const uid of [NOTE, TAG])
+  for (const uid of [NOTE, TAG, CATEGORY])
     controllers[uid] = createCoreController(uid, ({ strapi: s }) =>
       enforcedController(s, uid, TABLES),
     );
@@ -326,6 +334,7 @@ beforeEach(() => {
 
 const notes = () => controllers[NOTE]!;
 const tags = () => controllers[TAG]!;
+const categories = () => controllers[CATEGORY]!;
 const documentIds = (body: Body): string[] => (body.data as Row[]).map((r) => r.documentId);
 const field = (body: Body, documentId: string, key: string): unknown =>
   (body.data as Row[]).find((r) => r.documentId === documentId)?.[key];
@@ -546,6 +555,63 @@ describe("tags reach notes: a populate, a filter or a link carries the note's co
     const body = await list(asToken, { populate: "note" });
     expect(field(body, "t1", "note")).toMatchObject({ documentId: "theirs" });
     expect(calls).toEqual([`core.find ${TAG}`]);
+  });
+});
+
+describe("a relation write needs update on every entry it changes", () => {
+  const reviewer = () => asUser(10, "reviewer");
+  const write = async (
+    controller: Controller,
+    state: unknown,
+    id: string | undefined,
+    data: unknown,
+  ): Promise<number | undefined> => {
+    const ctx = context(state, {
+      ...(id === undefined ? {} : { params: { id } }),
+      request: { body: { data } },
+    });
+    await (id === undefined ? controller.create(ctx) : controller.update(ctx));
+    return ctx.status;
+  };
+  // A reviewer reads every note and updates its own; writing a category's notes changes the
+  // notes, whose category is the same link.
+  it("refuses to connect, disconnect or replace a category's notes the reviewer may not update", async () => {
+    for (const data of [
+      { notes: { connect: ["theirs"] } },
+      { notes: { disconnect: ["theirs"] } },
+      { notes: { set: [] } },
+      { notes: [] },
+      { notes: null },
+    ])
+      expect(await write(categories(), reviewer(), "c1", data), JSON.stringify(data)).toBe(403);
+    expect(byDocument(CATEGORY, "c1")!.notes).toEqual([byDocument(NOTE, "theirs")]);
+    expect(calls).toEqual([]);
+    expect(await write(categories(), reviewer(), "c2", { notes: { connect: ["mine"] } })).toBe(
+      undefined,
+    );
+    expect(await write(categories(), reviewer(), "c2", { label: "renamed" })).toBe(undefined);
+  });
+  // A tag is pinned on one note at most: pinning it on mine takes it from theirs.
+  it("refuses to take a pinned tag from another member's note", async () => {
+    expect(await write(notes(), member(), "mine", { pinned: { connect: ["t1"] } })).toBe(403);
+    expect(await write(notes(), member(), "mine", { pinned: { connect: ["t3"] } })).toBe(undefined);
+  });
+  it("refuses a tag that pins itself on another member's note, which shows the link", async () => {
+    expect(await write(tags(), member(), undefined, { label: "x", pinnedOn: "theirs" })).toBe(403);
+    expect(await write(tags(), member(), undefined, { label: "x", pinnedOn: "mine" })).toBe(201);
+  });
+});
+
+describe("a file's related entries", () => {
+  it("are refused with 400 under a note's attachment", async () => {
+    const ctx = context(member(), {
+      query: { populate: { attachment: { populate: { related: true } } } },
+    });
+    await notes().find(ctx);
+    expect(ctx.status).toBe(400);
+    const plain = context(member(), { query: { populate: "attachment" } });
+    await notes().find(plain);
+    expect(plain.status).toBeUndefined();
   });
 });
 
