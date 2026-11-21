@@ -81,7 +81,6 @@ export const reservedNameGaps = (
     if (component === undefined) return []; // unreachable on validated IR
     return component.fields.flatMap((inner): EmbeddedField[] => {
       if (inner.type === "component") return embeddedIn(inner, [...path, inner.name]);
-      if (inner.type === "dynamicZone") return [];
       return [{ path: [...path, inner.name], field: inner, component }];
     });
   };
