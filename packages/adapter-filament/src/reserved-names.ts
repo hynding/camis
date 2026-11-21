@@ -7,7 +7,7 @@ import {
 } from "@camis/ir-core";
 import type { CapabilityGap, Field, IrDocument } from "@camis/ir-schema";
 import { STRAPI_RESERVED_NAMES, strapiAttributeNames } from "@camis/strapi-schema";
-import { childTableEmit, type ChildTableEmit } from "./components";
+import { childTableEmit, ITEM_POSITION_COLUMN, type ChildTableEmit } from "./components";
 import { snakeColumn } from "./names";
 
 type ApiStyle = "laravel" | "strapi";
@@ -64,13 +64,22 @@ const rowColumnNames =
 /**
  * The item tables the generator emits on the Laravel storage layout, planned as it plans them: a
  * repeatable component's, nested ones included on the Strapi API style, and on that style a
- * dynamic zone member's (the Laravel API style keeps a zone in one column of the entry's).
+ * dynamic zone member's (the Laravel API style keeps a zone in one column of the entry's). A row
+ * keeps its timestamps, its key to the row holding it and, a zone member's, its place.
  */
 const itemTables = (doc: IrDocument, apiStyle: ApiStyle, linksMedia: boolean): ItemTable[] => {
   const deep = apiStyle === "strapi";
-  const kept = deep ? STRAPI_TIMESTAMPS : LARAVEL_TIMESTAMPS;
+  const timestamps = deep ? STRAPI_TIMESTAMPS : LARAVEL_TIMESTAMPS;
   const rows = (child: ChildTableEmit, holder: string): ItemTable[] => [
-    { component: child.component.name, heldBy: [holder, ...child.path].join("."), kept },
+    {
+      component: child.component.name,
+      heldBy: [holder, ...child.path].join("."),
+      kept: new Map([
+        ...timestamps,
+        [child.fk, child.fk],
+        ...(child.ordered === true ? [[ITEM_POSITION_COLUMN, ITEM_POSITION_COLUMN] as const] : []),
+      ]),
+    },
     ...child.children.flatMap((c) => rows(c, child.component.name)),
   ];
   return doc.contentTypes
@@ -82,11 +91,18 @@ const itemTables = (doc: IrDocument, apiStyle: ApiStyle, linksMedia: boolean): I
         deep ? { componentRelations: true, nestedTables: true } : {},
       );
       const context = deep ? { doc } : undefined;
-      const tables = [
-        ...expansion.tables,
-        ...(deep ? expansion.zones.flatMap((z) => z.members.map((m) => m.table)) : []),
-      ];
-      return tables.flatMap((t) => rows(childTableEmit(ct, t, linksMedia, context), ct.name));
+      const zoneMembers = deep
+        ? expansion.zones.flatMap((z) =>
+            z.members.map((m) => ({
+              ...childTableEmit(ct, m.table, linksMedia, context),
+              ordered: true,
+            })),
+          )
+        : [];
+      return [
+        ...expansion.tables.map((t) => childTableEmit(ct, t, linksMedia, context)),
+        ...zoneMembers,
+      ].flatMap((child) => rows(child, ct.name));
     });
 };
 

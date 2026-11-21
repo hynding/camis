@@ -2751,8 +2751,17 @@ no gap reported (issue #103).
   as `mediaPlan` decides. The Strapi storage layout keeps a component in a table of its own, as
   Strapi does.
 - **Express** reports `createdAt` and `updatedAt` on a content type, a built-in one included (each
-  table's timestamp columns), an embedded component's columns on the entry's table among them; a
-  repeatable component's fields are rows of a table without timestamps and collide with none.
+  table's timestamp columns), an embedded component's columns on the entry's table among them. A
+  repeatable component's items are rows of a table without timestamps whose rows keep a key to
+  their entry, `<type>_id` (`itemEntryKey`): an item's field whose column there, by its path from
+  the item, is that key (`noteId` in `Note.items`) is reported, since Drizzle would keep one
+  `note_id` and lose the foreign key.
+- **Item tables' own columns.** On Filament's Laravel storage layout an item's row keeps, besides
+  its timestamps, its key to the row holding it, `<type>_id` (`<parent model>_id` in a nested
+  table, `note_items_id`), and a dynamic zone member's its place, `position` (on the Strapi API
+  style, where a zone is tables); an item's field whose column repeats either is reported, located
+  at the component and its field, with the item table's place in the message. A repeatable item's
+  rows keep no `position`, and none keeps the entry's own columns (`document_id`, `created_by_id`).
 - **Import.** A Strapi project's schema.json never carries these names (Strapi adds them itself and
   its builder refuses them), so it imports and generates as before. One edited by hand to carry one
   imports as it is, and generation reports it.

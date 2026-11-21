@@ -1,7 +1,9 @@
-import { reservedNameGaps, type TargetName } from "@camis/ir-core";
+import { expandComponents } from "@camis/adapter-kernel";
+import { reservedNameGaps, type ItemTable, type TargetName } from "@camis/ir-core";
 import type { CapabilityGap, IrDocument } from "@camis/ir-schema";
 import { isSupportedField } from "./fields";
 import { snakeColumn } from "./names";
+import { itemEntryKey } from "./schema";
 
 /** Every content type's table ends in `createdAt` and `updatedAt`, as these columns. */
 const TIMESTAMP_COLUMNS: ReadonlyMap<string, string> = new Map([
@@ -9,18 +11,33 @@ const TIMESTAMP_COLUMNS: ReadonlyMap<string, string> = new Map([
   ["updated_at", "updated_at"],
 ]);
 
-/** An embedded component's field is a column of the entry's table named by its joined path. */
-const embeddedColumn = (path: readonly string[]): TargetName => {
+/** A component's field is a column of the row holding it named by its joined path from there. */
+const rowColumn = (path: readonly string[]): TargetName => {
   const column = path.map(snakeColumn).join("_");
   return { spelled: column, mapped: column };
 };
 
 /**
- * An `error` gap for each field of a content type whose column (its name in snake_case) is one of
- * the table's timestamps, an embedded component's field's (its path snake_cased and joined,
- * `created` holding `at` being created_at) included. A built-in type is a plain table like any
- * other, so it is checked too. A repeatable component's fields are rows of a table of their own
- * without timestamps, so they collide with none.
+ * The item tables the schema emits, planned as it plans them: one per repeatable component a
+ * content type holds (a repeatable nested in an item is left out, with a gap of its own). A row
+ * keeps no timestamps, only its key to the entry.
+ */
+const itemTables = (doc: IrDocument): ItemTable[] =>
+  doc.contentTypes.flatMap((ct) =>
+    expandComponents(doc, ct).tables.map((t) => ({
+      component: t.component.name,
+      heldBy: [ct.name, ...t.path].join("."),
+      kept: new Map([[itemEntryKey(ct), itemEntryKey(ct)]]),
+    })),
+  );
+
+/**
+ * An `error` gap for each column the schema would emit twice: a content type's field whose column
+ * (its name in snake_case) is one of the table's timestamps, an embedded component's field's (its
+ * path snake_cased and joined, `created` holding `at` being created_at) included, and an item's
+ * field whose column on its item table's rows (its path from the item) is the key to its entry,
+ * `<type>_id`. A built-in type is a plain table like any other, so it is checked too. An item
+ * table has no timestamps.
  */
 export const expressReservedNameGaps = (doc: IrDocument): CapabilityGap[] =>
   reservedNameGaps(
@@ -34,6 +51,7 @@ export const expressReservedNameGaps = (doc: IrDocument): CapabilityGap[] =>
     {
       builtins: true,
       // A relation inside a component is left out on this target, with a gap of its own.
-      columns: (path, field) => (field.type !== "relation" ? [embeddedColumn(path)] : []),
+      columns: (path, field) => (field.type !== "relation" ? [rowColumn(path)] : []),
+      items: itemTables(doc),
     },
   );
