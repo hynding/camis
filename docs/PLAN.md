@@ -2800,6 +2800,27 @@ relation write, and a database seeded once kept it.
     (including a unidirectional many-to-many, and every relation in a component) changes nothing at
     the other end and needs read alone. A collection type with a mirrored relation into a type with
     rules is served by the controller too.
+  - **The write body's shape (a fix to this phase, carried by Phase 95's PR).** As first merged,
+    a relation item was checked by the entry it named and then passed to Strapi whole, and the
+    database layer spreads an item's `__pivot` into the join row after the ids
+    (`{ note_id, tag_id, ...on, ...item.__pivot }` in `attachRelations`/`updateRelations`), so
+    `{ connect: [{ id: 2, __pivot: { note_id: 9 } }] }` linked entry 9, never checked: the
+    `__pivot` hole was in code already on master. Now a restricted caller's create or update body
+    is first checked against the type's attributes at every depth (the generated `SHAPES` table,
+    `projectShapes` in `api-shapes.ts`; `writeShape` in `api-conditions.ts`), and anything else is
+    400 before any decision: a key that is no attribute of the type or component (top-level
+    `documentId`, `locale`, `publishedAt`, `createdBy`, `localizations` on an unlocalized type,
+    `__pivot`, `__temp_key__`, …); a relation item other than a row id (a number or plain digits),
+    a documentId (a string `parseInt` cannot read: Strapi takes `"5abc"` as row id `"5abc"`,
+    which MySQL casts to 5), or an object with exactly one of `id`/`documentId` and only `locale`,
+    `status` (`draft`/`published`) and `position` beside it (`before`/`after` naming an entry,
+    which must be one the caller may read, `start`/`end` true); `__type` only, and always, on a
+    polymorphic item; an operation object other than a non-empty set of `connect`, `set`,
+    `disconnect` and `options` (`{ strict: boolean }` alone); more than one entry on a to-one
+    attribute (Strapi keeps the last and checks only what it keeps); a component item with keys
+    other than its attributes and a positive integer `id` (Strapi's `deleteOldComponents` refuses
+    an id not on the entry); a zone item whose `__component` is not one of the zone's. A write
+    with both `set` and `connect` is decided on the `set` list, as Strapi ignores `connect` then.
   - Not narrowed, as on Strapi and the Filament target: admin roles and API tokens (Phase 25). An
     `auth: false` action (Phase 57) serves its own type's rows to anyone, and its reach is decided
     as the public role's, so a reach-only type's open route still answers. A session whose role is
@@ -2815,10 +2836,10 @@ relation write, and a database seeded once kept it.
   since their plugins serve it; a role that reads the media library while a file's `related`
   entries reach a type it reads under a condition; a single type the role reads reaches one, since
   Strapi's own single-type controller serves it; or a role writes the built-in user or a single
-  type whose mirrored relation changes entries of a type it does not update outright; or, once a
-  role the rules restrict writes files, a role writes a single type with a media field (its own or
-  an embedded component's), since Strapi's own single type controller links any stored file id
-  there. A role that writes files was itself an error here (the upload API attached, replaced or
+  type whose mirrored relation changes entries of a type it does not update outright; or a
+  restricted role writes, or an `auth: false` action opens for create or update, a single type
+  with a media field (its own or an embedded component's), since Strapi's own single type
+  controller links any stored file id there (Phase 95; file grants or not). A role that writes files was itself an error here (the upload API attached, replaced or
   deleted a file on any entry: seen on Strapi 5.48, a member attached a file to another member's
   private note); Phase 95 enforces the upload API and lifts it. `apiUserWrite`: a non-admin role
   may create or update the built-in user (no grant set of its own exempts it: another role may
@@ -2969,23 +2990,46 @@ Built from the plugin's source (`controllers/content-api.js`, `services/upload.j
   may change it.
 - **Linking a stored file through an entry write** (`{ avatar: 12 }`): the enforced controller
   walks the data's media fields at any depth of its components and dynamic zones and refuses (403)
-  a file the caller neither uploaded nor finds on an entry it may read (or update); linking such a
-  file shows nothing it could not read already. A media value outside the forms the database
-  layer reads as a row id (an id, digits, `{ id }`, a list of those, `connect`/`set` lists) is
-  400. Every collection type with a media field (its own or an embedded component's) that a
-  restricted role creates or updates, or the router opens for create or update, is served by the
-  enforced controller for this, with no rules of its own if it has none.
+  a file the caller neither uploaded nor finds on an entry it may update. A media item is a row id
+  (a number or plain digits) or `{ id }` and nothing else: the database layer writes media links
+  straight into `files_related_mph` as `{ file_id, related_id, related_type, field, order,
+  ...item.__pivot }`, so a `__pivot` (or any other key, `position` included) would override the
+  file, entry or type linked; it is 400, as is a value outside a row id, a list of them, or a
+  `connect`/`set`/`disconnect` object (`options` carrying `strict` alone). Every collection type
+  with a media field (its own or an embedded component's) that a restricted role creates or
+  updates, or the router opens for create or update, is served by the enforced controller for
+  this, with no rules of its own if it has none, **whether or not any role writes files**: Strapi
+  links any stored file id through an entry write with no upload grant at all.
+- **Who may link and who may change a file.** Link (an entry write naming the file): the caller
+  uploaded it, or it is attached to an entry the caller may update. Change (`?id=` replace or info
+  update, delete): the caller uploaded it, or it is attached and the caller may update every entry
+  it is attached to. Neither can be abused: a reader cannot take a file it only sees (read no
+  longer suffices, so it cannot attach another's file to its own entry and then, as an updater of
+  every entry the file is on, replace or delete it); a file one member attaches to a shared entry
+  stays that member's to replace or delete, and a co-updater of that entry may link it elsewhere
+  only as far as it already controls the file through the entry. Linking adds an entry to the
+  file, so a non-uploader who links a file on entry A to its entry B can change it only if it
+  also updates A, as before. The uploader always keeps its own file, wherever it is attached:
+  others linking it cannot lock its owner out.
+- **Without file grants.** When no restricted role writes files the upload extension is not
+  emitted and no `camisUploader` exists (`TABLES.uploads.uploaderRecorded: false`): no file has an
+  uploader, so a link or change is decided on the entry rule alone, and an unattached file cannot
+  be linked by a restricted caller (the media checks and tables are still emitted).
 - **What stays.** `GET /api/upload/files` and `/files/:id` are the plugin's: reading the media
   library while a file's `related` entries reach a type read under a condition stays an
   `apiRelationReach` error (Phase 94), and the files a role lists are not scoped by uploader. Reads
   of media through an entry are unchanged and a populate of `related` is still refused. A single
-  type with a media field that a restricted role writes stays an `apiRelationReach` error once the
-  upload API is enforced: Strapi's own single type controller links any stored file id. The
-  extension and the media checks are emitted only when a role the rules restrict writes files.
+  type with a media field that a restricted role creates or updates, or that `publicApiActions`
+  opens for create or update (located as "anyone (an auth: false route)"), is an
+  `apiRelationReach` error, file grants or not: Strapi's own single type controller links any
+  stored file id there. The extension is emitted only when a role the rules restrict writes
+  files; the media checks whenever a restricted role or an open action writes a media field.
 - **Tables.** `TABLES.uploads` (`api-upload-enforcement.ts`, `projectUploads`): the admin roles;
   every content type and component with a media field at some depth (its media attributes, and
   the component or zone attributes leading to one); each content type's outright readers and
-  updaters.
+  updaters; `uploaderRecorded`. `TABLES.shapes` (`api-shapes.ts`): each served type's and
+  embedded component's attributes and how each is written (scalar, relation, polymorphic, media,
+  component, zone), for the body check of Phase 94.
 - **CI.** `strapi-enforcement-boot` now also checks, with members holding File create and delete:
   an upload to the member's own note is 201 and attached, with the member recorded as uploader; an
   upload to another member's note, to a note that does not exist, to a component's uid and to a
@@ -2995,7 +3039,12 @@ Built from the plugin's source (`controllers/content-api.js`, `services/upload.j
   attached; linking another member's file by id in a note create or update is 403; the member's
   own upload links to her note, and is replaced and deleted there, and a member deletes his own
   unattached file. The content API allowlist names `upload` and `destroy` with where they are
-  enforced.
+  enforced. Added with the review fixes: a media `connect` item whose `__pivot` names another
+  `file_id` or `related_id`, and a media `set` item with a `__pivot` on create, are 400 and
+  `files_related_mph` is unchanged (the other member's file stays off the note); a relation
+  `connect` item whose `__pivot` names another `note_id` is 400 and the join table is unchanged,
+  while the plain connect is 201; a reviewer who reads but does not update the note holding a
+  file cannot link it (403) and still updates her own note.
 
 Known limits: the upload API is enforced for the content API only (GraphQL's upload mutations, if a
 project adds the plugin, are not); an IR relation (not a media field) to the media library's type
@@ -3005,10 +3054,17 @@ two leaves the file with none (no restricted caller may then change it unattache
 Exit: `runtime/api-uploads.test.ts` (every request shape: fileInfo forms, refId as a row id, a
 documentId, decimals, signs and arrays, partial and empty triples, `path`/`folder`/`source`/`files`,
 `?id=` forms and beside a ref, unknown query parameters; the attach field; the caller; entry,
-change and attach verdicts; media value forms, components and zones); `upload-behaviour.test.ts`
+change and attach verdicts; media value forms, components and zones; `__pivot`, `position` and
+`options` in media items; the link and change rules, with and without a recorded uploader);
+`runtime/api-conditions.test.ts` (relation items, to-one and `set` writes, `writeShape` at every
+depth); `runtime/engine.test.ts` (the real entity manager writes a `__pivot`-named entry into the
+join row; camis refuses the body); `upload-behaviour.test.ts`
 (the emitted extension and controllers against a fake upload plugin and query engine: nothing
 stored, replaced or deleted on any refusal); `api-enforcement.test.ts` (the lifted error, the
-single type error, the tables, the served types); goldens `api-uploads.ts.txt`,
+single type error with and without file grants and for an open action, the tables, the media
+tables without file grants, the shapes, the served types); `enforcement-golden.test.ts` (no
+extension without file grants); goldens `api-conditions.ts.txt`, `api-controller.ts.txt`,
+`api-uploads.ts.txt`,
 `api-upload-controller.ts.txt`, `upload.strapi-server.ts.txt`, idempotent; the boot job.
 
 ---

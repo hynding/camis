@@ -143,6 +143,14 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
     may update; a many-to-many link only one side declares needs read alone. Linking an entry
     whose other side holds one entry at most (a bidirectional oneToOne or oneToMany) takes it from
     its last holder, which must be one the caller may update when its type has rules.
+  - A restricted caller's create or update body is first checked against the type's attributes at
+    every depth (400 otherwise): no key but an attribute (top-level `documentId`, `locale`,
+    `publishedAt`, `createdBy` are refused); a relation item is a row id, a documentId, or an
+    object with one of `id`/`documentId` and only `locale`, `status` and `position` beside it
+    (`__type` on a polymorphic item); a media item is a row id or `{ id }`; a component item
+    holds its attributes and its own `id`; a zone item names one of the zone's components. So no
+    `__pivot` reaches a join row (it overrode the linked ids, in releases before this one too),
+    and a to-one attribute takes one entry.
   - The upload API, once a role the rules restrict holds a file grant (a generated
     `src/extensions/upload/strapi-server.ts` wraps the plugin's content API controller): `POST
     /api/upload` takes only `fileInfo`, `ref`, `refId` and `field` (any other body field, `path`
@@ -153,11 +161,13 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
     exist are 403. Each upload records its uploader in a private `camisUploader` attribute (the
     content API's `createdBy` is never set for a users-permissions caller). `?id=` (replace or
     info update) and `DELETE /api/upload/files/:id` need update on every entry the file is
-    attached to, or, unattached, that the caller uploaded it. An entry create or update linking a
-    stored file through a media field (at any depth of components and zones) is 403 unless the
-    caller uploaded it or may read an entry it is attached to; a media value other than a row id
-    (`3`, `"3"`, `{ id: 3 }`, a list, `connect`/`set`) is 400. Listing and reading files stay the
-    plugin's.
+    attached to, or that the caller uploaded it (an uploader keeps its own file). An entry create
+    or update linking a stored file through a media field (at any depth of components and zones)
+    is 403 unless the caller uploaded it or may update an entry it is attached to; a media value
+    other than a row id (`3`, `"3"`, `{ id: 3 }`, a list, `connect`/`set`) is 400. These link
+    checks apply whenever a restricted role or an open action writes a media field, file grants
+    or not; with no file grants there is no uploader record and only the entry rule applies.
+    Listing and reading files stay the plugin's.
   - The role is the session's users-permissions role, the public role without a session; a role
     the IR does not grant the type, a session whose role was not loaded and an unknown strategy are
     refused. Admin roles and API tokens are not narrowed; an `auth: false` action serves its own
@@ -172,9 +182,9 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
   built-in user, from the media library (a role that reads files, whose `related` entries reach a
   type it reads under a condition) or from a single type, and for a role that writes the built-in
   user or a single type whose relation both sides declare into a type it does not update outright
-  (the plugin's or Strapi's own controller serves those), and, once a restricted role writes
-  files, for a role that writes a single type with a media field (Strapi's single type controller
-  links any stored file id); `apiUserWrite` for a non-admin
+  (the plugin's or Strapi's own controller serves those), and for a restricted role, or an
+  `auth: false` action, that writes a single type with a media field (Strapi's single type
+  controller links any stored file id); `apiUserWrite` for a non-admin
   role that may create or update the built-in user (users-permissions sets any user's role and
   password from the body), whatever else it holds. The admin-panel copy of a non-admin role
   cannot read `record.*`, so there its condition denies every entry (`conditionContext`,
