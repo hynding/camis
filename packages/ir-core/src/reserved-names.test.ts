@@ -190,6 +190,43 @@ describe("reservedNameGaps", () => {
     ]);
   });
 
+  // A target may keep a column an inverse puts on the related type's rows (a key named by it).
+  const inverseColumn = (field: { name: string; inverse?: string | undefined }): TargetName[] =>
+    field.inverse === undefined
+      ? []
+      : [
+          {
+            spelled: `${field.inverse}_id`,
+            mapped: `${snakeCase(field.inverse)}_id`,
+            inverse: true,
+          },
+        ];
+
+  it("says what an inverse is called on the target when that is not its name", () => {
+    const kept = new Map([["stamped_id", "stampedId"]]);
+    const gaps = reservedNameGaps(doc, "the Test target", kept, inverseColumn);
+    expect(gaps.map((g) => [g.location, g.message])).toEqual([
+      [
+        { contentType: "Person", field: "stamped" },
+        `inverse "stamped" of relation "Note.owner", as "stamped_id", collides with the Test target's own "stampedId"; rename it`,
+      ],
+    ]);
+  });
+
+  it("reports an inverse once per name the target keeps, however many of its names map onto it", () => {
+    const aliased = new Map([
+      ["stamped", "stamped"],
+      ["stamped_id", "stamped"],
+    ]);
+    const gaps = reservedNameGaps(doc, "the Test target", aliased, (field) => [
+      ...snakeNames(field).filter((name) => name.inverse === true),
+      ...inverseColumn(field),
+    ]);
+    expect(gaps.map((g) => g.message)).toEqual([
+      `inverse "stamped" of relation "Note.owner" collides with the Test target's own "stamped"; rename it`,
+    ]);
+  });
+
   // Renaming the field leaves its inverse's collision on Person, so each is reported where it is.
   it("reports a relation and its inverse kept under one name each where it lands", () => {
     const related: IrDocument = {

@@ -99,6 +99,93 @@ describe("Filament target: names its rows and wire shape reserve", () => {
       ]);
     });
 
+    // A one-to-many's key is a column of the related type's rows on the Laravel storage layout,
+    // named by its inverse: an inverse `document` is a second document_id on tags.
+    it("reports a one-to-many's inverse whose key column on the related rows is one of theirs", () => {
+      const bundle = withFields([
+        {
+          type: "relation",
+          name: "tags",
+          relationKind: "oneToMany",
+          target: "Tag",
+          inverse: "document",
+        },
+      ]);
+      expect(reserved(bundle, "strapi").map((g) => [g.location, g.message])).toEqual([
+        [
+          { contentType: "Tag", field: "document" },
+          `inverse "document" of relation "Note.tags", as "document_id", collides with the Strapi API style's own "documentId"; rename it`,
+        ],
+      ]);
+      expect(reserved(bundle, "laravel")).toEqual([]);
+      // The Strapi storage layout links the two in a table of Strapi's: no key column on a row.
+      expect(reserved(bundle, "strapi", "strapi")).toEqual([]);
+    });
+
+    // Without an inverse the key is named by the type holding the relation: Document's is document_id.
+    it("reports a one-to-many without an inverse whose key column, named by its type, is one", () => {
+      const bundle: IrBundle = {
+        document: {
+          version: 1,
+          contentTypes: [
+            {
+              name: "Document",
+              kind: "collection",
+              fields: [
+                { type: "relation", name: "tags", relationKind: "oneToMany", target: "Tag" },
+              ],
+            },
+            { name: "Tag", kind: "collection", fields: [{ type: "string", name: "label" }] },
+          ],
+          components: [],
+        },
+        roles: [],
+      };
+      expect(reserved(bundle, "strapi").map((g) => [g.location, g.message])).toEqual([
+        [
+          { contentType: "Document", field: "tags" },
+          `field "tags", as "document_id", collides with the Strapi API style's own "documentId"; rename it`,
+        ],
+      ]);
+      expect(reserved(bundle, "strapi", "strapi")).toEqual([]);
+    });
+
+    // A one-to-one's key is on the row holding it, and the host app's users table is left alone.
+    it("leaves an inverse whose type keeps no key column for it", () => {
+      const bundle: IrBundle = {
+        document: {
+          version: 1,
+          contentTypes: [
+            {
+              name: "Note",
+              kind: "collection",
+              fields: [
+                {
+                  type: "relation",
+                  name: "tag",
+                  relationKind: "oneToOne",
+                  target: "Tag",
+                  inverse: "document",
+                },
+                {
+                  type: "relation",
+                  name: "readers",
+                  relationKind: "oneToMany",
+                  target: "User",
+                  inverse: "document",
+                },
+              ],
+            },
+            { name: "Tag", kind: "collection", fields: [{ type: "string", name: "label" }] },
+            { name: "User", kind: "collection", builtin: "user", fields: [] },
+          ],
+          components: [],
+        },
+        roles: [],
+      };
+      expect(reserved(bundle, "strapi")).toEqual([]);
+    });
+
     it("reports Strapi's discriminator keys, which are keys on its wire, and its strapi prefix", () => {
       const bundle = withFields([
         { type: "string", name: "kind", names: { api: "__component" } },
@@ -218,8 +305,9 @@ describe("Filament target: names its rows and wire shape reserve", () => {
   );
 
   // Its relation's inverse lands on Note, whose row and key the generator does emit: an inverse
-  // createdBy is a second created_by_id on notes, beside the Strapi API style's own creator key.
-  it.each(["createdBy", "publishedAt"])(
+  // createdBy is a second created_by_id on notes, beside the Strapi API style's own creator key,
+  // and an inverse document a second document_id.
+  it.each(["createdBy", "publishedAt", "document"])(
     "reports a built-in type's relation whose inverse %s lands on a type of ours",
     (inverse) => {
       const bundle: IrBundle = {
