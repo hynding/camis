@@ -87,6 +87,22 @@ describe("Filament target: names its rows and wire shape reserve", () => {
       ]);
     });
 
+    // Its key created_by and its key column created_by_id are both Strapi's createdBy: one gap.
+    it.each(["createdBy", "updatedBy"])(
+      "reports a to-one relation named %s once, for the one key it collides with",
+      (name) => {
+        const bundle = withFields([
+          { type: "relation", name, relationKind: "manyToOne", target: "Tag" },
+        ]);
+        expect(reserved(bundle, "strapi").map((g) => [g.location, g.message])).toEqual([
+          [
+            { contentType: "Note", field: name },
+            `field "${name}" collides with the Strapi API style's own "${name}"; rename it`,
+          ],
+        ]);
+      },
+    );
+
     it("reports a relation's inverse and a component's field", () => {
       const bundle = withFields(
         [

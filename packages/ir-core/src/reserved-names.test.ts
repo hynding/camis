@@ -113,6 +113,24 @@ describe("reservedNameGaps", () => {
     ]);
     expect(gaps).toHaveLength(3);
   });
+
+  it("reports a field once per name the target keeps, though two kept spellings name it", () => {
+    const aliased = new Map([
+      ["stamped_at", "stampedAt"],
+      ["stamped_at_id", "stampedAt"],
+    ]);
+    const gaps = reservedNameGaps(doc, "the Test target", aliased, (field, holder) =>
+      holder === "contentType" && field.name === "stampedAt"
+        ? [
+            { spelled: "stampedAt", mapped: "stamped_at" },
+            { spelled: "stamped_at_id", mapped: "stamped_at_id" },
+          ]
+        : [],
+    );
+    expect(gaps.map((g) => g.message)).toEqual([
+      `field "stampedAt" collides with the Test target's own "stampedAt"; rename it`,
+    ]);
+  });
 });
 
 describe("reservedNameGaps, embedded components", () => {
