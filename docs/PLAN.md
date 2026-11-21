@@ -2819,8 +2819,8 @@ relation write, and a database seeded once kept it.
     relation); `__type` only, and always, on a polymorphic item; an operation object other than a
     non-empty set of `connect`, `set`, `disconnect` and `options` (`{ strict: boolean }` alone);
     a `set` beside a `connect` or a `disconnect` (Strapi applies only the set, yet its document
-    service still looks up the others' entries); more than one entry on a to-one attribute
-    (Strapi keeps the last and checks only what it keeps); a component item with keys other than
+    service still looks up the others' entries); more than one entry on a to-one relation, at
+    any depth (`toOneRelation` in `SHAPES`: Strapi keeps the last and checks only what it keeps); a component item with keys other than
     its attributes and a positive integer `id` (Strapi's `deleteOldComponents` refuses an id not
     on the entry); a zone item whose `__component` is not one of the zone's. `null` clears a
     component, a repeatable component or a zone, as in Strapi.
@@ -2849,6 +2849,12 @@ relation write, and a database seeded once kept it.
     update outright). Not checked: the built-in user (a non-admin write is an `apiUserWrite`
     error) and the media library (the upload API takes only the documented `fileInfo` fields);
     admin roles and API tokens; GraphQL.
+  - **A write's response.** A create or update on a served collection type answers through the
+    same scoped query as a read (`scopeQuery` under the caller's reach), so `?populate=` on a POST
+    or PUT is narrowed as on a GET, whether or not the role reads the type. The paths that are not
+    narrowed fail the build for a writer as for a reader: a polymorphic relation and a single
+    type's reach. The upload API refuses every query parameter but `id`, and a non-admin write of
+    the built-in user is an error.
   - Not narrowed, as on Strapi and the Filament target: admin roles and API tokens (Phase 25). An
     `auth: false` action (Phase 57) serves its own type's rows to anyone, and its reach is decided
     as the public role's, so a reach-only type's open route still answers. A session whose role is
@@ -2857,13 +2863,18 @@ relation write, and a database seeded once kept it.
   role. `apiGrantCondition`: a read condition outside the filter subset, an update/delete condition
   reading a variable an entry lacks, a create condition reading a relation the client writes, any
   condition on a single type or on the built-in user or media library. `apiPolymorphicReach`: a role
-  reads a type with a polymorphic relation (its own or a component's), or a polymorphic inverse
-  that reaches a conditioned type, while it reads some type under a condition — a polymorphic
-  populate takes no per-target filter. `apiRelationReach`: a relation from the built-in user or
+  reads or writes (creates or updates) a type with a polymorphic relation (its own or a
+  component's), or a polymorphic inverse that reaches a conditioned type, while it reads some type
+  under a condition — a polymorphic populate takes no per-target filter, a write's response is
+  populated like a read, and a polymorphic link is written unchecked; an `auth: false` create or
+  update route counts as the public role writing. `apiRelationReach`: a relation from the built-in user or
   media library (its own, or an inverse onto it) reaches a type the role reads under a condition,
   since their plugins serve it; a role that reads the media library while a file's `related`
-  entries reach a type it reads under a condition; a single type the role reads reaches one, since
-  Strapi's own single-type controller serves it; or a role writes the built-in user or a single
+  entries reach a type it reads under a condition; a single type the role reads or writes (or an
+  `auth: false` route opens for create or update, as the public role) reaches one, since Strapi's
+  own single-type controller serves it, populating a write's response and linking unchecked (a
+  review showed a member with update alone on a single type link another member's private note
+  and read it back in the response); or a role writes the built-in user or a single
   type whose mirrored relation changes entries of a type it does not update outright; or a
   restricted role writes, or an `auth: false` action opens for create or update, a single type
   with a media field (its own or an embedded component's), since Strapi's own single type

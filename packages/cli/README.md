@@ -150,7 +150,7 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
     (`__type` on a polymorphic item; a position may name its anchor's `locale` and `status`); a
     media item is a row id or `{ id }`; a component item holds its attributes and its own `id`; a
     zone item names one of the zone's components; `null` clears. So no `__pivot` reaches a join
-    row (it overrode the linked ids, in releases before this one too), a to-one attribute takes
+    row (it overrode the linked ids, in releases before this one too), a to-one relation takes
     one entry, and a `set` stands alone. Any `set` but `null` replaces the relation, one entry
     included, so every entry it drops is checked. The check covers every collection type camis
     serves, including each with a relation or media field that a restricted role or an open route
@@ -184,10 +184,11 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
   outside `eq`/`and`/`or` over `record.<field>`/`record.<relation>Id` vs a literal or
   `user.id`/`user.email`/`user.role`, an update/delete condition reading another variable, a create
   condition reading a relation the client writes, or a condition on a single type, the built-in
-  user or the media library; `apiPolymorphicReach` when a role reads a type with a polymorphic
-  relation while it reads some type under a condition; `apiRelationReach` for a reach from the
+  user or the media library; `apiPolymorphicReach` when a role reads or writes a type with a
+  polymorphic relation while it reads some type under a condition (an open create or update route
+  counts as the public role writing); `apiRelationReach` for a reach from the
   built-in user, from the media library (a role that reads files, whose `related` entries reach a
-  type it reads under a condition) or from a single type, and for a role that writes the built-in
+  type it reads under a condition) or from a single type a role reads or writes, and for a role that writes the built-in
   user or a single type whose relation both sides declare into a type it does not update outright
   (the plugin's or Strapi's own controller serves those), and for a restricted role, or an
   `auth: false` action, that writes a single type with a media field (Strapi's single type
