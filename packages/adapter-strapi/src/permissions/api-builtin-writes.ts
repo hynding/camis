@@ -6,8 +6,6 @@ import { embedded } from "./api-reach";
 // no check of camis's, and some of their writes reach far past the entry written: the upload API
 // attaches, replaces or deletes a file on any entry, and the user API sets any user's role.
 
-const ENTRY_ACTIONS: Action[] = ["create", "read", "update", "delete"];
-
 const holdsOutright = (role: Role, contentType: string, action: Action): boolean =>
   role.grants.some(
     (g) => g.contentType === contentType && g.actions.includes(action) && g.condition === undefined,
@@ -52,14 +50,11 @@ const uploadGaps = (doc: IrDocument, role: Role, file: ContentType): CapabilityG
 /**
  * A non-admin role that creates or updates the built-in user: users-permissions takes the role
  * and password from the body for any user, so the caller could move itself (or an account it
- * made) into any role. Only a role that already holds every action outright gains nothing.
+ * made) into any role, and with it any endpoint or plugin service that role holds. No grant set
+ * of the role's own makes that harmless, so none exempts it.
  */
-const userGaps = (doc: IrDocument, role: Role, user: ContentType): CapabilityGap[] => {
-  const everything = doc.contentTypes.every((ct) =>
-    ENTRY_ACTIONS.every((a) => holdsOutright(role, ct.name, a)),
-  );
-  if (everything) return [];
-  return (["create", "update"] as const)
+const userGaps = (role: Role, user: ContentType): CapabilityGap[] =>
+  (["create", "update"] as const)
     .filter((a) => role.grants.some((g) => g.contentType === user.name && g.actions.includes(a)))
     .map((action) => ({
       feature: "apiUserWrite",
@@ -67,7 +62,6 @@ const userGaps = (doc: IrDocument, role: Role, user: ContentType): CapabilityGap
       severity: "error",
       message: `role "${role.name}" may ${action} the built-in user, and Strapi's users-permissions ${action === "update" ? "update (PUT /api/users/:id)" : "create (POST /api/users)"} sets the role and password of any user from the body: the caller could take any other role, and every grant the rules guard`,
     }));
-};
 
 /** The errors for writes to the built-in user and media library their plugins serve unchecked. */
 export const builtinWriteGaps = (doc: IrDocument, roles: readonly Role[]): CapabilityGap[] => {
@@ -77,6 +71,6 @@ export const builtinWriteGaps = (doc: IrDocument, roles: readonly Role[]): Capab
     .filter((r) => r.admin !== true)
     .flatMap((role) => [
       ...(file === undefined ? [] : uploadGaps(doc, role, file)),
-      ...(user === undefined ? [] : userGaps(doc, role, user)),
+      ...(user === undefined ? [] : userGaps(role, user)),
     ]);
 };
