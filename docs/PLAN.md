@@ -2704,7 +2704,10 @@ no gap reported (issue #103).
 - **Where the rule lives.** Only `id` is kept by every target, and it stays an IR rule
   (`reserved_field_name`). The other names are one target's concept, so the adapter that owns the
   name reports it: an `error`-severity `reservedFieldName` gap, located at the content type (or
-  component) and the field, so `camis generate`/`camis build` stop before writing. `ir-core`'s
+  component) and the field, so `camis generate`/`camis build` stop before writing. A relation's
+  inverse is located on the type it lands on, by its name there; a field is reported once for each
+  name the target keeps however many of its names (a key and its key column) map onto it, and its
+  inverse apart, so `updatedBy` with inverse `updatedBy` is reported on both types. `ir-core`'s
   `reservedNameGaps(doc, target, reserved, namesOf, options)` walks the fields; each target says how
   it maps a field's names and which it keeps, and whether a built-in type's fields are checked
   (`builtins`): Strapi and Filament map a built-in type onto a model of their own (users-permissions'

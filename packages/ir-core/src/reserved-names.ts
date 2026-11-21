@@ -71,8 +71,9 @@ interface EmbeddedField {
   component: Component;
 }
 
-const describe = (field: Field, name: TargetName): string => {
-  if (name.inverse === true) return `inverse "${name.spelled}" of relation "${field.name}"`;
+const describe = (holderName: string, field: Field, name: TargetName): string => {
+  if (name.inverse === true)
+    return `inverse "${name.spelled}" of relation "${holderName}.${field.name}"`;
   return name.spelled === field.name
     ? `field "${field.name}"`
     : `field "${field.name}", as "${name.spelled}",`;
@@ -116,17 +117,19 @@ export const reservedNameGaps = (
     });
 
   // One gap per place and kept name, however many of a field's names, or rows, map onto it: a key
-  // and its key column (created_by, created_by_id) may both be one name of the target's.
+  // and its key column (created_by, created_by_id) may both be one name of the target's. An
+  // inverse is a name of its own, where it lands, so it is reported beside its relation.
   const reported = new Set<string>();
   const gaps = (
     names: readonly TargetName[],
     kept: KeptNames,
-    location: IrErrorLocation,
+    locate: (name: TargetName) => IrErrorLocation,
     described: (name: TargetName) => string,
   ): CapabilityGap[] =>
     names.flatMap((name): CapabilityGap[] => {
       const own = kept.get(name.mapped);
-      const key = `${locationKey(location)}\0${own}`;
+      const location = locate(name);
+      const key = [locationKey(location), name.inverse === true, own].join("\0");
       if (own === undefined || reported.has(key)) return [];
       reported.add(key);
       return [
@@ -149,7 +152,7 @@ export const reservedNameGaps = (
       gaps(
         columns(e.path, e.field),
         reserved,
-        { contentType, component: e.component.name, field: e.field.name },
+        () => ({ contentType, component: e.component.name, field: e.field.name }),
         (name) => describeEmbedded(contentType, e, name),
       ),
     );
@@ -162,17 +165,22 @@ export const reservedNameGaps = (
       gaps(
         columns(e.path, e.field),
         item.kept,
-        { component: e.component.name, field: e.field.name },
+        () => ({ component: e.component.name, field: e.field.name }),
         (name) => describeItem(item, e, name),
       ),
     );
   };
 
+  // A field is located where it is declared, its inverse on the type it lands on.
   const ownGaps = (holderName: string, field: Field, holder: FieldHolder): CapabilityGap[] => {
     const at: IrErrorLocation =
       holder === "contentType" ? { contentType: holderName } : { component: holderName };
-    return gaps(namesOf(field, holder), reserved, { ...at, field: field.name }, (name) =>
-      describe(field, name),
+    const locate = (name: TargetName): IrErrorLocation =>
+      name.inverse === true && field.type === "relation"
+        ? { contentType: field.target, field: field.inverse ?? name.spelled }
+        : { ...at, field: field.name };
+    return gaps(namesOf(field, holder), reserved, locate, (name) =>
+      describe(holderName, field, name),
     );
   };
 
