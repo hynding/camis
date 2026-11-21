@@ -122,7 +122,7 @@ export const filamentAdapter: GenerateAdapter = {
         ? []
         : [...emitCustomFields(doc, apiStyle === "strapi"), ...emitInverseLinks(rel.inverseLinks)];
     const gaps: CapabilityGap[] = [
-      ...filamentReservedNameGaps(normalized, apiStyle),
+      ...filamentReservedNameGaps(normalized, apiStyle, storage),
       ...draftPublish.gaps,
       ...localization.gaps,
       ...morphs.gaps,

@@ -62,7 +62,10 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
 A field named as a target names its own keys or columns is such an error (`reservedFieldName`,
 located at the content type or component and the field, before anything is written), since the
 target would overwrite or refuse it. Names are compared as the target maps them, so
-`published_at` and `PublishedAt` (an imported API key) are caught as `publishedAt` is:
+`published_at` and `PublishedAt` (an imported API key) are caught as `publishedAt` is. Where a
+target flattens a non-repeatable component into the row holding it, its fields' columns are named
+by their path (`created` holding `at` is `created_at`) and checked too, located at the content type
+(or component), the component and its field:
 
 - `strapi`, and `filament` with `apiStyle: "strapi"`: `documentId`, `createdAt`, `updatedAt`,
   `publishedAt`, `createdBy`, `updatedBy`, `locale`, `localizations` (and `createdById`,
@@ -71,7 +74,10 @@ target would overwrite or refuse it. Names are compared as the target maps them,
   named `document` (`document_id`) is refused there.
 - `filament` with `apiStyle: "laravel"`: `createdAt` and `updatedAt`, whose columns are Laravel's
   timestamps, a component's fields included.
-- `express`: `createdAt` and `updatedAt` on a content type.
+- `filament` on the Laravel storage layout (either API style): an embedded component's columns on
+  the entry's row and on an item's, both of which carry the timestamps.
+- `express`: `createdAt` and `updatedAt` on a content type, a built-in one included, and an
+  embedded component's columns on the entry's table.
 
 `id` is refused by `camis validate` itself, since every target keeps it.
 

@@ -2715,12 +2715,24 @@ no gap reported (issue #103).
   `PublishedAt` is caught. A field's API key, a relation's inverse (Strapi adds it to the related
   type) and a component's field (the builder refuses it there too) are checked. The builder also
   refuses `status`, `meta` and `entry_id`, which are not keys of the entry and are left alone.
+- **Embedded components.** A non-repeatable component's fields are flattened into the row holding
+  it, as columns named by their path snake_cased and joined, so a field `created` holding a
+  component with a field `at` is a column `created_at`, which a target may keep. With the walker's
+  `embedded` option a target says what an embedded field's column is called, and such a field is
+  reported located at the content type (or component), the component and its field, with the path
+  in the message. A repeatable component or a dynamic zone is rows of a table of its own.
 - **Filament.** The Strapi API style answers Strapi's REST API, so it reports Strapi's names, and
   also a column of its own rows a field's column would repeat: a to-one relation named `document`
   keeps `document_id`. The Laravel API style reports `createdAt` and `updatedAt`, whose columns are
-  Laravel's timestamps on every table, a component item's included.
+  Laravel's timestamps on every table, a component item's included. On the Laravel storage layout,
+  in either API style, an embedded component's columns land on the entry's row or an item's, both
+  of which carry the timestamps, and are checked against the same names (on the Strapi API style a
+  to-one relation inside one by its key column, `created.by` being `created_by_id`, and a media
+  field not at all, since it links the media library's files). The Strapi storage layout keeps a
+  component in a table of its own, as Strapi does.
 - **Express** reports `createdAt` and `updatedAt` on a content type, a built-in one included (each
-  table's timestamp columns); a component's fields are prefixed columns, or rows of a table without timestamps.
+  table's timestamp columns), an embedded component's columns on the entry's table among them; a
+  repeatable component's fields are rows of a table without timestamps and collide with none.
 - **Import.** A Strapi project's schema.json never carries these names (Strapi adds them itself and
   its builder refuses them), so it imports and generates as before. One edited by hand to carry one
   imports as it is, and generation reports it.
