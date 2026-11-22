@@ -6,7 +6,7 @@ import { emitGeneratedController, emitProtectedController } from "../core/contro
 import type { StrapiApiEmission, StrapiApiInput } from "../emit";
 import { emitStrapiErrorsMiddleware } from "../core/errors";
 import { emitStrapiError } from "../core/rest-runtime";
-import { emitStrapiHashes } from "../core/errors";
+import { emitStrapiHashes, emitStrapiJsonBody } from "../core/errors";
 import { emitApiConfig, emitStrapiRoutes } from "../core/routes";
 import { emitCorsConfig } from "../core/cors";
 import { emitScopeMethod } from "../core/scope";
@@ -176,6 +176,7 @@ export const emitStrapiStorage = (input: StrapiApiInput): StrapiApiEmission => {
   // The middleware renders the validator's.
   files.push({ path: "app/Support/StrapiError.php", content: emitStrapiError() });
   files.push({ path: "app/Support/StrapiHashes.php", content: emitStrapiHashes() });
+  files.push({ path: "app/Http/Middleware/StrapiJsonBody.php", content: emitStrapiJsonBody() });
   files.push({
     path: "app/Console/Commands/CamisStrapiSchemaCheck.php",
     content: emitSchemaCheck(expectedSchema(doc, emitted)),

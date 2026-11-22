@@ -8,6 +8,7 @@ overwrite app/Http/Controllers/Api/Generated/NoteApiController.php
 overwrite app/Http/Controllers/Api/Generated/TaskApiController.php
 overwrite app/Http/Controllers/Api/Generated/TransactionApiController.php
 overwrite app/Http/Middleware/StrapiErrors.php
+overwrite app/Http/Middleware/StrapiJsonBody.php
 overwrite app/Http/Middleware/StrapiJwtGuard.php
 overwrite app/Http/Serializers/ActivitySessionSerializer.php
 overwrite app/Http/Serializers/ConsumableSerializer.php
