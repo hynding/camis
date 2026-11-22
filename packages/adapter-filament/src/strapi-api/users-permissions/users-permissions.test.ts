@@ -237,6 +237,10 @@ describe("users-permissions routes", () => {
     const middleware = content("app/Http/Middleware/StrapiJsonBody.php");
     expect(middleware).toContain("new StrapiError(415, 'UnsupportedMediaTypeError'");
     expect(middleware).toContain("$request->getContent() === ''");
+    // PHP parses a form into fields and files, leaving the raw body empty.
+    expect(middleware).toContain(
+      "$request->request->count() === 0 && $request->files->count() === 0",
+    );
     expect(middleware).toContain("$type === 'application/json'");
     expect(middleware).toContain("str_ends_with($type, '+json')");
   });

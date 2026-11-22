@@ -217,6 +217,26 @@ class AuthSecurityTest extends TestCase
         $this->login('alice')->assertOk();
     }
 
+    /**
+     * PHP parses a form or multipart body into its fields before the app runs, leaving the raw body
+     * empty, as the test client leaves it when given parameters: still a form, still refused.
+     */
+    public function test_a_form_php_has_already_parsed_is_refused(): void
+    {
+        $fields = ['identifier' => 'alice', 'password' => 'secret1', 'username' => 'mallory', 'email' => 'mallory@example.test'];
+        foreach (['multipart/form-data; boundary=x', 'application/x-www-form-urlencoded', ''] as $type) {
+            $this->freshRequest();
+            self::assertUnsupported($this->call('POST', '/api/auth/local', $fields, [], [], ['CONTENT_TYPE' => $type, 'HTTP_ACCEPT' => 'application/json']));
+            $this->freshRequest();
+            self::assertUnsupported($this->call('POST', '/api/auth/local/register', $fields, [], [], ['CONTENT_TYPE' => $type, 'HTTP_ACCEPT' => 'application/json']));
+        }
+        $this->freshRequest();
+        self::assertUnsupported($this->call('POST', '/api/auth/local', [], [], ['file' => \Illuminate\Http\UploadedFile::fake()->create('a.txt', 1)], ['CONTENT_TYPE' => 'multipart/form-data; boundary=x', 'HTTP_ACCEPT' => 'application/json']));
+        // A form type with nothing in it is still a form.
+        self::assertUnsupported($this->postAs('/api/auth/local', 'application/x-www-form-urlencoded', ''));
+        $this->assertDatabaseMissing('users', ['username' => 'mallory']);
+    }
+
     public function test_an_auth_write_takes_json_by_any_of_its_names_and_an_empty_body(): void
     {
         config(['camis.auth_throttle_per_minute' => 10, 'camis.users_permissions.auth_address_throttle_per_minute' => 10]);
