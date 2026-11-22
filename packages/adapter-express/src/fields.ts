@@ -124,10 +124,13 @@ export const column = (dialect: Dialect, field: Field): ColumnEmit => {
   const f = field as Field & Record<string, unknown>;
   const c = snakeColumn(field.name);
   const b = base(dialect, field, c);
+  // A decimal kept as text (see decimalColumn) takes its default as text too.
+  const defaultValue =
+    b.import === "text" && typeof f.default === "number" ? String(f.default) : f.default;
   const drizzle =
     b.expr +
     (f.required === true ? ".notNull()" : "") +
     (f.unique === true ? ".unique()" : "") +
-    (f.default !== undefined ? `.default(${tsLiteral(f.default)})` : "");
+    (defaultValue !== undefined ? `.default(${tsLiteral(defaultValue)})` : "");
   return { column: c, drizzle, import: b.import };
 };
