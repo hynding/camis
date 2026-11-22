@@ -96,23 +96,34 @@ field. A gap is reported only where the target emits the colliding column or key
 
 A `decimal` may state its digits, `precision` (all of them, 1 to 65) and `scale` (those after the
 point, 0 to 30 and at most the precision), both or neither: `camis validate` refuses one without
-the other, or out of bounds (`invalid_decimal_digits`), MySQL's DECIMAL being the narrowest
-database every target runs on. Without them each target keeps its own default, as before: (8, 2)
-on Filament, Strapi's (10, 2), Drizzle's `decimal`/`numeric` on Express. With them:
+the other, or out of bounds, and a `default`, `min` or `max` with more digits before the point than
+`precision - scale`, or a `default` with more after it than `scale` (`invalid_decimal_digits`,
+located at the key), MySQL's DECIMAL being the narrowest database every target runs on. Without
+digits each target keeps its own default, as before: (8, 2) on Filament, Strapi's (10, 2),
+Drizzle's `decimal`/`numeric` on Express. With them:
 
-- `filament`: `$table->decimal('x', p, s)` and the cast `decimal:s`, which reads the value as a
-  string. A decimal of more than 15 digits, more than a double keeps, is DECIMAL on MySQL and
-  PostgreSQL and text on SQLite (decided by the connection when it migrates), so every digit is
-  kept on all three. The Laravel API style answers every decimal as a string, as it always has;
-  the Strapi API style answers a decimal of more than 15 digits as a string (a JSON number of that
-  many digits is rounded by every JavaScript client), over REST, GraphQL (`String`), the OpenAPI
-  document and the MCP tools, and every other decimal as the number Strapi answers. Send such a
-  value as a string: a JSON number is a double by the time PHP reads it, and is taken as its
-  shortest digits (not PHP's own 14-digit string of a float). On the Strapi API style a filter or
-  a sort on a decimal of more than 15 digits compares text on SQLite, and a data-transfer archive
-  carries it as a number, as Strapi's do (a `decimalPrecision` downgrade gap, located at the type
-  or component and the field); on Strapi's storage layout the column is Strapi's, which SQLite
-  keeps as a double (the same gap).
+- `filament`: `$table->decimal('x', p, s)` and the cast `decimal:s`, which answers the value as a
+  string at the scale. PDO reads a SQLite decimal column as a PHP float, which becomes a string of
+  14 significant digits, so a decimal of 15 digits or more is DECIMAL on MySQL and PostgreSQL and
+  text on SQLite (decided by the connection when it migrates): every digit is kept on all three.
+  Both API styles write a decimal stating its digits as MySQL and PostgreSQL keep it, whatever the
+  database: a string or a JSON number, trimmed, exponent form expanded, rounded half away from zero
+  to the scale, stored with exactly the scale's digits after the point (so `1.5` and `1.50` are one
+  value, also on SQLite's text); a value that is not a decimal, or has more digits before the point
+  than `precision - scale`, is refused with a 400 (Strapi's `ValidationError` on the Strapi API
+  style, Laravel's validation errors on the Laravel API style). The Laravel API style answers every
+  decimal as a string, as it always has; the Strapi API style answers a decimal of 15 digits or
+  more as a string (a JSON number of that many digits is rounded by every JavaScript client), over
+  REST, GraphQL (`String`), the OpenAPI document and the MCP tools, and every other decimal as the
+  number Strapi answers. Its filters compare a decimal stating its digits with the filter's value at
+  the field's scale, never through a float (as a numeric literal on MySQL and PostgreSQL, as text on
+  SQLite). Send an exact value as a string: a JSON number is a double by the time PHP reads it, so
+  the digits a double does not keep are gone before the API sees them. On the Strapi API style a
+  decimal of 15 digits or more on SQLite matches equal values exactly in a filter, but an ordering
+  comparison (`$lt`, `$lte`, `$gt`, `$gte`, `$between`) or a sort on it compares text, and a
+  data-transfer archive carries it as a number, as Strapi's do (a `decimalPrecision` downgrade gap,
+  located at the type or component and the field); on Strapi's storage layout the column is
+  Strapi's, which SQLite keeps as a double read back with 14 digits (the same gap).
 - `strapi`: the attribute's column settings, `"column": { "type": "decimal", "args": [p, s] }`,
   which Strapi's database layer lays over the decimal(10, 2) it makes. Strapi itself reads and
   writes a decimal as a JavaScript number on every database, so a decimal of more than 15 digits
@@ -120,7 +131,12 @@ on Filament, Strapi's (10, 2), Drizzle's `decimal`/`numeric` on Express. With th
   digits back from these settings, and reports other column settings on a decimal
   (`decimalColumn`) rather than dropping them silently.
 - `express`: `decimal('x', { precision, scale })` on MySQL, `numeric(...)` on PostgreSQL; SQLite
-  takes no digits, so `numeric('x')`, or `text('x')` for a decimal of more than 15 digits.
+  takes no digits, so `numeric('x')`, or `text('x')` for a decimal of more than 15 digits, which a
+  JavaScript number keeps. Drizzle answers such a decimal as a string on every database, and the
+  generated admin shows and edits it as text (`TextField`, `TextInput`), not as a number that would
+  round it. The generated list sorts rows in JavaScript, comparing such strings as text, and the
+  JSON body parser reads a JSON number as a double, so send an exact value as a string: a
+  `decimalPrecision` downgrade gap, located, says both.
 
 ## camis.config.json
 
