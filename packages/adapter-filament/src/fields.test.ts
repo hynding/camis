@@ -99,6 +99,33 @@ describe("emitField", () => {
     );
     expect(emitField({ type: "decimal", name: "price" } as Field).cast).toBe("'decimal:2'");
   });
+  it("keeps Laravel's decimal(8, 2) where a decimal states no digits", () => {
+    const f = emitField({ type: "decimal", name: "price" } as Field);
+    expect(f.migration).toBe("$table->decimal('price')->nullable()");
+    expect(f.cast).toBe("'decimal:2'");
+  });
+  it("gives a decimal its digits, and its scale to the cast that reads it as a string", () => {
+    const f = emitField({ type: "decimal", name: "rate", precision: 9, scale: 4 } as Field);
+    expect(f.migration).toBe("$table->decimal('rate', 9, 4)->nullable()");
+    expect(f.cast).toBe("'decimal:4'");
+  });
+  // SQLite keeps a decimal column's values as doubles, which keep 15 significant digits.
+  it("keeps a decimal beyond a double as text on SQLite and as DECIMAL elsewhere, decided when it migrates", () => {
+    const f = emitField({
+      type: "decimal",
+      name: "balance",
+      required: true,
+      precision: 20,
+      scale: 6,
+    } as Field);
+    expect(f.migration).toBe(
+      "(\\Illuminate\\Support\\Facades\\Schema::getConnection()->getDriverName() === 'sqlite' ? $table->string('balance', 22) : $table->decimal('balance', 20, 6))",
+    );
+    expect(f.cast).toBe("'decimal:6'");
+    expect(
+      emitField({ type: "decimal", name: "exact", precision: 15, scale: 2 } as Field).migration,
+    ).toBe("$table->decimal('exact', 15, 2)->nullable()");
+  });
   // Strapi's richtext is Markdown: an HTML editor would rewrite it on the first save.
   it("edits richText as Markdown", () => {
     const f = emitField({ type: "richText", name: "body" } as Field);
