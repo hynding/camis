@@ -192,6 +192,35 @@ describe("patchBootstrapProviders", () => {
     const once = patchBootstrapProviders(STOCK_PROVIDERS);
     expect(patchBootstrapProviders(once)).toBe(once);
   });
+  // Laravel writes the file with PHP_EOL, and a hand-edited one may use any indent or form.
+  it.each([
+    [
+      "CRLF line endings",
+      STOCK_PROVIDERS.replaceAll("\n", "\r\n"),
+      "    App\\Providers\\Filament\\AdminPanelProvider::class,\r\n" + ENTRY + "\r\n];",
+    ],
+    [
+      "a tab indent",
+      STOCK_PROVIDERS.replaceAll("    ", "\t"),
+      "\tApp\\Providers\\Filament\\AdminPanelProvider::class,\n" +
+        ENTRY.replace("    ", "\t") +
+        "\n];",
+    ],
+    [
+      "no trailing comma",
+      STOCK_PROVIDERS.replace("AdminPanelProvider::class,", "AdminPanelProvider::class"),
+      "    App\\Providers\\Filament\\AdminPanelProvider::class,\n" + ENTRY + "\n];",
+    ],
+    [
+      "a leading backslash",
+      STOCK_PROVIDERS.replace("    App\\Providers\\Filament", "    \\App\\Providers\\Filament"),
+      "    \\App\\Providers\\Filament\\AdminPanelProvider::class,\n" + ENTRY + "\n];",
+    ],
+  ])("registers the provider after an entry with %s, idempotently", (_form, source, expected) => {
+    const once = patchBootstrapProviders(source);
+    expect(once).toContain(expected);
+    expect(patchBootstrapProviders(once)).toBe(once);
+  });
   it("is patched by the scaffold", async () => {
     const { io, written } = fakeIo({
       files: {
