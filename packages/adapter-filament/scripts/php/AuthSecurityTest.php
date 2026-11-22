@@ -892,6 +892,63 @@ class AuthSecurityTest extends TestCase
         );
     }
 
+    /** The bodies of the mails sent so far, by recipient. */
+    private static function mailBodies(): array
+    {
+        $bodies = [];
+        foreach (\Illuminate\Support\Facades\Mail::mailer('array')->getSymfonyTransport()->messages()->all() as $sent) {
+            $bodies[$sent->getEnvelope()->getRecipients()[0]->getAddress()] = (string) $sent->getOriginalMessage()->getHtmlBody();
+        }
+
+        return $bodies;
+    }
+
+    /**
+     * A username is looked up as an email too (as Strapi looks it up), so a username naming another
+     * address would tell its registrant, by the mail they get, whether that address has an
+     * account: it is refused before any lookup, alike whether or not the address has one.
+     */
+    public function test_a_username_naming_another_address_is_refused_before_any_lookup(): void
+    {
+        $this->confirmationOn();
+        $answers = [];
+        foreach (['bob', 'alice'] as $i => $existing) {
+            $this->register($existing === 'alice' ? 'alice' : 'bob');
+            $this->freshRequest();
+            $answers[] = $this->withServerVariables(['REMOTE_ADDR' => "10.8.0.{$i}"])
+                ->postJson('/api/auth/local/register', ['username' => 'Alice@Example.test', 'email' => "mallory{$i}@example.test", 'password' => 'secret1']);
+        }
+        $answers[0]->assertStatus(400)->assertJsonPath('error.name', 'ValidationError')
+            ->assertJsonPath('error.message', 'username must not be an email address other than the one registering');
+        self::assertSame([$answers[0]->status(), $answers[0]->json()], [$answers[1]->status(), $answers[1]->json()]);
+        self::assertSame(0, \App\Models\User::query()->where('email', 'like', 'mallory%')->count());
+        // An address of one's own as a username is no other address.
+        $this->freshRequest();
+        $this->postJson('/api/auth/local/register', ['username' => 'Carol@Example.test', 'email' => 'carol@example.test', 'password' => 'secret1'])
+            ->assertOk()->assertJsonPath('sent', true);
+        // With the setting off Strapi takes such a username, as Strapi does.
+        config(['camis.users_permissions.hide_account_existence' => false]);
+        $this->freshRequest();
+        $this->postJson('/api/auth/local/register', ['username' => 'alice@example.test', 'email' => 'mallory@example.test', 'password' => 'secret1'])
+            ->assertStatus(400)->assertJsonPath('error.message', 'Email or Username are already taken');
+    }
+
+    /** A taken address and a taken username get the one notice, which says neither was taken. */
+    public function test_the_registration_notice_does_not_say_which_name_was_taken(): void
+    {
+        $this->register('alice');
+        $this->confirmationOn();
+        self::forgetMails();
+        foreach ([['alice2', 'alice@example.test'], ['alice', 'dave@example.test']] as $i => [$username, $email]) {
+            $this->freshRequest();
+            $this->withServerVariables(['REMOTE_ADDR' => "10.9.0.{$i}"])
+                ->postJson('/api/auth/local/register', ['username' => $username, 'email' => $email, 'password' => 'secret1'])->assertOk();
+        }
+        $bodies = self::mailBodies();
+        self::assertSame($bodies['alice@example.test'], $bodies['dave@example.test']);
+        self::assertStringContainsString('different username', $bodies['dave@example.test']);
+    }
+
     /** Without email confirmation a new account gets its tokens at once, so a taken one is said so, as in Strapi. */
     public function test_registration_without_confirmation_still_says_an_address_is_taken(): void
     {

@@ -406,6 +406,15 @@ describe("users-permissions register and /users queries", () => {
 });
 
 describe("users-permissions config and errors", () => {
+  // Which of the address or the username was taken is what a registrant must not learn.
+  it("has one registration notice, naming neither the address nor the username as taken", () => {
+    const config = content("config/camis.php");
+    expect(config).toContain("'registration_attempted' => [");
+    expect(config).not.toContain("'username_taken'");
+    expect(content("app/Support/StrapiUsers.php")).toContain(
+      "public static function sendRegistrationNotice(string $email): void",
+    );
+  });
   // Strapi's bcryptjs writes $2a$, which Laravel's bcrypt refuses to verify and throws on: an
   // imported account must sign in, and a hash no hasher verifies must fail as a wrong password.
   it("reads bcryptjs hashes as PHP's and fails a hash the hasher cannot verify as a wrong one", () => {
