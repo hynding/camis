@@ -77,7 +77,6 @@ final class DecimalDigits
             $decimals[] = $decimal;
         }
         $target = [
-            'name' => $column,
             'wrapped' => $query->getQuery()->getGrammar()->wrap($column),
             'bound' => match ($query->getConnection()->getDriverName()) {
                 'sqlite' => '?',
@@ -103,12 +102,17 @@ final class DecimalDigits
         if ($listed) {
             // A value the column cannot hold equals none of its values.
             $held = array_values(array_filter($decimals, fn (BigDecimal $d) => self::holds($target, $d)));
+            if ($held === []) {
+                self::decided($query, $target, $operator === '$notIn');
+
+                return true;
+            }
             $not = $operator === '$notIn' ? ' NOT' : '';
-            match (true) {
-                $held !== [] => $query->whereRaw("{$target['wrapped']}{$not} IN (" . implode(', ', array_fill(0, count($held), $target['bound'])) . ')', array_map(fn (BigDecimal $d) => (string) $d->toScale($target['scale']), $held)),
-                $not === '' => $query->whereRaw('0 = 1'),
-                default => $query->whereNotNull($target['name']),
-            };
+            $placeholders = implode(', ', array_fill(0, count($held), $target['bound']));
+            $query->whereRaw(
+                "{$target['wrapped']}{$not} IN ({$placeholders})",
+                array_map(fn (BigDecimal $d) => (string) $d->toScale($target['scale']), $held),
+            );
 
             return true;
         }
@@ -120,7 +124,7 @@ final class DecimalDigits
     /**
      * One comparison of the column with $decimal, decided alone where the column cannot hold it.
      *
-     * @param array{name: string, wrapped: string, bound: string, scale: int, largest: BigDecimal} $column
+     * @param array{wrapped: string, bound: string, scale: int, largest: BigDecimal} $column
      */
     private static function compare(Builder $query, array $column, string $operator, BigDecimal $decimal): void
     {
@@ -131,14 +135,32 @@ final class DecimalDigits
         }
         // Above $decimal is at or above its ceiling at the scale; below it, at or below its floor.
         $nearest = $decimal->toScale($column['scale'], in_array($operator, ['$gt', '$gte'], true) ? RoundingMode::CEILING : RoundingMode::FLOOR);
-        $none = fn () => $query->whereRaw('0 = 1');
-        $all = fn () => $query->whereNotNull($column['name']);
-        match ($operator) {
-            '$eq' => $none(),
-            '$ne' => $all(),
-            '$gt', '$gte' => $nearest->isGreaterThan($column['largest']) ? $none() : ($nearest->isLessThan($column['largest']->negated()) ? $all() : $query->whereRaw("{$column['wrapped']} >= {$column['bound']}", [(string) $nearest])),
-            '$lt', '$lte' => $nearest->isLessThan($column['largest']->negated()) ? $none() : ($nearest->isGreaterThan($column['largest']) ? $all() : $query->whereRaw("{$column['wrapped']} <= {$column['bound']}", [(string) $nearest])),
+        $largest = $column['largest'];
+        $every = match ($operator) {
+            '$eq' => false,
+            '$ne' => true,
+            '$gt', '$gte' => $nearest->isGreaterThan($largest) ? false : ($nearest->isLessThan($largest->negated()) ? true : null),
+            '$lt', '$lte' => $nearest->isLessThan($largest->negated()) ? false : ($nearest->isGreaterThan($largest) ? true : null),
         };
+        if ($every !== null) {
+            self::decided($query, $column, $every);
+
+            return;
+        }
+        $comparison = in_array($operator, ['$gt', '$gte'], true) ? '>=' : '<=';
+        $query->whereRaw("{$column['wrapped']} {$comparison} {$column['bound']}", [(string) $nearest]);
+    }
+
+    /**
+     * A comparison decided without the filter's value, matching every value the column holds or
+     * none, yet unknown for a row without one as SQL's own comparison is, so $not still leaves
+     * that row out.
+     *
+     * @param array{wrapped: string} $column
+     */
+    private static function decided(Builder $query, array $column, bool $every): void
+    {
+        $query->whereRaw($every ? "{$column['wrapped']} = {$column['wrapped']}" : "{$column['wrapped']} <> {$column['wrapped']}");
     }
 
     /**
