@@ -37,6 +37,19 @@ describe("toAttribute — scalars", () => {
   });
 });
 
+describe("toAttribute — decimal digits", () => {
+  it("leaves a decimal stating no digits to Strapi's decimal(10, 2)", () => {
+    expect(toAttribute({ type: "decimal", name: "fee" } as Field)).toEqual({ type: "decimal" });
+  });
+  // Strapi 5.48's database layer builds a scalar's column from its type, then lays the
+  // attribute's `column` over it: its type and args are the column's.
+  it("gives a decimal's column its digits through Strapi's column settings", () => {
+    expect(
+      toAttribute({ type: "decimal", name: "balance", precision: 20, scale: 6 } as Field),
+    ).toEqual({ type: "decimal", column: { type: "decimal", args: [20, 6] } });
+  });
+});
+
 describe("toAttribute — relations", () => {
   it("maps a relation with an inverse to the api:: target uid + inversedBy", () => {
     expect(
