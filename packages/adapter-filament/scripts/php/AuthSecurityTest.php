@@ -757,6 +757,68 @@ class AuthSecurityTest extends TestCase
      *
      * @return \ArrayObject<string, int>
      */
+    /** An account whose stored password hash is $hash, written as an import or another driver left it. */
+    private function accountWithHash(string $username, string $hash): void
+    {
+        $this->register($username);
+        \App\Models\User::query()->where('username', $username)->toBase()->update(['password' => $hash]);
+    }
+
+    /** What a sign-in answers, as a client sees it. */
+    private function signInSeen(string $identifier, string $password): array
+    {
+        $this->freshRequest();
+        $response = $this->postJson('/api/auth/local', ['identifier' => $identifier, 'password' => $password]);
+
+        return [$response->status(), $response->json()];
+    }
+
+    public function test_an_account_with_strapis_bcryptjs_hash_signs_in(): void
+    {
+        config(['camis.auth_throttle_per_minute' => 10, 'camis.users_permissions.auth_address_throttle_per_minute' => 10]);
+        // bcryptjs writes $2a$ and $2b$ for the hash PHP writes as $2y$.
+        foreach (['2a', '2b'] as $variant) {
+            $this->accountWithHash("js{$variant}", '$'.$variant.substr(password_hash('secret1', PASSWORD_BCRYPT, ['cost' => 4]), 3));
+            $this->login("js{$variant}")->assertOk();
+            self::assertSame($this->signInSeen('nobody', 'secret1'), $this->signInSeen("js{$variant}", 'wrong'));
+        }
+    }
+
+    public function test_a_stored_hash_the_hasher_cannot_verify_answers_as_no_account_does(): void
+    {
+        config(['camis.auth_throttle_per_minute' => 10, 'camis.users_permissions.auth_address_throttle_per_minute' => 10]);
+        $this->accountWithHash('plain', 'secret1');
+        $this->accountWithHash('argon', password_hash('secret1', PASSWORD_ARGON2ID));
+        $unknown = $this->signInSeen('nobody', 'secret1');
+        self::assertSame(400, $unknown[0]);
+        self::assertSame($unknown, $this->signInSeen('plain', 'secret1'));
+        self::assertSame($unknown, $this->signInSeen('argon', 'secret1'));
+        // A password change checks the current password the same way: refused, never a 500.
+        $jwt = $this->register('changer');
+        \App\Models\User::query()->where('username', 'changer')->toBase()->update(['password' => 'secret1']);
+        $this->freshRequest();
+        $this->withToken($jwt)->postJson('/api/auth/change-password', ['currentPassword' => 'secret1', 'password' => 'secret2', 'passwordConfirmation' => 'secret2'])
+            ->assertStatus(400)->assertJsonPath('error.message', 'The provided current password is invalid');
+    }
+
+    /** HASH_DRIVER moved off the driver the accounts were hashed with: they fail as no account does. */
+    public function test_accounts_of_another_hash_driver_answer_as_no_account_does(): void
+    {
+        $this->register('alice');
+        config(['hashing.driver' => 'argon2id']);
+        app('hash')->forgetDrivers();
+        self::assertSame($this->signInSeen('nobody', 'secret1'), $this->signInSeen('alice', 'secret1'));
+    }
+
+    public function test_an_imported_account_keeps_a_hash_php_verifies(): void
+    {
+        $this->accountWithHash('imported', '$2a'.substr(password_hash('secret1', PASSWORD_BCRYPT, ['cost' => 4]), 3));
+        $archive = \App\Support\StrapiExport::write(sys_get_temp_dir().'/camis-hash-'.bin2hex(random_bytes(4)), \App\Support\StrapiExport::STAGES, true, null)['path'];
+        \App\Support\StrapiImport::open($archive, null)->run(\App\Support\StrapiImport::STAGES);
+        unlink($archive);
+        self::assertStringStartsWith('$2y$', (string) \App\Models\User::query()->where('username', 'imported')->value('password'));
+    }
+
     private function countHashing(): \ArrayObject
     {
         $tally = new \ArrayObject(['make' => 0, 'check' => 0]);

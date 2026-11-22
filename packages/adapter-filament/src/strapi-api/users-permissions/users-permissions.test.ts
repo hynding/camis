@@ -406,6 +406,21 @@ describe("users-permissions register and /users queries", () => {
 });
 
 describe("users-permissions config and errors", () => {
+  // Strapi's bcryptjs writes $2a$, which Laravel's bcrypt refuses to verify and throws on: an
+  // imported account must sign in, and a hash no hasher verifies must fail as a wrong password.
+  it("reads bcryptjs hashes as PHP's and fails a hash the hasher cannot verify as a wrong one", () => {
+    const hashes = content("app/Support/StrapiHashes.php");
+    expect(hashes).toContain("public static function fromBcryptjs(mixed $hash): ?string");
+    expect(hashes).toContain("public static function check(string $password, string $hash): bool");
+    expect(content("app/Support/StrapiImport.php")).toContain(
+      "'password' => StrapiHashes::fromBcryptjs($data['password'] ?? null),",
+    );
+    expect(content("app/Support/StrapiAdminImport.php")).toContain("StrapiHashes::fromBcryptjs(");
+    expect(content("app/Support/StrapiUsers.php")).toContain("StrapiHashes::check(");
+    expect(content("app/Http/Controllers/Api/AuthController.php")).toContain(
+      "StrapiUsers::passwordMatches($user, (string) $body['currentPassword'])",
+    );
+  });
   it("keeps Strapi's advanced settings defaults in config", () => {
     const config = content("config/camis.php");
     for (const key of [
