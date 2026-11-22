@@ -78,7 +78,7 @@ final class DecimalDigits
         }
         $target = [
             'wrapped' => $query->getQuery()->getGrammar()->wrap($column),
-            'bound' => match ($query->getConnection()->getDriverName()) {
+            'bound' => match ($query->getModel()->getConnection()->getDriverName()) {
                 'sqlite' => '?',
                 'pgsql' => 'CAST(? AS NUMERIC)',
                 default => "CAST(? AS DECIMAL({$precision}, {$scale}))",
@@ -141,6 +141,7 @@ final class DecimalDigits
             '$ne' => true,
             '$gt', '$gte' => $nearest->isGreaterThan($largest) ? false : ($nearest->isLessThan($largest->negated()) ? true : null),
             '$lt', '$lte' => $nearest->isLessThan($largest->negated()) ? false : ($nearest->isGreaterThan($largest) ? true : null),
+            default => throw new \LogicException("{$operator} is not a comparison"),
         };
         if ($every !== null) {
             self::decided($query, $column, $every);
