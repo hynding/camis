@@ -9,7 +9,6 @@ use App\Models\Concerns\HasDocumentId;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Mail\Message;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 
 final class StrapiUsers
@@ -117,21 +116,10 @@ final class StrapiUsers
     }
 
 
-    /**
-     * Whether $password is the account's, after exactly one hash check whether or not there is an
-     * account with a password (StrapiHashes::matches). A hash of another cost (a Strapi import's
-     * bcryptjs 10) takes another time to check, which tells the account apart; once the password
-     * is known it is stored at the configured one.
-     */
+    /** Whether $password is the account's, by one hash check whatever the name found (StrapiHashes::matches). */
     public static function passwordMatches(?User $user, string $password): bool
     {
-        $hash = $user !== null && ($user->password ?? '') !== '' ? (string) $user->password : null;
-        $matches = StrapiHashes::matches($password, $hash, 'user', $user?->getKey());
-        if ($matches && $user !== null && Hash::needsRehash((string) StrapiHashes::fromBcryptjs($hash))) {
-            $user->forceFill(['password' => Hash::make($password)])->save();
-        }
-
-        return $matches;
+        return StrapiHashes::matches($password, $user, 'user');
     }
 
     public static function sendResetPassword(User $user, string $token): void

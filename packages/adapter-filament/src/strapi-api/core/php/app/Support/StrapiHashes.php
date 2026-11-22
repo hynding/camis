@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support;
 
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -23,16 +24,22 @@ final class StrapiHashes
     }
 
     /**
-     * Whether $password is that of $account's account $id, stored as $hash (null: no account, or
-     * none with a password), after exactly one hash check of the configured cost whatever it is: a
-     * missing or unverifiable hash is checked against a stand-in, so a wrong name takes as long as a
-     * wrong password.
+     * Whether $password is $owner's, the $account account (null: none matched the name), after
+     * exactly one hash check of the configured cost whatever it is: no account, no password or an
+     * unverifiable hash is checked against a stand-in, so a wrong name takes as long as a wrong
+     * password. A hash of another cost (a Strapi import's bcryptjs 10) takes another time to check,
+     * which tells the account apart: once the password is known it is stored at the configured one.
      */
-    public static function matches(string $password, ?string $hash, string $account, int|string|null $id): bool
+    public static function matches(string $password, ?Model $owner, string $account): bool
     {
-        $matches = $hash === null ? null : self::verify($password, $hash, $account, $id);
+        $stored = $owner?->getAttribute('password');
+        $hash = is_string($stored) && $stored !== '' ? $stored : null;
+        $matches = $hash === null ? null : self::verify($password, $hash, $account, $owner?->getKey());
         if ($matches === null) {
             Hash::check($password, self::standIn());
+        }
+        if ($matches === true && $owner !== null && Hash::needsRehash((string) self::fromBcryptjs($hash))) {
+            $owner->forceFill(['password' => Hash::make($password)])->save();
         }
 
         return $matches === true;

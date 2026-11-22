@@ -43,9 +43,8 @@ final class StrapiAdminController
             throw new StrapiError(400, 'ApplicationError', 'Missing credentials');
         }
         $admin = AdminUser::query()->where('email', mb_strtolower($email))->first();
-        $hash = $admin?->getAttribute('password');
         // One hash check whatever the email finds, so its time tells no admin account apart.
-        if (! StrapiHashes::matches($password, is_string($hash) && $hash !== '' ? $hash : null, 'admin', $admin?->getKey()) || $admin === null) {
+        if (! StrapiHashes::matches($password, $admin, 'admin') || $admin === null) {
             throw new StrapiError(400, 'ApplicationError', 'Invalid credentials');
         }
         if (! $admin->is_active) {
