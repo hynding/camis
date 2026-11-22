@@ -197,7 +197,10 @@ class AdminAccountsTest extends TestCase
         $this->admin();
         $this->admin('plain@example.test');
         $this->admin('imported@example.test');
+        $this->admin('current@example.test');
         $rounds = (int) config('hashing.bcrypt.rounds');
+        $current = '$2b'.substr(password_hash('Admin-pass-1', PASSWORD_BCRYPT, ['cost' => $rounds]), 3);
+        AdminUser::query()->where('email', 'current@example.test')->toBase()->update(['password' => $current]);
         AdminUser::query()->where('email', 'plain@example.test')->toBase()->update(['password' => 'Admin-pass-1']);
         AdminUser::query()->where('email', 'imported@example.test')->toBase()->update(['password' => '$2a'.substr(password_hash('Admin-pass-1', PASSWORD_BCRYPT, ['cost' => $rounds + 1]), 3)]);
         $checks = new \ArrayObject(['n' => 0]);
@@ -226,7 +229,36 @@ class AdminAccountsTest extends TestCase
         self::assertTrue($auth->attempt(['email' => 'imported@example.test', 'password' => 'Admin-pass-1']));
         $auth->logout();
         self::assertStringStartsWith(sprintf('$2y$%02d$', $rounds), (string) AdminUser::query()->where('email', 'imported@example.test')->value('password'));
+        // Strapi's $2b$ hash at the configured cost already serves: the session guard's own rehash
+        // (needsRehash reads $2b$ as another algorithm) must not store it again.
+        self::assertTrue($auth->attempt(['email' => 'current@example.test', 'password' => 'Admin-pass-1']));
+        $auth->logout();
+        self::assertSame($current, AdminUser::query()->where('email', 'current@example.test')->value('password'));
         self::assertTrue($auth->attempt(['email' => 'admin@example.test', 'password' => 'Admin-pass-1']));
+    }
+
+    /** An earlier provider (AppServiceProvider, say) may resolve the admin guard while it boots. */
+    public function test_the_admin_guard_resolves_while_earlier_providers_boot(): void
+    {
+        $app = require $this->app->bootstrapPath('app.php');
+        $provider = null;
+        $app->booting(function ($app) use (&$provider): void {
+            $provider = $app['auth']->guard('admin')->getProvider()::class;
+        });
+        try {
+            $app->bootstrapWith([
+                \Illuminate\Foundation\Bootstrap\LoadEnvironmentVariables::class,
+                \Illuminate\Foundation\Bootstrap\LoadConfiguration::class,
+                \Illuminate\Foundation\Bootstrap\RegisterFacades::class,
+                \Illuminate\Foundation\Bootstrap\RegisterProviders::class,
+                \Illuminate\Foundation\Bootstrap\BootProviders::class,
+            ]);
+        } finally {
+            \Illuminate\Container\Container::setInstance($this->app);
+            \Illuminate\Support\Facades\Facade::clearResolvedInstances();
+            \Illuminate\Support\Facades\Facade::setFacadeApplication($this->app);
+        }
+        self::assertSame(\App\Auth\CamisAdminUserProvider::class, $provider);
     }
 
     public function test_a_sign_in_returns_strapis_body_and_a_token_for_the_admin_api(): void
