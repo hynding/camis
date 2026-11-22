@@ -3298,6 +3298,131 @@ reaching through it is served (`api-enforcement.test.ts`); roles without any con
 
 ---
 
+## Phase 96 — the Strapi target boots with any mix of conditions (`adapter-strapi`)
+
+A generated Strapi project with roles did not boot on a fresh database (issue #102):
+
+- An admin permission with no condition has no `conditions` key, and Strapi 5's query engine
+  binds that json column unserialised, which sqlite refuses (`SQLite3 can only bind numbers,
+  strings, bigints, buffers, and null`). The bootstrap now creates each admin permission with
+  `conditions: []` beneath its own.
+- `src/index.ts` imported `./permissions/conditions` even when no grant carried a condition and
+  the module was not emitted. The bootstrap now imports and registers the conditions module only
+  with it (`permissionsIndexTs(withConditions)`), so a project with conditions emits the same
+  bootstrap as before, and one without emits no Ring 1 runtime it never runs.
+
+The bootstrap still creates its admin permissions again on every start (issue #100).
+
+Exit: `bootstrap-boot.test.ts` (every module the bootstrap imports is emitted; the bootstrap runs
+against a query engine that refuses an absent `conditions`, for a project with no condition and
+one with conditions on some grants only; the golden of a bootstrap without conditions), which run
+on every pull request. The boot smoke (`pnpm --filter @camis/adapter-strapi smoke`) boots both
+notes projects on fresh sqlite databases besides the blog, and reads their public notes (200); it
+runs by hand, or in the `strapi-boot-smoke` workflow, which runs nightly or when dispatched, not on
+pull requests.
+
+---
+
+## Phase 97 — field names a target keeps for itself (`ir-core`, `strapi-schema`, `adapter-strapi`, `adapter-filament`, `adapter-express`, `cli`)
+
+The IR accepted fields named `publishedAt` and `updatedAt`, the Strapi target emitted them, and
+Strapi then overwrote the one and refused writes naming the other (`Invalid key updatedAt`), with
+no gap reported (issue #103).
+
+- **Where the rule lives.** Only `id` is kept by every target, and it stays an IR rule
+  (`reserved_field_name`). The other names are one target's concept, so the adapter that owns the
+  name reports it: an `error`-severity `reservedFieldName` gap, located at the content type (or
+  component) and the field, so `camis generate`/`camis build` stop before writing. A relation's
+  inverse is located on the type it lands on, by its name there; a field is reported once for each
+  name the target keeps however many of its names (a key and its key column) map onto it, and its
+  inverse apart, likewise once however many of its names map onto one (the message says the name
+  the target maps it to, where that is not its own), so `updatedBy` with inverse `updatedBy` is
+  reported on both types. `ir-core`'s
+  `reservedNameGaps(doc, target, reserved, namesOf, options)` walks the fields; each target says how
+  it maps a field's names and which it keeps, and whether a built-in type's own fields are checked
+  (`builtins`): Strapi and Filament map a built-in type onto a model of their own (users-permissions'
+  user, the host app's `users` or Strapi's `up_users`) and generate nothing from its own fields,
+  while Express emits it as a plain table with the same timestamps, so only Express checks them.
+  A built-in type's relations' inverses are checked on every target: they land on the related
+  type, which each generates (`User.notes` with inverse `createdBy` is a second `created_by_id` on
+  the Filament Strapi API style's `notes`, and an inverse `publishedAt` overwrites Strapi's key).
+- **Strapi** (`@camis/strapi-schema`'s `STRAPI_RESERVED_NAMES`, `strapiReservedNameGaps`). What
+  camis refuses: the keys of the entry itself, `documentId`, `createdAt`, `updatedAt`,
+  `publishedAt`, `createdBy`, `updatedBy`, `locale`, `localizations`, and the
+  `created_by_id`/`updated_by_id` key columns; Strapi's discriminator keys `__component` (which a
+  dynamic zone item's component goes by on the wire, beside the item's own keys) and
+  `__contentType`, which only an API key can spell (camis's own rule, since they are keys on the
+  wire: Strapi's builder snake_cases a name before comparing it, which strips the leading
+  underscores, so it does not refuse them); and any name with Strapi's `strapi`, `_strapi`
+  or `__strapi` prefix (`strapi_stage`, `strapi_assignee` are its own columns). Names are compared
+  snake_cased as Strapi's Content-Type Builder compares attribute names, so an API key
+  `published_at` or `PublishedAt` is caught. A field's API key, a relation's inverse (Strapi adds it
+  to the related type) and a component's field (the builder refuses it there too) are checked. What
+  Strapi's builder additionally refuses, and camis lets through: `status` (since 5.48), `meta` and
+  `entry_id`, which are not keys of an entry (`meta` sits beside `data` in a response), so such a
+  field reads and writes as it should, and Strapi only warns of `status` when it boots; the blog
+  fixtures keep a `status` and the catalogs a `meta`. Each decision is pinned by a test.
+- **Embedded components.** A non-repeatable component's fields are flattened into the row holding
+  it, as columns named by their path snake_cased and joined, so a field `created` holding a
+  component with a field `at` is a column `created_at`, which a target may keep. With the walker's
+  `columns` option a target says what a field's column is called by its path from its row, and an
+  embedded field is reported located at the content type, the component and its field, with the
+  path in the message. Such a column is checked against the names the target keeps, not a prefix
+  it keeps, which is its own names' (on the Filament Strapi API style `Note.strapi` embedding a
+  field `foo` is reported for the key `strapi`, not again as `strapi_foo`). A repeatable component, or a dynamic zone where the target keeps one as
+  tables, is rows of a table of its own: the target names each item table it emits (`items`), with
+  the names its rows keep, and an item's fields, its embedded components' included, are checked
+  from the item's row, the path restarting there, located at the component and its field. A
+  component's path is checked from no row of its own where the target keeps no table of its items:
+  only embedded, `Note.seo` holding a Seo that embeds Stamp as `created` is `seo_created_at`.
+- **Filament.** The Strapi API style answers Strapi's REST API, so it reports Strapi's names, and
+  also a column of its own rows a field's column would repeat: a to-one relation named `document`
+  keeps `document_id`. On the Laravel storage layout a one-to-many's key is a column of its
+  target's rows, named by its inverse, so `Note.tags` with inverse `document` is a second
+  `document_id` on `tags`, reported as the inverse on Tag; without an inverse it is named by the
+  type holding the relation (a type `Document`'s is `document_id`), reported at the relation. A
+  one-to-one's inverse keeps no column (the key is the owning side's), nor does a one-to-many to a
+  built-in type, whose table the host app owns; the Strapi storage layout links either in a table
+  of Strapi's. A to-one polymorphic relation, served only on the Strapi API style over Laravel
+  storage, keeps its link's `<name>_id` and `<name>_type` on the entry's row (one named
+  `document` keeps a second `document_id`); a to-many one keeps its links in a table of their own,
+  and the IR keeps either out of a component. The Laravel API style reports `createdAt` and `updatedAt`, whose columns are
+  Laravel's timestamps on every table, a component item's included. On the Laravel storage layout,
+  in either API style, an embedded component's columns land on the entry's row, checked against
+  the names above, and an item's fields' columns on its item table's rows, checked against that
+  row's own: its timestamps. The item tables are those the generator plans (`childTableEmit` over
+  `expandComponents`): a repeatable's, and on the Strapi API style only a repeatable's nested in an
+  item and a dynamic zone member's (the Laravel API style keeps a zone in one column). On the
+  Strapi API style a to-one relation inside a component is a key column, `created.by` being
+  `created_by_id` (the entry's creator, not an item's: an item's row keeps none), and a media field
+  is a column only without a media library: the Strapi API style keeps one, whose files a media
+  field links, only when a content type has a media field of its own or a file type is declared,
+  as `mediaPlan` decides. The Strapi storage layout keeps a component in a table of its own, as
+  Strapi does.
+- **Express** reports `createdAt` and `updatedAt` on a content type, a built-in one included (each
+  table's timestamp columns), an embedded component's columns on the entry's table among them. A
+  repeatable component's items are rows of a table without timestamps whose rows keep a key to
+  their entry, `<type>_id` (`itemEntryKey`): an item's field whose column there, by its path from
+  the item, is that key (`noteId` in `Note.items`) is reported, since Drizzle would keep one
+  `note_id` and lose the foreign key.
+- **Item tables' own columns.** On Filament's Laravel storage layout an item's row keeps, besides
+  its timestamps, its key to the row holding it, `<type>_id` (`<parent model>_id` in a nested
+  table, `note_items_id`), and a dynamic zone member's its place, `position` (on the Strapi API
+  style, where a zone is tables); an item's field whose column repeats either is reported, located
+  at the component and its field, with its place from the entry's type in the message (in
+  `Note.items.sub`, a nested table's item; embedded in `Note.items.created`, an item's embedded
+  component's field). A repeatable item's rows keep no `position`, and none keeps the entry's own
+  columns (`document_id`, `created_by_id`).
+- **Import.** A Strapi project's schema.json never carries these names (Strapi adds them itself and
+  its builder refuses them), so it imports and generates as before. One edited by hand to carry one
+  imports as it is, and generation reports it.
+
+Exit: `reserved-names.test.ts` in `ir-core`, `strapi-schema`, `adapter-strapi` (with the import
+cases), `adapter-filament` (both API styles) and `adapter-express`, each with its fixtures reporting
+none; `generate.test.ts` in the CLI fails with a located message per name and writes nothing.
+
+---
+
 ## Sequencing rationale (quick reference)
 
 1. **Strapi first** — mature schema validates the IR fastest, with the thinnest adapter.

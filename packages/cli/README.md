@@ -59,6 +59,41 @@ components, and repeatables nested inside repeatables, are reported as downgrade
 Exit codes: `0` on success (capability *downgrades* are warnings); non-zero on a validation failure,
 an unreadable/invalid config, an unknown command, or an `error`-severity capability gap.
 
+A field named as a target names its own keys or columns is such an error (`reservedFieldName`,
+located at the content type or component and the field, before anything is written), since the
+target would overwrite or refuse it. Names are compared as the target maps them, so
+`published_at` and `PublishedAt` (an imported API key) are caught as `publishedAt` is. A relation's
+inverse is located on the type it lands on, a built-in type's included. Where a target flattens a
+non-repeatable component into the row holding it, its fields' columns are named by their path
+(`created` holding `at` is `created_at`) and checked too, located at the content type, the
+component and its field; where it stores a component's items as rows of a table of their own, an
+item's fields are checked against that table's own columns, located at the component and its
+field. A gap is reported only where the target emits the colliding column or key:
+
+- `strapi`, and `filament` with `apiStyle: "strapi"`: `documentId`, `createdAt`, `updatedAt`,
+  `publishedAt`, `createdBy`, `updatedBy`, `locale`, `localizations` (and `createdById`,
+  `updatedById`), the API keys `__component` and `__contentType`, and any name starting with
+  `strapi`, `_strapi` or `__strapi`, compared snake_cased; for a field, its API key, a relation's
+  inverse and a component's field. The Filament target also checks a to-one relation's key column,
+  so a relation named `document` (`document_id`) is refused there, and on the Laravel storage
+  layout a one-to-many's key column on its target's rows, named by its inverse (an inverse
+  `document`) or, without one, by the type holding it (a type `Document`), and a to-one
+  polymorphic relation's `<name>_id` and `<name>_type`. Strapi's Content-Type Builder additionally
+  refuses `status`, `meta` and `entry_id`; camis lets them through, since none is a key of an entry
+  and Strapi reads and writes such a field as it should.
+- `filament` with `apiStyle: "laravel"`: `createdAt` and `updatedAt`, whose columns are Laravel's
+  timestamps.
+- `filament` on the Laravel storage layout (either API style): an embedded component's columns on
+  the entry's row, and an item's columns on its item table's rows, which keep the timestamps, the
+  key to the row holding them (`note_id`, or `note_items_id` in a nested table) and, a dynamic zone
+  member's on the Strapi API style, `position`. A media field inside a component is a column there
+  unless the project keeps a media library.
+- `express`: `createdAt` and `updatedAt` on a content type, a built-in one included, and an
+  embedded component's columns on the entry's table; an item's columns on its item table, whose
+  rows keep the key to their entry (`note_id`).
+
+`id` is refused by `camis validate` itself, since every target keeps it.
+
 ## camis.config.json
 
 ```json

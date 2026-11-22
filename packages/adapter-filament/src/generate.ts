@@ -58,6 +58,7 @@ import { migrationOrder } from "./migration-order";
 import { emitModel } from "./model";
 import { filamentNames, snake, snakeColumn } from "./names";
 import { constrainedColumn, resolveRelations, type ForeignKeyColumn } from "./relations";
+import { filamentReservedNameGaps } from "./reserved-names";
 import { emitResourceFiles } from "./resource";
 import { draftPublishPlan } from "./strapi-api/core/draft-publish";
 import { guestsPlan } from "./strapi-api/core/guests";
@@ -121,6 +122,7 @@ export const filamentAdapter: GenerateAdapter = {
         ? []
         : [...emitCustomFields(doc, apiStyle === "strapi"), ...emitInverseLinks(rel.inverseLinks)];
     const gaps: CapabilityGap[] = [
+      ...filamentReservedNameGaps(normalized, apiStyle, storage, fileModel !== undefined),
       ...draftPublish.gaps,
       ...localization.gaps,
       ...morphs.gaps,

@@ -1,7 +1,7 @@
 import { stableJson, type GeneratedFile } from "@camis/adapter-kernel";
 import type { CapabilityGap, IrDocument } from "@camis/ir-schema";
 import type { Role } from "@camis/permissions";
-import { PERMISSIONS_INDEX_TS } from "../skeleton/templates";
+import { permissionsIndexTs } from "../skeleton/templates";
 import {
   checkedSingleSource,
   emitApiEnforcementFiles,
@@ -69,7 +69,7 @@ export const emitPermissions = (doc: IrDocument, roles: Role[]): PermissionEmiss
   return {
     files,
     gaps: [...gaps, ...apiRoles.gaps, ...enforcement.gaps],
-    indexContent: PERMISSIONS_INDEX_TS,
+    indexContent: permissionsIndexTs(conditions.length > 0),
     controllers: controllersOf(enforcement),
   };
 };

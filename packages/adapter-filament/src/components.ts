@@ -21,6 +21,9 @@ const studlySegment = (segment: string): string =>
 export const camelPath = (path: string[]): string =>
   path.map((s, i) => (i === 0 ? s : studlySegment(s))).join("");
 
+/** The column a dynamic zone member's row keeps its place in the zone by. */
+export const ITEM_POSITION_COLUMN = "position";
+
 export interface ChildTableEmit {
   table: string;
   model: string;
@@ -172,7 +175,7 @@ return new class extends Migration
     {
         Schema::create('${child.table}', function (Blueprint $table): void {
             $table->id();
-            $table->foreignId('${child.fk}')${constrainedTo(child.table, child.fk, child.parentTable)}->cascadeOnDelete();${child.ordered === true ? "\n            $table->unsignedInteger('position');" : ""}
+            $table->foreignId('${child.fk}')${constrainedTo(child.table, child.fk, child.parentTable)}->cascadeOnDelete();${child.ordered === true ? `\n            $table->unsignedInteger('${ITEM_POSITION_COLUMN}');` : ""}
 ${columns}
             $table->timestamps(${milliseconds ? "3" : ""});
         });
@@ -194,7 +197,7 @@ export const emitChildModel = (
   milliseconds = false,
 ): string => {
   const fillable = [
-    ...(child.ordered === true ? ["position"] : []),
+    ...(child.ordered === true ? [ITEM_POSITION_COLUMN] : []),
     ...child.emits.map((e) => e.column),
     ...child.relations.flatMap((r) => (r.foreignKey === null ? [] : [r.foreignKey.column])),
   ]
@@ -256,7 +259,7 @@ ${mediaComponents}${castsMethod}${media.join("")}${links.join("")}}
 // (a link a deleted target nulled) after the others.
 export const childRelationMethod = (child: ChildTableEmit): RelationMethod => ({
   import: "Illuminate\\Database\\Eloquent\\Relations\\HasMany",
-  php: `    public function ${child.relationName}(): HasMany\n    {\n        return $this->hasMany(${child.model}::class, '${child.fk}')->orderBy('${child.ordered === true ? "position" : "id"}');\n    }`,
+  php: `    public function ${child.relationName}(): HasMany\n    {\n        return $this->hasMany(${child.model}::class, '${child.fk}')->orderBy('${child.ordered === true ? ITEM_POSITION_COLUMN : "id"}');\n    }`,
 });
 
 export interface RepeaterEmit {
