@@ -141,7 +141,10 @@ describe("users-permissions routes", () => {
     for (const [route, group] of [
       ["Route::post('/auth/local', [AuthController::class, 'login'])", "sign-in"],
       ["Route::post('/auth/local/register', [AuthController::class, 'register'])", "register"],
-      ["Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])", "recovery"],
+      [
+        "Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])",
+        "password-reset",
+      ],
       [
         "Route::post('/auth/send-email-confirmation', [AuthController::class, 'sendEmailConfirmation'])",
         "confirmation",
@@ -164,6 +167,27 @@ describe("users-permissions routes", () => {
     expect(content("app/Http/Middleware/StrapiThrottle.php")).toContain(
       "StrapiRateLimits::attempt($request, $group)",
     );
+  });
+  // A bucket per address alone is one a foreign client fills for every user behind that address;
+  // per address and identifier, each account's guesses are counted apart, under a per-address
+  // ceiling. The identifier is hashed and cut to a fixed length, so no raw body text is a key.
+  it("keys sign-in, recovery and confirmation by address and hashed identifier, under a ceiling", () => {
+    const limits = content("app/Support/StrapiRateLimits.php");
+    expect(limits).toContain(
+      "private const IDENTIFIED = ['sign-in' => 'identifier', 'recovery' => 'email', 'confirmation' => 'email'];",
+    );
+    expect(limits).toContain("substr(hash('sha256', mb_strtolower(trim($identifier))), 0, 32)");
+    expect(limits).toContain("'camis.users_permissions.auth_address_throttle_per_minute'");
+    expect(content("config/camis.php")).toContain(
+      "'auth_address_throttle_per_minute' => max(1, (int) env('CAMIS_AUTH_ADDRESS_THROTTLE_PER_MINUTE', 50)),",
+    );
+  });
+  // Checking and then counting lets parallel requests all pass the check: the count hit() returns
+  // is the decision.
+  it("decides on the count it takes, so parallel requests cannot pass one check together", () => {
+    const limits = content("app/Support/StrapiRateLimits.php");
+    expect(limits).toContain("RateLimiter::hit($key, 60) > $max");
+    expect(limits).not.toContain("tooManyAttempts(");
   });
   it("throttles the unauthenticated email endpoints with the credential ones", () => {
     expect(routes).toContain(

@@ -190,6 +190,20 @@ describe("users-permissions sessions", () => {
     expect(deploy).toContain("A rate of 0, or one that is not a number, means 1 per minute");
   });
 
+  // A turn taken before any check is one a foreign page burns from the victim's browser: only a
+  // refresh that rotated nothing is counted, and only such a one is refused once the bucket is full.
+  it("counts and refuses only failed refreshes, so a valid refresh token is never throttled", () => {
+    const controller = content("app/Http/Controllers/Api/SessionController.php");
+    expect(controller).toContain("StrapiRateLimits::refuseFailure($request, 'refresh');");
+    expect(content("routes/api.php")).not.toContain("StrapiThrottle::class.':refresh'");
+  });
+  // A session row swept at its absolute expiry leaves its access token in date: logout must still
+  // end that token.
+  it("ends the access token on logout when its session row is gone", () => {
+    expect(content("app/Http/Controllers/Api/SessionController.php")).toContain(
+      "if ($session === null || ! StrapiSessions::revoke($user, $session)) {",
+    );
+  });
   it("issues sessions from login, registration and a password change or reset", () => {
     const auth = content("app/Http/Controllers/Api/AuthController.php");
     expect(auth).toContain("StrapiSessions::login($request, $user)");
@@ -200,7 +214,7 @@ describe("users-permissions sessions", () => {
   it("routes refresh as a public-only route and the rest behind a session", () => {
     const routes = content("routes/api.php");
     expect(routes).toContain(
-      "Route::post('/auth/refresh', [SessionController::class, 'refresh'])->middleware([StrapiThrottle::class.':refresh', StrapiCredentials::class.':guest']);",
+      "Route::post('/auth/refresh', [SessionController::class, 'refresh'])->middleware(StrapiCredentials::class.':guest');",
     );
     expect(routes).toContain("Route::post('/auth/logout', [SessionController::class, 'logout']);");
     expect(routes).toContain(

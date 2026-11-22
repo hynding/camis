@@ -25,11 +25,14 @@ class AuthSecurityTest extends TestCase
 
     private const REFRESH_RATE = 5;
 
+    /** The ceiling on one address's turns, across every identifier it names. */
+    private const ADDRESS_RATE = 6;
+
     protected function setUp(): void
     {
         parent::setUp();
         $this->seed(\Database\Seeders\RolePermissionSeeder::class);
-        config(['camis.auth_throttle_per_minute' => self::RATE, 'camis.users_permissions.sessions.refresh_throttle_per_minute' => self::REFRESH_RATE]);
+        config(['camis.auth_throttle_per_minute' => self::RATE, 'camis.users_permissions.sessions.refresh_throttle_per_minute' => self::REFRESH_RATE, 'camis.users_permissions.auth_address_throttle_per_minute' => self::ADDRESS_RATE]);
     }
 
     protected function tearDown(): void
@@ -136,6 +139,35 @@ class AuthSecurityTest extends TestCase
         $this->login('alice')->assertOk();
     }
 
+    /** A guesser at one account, or everyone behind one address, must not lock another account out. */
+    public function test_sign_in_counts_per_identifier_so_one_account_cannot_lock_out_another(): void
+    {
+        $this->register('alice');
+        $this->freshRequest();
+        $this->register('bob');
+        self::assertThrottled(function (): TestResponse {
+            $this->freshRequest();
+
+            return $this->postJson('/api/auth/local', ['identifier' => 'alice', 'password' => 'wrong']);
+        }, 400);
+        // The identifier is normalised, so its case and spaces buy no fresh bucket.
+        $this->freshRequest();
+        $this->postJson('/api/auth/local', ['identifier' => ' ALICE ', 'password' => 'secret1'])->assertStatus(429);
+
+        $this->login('bob')->assertOk();
+    }
+
+    /** Naming a new identifier each time buys a guesser no more than the address's ceiling. */
+    public function test_an_address_naming_many_identifiers_meets_its_ceiling(): void
+    {
+        self::assertThrottled(fn (int $attempt): TestResponse => $this->login("guess{$attempt}"), 400, self::ADDRESS_RATE);
+        self::assertThrottled(fn (int $attempt): TestResponse => $this->postJson('/api/auth/forgot-password', ['email' => "guess{$attempt}@example.test"]), 200, self::ADDRESS_RATE);
+
+        // The ceiling is the address's: another address keeps its own.
+        $this->freshRequest();
+        $this->withServerVariables(['REMOTE_ADDR' => '10.0.0.9'])->postJson('/api/auth/local', ['identifier' => 'guess-new', 'password' => 'wrong'])->assertStatus(400);
+    }
+
     public function test_one_group_of_credential_routes_cannot_use_up_another(): void
     {
         $this->register('alice');
@@ -215,6 +247,23 @@ class AuthSecurityTest extends TestCase
         // A CORS origin listed without credentials is no page of this app's.
         config(['cors.allowed_origins' => ['https://app.example.test'], 'cors.supports_credentials' => false]);
         self::assertRefused($this->refreshWithCookie($cookie, ['Origin' => 'https://app.example.test']));
+    }
+
+    /**
+     * A foreign page's refreshes ride on the victim's cookie and address: they are failures, and
+     * the bucket they fill refuses failures alone, never a refresh that rotates a valid token.
+     */
+    public function test_a_foreign_page_cannot_use_up_its_victims_refreshes(): void
+    {
+        $cookie = $this->cookieSession();
+        for ($i = 0; $i < self::REFRESH_RATE; $i++) {
+            self::assertRefused($this->refreshWithCookie($cookie, ['Origin' => 'https://evil.example.test']));
+        }
+        $this->refreshWithCookie($cookie, ['Origin' => 'https://evil.example.test'])->assertStatus(429)
+            ->assertJsonPath('error.name', 'RateLimitError');
+        $this->refreshWithCookie('nope.nope', ['x-strapi-refresh-cookie' => 'httpOnly'])->assertStatus(429);
+
+        $this->refreshWithCookie($cookie, ['x-strapi-refresh-cookie' => 'httpOnly'])->assertOk()->assertJsonStructure(['jwt']);
     }
 
     public function test_the_refresh_cookie_is_taken_from_the_apps_own_origin(): void
@@ -398,6 +447,20 @@ class AuthSecurityTest extends TestCase
         $this->postJson('/api/auth/refresh', ['refreshToken' => $elsewhere])->assertOk();
         $this->freshRequest();
         self::assertContains($this->withToken($legacy)->getJson('/api/users/me')->status(), [401, 403]);
+    }
+
+    /** A session row swept at its absolute expiry leaves its access token in date, until logout. */
+    public function test_logout_ends_the_access_token_when_its_session_row_is_gone(): void
+    {
+        config(['camis.users_permissions.jwt_management' => 'refresh']);
+        $this->register('alice');
+        $jwt = (string) $this->login('alice')->assertOk()->json('jwt');
+        \Illuminate\Support\Facades\DB::table('strapi_sessions')->delete();
+
+        $this->freshRequest();
+        $this->withToken($jwt)->postJson('/api/auth/logout', [])->assertOk();
+        $this->freshRequest();
+        self::assertContains($this->withToken($jwt)->getJson('/api/users/me')->status(), [401, 403]);
     }
 
     /** The provider routes encrypt their own cookies; the refresh cookie must stay as refresh reads it. */

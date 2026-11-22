@@ -130,6 +130,17 @@ describe("GraphQL", () => {
     );
   });
 
+  // The REST route reads the identifier from its body; the mutation's arguments are not the
+  // request's body, so each passes its own to the same per-identifier bucket.
+  it("counts sign-in and recovery mail per identifier, and a reset in a bucket of its own", () => {
+    const plugins = generate(true).files.find(
+      (f) => f.path === "app/GraphQL/StrapiGraphqlPlugins.php",
+    )!.content;
+    expect(plugins).toContain("self::throttle($request, 'sign-in', $input['identifier'] ?? null);");
+    expect(plugins).toContain("self::throttle($request, 'recovery', $args['email'] ?? null);");
+    expect(plugins).toContain("self::throttle($request, 'password-reset');");
+  });
+
   it("serves the media library's files with the entries they are linked from", () => {
     expect(fields(ours.get("UploadFile") ?? "")).toEqual(fields(oracle.get("UploadFile")!));
     // The fixture has more content types than the oracle project; the shared ones keep its order.
