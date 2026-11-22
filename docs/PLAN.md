@@ -3384,9 +3384,13 @@ header working unchanged.
   neither. A registrant using their own address can still tell a taken username from the notice
   arriving instead of a confirmation, which unique usernames make inherent. Each kind of mail a
   caller can aim (registration notice, confirmation resend, recovery) goes to one address at most
-  `CAMIS_ACCOUNT_MAIL_PER_HOUR` (1) times an hour, keyed by the folded recipient through the
-  throttles' atomic limiter (`StrapiRateLimits::mailable`) and counted where the mail is sent, so a
-  skipped mail changes neither answer nor time. An insert that loses a race for its name (a unique
+  `CAMIS_ACCOUNT_MAIL_PER_HOUR` (3, a burst so a stranger cannot spend an owner's only mail) times
+  an hour, keyed by the folded recipient through the throttles' limiter (`StrapiRateLimits::mailable`)
+  and counted where the mail is sent, so a skipped mail changes neither answer nor time. The count
+  is atomic on the `database` (Laravel's default), `redis` and `memcached` cache stores, not on
+  `file`; DEPLOY.md says so rather than locking around the file store's count. The email-shaped
+  username rule reads folded names, since MySQL's collation reads a fullwidth or small "@" as "@";
+  the taken check still runs through the collation, which DEPLOY.md records. An insert that loses a race for its name (a unique
   violation inside its own savepoint) is a taken name: the notice when hidden, Strapi's taken error
   otherwise, never "Validation failed". GraphQL's `register`, whose payload's user is non-null,
   answers a hidden registration with `ConfirmationPendingError` (`STRAPI_CONFIRMATION_PENDING_ERROR`)
@@ -3394,8 +3398,11 @@ header working unchanged.
 - **Hashes.** `StrapiHashes` reads Strapi's bcryptjs `$2a$`/`$2b$` as PHP's `$2y$`: the users and
   admin imports store it rewritten, and a hash stored by an earlier import is read rewritten. A
   stored hash the configured hasher refuses (another `HASH_DRIVER`'s, or not a hash) fails as a
-  wrong password, checked against the stand-in so it takes as long, and is logged, where it
-  answered 500. The first sign-in that matches a hash of another cost stores the password again at
+  wrong password, checked against the stand-in so it takes as long, and is logged with the
+  account's kind and id once an hour per account, where it answered 500. `StrapiHashes::matches`
+  holds the one-check rule for users and admins alike: an admin sign-in no longer returns before
+  any hash check for an unknown email. The Strapi storage layout keeps its `password_verify`
+  sign-in, which reads `$2a$` and never throws, and so does not emit `StrapiHashes`. The first sign-in that matches a hash of another cost stores the password again at
   the configured one, so an imported (cost 10) account stops being told apart by timing; DEPLOY.md
   gives `BCRYPT_ROUNDS=10` as the immediate fix and its cost.
 - **JSON bodies.** Every auth write and `POST /graphql` takes its body only as JSON

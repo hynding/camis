@@ -185,6 +185,11 @@ failing refresh (an expired or revoked token) may answer 429 rather than 401 unt
 empties. The GraphQL mutations take turns of the same buckets as their REST routes. The rates are read per request, so
 \`php artisan config:cache\` is enough after changing them.
 
+The throttles and the mail bound count in Laravel's cache, which must count atomically for parallel
+requests not to share one turn: \`CACHE_STORE\` \`database\` (Laravel's default), \`redis\` or
+\`memcached\` do; the \`file\` store does not count atomically, so do not use it for a deployment
+taking parallel requests, and \`array\` keeps nothing between requests.
+
 | Group | Routes | Rate per minute |
 | --- | --- | --- |
 | sign-in | \`POST /auth/local\`, \`GET /auth/local/callback\` (Strapi's password login, which Strapi leaves unthrottled), GraphQL \`login\`, per address and name given | \`CAMIS_AUTH_THROTTLE_PER_MINUTE\` (10) |
@@ -240,8 +245,19 @@ finished first (\`fastcgi_finish_request\`), while under mod_php or \`php artisa
 still waits for the mail, and its time shows. A mail that fails is logged, not answered. Each kind
 of mail a caller can send to an address they name (the registration notice, the confirmation
 resend, recovery) goes to one address at most \`CAMIS_ACCOUNT_MAIL_PER_HOUR\` times an hour
-(default 1, floored at 1), whoever asks; a mail over the bound is skipped silently, so the answer
-does not change, and a lost mail can be asked for again after the hour.
+(default 3, floored at 1), whoever asks; a mail over the bound is skipped silently, so the answer
+does not change. The bound weighs two costs: lower, it caps the unsolicited mail anyone can send
+an address; but whoever spends an address's turns first, a stranger included, leaves its owner's
+own request answered as sent, though no mail goes and the owner is told nothing until the hour is up.
+The default burst of 3 leaves an owner a mail of their own unless someone is spending them on
+purpose. A failure of the cache the bound counts in sends no mail.
+
+A username containing "@", once folded (case, width and look-alikes such as a fullwidth "@"
+removed), is read as an address, since the database's collation may read it as one: under MySQL's
+\`utf8mb4_unicode_ci\` a fullwidth or small "@" compares equal to "@". Whether a name is taken is
+still asked through that collation, so which names count as one depends on the database (SQLite
+and PostgreSQL compare them as stored, MySQL ignores case, width and accents); the throttles fold
+names whatever the database.
 
 Without email confirmation registration cannot answer every address the same: a new account gets its token at
 once, so a taken address or username still answers Strapi's 400 "Email or Username are already
@@ -332,7 +348,8 @@ proxy, trust it as above so the request's own origin reads \`https\`.
   refused with 400 \`ValidationError\`; the notices for a taken address and a taken username are one
   (\`account_emails.registration_attempted\`), and over GraphQL a registration waiting on its email
   answers \`ConfirmationPendingError\`, where the account was made but the answer failed.
-- Account mail to one address is bounded by \`CAMIS_ACCOUNT_MAIL_PER_HOUR\` (default 1) per kind.
+- Account mail to one address is bounded by \`CAMIS_ACCOUNT_MAIL_PER_HOUR\` (default 3) per kind.
+- An admin sign-in checks one password hash whether or not the email names an account.
 - Imported \`$2a$\` hashes sign in, a hash the hasher cannot verify answers as a wrong password
   instead of 500, and a sign-in stores a hash of another cost again at the configured one.
 - Add \`$middleware->prependToPriorityList(\\Illuminate\\Routing\\Middleware\\ThrottleRequests::class, \\App\\Http\\Middleware\\StrapiJsonBody::class);\`
