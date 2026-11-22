@@ -92,8 +92,9 @@ phase's exit criteria are green.
   API styles share lives at `adapter-filament/src/php/<path in the app>`, analysed by the same job).
   Only PHP that varies per project stays in TypeScript; where a project needs a few lines of such a
   file changed, the emitter patches only those lines at anchors (each must occur exactly once, or
-  generation throws) and the logic they call lives in a static file. The `runtime-phpstan` CI job analyses every
-  such file inside a scaffolded Laravel app (`scripts/runtime-phpstan.sh`, `phpstan.neon`).
+  generation throws) and the logic they call lives in a static file. The `runtime-phpstan` CI job
+  analyses every such file inside a scaffolded Laravel app (`scripts/runtime-phpstan.sh`,
+  `phpstan.neon`).
 - **CI:** install → lint → typecheck → test for every package; the `expr-php-emit` and
   Filament adapter test jobs additionally require PHP and the relevant databases.
 - **Databases:** the Filament/Express targets must run on `sqlite | mysql | pgsql` selected
