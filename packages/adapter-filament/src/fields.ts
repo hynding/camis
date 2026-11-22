@@ -254,7 +254,7 @@ const base = (field: Field, c: string): Base => {
 
 /**
  * The form's uniqueness rule. Filament's `->unique()` compares the text as typed with the stored
- * digits, so a decimal stating its digits is compared as its filters compare it.
+ * digits, so a decimal stating its digits is compared as it will be stored, rounded to its scale.
  */
 const uniqueRule = (field: Field, column: string): string => {
   const digits = decimalDigits(field);

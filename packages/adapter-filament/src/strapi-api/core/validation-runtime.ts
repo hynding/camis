@@ -16,5 +16,63 @@ import { runtimePhp } from "../../runtime-php";
  * required relation or file (`toOne` when one target replaces another) must keep one while
  * camis.documents.strict_relations is on, as Strapi's api.documents.strictRelations.
  */
-export const emitStrapiValidator = (): string =>
-  runtimePhp(new URL("./php/app/Support/StrapiValidator.php", import.meta.url));
+export const emitStrapiValidator = (uniqueDigits = false): string => {
+  const php = runtimePhp(new URL("./php/app/Support/StrapiValidator.php", import.meta.url));
+  return uniqueDigits ? withUniqueDigits(php) : php;
+};
+
+// A unique decimal stating its digits (its `unique` carrying `digits`) is looked up by the value as
+// sent, not yup's cast (a float, which keeps 14 digits), and compared as it is stored.
+const UNIQUE_DIGITS_CHECKS: [string, string][] = [
+  [
+    "&& self::taken($cast, $rule['unique'], $repeated, $context['unique'])",
+    "&& self::taken(isset($rule['unique']['digits']) ? $value : $cast, $rule['unique'], $repeated, $context['unique'])",
+  ],
+  [
+    `        $query = $others();
+        if (isset($stored['relation'])) {`,
+    `        $query = $others();
+        if (isset($stored['digits'])) {
+            return self::takenDigits($query, $stored, $value);
+        }
+        if (isset($stored['relation'])) {`,
+  ],
+  [
+    `        return $query->where($stored['column'], $value)->exists();
+    }
+`,
+    `        return $query->where($stored['column'], $value)->exists();
+    }
+
+    /**
+     * Whether another entry holds a decimal stating its digits, compared as it is stored: rounded
+     * to its scale, which is what its unique index compares, and bound exactly on every database
+     * (DecimalDigits::where). A value its column cannot hold is left to the write, which refuses it.
+     *
+     * @param  array{column: string, relation?: string, digits: array{int, int}}  $stored
+     */
+    private static function takenDigits(Builder $query, array $stored, mixed $value): bool
+    {
+        [$precision, $scale] = $stored['digits'];
+        $canonical = DecimalDigits::canonical($value, $precision, $scale);
+        if ($canonical === null) {
+            return false;
+        }
+        $matching = fn (Builder $rows): bool => DecimalDigits::where($rows, $stored['column'], '$eq', $canonical, $precision, $scale);
+        if (isset($stored['relation'])) {
+            return $query->whereHas($stored['relation'], fn (Builder $items) => $matching($items))->exists();
+        }
+
+        return $matching($query) && $query->exists();
+    }
+`,
+  ],
+];
+
+/**
+ * The validator for a project with a unique decimal stating its digits: SQLite keeps one beyond a
+ * PHP float as text, and every database keeps it rounded to its scale, so the value as sent (1.5
+ * beside a stored 1.50000, or 1.500004) found no other entry and reached the unique index.
+ */
+export const withUniqueDigits = (php: string): string =>
+  UNIQUE_DIGITS_CHECKS.reduce((patched, [from, to]) => patched.replace(from, () => to), php);

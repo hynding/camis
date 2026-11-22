@@ -313,6 +313,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
   const fileModel = input.media === undefined ? undefined : filamentNames(input.media).model;
 
   const shapes = new Map<string, WireShape>();
+  let uniqueDigits = false;
   for (const ct of emitted) {
     const names = filamentNames(ct);
     const shape: WireShape = {
@@ -322,6 +323,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     };
     shapes.set(ct.name, shape);
     const entity = entityRules(ct, doc, shape, "laravel");
+    uniqueDigits ||= entity.uniqueDigits;
     gaps.push(...entity.gaps);
     files.push({
       path: `app/Http/Serializers/${names.model}Serializer.php`,
@@ -487,7 +489,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     path: "app/Support/StrapiRelationsOrderer.php",
     content: emitStrapiRelationsOrderer(),
   });
-  files.push({ path: VALIDATOR_PATH, content: emitStrapiValidator() });
+  files.push({ path: VALIDATOR_PATH, content: emitStrapiValidator(uniqueDigits) });
   if (emitted.some((ct) => ct.fields.some((f) => f.type === "dynamicZone")))
     files.push({
       path: "app/Support/StrapiZones.php",

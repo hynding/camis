@@ -507,7 +507,7 @@ export const filamentAdapter: GenerateAdapter = {
       });
     }
     files.push(apiCustomSeed());
-    files.push(...decimalDigitsFiles(doc));
+    files.push(...decimalDigitsFiles(doc, files));
     // Edited in the admin, which the Strapi storage layout does not have.
     if (storage !== "strapi" && hasBlocksFields(doc)) {
       files.push(...emitBlocksFiles(fileModel !== undefined));

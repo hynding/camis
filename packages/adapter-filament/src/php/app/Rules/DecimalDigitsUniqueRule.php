@@ -13,9 +13,11 @@ use Illuminate\Database\Eloquent\Model;
  * A unique decimal stating its digits as the admin's form checks it, in place of Filament's
  * `->unique()`, which compares the text as typed with the stored digits: SQLite's text column
  * would take 1.5 beside a stored 1.500000 until its unique index refused the write, and MySQL
- * compares a string with a DECIMAL as two doubles. The value is compared as every filter compares
- * it (DecimalDigits::where), against the table as Laravel's unique rule reads it, ignoring the
- * record being edited.
+ * compares a string with a DECIMAL as two doubles. The value is compared as it will be stored,
+ * rounded to its scale (DecimalDigits::canonical), since that is what the unique index compares:
+ * 1.500004 typed beside a stored 1.50000 is that value. It is bound exactly on every database
+ * (DecimalDigits::where), against the table as Laravel's unique rule reads it, ignoring the record
+ * being edited. A value the column cannot hold is DecimalDigitsRule's to refuse.
  */
 final class DecimalDigitsUniqueRule implements ValidationRule
 {
@@ -34,14 +36,15 @@ final class DecimalDigitsUniqueRule implements ValidationRule
 
     public function validate(string $attribute, mixed $value, Closure $fail): void
     {
-        if ($this->model === null) {
+        $canonical = DecimalDigits::canonical($value, $this->precision, $this->scale);
+        if ($this->model === null || $canonical === null) {
             return;
         }
         $query = (new $this->model())->newQueryWithoutScopes();
         if ($this->ignored !== null) {
             $query->whereKeyNot($this->ignored->getOriginal($this->ignored->getKeyName()));
         }
-        if (DecimalDigits::where($query, $this->column, '$eq', $value, $this->precision, $this->scale) && $query->exists()) {
+        if (DecimalDigits::where($query, $this->column, '$eq', $canonical, $this->precision, $this->scale) && $query->exists()) {
             $fail('validation.unique')->translate();
         }
     }

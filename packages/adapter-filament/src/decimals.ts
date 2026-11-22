@@ -51,19 +51,26 @@ const DECIMAL_DIGITS_RUNTIME = [
 
 const UNIQUE_RULE = "app/Rules/DecimalDigitsUniqueRule.php";
 
+/** How a form checks a unique decimal stating its digits (see `uniqueRule` in fields.ts). */
+const UNIQUE_RULE_USE = "new \\App\\Rules\\DecimalDigitsUniqueRule(";
+
 /**
  * What writes a decimal stating its digits, through Eloquent (DecimalDigitsCast) and the admin's
  * form (DecimalDigitsRule) on either API style, and what the Strapi API style
  * filters one by: emitted only for a project with such a decimal. The form's uniqueness rule
- * (DecimalDigitsUniqueRule) comes only with a unique one.
+ * (DecimalDigitsUniqueRule) comes only with a form among `emitted` that checks it: a form whose
+ * rows share their values (draft and publish, locales) leaves a unique field's rule out.
  */
-export const decimalDigitsFiles = (doc: IrDocument): GeneratedFile[] => {
+export const decimalDigitsFiles = (
+  doc: IrDocument,
+  emitted: readonly GeneratedFile[],
+): GeneratedFile[] => {
   const fields = [...doc.contentTypes, ...doc.components].flatMap((holder) =>
     holder.fields.filter((field) => decimalDigits(field) !== undefined),
   );
   const paths = [
     ...(fields.length > 0 ? DECIMAL_DIGITS_RUNTIME : []),
-    ...(fields.some((field) => "unique" in field && field.unique === true) ? [UNIQUE_RULE] : []),
+    ...(emitted.some((file) => file.content.includes(UNIQUE_RULE_USE)) ? [UNIQUE_RULE] : []),
   ];
   return paths.map((path) => ({
     path,
