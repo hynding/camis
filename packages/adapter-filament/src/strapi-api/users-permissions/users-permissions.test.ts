@@ -406,6 +406,18 @@ describe("users-permissions register and /users queries", () => {
 });
 
 describe("users-permissions config and errors", () => {
+  // A mail goes to an address the caller names, so a caller could otherwise mail anyone at will.
+  it("bounds each kind of account mail per recipient, by a setting", () => {
+    expect(content("config/camis.php")).toContain(
+      "'account_mail_per_hour' => max(1, (int) env('CAMIS_ACCOUNT_MAIL_PER_HOUR', 1)),",
+    );
+    expect(content("app/Support/StrapiRateLimits.php")).toContain(
+      "public static function mailable(string $kind, string $address): bool",
+    );
+    const auth = content("app/Http/Controllers/Api/AuthController.php");
+    for (const kind of ["registration-notice", "confirmation", "reset-password"])
+      expect(auth).toContain(`StrapiRateLimits::mailable('${kind}', `);
+  });
   // Which of the address or the username was taken is what a registrant must not learn.
   it("has one registration notice, naming neither the address nor the username as taken", () => {
     const config = content("config/camis.php");

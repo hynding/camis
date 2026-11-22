@@ -1053,5 +1053,62 @@ class AuthSecurityTest extends TestCase
         self::assertSame(0, $atAnswer);
         self::assertSame([['alice@example.test', 'Reset password']], self::mails());
     }
+
+    /** POSTs $body to $path from a fresh client address each time, so no request throttle is in the way. */
+    private function fromAnywhere(string $path, array $body): TestResponse
+    {
+        static $client = 0;
+        $client++;
+        $this->freshRequest();
+
+        return $this->withServerVariables(['REMOTE_ADDR' => '10.20.'.intdiv($client, 250).'.'.($client % 250)])->postJson($path, $body);
+    }
+
+    /**
+     * Registration, the confirmation resend and recovery each mail an address someone else names,
+     * so each kind of mail goes to one address at most CAMIS_ACCOUNT_MAIL_PER_HOUR times an hour,
+     * whoever asks and from wherever; a mail skipped changes nothing in the answer.
+     */
+    public function test_each_kind_of_account_mail_goes_to_an_address_once_an_hour(): void
+    {
+        $this->register('alice');
+        \App\Models\User::forceCreate(['name' => 'pending', 'username' => 'pending', 'email' => 'pending@example.test', 'password' => 'x', 'provider' => 'local', 'confirmed' => false, 'blocked' => false]);
+        $this->confirmationOn();
+        self::forgetMails();
+        $requests = [
+            ['/api/auth/local/register', ['username' => 'alice', 'email' => 'victim@example.test', 'password' => 'secret1']],
+            ['/api/auth/local/register', ['username' => 'alice2', 'email' => 'alice@example.test', 'password' => 'secret1']],
+            ['/api/auth/send-email-confirmation', ['email' => 'pending@example.test']],
+            ['/api/auth/forgot-password', ['email' => 'alice@example.test']],
+        ];
+        foreach ($requests as [$path, $body]) {
+            $first = $this->fromAnywhere($path, $body)->assertOk();
+            for ($i = 0; $i < 4; $i++) {
+                $again = $this->fromAnywhere($path, $body)->assertOk();
+                self::assertSame([$first->status(), $first->json()], [$again->status(), $again->json()]);
+            }
+        }
+        self::assertEqualsCanonicalizing(
+            [['victim@example.test', 'Account registration'], ['alice@example.test', 'Account registration'], ['pending@example.test', 'Account confirmation'], ['alice@example.test', 'Reset password']],
+            self::mails(),
+        );
+        self::assertSame(0, \App\Models\User::query()->where('email', 'victim@example.test')->count());
+
+        $this->travel(61)->minutes();
+        self::forgetMails();
+        $this->fromAnywhere(...$requests[0])->assertOk();
+        self::assertSame([['victim@example.test', 'Account registration']], self::mails());
+    }
+
+    public function test_the_hourly_mail_bound_is_a_setting(): void
+    {
+        $this->register('alice');
+        config(['camis.users_permissions.account_mail_per_hour' => 3, 'mail.from.address' => 'hello@example.test']);
+        self::forgetMails();
+        for ($i = 0; $i < 5; $i++) {
+            $this->fromAnywhere('/api/auth/forgot-password', ['email' => 'alice@example.test'])->assertOk();
+        }
+        self::assertCount(3, self::mails());
+    }
 }
 
