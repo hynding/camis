@@ -7,8 +7,7 @@ namespace App\Support;
 use Brick\Math\BigDecimal;
 use Brick\Math\Exception\MathException;
 use Brick\Math\RoundingMode;
-use Illuminate\Database\Query\Expression;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Database\Eloquent\Builder;
 
 /**
  * A decimal stating its digits as every database keeps it: rounded half away from zero to its
@@ -19,6 +18,20 @@ use Illuminate\Support\Facades\DB;
  */
 final class DecimalDigits
 {
+    /**
+     * What is read as a decimal: ASCII digits with at most one point, an optional sign and an
+     * exponent of at most three digits, in at most MAX_LENGTH characters. brick/math writes out
+     * every zero an exponent stands for, so an unbounded one ("1e100000000") would exhaust memory.
+     */
+    private const PATTERN = '/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d{1,3})?$/D';
+
+    private const MAX_LENGTH = 100;
+
+    /** The filter operators compared here; the others are the caller's. */
+    private const OPERATORS = ['$eq', '$ne', '$gt', '$gte', '$lt', '$lte', '$in', '$notIn', '$between'];
+
+    private const COMPARISONS = ['$eq' => '=', '$ne' => '<>', '$gt' => '>', '$gte' => '>=', '$lt' => '<', '$lte' => '<='];
+
     /**
      * A written value as its column keeps it, or null when it is not a decimal or has more digits
      * before the point than the column keeps. A JSON number is taken as its shortest digits.
@@ -34,20 +47,102 @@ final class DecimalDigits
     }
 
     /**
-     * A filter's value as the column is compared with it: its form at the scale, bound as text on
-     * SQLite, where the column is text or gives text its numeric affinity, and written as a numeric
-     * literal elsewhere, because MySQL compares a DECIMAL with a string as two doubles. A value that
-     * is not a decimal is left as it is.
+     * Filters $column by a comparison, exactly and never rounding the filter's value: every value
+     * the column holds is a multiple of 10^-scale below 10^(precision - scale) in magnitude, so a
+     * value between two of them, or beyond them all, is compared through the nearest one or decides
+     * the comparison alone, and what is bound always fits the column. It is bound typed, as DECIMAL
+     * on MySQL (which compares a DECIMAL with a string as two doubles) and NUMERIC on PostgreSQL;
+     * SQLite compares it with the column's text, or gives it a numeric column's affinity. False,
+     * adding nothing, for another operator or a value that is not a decimal, which the caller binds
+     * as it came, as it does every other number field's.
      */
-    public static function filter(mixed $value, int $scale): mixed
+    public static function where(Builder $query, string $column, string $operator, mixed $value, int $precision, int $scale): bool
     {
-        $decimal = self::parse($value)?->toScale($scale, RoundingMode::HALF_UP);
-        if ($decimal === null) {
-            return $value;
+        if (! in_array($operator, self::OPERATORS, true)) {
+            return false;
         }
+        $listed = in_array($operator, ['$in', '$notIn', '$between'], true);
+        $decimals = [];
+        foreach ($listed && is_array($value) ? array_values($value) : [$value] as $item) {
+            $decimal = self::parse($item);
+            if ($decimal === null) {
+                return false;
+            }
+            $decimals[] = $decimal;
+        }
+        $target = [
+            'name' => $column,
+            'wrapped' => $query->getQuery()->getGrammar()->wrap($column),
+            'bound' => match ($query->getConnection()->getDriverName()) {
+                'sqlite' => '?',
+                'pgsql' => 'CAST(? AS NUMERIC)',
+                default => "CAST(? AS DECIMAL({$precision}, {$scale}))",
+            },
+            'scale' => $scale,
+            // The largest value the column holds; its negation is the smallest.
+            'largest' => BigDecimal::ten()->power($precision - $scale)->minus(BigDecimal::ofUnscaledValue(1, $scale)),
+        ];
 
-        // The literal is BigDecimal's own digits, a sign and a point: nothing else reaches the SQL.
-        return DB::connection()->getDriverName() === 'sqlite' ? (string) $decimal : new Expression((string) $decimal);
+        if ($operator === '$between') {
+            if (count($decimals) !== 2) {
+                return false;
+            }
+            $query->where(function (Builder $q) use ($decimals, $target): void {
+                self::compare($q, $target, '$gte', $decimals[0]);
+                self::compare($q, $target, '$lte', $decimals[1]);
+            });
+
+            return true;
+        }
+        if ($listed) {
+            // A value the column cannot hold equals none of its values.
+            $held = array_values(array_filter($decimals, fn (BigDecimal $d) => self::holds($target, $d)));
+            $not = $operator === '$notIn' ? ' NOT' : '';
+            match (true) {
+                $held !== [] => $query->whereRaw("{$target['wrapped']}{$not} IN (" . implode(', ', array_fill(0, count($held), $target['bound'])) . ')', array_map(fn (BigDecimal $d) => (string) $d->toScale($target['scale']), $held)),
+                $not === '' => $query->whereRaw('0 = 1'),
+                default => $query->whereNotNull($target['name']),
+            };
+
+            return true;
+        }
+        self::compare($query, $target, $operator, $decimals[0]);
+
+        return true;
+    }
+
+    /**
+     * One comparison of the column with $decimal, decided alone where the column cannot hold it.
+     *
+     * @param array{name: string, wrapped: string, bound: string, scale: int, largest: BigDecimal} $column
+     */
+    private static function compare(Builder $query, array $column, string $operator, BigDecimal $decimal): void
+    {
+        if (self::holds($column, $decimal)) {
+            $query->whereRaw("{$column['wrapped']} " . self::COMPARISONS[$operator] . " {$column['bound']}", [(string) $decimal->toScale($column['scale'])]);
+
+            return;
+        }
+        // Above $decimal is at or above its ceiling at the scale; below it, at or below its floor.
+        $nearest = $decimal->toScale($column['scale'], in_array($operator, ['$gt', '$gte'], true) ? RoundingMode::CEILING : RoundingMode::FLOOR);
+        $none = fn () => $query->whereRaw('0 = 1');
+        $all = fn () => $query->whereNotNull($column['name']);
+        match ($operator) {
+            '$eq' => $none(),
+            '$ne' => $all(),
+            '$gt', '$gte' => $nearest->isGreaterThan($column['largest']) ? $none() : ($nearest->isLessThan($column['largest']->negated()) ? $all() : $query->whereRaw("{$column['wrapped']} >= {$column['bound']}", [(string) $nearest])),
+            '$lt', '$lte' => $nearest->isLessThan($column['largest']->negated()) ? $none() : ($nearest->isGreaterThan($column['largest']) ? $all() : $query->whereRaw("{$column['wrapped']} <= {$column['bound']}", [(string) $nearest])),
+        };
+    }
+
+    /**
+     * Whether the column can hold $decimal exactly: no digit beyond its scale, and within its range.
+     *
+     * @param array{scale: int, largest: BigDecimal} $column
+     */
+    private static function holds(array $column, BigDecimal $decimal): bool
+    {
+        return $decimal->stripTrailingZeros()->getScale() <= $column['scale'] && $decimal->abs()->isLessThanOrEqualTo($column['largest']);
     }
 
     private static function parse(mixed $value): ?BigDecimal
@@ -59,7 +154,7 @@ final class DecimalDigits
             is_string($value) => trim($value),
             default => null,
         };
-        if ($digits === null) {
+        if ($digits === null || strlen($digits) > self::MAX_LENGTH || preg_match(self::PATTERN, $digits) !== 1) {
             return null;
         }
         try {

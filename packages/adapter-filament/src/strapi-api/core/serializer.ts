@@ -436,9 +436,11 @@ export const statesDecimalDigits = (shape: WireShape): boolean =>
 const privateEntry = (entry: { private?: true }): string =>
   entry.private === true ? ", 'private' => true" : "";
 
-// A decimal stating its digits carries its scale, at which StrapiQuery compares a filter's value.
+// A decimal stating its digits carries them, by which StrapiQuery compares a filter's value.
 const scaleEntry = (s: WireScalar): string =>
-  s.digits === undefined ? "" : `, 'scale' => ${s.digits.scale}`;
+  s.digits === undefined
+    ? ""
+    : `, 'precision' => ${s.digits.precision}, 'scale' => ${s.digits.scale}`;
 
 const fieldEntry = (s: WireScalar, indent: string): string =>
   `${indent}'${s.key.join(".")}' => ['column' => '${s.column}', 'type' => '${s.type}'${scaleEntry(s)}${privateEntry(s)}],`;
