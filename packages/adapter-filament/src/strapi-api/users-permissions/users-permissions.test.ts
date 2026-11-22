@@ -154,8 +154,11 @@ describe("users-permissions routes", () => {
   });
   // Keyed by the caller's account once it is known, by its address otherwise, through one limiter
   // the GraphQL mutations share, so REST and GraphQL count the same turns.
-  it("keys a throttle by the signed-in account, in a limiter GraphQL shares", () => {
+  // Only a password change: keyed by account, a sign-in, registration or recovery mail would get
+  // a fresh bucket for every account whose token the caller sends (GraphQL reads one, as Strapi's).
+  it("keys a password change by the signed-in account, every other group by address", () => {
     const limits = content("app/Support/StrapiRateLimits.php");
+    expect(limits).toContain("private const PER_ACCOUNT = ['password-change'];");
     expect(limits).toContain("'user:'.$user->getAuthIdentifier()");
     expect(limits).toContain("'ip:'.$request->ip()");
     expect(content("app/Http/Middleware/StrapiThrottle.php")).toContain(

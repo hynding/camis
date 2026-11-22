@@ -123,6 +123,37 @@ class GraphqlTest extends TestCase
             ->assertJsonPath('errors.0.message', 'Too many requests, please try again later.');
     }
 
+    /**
+     * Strapi's GraphQL sign-in, registration and recovery mutations take a caller's session (auth:
+     * false) without refusing it; its account must not buy the caller's address a fresh bucket.
+     */
+    public function test_a_session_buys_no_more_sign_ins_registrations_or_recovery_mail(): void
+    {
+        config(['camis.auth_throttle_per_minute' => 2]);
+        $own = $this->signIn('mallory');
+        $other = $this->signIn('trent');
+        $restLogin = fn () => $this->postJson('/api/auth/local', ['identifier' => 'nobody', 'password' => 'wrong']);
+        $this->app['auth']->forgetGuards();
+        $restLogin()->assertStatus(400);
+        $restLogin()->assertStatus(400);
+        $restLogin()->assertStatus(429);
+        foreach ([$own, $other] as $jwt) {
+            $this->graphql('mutation { login(input: { identifier: "nobody", password: "wrong" }) { jwt } }', $jwt)
+                ->assertJsonPath('errors.0.extensions.code', 'STRAPI_RATE_LIMIT_ERROR');
+        }
+
+        $this->app['auth']->forgetGuards();
+        $this->postJson('/api/auth/local/register', ['username' => 'r1', 'email' => 'r1@example.test', 'password' => 'secret1'])->assertOk();
+        $this->postJson('/api/auth/local/register', ['username' => 'r2', 'email' => 'r2@example.test', 'password' => 'secret1'])->assertOk();
+        $this->graphql('mutation { register(input: { username: "g1", email: "g1@example.test", password: "secret1" }) { jwt } }', $own)
+            ->assertJsonPath('errors.0.extensions.code', 'STRAPI_RATE_LIMIT_ERROR');
+
+        $forgot = 'mutation { forgotPassword(email: "nobody@example.test") { ok } }';
+        $this->graphql($forgot, $own)->assertJsonPath('data.forgotPassword.ok', true);
+        $this->graphql($forgot, $other)->assertJsonPath('data.forgotPassword.ok', true);
+        $this->graphql($forgot, $own)->assertJsonPath('errors.0.extensions.code', 'STRAPI_RATE_LIMIT_ERROR');
+    }
+
     public function test_changing_the_password_through_graphql_is_throttled_as_the_rest_route_is(): void
     {
         config(['camis.auth_throttle_per_minute' => 2]);
