@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Models\Ledger;
 use App\Models\User;
+use App\Support\DecimalDigits;
 use Brick\Math\BigDecimal;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -145,6 +146,76 @@ class DecimalsTest extends TestCase
         $this->assertSame(['exact', 'hundred'], $in);
         $this->graphql('{ ledgers(filters: { balance: { notIn: ["'.self::BALANCE.'", "100"] } }) { label } }')
             ->assertJsonCount(4, 'data.ledgers');
+    }
+
+    public function test_filters_compare_a_value_with_more_digits_than_the_scale_exactly_never_rounding_it(): void
+    {
+        foreach (['r0' => ['1.0000', '1.000000'], 'r1' => ['1.0001', '1.000001'], 'r2' => ['1.0002', '1.000002']] as $label => [$rate, $balance]) {
+            $this->api('POST', 'ledgers', ['label' => $label, 'rate' => $rate, 'balance' => $balance])->assertCreated();
+        }
+        // A row without a value, which no comparison but $null finds, on any database.
+        $this->api('POST', 'ledgers', ['label' => 'empty'])->assertCreated();
+        $all = ['r0', 'r1', 'r2'];
+
+        foreach ([
+            'filters[rate][$gt]=1.00005' => ['r1', 'r2'],
+            'filters[rate][$gte]=1.00004' => ['r1', 'r2'],
+            'filters[rate][$lt]=1.00015' => ['r0', 'r1'],
+            'filters[rate][$lte]=1.00005' => ['r0'],
+            'filters[rate][$eq]=1.00004' => [],
+            'filters[rate]=1.00004' => [],
+            'filters[rate][$eq]=1.0001000' => ['r1'],
+            'filters[rate][$ne]=1.00004' => $all,
+            'filters[rate][$in][0]=1.00004&filters[rate][$in][1]=1.0001' => ['r1'],
+            'filters[rate][$in][0]=1.00004' => [],
+            'filters[rate][0]=1.00004&filters[rate][1]=1.0002' => ['r2'],
+            'filters[rate][$notIn][0]=1.00004' => $all,
+            'filters[rate][$notIn][0]=1.00004&filters[rate][$notIn][1]=1.0001' => ['r0', 'r2'],
+            'filters[rate][$between][0]=1.00005&filters[rate][$between][1]=1.00015' => ['r1'],
+            // Beyond every value (9, 4) holds.
+            'filters[rate][$lt]=1e10' => $all,
+            'filters[rate][$gt]=-1e10' => $all,
+            'filters[rate][$gt]=1e10' => [],
+            'filters[rate][$eq]=1e10' => [],
+            'filters[rate][$ne]=1e10' => $all,
+            'filters[rate][$lte]=99999.99995' => $all,
+            'filters[rate][$gte]=99999.99995' => [],
+            'filters[rate][$not][$gt]=1.00005' => ['empty', 'r0'],
+            'filters[balance][$gt]=1.0000005' => ['r1', 'r2'],
+            'filters[balance][$gte]=1.0000004' => ['r1', 'r2'],
+            'filters[balance][$lte]=1.0000015' => ['r0', 'r1'],
+            'filters[balance][$eq]=1.0000004' => [],
+            'filters[balance][$ne]=1.0000004' => $all,
+            'filters[balance][$eq]=1.000001' => ['r1'],
+            'filters[balance][$eq]=1e-999' => [],
+        ] as $query => $expected) {
+            $this->assertSame($expected, $this->labels($query), $query);
+        }
+
+        $labels = fn (string $filter): array => array_map(fn (array $l) => $l['label'], $this->graphql('{ ledgers(sort: "label", filters: '.$filter.') { label } }')->json('data.ledgers'));
+        $this->assertSame(['r1', 'r2'], $labels('{ rate: { gt: 1.00005 } }'));
+        $this->assertSame(['r0'], $labels('{ rate: { lte: 1.00005 } }'));
+        $this->assertSame([], $labels('{ rate: { eq: 1.00004 } }'));
+        $this->assertSame(['r1', 'r2'], $labels('{ balance: { gt: "1.0000005" } }'));
+        $this->assertSame([], $labels('{ balance: { in: ["1.0000004"] } }'));
+    }
+
+    public function test_a_value_too_long_or_with_too_large_an_exponent_is_not_a_decimal(): void
+    {
+        // brick/math writes out every zero an exponent stands for: these are refused before it reads them.
+        foreach (['1e100000000', '1e999999999', str_repeat('9', 5000), '1e-999999999', '1e1000', "1\n2", '１２', '0x1A', '1_000'] as $value) {
+            $this->assertNull(DecimalDigits::canonical($value, 20, 6), substr($value, 0, 20));
+        }
+        $this->assertSame('1000.000000', DecimalDigits::canonical('1e3', 20, 6));
+        $this->assertSame('0.000000', DecimalDigits::canonical('1e-999', 20, 6));
+
+        $this->api('POST', 'ledgers', ['label' => 'huge', 'balance' => '1e100000000'])->assertStatus(400);
+        $this->assertFalse(DB::table('ledgers')->exists());
+        // A filter by one is bound as it came, as every number field's unreadable value is.
+        foreach (['1e100000000', '1e-999999999', str_repeat('9', 5000)] as $value) {
+            $status = $this->api('GET', 'ledgers?filters[balance][$eq]='.$value)->getStatusCode();
+            $this->assertContains($status, [200, 400], substr($value, 0, 20));
+        }
     }
 
     public function test_a_decimal_stating_its_digits_is_written_at_its_scale_on_every_database(): void

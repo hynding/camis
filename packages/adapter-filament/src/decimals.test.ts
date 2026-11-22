@@ -108,14 +108,20 @@ describe("decimals stating their digits (issue #104)", () => {
   });
 
   // A float holds 15 digits; MySQL compares a DECIMAL with a string as two doubles.
-  it("filters a decimal stating its digits by a value at its scale, never through a float, and every other project as before", () => {
+  it("filters a decimal stating its digits by its exact value, never through a float nor rounded, and every other project as before", () => {
     const query = contentOf(generate("strapi"))("app/Support/StrapiQuery.php");
     expect(query).toContain(
-      `self::attribute($query, $query->qualifyColumn($field['column']), (isset($field['scale']) ? "decimal:{$field['scale']}" : $field['type']), $value, self::join($at, $wirePath));`,
+      `self::attribute($query, $query->qualifyColumn($field['column']), (isset($field['scale']) ? "decimal:{$field['precision']},{$field['scale']}" : $field['type']), $value, self::join($at, $wirePath));`,
+    );
+    // A value or a list without an operator is compared as by $eq or $in.
+    expect(query).toContain(
+      "if (str_starts_with($type, 'decimal:') && $value !== null && (! is_array($value) || array_is_list($value))) {\n            self::operator($query, $column, $type, is_array($value) ? '$in' : '$eq', $value, $wirePath);",
     );
     expect(query).toContain(
-      "default => str_starts_with($type, 'decimal:') ? DecimalDigits::filter($value, (int) substr($type, 8)) : $value,",
+      "if (DecimalDigits::where($query, $column, $operator, $value, $precision, $scale)) {",
     );
+    expect(query).not.toContain("DecimalDigits::filter");
+    expect(query).toContain("            default => $value,\n");
     const blogQuery =
       filamentAdapter
         .generate(blog, { projectName: "blog", apiStyle: "strapi" })
