@@ -3489,8 +3489,9 @@ decimal(10, 2), and a double on SQLite.
   (`DecimalDigits::where`), against the table as Laravel's unique rule reads it, ignoring the
   record being edited, with Laravel's "has already been taken" message; a value the column cannot
   hold is `DecimalDigitsRule`'s to refuse. The rule is emitted only when a generated form checks it,
-  so not for one whose only such decimal is in a draft-and-publish or localized type, whose form
-  leaves a unique field's rule out. The Strapi API style's unique check had the same flaw: it
+  so not, on the Strapi API style, for one whose only such decimal is in a draft-and-publish or
+  localized type, whose form there leaves a unique field's rule out (the Laravel API style keeps
+  one row per record and keeps the rule). The Strapi API style's unique check had the same flaw: it
   looked the value up as sent (yup's cast, a float), so a duplicate in another spelling (`1.5`
   beside a stored `1.50000` on SQLite, `1.500004` on PostgreSQL) reached the unique index and was
   answered with a bare 400 "Validation failed" with no details. For a project with a unique decimal
@@ -3588,11 +3589,14 @@ conversion, `ColumnConversion`); a GraphQL filter's `in` or `notIn` list has no 
 (REST's query string has PHP's `max_input_vars`, 1000), so a list of 50,000 decimals takes over a
 second to compare. A unique field inside a dynamic zone's component gets the form's unique rule
 (`DecimalDigitsUniqueRule`, like Filament's `->unique()` for every other type) checked against the
-parent's model, whose table has no such column. The Laravel API style checks no uniqueness before
-a write, for any unique field, so a duplicate still reaches the unique index there. On Strapi's
-storage layout `StrapiValidator` compares a unique value as sent, as before. The patched
-`StrapiValidator`, like the patched `StrapiImport`, is not analysed by the `runtime-phpstan` job,
-which analyses the static files only.
+parent's model, whose table has no such column: saving that form fails on PostgreSQL (the column
+does not exist), and SQLite, reading the unknown quoted name as text, lets duplicates through. The
+Laravel API style checks no uniqueness before a write, for any unique field, so a duplicate still
+reaches the unique index there. On Strapi's storage layout `StrapiValidator` compares a unique
+value as sent, as before. Two items of one request are still compared with each other as sent,
+not as stored, so `"7"` beside `"7.0"` in one repeatable passes where `"7"` twice is refused. The
+patched `StrapiValidator`, like the patched `StrapiImport`, is not analysed by the
+`runtime-phpstan` job, which analyses the static files only.
 
 Exit: `fields.test.ts` and `parse.test.ts` in `ir-schema`; `decimals.test.ts` in `adapter-filament`
 (goldens of both API styles' migrations, models, admin forms, the Laravel controller, the Strapi
