@@ -473,6 +473,10 @@ describe("deploymentSettings — strapi::cors in config/middlewares", () => {
     expect(features({ origin: env("CORS_ORIGIN", "https://a.example,*") })).toEqual([
       "corsCredentialsAnyOrigin",
     ]);
+    // A variable without a fallback leaves the origin unset where it is unset: strapi::cors's `*`.
+    expect(features({ origin: env("CORS_ORIGIN") })).toEqual(["corsCredentialsAnyOrigin"]);
+    // In a list it is one entry that matches no request's origin.
+    expect(features({ origin: ["https://a.example", env("CORS_ORIGIN")] })).toEqual([]);
     expect(features({ origin: "*", credentials: false })).toEqual([]);
     expect(features({ origin: ["https://a.example"] })).toEqual([]);
   });
