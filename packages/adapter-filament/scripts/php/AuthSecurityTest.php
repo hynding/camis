@@ -18,10 +18,42 @@ class AuthSecurityTest extends TestCase
 {
     use RefreshDatabase;
 
+    /** @var list<string> */
+    private array $env = [];
+
     protected function setUp(): void
     {
         parent::setUp();
         $this->seed(\Database\Seeders\RolePermissionSeeder::class);
+    }
+
+    protected function tearDown(): void
+    {
+        parent::tearDown();
+        foreach ($this->env as $name) {
+            putenv($name);
+            unset($_ENV[$name], $_SERVER[$name]);
+        }
+    }
+
+    /** Boots the app again with $env set, for settings read when the config is loaded. */
+    private function bootWith(array $env): void
+    {
+        foreach ($env as $name => $value) {
+            putenv("{$name}={$value}");
+            $_ENV[$name] = $_SERVER[$name] = $value;
+            $this->env[] = $name;
+        }
+        $this->refreshApplication();
+    }
+
+    private function preflight(string $origin, string $headers = 'content-type'): TestResponse
+    {
+        return $this->call('OPTIONS', '/api/auth/refresh', server: [
+            'HTTP_ORIGIN' => $origin,
+            'HTTP_ACCESS_CONTROL_REQUEST_METHOD' => 'POST',
+            'HTTP_ACCESS_CONTROL_REQUEST_HEADERS' => $headers,
+        ]);
     }
 
     private static function limit(): int
@@ -68,5 +100,35 @@ class AuthSecurityTest extends TestCase
         $jwt = $this->register('alice');
         $guess = ['currentPassword' => 'wrong', 'password' => 'secret2', 'passwordConfirmation' => 'secret2'];
         self::assertThrottled(fn (): TestResponse => $this->withToken($jwt)->postJson('/api/auth/change-password', $guess), 400);
+    }
+
+    /** Credentials for `*` would let any site read what the visitor's refresh cookie buys. */
+    public function test_any_origin_is_answered_without_credentials_by_default(): void
+    {
+        $response = $this->preflight('https://evil.example.test', 'x-strapi-refresh-cookie');
+
+        $response->assertNoContent();
+        self::assertSame('*', $response->headers->get('Access-Control-Allow-Origin'));
+        self::assertNull($response->headers->get('Access-Control-Allow-Credentials'));
+    }
+
+    public function test_a_listed_origin_alone_is_answered_with_credentials(): void
+    {
+        $this->bootWith(['CAMIS_CORS_ORIGIN' => 'https://app.example.test']);
+
+        $listed = $this->preflight('https://app.example.test', 'x-strapi-refresh-cookie,x-requested-with');
+        self::assertSame('https://app.example.test', $listed->headers->get('Access-Control-Allow-Origin'));
+        self::assertSame('true', $listed->headers->get('Access-Control-Allow-Credentials'));
+        self::assertStringContainsStringIgnoringCase('x-strapi-refresh-cookie', (string) $listed->headers->get('Access-Control-Allow-Headers'));
+
+        $other = $this->preflight('https://evil.example.test');
+        self::assertNotSame('https://evil.example.test', $other->headers->get('Access-Control-Allow-Origin'));
+    }
+
+    public function test_a_cross_origin_client_can_read_retry_after(): void
+    {
+        $response = $this->call('GET', '/api/_health', server: ['HTTP_ORIGIN' => 'https://app.example.test']);
+
+        self::assertSame('Retry-After', $response->headers->get('Access-Control-Expose-Headers'));
     }
 }
