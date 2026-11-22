@@ -43,35 +43,35 @@ describe("decimals stating their digits (issue #104)", () => {
   });
 
   // PDO SQLite reads a decimal column as a PHP float, which becomes a string of 14 digits.
-  it("reports, located, that the Strapi API style compares a decimal beyond a PHP float as text on SQLite in an ordering filter or a sort", () => {
+  it("reports, located, that the Strapi API style compares a decimal beyond a PHP float as text on SQLite in an ordering filter, a sort or an admin list filter", () => {
     expect(decimalGaps(generate("strapi"))).toEqual([
       {
         feature: "decimalPrecision",
         location: { contentType: "Ledger", field: "balance" },
         severity: "downgrade",
         message:
-          '"balance" keeps its 20 digits as text on SQLite, where a filter on it finds equal values exactly but compares text, not numbers, in an ordering comparison ($lt, $lte, $gt, $gte, $between) or a sort; a JSON number sent for it is read as a double first, so an exact value is sent as a string; a data-transfer archive carries it as a number, as Strapi\'s archives do, rounded to 15 significant digits',
+          "\"balance\" keeps its 20 digits as text on SQLite, where a filter on it finds equal values exactly but compares text, not numbers, in an ordering comparison ($lt, $lte, $gt, $gte, $between) or a sort; a JSON number sent for it is read as a double first, so an exact value is sent as a string; the admin list's number filters compare it through a PHP float, as text on SQLite; a data-transfer archive carries it as a number, as Strapi's archives do, rounded to 15 significant digits",
       },
       {
         feature: "decimalPrecision",
         location: { contentType: "Ledger", field: "share" },
         severity: "downgrade",
         message:
-          '"share" keeps its 15 digits as text on SQLite, where a filter on it finds equal values exactly but compares text, not numbers, in an ordering comparison ($lt, $lte, $gt, $gte, $between) or a sort; a JSON number sent for it is read as a double first, so an exact value is sent as a string; a data-transfer archive carries it as a number, as Strapi\'s archives do, rounded to 15 significant digits',
+          "\"share\" keeps its 15 digits as text on SQLite, where a filter on it finds equal values exactly but compares text, not numbers, in an ordering comparison ($lt, $lte, $gt, $gte, $between) or a sort; a JSON number sent for it is read as a double first, so an exact value is sent as a string; the admin list's number filters compare it through a PHP float, as text on SQLite; a data-transfer archive carries it as a number, as Strapi's archives do, rounded to 15 significant digits",
       },
       {
         feature: "decimalPrecision",
         location: { component: "Limit", field: "ceiling" },
         severity: "downgrade",
         message:
-          '"ceiling" keeps its 18 digits as text on SQLite, where a filter on it finds equal values exactly but compares text, not numbers, in an ordering comparison ($lt, $lte, $gt, $gte, $between) or a sort; a JSON number sent for it is read as a double first, so an exact value is sent as a string; a data-transfer archive carries it as a number, as Strapi\'s archives do, rounded to 15 significant digits',
+          "\"ceiling\" keeps its 18 digits as text on SQLite, where a filter on it finds equal values exactly but compares text, not numbers, in an ordering comparison ($lt, $lte, $gt, $gte, $between) or a sort; a JSON number sent for it is read as a double first, so an exact value is sent as a string; the admin list's number filters compare it through a PHP float, as text on SQLite; a data-transfer archive carries it as a number, as Strapi's archives do, rounded to 15 significant digits",
       },
       {
         feature: "decimalPrecision",
         location: { component: "Entry", field: "amount" },
         severity: "downgrade",
         message:
-          '"amount" keeps its 20 digits as text on SQLite, where a filter on it finds equal values exactly but compares text, not numbers, in an ordering comparison ($lt, $lte, $gt, $gte, $between) or a sort; a JSON number sent for it is read as a double first, so an exact value is sent as a string; a data-transfer archive carries it as a number, as Strapi\'s archives do, rounded to 15 significant digits',
+          "\"amount\" keeps its 20 digits as text on SQLite, where a filter on it finds equal values exactly but compares text, not numbers, in an ordering comparison ($lt, $lte, $gt, $gte, $between) or a sort; a JSON number sent for it is read as a double first, so an exact value is sent as a string; the admin list's number filters compare it through a PHP float, as text on SQLite; a data-transfer archive carries it as a number, as Strapi's archives do, rounded to 15 significant digits",
       },
     ]);
   });
