@@ -130,6 +130,12 @@ describe("users-permissions routes", () => {
       /Route::middleware\(\[StrapiCredentials::class\.':required', StrapiActiveUser::class\]\)/,
     );
   });
+  // Strapi rate-limits it too: a stolen access token must not buy unlimited guesses of the password.
+  it("throttles a password change, which checks the current password", () => {
+    expect(routes).toContain(
+      "Route::post('/auth/change-password', [AuthController::class, 'changePassword'])->middleware($authThrottle);",
+    );
+  });
   it("throttles the unauthenticated email endpoints with the credential ones", () => {
     expect(routes).toContain(
       "Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware([$authThrottle, StrapiCredentials::class.':guest']);",

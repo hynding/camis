@@ -35,20 +35,38 @@ class AuthSecurityTest extends TestCase
             ->assertOk()->json('jwt');
     }
 
-    /** The request the limit was reached with is refused in Strapi's envelope, with its wait. */
-    private static function assertThrottled(TestResponse $response): void
+    /**
+     * Repeats a request until it is throttled, which must happen within the limit: the credential
+     * routes share one bucket per client, so an earlier request may already have used a turn.
+     * Each answer before is $expected; the throttled one is in Strapi's envelope, with its wait.
+     *
+     * @param callable(): TestResponse $request
+     */
+    private static function assertThrottled(callable $request, int $expected): void
     {
-        $response->assertStatus(429)->assertJsonPath('error.status', 429)->assertJsonPath('data', null);
-        self::assertNotNull($response->headers->get('Retry-After'));
+        for ($i = 0; $i <= self::limit(); $i++) {
+            $response = $request();
+            if ($response->status() === 429) {
+                $response->assertJsonPath('error.status', 429)->assertJsonPath('data', null);
+                self::assertNotNull($response->headers->get('Retry-After'));
+
+                return;
+            }
+            $response->assertStatus($expected);
+        }
+        self::fail('Not throttled within '.self::limit().' requests');
     }
 
     public function test_a_password_sign_in_through_the_provider_callback_route_is_throttled(): void
     {
-        for ($i = 0; $i < self::limit(); $i++) {
-            $this->json('GET', '/api/auth/local/callback', ['identifier' => 'nobody', 'password' => 'wrong'])
-                ->assertStatus(400);
-        }
+        self::assertThrottled(fn (): TestResponse => $this->json('GET', '/api/auth/local/callback', ['identifier' => 'nobody', 'password' => 'wrong']), 400);
+    }
 
-        self::assertThrottled($this->json('GET', '/api/auth/local/callback', ['identifier' => 'nobody', 'password' => 'wrong']));
+    /** A stolen access token must not buy unlimited guesses of the current password. */
+    public function test_a_password_change_is_throttled_per_account(): void
+    {
+        $jwt = $this->register('alice');
+        $guess = ['currentPassword' => 'wrong', 'password' => 'secret2', 'passwordConfirmation' => 'secret2'];
+        self::assertThrottled(fn (): TestResponse => $this->withToken($jwt)->postJson('/api/auth/change-password', $guess), 400);
     }
 }
