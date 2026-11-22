@@ -121,14 +121,19 @@ final class StrapiUsers
     /**
      * Whether $password is the account's, after exactly one hash check of the configured cost
      * whether or not there is an account with a password: a name that finds none is checked
-     * against a stand-in hash, so the answer takes as long as a wrong password's.
+     * against a stand-in hash, so the answer takes as long as a wrong password's. A stored hash
+     * the hasher cannot verify is checked against the stand-in too, and fails as a wrong one.
      */
     public static function passwordMatches(?User $user, string $password): bool
     {
         $standIn = self::standInHash();
         $hash = $user !== null && ($user->password ?? '') !== '' ? (string) $user->password : null;
+        $matches = $hash === null ? null : StrapiHashes::verify($password, $hash);
+        if ($matches === null) {
+            StrapiHashes::check($password, $standIn);
+        }
 
-        return Hash::check($password, $hash ?? $standIn) && $hash !== null;
+        return $matches === true;
     }
 
     /** A hash of a random secret at the configured algorithm and cost, read on every sign-in. */

@@ -30,6 +30,7 @@ overwrite app/Support/Ring1.php
 overwrite app/Support/StrapiComponentAttributes.php
 overwrite app/Support/StrapiComponents.php
 overwrite app/Support/StrapiError.php
+overwrite app/Support/StrapiHashes.php
 overwrite app/Support/StrapiRows.php
 overwrite app/Support/StrapiValidator.php
 overwrite config/camis.php

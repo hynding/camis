@@ -74,7 +74,7 @@ final class StrapiAdminImport
                     'lastname' => $row->lastname ?? null,
                     'username' => $row->username ?? null,
                     'email' => $email,
-                    'password' => self::hash($row->password ?? null),
+                    'password' => StrapiHashes::fromBcryptjs($row->password ?? null),
                     'is_active' => (bool) ($row->is_active ?? false),
                     'blocked' => (bool) ($row->blocked ?? false),
                     'prefered_language' => $row->prefered_language ?? null,
@@ -163,16 +163,6 @@ final class StrapiAdminImport
     private static function email(object $row): string
     {
         return mb_strtolower((string) $row->email);
-    }
-
-    /** bcryptjs writes `$2a$` (and `$2b$`), the same hash PHP verifies as `$2y$`. */
-    private static function hash(mixed $hash): ?string
-    {
-        if (! is_string($hash) || $hash === '') {
-            return null;
-        }
-
-        return preg_match('/^\$2[ab]\$/', $hash) === 1 ? '$2y$' . substr($hash, 4) : $hash;
     }
 
     /** A Strapi datetime: milliseconds since the epoch on SQLite, a date string elsewhere. */

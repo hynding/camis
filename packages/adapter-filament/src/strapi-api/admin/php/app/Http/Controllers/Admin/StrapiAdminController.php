@@ -7,12 +7,12 @@ namespace App\Http\Controllers\Admin;
 use App\Models\AdminUser;
 use App\Support\StrapiAdminAuth;
 use App\Support\StrapiError;
+use App\Support\StrapiHashes;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Spatie\Permission\Models\Role;
 
@@ -44,7 +44,7 @@ final class StrapiAdminController
         }
         $admin = AdminUser::query()->where('email', mb_strtolower($email))->first();
         $hash = $admin?->getAttribute('password');
-        if ($admin === null || ! is_string($hash) || $hash === '' || ! Hash::check($password, $hash)) {
+        if ($admin === null || ! is_string($hash) || $hash === '' || ! StrapiHashes::check($password, $hash)) {
             throw new StrapiError(400, 'ApplicationError', 'Invalid credentials');
         }
         if (! $admin->is_active) {

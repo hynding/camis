@@ -382,6 +382,7 @@ overwrite app/Support/StrapiEmail.php
 overwrite app/Support/StrapiError.php
 overwrite app/Support/StrapiExport.php
 overwrite app/Support/StrapiFolders.php
+overwrite app/Support/StrapiHashes.php
 overwrite app/Support/StrapiHomepage.php
 overwrite app/Support/StrapiImport.php
 overwrite app/Support/StrapiItems.php

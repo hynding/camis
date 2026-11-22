@@ -133,7 +133,8 @@ describe("Strapi's admin accounts and admin API", () => {
     expect(engine).toContain("'admin_users_roles_lnk'");
     expect(engine).toContain("'strapi-super-admin'");
     // bcryptjs writes $2a$, which PHP verifies as $2y$.
-    expect(engine).toContain("'$2y$'");
+    expect(engine).toContain("StrapiHashes::fromBcryptjs($row->password ?? null)");
+    expect(content("app/Support/StrapiHashes.php")).toContain("'$2y$'");
   });
 
   it("counts admin accounts on the Home page", () => {
