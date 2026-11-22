@@ -104,7 +104,7 @@ import {
   linkOrderColumns,
   toOneLinkOrders,
 } from "./core/link-order";
-import { emitSerializer, statesDecimalDigits } from "./core/serializer";
+import { emitSerializer, statesDecimalDigits, zoneItemsStateDigits } from "./core/serializer";
 import {
   emitRoleController,
   emitSessionController,
@@ -491,7 +491,10 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
   if (emitted.some((ct) => ct.fields.some((f) => f.type === "dynamicZone")))
     files.push({
       path: "app/Support/StrapiZones.php",
-      content: emitStrapiZones(doc.components.map(componentUid).sort()),
+      content: emitStrapiZones(
+        doc.components.map(componentUid).sort(),
+        [...shapes.values()].some(zoneItemsStateDigits),
+      ),
     });
   files.push({ path: "app/Models/Concerns/HasDocumentId.php", content: emitHasDocumentId() });
   files.push({

@@ -108,7 +108,7 @@ const decimalsConstant = (decimals: DecimalColumn[]): string =>
 
 // SQLite keeps a decimal beyond a PHP float as text, which takes any string: every value is kept
 // as MySQL and PostgreSQL keep it, at its scale, and one that is not a decimal or does not fit is
-// refused before it is written, with a 400 in Laravel's validation error shape.
+// refused before it is written, as Laravel refuses an invalid field: a 422 with its errors.
 const WITH_DECIMALS = `
 
     /** The payload with each decimal stating its digits as its column keeps it, from a string or a number. */
@@ -120,7 +120,7 @@ const WITH_DECIMALS = `
             }
             $decimal = DecimalDigits::canonical($payload[$column], $precision, $scale);
             if ($decimal === null) {
-                throw ValidationException::withMessages([$column => "The {$column} field must be a decimal of at most {$precision} digits, {$scale} of them after the point."])->status(400);
+                throw ValidationException::withMessages([$column => "The {$column} field must be a decimal of at most {$precision} digits, {$scale} of them after the point."]);
             }
             $payload[$column] = $decimal;
         }

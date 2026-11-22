@@ -187,15 +187,21 @@ ${indent}]])->all(),`;
 const zoneWire = (zone: WireZone, indent: string): string =>
   `self::zone([\n${zone.members.map((m) => zoneMemberWire(m, indent)).join("\n")}\n${indent.slice(UNIT.length)}])`;
 
-const fromWireColumns = (scalars: WireScalar[], src: string, indent: string): string =>
+const quoted = (keys: readonly string[]): string => keys.map((k) => `'${k}'`).join(", ");
+
+/**
+ * Each column of a row read from `src`. `at` is the PHP list of the path to `src` within the
+ * request (a repeatable's key and an item's index, say), which a refused decimal names.
+ */
+const fromWireColumns = (scalars: WireScalar[], src: string, indent: string, at = ""): string =>
   scalars
     .map((s) => {
-      const value = `self::dig(${src}, [${s.key.map((k) => `'${k}'`).join(", ")}])`;
+      const value = `self::dig(${src}, [${quoted(s.key)}])`;
       const taken =
         s.type === "timestamp"
           ? `self::epoch(${value})`
           : s.digits !== undefined
-            ? `self::decimal(${value}, ${s.digits.precision}, ${s.digits.scale}, '${s.key.join(".")}')`
+            ? `self::decimal(${value}, ${s.digits.precision}, ${s.digits.scale}, [${at}${quoted(s.key)}])`
             : value;
       return `${indent}'${s.column}' => ${taken},`;
     })
@@ -211,7 +217,7 @@ const fromWireChildStatements = (children: WireChild[], indent: string): string 
     const assignIndent = `${indent}${UNIT}`;
     const path = c.key.map((k) => `'${k}'`).join(", ");
     return `${indent}if (self::has($data, [${path}])) {
-${assignIndent}$children['${c.relation}'] = ${itemRows(c, `self::dig($data, [${path}])`, 1, assignIndent)};
+${assignIndent}$children['${c.relation}'] = ${itemRows(c, `self::dig($data, [${path}])`, 1, assignIndent, `${path}, `)};
 ${indent}}`;
   });
   return [`${indent}$children = [];`, ...blocks].join("\n");
@@ -223,25 +229,43 @@ ${indent}}`;
  * the repeatables inside it (`__children`). A new item links nothing and holds no items, so a null
  * reference or list and a missing one mean the same.
  */
-const itemRows = (c: WireChild, value: string, level: number, indent: string): string => {
+const itemRows = (
+  c: WireChild,
+  value: string,
+  level: number,
+  indent: string,
+  at: string,
+): string => {
   const row = level === 1 ? "$row" : `$row${level}`;
+  // An item's index is read only where a decimal in it, which a refusal names by it, needs it.
+  const index = statesDigits(c) ? (level === 1 ? "$i" : `$i${level}`) : undefined;
+  const itemAt = index === undefined ? "" : `${at}(string) ${index}, `;
   const rowIndent = `${indent}${UNIT}`;
   const links = [...c.media, ...c.relations];
   const nested = c.children.map(
     (n) =>
-      `${rowIndent}${UNIT}'${n.relation}' => ${itemRows(n, `self::dig(${row}, [${n.key.map((k) => `'${k}'`).join(", ")}])`, level + 1, `${rowIndent}${UNIT}`)},`,
+      `${rowIndent}${UNIT}'${n.relation}' => ${itemRows(n, `self::dig(${row}, [${quoted(n.key)}])`, level + 1, `${rowIndent}${UNIT}`, `${itemAt}${quoted(n.key)}, `)},`,
   );
   const parts = [
-    fromWireColumns(c.scalars, row, rowIndent),
+    fromWireColumns(c.scalars, row, rowIndent, itemAt),
     ...(links.length === 0 ? [] : [fromWireLinks(links, row, rowIndent)]),
     ...(nested.length === 0
       ? []
       : [`${rowIndent}'__children' => [\n${nested.join("\n")}\n${rowIndent}],`]),
   ].filter((part) => part !== "");
-  return `array_map(fn (array ${row}) => array_filter([
+  const items = `is_array(${value}) ? ${value} : []`;
+  return index === undefined
+    ? `array_map(fn (array ${row}) => array_filter([
 ${parts.join("\n")}
-${indent}], fn ($v) => $v !== null), is_array(${value}) ? ${value} : [])`;
+${indent}], fn ($v) => $v !== null), ${items})`
+    : `array_map(fn (array ${row}, int|string ${index}) => array_filter([
+${parts.join("\n")}
+${indent}], fn ($v) => $v !== null), ${items}, array_keys(${items}))`;
 };
+
+/** Whether an item, or an item of a repeatable inside it, writes a decimal stating its digits. */
+const statesDigits = (c: Pick<WireChild, "scalars" | "children">): boolean =>
+  c.scalars.some((s) => s.digits !== undefined) || c.children.some(statesDigits);
 
 // An item's links as sent: the controller resolves them before any write.
 const fromWireLinks = (links: WireRelation[], row: string, indent: string): string =>
@@ -263,22 +287,25 @@ const fromWireZoneStatements = (zones: WireZone[], indent: string): string =>
       const l1 = `${indent}${UNIT}`;
       const l2 = `${l1}${UNIT}`;
       const l3 = `${l2}${UNIT}`;
+      // StrapiZones passes an item's place in the zone, which a refused decimal in it names.
+      const positioned = z.members.some(statesDigits);
+      const at = positioned ? `'${z.key}', (string) $position, ` : "";
       const arms = z.members
         .map(
           (m) =>
             `${l2}'${m.uid}' => [\n${[
-              fromWireColumns(m.scalars, "$item", l3),
+              fromWireColumns(m.scalars, "$item", l3, at),
               ...(m.media.length + m.relations.length === 0
                 ? []
                 : [zoneItemLinks([...m.media, ...m.relations], l3)]),
-              ...(m.children.length === 0 ? [] : [zoneItemChildren(m.children, l3)]),
+              ...(m.children.length === 0 ? [] : [zoneItemChildren(m.children, l3, at)]),
             ]
               .filter((part) => part !== "")
               .join("\n")}\n${l2}],`,
         )
         .join("\n");
       return `${indent}if (array_key_exists('${z.key}', $data)) {
-${l1}$children['${z.key}'] = StrapiZones::items($data['${z.key}'], '${z.key}', self::ZONES['${z.key}'], fn (string $uid, array $item) => match ($uid) {
+${l1}$children['${z.key}'] = StrapiZones::items($data['${z.key}'], '${z.key}', self::ZONES['${z.key}'], fn (string $uid, array $item${positioned ? ", int $position" : ""}) => match ($uid) {
 ${arms}
 ${l1}});
 ${indent}}`;
@@ -291,11 +318,11 @@ const zoneItemLinks = (links: WireRelation[], indent: string): string =>
   `${indent}'__links' => array_intersect_key($item, [${[...new Set(links.map((r) => r.key.split(".")[0]))].map((k) => `'${k}' => true`).join(", ")}]),`;
 
 // The items of the repeatables inside a zone's item, replaced whole with the item.
-const zoneItemChildren = (children: WireChild[], indent: string): string =>
+const zoneItemChildren = (children: WireChild[], indent: string, at: string): string =>
   `${indent}'__children' => array_filter([\n${children
     .map(
       (n) =>
-        `${indent}${UNIT}'${n.relation}' => self::has($item, [${n.key.map((k) => `'${k}'`).join(", ")}]) ? ${itemRows(n, `self::dig($item, [${n.key.map((k) => `'${k}'`).join(", ")}])`, 2, `${indent}${UNIT}`)} : null,`,
+        `${indent}${UNIT}'${n.relation}' => self::has($item, [${n.key.map((k) => `'${k}'`).join(", ")}]) ? ${itemRows(n, `self::dig($item, [${quoted(n.key)}])`, 2, `${indent}${UNIT}`, `${at}${quoted(n.key)}, `)} : null,`,
     )
     .join("\n")}\n${indent}], fn ($v) => $v !== null),`;
 
@@ -375,28 +402,33 @@ const hasHelper = `
         return true;
     }`;
 
-// Emitted only for a shape with a timestamp scalar, so no other serializer carries it unused.
 // Emitted only for a shape writing a decimal stating its digits. SQLite keeps one beyond a PHP
 // float as text, which takes any string: every value is kept as MySQL and PostgreSQL keep it, at
 // its scale, and one that is not a decimal or does not fit is refused before it is written.
 const decimalHelper = `
 
-    /** A decimal stating its digits as its column keeps it, from a string or a number; refused when it is not one that fits. */
-    private static function decimal(mixed $value, int $precision, int $scale, string $path): ?string
+    /** A decimal stating its digits as its column keeps it, from a string or a number; refused, named by its path, when it is not one that fits. */
+    private static function decimal(mixed $value, int $precision, int $scale, array $path): ?string
     {
         if ($value === null) {
             return null;
         }
         $decimal = DecimalDigits::canonical($value, $precision, $scale);
         if ($decimal === null) {
-            $message = "{$path} must be a decimal of at most {$precision} digits, {$scale} of them after the point";
+            // StrapiValidator's form: ['entries', '1', 'amount'] reads entries[1].amount.
+            $label = '';
+            foreach ($path as $segment) {
+                $label .= ctype_digit($segment) ? "[{$segment}]" : ($label === '' ? $segment : ".{$segment}");
+            }
+            $message = "{$label} must be a decimal of at most {$precision} digits, {$scale} of them after the point";
 
-            throw StrapiError::validation($message, ['errors' => [['path' => explode('.', $path), 'message' => $message, 'name' => 'ValidationError']]]);
+            throw StrapiError::validation($message, ['errors' => [['path' => $path, 'message' => $message, 'name' => 'ValidationError']]]);
         }
 
         return $decimal;
     }`;
 
+// Emitted only for a shape with a timestamp scalar, so no other serializer carries it unused.
 const epochHelper = `
 
     /** A timestamp as Strapi takes one: its epoch in milliseconds, or a date string. */
@@ -428,6 +460,10 @@ const writesScalar = (
     ...zones.flatMap((z) => z.members.flatMap((m) => [...m.scalars, ...items(m.children)])),
   ].some(which);
 };
+
+/** Whether a zone's item writes a decimal stating its digits, whose refusal names its place. */
+export const zoneItemsStateDigits = (shape: WireShape): boolean =>
+  shape.zones.some((z) => z.members.some(statesDigits));
 
 /** Whether a shape writes or filters a decimal stating its digits, at any depth. */
 export const statesDecimalDigits = (shape: WireShape): boolean =>
