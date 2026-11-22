@@ -4,10 +4,22 @@ import { catalog } from "./catalog";
 // Gated-CI-only bundle: catalog's content/relations PLUS an Editor role with a record-level
 // condition, so the boot job exercises migrations, relations, the Spatie seeder, and Policy
 // enforcement in one app, with a hook on each kind of Ring 2 seam; Editor is the admin role and Reader is not, for the admin access check.
-// Not golden-tested (it is free to combine).
+// Not golden-tested (it is free to combine). Article's balance, a decimal beyond a double, is
+// round tripped through the API on each database (issue #104).
 export const bootBundle: IrBundle = {
   document: {
     ...catalog.document,
+    contentTypes: catalog.document.contentTypes.map((ct) =>
+      ct.name === "Article"
+        ? {
+            ...ct,
+            fields: [
+              ...ct.fields,
+              { type: "decimal", name: "balance", precision: 20, scale: 6 } as const,
+            ],
+          }
+        : ct,
+    ),
     hooks: [
       {
         name: "TransformTitle",
