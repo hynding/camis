@@ -48,8 +48,8 @@ that failure looks exactly like a bad token, every authenticated request would a
 other clue. Strapi imposes no such minimum, so a secret that works there can still be too short
 here. \`CAMIS_EMAIL_CONFIRMATION\` mirrors Strapi's "Enable email confirmation" advanced
 setting, and \`CAMIS_AUTH_THROTTLE_PER_MINUTE\` (default 10, floored at 1) sets the request rate
-allowed on \`/auth/local\` and \`/auth/local/register\` — one bucket per client address, shared
-by both routes. The throttle is read through the generated \`config/camis.php\`; after changing
+allowed on \`/auth/local\` and \`/auth/local/register\` — each route in a bucket of its own per
+client address. The throttle is read through the generated \`config/camis.php\`; after changing
 it re-run \`php artisan config:cache\`, and \`php artisan route:cache\` too if routes are cached —
 the rate is baked into the cached route definition.
 
@@ -76,10 +76,11 @@ The Strapi API style adds a NOT NULL unique \`username\` column to \`users\`; ru
 against an empty users table, or backfill usernames first. Two \`.env\` knobs govern its auth
 endpoints: \`SANCTUM_TOKEN_EXPIRATION\` bounds token lifetime (tokens do not expire by default),
 and \`CAMIS_AUTH_THROTTLE_PER_MINUTE\` (default 10, floored at 1) sets the request rate allowed
-on \`/auth/local\` and \`/auth/local/register\` (with the Strapi API style, on every credential
-route: see Sign-in sessions) — one bucket per client address, shared by all of them. The throttle is read through the generated \`config/camis.php\`; after changing it
-re-run \`php artisan config:cache\`, and \`php artisan route:cache\` too if routes are cached —
-the rate is baked into the cached route definition.
+on \`/auth/local\` and \`/auth/local/register\` — each in a bucket of its own per client address
+(with the Strapi API style, every credential route: see Sign-in sessions). It is read through the
+generated \`config/camis.php\`; after changing it re-run \`php artisan config:cache\`. Without the
+Strapi API style re-run \`php artisan route:cache\` too if routes are cached —
+the rate is baked into the cached route definition; with it, the rates are read per request.
 
 \`\`\`sh
 composer install --no-dev --optimize-autoloader
@@ -153,13 +154,31 @@ const sessionsSection = `
 
 ## Sign-in sessions
 
-Every route that checks a password or a refresh token shares \`CAMIS_AUTH_THROTTLE_PER_MINUTE\`,
-one bucket per client address: \`POST /auth/local\`, \`/auth/local/register\`,
-\`/auth/forgot-password\`, \`/auth/reset-password\`, \`/auth/send-email-confirmation\`,
-\`/auth/refresh\` and \`/auth/change-password\`, \`GET /connect/{provider}\` and its callback,
-and \`GET /auth/{provider}/callback\` (for \`/auth/local/callback\` Strapi's password login, which
-Strapi itself leaves unthrottled); GraphQL's sign-in and password mutations take turns of the same
-rate. A throttled REST request answers 429 in Strapi's error envelope with \`Retry-After\`.
+Every route that checks a password or a refresh token is throttled, each group of routes in a
+bucket of its own so a flood of one never locks out another. A bucket counts per client address,
+except a password change, which counts per account: a stolen access token gets no more guesses from
+more addresses. The GraphQL mutations take turns of the same buckets as their REST routes. The
+rates are read per request, so \`php artisan config:cache\` is enough after changing them.
+
+| Group | Routes | Rate per minute |
+| --- | --- | --- |
+| sign-in | \`POST /auth/local\`, \`GET /auth/{provider}/callback\` (for \`/auth/local/callback\` Strapi's password login, which Strapi leaves unthrottled), GraphQL \`login\` | \`CAMIS_AUTH_THROTTLE_PER_MINUTE\` (10) |
+| register | \`POST /auth/local/register\`, GraphQL \`register\` | the same |
+| recovery | \`POST /auth/forgot-password\`, \`/auth/reset-password\`, their GraphQL mutations | the same |
+| confirmation | \`POST /auth/send-email-confirmation\` | the same |
+| provider | \`GET /connect/{provider}\` and its callback | the same |
+| password-change | \`POST /auth/change-password\`, GraphQL \`changePassword\`, per account | the same |
+| refresh | \`POST /auth/refresh\` | \`CAMIS_REFRESH_THROTTLE_PER_MINUTE\` (60) |
+
+A throttled REST request answers 429 in Strapi's error envelope with \`Retry-After\`.
+
+The client address is the one the request comes from. Behind a reverse proxy or load balancer
+that Laravel does not trust, every client has the proxy's address, shares its buckets with every
+other client and is throttled with them, and the request's own origin reads \`http\`. The
+generated app does not trust any proxy by itself, since which addresses to trust belongs to the
+deployment: add \`$middleware->trustProxies(at: ['10.0.0.0/8']);\` (the proxy's addresses, or
+\`'*'\` when only the proxy can reach the app) inside \`->withMiddleware(...)\` in
+\`bootstrap/app.php\`.
 
 With \`CAMIS_JWT_MANAGEMENT=refresh\` a client may keep its refresh token in an httpOnly cookie
 rather than the response body: for every request with \`CAMIS_SESSIONS_HTTP_ONLY=true\`, or per
@@ -182,7 +201,7 @@ request's own scheme and host) or a CORS origin allowed credentials, or from a r
 \`Origin\` that carries \`X-Requested-With\` or \`x-strapi-refresh-cookie\` (headers a page of
 another site cannot send without a preflight CORS refuses). Anything else answers 403
 \`ForbiddenError\`. A refresh token sent in the JSON body is unaffected. Behind a TLS-terminating
-proxy, configure Laravel's trusted proxies so the request's own origin reads \`https\`.
+proxy, trust it as above so the request's own origin reads \`https\`.
 
 ### Upgrading
 
@@ -195,9 +214,13 @@ proxy, configure Laravel's trusted proxies so the request's own origin reads \`h
   first and wins, but logout clears only the new path. A deployment served over plain HTTP outside
   local development must move to HTTPS, and a frontend on another site must set
   \`CAMIS_SESSIONS_COOKIE_SAME_SITE=none\`.
-- \`/auth/refresh\`, \`/auth/change-password\` and \`GET /auth/{provider}/callback\` now count
-  against the throttle: raise \`CAMIS_AUTH_THROTTLE_PER_MINUTE\` if many clients share one address,
-  then re-run \`php artisan config:cache\` and \`php artisan route:cache\`.`;
+- \`/auth/refresh\`, \`/auth/change-password\` and \`GET /auth/{provider}/callback\` are now
+  throttled, and each group of credential routes counts on its own: raise
+  \`CAMIS_REFRESH_THROTTLE_PER_MINUTE\` or \`CAMIS_AUTH_THROTTLE_PER_MINUTE\` if many clients
+  share one address, then re-run \`php artisan config:cache\`.
+- Logout without \`scope\` or \`deviceId\` ends the session of the access token it is sent with,
+  where it ended the refresh cookie's; it clears the cookie only when the cookie named a session it
+  ended, so another tab's newer sign-in keeps its cookie.`;
 
 /** Strapi's GraphQL endpoint: its library, its route outside /api, and its parsed-schema cache. */
 const graphqlSection = `

@@ -3296,7 +3296,7 @@ reaching through it is served (`api-enforcement.test.ts`); roles without any con
 './permissions/conditions'"); the boot job's custom token gets 403, with the message, on
 `/api/notes`, `/api/front` and `/api/upload/files`.
 
-## Phase 96 — credential routes and the refresh cookie hardened (`adapter-filament`)
+## Phase 96 — credential routes and the refresh cookie hardened (`adapter-filament`, `adapter-strapi`)
 
 **Goal:** the strapi-php target answers Strapi's sign-in routes without the weaknesses Strapi 5.48
 ships with, keeping every Strapi client that sends its tokens in the body or the `Authorization`
@@ -3305,8 +3305,18 @@ header working unchanged.
 - **Throttling.** `/auth/refresh`, `/auth/change-password` (Strapi rate-limits it too) and
   `GET /auth/{provider}/callback` join the credential throttle. For provider `local` that route
   is Strapi's password login (`auth.callback`), which Strapi leaves without its rate limit; camis
-  keeps the route but never checks a password unthrottled. A throttled answer keeps its
-  `Retry-After`: `StrapiErrors` now carries an HTTP exception's headers onto the envelope.
+  keeps the route but never checks a password unthrottled. Each group of credential routes
+  (sign-in, register, recovery, confirmation, provider, refresh, password-change) takes turns of a
+  bucket of its own in `StrapiRateLimits`, through the `StrapiThrottle` route middleware, so a
+  flood of refreshes never locks out sign-in; refresh has its own rate
+  (`CAMIS_REFRESH_THROTTLE_PER_MINUTE`, 60). A bucket counts per client address, a password change
+  per account: `StrapiThrottle` is listed after the route's credentials and is not Laravel's
+  `ThrottleRequests`, which the priority sort runs before `StrapiCredentials` has named the
+  account. The GraphQL mutations take turns of the same buckets, so REST and GraphQL count one
+  password-change total. Rates are read per request, not baked into cached routes. A throttled
+  answer keeps its `Retry-After`: `StrapiErrors` now carries an HTTP exception's headers onto the
+  envelope. Behind an untrusted proxy every client shares the proxy's address; DEPLOY.md says how
+  to trust it, which the generated app leaves to the deployment.
 - **CORS.** `config/cors.php` allows credentials only for origins listed in `CAMIS_CORS_ORIGIN`,
   never with `*` (Strapi echoes any origin with credentials, so any site could refresh a visitor's
   cookie session and read the access token). `X-Requested-With` and `x-strapi-refresh-cookie` are
@@ -3315,19 +3325,26 @@ header working unchanged.
 - **The refresh cookie.** On `/auth/refresh` the cookie is taken only from the app's own origin, a
   CORS origin allowed credentials, or a request without an `Origin` carrying `X-Requested-With` or
   `x-strapi-refresh-cookie`; otherwise 403 `ForbiddenError`. Logout needs the access token, so the
-  cookie is never its only credential. The cookie defaults to `Secure` (`false` honoured only with
+  cookie is never its only credential; it ends the access token's own session (not the cookie's,
+  which may be another tab's newer sign-in) and clears the cookie only when the cookie named a
+  session it ended, with the attributes the cookie was set with. The cookie defaults to `Secure` (`false` honoured only with
   `APP_ENV=local`), `SameSite=Strict`, `Path=/api/auth`, and a lifetime equal to what its
-  session's absolute lifespan has left, where Strapi sets `lax`, Secure in production only, `/`
+  session's absolute lifespan has left (the expiry the session was issued with, never a second
+  read; without one, the browser session), where Strapi sets `lax`, Secure in production only, `/`
   and a browser-session cookie. Body mode stays the default (`CAMIS_SESSIONS_HTTP_ONLY=false`), as
   in Strapi: turning the cookie on by default would drop `refreshToken` from every login body.
+- **Import.** A strapi::cors allowing credentials for any origin (its defaults among them) is a
+  `corsCredentialsAnyOrigin` capability gap, since the app answers `*` without credentials.
 - **Docs.** DEPLOY.md gains a CORS and a Sign-in sessions section with an upgrade list;
   `deployment.env` notes that credentials go to listed origins only.
 
 **Tests:** `cors.test.ts` evaluates `config/cors.php` under PHP for each env contract;
 `sessions.test.ts`, `oauth.test.ts`, `auth.test.ts`, `users-permissions.test.ts` and
 `generate-strapi.test.ts` pin the routes and runtime; `scripts/php/AuthSecurityTest.php` (CI, with
-uncached routes and a rate of 3) exercises the throttles and `Retry-After`, preflights, the refused
-and accepted cookie refreshes, and the cookie's attributes and lifetime.
+low rates set per test) exercises each bucket on its own, a password change from changing addresses,
+`Retry-After`, preflights, the refused and accepted cookie refreshes, the cookie's attributes and
+lifetime, and logout with another tab's cookie; `GraphqlTest.php` counts REST and GraphQL password
+changes together; `deployment-settings.test.ts` the import gap.
 
 ---
 

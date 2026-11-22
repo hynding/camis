@@ -250,10 +250,12 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
   400, `UnauthorizedError` 401, `ForbiddenError` 403, `NotFoundError` 404, otherwise
   `HttpError`), and the error envelope applies to every route registered in `routes/api.php` or
   `routes/api-custom.php`; requests to unmatched paths under `/api` fall back to Laravel's
-  default 404 shape. Login and registration share one throttle bucket per client IP (with the
-  Strapi API style, so do refresh, password change, the password reset and confirmation routes and
-  the provider callbacks, `GET /auth/local/callback` included, and a 429 carries `Retry-After`);
-  its rate comes from the generated `config/camis.php` and is overridable with
+  default 404 shape. Login and registration are throttled per client IP, each in a bucket of its
+  own (with the Strapi API style, so is each group of credential routes, refresh, password
+  recovery, confirmation and the provider callbacks, `GET /auth/local/callback` included, with a
+  password change counted per account and refresh at `CAMIS_REFRESH_THROTTLE_PER_MINUTE`, and a
+  429 carries `Retry-After`); its rate comes from the generated `config/camis.php` and is
+  overridable with
   `CAMIS_AUTH_THROTTLE_PER_MINUTE` in `.env` (default 10 requests per minute, floored at 1, so a
   typo cannot lock the endpoints out). CORS allows credentials only for origins listed in
   `CAMIS_CORS_ORIGIN`, never with `*`; the refresh cookie is refused cross-site and defaults to
