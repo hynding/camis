@@ -14,7 +14,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('ledger_id')->constrained('ledgers')->cascadeOnDelete();
             $table->string('memo')->nullable();
-            (\Illuminate\Support\Facades\Schema::getConnection()->getDriverName() === 'sqlite' ? $table->string('amount', 22) : $table->decimal('amount', 20, 6))->nullable();
+            (Schema::getConnection()->getDriverName() === 'sqlite' ? $table->string('amount', 22) : $table->decimal('amount', 20, 6))->nullable();
             $table->timestamps(3);
         });
     }

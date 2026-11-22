@@ -14,10 +14,10 @@ class LedgerApiController extends Controller
 {
     use AuthorizesRequests;
 
-    private const FIELDS = ['label', 'balance', 'rate', 'fee', 'limit_ceiling'];
+    private const FIELDS = ['label', 'balance', 'rate', 'share', 'units', 'fee', 'limit_ceiling'];
 
     /** Decimals stating their digits. */
-    private const DECIMALS = ['balance', 'rate', 'limit_ceiling'];
+    private const DECIMALS = ['balance', 'rate', 'share', 'units', 'limit_ceiling'];
 
     public function index(): JsonResponse
     {

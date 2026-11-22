@@ -29,6 +29,8 @@ class Ledger extends Model
         'label',
         'balance',
         'rate',
+        'share',
+        'units',
         'fee',
         'limit_ceiling',
     ];
@@ -38,6 +40,8 @@ class Ledger extends Model
         return [
             'balance' => 'decimal:6',
             'rate' => 'decimal:4',
+            'share' => 'decimal:5',
+            'units' => 'decimal:4',
             'fee' => 'decimal:2',
             'limit_ceiling' => 'decimal:2',
         ];

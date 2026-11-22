@@ -109,8 +109,8 @@ describe("emitField", () => {
     expect(f.migration).toBe("$table->decimal('rate', 9, 4)->nullable()");
     expect(f.cast).toBe("'decimal:4'");
   });
-  // SQLite keeps a decimal column's values as doubles, which keep 15 significant digits.
-  it("keeps a decimal beyond a double as text on SQLite and as DECIMAL elsewhere, decided when it migrates", () => {
+  // SQLite keeps a decimal column's values as doubles, which PDO reads as PHP floats of 14 digits.
+  it("keeps a decimal beyond a PHP float as text on SQLite and as DECIMAL elsewhere, decided when it migrates", () => {
     const f = emitField({
       type: "decimal",
       name: "balance",
@@ -119,12 +119,17 @@ describe("emitField", () => {
       scale: 6,
     } as Field);
     expect(f.migration).toBe(
-      "(\\Illuminate\\Support\\Facades\\Schema::getConnection()->getDriverName() === 'sqlite' ? $table->string('balance', 22) : $table->decimal('balance', 20, 6))",
+      "(Schema::getConnection()->getDriverName() === 'sqlite' ? $table->string('balance', 22) : $table->decimal('balance', 20, 6))",
     );
     expect(f.cast).toBe("'decimal:6'");
     expect(
-      emitField({ type: "decimal", name: "exact", precision: 15, scale: 2 } as Field).migration,
-    ).toBe("$table->decimal('exact', 15, 2)->nullable()");
+      emitField({ type: "decimal", name: "share", precision: 15, scale: 5 } as Field).migration,
+    ).toBe(
+      "(Schema::getConnection()->getDriverName() === 'sqlite' ? $table->string('share', 17) : $table->decimal('share', 15, 5))->nullable()",
+    );
+    expect(
+      emitField({ type: "decimal", name: "exact", precision: 14, scale: 2 } as Field).migration,
+    ).toBe("$table->decimal('exact', 14, 2)->nullable()");
   });
   // Strapi's richtext is Markdown: an HTML editor would rewrite it on the first save.
   it("edits richText as Markdown", () => {

@@ -16,6 +16,8 @@ final class LedgerSerializer
         'label' => ['column' => 'label', 'type' => 'string'],
         'balance' => ['column' => 'balance', 'type' => 'decimal'],
         'rate' => ['column' => 'rate', 'type' => 'decimal'],
+        'share' => ['column' => 'share', 'type' => 'decimal'],
+        'units' => ['column' => 'units', 'type' => 'decimal'],
         'fee' => ['column' => 'fee', 'type' => 'decimal'],
         'limit.ceiling' => ['column' => 'limit_ceiling', 'type' => 'decimal'],
         'entries' => ['component' => 'entries', 'fields' => [
@@ -48,6 +50,8 @@ final class LedgerSerializer
             'label' => $m->label,
             'balance' => $m->balance === null ? null : (string) $m->balance,
             'rate' => $m->rate === null ? null : (float) $m->rate,
+            'share' => $m->share === null ? null : (string) $m->share,
+            'units' => $m->units === null ? null : (float) $m->units,
             'fee' => $m->fee === null ? null : (float) $m->fee,
             'entries' => $m->entries->map(fn ($c) => [
                 'id' => $c->id,
@@ -71,6 +75,8 @@ final class LedgerSerializer
             'label' => self::dig($data, ['label']),
             'balance' => self::decimal(self::dig($data, ['balance'])),
             'rate' => self::decimal(self::dig($data, ['rate'])),
+            'share' => self::decimal(self::dig($data, ['share'])),
+            'units' => self::decimal(self::dig($data, ['units'])),
             'fee' => self::dig($data, ['fee']),
             'limit_ceiling' => self::decimal(self::dig($data, ['limit', 'ceiling'])),
         ], fn ($v) => $v !== null);

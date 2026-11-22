@@ -28,6 +28,12 @@ class DecimalsTest extends TestCase
 
     private const CEILING = '1234567890123456.78';
 
+    /** Fifteen digits: PHP writes a float with fourteen, so this one is never read through a float. */
+    private const SHARE = '1234567890.12345';
+
+    /** Fourteen digits: SQLite's double and PHP's float keep each of them. */
+    private const UNITS = '1234567890.1234';
+
     private string $jwt;
 
     protected function setUp(): void
@@ -55,6 +61,8 @@ class DecimalsTest extends TestCase
             'label' => 'main',
             'balance' => self::BALANCE,
             'rate' => 12345.6789,
+            'share' => self::SHARE,
+            'units' => self::UNITS,
             'fee' => 12.5,
             'limit' => ['ceiling' => self::CEILING],
             'entries' => [['memo' => 'refund', 'amount' => self::AMOUNT]],
@@ -65,6 +73,10 @@ class DecimalsTest extends TestCase
         $this->assertSame(self::BALANCE, $read->json('data.balance'));
         $this->assertSame(self::CEILING, $read->json('data.limit.ceiling'));
         $this->assertSame(self::AMOUNT, $read->json('data.entries.0.amount'));
+        $this->assertSame(self::SHARE, $read->json('data.share'));
+        $this->assertSame(self::SHARE, Ledger::query()->sole()->share);
+        $this->assertSame((float) self::UNITS, $read->json('data.units'));
+        $this->assertSame(self::UNITS, Ledger::query()->sole()->units);
         // Within a double a decimal stays the number Strapi answers.
         $this->assertSame(12345.6789, $read->json('data.rate'));
         $this->assertSame(12.5, $read->json('data.fee'));

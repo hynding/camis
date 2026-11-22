@@ -41,7 +41,8 @@ describe("decimals stating their digits (issue #104)", () => {
     expect(decimalGaps(generate("laravel"))).toEqual([]);
   });
 
-  it("reports, located, that the Strapi API style filters and sorts a decimal beyond a double as text on SQLite", () => {
+  // PDO SQLite reads a decimal column as a PHP float, which becomes a string of 14 digits.
+  it("reports, located, that the Strapi API style filters and sorts a decimal beyond a PHP float as text on SQLite", () => {
     expect(decimalGaps(generate("strapi"))).toEqual([
       {
         feature: "decimalPrecision",
@@ -49,6 +50,13 @@ describe("decimals stating their digits (issue #104)", () => {
         severity: "downgrade",
         message:
           '"balance" keeps its 20 digits as text on SQLite, where a filter or a sort on it compares text, not numbers; a data-transfer archive carries it as a number, as Strapi\'s archives do, rounded to 15 significant digits',
+      },
+      {
+        feature: "decimalPrecision",
+        location: { contentType: "Ledger", field: "share" },
+        severity: "downgrade",
+        message:
+          '"share" keeps its 15 digits as text on SQLite, where a filter or a sort on it compares text, not numbers; a data-transfer archive carries it as a number, as Strapi\'s archives do, rounded to 15 significant digits',
       },
       {
         feature: "decimalPrecision",
@@ -73,7 +81,7 @@ describe("decimals stating their digits (issue #104)", () => {
       location: { contentType: "Ledger", field: "balance" },
       severity: "downgrade",
       message:
-        "\"balance\" keeps 20 digits, but on Strapi's storage layout its column is Strapi's, which SQLite keeps as a double: on SQLite only 15 significant digits are kept",
+        "\"balance\" keeps 20 digits, but on Strapi's storage layout its column is Strapi's, which SQLite keeps as a double that PHP reads back as a float: on SQLite only 14 significant digits are kept",
     });
   });
 
@@ -111,16 +119,26 @@ describe("decimals stating their digits (issue #104)", () => {
         (new RegExp(`^${kind} ${name} \\{\\n([^}]*)\\}`, "m").exec(sdl)?.[1] ?? "")
           .split("\n")
           .map((line) => line.trim())
-          .filter((line) => /^(balance|rate|fee|ceiling|amount):/.test(line));
-      expect(typeOf("Ledger", "type")).toEqual(["balance: String", "rate: Float", "fee: Float"]);
+          .filter((line) => /^(balance|rate|share|units|fee|ceiling|amount):/.test(line));
+      expect(typeOf("Ledger", "type")).toEqual([
+        "balance: String",
+        "rate: Float",
+        "share: String",
+        "units: Float",
+        "fee: Float",
+      ]);
       expect(typeOf("LedgerInput", "input")).toEqual([
         "balance: String",
         "rate: Float",
+        "share: String",
+        "units: Float",
         "fee: Float",
       ]);
       expect(typeOf("LedgerFiltersInput", "input")).toEqual([
         "balance: StringFilterInput",
         "rate: FloatFilterInput",
+        "share: StringFilterInput",
+        "units: FloatFilterInput",
         "fee: FloatFilterInput",
       ]);
       expect(typeOf("ComponentSharedLimit", "type")).toEqual(["ceiling: String"]);
@@ -149,6 +167,8 @@ describe("decimals stating their digits (issue #104)", () => {
       });
       expect(answered.rate).toEqual({ description: "A decimal field", type: "number" });
       expect(taken.rate).toEqual({ description: "A decimal field", type: "number" });
+      expect(answered.share).toEqual({ description: "A decimal field", type: "string" });
+      expect(answered.units).toEqual({ description: "A decimal field", type: "number" });
       expect(document.components.schemas.SharedLimitEntry!.properties.ceiling).toEqual({
         description: "A decimal field",
         type: "string",
@@ -164,6 +184,8 @@ describe("decimals stating their digits (issue #104)", () => {
       ).properties.data.properties;
       expect(data.balance).toEqual({ anyOf: [{ type: "string" }, { type: "number" }] });
       expect(data.rate).toEqual({ type: "number" });
+      expect(data.share).toEqual({ anyOf: [{ type: "string" }, { type: "number" }] });
+      expect(data.units).toEqual({ type: "number" });
     });
   });
 });

@@ -14,10 +14,12 @@ return new class extends Migration
             $table->id();
             $table->string('document_id', 24)->unique();
             $table->string('label')->nullable();
-            (\Illuminate\Support\Facades\Schema::getConnection()->getDriverName() === 'sqlite' ? $table->string('balance', 22) : $table->decimal('balance', 20, 6))->nullable();
+            (Schema::getConnection()->getDriverName() === 'sqlite' ? $table->string('balance', 22) : $table->decimal('balance', 20, 6))->nullable();
             $table->decimal('rate', 9, 4)->nullable();
+            (Schema::getConnection()->getDriverName() === 'sqlite' ? $table->string('share', 17) : $table->decimal('share', 15, 5))->nullable();
+            $table->decimal('units', 14, 4)->nullable();
             $table->decimal('fee')->nullable();
-            (\Illuminate\Support\Facades\Schema::getConnection()->getDriverName() === 'sqlite' ? $table->string('limit_ceiling', 20) : $table->decimal('limit_ceiling', 18, 2))->nullable();
+            (Schema::getConnection()->getDriverName() === 'sqlite' ? $table->string('limit_ceiling', 20) : $table->decimal('limit_ceiling', 18, 2))->nullable();
             $table->foreignId('created_by_id')->nullable()->constrained('admin_users')->nullOnDelete();
             $table->foreignId('updated_by_id')->nullable()->constrained('admin_users')->nullOnDelete();
             $table->timestamps(3);
