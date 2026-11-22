@@ -9,10 +9,8 @@ use App\Models\Concerns\HasDocumentId;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Mail\Message;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Str;
 
 final class StrapiUsers
 {
@@ -120,32 +118,20 @@ final class StrapiUsers
 
 
     /**
-     * Whether $password is the account's, after exactly one hash check of the configured cost
-     * whether or not there is an account with a password: a name that finds none is checked
-     * against a stand-in hash, so the answer takes as long as a wrong password's. A stored hash
-     * the hasher cannot verify is checked against the stand-in too, and fails as a wrong one.
+     * Whether $password is the account's, after exactly one hash check whether or not there is an
+     * account with a password (StrapiHashes::matches). A hash of another cost (a Strapi import's
+     * bcryptjs 10) takes another time to check, which tells the account apart; once the password
+     * is known it is stored at the configured one.
      */
     public static function passwordMatches(?User $user, string $password): bool
     {
-        $standIn = self::standInHash();
         $hash = $user !== null && ($user->password ?? '') !== '' ? (string) $user->password : null;
-        $matches = $hash === null ? null : StrapiHashes::verify($password, $hash, 'user', $user?->getKey());
-        if ($matches === null) {
-            Hash::check($password, $standIn);
-        }
-        // A hash of another cost (a Strapi import's bcryptjs 10) takes another time to check, which
-        // tells the account apart; once the password is known it is stored at the configured one.
-        if ($matches === true && $user !== null && Hash::needsRehash((string) StrapiHashes::fromBcryptjs($hash))) {
+        $matches = StrapiHashes::matches($password, $hash, 'user', $user?->getKey());
+        if ($matches && $user !== null && Hash::needsRehash((string) StrapiHashes::fromBcryptjs($hash))) {
             $user->forceFill(['password' => Hash::make($password)])->save();
         }
 
-        return $matches === true;
-    }
-
-    /** A hash of a random secret at the configured algorithm and cost, read on every sign-in. */
-    private static function standInHash(): string
-    {
-        return Cache::rememberForever('camis-stand-in-hash:'.md5((string) json_encode(config('hashing'))), fn (): string => Hash::make(Str::random(40)));
+        return $matches;
     }
 
     public static function sendResetPassword(User $user, string $token): void

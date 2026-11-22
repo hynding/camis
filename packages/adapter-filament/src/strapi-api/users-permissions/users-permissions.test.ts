@@ -452,7 +452,7 @@ describe("users-permissions config and errors", () => {
     const hashes = content("app/Support/StrapiHashes.php");
     expect(hashes).toContain("public static function fromBcryptjs(mixed $hash): ?string");
     expect(hashes).toContain(
-      "public static function check(string $password, string $hash, string $account, int|string|null $id): bool",
+      "public static function matches(string $password, ?string $hash, string $account, int|string|null $id): bool",
     );
     // Which account, once an hour, and never its hash, password or names.
     expect(hashes).toContain("Cache::add('camis-unverifiable-hash:'.$account.':'.$id, true, 3600)");
@@ -460,7 +460,7 @@ describe("users-permissions config and errors", () => {
       "'password' => StrapiHashes::fromBcryptjs($data['password'] ?? null),",
     );
     expect(content("app/Support/StrapiAdminImport.php")).toContain("StrapiHashes::fromBcryptjs(");
-    expect(content("app/Support/StrapiUsers.php")).toContain("StrapiHashes::verify(");
+    expect(content("app/Support/StrapiUsers.php")).toContain("StrapiHashes::matches(");
     expect(content("app/Http/Controllers/Api/AuthController.php")).toContain(
       "StrapiUsers::passwordMatches($user, (string) $body['currentPassword'])",
     );
