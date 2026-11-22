@@ -450,10 +450,26 @@ describe("deploymentSettings — strapi::cors in config/middlewares", () => {
   });
 
   it("leaves CORS at its defaults for strapi::cors with no config, or none at all", () => {
-    const { settings, gaps } = deploymentSettings({}, undefined, ["strapi::cors"]);
+    const { settings } = deploymentSettings({}, undefined, ["strapi::cors"]);
     expect(settings.cors).toBeUndefined();
-    expect(gaps).toEqual([]);
     expect(deploymentSettings({}).settings.cors).toBeUndefined();
+  });
+
+  // strapi::cors echoes any origin with credentials (its defaults: origin `*`, credentials on);
+  // the generated app answers `*` without them, so a cookie client on another origin must be listed.
+  it("reports credentials for any origin, which the app does not allow", () => {
+    const features = (config?: unknown) =>
+      deploymentSettings(
+        {},
+        undefined,
+        config === undefined ? ["strapi::cors"] : cors(config),
+      ).gaps.map((g) => g.feature);
+    expect(features()).toEqual(["corsCredentialsAnyOrigin"]);
+    expect(features({ origin: "*", credentials: true })).toEqual(["corsCredentialsAnyOrigin"]);
+    expect(features({ origin: ["https://a.example", "*"] })).toEqual(["corsCredentialsAnyOrigin"]);
+    expect(features({ origin: env("CORS_ORIGIN", "*") })).toEqual(["corsCredentialsAnyOrigin"]);
+    expect(features({ origin: "*", credentials: false })).toEqual([]);
+    expect(features({ origin: ["https://a.example"] })).toEqual([]);
   });
 
   // A function origin decides per request; the config reader gives it back as an empty object.
@@ -471,6 +487,7 @@ describe("deploymentSettings — strapi::cors in config/middlewares", () => {
     ]);
     expect(settings.cors).toBeUndefined();
     expect(gaps.map((g) => g.feature)).toEqual(["corsMiddleware"]);
+    expect(gaps[0]!.message).toContain("any origin, without credentials, unless set");
   });
 });
 
