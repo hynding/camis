@@ -96,15 +96,15 @@ const textLike = (type: "string" | "text" | "richText" | "email") =>
  */
 const decimalDigits = { precision: z.number().optional(), scale: z.number().optional() };
 
-const numeric = (type: "integer" | "bigInteger" | "float" | "decimal") =>
+const numeric = <T extends "integer" | "bigInteger" | "float" | "decimal">(type: T) =>
   z.object({
     type: z.literal(type),
     ...common,
     unique: z.boolean().optional(),
     ...bound,
     default: z.number().optional(),
-    ...(type === "decimal" ? decimalDigits : {}),
   });
+const decimalField = numeric("decimal").extend(decimalDigits);
 
 const temporal = (type: "date" | "time" | "dateTime" | "timestamp") =>
   z.object({ type: z.literal(type), ...common, default: z.string().optional() });
@@ -159,7 +159,7 @@ export const SCALAR_VARIANTS = [
   numeric("integer"),
   numeric("bigInteger"),
   numeric("float"),
-  numeric("decimal"),
+  decimalField,
   booleanField,
   enumerationField,
   temporal("date"),

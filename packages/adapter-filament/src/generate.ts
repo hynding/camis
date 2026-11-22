@@ -59,6 +59,7 @@ import { emitModel } from "./model";
 import { filamentNames, snake, snakeColumn } from "./names";
 import { constrainedColumn, resolveRelations, type ForeignKeyColumn } from "./relations";
 import { filamentReservedNameGaps } from "./reserved-names";
+import { filamentDecimalGaps } from "./decimals";
 import { emitResourceFiles } from "./resource";
 import { draftPublishPlan } from "./strapi-api/core/draft-publish";
 import { guestsPlan } from "./strapi-api/core/guests";
@@ -135,6 +136,7 @@ export const filamentAdapter: GenerateAdapter = {
         : fieldEditorGaps(doc, "the Filament admin", CUSTOM_FIELD_REGISTRATIONS_PATH)),
       // The Strapi API style keeps private fields out of its answers; the Laravel one cannot.
       ...(apiStyle === "strapi" ? [] : privateFieldGaps(doc, "the Laravel API style")),
+      ...filamentDecimalGaps(doc, apiStyle, storage),
     ];
     if (storage !== requestedStorage) {
       gaps.push({

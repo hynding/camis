@@ -11,3 +11,5 @@ export type {
   TargetName,
   TargetNames,
 } from "./reserved-names";
+export { DOUBLE_DIGITS, beyondDouble, decimalDigits, decimalsBeyondDouble } from "./decimal-digits";
+export type { DecimalDigits, LocatedDecimal } from "./decimal-digits";
