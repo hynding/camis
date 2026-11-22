@@ -153,6 +153,9 @@ describe("admin access", () => {
       "...(class_exists(\\App\\Providers\\CamisAuthServiceProvider::class) ? [\\App\\Providers\\CamisAuthServiceProvider::class] : []),",
     );
     expect(deploy).toContain("one password hash whether or not the email names an account");
+    // Laravel's provider commands rewrite the file and drop the guarded line; a build says so.
+    expect(deploy).toContain("`php artisan make:provider`");
+    expect(deploy).toContain("`camis build` warns");
   });
 
   it("has no admin to let anyone into on the Strapi storage layout", () => {
