@@ -158,9 +158,11 @@ use App\\GraphQL\\StrapiGraphql;
 use App\\Http\\Middleware\\StrapiActiveUser;
 ${secured ? "use App\\Http\\Middleware\\StrapiApiToken;\n" : ""}use App\\Http\\Middleware\\StrapiCredentials;
 use App\\Http\\Middleware\\StrapiErrors;
+use App\\Http\\Middleware\\StrapiJsonBody;
 use Illuminate\\Support\\Facades\\Route;
 
-// The content API's own credentials: an API token, else a session, else the public role.
-Route::middleware([StrapiErrors::class, ${secured ? "StrapiApiToken::class, " : ""}StrapiCredentials::class.':optional', StrapiActiveUser::class])
+// The content API's own credentials: an API token, else a session, else the public role. A POST
+// body is taken only as JSON, as the auth routes take it, since login and register are mutations.
+Route::middleware([StrapiErrors::class, StrapiJsonBody::class, ${secured ? "StrapiApiToken::class, " : ""}StrapiCredentials::class.':optional', StrapiActiveUser::class])
     ->match(['get', 'post'], '/graphql', StrapiGraphql::class);
 `;

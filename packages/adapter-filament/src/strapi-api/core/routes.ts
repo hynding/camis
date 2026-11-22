@@ -225,6 +225,7 @@ export const emitStrapiRoutes = (
     ...sorted.map((ct) => `App\\Http\\Controllers\\Api\\${filamentNames(ct).model}ApiController`),
     ...(endpoints.length > 0 ? [`App\\Http\\Controllers\\Api\\${ENDPOINTS_CONTROLLER}`] : []),
     "App\\Http\\Middleware\\StrapiErrors",
+    "App\\Http\\Middleware\\StrapiJsonBody",
     ...(hooked.size > 0 ? ["App\\Http\\Middleware\\CamisRouteHooks"] : []),
     ...(usersPermissions
       ? [
@@ -259,23 +260,30 @@ export const emitStrapiRoutes = (
       : sanctum;
   // A session's own routes need one even where nothing else is guarded.
   const own = secured ? "" : "->middleware(['auth:sanctum', StrapiActiveUser::class])";
+  // A write's body is taken only as JSON (StrapiJsonBody), so a page of another site cannot post
+  // one without the preflight CORS answers.
+  const ownWrite = secured
+    ? "->middleware([StrapiJsonBody::class])"
+    : "->middleware([StrapiJsonBody::class, 'auth:sanctum', StrapiActiveUser::class])";
   // A password change checks the current password, so it is throttled as Strapi does, after the
   // session that names the account it is counted by.
   const ownThrottled = secured
-    ? "->middleware(StrapiThrottle::class.':password-change')"
-    : "->middleware(['auth:sanctum', StrapiActiveUser::class, StrapiThrottle::class.':password-change'])";
+    ? "->middleware([StrapiJsonBody::class, StrapiThrottle::class.':password-change'])"
+    : "->middleware([StrapiJsonBody::class, 'auth:sanctum', StrapiActiveUser::class, StrapiThrottle::class.':password-change'])";
   // Strapi grants these to its public role alone, so a session is refused on them.
   const guestOnly = usersPermissions ? ", StrapiCredentials::class.':guest'" : "";
   // Each group of credential routes has a bucket of its own, so one cannot use up another.
   const throttled = (group: string): string =>
     usersPermissions
-      ? `[StrapiThrottle::class.':${group}'${guestOnly}]`
-      : `$authThrottle.',${group}'`;
+      ? `[StrapiJsonBody::class, StrapiThrottle::class.':${group}'${guestOnly}]`
+      : `[StrapiJsonBody::class, $authThrottle.',${group}']`;
   // A sign-in or recovery mail counts per address and the name it gives, so its controller takes
   // the turn with the name it then looks up (StrapiRateLimits::refuseNamed); the route only
   // refuses a session.
   const named = (group: string): string =>
-    usersPermissions ? "StrapiCredentials::class.':guest'" : throttled(group);
+    usersPermissions
+      ? "[StrapiJsonBody::class, StrapiCredentials::class.':guest']"
+      : throttled(group);
   const accountRoutes = usersPermissions
     ? `
     Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware(${named("recovery")});
@@ -283,7 +291,7 @@ export const emitStrapiRoutes = (
     Route::get('/auth/email-confirmation', [AuthController::class, 'emailConfirmation'])->middleware(StrapiCredentials::class.':guest');
     Route::post('/auth/send-email-confirmation', [AuthController::class, 'sendEmailConfirmation'])->middleware(${named("confirmation")});
     // Throttled in the controller, which counts the refreshes that fail alone.
-    Route::post('/auth/refresh', [SessionController::class, 'refresh'])->middleware(StrapiCredentials::class.':guest');
+    Route::post('/auth/refresh', [SessionController::class, 'refresh'])->middleware([StrapiJsonBody::class, StrapiCredentials::class.':guest']);
 
     // A provider's round trip is the browser's: its state and tokens are kept in a session.
     Route::middleware([StrapiEncryptCookies::class, AddQueuedCookiesToResponse::class, StartSession::class, StrapiCredentials::class.':guest'])->group(function (): void {
@@ -332,7 +340,7 @@ ${services.map((r) => `    ${r}`).join("\n")}`;
         Route::delete('/users/{id}', [UserController::class, 'destroy']);`;
   const ownRoutes = `Route::get('/users/me', [UserController::class, 'me'])${own};
         Route::post('/auth/change-password', [AuthController::class, 'changePassword'])${ownThrottled};
-        Route::post('/auth/logout', [SessionController::class, 'logout'])${own};
+        Route::post('/auth/logout', [SessionController::class, 'logout'])${ownWrite};
         Route::get('/auth/sessions', [SessionController::class, 'sessions'])${own};
         Route::delete('/auth/sessions/{sessionId}', [SessionController::class, 'revoke'])${own};`;
   const sessionRoutes = usersPermissions

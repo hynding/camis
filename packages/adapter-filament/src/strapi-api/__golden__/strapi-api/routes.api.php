@@ -27,6 +27,7 @@ use App\Http\Controllers\Api\TicketApiController;
 use App\Http\Controllers\Api\TopicApiController;
 use App\Http\Controllers\Api\TransactionApiController;
 use App\Http\Middleware\StrapiErrors;
+use App\Http\Middleware\StrapiJsonBody;
 use Illuminate\Support\Facades\Route;
 
 // Laravel's middleware priority sort moves Authenticate and ThrottleRequests ahead of any
@@ -42,8 +43,8 @@ $authThrottle = 'throttle:'.(int) config('camis.auth_throttle_per_minute', 10).'
 
 Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle): void {
     Route::get('/_health', fn () => response()->noContent());
-    Route::post('/auth/local', [AuthController::class, 'login'])->middleware($authThrottle.',sign-in');
-    Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware($authThrottle.',register');
+    Route::post('/auth/local', [AuthController::class, 'login'])->middleware([StrapiJsonBody::class, $authThrottle.',sign-in']);
+    Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware([StrapiJsonBody::class, $authThrottle.',register']);
 
     Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/users/me', [AuthController::class, 'me']);

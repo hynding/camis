@@ -52,7 +52,7 @@ import {
   LOCALES_MIGRATION_PATH,
 } from "./i18n/i18n-runtime";
 import { emitResourceFiles } from "../resource";
-import { emitStrapiErrorsMiddleware } from "./core/errors";
+import { emitStrapiErrorsMiddleware, emitStrapiJsonBody } from "./core/errors";
 import { mediaFields } from "./upload/media";
 import {
   emitFileModel,
@@ -471,6 +471,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     path: "app/Http/Middleware/StrapiErrors.php",
     content: emitStrapiErrorsMiddleware(),
   });
+  files.push({ path: "app/Http/Middleware/StrapiJsonBody.php", content: emitStrapiJsonBody() });
   files.push({ path: "app/Support/StrapiError.php", content: emitStrapiError() });
   files.push({ path: "app/Support/StrapiQuery.php", content: emitStrapiQuery(secured) });
   files.push({ path: "app/Support/StrapiPopulate.php", content: emitStrapiPopulate() });

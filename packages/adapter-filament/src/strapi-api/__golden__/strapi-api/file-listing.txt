@@ -256,6 +256,7 @@ overwrite app/Http/Middleware/StrapiApiToken.php
 overwrite app/Http/Middleware/StrapiCredentials.php
 overwrite app/Http/Middleware/StrapiEncryptCookies.php
 overwrite app/Http/Middleware/StrapiErrors.php
+overwrite app/Http/Middleware/StrapiJsonBody.php
 overwrite app/Http/Middleware/StrapiPublicRoute.php
 overwrite app/Http/Middleware/StrapiThrottle.php
 overwrite app/Http/Serializers/ActivitySerializer.php

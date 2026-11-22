@@ -18,6 +18,7 @@ use App\Http\Middleware\StrapiActiveUser;
 use App\Http\Middleware\StrapiCredentials;
 use App\Http\Middleware\StrapiEncryptCookies;
 use App\Http\Middleware\StrapiErrors;
+use App\Http\Middleware\StrapiJsonBody;
 use App\Http\Middleware\StrapiThrottle;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Session\Middleware\StartSession;
@@ -37,14 +38,14 @@ Route::prependMiddlewareToGroup('api', StrapiErrors::class);
 
 Route::middleware([StrapiErrors::class])->group(function (): void {
     Route::get('/_health', fn () => response()->noContent());
-    Route::post('/auth/local', [AuthController::class, 'login'])->middleware(StrapiCredentials::class.':guest');
-    Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware([StrapiThrottle::class.':register', StrapiCredentials::class.':guest']);
-    Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware(StrapiCredentials::class.':guest');
-    Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])->middleware([StrapiThrottle::class.':password-reset', StrapiCredentials::class.':guest']);
+    Route::post('/auth/local', [AuthController::class, 'login'])->middleware([StrapiJsonBody::class, StrapiCredentials::class.':guest']);
+    Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware([StrapiJsonBody::class, StrapiThrottle::class.':register', StrapiCredentials::class.':guest']);
+    Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware([StrapiJsonBody::class, StrapiCredentials::class.':guest']);
+    Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])->middleware([StrapiJsonBody::class, StrapiThrottle::class.':password-reset', StrapiCredentials::class.':guest']);
     Route::get('/auth/email-confirmation', [AuthController::class, 'emailConfirmation'])->middleware(StrapiCredentials::class.':guest');
-    Route::post('/auth/send-email-confirmation', [AuthController::class, 'sendEmailConfirmation'])->middleware(StrapiCredentials::class.':guest');
+    Route::post('/auth/send-email-confirmation', [AuthController::class, 'sendEmailConfirmation'])->middleware([StrapiJsonBody::class, StrapiCredentials::class.':guest']);
     // Throttled in the controller, which counts the refreshes that fail alone.
-    Route::post('/auth/refresh', [SessionController::class, 'refresh'])->middleware(StrapiCredentials::class.':guest');
+    Route::post('/auth/refresh', [SessionController::class, 'refresh'])->middleware([StrapiJsonBody::class, StrapiCredentials::class.':guest']);
 
     // A provider's round trip is the browser's: its state and tokens are kept in a session.
     Route::middleware([StrapiEncryptCookies::class, AddQueuedCookiesToResponse::class, StartSession::class, StrapiCredentials::class.':guest'])->group(function (): void {
@@ -72,8 +73,8 @@ Route::middleware([StrapiErrors::class])->group(function (): void {
 
     Route::middleware([])->group(function (): void {
         Route::get('/users/me', [UserController::class, 'me'])->middleware(['auth:sanctum', StrapiActiveUser::class]);
-        Route::post('/auth/change-password', [AuthController::class, 'changePassword'])->middleware(['auth:sanctum', StrapiActiveUser::class, StrapiThrottle::class.':password-change']);
-        Route::post('/auth/logout', [SessionController::class, 'logout'])->middleware(['auth:sanctum', StrapiActiveUser::class]);
+        Route::post('/auth/change-password', [AuthController::class, 'changePassword'])->middleware([StrapiJsonBody::class, 'auth:sanctum', StrapiActiveUser::class, StrapiThrottle::class.':password-change']);
+        Route::post('/auth/logout', [SessionController::class, 'logout'])->middleware([StrapiJsonBody::class, 'auth:sanctum', StrapiActiveUser::class]);
         Route::get('/auth/sessions', [SessionController::class, 'sessions'])->middleware(['auth:sanctum', StrapiActiveUser::class]);
         Route::delete('/auth/sessions/{sessionId}', [SessionController::class, 'revoke'])->middleware(['auth:sanctum', StrapiActiveUser::class]);
 
