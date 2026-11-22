@@ -42,18 +42,23 @@ export const filamentDecimalGaps = (
             : `"${location.field}" keeps its ${digits.precision} digits as text on SQLite, where a filter on it finds equal values exactly but compares text, not numbers, in an ordering comparison ($lt, $lte, $gt, $gte, $between) or a sort; a JSON number sent for it is read as a double first, so an exact value is sent as a string; a data-transfer archive carries it as a number, as Strapi's archives do, rounded to ${DOUBLE_DIGITS} significant digits`,
       }));
 
+const DECIMAL_DIGITS_RUNTIME = [
+  "app/Casts/DecimalDigitsCast.php",
+  "app/Rules/DecimalDigitsRule.php",
+  "app/Support/DecimalDigits.php",
+];
+
 /**
- * What writes a decimal stating its digits, on either API style, and what the Strapi API style
+ * What writes a decimal stating its digits, through Eloquent (DecimalDigitsCast) and the admin's
+ * form (DecimalDigitsRule) on either API style, and what the Strapi API style
  * filters one by: emitted only for a project with such a decimal.
  */
 export const decimalDigitsFiles = (doc: IrDocument): GeneratedFile[] =>
   [...doc.contentTypes, ...doc.components].some((holder) =>
     holder.fields.some((field) => decimalDigits(field) !== undefined),
   )
-    ? [
-        {
-          path: "app/Support/DecimalDigits.php",
-          content: runtimePhp(new URL("./php/app/Support/DecimalDigits.php", import.meta.url)),
-        },
-      ]
+    ? DECIMAL_DIGITS_RUNTIME.map((path) => ({
+        path,
+        content: runtimePhp(new URL(`./php/${path}`, import.meta.url)),
+      }))
     : [];

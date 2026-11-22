@@ -138,12 +138,21 @@ const base = (field: Field, c: string): Base => {
       const digits = decimalDigits(field);
       return {
         migration: decimalColumn(field, c),
-        formComponent: `TextInput::make('${c}')->numeric()`,
+        // ->numeric() makes the state a PHP float, which keeps 14 digits: a decimal stating its
+        // digits is taken as text, refused as its model's cast would refuse it.
+        formComponent:
+          digits === undefined
+            ? `TextInput::make('${c}')->numeric()`
+            : `TextInput::make('${c}')->inputMode('decimal')->rule(new \\App\\Rules\\DecimalDigitsRule(${digits.precision}, ${digits.scale}))`,
         tableColumn: `TextColumn::make('${c}')`,
         formImport: TEXT_INPUT,
         tableImport: TEXT_COLUMN,
-        // Laravel's decimal cast answers the column as a string at the scale (see decimalColumn).
-        cast: `'decimal:${digits?.scale ?? 2}'`,
+        // Laravel's decimal cast answers the column as a string at the scale; a decimal stating its
+        // digits is written as DecimalDigits keeps it by whatever writes through Eloquent.
+        cast:
+          digits === undefined
+            ? "'decimal:2'"
+            : `\\App\\Casts\\DecimalDigitsCast::class.':${digits.precision},${digits.scale}'`,
       };
     }
     case "boolean":

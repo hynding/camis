@@ -469,9 +469,11 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     content: emitStrapiErrorsMiddleware(),
   });
   files.push({ path: "app/Support/StrapiError.php", content: emitStrapiError() });
+  // Filters, imports and writes compare and keep a decimal stating its digits exactly.
+  const statesDigits = [...shapes.values()].some(statesDecimalDigits);
   files.push({
     path: "app/Support/StrapiQuery.php",
-    content: emitStrapiQuery(secured, [...shapes.values()].some(statesDecimalDigits)),
+    content: emitStrapiQuery(secured, statesDigits),
   });
   files.push({ path: "app/Support/StrapiPopulate.php", content: emitStrapiPopulate() });
   files.push({ path: "app/Support/StrapiRelations.php", content: emitStrapiRelations() });
@@ -590,7 +592,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
   });
   files.push(
     { path: TRANSFER_MAP_PATH, content: transferMap },
-    { path: IMPORT_ENGINE_PATH, content: emitStrapiImport() },
+    { path: IMPORT_ENGINE_PATH, content: emitStrapiImport(statesDigits) },
     { path: TRANSFER_CIPHER_PATH, content: emitStrapiTransferCipher() },
     {
       path: TRANSFER_SCHEMAS_PATH,

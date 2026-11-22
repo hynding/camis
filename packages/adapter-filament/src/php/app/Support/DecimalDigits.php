@@ -46,6 +46,12 @@ final class DecimalDigits
         return (string) $decimal;
     }
 
+    /** Why a value is refused, in Laravel's validation message form. */
+    public static function refusal(string $attribute, int $precision, int $scale): string
+    {
+        return "The {$attribute} field must be a decimal of at most {$precision} digits, {$scale} of them after the point.";
+    }
+
     /**
      * Filters $column by a comparison, exactly and never rounding the filter's value: every value
      * the column holds is a multiple of 10^-scale below 10^(precision - scale) in magnitude, so a
