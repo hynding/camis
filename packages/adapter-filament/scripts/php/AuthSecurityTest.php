@@ -399,4 +399,18 @@ class AuthSecurityTest extends TestCase
         $this->freshRequest();
         self::assertContains($this->withToken($legacy)->getJson('/api/users/me')->status(), [401, 403]);
     }
+
+    /** The provider routes encrypt their own cookies; the refresh cookie must stay as refresh reads it. */
+    public function test_a_refresh_cookie_from_the_provider_callback_route_refreshes(): void
+    {
+        config(['camis.users_permissions.jwt_management' => 'refresh']);
+        $this->register('alice');
+        $this->freshRequest();
+        $cookie = $this->withHeader('x-strapi-refresh-cookie', 'httpOnly')
+            ->json('GET', '/api/auth/local/callback', ['identifier' => 'alice', 'password' => 'secret1'])->assertOk()
+            ->getCookie('strapi_up_refresh', false);
+
+        self::assertNotNull($cookie);
+        self::assertTrue($this->refreshes((string) $cookie->getValue()));
+    }
 }

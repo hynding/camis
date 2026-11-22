@@ -78,10 +78,18 @@ describe("users-permissions sign-in providers", () => {
     );
   });
 
+  // Laravel would encrypt every cookie these routes set, the refresh cookie among them, which
+  // /auth/refresh reads as it was issued: StrapiEncryptCookies leaves that one alone.
+  it("leaves the refresh cookie unencrypted on the provider routes", () => {
+    expect(content("app/Http/Middleware/StrapiEncryptCookies.php")).toContain(
+      "config('camis.users_permissions.sessions.cookie.name')",
+    );
+  });
+
   it("routes the round trip through a session, for callers without one of Strapi's", () => {
     const routes = content("routes/api.php");
     expect(routes).toContain(
-      "Route::middleware([EncryptCookies::class, AddQueuedCookiesToResponse::class, StartSession::class, StrapiCredentials::class.':guest'])->group(function (): void {",
+      "Route::middleware([StrapiEncryptCookies::class, AddQueuedCookiesToResponse::class, StartSession::class, StrapiCredentials::class.':guest'])->group(function (): void {",
     );
     expect(routes).toContain(
       "Route::get('/connect/{provider}', [ConnectController::class, 'connect'])->middleware(StrapiThrottle::class.':provider');",
