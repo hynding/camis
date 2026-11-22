@@ -260,7 +260,7 @@ class AuthSecurityTest extends TestCase
         $this->postJson('/api/auth/local/register', ['username' => 'long', 'email' => $long.'@example.test', 'password' => 'secret1'])->assertStatus(400)
             ->assertJsonPath('error.name', 'ValidationError');
         $this->freshRequest();
-        $this->register(str_repeat('b', 255));
+        $this->postJson('/api/auth/local/register', ['username' => str_repeat('b', 255), 'email' => 'b@example.test', 'password' => 'secret1'])->assertOk();
     }
 
     /** A user made over the API gets exactly one role: an array of them is refused, never applied. */

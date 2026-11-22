@@ -32,7 +32,7 @@ Route::prependMiddlewareToGroup('api', StrapiErrors::class);
 
 // Every route that checks a password or a refresh token is throttled so it is not a guessing
 // oracle (StrapiRateLimits): a bucket per group of routes, per account for a password change, per
-// client address and the account named for a sign-in or recovery mail, per address otherwise. The
+// client address and the name given for a sign-in or recovery mail, per address otherwise. The
 // rates are deployment-specific and read per request — see config/camis.php.
 
 Route::middleware([StrapiErrors::class])->group(function (): void {

@@ -3310,10 +3310,10 @@ header working unchanged.
   takes turns of a bucket of its own in `StrapiRateLimits`, through the `StrapiThrottle` route
   middleware, so a flood of one never locks out another; refresh has its own rate
   (`CAMIS_REFRESH_THROTTLE_PER_MINUTE`, 60). Sign-in, recovery mail and confirmation mail count per
-  client address and the account named (a 32-character SHA-256 prefix of the trimmed, lower-cased
+  client address and the name given (a 32-character SHA-256 prefix of the trimmed, lower-cased
   identifier or email, never raw body text in a key), so neither a guesser at one account nor a
   foreign client sharing an office's address locks another account out, under a per-address
-  ceiling across every account named (`CAMIS_AUTH_ADDRESS_THROTTLE_PER_MINUTE`, 50, never below the
+  ceiling across every name given (`CAMIS_AUTH_ADDRESS_THROTTLE_PER_MINUTE`, 50, never below the
   credential rate). The controller takes a named turn (`StrapiRateLimits::refuseNamed`) with the
   very value it looked the account up by, and the limiter reads no request field, so a query
   string or another content type cannot split the key. A name counts in one bucket, its folded

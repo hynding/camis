@@ -156,8 +156,8 @@ const sessionsSection = `
 
 Every route that checks a password or a refresh token is throttled, each group of routes in a
 bucket of its own so a flood of one never locks out another. A sign-in, recovery mail or
-confirmation mail counts per client address and the account it names, so a guesser at one account,
-or everyone else behind the same address, does not lock another account out.
+confirmation mail counts per client address and the name it gives, so a guesser at one name, or
+everyone else behind the same address, does not lock another account out.
 A name counts with its case, width, accents and surrounding spaces folded out, and the turn is
 taken before the account is looked up: whether it finds an account has no bearing on the throttle,
 so the throttle tells a caller neither that an account exists nor which names are one account. A
@@ -176,11 +176,11 @@ empties. The GraphQL mutations take turns of the same buckets as their REST rout
 
 | Group | Routes | Rate per minute |
 | --- | --- | --- |
-| sign-in | \`POST /auth/local\`, \`GET /auth/local/callback\` (Strapi's password login, which Strapi leaves unthrottled), GraphQL \`login\`, per account named | \`CAMIS_AUTH_THROTTLE_PER_MINUTE\` (10) |
+| sign-in | \`POST /auth/local\`, \`GET /auth/local/callback\` (Strapi's password login, which Strapi leaves unthrottled), GraphQL \`login\`, per address and name given | \`CAMIS_AUTH_THROTTLE_PER_MINUTE\` (10) |
 | register | \`POST /auth/local/register\`, GraphQL \`register\` | the same |
-| recovery | \`POST /auth/forgot-password\`, GraphQL \`forgotPassword\`, per account named | the same |
+| recovery | \`POST /auth/forgot-password\`, GraphQL \`forgotPassword\`, per address and name given | the same |
 | password-reset | \`POST /auth/reset-password\`, GraphQL \`resetPassword\` | the same |
-| confirmation | \`POST /auth/send-email-confirmation\`, per account named | the same |
+| confirmation | \`POST /auth/send-email-confirmation\`, per address and name given | the same |
 | provider | \`GET /connect/{provider}\` and its callback, \`GET /auth/{provider}/callback\` for another provider than \`local\` | the same |
 | password-change | \`POST /auth/change-password\`, GraphQL \`changePassword\`, per account | the same |
 | refresh | \`POST /auth/refresh\`, failures only | \`CAMIS_REFRESH_THROTTLE_PER_MINUTE\` (60) |
@@ -235,10 +235,19 @@ proxy, trust it as above so the request's own origin reads \`https\`.
   throttled, and each group of credential routes counts on its own: raise
   \`CAMIS_REFRESH_THROTTLE_PER_MINUTE\` or \`CAMIS_AUTH_THROTTLE_PER_MINUTE\` if many clients
   share one address, then re-run \`php artisan config:cache\`.
-- A sign-in, recovery mail or confirmation mail counts per address and the account it names, under
+- A sign-in, recovery mail or confirmation mail counts per address and the name it gives, under
   the per-address \`CAMIS_AUTH_ADDRESS_THROTTLE_PER_MINUTE\`: raise it for an office or a
   carrier-grade NAT where many users sign in from one address. A password reset has a bucket of
   its own, no longer shared with recovery mails.
+- A throttled request answers 429 with Strapi's error body, \`RateLimitError\` and
+  "Too many requests, please try again later.", and \`Retry-After\`, where it answered Laravel's
+  own 429 body.
+- A username or email longer than 255 characters is refused on registration and on
+  \`POST\`/\`PUT /users\`, and a sign-in identifier that long is refused unread, as a wrong one.
+- A string field of the auth and \`/users\` routes given a number, boolean, null, array or
+  object answers 400 \`ValidationError\` with yup's message, as Strapi's strict validation does,
+  where a number was taken as its string and an array or object answered 500. \`POST /users\`
+  takes a single role id.
 - Logout without \`scope\` or \`deviceId\` ends the session of the access token it is sent with,
   where it ended the refresh cookie's; it clears the cookie only when the cookie named a session it
   ended, so another tab's newer sign-in keeps its cookie.`;

@@ -65,8 +65,8 @@ export const usersPermissionsConfigKeys = (): string => `
     // Strapi's users-permissions settings as a new project starts with them; the admin's
     // Users & Permissions settings page overrides them at runtime (strapi_settings).
     'users_permissions' => [${sessionsConfigKeys()}
-        // A sign-in or recovery mail counts per client address and the account it names, at
-        // auth_throttle_per_minute; this caps one address's turns across every account it names
+        // A sign-in or recovery mail counts per client address and the name it gives, at
+        // auth_throttle_per_minute; this caps one address's turns across every name it gives
         // (never below that rate), high enough that the address's other users are not locked out.
         'auth_address_throttle_per_minute' => max(1, (int) env('CAMIS_AUTH_ADDRESS_THROTTLE_PER_MINUTE', 50)),
         // users-permissions' register.allowedFields: body keys register takes beside username,
@@ -231,7 +231,7 @@ export const emitStrapiThrottle = (): string =>
 export const emitUserController = (secured: boolean, guests = false): string => {
   const allow = (permission: string): string =>
     secured ? `\n        $this->allow($request, '${permission}');` : "";
-  const roleRule = secured ? ", 'role' => ['required']" : "";
+  const roleRule = secured ? ", 'role' => ['required', 'id']" : "";
   const assignRole = secured
     ? `
         $role = Role::query()->find($body['role']);
@@ -316,7 +316,7 @@ final class UserController extends Controller
     public function create(Request $request): JsonResponse
     {${allow("user.create")}
         $body = $request->json()->all();
-        StrapiUsers::validate($body, ['email' => ['string', 'required', 'email'], 'username' => ['string', 'required'], 'password' => ['string', 'required']${roleRule}]);
+        StrapiUsers::validate($body, ['email' => ['string', 'required', 'email', 'max:255'], 'username' => ['string', 'required', 'max:255'], 'password' => ['string', 'required']${roleRule}]);
         if ((bool) (StrapiUsers::advanced()['unique_email'] ?? false) && User::query()->where('email', mb_strtolower((string) $body['email']))->exists()) {
             throw StrapiUsers::application('Email already taken');
         }
@@ -333,8 +333,8 @@ ${assignRole}        $user = StrapiUsers::add([...$body, 'password' => Hash::mak
     {${allow("user.update")}
         $user = User::query()->find($id) ?? throw new StrapiError(404, 'NotFoundError', 'User not found');
         $body = $request->json()->all();
-        StrapiUsers::validate($body, ['email' => ['string', 'email', 'nonEmpty'], 'username' => ['string', 'nonEmpty'], 'password' => ['string']]);
-        if (($user->provider ?? 'local') === 'local' && array_key_exists('password', $body) && in_array($body['password'], [null, '', false, 0], true)) {
+        StrapiUsers::validate($body, ['email' => ['string', 'email', 'nonEmpty', 'max:255'], 'username' => ['string', 'nonEmpty', 'max:255'], 'password' => ['updatePassword']]);
+        if (($user->provider ?? 'local') === 'local' && array_key_exists('password', $body) && in_array($body['password'], [null, ''], true)) {
             throw StrapiError::validation('password.notNull');
         }
         if (array_key_exists('username', $body) && User::query()->where('username', $body['username'])->whereKeyNot($user->getKey())->exists()) {

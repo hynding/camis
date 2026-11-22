@@ -171,8 +171,13 @@ final class StrapiUsers
         $present = $value !== null && $value !== '';
         foreach ($checks as $check) {
             $failed = match (true) {
-                // yup's string() casts a number or boolean, and refuses what it cannot cast.
-                $check === 'string' => $value !== null && ! is_scalar($value),
+                // Strapi validates strictly: a number, boolean or null is no string either.
+                $check === 'string' => array_key_exists($field, $body) && ! is_string($value),
+                // yup's strapiID(): a string or a non-negative integer, never a list of them.
+                $check === 'id' => array_key_exists($field, $body) && ! is_string($value) && ! (is_int($value) && $value >= 0),
+                // users-permissions' update test: a missing, null or empty password passes here.
+                $check === 'updatePassword' => $present && ! is_string($value),
+                str_starts_with($check, 'max:') => is_string($value) && mb_strlen($value) > (int) substr($check, 4),
                 $check === 'required' => ! $present,
                 $check === 'email' => $present && filter_var($value, FILTER_VALIDATE_EMAIL) === false,
                 $check === 'nonEmpty' => array_key_exists($field, $body) && (! is_scalar($value) || (string) $value === ''),
@@ -183,6 +188,9 @@ final class StrapiUsers
             if ($failed) {
                 return match (true) {
                     $check === 'string' => "{$field} must be a `string` type, but the final value was: `".self::yupPrinted($value).'`.',
+                    $check === 'id' => "{$field} must be a `strapiID` type, but the final value was: `".self::yupPrinted($value).'`.',
+                    $check === 'updatePassword' => 'Password must be at least 1 character',
+                    str_starts_with($check, 'max:') => "{$field} must be at most ".substr($check, 4).' characters',
                     $check === 'required' => "{$field} is a required field",
                     $check === 'email' => "{$field} must be a valid email",
                     $check === 'nonEmpty' => "{$field} must be at least 1 characters",
@@ -195,12 +203,34 @@ final class StrapiUsers
         return null;
     }
 
-    /** yup's printValue of an array or object: JSON indented by two spaces. */
+    /**
+     * yup's printValue with quoted strings: a scalar as JavaScript prints it, an array or object as
+     * JSON indented by two spaces, each scalar in it replaced by its own printed form first.
+     */
     private static function yupPrinted(mixed $value): string
     {
-        $json = (string) json_encode($value, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        if (! is_array($value)) {
+            return self::yupPrintedScalar($value);
+        }
+        $json = (string) json_encode(self::yupPrintedLeaves($value), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
         return (string) preg_replace_callback('/^((?:    )+)/m', fn (array $m): string => str_repeat('  ', intdiv(strlen($m[1]), 4)), $json);
+    }
+
+    private static function yupPrintedLeaves(array $value): array
+    {
+        return array_map(fn (mixed $item): mixed => is_array($item) ? self::yupPrintedLeaves($item) : self::yupPrintedScalar($item), $value);
+    }
+
+    private static function yupPrintedScalar(mixed $value): string
+    {
+        return match (true) {
+            $value === null => 'null',
+            is_bool($value) => $value ? 'true' : 'false',
+            is_string($value) => '"'.$value.'"',
+            is_float($value) && is_finite($value) && floor($value) === $value && abs($value) < 1e21 => sprintf('%.0f', $value),
+            default => (string) json_encode($value),
+        };
     }
 
     /** JavaScript's Number() of a query value: '' is 0, and what does not parse is NaN. */

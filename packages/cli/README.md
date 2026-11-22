@@ -253,7 +253,7 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
   default 404 shape. Login and registration are throttled per client IP, each in a bucket of its
   own (with the Strapi API style, so is each group of credential routes, refresh, password
   recovery and reset, confirmation and the provider callbacks, `GET /auth/local/callback` included,
-  with sign-in and recovery counted per address and the account named (taken by the controller
+  with sign-in and recovery counted per address and the name given (taken by the controller
   with the name it looks up, before the lookup) under a per-address
   `CAMIS_AUTH_ADDRESS_THROTTLE_PER_MINUTE`, a password change counted per account, only failed
   refreshes counted at `CAMIS_REFRESH_THROTTLE_PER_MINUTE`, and a 429 carries `Retry-After`); its rate comes from the generated `config/camis.php` and is

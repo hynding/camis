@@ -28,7 +28,7 @@ final class StrapiRateLimits
     /** Groups with a rate of their own; every other group uses the credential rate. */
     private const RATES = ['refresh' => 'camis.users_permissions.sessions.refresh_throttle_per_minute'];
 
-    /** Groups counted per account: each needs a session, so its account is the caller. */
+    /** Groups counted per caller account, since each needs a session that names its caller. */
     private const PER_ACCOUNT = ['password-change'];
 
     /** Groups counted per address and the name they give, by refuseNamed alone. */

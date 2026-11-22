@@ -61,7 +61,7 @@ class AuthController extends Controller
         if ($invalid !== []) {
             throw StrapiError::validation('Invalid parameters: '.implode(', ', $invalid));
         }
-        StrapiUsers::validate($body, ['email' => ['string', 'required', 'email'], 'username' => ['string', 'required'], 'password' => ['string', 'required', 'maxPassword']]);
+        StrapiUsers::validate($body, ['email' => ['string', 'required', 'email', 'max:255'], 'username' => ['string', 'required', 'max:255'], 'password' => ['string', 'required', 'maxPassword']]);
 ${
   defaultRole !== undefined
     ? `        $role = Role::query()->where('name', ${phpSingleQuoted(defaultRole)})->first()

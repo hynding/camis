@@ -271,8 +271,9 @@ export const emitStrapiRoutes = (
     usersPermissions
       ? `[StrapiThrottle::class.':${group}'${guestOnly}]`
       : `$authThrottle.',${group}'`;
-  // A sign-in or recovery mail counts the account it names, so its controller takes the turn with
-  // the name it looked up (StrapiRateLimits::refuseNamed); the route only refuses a session.
+  // A sign-in or recovery mail counts per address and the name it gives, so its controller takes
+  // the turn with the name it then looks up (StrapiRateLimits::refuseNamed); the route only
+  // refuses a session.
   const named = (group: string): string =>
     usersPermissions ? "StrapiCredentials::class.':guest'" : throttled(group);
   const accountRoutes = usersPermissions
@@ -372,7 +373,7 @@ ${
   usersPermissions
     ? `// Every route that checks a password or a refresh token is throttled so it is not a guessing
 // oracle (StrapiRateLimits): a bucket per group of routes, per account for a password change, per
-// client address and the account named for a sign-in or recovery mail, per address otherwise. The
+// client address and the name given for a sign-in or recovery mail, per address otherwise. The
 // rates are deployment-specific and read per request — see config/camis.php.
 
 `
