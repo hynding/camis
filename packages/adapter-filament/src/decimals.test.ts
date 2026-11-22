@@ -3,7 +3,7 @@ import { filamentAdapter } from "./generate";
 import { blog } from "./__fixtures__/blog";
 import { decimalsBundle } from "./__fixtures__/decimals";
 import { contentManagerMcpTools } from "./strapi-api/content-manager/mcp-tools";
-import { emitStrapiValidator } from "./strapi-api/core/validation-runtime";
+import { emitStrapiValidator, withUniqueDigits } from "./strapi-api/core/validation-runtime";
 import { emitStrapiImport, withDecimalDigits } from "./strapi-api/data-transfer/transfer-runtime";
 import { strapiApiBundle } from "./strapi-api/__fixtures__/strapi-api";
 
@@ -195,6 +195,15 @@ describe("decimals stating their digits (issue #104)", () => {
         .files.find((f) => f.path === "app/Support/StrapiValidator.php")?.content ?? "";
     expect(blogValidator).toBe(emitStrapiValidator());
     expect(blogValidator).not.toContain("DecimalDigits");
+  });
+
+  it("refuses to patch a validator that lacks a check it patches", () => {
+    const php = emitStrapiValidator();
+    const anchor = "&& self::taken($cast, $rule['unique'], $repeated, $context['unique'])";
+    expect(() => withUniqueDigits(php.replace(anchor, ""))).toThrow(
+      `StrapiValidator.php must hold exactly one "${anchor}"`,
+    );
+    expect(() => withUniqueDigits(php + anchor)).toThrow("must hold exactly one");
   });
 
   it("searches the admin's list by a decimal stating its digits as its filters compare it", async () => {
