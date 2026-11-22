@@ -37,7 +37,10 @@ this layout does not use. Add that line by hand on an existing app. Custom endpo
 With the Strapi API style, \`camis scaffold filament\` also prepends the generated
 \`StrapiErrors\` middleware to the \`api\` group in \`bootstrap/app.php\`; on an existing app add
 \`$middleware->prependToGroup('api', \\App\\Http\\Middleware\\StrapiErrors::class);\` inside
-\`->withMiddleware(...)\` by hand. \`routes/api.php\` does the same, but \`route:cache\` stops
+\`->withMiddleware(...)\` by hand, with
+\`$middleware->prependToPriorityList(\\Illuminate\\Routing\\Middleware\\ThrottleRequests::class, \\App\\Http\\Middleware\\StrapiJsonBody::class);\`
+so a credential body refused as not JSON takes no throttle turn. \`routes/api.php\` prepends
+\`StrapiErrors\` too, but \`route:cache\` stops
 Laravel reading route files, so without the bootstrap line a cached app loses Strapi's error
 envelope.
 
@@ -68,7 +71,10 @@ an existing app. Custom endpoints belong in \`routes/api-custom.php\` (never ove
 With the Strapi API style, \`camis scaffold filament\` also prepends the generated
 \`StrapiErrors\` middleware to the \`api\` group in \`bootstrap/app.php\`; on an existing app add
 \`$middleware->prependToGroup('api', \\App\\Http\\Middleware\\StrapiErrors::class);\` inside
-\`->withMiddleware(...)\` by hand. \`routes/api.php\` does the same, but \`route:cache\` stops
+\`->withMiddleware(...)\` by hand, with
+\`$middleware->prependToPriorityList(\\Illuminate\\Routing\\Middleware\\ThrottleRequests::class, \\App\\Http\\Middleware\\StrapiJsonBody::class);\`
+so a credential body refused as not JSON takes no throttle turn. \`routes/api.php\` prepends
+\`StrapiErrors\` too, but \`route:cache\` stops
 Laravel reading route files, so without the bootstrap line a cached app loses Strapi's error
 envelope.
 
@@ -208,27 +214,54 @@ Every auth write (\`/auth/local\`, \`/auth/local/register\`, \`/auth/forgot-pass
 body whose \`Content-Type\` is not \`application/json\` or an \`application/*+json\` type answers
 415 \`UnsupportedMediaTypeError\` in Strapi's error envelope, unread and uncounted. A text/plain
 body or a form is what a page of another site can post with no CORS preflight; Strapi parses a
-form, and it is refused here on purpose. A request with no body goes on as Strapi takes it.
+form, and it is refused here on purpose, whether its body is raw or PHP has already parsed it into
+fields and files. A request with no body goes on as Strapi takes it. Laravel's priority sort runs
+its own throttle ahead of route middleware it does not list, so \`camis scaffold\` adds
+\`$middleware->prependToPriorityList(\\Illuminate\\Routing\\Middleware\\ThrottleRequests::class, \\App\\Http\\Middleware\\StrapiJsonBody::class);\`
+beside the \`StrapiErrors\` line in \`bootstrap/app.php\`; on an app scaffolded before, add it by hand.
 
 \`CAMIS_AUTH_HIDE_ACCOUNT_EXISTENCE\` (default \`true\`) keeps the auth routes from telling a
 caller whether an account exists, where Strapi tells. With email confirmation on (the
 users-permissions advanced setting), registration answers a new address and a registered one, or
 a username already taken, alike: 200 \`{"email": ..., "sent": true}\`, after hashing the password
-on both paths. The new address gets its confirmation mail; a registered one gets a mail saying
-someone tried to register with it (\`account_emails\` in \`config/camis.php\`).
+on both paths, and even when a concurrent registration takes the name first. The new address gets
+its confirmation mail; a registered address, or the address given with a taken username, gets one
+notice saying a registration was attempted with it, which names neither as taken
+(\`account_emails\` in \`config/camis.php\`). A username is looked up as an address too, as Strapi
+looks it up, so a username that is an email address other than the one registering is refused
+with 400 \`ValidationError\` before any lookup. Over GraphQL, whose \`register\` payload must hold a
+user, every such registration answers one error, \`ConfirmationPendingError\` (code
+\`STRAPI_CONFIRMATION_PENDING_ERROR\`, "Check your email to finish registering").
 \`/auth/send-email-confirmation\` answers every address \`{"email": ..., "sent": true}\` and mails
 only an account that is neither confirmed nor blocked. Sign-in checks one password hash whether
 or not an account matches, whatever the setting. Account mail (confirmation, recovery and these
 notices) is sent after the answer, with no queue: under PHP-FPM or LiteSpeed the response is
 finished first (\`fastcgi_finish_request\`), while under mod_php or \`php artisan serve\` the client
-still waits for the mail, and its time shows. A mail that fails is logged, not answered.
+still waits for the mail, and its time shows. A mail that fails is logged, not answered. Each kind
+of mail a caller can send to an address they name (the registration notice, the confirmation
+resend, recovery) goes to one address at most \`CAMIS_ACCOUNT_MAIL_PER_HOUR\` times an hour
+(default 1, floored at 1), whoever asks; a mail over the bound is skipped silently, so the answer
+does not change, and a lost mail can be asked for again after the hour.
+
 Without email confirmation registration cannot answer every address the same: a new account gets its token at
 once, so a taken address or username still answers Strapi's 400 "Email or Username are already
 taken". Turn confirmation on to hide it. What the setting leaves distinguishable: a new
 registration's insert, a few milliseconds; the blocked and unconfirmed errors, which come only
-after a correct password, as in Strapi; an account whose stored hash has an older cost, which
-takes another time to check. \`false\` restores Strapi's answers (registration's \`{"user": ...}\`,
+after a correct password, as in Strapi; a person registering with their own address learns a
+username is taken from getting the notice where a new account gets a confirmation mail instead of the notice,
+which unique usernames make inherent; and an account whose stored hash has another cost, which
+takes another time to check. Every account imported from Strapi is bcryptjs cost 10, so imported
+accounts stay distinguishable by timing until their first sign-in, which stores the password again
+at the configured cost. \`BCRYPT_ROUNDS=10\` closes that at once, at the price of hashing every new
+password at cost 10 rather than Laravel's 12, a quarter of the work for anyone cracking a stolen
+hash offline. \`false\` restores Strapi's answers (registration's \`{"user": ...}\`,
 the resend's errors for a confirmed or blocked account) and sends mail inside the request.
+
+Strapi's bcryptjs hashes (\`$2a$\`) are imported as PHP's (\`$2y$\`), and one stored by an earlier
+import is read as PHP's at sign-in. A stored hash the configured hasher cannot verify fails as a
+wrong password, logged for the operator, never a 500: changing \`HASH_DRIVER\` away from the driver
+the stored hashes use makes every such account unable to sign in, answered as a wrong password,
+until its password is reset.
 
 In refresh mode every answer that issues an access token (sign-in, registration, refresh, password
 change and reset) adds \`expiresIn\`, the seconds the token lasts (\`CAMIS_ACCESS_TOKEN_LIFESPAN\`), so
@@ -296,6 +329,15 @@ proxy, trust it as above so the request's own origin reads \`https\`.
   415 \`UnsupportedMediaTypeError\`: a client posting a form or text/plain must send
   \`Content-Type: application/json\`.
 - In refresh mode the answers that issue an access token add \`expiresIn\`.
+- With accounts hidden, a username that is an email address other than the one registering is
+  refused with 400 \`ValidationError\`; the notices for a taken address and a taken username are one
+  (\`account_emails.registration_attempted\`), and over GraphQL a registration waiting on its email
+  answers \`ConfirmationPendingError\`, where the account was made but the answer failed.
+- Account mail to one address is bounded by \`CAMIS_ACCOUNT_MAIL_PER_HOUR\` (default 1) per kind.
+- Imported \`$2a$\` hashes sign in, a hash the hasher cannot verify answers as a wrong password
+  instead of 500, and a sign-in stores a hash of another cost again at the configured one.
+- Add \`$middleware->prependToPriorityList(\\Illuminate\\Routing\\Middleware\\ThrottleRequests::class, \\App\\Http\\Middleware\\StrapiJsonBody::class);\`
+  to an app scaffolded before, beside the \`StrapiErrors\` line in \`bootstrap/app.php\`.
 - An entry created or updated without a field the grant assigns (an \`owner\` taken from the
   session, say) is accepted, where a required one answered 400 "owner must be defined"; the
   body's value for a field the grant assigns is still never taken.

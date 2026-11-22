@@ -3377,11 +3377,35 @@ header working unchanged.
   insert on a new registration, the blocked and unconfirmed errors after a correct password (as in
   Strapi), a stored hash of another cost, and mail time without fastcgi_finish_request. `false`
   restores Strapi's answers; the CI auth vectors run with it, as they record Strapi's.
+- **Account existence, second pass.** With accounts hidden a username that is an email address
+  other than the one registering is refused before any lookup (Strapi looks a username up as an
+  email too, so it would tell its registrant whether that address has an account); a taken address
+  and a taken username get one notice (`account_emails.registration_attempted`) that names
+  neither. A registrant using their own address can still tell a taken username from the notice
+  arriving instead of a confirmation, which unique usernames make inherent. Each kind of mail a
+  caller can aim (registration notice, confirmation resend, recovery) goes to one address at most
+  `CAMIS_ACCOUNT_MAIL_PER_HOUR` (1) times an hour, keyed by the folded recipient through the
+  throttles' atomic limiter (`StrapiRateLimits::mailable`) and counted where the mail is sent, so a
+  skipped mail changes neither answer nor time. An insert that loses a race for its name (a unique
+  violation inside its own savepoint) is a taken name: the notice when hidden, Strapi's taken error
+  otherwise, never "Validation failed". GraphQL's `register`, whose payload's user is non-null,
+  answers a hidden registration with `ConfirmationPendingError` (`STRAPI_CONFIRMATION_PENDING_ERROR`)
+  for every address; its `login` and `forgotPassword` run REST's controllers and so its protections.
+- **Hashes.** `StrapiHashes` reads Strapi's bcryptjs `$2a$`/`$2b$` as PHP's `$2y$`: the users and
+  admin imports store it rewritten, and a hash stored by an earlier import is read rewritten. A
+  stored hash the configured hasher refuses (another `HASH_DRIVER`'s, or not a hash) fails as a
+  wrong password, checked against the stand-in so it takes as long, and is logged, where it
+  answered 500. The first sign-in that matches a hash of another cost stores the password again at
+  the configured one, so an imported (cost 10) account stops being told apart by timing; DEPLOY.md
+  gives `BCRYPT_ROUNDS=10` as the immediate fix and its cost.
 - **JSON bodies.** Every auth write and `POST /graphql` takes its body only as JSON
   (`StrapiJsonBody`): another type, a form included, answers 415 `UnsupportedMediaTypeError`
   before the body is read or a throttle turn taken, since Laravel's `json()` decodes a text/plain
-  body a foreign page posts with no preflight. Strapi parses forms; refusing them is deliberate. An
-  empty body passes.
+  body a foreign page posts with no preflight. Strapi parses forms; refusing them is deliberate. A
+  form type, or fields and files PHP has already parsed from a form, count as a body; an empty body
+  passes. The scaffold lists `StrapiJsonBody` ahead of Laravel's `ThrottleRequests` in the middleware
+  priority (`bootstrap/app.php`), which otherwise sorts the throttle first in the variant without
+  users-permissions. The Strapi storage layout now emits the middleware its routes name.
 - **Token lifetime.** In refresh mode the answers that issue an access token add `expiresIn`, its
   lifetime in seconds (`CAMIS_ACCESS_TOKEN_LIFESPAN`), a field Strapi 5.48 lacks (its controllers
   answer `jwt` and `refreshToken` only); the auth vectors leave it out of the comparison.
@@ -3409,7 +3433,11 @@ lifetime, logout with another tab's cookie and after its session row is swept, r
 the confirmation resend answering every address alike with the mail each address gets, one hash
 check per sign-in (a counting hasher) and its timing against a wrong password, mail sent after
 `RequestHandled`, 415 for text/plain, form and multipart bodies on every auth write, `expiresIn`
-and the token's actual expiry, and `PUT /users` role ids; `AuthorRoleTest.php` creates and
+and the token's actual expiry, `PUT /users` role ids, imported `$2a$` and unverifiable hashes (another
+driver's included) answering as no account, the rehash at sign-in, email-shaped usernames refused
+alike, one notice text, the per-recipient mail bound, a registration losing a race (an existing
+account hidden from the check), GraphQL registration, login and recovery, parsed forms refused, and
+a refused body taking no turn of Laravel's throttle; `AuthorRoleTest.php` creates and
 updates an owned entry without, and against, the assigned owner; `GraphqlTest.php` counts REST and GraphQL password
 changes together; `deployment-settings.test.ts` the import gap.
 
