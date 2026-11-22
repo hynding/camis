@@ -59,8 +59,8 @@ final class DecimalDigits
      * the comparison alone, and what is bound always fits the column. It is bound typed, as DECIMAL
      * on MySQL (which compares a DECIMAL with a string as two doubles) and NUMERIC on PostgreSQL;
      * SQLite compares it with the column's text, or gives it a numeric column's affinity. False,
-     * adding nothing, for another operator or a value that is not a decimal, which the caller binds
-     * as it came, as it does every other number field's.
+     * adding nothing, for another operator or a value that is not a decimal (for $in and $notIn, a
+     * list holding none), which the caller binds as it came, as it does every other number field's.
      */
     public static function where(Builder $query, string $column, string $operator, mixed $value, int $precision, int $scale): bool
     {
@@ -68,13 +68,21 @@ final class DecimalDigits
             return false;
         }
         $listed = in_array($operator, ['$in', '$notIn', '$between'], true);
+        $items = $listed && is_array($value) ? array_values($value) : [$value];
+        // $between's bounds are its first two values.
+        $items = $operator === '$between' ? array_slice($items, 0, 2) : $items;
         $decimals = [];
-        foreach ($listed && is_array($value) ? array_values($value) : [$value] as $item) {
+        foreach ($items as $item) {
             $decimal = self::parse($item);
-            if ($decimal === null) {
-                return false;
+            if ($decimal !== null) {
+                $decimals[] = $decimal;
             }
-            $decimals[] = $decimal;
+        }
+        // A list's item that is not a decimal equals none of the column's values, so $in and
+        // $notIn compare the others; anything else unreadable is the caller's.
+        $partial = in_array($operator, ['$in', '$notIn'], true);
+        if ($decimals === [] || (! $partial && count($decimals) !== count($items))) {
+            return false;
         }
         $target = [
             'wrapped' => $query->getQuery()->getGrammar()->wrap($column),
