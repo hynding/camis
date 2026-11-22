@@ -88,7 +88,7 @@ final class StrapiGraphqlPlugins
                 if (($input['provider'] ?? 'local') !== 'local') {
                     throw StrapiError::validation('Only the local provider signs in through GraphQL');
                 }
-                self::throttle($request, 'sign-in');
+                self::throttle($request, 'sign-in', $input['identifier'] ?? null);
 
                 return self::session(StrapiGraphql::dispatch($auth, 'login', [], $request, ['identifier' => $input['identifier'], 'password' => $input['password']], [], false));
             case 'register':
@@ -96,11 +96,11 @@ final class StrapiGraphqlPlugins
 
                 return self::session(StrapiGraphql::dispatch($auth, 'register', [], $request, $args['input'], [], false));
             case 'forgotPassword':
-                self::throttle($request, 'recovery');
+                self::throttle($request, 'recovery', $args['email'] ?? null);
 
                 return StrapiGraphql::dispatch($auth, 'forgotPassword', [], $request, $args, [], false);
             case 'resetPassword':
-                self::throttle($request, 'recovery');
+                self::throttle($request, 'password-reset');
 
                 return self::session(StrapiGraphql::dispatch($auth, 'resetPassword', [], $request, $args, [], false));
             case 'changePassword':
@@ -207,9 +207,9 @@ final class StrapiGraphqlPlugins
     }
 
     /** The REST routes' turn of the same bucket, which an in-process call does not pass through. */
-    private static function throttle(Request $request, string $group): void
+    private static function throttle(Request $request, string $group, mixed $identifier = null): void
     {
-        if (StrapiRateLimits::attempt($request, $group) !== null) {
+        if (StrapiRateLimits::attempt($request, $group, $identifier) !== null) {
             throw new StrapiError(429, 'RateLimitError', 'Too many requests, please try again later.');
         }
     }

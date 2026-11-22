@@ -191,7 +191,7 @@ final class StrapiSessions
         return true;
     }
 
-    /** Revokes the request's access token itself, for a token that no session issued. */
+    /** Revokes the request's access token itself, for a token whose session is gone or never was. */
     public static function dropAccessToken(Request $request): void
     {
         $token = $request->user()?->currentAccessToken();

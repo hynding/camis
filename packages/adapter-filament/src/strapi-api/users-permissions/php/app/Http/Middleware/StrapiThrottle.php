@@ -6,14 +6,15 @@ namespace App\Http\Middleware;
 
 use App\Support\StrapiRateLimits;
 use Closure;
-use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
  * A credential route's turn of its group's bucket (StrapiRateLimits). Not Laravel's
- * ThrottleRequests, which the middleware priority sort would move ahead of StrapiCredentials:
- * listed after the route's credentials, this runs once the caller's account is known.
+ * ThrottleRequests, which the middleware priority sort moves ahead of every unprioritised route
+ * middleware: this one is not prioritised, so it runs where the route lists it. The password
+ * change lists it after the session's credentials, since it counts per account; the guest routes
+ * list it first, since they count per address and the account the body names, which need none.
  */
 final class StrapiThrottle
 {
@@ -21,11 +22,7 @@ final class StrapiThrottle
     {
         $wait = StrapiRateLimits::attempt($request, $group);
         if ($wait !== null) {
-            throw new ThrottleRequestsException('Too Many Attempts.', null, [
-                'Retry-After' => $wait,
-                'X-RateLimit-Limit' => StrapiRateLimits::rate($group),
-                'X-RateLimit-Remaining' => 0,
-            ]);
+            throw StrapiRateLimits::tooMany($group, $wait);
         }
 
         return $next($request);

@@ -274,10 +274,11 @@ export const emitStrapiRoutes = (
   const accountRoutes = usersPermissions
     ? `
     Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware(${throttled("recovery")});
-    Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])->middleware(${throttled("recovery")});
+    Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])->middleware(${throttled("password-reset")});
     Route::get('/auth/email-confirmation', [AuthController::class, 'emailConfirmation'])->middleware(StrapiCredentials::class.':guest');
     Route::post('/auth/send-email-confirmation', [AuthController::class, 'sendEmailConfirmation'])->middleware(${throttled("confirmation")});
-    Route::post('/auth/refresh', [SessionController::class, 'refresh'])->middleware(${throttled("refresh")});
+    // Throttled in the controller, which counts the refreshes that fail alone.
+    Route::post('/auth/refresh', [SessionController::class, 'refresh'])->middleware(StrapiCredentials::class.':guest');
 
     // A provider's round trip is the browser's: its state and tokens are kept in a session.
     Route::middleware([StrapiEncryptCookies::class, AddQueuedCookiesToResponse::class, StartSession::class, StrapiCredentials::class.':guest'])->group(function (): void {
@@ -365,8 +366,9 @@ Route::prependMiddlewareToGroup('api', StrapiErrors::class);
 ${
   usersPermissions
     ? `// Every route that checks a password or a refresh token is throttled so it is not a guessing
-// oracle (StrapiThrottle): a bucket per group of routes, per account once signed in, per client
-// address otherwise. The rates are deployment-specific and read per request — see config/camis.php.
+// oracle (StrapiRateLimits): a bucket per group of routes, per account for a password change, per
+// client address and the account named for a sign-in or recovery mail, per address otherwise. The
+// rates are deployment-specific and read per request — see config/camis.php.
 
 `
     : `// The credential routes are throttled so they are not a guessing oracle, each in a bucket of

@@ -31,18 +31,20 @@ use Illuminate\Support\Facades\Route;
 Route::prependMiddlewareToGroup('api', StrapiErrors::class);
 
 // Every route that checks a password or a refresh token is throttled so it is not a guessing
-// oracle (StrapiThrottle): a bucket per group of routes, per account once signed in, per client
-// address otherwise. The rates are deployment-specific and read per request — see config/camis.php.
+// oracle (StrapiRateLimits): a bucket per group of routes, per account for a password change, per
+// client address and the account named for a sign-in or recovery mail, per address otherwise. The
+// rates are deployment-specific and read per request — see config/camis.php.
 
 Route::middleware([StrapiErrors::class])->group(function (): void {
     Route::get('/_health', fn () => response()->noContent());
     Route::post('/auth/local', [AuthController::class, 'login'])->middleware([StrapiThrottle::class.':sign-in', StrapiCredentials::class.':guest']);
     Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware([StrapiThrottle::class.':register', StrapiCredentials::class.':guest']);
     Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware([StrapiThrottle::class.':recovery', StrapiCredentials::class.':guest']);
-    Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])->middleware([StrapiThrottle::class.':recovery', StrapiCredentials::class.':guest']);
+    Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])->middleware([StrapiThrottle::class.':password-reset', StrapiCredentials::class.':guest']);
     Route::get('/auth/email-confirmation', [AuthController::class, 'emailConfirmation'])->middleware(StrapiCredentials::class.':guest');
     Route::post('/auth/send-email-confirmation', [AuthController::class, 'sendEmailConfirmation'])->middleware([StrapiThrottle::class.':confirmation', StrapiCredentials::class.':guest']);
-    Route::post('/auth/refresh', [SessionController::class, 'refresh'])->middleware([StrapiThrottle::class.':refresh', StrapiCredentials::class.':guest']);
+    // Throttled in the controller, which counts the refreshes that fail alone.
+    Route::post('/auth/refresh', [SessionController::class, 'refresh'])->middleware(StrapiCredentials::class.':guest');
 
     // A provider's round trip is the browser's: its state and tokens are kept in a session.
     Route::middleware([StrapiEncryptCookies::class, AddQueuedCookiesToResponse::class, StartSession::class, StrapiCredentials::class.':guest'])->group(function (): void {

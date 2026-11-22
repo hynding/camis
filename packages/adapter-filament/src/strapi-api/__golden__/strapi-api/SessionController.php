@@ -8,6 +8,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\StrapiError;
+use App\Support\StrapiRateLimits;
 use App\Support\StrapiSessions;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,11 +19,19 @@ final class SessionController extends Controller
     public function refresh(Request $request): JsonResponse
     {
         self::refreshOnly();
-        StrapiSessions::refuseForeignCookie($request);
-        $token = StrapiSessions::presented($request)
-            ?? throw new StrapiError(400, 'BadRequestError', 'Missing refresh token');
-        $tokens = StrapiSessions::rotate($token)
-            ?? throw new StrapiError(401, 'UnauthorizedError', 'Invalid refresh token');
+        // Only a refresh that rotates nothing takes a turn, so a foreign page firing refreshes from
+        // its victim's browser fills a bucket that never refuses the victim's own valid token.
+        try {
+            StrapiSessions::refuseForeignCookie($request);
+            $token = StrapiSessions::presented($request)
+                ?? throw new StrapiError(400, 'BadRequestError', 'Missing refresh token');
+            $tokens = StrapiSessions::rotate($token)
+                ?? throw new StrapiError(401, 'UnauthorizedError', 'Invalid refresh token');
+        } catch (StrapiError $failure) {
+            StrapiRateLimits::refuseFailure($request, 'refresh');
+
+            throw $failure;
+        }
 
         return StrapiSessions::respond($request, $tokens);
     }
@@ -40,9 +49,12 @@ final class SessionController extends Controller
             StrapiSessions::invalidate($user, $deviceId);
         } else {
             // The access token names the caller's own session; the cookie may be another tab's. A
-            // token naming none (one issued before refresh mode) ends itself alone.
+            // token naming none (one issued before refresh mode), or a session already swept, ends
+            // itself alone.
             $session = StrapiSessions::current($request);
-            $session === null ? StrapiSessions::dropAccessToken($request) : StrapiSessions::revoke($user, $session);
+            if ($session === null || ! StrapiSessions::revoke($user, $session)) {
+                StrapiSessions::dropAccessToken($request);
+            }
         }
         $response = response()->json(['ok' => true]);
 

@@ -65,6 +65,10 @@ export const usersPermissionsConfigKeys = (): string => `
     // Strapi's users-permissions settings as a new project starts with them; the admin's
     // Users & Permissions settings page overrides them at runtime (strapi_settings).
     'users_permissions' => [${sessionsConfigKeys()}
+        // A sign-in or recovery mail counts per client address and the account it names, at
+        // auth_throttle_per_minute; this caps one address's turns across every account it names
+        // (never below that rate), high enough that the address's other users are not locked out.
+        'auth_address_throttle_per_minute' => max(1, (int) env('CAMIS_AUTH_ADDRESS_THROTTLE_PER_MINUTE', 50)),
         // users-permissions' register.allowedFields: body keys register takes beside username,
         // email and password (comma separated). A key the user has no column for is accepted and
         // dropped, as Strapi drops it.
@@ -211,11 +215,11 @@ export const emitStrapiActiveUser = (): string =>
 export const emitStrapiEncryptCookies = (): string =>
   runtimePhp(new URL("./php/app/Http/Middleware/StrapiEncryptCookies.php", import.meta.url));
 
-/** The credential throttle: a bucket per group of routes, by address (a password change by account). */
+/** The credential throttle: a bucket per group of routes, by address, named account or caller account. */
 export const emitStrapiRateLimits = (): string =>
   runtimePhp(new URL("./php/app/Support/StrapiRateLimits.php", import.meta.url));
 
-/** A credential route's turn of its group's bucket, taken after the route's credentials. */
+/** A credential route's turn of its group's bucket, taken where the route lists it. */
 export const emitStrapiThrottle = (): string =>
   runtimePhp(new URL("./php/app/Http/Middleware/StrapiThrottle.php", import.meta.url));
 
