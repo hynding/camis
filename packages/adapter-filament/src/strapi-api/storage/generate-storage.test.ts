@@ -40,6 +40,11 @@ describe("filamentAdapter storageLayout strapi — file set", () => {
     for (const [, middleware] of named)
       expect(paths).toContain(`app/Http/Middleware/${middleware}.php`);
   });
+  // Its sign-in reads the shared table with password_verify, which takes Strapi's $2a$ hashes and
+  // never throws, so the hasher-backed StrapiHashes would be unused here.
+  it("emits no StrapiHashes, which its password_verify sign-in has no use for", () => {
+    expect(paths).not.toContain("app/Support/StrapiHashes.php");
+  });
   it("file listing golden", async () => {
     await expect(
       result.files
