@@ -115,8 +115,9 @@ Drizzle's `decimal`/`numeric` on Express. With them:
   APIs' writes (Strapi's 400 `ValidationError` on the Strapi API style, named by its full path,
   `entries[1].amount` inside a repeatable; Laravel's 422 validation errors on the Laravel API
   style), the admin's form (a text input with a validation rule, never a float, which checks a
-  unique one by its digits, not the text as typed) and the Strapi API style's archive import (which
-  stops at a value that does not fit): every digit is kept on all three databases. The Laravel API
+  unique one as it is stored, rounded to the scale, as the Strapi API style's unique check does
+  too) and the Strapi API style's archive import (which stops at a value that does not fit): every
+  digit is kept on all three databases. The Laravel API
   style answers every decimal as a string, as it always has; the Strapi API style answers a decimal
   of 15 digits or more as a string (a JSON number of that many digits is rounded by every
   JavaScript client), over REST, GraphQL (`String`), the OpenAPI document and the MCP tools, and

@@ -3483,9 +3483,22 @@ decimal(10, 2), and a double on SQLite.
   `App\Rules\DecimalDigitsUniqueRule` (emitted only for a project with one) in place of Filament's
   `->unique()`, which compares the text as typed with the stored digits: on SQLite `1.5` typed
   beside a stored `1.500000` passed it and the unique index answered a 500, and MySQL compares a
-  string with a DECIMAL as two doubles. The rule compares the value as a filter does
+  string with a DECIMAL as two doubles. The rule compares the value as it is stored, rounded to the
+  scale (`DecimalDigits::canonical`), since that is what the unique index compares (`1.500004` typed
+  beside a stored `1.50000` is that value), bound exactly as a filter binds it
   (`DecimalDigits::where`), against the table as Laravel's unique rule reads it, ignoring the
-  record being edited, with Laravel's "has already been taken" message. The archive import writes
+  record being edited, with Laravel's "has already been taken" message; a value the column cannot
+  hold is `DecimalDigitsRule`'s to refuse. The rule is emitted only when a generated form checks it,
+  so not for one whose only such decimal is in a draft-and-publish or localized type, whose form
+  leaves a unique field's rule out. The Strapi API style's unique check had the same flaw: it
+  looked the value up as sent (yup's cast, a float), so a duplicate in another spelling (`1.5`
+  beside a stored `1.50000` on SQLite, `1.500004` on PostgreSQL) reached the unique index and was
+  answered with a bare 400 "Validation failed" with no details. For a project with a unique decimal
+  stating its digits on the Laravel storage layout, its rule in the controller's `RULES` carries
+  `digits` under `unique`, and `StrapiValidator` (patched only for such a project, at its anchors,
+  as `StrapiImport` is) looks it up by the value as sent, rounded to the scale and bound through
+  `DecimalDigits::where`, in the entry's row or its items' rows alike, answering Strapi's "This
+  attribute must be unique". The archive import writes
   rows with the query builder, past every cast: its transfer map carries such a decimal's `digits`,
   and `StrapiImport` (patched only for a project with one, at the three lines that write a column,
   each to call `DecimalDigits::archived`) writes it as `DecimalDigits` keeps it and stops at one
@@ -3573,12 +3586,20 @@ canonical form: `$model->increment()` or `decrement()`, an Eloquent or query-bui
 and any other write through the query builder than the import (the Content-Type Builder's column
 conversion, `ColumnConversion`); a GraphQL filter's `in` or `notIn` list has no length bound
 (REST's query string has PHP's `max_input_vars`, 1000), so a list of 50,000 decimals takes over a
-second to compare.
+second to compare. A unique field inside a dynamic zone's component gets the form's unique rule
+(`DecimalDigitsUniqueRule`, like Filament's `->unique()` for every other type) checked against the
+parent's model, whose table has no such column. The Laravel API style checks no uniqueness before
+a write, for any unique field, so a duplicate still reaches the unique index there. On Strapi's
+storage layout `StrapiValidator` compares a unique value as sent, as before. The patched
+`StrapiValidator`, like the patched `StrapiImport`, is not analysed by the `runtime-phpstan` job,
+which analyses the static files only.
 
 Exit: `fields.test.ts` and `parse.test.ts` in `ir-schema`; `decimals.test.ts` in `adapter-filament`
 (goldens of both API styles' migrations, models, admin forms, the Laravel controller, the Strapi
 serializer and the admin list's search; the 14-digit threshold; `DecimalDigits`, its cast and
-rules, the unique rule in the form, and `StrapiQuery`'s exact filter; the import's map, its patched
+rules, the unique rule in the form and when it is emitted, the unique check's `digits` in `RULES`,
+the patched `StrapiValidator`'s golden and a missing anchor refused, and `StrapiQuery`'s exact
+filter; the import's map, its patched
 golden and a missing anchor refused; the paths a refusal names; GraphQL, OpenAPI and MCP; the
 gaps), `adapter-strapi` (schema.json goldens, the gap, the round trip) and `adapter-express` (a
 schema golden per dialect, the admin, the gap); `attributes.test.ts` in `strapi-schema` and the
@@ -3591,7 +3612,8 @@ decimals fixture, `DecimalsTest`: REST and GraphQL round trips of (20, 6), (18, 
 exactly, also under `$not`, a list's unreadable items skipped, values past the length or exponent
 bound refused, writes kept at the scale or refused with their full path in a repeatable or a zone,
 writes through the model's cast past the request's trimming, and the admin's form driven through
-Livewire, a unique decimal checked by its digits). `DecimalDigits.php`, the cast and the rules are
+Livewire, a unique decimal checked as it is stored, rounded to the scale, in the form on create and
+edit and over REST on create and update). `DecimalDigits.php`, the cast and the rules are
 analysed by the `runtime-phpstan` job (`scripts/runtime-phpstan.sh` copies `src/php/` into its
 app), in CI only. MySQL, and with it the `CAST(? AS DECIMAL(p, s))` comparison, runs only in CI;
 SQLite and PostgreSQL also ran locally.
