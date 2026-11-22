@@ -75,6 +75,25 @@ describe("users-permissions sessions", () => {
     await expect(controller).toMatchFileSnapshot("../__golden__/strapi-api/SessionController.php");
   });
 
+  // A browser attaches the refresh cookie to a request any site makes, and on /auth/refresh it is
+  // the only credential: camis takes it only from this app's origin or a CORS origin allowed
+  // credentials, or, without an Origin, with a header no other site can send without a preflight.
+  it("refuses the refresh cookie on a request another site could have made", () => {
+    const controller = content("app/Http/Controllers/Api/SessionController.php");
+    const refresh = controller.slice(controller.indexOf("public function refresh"));
+    expect(refresh.indexOf("StrapiSessions::refuseForeignCookie($request);")).toBeGreaterThan(-1);
+    expect(refresh.indexOf("StrapiSessions::refuseForeignCookie($request);")).toBeLessThan(
+      refresh.indexOf("StrapiSessions::presented($request)"),
+    );
+    const sessions = content("app/Support/StrapiSessions.php");
+    expect(sessions).toContain(
+      "throw new StrapiError(403, 'ForbiddenError', 'The refresh cookie is not accepted from this origin');",
+    );
+    expect(sessions).toContain("(bool) config('cors.supports_credentials')");
+    expect(sessions).toContain("$request->headers->has('X-Requested-With')");
+    expect(sessions).toContain("$request->headers->has('x-strapi-refresh-cookie')");
+  });
+
   it("issues sessions from login, registration and a password change or reset", () => {
     const auth = content("app/Http/Controllers/Api/AuthController.php");
     expect(auth).toContain("StrapiSessions::login($request, $user)");
@@ -85,7 +104,7 @@ describe("users-permissions sessions", () => {
   it("routes refresh as a public-only route and the rest behind a session", () => {
     const routes = content("routes/api.php");
     expect(routes).toContain(
-      "Route::post('/auth/refresh', [SessionController::class, 'refresh'])->middleware(StrapiCredentials::class.':guest');",
+      "Route::post('/auth/refresh', [SessionController::class, 'refresh'])->middleware([$authThrottle, StrapiCredentials::class.':guest']);",
     );
     expect(routes).toContain("Route::post('/auth/logout', [SessionController::class, 'logout']);");
     expect(routes).toContain(
