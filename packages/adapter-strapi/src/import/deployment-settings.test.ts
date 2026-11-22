@@ -468,6 +468,11 @@ describe("deploymentSettings — strapi::cors in config/middlewares", () => {
     expect(features({ origin: "*", credentials: true })).toEqual(["corsCredentialsAnyOrigin"]);
     expect(features({ origin: ["https://a.example", "*"] })).toEqual(["corsCredentialsAnyOrigin"]);
     expect(features({ origin: env("CORS_ORIGIN", "*") })).toEqual(["corsCredentialsAnyOrigin"]);
+    // strapi::cors splits a string origin on commas.
+    expect(features({ origin: "https://a.example, *" })).toEqual(["corsCredentialsAnyOrigin"]);
+    expect(features({ origin: env("CORS_ORIGIN", "https://a.example,*") })).toEqual([
+      "corsCredentialsAnyOrigin",
+    ]);
     expect(features({ origin: "*", credentials: false })).toEqual([]);
     expect(features({ origin: ["https://a.example"] })).toEqual([]);
   });

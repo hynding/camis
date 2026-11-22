@@ -181,6 +181,15 @@ describe("users-permissions sessions", () => {
     expect(deploy).not.toContain("shared by all of them");
   });
 
+  // The cookie's path covers every /api/auth route, and a rate that is not a positive number is
+  // floored rather than turning the throttle off: an operator must not read either the other way.
+  it("says the cookie goes to every /api/auth route and a rate of 0 means 1 per minute", () => {
+    const deploy = content("DEPLOY.md");
+    expect(deploy).not.toContain("and `/api/auth/logout` alone");
+    expect(deploy).toContain("Sent to every route under `/api/auth`");
+    expect(deploy).toContain("A rate of 0, or one that is not a number, means 1 per minute");
+  });
+
   it("issues sessions from login, registration and a password change or reset", () => {
     const auth = content("app/Http/Controllers/Api/AuthController.php");
     expect(auth).toContain("StrapiSessions::login($request, $user)");
