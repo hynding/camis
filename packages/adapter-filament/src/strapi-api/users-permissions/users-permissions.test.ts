@@ -445,7 +445,11 @@ describe("users-permissions config and errors", () => {
   it("reads bcryptjs hashes as PHP's and fails a hash the hasher cannot verify as a wrong one", () => {
     const hashes = content("app/Support/StrapiHashes.php");
     expect(hashes).toContain("public static function fromBcryptjs(mixed $hash): ?string");
-    expect(hashes).toContain("public static function check(string $password, string $hash): bool");
+    expect(hashes).toContain(
+      "public static function check(string $password, string $hash, string $account, int|string|null $id): bool",
+    );
+    // Which account, once an hour, and never its hash, password or names.
+    expect(hashes).toContain("Cache::add('camis-unverifiable-hash:'.$account.':'.$id, true, 3600)");
     expect(content("app/Support/StrapiImport.php")).toContain(
       "'password' => StrapiHashes::fromBcryptjs($data['password'] ?? null),",
     );

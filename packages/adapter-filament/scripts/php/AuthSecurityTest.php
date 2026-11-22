@@ -1292,5 +1292,21 @@ class AuthSecurityTest extends TestCase
             self::assertSame($mailed, $token($column, $username), "{$path} skipped keeps its token");
         }
     }
+
+    /** The operator learns which account cannot sign in, once an hour, and nothing of its secrets. */
+    public function test_an_unverifiable_hash_is_logged_once_an_hour_by_its_account(): void
+    {
+        config(['camis.auth_throttle_per_minute' => 10, 'camis.users_permissions.auth_address_throttle_per_minute' => 10]);
+        $this->accountWithHash('plain', 'secret1');
+        $id = \App\Models\User::query()->where('username', 'plain')->value('id');
+        \Illuminate\Support\Facades\Log::spy();
+        $this->signInSeen('plain', 'secret1');
+        $this->signInSeen('plain', 'other');
+        \Illuminate\Support\Facades\Log::shouldHaveReceived('warning')->once()
+            ->with('A stored password hash cannot be verified by the configured hasher', ['account' => 'user', 'id' => $id]);
+        $this->travel(61)->minutes();
+        $this->signInSeen('plain', 'secret1');
+        \Illuminate\Support\Facades\Log::shouldHaveReceived('warning')->twice();
+    }
 }
 
