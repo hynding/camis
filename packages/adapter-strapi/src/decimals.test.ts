@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { normalize } from "@camis/ir-core";
 import { strapiAdapter } from "./generate";
+import { importDocument } from "./import/import-document";
 import { blog } from "./__fixtures__/blog";
 import { decimals } from "./__fixtures__/decimals";
 
@@ -48,5 +50,13 @@ describe("Strapi target: decimals stating their digits (issue #104)", () => {
       { projectName: "blog" },
     ).gaps;
     expect(gaps.gaps.filter((g) => g.feature === "decimalPrecision")).toEqual([]);
+  });
+
+  it("imports the generated schema back to the same digits", () => {
+    const { document, gaps } = importDocument(generate().files);
+    expect(document.ok).toBe(true);
+    if (!document.ok) return;
+    expect(gaps.gaps).toEqual([]);
+    expect(normalize(document.value)).toEqual(normalize(decimals));
   });
 });
