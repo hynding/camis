@@ -142,6 +142,11 @@ signs in as Laravel's own provider does:
     ...(class_exists(\\App\\Providers\\CamisAuthServiceProvider::class) ? [\\App\\Providers\\CamisAuthServiceProvider::class] : []),
 \`\`\`
 
+\`php artisan make:provider\` and \`php artisan make:filament-panel\` rewrite that file from its
+evaluated array, which drops the line until the first build has emitted the provider (and lists it
+plainly after one). \`camis build\` warns, with the line to add again, whenever the file no longer
+lists the provider.
+
 `;
 
 const offlineStep = (layout: StorageLayout): string =>
