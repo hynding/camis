@@ -157,6 +157,64 @@ class AuthSecurityTest extends TestCase
         $this->login('bob')->assertOk();
     }
 
+    /**
+     * A body of another content type (which the controller still reads as JSON) with a fresh name
+     * in the query string each time: the turn is the name the controller looked up, never another.
+     *
+     * @return callable(int): TestResponse
+     */
+    private function plainText(string $method, string $path, array $body): callable
+    {
+        return function (int $attempt) use ($method, $path, $body): TestResponse {
+            $this->freshRequest();
+
+            return $this->call($method, $path.'?identifier=fresh'.$attempt.'&email=fresh'.$attempt.'%40example.test', [], [], [], ['CONTENT_TYPE' => 'text/plain', 'HTTP_ACCEPT' => 'application/json'], (string) json_encode($body));
+        };
+    }
+
+    public function test_the_turn_is_the_name_the_controller_looks_up_whatever_the_query_string_says(): void
+    {
+        $this->register('alice');
+        self::assertThrottled($this->plainText('POST', '/api/auth/local', ['identifier' => 'alice', 'password' => 'wrong']), 400);
+        $this->freshRequest();
+        self::assertThrottled($this->plainText('GET', '/api/auth/local/callback', ['identifier' => 'bob', 'password' => 'wrong']), 400);
+        self::assertThrottled($this->plainText('POST', '/api/auth/forgot-password', ['email' => 'alice@example.test']), 200);
+        self::assertThrottled($this->plainText('POST', '/api/auth/send-email-confirmation', ['email' => 'carol@example.test']), 200);
+    }
+
+    /** The bucket follows the account, whichever of its names a guesser uses. */
+    public function test_an_accounts_names_share_its_bucket(): void
+    {
+        $this->register('alice');
+        self::assertThrottled(function (int $attempt): TestResponse {
+            $this->freshRequest();
+
+            return $this->postJson('/api/auth/local', ['identifier' => $attempt % 2 === 0 ? 'alice' : 'alice@example.test', 'password' => 'wrong']);
+        }, 400);
+    }
+
+    /** A number is the string the lookup casts it to; accents, width and case are folded out of a name. */
+    public function test_a_name_buys_no_fresh_bucket_by_its_type_case_width_or_accents(): void
+    {
+        $names = [12345, '12345', ' 12345 '];
+        self::assertThrottled(fn (int $attempt): TestResponse => $this->postJson('/api/auth/local', ['identifier' => $names[$attempt] ?? '１２３４５', 'password' => 'wrong']), 400);
+        $this->freshRequest();
+        $folded = ['nobody', 'NÖBODY', 'ｎｏｂｏｄｙ'];
+        self::assertThrottled(fn (int $attempt): TestResponse => $this->postJson('/api/auth/forgot-password', ['email' => ($folded[$attempt] ?? 'nóbody').'@example.test']), 200);
+    }
+
+    /** Strapi's yup string() refuses an array or object: a ValidationError, never a server error. */
+    public function test_a_name_that_is_neither_string_nor_number_is_a_validation_error(): void
+    {
+        $this->postJson('/api/auth/local', ['identifier' => ['alice'], 'password' => 'wrong'])->assertStatus(400)
+            ->assertJsonPath('error.name', 'ValidationError')
+            ->assertJsonPath('error.message', "identifier must be a `string` type, but the final value was: `[\n  \"alice\"\n]`.");
+        $this->postJson('/api/auth/forgot-password', ['email' => ['a' => 1]])->assertStatus(400)
+            ->assertJsonPath('error.name', 'ValidationError');
+        $this->postJson('/api/auth/send-email-confirmation', ['email' => [1]])->assertStatus(400)
+            ->assertJsonPath('error.name', 'ValidationError');
+    }
+
     /** Naming a new identifier each time buys a guesser no more than the address's ceiling. */
     public function test_an_address_naming_many_identifiers_meets_its_ceiling(): void
     {

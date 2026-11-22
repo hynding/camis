@@ -97,19 +97,20 @@ describe("users-permissions sign-in providers", () => {
     expect(routes).toContain(
       "Route::get('/connect/{provider}/callback', [ConnectController::class, 'callback'])->middleware(StrapiThrottle::class.':provider');",
     );
+    // The local callback is the password login, which takes its own turn of sign-in.
     expect(routes).toContain(
-      "Route::get('/auth/{provider}/callback', [ConnectController::class, 'signIn'])->middleware(StrapiThrottle::class.':sign-in');",
+      "Route::get('/auth/{provider}/callback', [ConnectController::class, 'signIn']);",
     );
   });
 
   // Strapi answers GET /auth/local/callback as the password login, without its rate limit; camis
   // keeps the route but never checks a password unthrottled.
   it("throttles the provider callback, which signs in with a password for provider local", () => {
-    const routes = content("routes/api.php");
-    expect(routes).not.toContain("[ConnectController::class, 'signIn']);");
-    expect(content("app/Http/Controllers/Api/ConnectController.php")).toContain(
-      "return app(AuthController::class)->login($request);",
-    );
+    const connect = content("app/Http/Controllers/Api/ConnectController.php");
+    const signIn = connect.slice(connect.indexOf("public function signIn"));
+    expect(signIn).toContain("return app(AuthController::class)->login($request);");
+    // Another provider's callback takes a turn of the provider routes' bucket.
+    expect(signIn).toContain("StrapiRateLimits::refuse($request, 'provider');");
   });
 
   it("lets an account made through a provider have no password", () => {

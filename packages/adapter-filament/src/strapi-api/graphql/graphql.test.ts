@@ -130,15 +130,20 @@ describe("GraphQL", () => {
     );
   });
 
-  // The REST route reads the identifier from its body; the mutation's arguments are not the
-  // request's body, so each passes its own to the same per-identifier bucket.
-  it("counts sign-in and recovery mail per identifier, and a reset in a bucket of its own", () => {
+  // The mutation runs the REST controller in process, which takes the named turn itself; a
+  // throttled turn answers Strapi's RateLimitError.
+  it("leaves the named turns to the controller, and a reset in a bucket of its own", () => {
     const plugins = generate(true).files.find(
       (f) => f.path === "app/GraphQL/StrapiGraphqlPlugins.php",
     )!.content;
-    expect(plugins).toContain("self::throttle($request, 'sign-in', $input['identifier'] ?? null);");
-    expect(plugins).toContain("self::throttle($request, 'recovery', $args['email'] ?? null);");
+    // The controller the mutation runs takes the named turn, with the name it looks up.
+    expect(plugins).not.toContain("self::throttle($request, 'sign-in'");
+    expect(plugins).not.toContain("self::throttle($request, 'recovery'");
     expect(plugins).toContain("self::throttle($request, 'password-reset');");
+    const graphql = generate(true).files.find(
+      (f) => f.path === "app/GraphQL/StrapiGraphql.php",
+    )!.content;
+    expect(graphql).toContain("if ($previous instanceof ThrottleRequestsException) {");
   });
 
   it("serves the media library's files with the entries they are linked from", () => {
