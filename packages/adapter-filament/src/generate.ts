@@ -471,18 +471,24 @@ export const filamentAdapter: GenerateAdapter = {
         });
       });
       if (apiStyle === "laravel") {
+        const ownEmits = ct.fields
+          .filter((f) => f.type !== "relation" && f.type !== "component")
+          .map((f) => emitField(f));
         files.push({
           path: `app/Http/Controllers/Api/${names.model}ApiController.php`,
           content: emitApiController(
             ct,
             [
-              ...ct.fields
-                .filter((f) => f.type !== "relation" && f.type !== "component")
-                .map((f) => emitField(f).column),
+              ...ownEmits.map((e) => e.column),
               ...embeddedEmits.map((e) => e.column),
               ...(rel.fkNames.get(ct.name) ?? []),
             ],
-            { secured: ir.roles.length > 0 },
+            {
+              secured: ir.roles.length > 0,
+              decimals: [...ownEmits, ...embeddedEmits]
+                .filter((e) => e.decimalDigits === true)
+                .map((e) => e.column),
+            },
           ),
         });
       }

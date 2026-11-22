@@ -9,6 +9,8 @@ import { filamentNames, snake, snakeColumn } from "./names";
 
 export interface ApiOptions {
   secured: boolean;
+  /** The columns of decimals stating their digits, whose JSON numbers are taken as their digits. */
+  decimals?: string[];
   /** Content types whose routes run the IR's route policies and middlewares. */
   hooked?: ReadonlySet<string>;
 }
@@ -26,17 +28,22 @@ export const emitApiController = (
   const param = wildcard(ct);
   const fields = columns.map((c) => `'${c}'`).join(", ");
   const upsertBy = ct.options?.upsertBy;
+  const decimals = options.decimals ?? [];
+  const payload =
+    decimals.length === 0
+      ? "$request->only(self::FIELDS)"
+      : "self::withDecimals($request->only(self::FIELDS))";
   const auth = (line: string): string => (options.secured ? `        ${line}\n` : "");
 
   const storeBody = upsertBy
     ? (() => {
         const col = snakeColumn(upsertBy);
-        return `        $payload = $request->only(self::FIELDS);
+        return `        $payload = ${payload};
         $${param} = ${model}::updateOrCreate(['${col}' => $payload['${col}'] ?? null], $payload);
 
         return response()->json($${param}, $${param}->wasRecentlyCreated ? 201 : 200);`;
       })()
-    : `        $payload = $request->only(self::FIELDS);
+    : `        $payload = ${payload};
 
         return response()->json(${model}::create($payload), 201);`;
 
@@ -56,7 +63,7 @@ use Illuminate\\Http\\Request;
 class ${model}ApiController extends Controller
 {
 ${options.secured ? "    use AuthorizesRequests;\n\n" : ""}    private const FIELDS = [${fields}];
-
+${decimalsConstant(decimals)}
     public function index(): JsonResponse
     {
 ${auth(`$this->authorize('viewAny', ${model}::class);`)}        return response()->json(${model}::query()->paginate(50));
@@ -74,7 +81,7 @@ ${auth(`$this->authorize('create', ${model}::class);`)}${storeBody}
 
     public function update(Request $request, ${model} $${param}): JsonResponse
     {
-${auth(`$this->authorize('update', $${param});`)}        $${param}->update($request->only(self::FIELDS));
+${auth(`$this->authorize('update', $${param});`)}        $${param}->update(${payload});
 
         return response()->json($${param});
     }
@@ -84,10 +91,32 @@ ${auth(`$this->authorize('update', $${param});`)}        $${param}->update($requ
 ${auth(`$this->authorize('delete', $${param});`)}        $${param}->delete();
 
         return response()->json(null, 204);
-    }
+    }${decimals.length === 0 ? "" : WITH_DECIMALS}
 }
 `;
 };
+
+const decimalsConstant = (decimals: string[]): string =>
+  decimals.length === 0
+    ? ""
+    : `\n    /** Decimals stating their digits. */\n    private const DECIMALS = [${decimals.map((c) => `'${c}'`).join(", ")}];\n`;
+
+// PHP writes a float as a string of 14 significant digits (its `precision`), which is how PDO
+// binds one: a JSON number for a decimal stating its digits is taken as var_export's shortest
+// string reading back as the same double instead.
+const WITH_DECIMALS = `
+
+    /** The payload with each decimal's JSON number as its shortest digits. */
+    private static function withDecimals(array $payload): array
+    {
+        foreach (self::DECIMALS as $column) {
+            if (is_float($payload[$column] ?? null)) {
+                $payload[$column] = var_export($payload[$column], true);
+            }
+        }
+
+        return $payload;
+    }`;
 
 // The resource method serving each content API action.
 const RESOURCE_METHODS: Record<RouteAction, string> = {

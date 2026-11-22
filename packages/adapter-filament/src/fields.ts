@@ -11,6 +11,8 @@ export interface FieldEmit {
   formImport: string;
   tableImport: string;
   cast?: string;
+  /** A decimal stating its digits, which an API takes a JSON number for as its shortest digits. */
+  decimalDigits?: true;
 }
 
 const TEXT_INPUT = "Filament\\Forms\\Components\\TextInput";
@@ -261,5 +263,6 @@ export const emitField = (field: Field, columnOverride?: string): FieldEmit => {
     formImport: b.formImport,
     tableImport: b.tableImport,
     ...(b.cast ? { cast: b.cast } : {}),
+    ...(decimalDigits(field) === undefined ? {} : { decimalDigits: true as const }),
   };
 };

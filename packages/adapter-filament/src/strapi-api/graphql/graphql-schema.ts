@@ -1,4 +1,4 @@
-import { pluralize } from "@camis/ir-core";
+import { beyondDouble, pluralize } from "@camis/ir-core";
 import {
   fieldApiName,
   type CapabilityGap,
@@ -167,6 +167,9 @@ const scalarOf = (type: Field["type"]): string => {
       return "String";
   }
 };
+/** A field's scalar: a decimal beyond a double is a String, as the REST API answers it. */
+const fieldScalarOf = (field: Field | ComponentFieldT): string =>
+  beyondDouble(field) ? "String" : scalarOf(field.type);
 const GRAPHQL_NAME = /^[_A-Za-z][_0-9A-Za-z]*$/;
 
 /** The upload plugin's file type, as Strapi's content API sends it. */
@@ -270,7 +273,7 @@ class SchemaBuilder implements DefinitionSink {
   scalarType(owner: string, field: Field | ComponentFieldT): string {
     return field.type === "enumeration"
       ? this.enumeration(owner, field)
-      : this.scalar(scalarOf(field.type));
+      : this.scalar(fieldScalarOf(field));
   }
 
   pagination(): void {
@@ -371,7 +374,7 @@ class SchemaBuilder implements DefinitionSink {
                 ? this.relationFilter(f)
                 : f.type === "media"
                   ? []
-                  : [{ name: fieldApiName(f), type: this.scalarFilter(scalarOf(f.type)) }],
+                  : [{ name: fieldApiName(f), type: this.scalarFilter(fieldScalarOf(f)) }],
         ),
         { name: "and", type: `[${name}]` },
         { name: "or", type: `[${name}]` },
@@ -628,7 +631,7 @@ export const buildGraphqlSchema = (input: GraphqlSchemaInput): GraphqlSchema => 
       } else {
         const type = b.scalarType(name, field);
         typeFields.push({ name: key, type: `${type}${field.required === true ? "!" : ""}` });
-        filter(key, () => b.scalarFilter(scalarOf(field.type)));
+        filter(key, () => b.scalarFilter(fieldScalarOf(field)));
         inputFields.push({ name: key, type });
       }
     }

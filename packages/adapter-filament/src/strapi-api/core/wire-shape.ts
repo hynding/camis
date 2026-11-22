@@ -1,9 +1,11 @@
 import { expandComponents, type ExpandedTable } from "@camis/adapter-kernel";
+import { beyondDouble, decimalDigits } from "@camis/ir-core";
 import { componentDisplayName } from "@camis/strapi-schema";
 import {
   fieldApiName,
   inverseApiName,
   type Component,
+  type ComponentFieldT,
   type ContentType,
   type Field,
   type FieldType,
@@ -20,6 +22,10 @@ export interface WireScalar {
   key: string[];
   column: string;
   type: FieldType;
+  /** A decimal stating its digits: a JSON number written to it is taken as its shortest digits. */
+  digits?: true;
+  /** A decimal stating more digits than a double keeps: answered as a string, never a float. */
+  exact?: true;
   /** Written, but never answered, filtered, sorted or selected (Strapi's `private`). */
   private?: true;
 }
@@ -117,6 +123,11 @@ export interface LinkOrder {
   table: string;
   column: string;
 }
+const exactness = (field: Field | ComponentFieldT): { digits?: true; exact?: true } => ({
+  ...(decimalDigits(field) === undefined ? {} : { digits: true }),
+  ...(beyondDouble(field) ? { exact: true } : {}),
+});
+
 export interface WireShape {
   model: string;
   /** The route key's column: `options.upsertBy`'s, else Strapi 5's `document_id`. */
@@ -187,6 +198,7 @@ export const wireShape = (
       key: [fieldApiName(f)],
       column: snakeColumn(f.name),
       type: f.type,
+      ...exactness(f),
       ...privacy(f.private === true),
     }));
   const linked = (s: { field: { type: string } }): boolean =>
@@ -197,6 +209,7 @@ export const wireShape = (
       key: s.apiPath,
       column: s.path.map(snakeColumn).join("_"),
       type: s.field.type,
+      ...exactness(s.field),
       ...privacy(s.field.private === true || within(s.apiPath)),
     }));
   const embeddedMedia: WireEmbeddedMedia[] =
@@ -234,6 +247,7 @@ export const wireShape = (
         key: s.apiPath,
         column: s.path.map(snakeColumn).join("_"),
         type: s.field.type,
+        ...exactness(s.field),
         ...privacy(s.field.private === true),
       })),
     ...privacy(isPrivate),
@@ -275,6 +289,7 @@ export const wireShape = (
             key: s.apiPath,
             column: s.path.map(snakeColumn).join("_"),
             type: s.field.type,
+            ...exactness(s.field),
             ...privacy(s.field.private === true),
           })),
         components: m.component.fields

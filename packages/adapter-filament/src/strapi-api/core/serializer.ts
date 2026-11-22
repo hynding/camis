@@ -34,7 +34,10 @@ const UNIT = "    ";
 const read = (s: WireScalar, src: string, layout: StorageLayout): string => {
   const col = `${src}->${s.column}`;
   if (NUMERIC_INT.has(s.type)) return `${col} === null ? null : (int) ${col}`;
-  if (NUMERIC_STRING.has(s.type)) return `${col} === null ? null : (string) ${col}`;
+  // Strapi renders a decimal as a number, but a JSON number holding more digits than a double
+  // keeps is rounded by every JavaScript client: such a decimal is a string, as its cast reads it.
+  if (NUMERIC_STRING.has(s.type) || s.exact === true)
+    return `${col} === null ? null : (string) ${col}`;
   if (NUMERIC_FLOAT.has(s.type)) return `${col} === null ? null : (float) ${col}`;
   if (DATE_ONLY.has(s.type)) return layout === "strapi" ? col : `${col}?->toDateString()`;
   if (DATETIME.has(s.type)) return `${col}${ZULU_MS}`;
@@ -188,7 +191,13 @@ const fromWireColumns = (scalars: WireScalar[], src: string, indent: string): st
   scalars
     .map((s) => {
       const value = `self::dig(${src}, [${s.key.map((k) => `'${k}'`).join(", ")}])`;
-      return `${indent}'${s.column}' => ${s.type === "timestamp" ? `self::epoch(${value})` : value},`;
+      const taken =
+        s.type === "timestamp"
+          ? `self::epoch(${value})`
+          : s.digits === true
+            ? `self::decimal(${value})`
+            : value;
+      return `${indent}'${s.column}' => ${taken},`;
     })
     .join("\n");
 
@@ -367,6 +376,17 @@ const hasHelper = `
     }`;
 
 // Emitted only for a shape with a timestamp scalar, so no other serializer carries it unused.
+// PHP writes a float as a string of 14 significant digits (its `precision`), which is how PDO
+// binds one: a JSON number written to a decimal stating its digits is taken as var_export's
+// shortest string reading back as the same double instead.
+const decimalHelper = `
+
+    /** A decimal as Strapi takes one: its string, or a number as its shortest digits. */
+    private static function decimal(mixed $value): mixed
+    {
+        return is_float($value) ? var_export($value, true) : $value;
+    }`;
+
 const epochHelper = `
 
     /** A timestamp as Strapi takes one: its epoch in milliseconds, or a date string. */
@@ -383,6 +403,21 @@ const hasTimestamp = (shape: WireShape, zones: WireZone[]): boolean =>
     ...shape.children.flatMap((c) => c.scalars),
     ...zones.flatMap((z) => z.members.flatMap((m) => m.scalars)),
   ].some((s) => s.type === "timestamp");
+
+/** Whether fromWire writes a scalar that `which` picks: the entry's, an item's at any depth, a zone member's. */
+const writesScalar = (
+  shape: WireShape,
+  zones: WireZone[],
+  which: (s: WireScalar) => boolean,
+): boolean => {
+  const items = (children: readonly WireChild[]): WireScalar[] =>
+    children.flatMap((c) => [...c.scalars, ...items(c.children)]);
+  return [
+    ...shape.scalars,
+    ...items(shape.children),
+    ...zones.flatMap((z) => z.members.flatMap((m) => [...m.scalars, ...items(m.children)])),
+  ].some(which);
+};
 
 const privateEntry = (entry: { private?: true }): string =>
   entry.private === true ? ", 'private' => true" : "";
@@ -462,6 +497,9 @@ export const emitSerializer = (shape: WireShape, layout: StorageLayout = "larave
   const hasHelperBody = shape.children.length === 0 ? "" : hasHelper;
   const zoneHelperBody = zones.length === 0 ? "" : zoneHelper;
   const epochHelperBody = hasTimestamp(shape, zones) ? epochHelper : "";
+  const decimalHelperBody = writesScalar(shape, zones, (s) => s.digits === true)
+    ? decimalHelper
+    : "";
   const zoneImport = [
     ...(shape.children.some(itemsLinkAnything) ? ["\nuse App\\Support\\StrapiItems;"] : []),
     ...(zones.length === 0 ? [] : ["\nuse App\\Support\\StrapiZones;"]),
@@ -517,7 +555,7 @@ ${fromWireChildStatements(shape.children, l2)}${zones.length === 0 ? "" : `\n${f
         }
 
         return $cur;
-    }${hasHelperBody}${zoneHelperBody}${epochHelperBody}
+    }${hasHelperBody}${zoneHelperBody}${epochHelperBody}${decimalHelperBody}
 }
 `;
 };
