@@ -416,8 +416,10 @@ describe("users-permissions config and errors", () => {
       "$folded = StrapiRateLimits::folded($username);",
     );
   });
+  // Users and admins share it, so neither can drift from the other.
   it("stores a matched password again when its hash is not the configured one", () => {
-    expect(content("app/Support/StrapiUsers.php")).toContain("Hash::needsRehash(");
+    expect(content("app/Support/StrapiHashes.php")).toContain("Hash::needsRehash(");
+    expect(content("app/Support/StrapiUsers.php")).not.toContain("Hash::needsRehash(");
   });
   // A concurrent registration can take the name between the check and the insert.
   it("answers a registration whose insert finds its name taken as a taken one", () => {
@@ -452,7 +454,7 @@ describe("users-permissions config and errors", () => {
     const hashes = content("app/Support/StrapiHashes.php");
     expect(hashes).toContain("public static function fromBcryptjs(mixed $hash): ?string");
     expect(hashes).toContain(
-      "public static function matches(string $password, ?string $hash, string $account, int|string|null $id): bool",
+      "public static function matches(string $password, ?Model $owner, string $account): bool",
     );
     // Which account, once an hour, and never its hash, password or names.
     expect(hashes).toContain("Cache::add('camis-unverifiable-hash:'.$account.':'.$id, true, 3600)");

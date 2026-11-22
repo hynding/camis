@@ -172,6 +172,21 @@ class AdminAccountsTest extends TestCase
         self::assertSame($answers[0], $answers[2]);
     }
 
+    /** An imported admin (bcryptjs, another cost) is stored at the configured cost by its first sign-in. */
+    public function test_an_admin_sign_in_stores_the_password_again_at_the_configured_cost(): void
+    {
+        $this->admin();
+        $rounds = (int) config('hashing.bcrypt.rounds');
+        AdminUser::query()->where('email', 'admin@example.test')->toBase()->update(['password' => '$2a'.substr(password_hash('Admin-pass-1', PASSWORD_BCRYPT, ['cost' => $rounds + 1]), 3)]);
+        $stored = fn (): string => (string) AdminUser::query()->where('email', 'admin@example.test')->value('password');
+        $before = $stored();
+        $this->postJson('/admin/login', ['email' => 'admin@example.test', 'password' => 'wrong'])->assertStatus(400);
+        self::assertSame($before, $stored(), 'a wrong password changes nothing');
+        $this->signIn();
+        self::assertStringStartsWith(sprintf('$2y$%02d$', $rounds), $stored());
+        $this->signIn();
+    }
+
     public function test_a_sign_in_returns_strapis_body_and_a_token_for_the_admin_api(): void
     {
         $admin = $this->admin();

@@ -140,7 +140,7 @@ describe("Strapi's admin accounts and admin API", () => {
   // An unknown email returning before any hash check would time an admin account apart.
   it("checks one password hash on an admin sign-in whether or not the email finds an account", () => {
     expect(content("app/Http/Controllers/Admin/StrapiAdminController.php")).toContain(
-      "StrapiHashes::matches($password, is_string($hash) && $hash !== '' ? $hash : null, 'admin', $admin?->getKey())",
+      "StrapiHashes::matches($password, $admin, 'admin')",
     );
   });
 
