@@ -1,4 +1,5 @@
 overwrite DEPLOY.md
+overwrite app/Auth/CamisAdminUserProvider.php
 overwrite app/Console/Commands/CamisAdmin.php
 overwrite app/Console/Commands/CamisSchemaSync.php
 overwrite app/Console/Commands/StrapiExport.php
@@ -360,6 +361,7 @@ overwrite app/Policies/TopicPolicy.php
 overwrite app/Policies/TransactionPolicy.php
 overwrite app/Policies/UploadFolderPolicy.php
 overwrite app/Policies/UserPolicy.php
+overwrite app/Providers/CamisAuthServiceProvider.php
 overwrite app/Support/CamisSchemaSync.php
 overwrite app/Support/ColumnConversion.php
 overwrite app/Support/ContentTypeBuilder.php

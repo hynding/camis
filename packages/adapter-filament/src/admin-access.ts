@@ -4,6 +4,7 @@ import type { Role } from "@camis/permissions";
 import { PHP_MARKER } from "./hooks/names";
 import { phpSingleQuoted } from "./php-literal";
 import { runtimePhp } from "./runtime-php";
+import { emitStrapiHashes } from "./strapi-api/core/errors";
 
 /**
  * Who may sign in to the admin: an admin account holding a role the IR marks `admin`. Admin
@@ -22,6 +23,9 @@ export const AUTH_CONFIG_PATH = "config/auth.php";
 export const ADMIN_PROFILE_PATH = "app/Filament/Pages/AdminProfile.php";
 export const ADMIN_LOCALE_PATH = "app/Http/Middleware/AdminLocale.php";
 export const ADMIN_LOCALES_CONFIG_PATH = "config/camis-admin.php";
+export const ADMIN_USER_PROVIDER_PATH = "app/Auth/CamisAdminUserProvider.php";
+export const AUTH_SERVICE_PROVIDER_PATH = "app/Providers/CamisAuthServiceProvider.php";
+export const HASHES_PATH = "app/Support/StrapiHashes.php";
 
 const adminPhp = (path: string): string =>
   runtimePhp(new URL(`./strapi-api/admin/php/${path}`, import.meta.url));
@@ -86,6 +90,10 @@ export const emitAdminAccessFiles = (
     { path: ADMIN_PROFILE_PATH, content: adminPhp(ADMIN_PROFILE_PATH) },
     { path: ADMIN_LOCALE_PATH, content: adminPhp(ADMIN_LOCALE_PATH) },
     { path: ADMIN_LOCALES_CONFIG_PATH, content: adminPhp(ADMIN_LOCALES_CONFIG_PATH) },
+    { path: ADMIN_USER_PROVIDER_PATH, content: adminPhp(ADMIN_USER_PROVIDER_PATH) },
+    { path: AUTH_SERVICE_PROVIDER_PATH, content: adminPhp(AUTH_SERVICE_PROVIDER_PATH) },
+    // The admin guard and Strapi's admin and users sign-ins share it: emitted with the guard.
+    { path: HASHES_PATH, content: emitStrapiHashes() },
   ],
   gaps: noAdminRole(roles),
 });

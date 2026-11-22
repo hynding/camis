@@ -503,6 +503,7 @@ describe("scaffoldCommand", () => {
         "/proj/generated/filament/app/Models/User.php": STOCK_USER,
         "/proj/generated/filament/app/Providers/Filament/AdminPanelProvider.php": STOCK_PANEL,
         "/proj/generated/filament/bootstrap/app.php": STOCK_BOOTSTRAP,
+        "/proj/generated/filament/bootstrap/providers.php": STOCK_PROVIDERS,
       },
     });
     expect(await scaffoldCommand("filament", "generated/filament", io)).toBe(0);

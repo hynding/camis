@@ -65,6 +65,25 @@ const PROFILE_AND_LOCALE =
   "            ->profile(class_exists(\\App\\Filament\\Pages\\AdminProfile::class) ? \\App\\Filament\\Pages\\AdminProfile::class : null, isSimple: false)\n" +
   "            ->middleware(class_exists(\\App\\Http\\Middleware\\AdminLocale::class) ? [\\App\\Http\\Middleware\\AdminLocale::class] : [], isPersistent: true)\n";
 
+const STOCK_PANEL_PROVIDER_ENTRY = "    App\\Providers\\Filament\\AdminPanelProvider::class,\n";
+// Guarded: an app on Strapi's own storage layout has no admin accounts, so camis emits no provider.
+const AUTH_PROVIDER_ENTRY =
+  "    ...(class_exists(\\App\\Providers\\CamisAuthServiceProvider::class) ? [\\App\\Providers\\CamisAuthServiceProvider::class] : []),\n";
+
+/**
+ * Register camis's auth service provider in bootstrap/providers.php, after the admin panel's: it
+ * puts the admin guard's accounts behind camis's user provider, whose sign-in checks one hash
+ * whatever the email finds. Idempotent. A source without the panel provider's entry is returned
+ * unchanged; the caller treats that as a failure.
+ */
+export const patchBootstrapProviders = (source: string): string =>
+  source.includes("CamisAuthServiceProvider")
+    ? source
+    : source.replace(
+        STOCK_PANEL_PROVIDER_ENTRY,
+        `${STOCK_PANEL_PROVIDER_ENTRY}${AUTH_PROVIDER_ENTRY}`,
+      );
+
 /**
  * Sign the admin panel in on the generated `admin` guard, whose accounts are AdminUser rows apart
  * from the API's users, and give it the admin's profile page and interface language (Strapi's
@@ -447,6 +466,22 @@ export const scaffoldCommand = async (
     io.out("✓ patched the admin panel to sign in on the admin guard (admin accounts)");
   } catch (e) {
     io.out(`✗ cannot patch ${panelPath}: ${(e as Error).message}`);
+    return 1;
+  }
+
+  const providersPath = join(appDir, "bootstrap/providers.php");
+  try {
+    const patched = patchBootstrapProviders(await io.readFile(providersPath));
+    if (!patched.includes("CamisAuthServiceProvider")) {
+      io.out("✗ could not patch bootstrap/providers.php: no admin panel provider entry");
+      return 1;
+    }
+    await io.writeFile(providersPath, patched);
+    io.out(
+      "✓ registered camis's admin sign-in (one hash check per sign-in) in bootstrap/providers.php",
+    );
+  } catch (e) {
+    io.out(`✗ cannot patch ${providersPath}: ${(e as Error).message}`);
     return 1;
   }
 
