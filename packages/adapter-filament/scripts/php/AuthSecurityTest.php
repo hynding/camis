@@ -229,6 +229,8 @@ class AuthSecurityTest extends TestCase
         ];
         foreach ($requests as $i => $request) {
             $this->freshRequest();
+            // An address each, so no route's bucket fills before its request is checked.
+            $this->withServerVariables(['REMOTE_ADDR' => "10.4.0.{$i}"]);
             $response = $request();
             self::assertSame(400, $response->status(), "request {$i}: ".$response->getContent());
             $response->assertJsonPath('error.name', 'ValidationError');

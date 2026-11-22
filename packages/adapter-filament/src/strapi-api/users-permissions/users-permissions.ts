@@ -215,7 +215,7 @@ export const emitStrapiActiveUser = (): string =>
 export const emitStrapiEncryptCookies = (): string =>
   runtimePhp(new URL("./php/app/Http/Middleware/StrapiEncryptCookies.php", import.meta.url));
 
-/** The credential throttle: a bucket per group of routes, by address, named account or caller account. */
+/** The credential throttle: a bucket per group of routes, by address, name given or caller account. */
 export const emitStrapiRateLimits = (): string =>
   runtimePhp(new URL("./php/app/Support/StrapiRateLimits.php", import.meta.url));
 
@@ -316,7 +316,7 @@ final class UserController extends Controller
     public function create(Request $request): JsonResponse
     {${allow("user.create")}
         $body = $request->json()->all();
-        StrapiUsers::validate($body, ['email' => ['required', 'email'], 'username' => ['required'], 'password' => ['required']${roleRule}]);
+        StrapiUsers::validate($body, ['email' => ['string', 'required', 'email'], 'username' => ['string', 'required'], 'password' => ['string', 'required']${roleRule}]);
         if ((bool) (StrapiUsers::advanced()['unique_email'] ?? false) && User::query()->where('email', mb_strtolower((string) $body['email']))->exists()) {
             throw StrapiUsers::application('Email already taken');
         }
@@ -333,7 +333,7 @@ ${assignRole}        $user = StrapiUsers::add([...$body, 'password' => Hash::mak
     {${allow("user.update")}
         $user = User::query()->find($id) ?? throw new StrapiError(404, 'NotFoundError', 'User not found');
         $body = $request->json()->all();
-        StrapiUsers::validate($body, ['email' => ['email', 'nonEmpty'], 'username' => ['nonEmpty']]);
+        StrapiUsers::validate($body, ['email' => ['string', 'email', 'nonEmpty'], 'username' => ['string', 'nonEmpty'], 'password' => ['string']]);
         if (($user->provider ?? 'local') === 'local' && array_key_exists('password', $body) && in_array($body['password'], [null, '', false, 0], true)) {
             throw StrapiError::validation('password.notNull');
         }

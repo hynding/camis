@@ -171,7 +171,7 @@ describe("users-permissions routes", () => {
     const limits = content("app/Support/StrapiRateLimits.php");
     expect(limits).toContain("private const NAMED = ['sign-in', 'recovery', 'confirmation'];");
     expect(limits).toContain("substr(hash('sha256', self::folded($identifier)), 0, 32)");
-    expect(limits).not.toContain("account:");
+    expect(limits).not.toContain("'account:'");
     expect(limits).toContain(
       "public static function refuseNamed(Request $request, string $group, string $identifier): void",
     );

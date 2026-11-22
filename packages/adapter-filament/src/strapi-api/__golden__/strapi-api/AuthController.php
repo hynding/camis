@@ -22,6 +22,9 @@ class AuthController extends Controller
 {
     private const ALWAYS_ALLOWED_KEYS = ['username', 'password', 'email'];
 
+    /** The users table's username and email columns: no account has a longer name. */
+    private const MAX_IDENTIFIER_LENGTH = 255;
+
     public function register(Request $request): JsonResponse
     {
         $settings = StrapiUsers::advanced();
@@ -35,7 +38,7 @@ class AuthController extends Controller
         if ($invalid !== []) {
             throw StrapiError::validation('Invalid parameters: '.implode(', ', $invalid));
         }
-        StrapiUsers::validate($body, ['email' => ['required', 'email'], 'username' => ['required'], 'password' => ['required', 'maxPassword']]);
+        StrapiUsers::validate($body, ['email' => ['string', 'required', 'email'], 'username' => ['string', 'required'], 'password' => ['string', 'required', 'maxPassword']]);
         $role = Role::query()->where('name', 'authenticated')->first()
             ?? throw StrapiUsers::application('Impossible to find the default role');
         $email = mb_strtolower((string) $body['email']);
@@ -78,11 +81,15 @@ class AuthController extends Controller
         $body = $request->json()->all();
         StrapiUsers::validate($body, ['identifier' => ['string', 'required'], 'password' => ['string', 'required']]);
         $identifier = (string) $body['identifier'];
+        if (mb_strlen($identifier) > self::MAX_IDENTIFIER_LENGTH) {
+            throw StrapiError::validation('Invalid identifier or password');
+        }
+        // The turn is the name about to be looked up, so no other field of the request can stand
+        // in for it, and taken first, so nothing the lookup finds can bear on it.
+        StrapiRateLimits::refuseNamed($request, 'sign-in', $identifier);
         $user = User::query()->where('provider', 'local')
             ->where(fn ($q) => $q->where('email', mb_strtolower($identifier))->orWhere('username', $identifier))
             ->first();
-        // The turn is the name just looked up, so no other field of the request can stand in for it.
-        StrapiRateLimits::refuseNamed($request, 'sign-in', $identifier, $user);
         if ($user === null || ($user->password ?? '') === '' || ! Hash::check((string) $body['password'], $user->password)) {
             throw StrapiError::validation('Invalid identifier or password');
         }
@@ -100,7 +107,7 @@ class AuthController extends Controller
     {
         $user = $request->user() ?? throw StrapiUsers::application('You must be authenticated to reset your password');
         $body = $request->json()->all();
-        StrapiUsers::validate($body, ['password' => ['required', 'maxPassword'], 'passwordConfirmation' => ['required', 'same:password'], 'currentPassword' => ['required']]);
+        StrapiUsers::validate($body, ['password' => ['string', 'required', 'maxPassword'], 'passwordConfirmation' => ['string', 'required', 'same:password'], 'currentPassword' => ['string', 'required']]);
         if (! Hash::check((string) $body['currentPassword'], $user->password)) {
             throw StrapiError::validation('The provided current password is invalid');
         }
@@ -117,8 +124,8 @@ class AuthController extends Controller
         $body = $request->json()->all();
         StrapiUsers::validate($body, ['email' => ['string', 'required', 'email']]);
         $email = mb_strtolower((string) $body['email']);
+        StrapiRateLimits::refuseNamed($request, 'recovery', $email);
         $user = User::query()->where('email', $email)->first();
-        StrapiRateLimits::refuseNamed($request, 'recovery', $email, $user);
         if ($user === null || (bool) $user->blocked) {
             return response()->json(['ok' => true]);
         }
@@ -133,7 +140,7 @@ class AuthController extends Controller
     public function resetPassword(Request $request): JsonResponse
     {
         $body = $request->json()->all();
-        StrapiUsers::validate($body, ['password' => ['required', 'maxPassword'], 'passwordConfirmation' => ['required', 'same:password'], 'code' => ['required']]);
+        StrapiUsers::validate($body, ['password' => ['string', 'required', 'maxPassword'], 'passwordConfirmation' => ['string', 'required', 'same:password'], 'code' => ['string', 'required']]);
         $user = User::query()->where('reset_password_token', (string) $body['code'])->first()
             ?? throw StrapiError::validation('Incorrect code provided');
         $user->forceFill(['reset_password_token' => null, 'password' => Hash::make((string) $body['password'])])->save();
@@ -144,7 +151,7 @@ class AuthController extends Controller
     public function emailConfirmation(Request $request): RedirectResponse
     {
         $query = $request->query();
-        StrapiUsers::validate($query, ['confirmation' => ['required']]);
+        StrapiUsers::validate($query, ['confirmation' => ['string', 'required']]);
         $user = User::query()->where('confirmation_token', (string) $query['confirmation'])->first()
             ?? throw StrapiError::validation('Invalid token');
         $user->forceFill(['confirmed' => true, 'confirmation_token' => null])->save();
@@ -158,8 +165,8 @@ class AuthController extends Controller
         $body = $request->json()->all();
         StrapiUsers::validate($body, ['email' => ['string', 'required', 'email']]);
         $email = mb_strtolower((string) $body['email']);
+        StrapiRateLimits::refuseNamed($request, 'confirmation', $email);
         $user = User::query()->where('email', $email)->first();
-        StrapiRateLimits::refuseNamed($request, 'confirmation', $email, $user);
         if ($user === null) {
             return response()->json(['email' => $body['email'], 'sent' => true]);
         }

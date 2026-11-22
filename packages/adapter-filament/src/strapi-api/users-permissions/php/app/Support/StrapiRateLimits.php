@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Support;
 
-use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -13,14 +12,14 @@ use Illuminate\Support\Facades\RateLimiter;
  * The credential throttle, one bucket per group of routes (sign-in, register, recovery,
  * password-reset, confirmation, provider, refresh, password-change) so a flood of one never locks
  * out another. A sign-in, recovery mail or confirmation mail counts per client address and the
- * account it names, so a guesser at one account, or everyone behind one address, cannot lock
- * another account out; the address's turns across every name it tries meet a ceiling of their
+ * name it gives, so a guesser at one name, or everyone behind one address, cannot lock another
+ * account out; the address's turns across every name it tries meet a ceiling of their
  * own. A password change counts per account, so a stolen access token gets no more guesses from
  * more addresses. Every other group counts per address. No group may count per caller account but
  * the password change: GraphQL's sign-in, registration and recovery take a caller's session as
  * Strapi's do, and each account whose token a caller sent would buy its address a fresh bucket.
- * A named group's turn is taken by its controller, with the very name it looked the account up
- * by: nothing here reads a request's fields, so the turn and the lookup cannot disagree. The REST
+ * A named group's turn is taken by its controller, with the very name it then looks the account
+ * up by: nothing here reads a request's fields, so the turn and the lookup cannot disagree. The REST
  * routes and the GraphQL mutations take their turns here, so both count the same ones. Rates are
  * read per request, so a cached route file keeps no stale number.
  */
@@ -32,7 +31,7 @@ final class StrapiRateLimits
     /** Groups counted per account: each needs a session, so its account is the caller. */
     private const PER_ACCOUNT = ['password-change'];
 
-    /** Groups counted per address and the account they name, by refuseNamed alone. */
+    /** Groups counted per address and the name they give, by refuseNamed alone. */
     private const NAMED = ['sign-in', 'recovery', 'confirmation'];
 
     private const ADDRESS_RATE = 'camis.users_permissions.auth_address_throttle_per_minute';
@@ -41,7 +40,7 @@ final class StrapiRateLimits
     public static function attempt(Request $request, string $group): ?int
     {
         if (in_array($group, self::NAMED, true)) {
-            throw new \LogicException("The {$group} throttle counts the account named: take its turn with refuseNamed()");
+            throw new \LogicException("The {$group} throttle counts the name given, through refuseNamed()");
         }
 
         return self::take('camis-throttle|'.$group.'|'.self::caller($request, $group), self::rate($group));
@@ -57,20 +56,18 @@ final class StrapiRateLimits
     }
 
     /**
-     * A named group's turn: $identifier is the name the account was looked up by, and $account
-     * what the lookup found. Two buckets per name, whether or not an account was found, so a turn
-     * costs and answers the same either way: the folded name's, and the account's (the folded
-     * name's again when none was found), which catches the names a database collation matches
-     * that folding does not. The address's turns across every name stop at its ceiling.
+     * A named group's turn: $identifier is the name the account is about to be looked up by. One
+     * bucket for the name, with the case, width and accents a database collation may ignore folded
+     * out, and the address's ceiling across every name it tries. Nothing the lookup finds bears on
+     * it: a bucket of the account's own would tell a caller which names are one account, or that
+     * one exists. A name a collation matches that folding does not is bounded by the ceiling.
      */
-    public static function refuseNamed(Request $request, string $group, string $identifier, ?Authenticatable $account): void
+    public static function refuseNamed(Request $request, string $group, string $identifier): void
     {
         $address = 'camis-throttle|'.$group.'|ip:'.$request->ip();
         $name = substr(hash('sha256', self::folded($identifier)), 0, 32);
-        $owner = $account === null ? 'name:'.$name : 'account:'.$account->getAuthIdentifier();
         $waits = [
             self::take($address.'|id:'.$name, self::rate($group)),
-            self::take($address.'|'.$owner, self::rate($group)),
             self::take($address, max(self::rate($group), (int) config(self::ADDRESS_RATE, 50))),
         ];
         $wait = max(array_map(fn (?int $w): int => $w ?? 0, $waits));
