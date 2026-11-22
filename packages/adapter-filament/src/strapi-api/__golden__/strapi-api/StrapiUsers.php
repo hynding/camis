@@ -133,6 +133,11 @@ final class StrapiUsers
         if ($matches === null) {
             StrapiHashes::check($password, $standIn);
         }
+        // A hash of another cost (a Strapi import's bcryptjs 10) takes another time to check, which
+        // tells the account apart; once the password is known it is stored at the configured one.
+        if ($matches === true && $user !== null && Hash::needsRehash((string) StrapiHashes::fromBcryptjs($hash))) {
+            $user->forceFill(['password' => Hash::make($password)])->save();
+        }
 
         return $matches === true;
     }
