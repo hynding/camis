@@ -217,6 +217,8 @@ describe("users-permissions sessions", () => {
     expect(deploy).toContain("BCRYPT_ROUNDS=10");
     expect(deploy).toContain("until their first sign-in");
     expect(deploy).toContain("HASH_DRIVER");
+    // Both admin sign-ins, Strapi's POST /admin/login and the panel's, check one hash.
+    expect(deploy).toContain("Strapi's `POST /admin/login` and the admin panel's sign-in");
     expect(deploy).toContain("the notice in place of a confirmation mail");
   });
 

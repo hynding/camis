@@ -148,6 +148,11 @@ describe("admin access", () => {
     expect(deploy).toContain("php artisan camis:admin admin@example.com");
     expect(deploy).toContain("`admin_users`");
     expect(deploy).toContain("config/auth.php");
+    // The panel's sign-in checks one hash only once its provider is registered.
+    expect(deploy).toContain(
+      "...(class_exists(\\App\\Providers\\CamisAuthServiceProvider::class) ? [\\App\\Providers\\CamisAuthServiceProvider::class] : []),",
+    );
+    expect(deploy).toContain("one password hash whether or not the email names an account");
   });
 
   it("has no admin to let anyone into on the Strapi storage layout", () => {
