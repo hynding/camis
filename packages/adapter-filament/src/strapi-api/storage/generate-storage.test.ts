@@ -33,6 +33,13 @@ const content = (p: string): string => {
 };
 
 describe("filamentAdapter storageLayout strapi — file set", () => {
+  // A route naming a middleware the layout does not emit fails on every request to it.
+  it("emits every App middleware its routes name", () => {
+    const named = [...content("routes/api.php").matchAll(/^use App\\Http\\Middleware\\(\w+);$/gm)];
+    expect(named.length).toBeGreaterThan(0);
+    for (const [, middleware] of named)
+      expect(paths).toContain(`app/Http/Middleware/${middleware}.php`);
+  });
   it("file listing golden", async () => {
     await expect(
       result.files
