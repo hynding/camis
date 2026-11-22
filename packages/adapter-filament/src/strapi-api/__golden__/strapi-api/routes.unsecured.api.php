@@ -66,9 +66,9 @@ Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle):
         Route::get('i18n/locales', [LocaleController::class, 'index']);
     });
 
-    Route::middleware([])->group(function (): void {
+    Route::middleware([])->group(function () use ($authThrottle): void {
         Route::get('/users/me', [UserController::class, 'me'])->middleware(['auth:sanctum', StrapiActiveUser::class]);
-        Route::post('/auth/change-password', [AuthController::class, 'changePassword'])->middleware(['auth:sanctum', StrapiActiveUser::class]);
+        Route::post('/auth/change-password', [AuthController::class, 'changePassword'])->middleware(['auth:sanctum', StrapiActiveUser::class, $authThrottle]);
         Route::post('/auth/logout', [SessionController::class, 'logout'])->middleware(['auth:sanctum', StrapiActiveUser::class]);
         Route::get('/auth/sessions', [SessionController::class, 'sessions'])->middleware(['auth:sanctum', StrapiActiveUser::class]);
         Route::delete('/auth/sessions/{sessionId}', [SessionController::class, 'revoke'])->middleware(['auth:sanctum', StrapiActiveUser::class]);

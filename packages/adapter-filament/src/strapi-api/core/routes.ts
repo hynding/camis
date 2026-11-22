@@ -257,6 +257,10 @@ export const emitStrapiRoutes = (
       : sanctum;
   // A session's own routes need one even where nothing else is guarded.
   const own = secured ? "" : "->middleware(['auth:sanctum', StrapiActiveUser::class])";
+  // A password change checks the current password, so it is throttled as Strapi does.
+  const ownThrottled = secured
+    ? "->middleware($authThrottle)"
+    : "->middleware(['auth:sanctum', StrapiActiveUser::class, $authThrottle])";
   // Strapi grants these to its public role alone, so a session is refused on them.
   const guestOnly = usersPermissions ? ", StrapiCredentials::class.':guest'" : "";
   const throttled = usersPermissions ? `[$authThrottle${guestOnly}]` : "$authThrottle";
@@ -313,7 +317,7 @@ ${services.map((r) => `    ${r}`).join("\n")}`;
         Route::put('/users/{id}', [UserController::class, 'update']);
         Route::delete('/users/{id}', [UserController::class, 'destroy']);`;
   const ownRoutes = `Route::get('/users/me', [UserController::class, 'me'])${own};
-        Route::post('/auth/change-password', [AuthController::class, 'changePassword'])${own};
+        Route::post('/auth/change-password', [AuthController::class, 'changePassword'])${ownThrottled};
         Route::post('/auth/logout', [SessionController::class, 'logout'])${own};
         Route::get('/auth/sessions', [SessionController::class, 'sessions'])${own};
         Route::delete('/auth/sessions/{sessionId}', [SessionController::class, 'revoke'])${own};`;
@@ -321,8 +325,11 @@ ${services.map((r) => `    ${r}`).join("\n")}`;
     ? `${ownRoutes}${secured && !guests ? userRoutes : ""}`
     : "Route::get('/users/me', [AuthController::class, 'me']);";
   // With a public role, content is served without a session; a session's own routes still need one.
+  const sessionGroup = usersPermissions
+    ? "->group(function () use ($authThrottle): void {"
+    : "->group(function (): void {";
   const groups = guests
-    ? `${sanctum}->group(function (): void {
+    ? `${sanctum}${sessionGroup}
         ${ownRoutes}
     });
 
@@ -330,7 +337,7 @@ ${services.map((r) => `    ${r}`).join("\n")}`;
 
 ${resources}${uploads}
     });`
-    : `${group}->group(function (): void {
+    : `${group}${sessionGroup}
         ${sessionRoutes}
 
 ${resources}${uploads}
