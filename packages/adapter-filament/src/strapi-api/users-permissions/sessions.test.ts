@@ -164,6 +164,16 @@ describe("users-permissions sessions", () => {
     expect(deploy).toContain("### Upgrading");
   });
 
+  // Behind a proxy that Laravel does not trust every client has the proxy's address, and so one
+  // bucket; the operator must learn that, and that a password change counts per account.
+  it("documents the throttle's buckets, the refresh rate and trusted proxies in DEPLOY.md", () => {
+    const deploy = content("DEPLOY.md");
+    expect(deploy).toContain("CAMIS_REFRESH_THROTTLE_PER_MINUTE");
+    expect(deploy).toContain("$middleware->trustProxies(at:");
+    expect(deploy).toContain("per account");
+    expect(deploy).not.toContain("shared by all of them");
+  });
+
   it("issues sessions from login, registration and a password change or reset", () => {
     const auth = content("app/Http/Controllers/Api/AuthController.php");
     expect(auth).toContain("StrapiSessions::login($request, $user)");
