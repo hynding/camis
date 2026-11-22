@@ -273,7 +273,7 @@ describe("users-permissions routes", () => {
     // Strapi's update takes a missing, null or empty password (then refused as password.notNull)
     // and refuses any other value that is not a string.
     expect(users).toContain(
-      "['email' => ['string', 'email', 'nonEmpty', 'max:255'], 'username' => ['string', 'nonEmpty', 'max:255'], 'password' => ['updatePassword']]",
+      "['email' => ['string', 'email', 'nonEmpty', 'max:255'], 'username' => ['string', 'nonEmpty', 'max:255'], 'password' => ['updatePassword'], 'role' => ['id']]",
     );
   });
   // Login refuses a name longer than the name columns: no account may be made with one.

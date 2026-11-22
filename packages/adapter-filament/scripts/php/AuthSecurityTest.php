@@ -324,6 +324,24 @@ class AuthSecurityTest extends TestCase
         $this->withToken($token)->postJson('/api/users', $user + ['role' => $roles[0]])->assertCreated();
     }
 
+    /** A user's role changes to one role id, as Strapi's update validates it, or not at all. */
+    public function test_a_user_updated_over_the_api_names_a_single_role_id(): void
+    {
+        $token = \App\Support\StrapiApiTokens::create(['name' => 'full', 'type' => 'full-access'])['accessKey'];
+        $roles = \Spatie\Permission\Models\Role::query()->pluck('id')->all();
+        $made = $this->withToken($token)->postJson('/api/users', ['username' => 'made', 'email' => 'made@example.test', 'password' => 'secret1', 'role' => $roles[0]])->assertCreated();
+        $path = '/api/users/'.$made->json('id');
+        foreach (['true' => true, '-1' => -1, '1.5' => 1.5] as $printed => $role) {
+            $this->withToken($token)->putJson($path, ['role' => $role])->assertStatus(400)
+                ->assertJsonPath('error.name', 'ValidationError')
+                ->assertJsonPath('error.message', 'role must be a `strapiID` type, but the final value was: `'.$printed.'`.');
+        }
+        $this->withToken($token)->putJson($path, ['role' => [$roles[1]]])->assertStatus(400)->assertJsonPath('error.name', 'ValidationError');
+        self::assertSame([$roles[0]], \App\Models\User::query()->findOrFail($made->json('id'))->roles->pluck('id')->all());
+        $this->withToken($token)->putJson($path, ['role' => $roles[1]])->assertOk();
+        self::assertSame([$roles[1]], \App\Models\User::query()->findOrFail($made->json('id'))->roles->pluck('id')->all());
+    }
+
     /** Spaces, width, accents and case are folded out of a name; a number is no name at all. */
     public function test_a_name_buys_no_fresh_bucket_by_its_type_case_width_or_accents(): void
     {
