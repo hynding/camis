@@ -81,6 +81,13 @@ describe("GraphQL", () => {
     expect(content("routes/graphql.php")).toContain("->match(['get', 'post'], '/graphql'");
   });
 
+  // Register's payload holds a user, which a registration answered alike for every address has not.
+  it("answers a registration that waits on its email with one error a client can recognise", () => {
+    expect(content("app/GraphQL/StrapiGraphqlPlugins.php")).toContain(
+      "new StrapiError(400, 'ConfirmationPendingError', 'Check your email to finish registering')",
+    );
+  });
+
   // Its login, register and forgotPassword mutations are a guest's, as their REST routes are.
   it("takes a POST body only as JSON, as the auth routes do", () => {
     expect(content("routes/graphql.php")).toContain(

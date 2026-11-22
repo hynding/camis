@@ -1171,5 +1171,66 @@ class AuthSecurityTest extends TestCase
         self::assertStringStartsWith(sprintf('$2y$%02d$', $rounds), $stored());
         $this->login('imported')->assertOk();
     }
+
+    /** A GraphQL operation as a client from a fresh address sends it: status and body. */
+    private function graphqlSeen(string $query): array
+    {
+        $response = $this->fromAnywhere('/graphql', ['query' => $query]);
+
+        return [$response->status(), $response->json()];
+    }
+
+    /**
+     * GraphQL's register answers a user, which a hidden registration cannot give: every address,
+     * new or taken, gets one error a client can tell apart as "check your email", and nothing else.
+     */
+    public function test_graphql_registration_answers_every_address_with_check_your_email(): void
+    {
+        $this->register('alice');
+        $this->confirmationOn();
+        self::forgetMails();
+        $register = fn (string $username, string $email): array => $this->graphqlSeen(sprintf('mutation { register(input: { username: "%s", email: "%s", password: "secret1" }) { jwt user { username } } }', $username, $email));
+        $new = $register('carol', 'carol@example.test');
+        self::assertSame(200, $new[0]);
+        self::assertNull($new[1]['data']);
+        self::assertSame('STRAPI_CONFIRMATION_PENDING_ERROR', $new[1]['errors'][0]['extensions']['code']);
+        self::assertSame('ConfirmationPendingError', $new[1]['errors'][0]['extensions']['error']['name']);
+        self::assertSame('Check your email to finish registering', $new[1]['errors'][0]['message']);
+        self::assertSame($new, $register('alice2', 'alice@example.test'));
+        self::assertSame($new, $register('alice', 'dave@example.test'));
+        self::assertTrue(\App\Models\User::query()->where('username', 'carol')->exists());
+        self::assertEqualsCanonicalizing(
+            [['carol@example.test', 'Account confirmation'], ['alice@example.test', 'Account registration'], ['dave@example.test', 'Account registration']],
+            self::mails(),
+        );
+        // With the setting off GraphQL answers as Strapi's: the user, and no session to confirm first.
+        config(['camis.users_permissions.hide_account_existence' => false]);
+        $strapi = $register('erin', 'erin@example.test');
+        self::assertSame(['jwt' => null, 'user' => ['username' => 'erin']], $strapi[1]['data']['register']);
+    }
+
+    /** GraphQL's login and forgotPassword run REST's controllers, and so its protections. */
+    public function test_graphql_sign_in_and_recovery_tell_no_account_apart(): void
+    {
+        config(['camis.auth_throttle_per_minute' => 10, 'camis.users_permissions.auth_address_throttle_per_minute' => 10, 'mail.from.address' => 'hello@example.test']);
+        $this->register('alice');
+        $this->accountWithHash('imported', '$2a'.substr(password_hash('secret1', PASSWORD_BCRYPT, ['cost' => 4]), 3));
+        $this->accountWithHash('plain', 'secret1');
+        $login = fn (string $identifier, string $password): array => $this->graphqlSeen(sprintf('mutation { login(input: { identifier: "%s", password: "%s" }) { jwt } }', $identifier, $password));
+        $unknown = $login('nobody', 'secret1');
+        self::assertSame('Invalid identifier or password', $unknown[1]['errors'][0]['message']);
+        self::assertSame($unknown, $login('alice', 'wrong'));
+        self::assertSame($unknown, $login('plain', 'secret1'));
+        self::assertIsString($login('imported', 'secret1')[1]['data']['login']['jwt']);
+
+        self::forgetMails();
+        $forgot = fn (string $email): array => $this->graphqlSeen(sprintf('mutation { forgotPassword(email: "%s") { ok } }', $email));
+        self::assertSame($forgot('nobody@example.test'), $forgot('alice@example.test'));
+        self::assertSame($forgot('nobody@example.test'), $forgot('alice@example.test'));
+        self::assertSame([['alice@example.test', 'Reset password']], self::mails());
+        // A confirmation that names no account is refused as REST refuses it.
+        $confirm = $this->graphqlSeen('mutation { emailConfirmation(confirmation: "nope") { jwt } }');
+        self::assertSame('Invalid token', $confirm[1]['errors'][0]['message']);
+    }
 }
 
