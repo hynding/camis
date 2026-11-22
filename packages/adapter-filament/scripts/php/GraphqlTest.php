@@ -123,6 +123,17 @@ class GraphqlTest extends TestCase
             ->assertJsonPath('errors.0.message', 'Too many requests, please try again later.');
     }
 
+    public function test_changing_the_password_through_graphql_is_throttled_as_the_rest_route_is(): void
+    {
+        config(['camis.auth_throttle_per_minute' => 2]);
+        $jwt = $this->signIn('ann');
+        $guess = 'mutation { changePassword(currentPassword: "wrong", password: "secret2", passwordConfirmation: "secret2") { jwt } }';
+
+        $this->graphql($guess, $jwt)->assertJsonPath('errors.0.extensions.code', 'BAD_USER_INPUT');
+        $this->graphql($guess, $jwt)->assertJsonPath('errors.0.extensions.code', 'BAD_USER_INPUT');
+        $this->graphql($guess, $jwt)->assertJsonPath('errors.0.extensions.code', 'STRAPI_RATE_LIMIT_ERROR');
+    }
+
     public function test_a_custom_token_reaches_only_the_actions_it_was_given(): void
     {
         $books = StrapiApiTokens::create(['name' => 'books', 'type' => 'custom', 'permissions' => ['api::book.book.find']])['accessKey'];

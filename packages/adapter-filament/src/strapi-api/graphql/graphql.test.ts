@@ -118,6 +118,16 @@ describe("GraphQL", () => {
 
   // strapi-php answers UploadFile.related with an internal error, so the links are checked by
   // media-vectors.json over REST and by GraphqlTest.php here.
+  // The mutation reaches the controller in process, past the REST route's throttle, so it takes
+  // its own turn of the same rate: a stolen session must not guess the current password freely.
+  it("throttles changePassword as the REST route is", () => {
+    const plugins = generate(true).files.find(
+      (f) => f.path === "app/GraphQL/StrapiGraphqlPlugins.php",
+    )!.content;
+    const change = plugins.slice(plugins.indexOf("case 'changePassword':"));
+    expect(change.slice(0, change.indexOf("return "))).toContain("self::throttle($request);");
+  });
+
   it("serves the media library's files with the entries they are linked from", () => {
     expect(fields(ours.get("UploadFile") ?? "")).toEqual(fields(oracle.get("UploadFile")!));
     // The fixture has more content types than the oracle project; the shared ones keep its order.
