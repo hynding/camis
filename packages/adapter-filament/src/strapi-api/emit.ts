@@ -324,7 +324,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
       morphInverses: (input.morphs?.inverses.get(ct.name) ?? []).map((i) => i.wire),
     };
     shapes.set(ct.name, shape);
-    const entity = entityRules(ct, doc, shape, "laravel");
+    const entity = entityRules(ct, doc, shape, "laravel", perm.assigns.get(ct.name) ?? []);
     gaps.push(...entity.gaps);
     files.push({
       path: `app/Http/Serializers/${names.model}Serializer.php`,

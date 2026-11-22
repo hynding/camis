@@ -90,7 +90,7 @@ export const emitStrapiStorage = (input: StrapiApiInput): StrapiApiEmission => {
     // No foreign-key columns on this layout: an owning relation is a link-table row, so the
     // serializer's `$wire['columns']` must name only columns the model can actually fill.
     const shape = wireShape(doc, ct, [], new Set(), new Set(), undefined, false);
-    const entity = entityRules(ct, doc, shape, "strapi");
+    const entity = entityRules(ct, doc, shape, "strapi", perm.assigns.get(ct.name) ?? []);
     gaps.push(...entity.gaps);
     files.push({
       path: `app/Http/Serializers/${names.model}Serializer.php`,
