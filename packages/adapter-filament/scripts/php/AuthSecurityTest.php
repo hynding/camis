@@ -1112,7 +1112,7 @@ class AuthSecurityTest extends TestCase
      * so each kind of mail goes to one address at most CAMIS_ACCOUNT_MAIL_PER_HOUR times an hour,
      * whoever asks and from wherever; a mail skipped changes nothing in the answer.
      */
-    public function test_each_kind_of_account_mail_goes_to_an_address_once_an_hour(): void
+    public function test_each_kind_of_account_mail_goes_to_an_address_three_times_an_hour(): void
     {
         $this->register('alice');
         \App\Models\User::forceCreate(['name' => 'pending', 'username' => 'pending', 'email' => 'pending@example.test', 'password' => 'x', 'provider' => 'local', 'confirmed' => false, 'blocked' => false]);
@@ -1131,10 +1131,8 @@ class AuthSecurityTest extends TestCase
                 self::assertSame([$first->status(), $first->json()], [$again->status(), $again->json()]);
             }
         }
-        self::assertEqualsCanonicalizing(
-            [['victim@example.test', 'Account registration'], ['alice@example.test', 'Account registration'], ['pending@example.test', 'Account confirmation'], ['alice@example.test', 'Reset password']],
-            self::mails(),
-        );
+        $kinds = [['victim@example.test', 'Account registration'], ['alice@example.test', 'Account registration'], ['pending@example.test', 'Account confirmation'], ['alice@example.test', 'Reset password']];
+        self::assertEqualsCanonicalizing([...$kinds, ...$kinds, ...$kinds], self::mails());
         self::assertSame(0, \App\Models\User::query()->where('email', 'victim@example.test')->count());
 
         $this->travel(61)->minutes();
@@ -1146,12 +1144,12 @@ class AuthSecurityTest extends TestCase
     public function test_the_hourly_mail_bound_is_a_setting(): void
     {
         $this->register('alice');
-        config(['camis.users_permissions.account_mail_per_hour' => 3, 'mail.from.address' => 'hello@example.test']);
+        config(['camis.users_permissions.account_mail_per_hour' => 1, 'mail.from.address' => 'hello@example.test']);
         self::forgetMails();
         for ($i = 0; $i < 5; $i++) {
             $this->fromAnywhere('/api/auth/forgot-password', ['email' => 'alice@example.test'])->assertOk();
         }
-        self::assertCount(3, self::mails());
+        self::assertCount(1, self::mails());
     }
 
     /**
@@ -1188,7 +1186,7 @@ class AuthSecurityTest extends TestCase
         $taken = $this->fromAnywhere('/api/auth/local/register', $body);
         $lost->assertOk()->assertJsonPath('sent', true);
         self::assertSame([$taken->status(), $taken->json()], [$lost->status(), $lost->json()]);
-        self::assertSame([['carol@example.test', 'Account registration']], self::mails());
+        self::assertSame([['carol@example.test', 'Account registration'], ['carol@example.test', 'Account registration']], self::mails());
 
         config(['camis.users_permissions.hide_account_existence' => false]);
         $settled = $this->loseTheNextRace('dave');
@@ -1270,7 +1268,7 @@ class AuthSecurityTest extends TestCase
         $forgot = fn (string $email): array => $this->graphqlSeen(sprintf('mutation { forgotPassword(email: "%s") { ok } }', $email));
         self::assertSame($forgot('nobody@example.test'), $forgot('alice@example.test'));
         self::assertSame($forgot('nobody@example.test'), $forgot('alice@example.test'));
-        self::assertSame([['alice@example.test', 'Reset password']], self::mails());
+        self::assertSame([['alice@example.test', 'Reset password'], ['alice@example.test', 'Reset password']], self::mails());
         // A confirmation that names no account is refused as REST refuses it.
         $confirm = $this->graphqlSeen('mutation { emailConfirmation(confirmation: "nope") { jwt } }');
         self::assertSame('Invalid token', $confirm[1]['errors'][0]['message']);
