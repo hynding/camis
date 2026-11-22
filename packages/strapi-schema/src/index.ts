@@ -19,3 +19,4 @@ export {
   strapiAttributeNames,
   strapiReservedNameGaps,
 } from "./reserved-names";
+export { strapiDecimalGaps } from "./decimals";

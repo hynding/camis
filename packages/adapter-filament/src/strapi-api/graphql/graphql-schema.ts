@@ -8,6 +8,7 @@ import {
   type Field,
   type IrDocument,
 } from "@camis/ir-schema";
+import { beyondPhpFloat } from "../../decimals";
 import { filamentNames } from "../../names";
 import { componentUid, kebab } from "../core/names";
 import {
@@ -167,6 +168,9 @@ const scalarOf = (type: Field["type"]): string => {
       return "String";
   }
 };
+/** A field's scalar: a decimal beyond a PHP float is a String, as the REST API answers it. */
+const fieldScalarOf = (field: Field | ComponentFieldT): string =>
+  beyondPhpFloat(field) ? "String" : scalarOf(field.type);
 const GRAPHQL_NAME = /^[_A-Za-z][_0-9A-Za-z]*$/;
 
 /** The upload plugin's file type, as Strapi's content API sends it. */
@@ -270,7 +274,7 @@ class SchemaBuilder implements DefinitionSink {
   scalarType(owner: string, field: Field | ComponentFieldT): string {
     return field.type === "enumeration"
       ? this.enumeration(owner, field)
-      : this.scalar(scalarOf(field.type));
+      : this.scalar(fieldScalarOf(field));
   }
 
   pagination(): void {
@@ -371,7 +375,7 @@ class SchemaBuilder implements DefinitionSink {
                 ? this.relationFilter(f)
                 : f.type === "media"
                   ? []
-                  : [{ name: fieldApiName(f), type: this.scalarFilter(scalarOf(f.type)) }],
+                  : [{ name: fieldApiName(f), type: this.scalarFilter(fieldScalarOf(f)) }],
         ),
         { name: "and", type: `[${name}]` },
         { name: "or", type: `[${name}]` },
@@ -628,7 +632,7 @@ export const buildGraphqlSchema = (input: GraphqlSchemaInput): GraphqlSchema => 
       } else {
         const type = b.scalarType(name, field);
         typeFields.push({ name: key, type: `${type}${field.required === true ? "!" : ""}` });
-        filter(key, () => b.scalarFilter(scalarOf(field.type)));
+        filter(key, () => b.scalarFilter(fieldScalarOf(field)));
         inputFields.push({ name: key, type });
       }
     }

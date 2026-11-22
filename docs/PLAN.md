@@ -3423,6 +3423,207 @@ none; `generate.test.ts` in the CLI fails with a located message per name and wr
 
 ---
 
+## Phase 98 — decimals state their digits (`ir-schema`, `ir-core`, `strapi-schema`, `adapter-strapi`, `adapter-filament`, `adapter-express`, `ai-authoring`)
+
+A `decimal` could not state its precision or scale (issue #104): the Filament target migrated
+`$table->decimal('value')`, Laravel's (8, 2), cast `decimal:2`, so 12345678901.123456 read back as
+12345678901.12 on SQLite and overflowed MySQL and PostgreSQL; the Strapi target got Strapi's
+decimal(10, 2), and a double on SQLite.
+
+- **The IR.** A decimal takes `precision` and `scale`, both or neither (`invalid_decimal_digits`,
+  located at the field's `precision` or `scale`). Bounds: precision 1 to 65, scale 0 to 30 and at
+  most the precision. A `default`, `min` or `max` with more digits before the point than
+  `precision - scale`, or a `default` with more after it than `scale`, is refused too, located at
+  that key: MySQL and PostgreSQL refuse such a default when the table migrates. They are MySQL's DECIMAL's; PostgreSQL's NUMERIC takes 1000 digits and SQLite
+  declares any, so MySQL's are what every database every target runs on takes. Both together,
+  because the targets' defaults differ ((8, 2), (10, 2), Drizzle's), so a scale alone would mean a
+  different precision per target, and a scale cannot be checked against a precision no one stated.
+  Without them each target emits what it did before, byte for byte (every existing golden is
+  unchanged). `ir-core`'s `decimalDigits`, `digitsBeyond`, `decimalsBeyond`, `beyondDouble` and
+  `decimalsBeyondDouble` are what the targets share: `DOUBLE_DIGITS`, 15, is the significant digits
+  of which a double keeps every decimal exactly (DBL_DIG), so on the JavaScript targets (Strapi,
+  Express) a decimal of more digits must not pass through a number. Each target owns its own
+  threshold where its runtime's numbers keep fewer.
+- **Filament.** `$table->decimal('x', p, s)`, cast by `DecimalDigitsCast` (see Writing; Laravel
+  12's decimal cast answers the column as a string at the scale through brick/math, but makes that
+  string from what PDO reads: a PHP float where SQLite keeps a double). PHP writes a float with 14 significant digits
+  (its `precision` setting), so `PHP_FLOAT_DIGITS`, 14, owned by `adapter-filament`, is its
+  threshold: a (15, 5) decimal's 1234567890.12345 reads back from SQLite's double as
+  1234567890.12350, while every (14, s) value round trips. A decimal of 15 digits or more is
+  therefore `$table->string('x', p + 2)` on SQLite and DECIMAL elsewhere, chosen by the
+  connection's driver when the migration runs (`Schema::getConnection()`), so one generated
+  migration serves every database with no code change.
+- **Writing.** SQLite's text column takes any string, so a value it stored verbatim (`" 12"`,
+  `"1e5"`, more digits than the column states) broke every later read there while MySQL and
+  PostgreSQL normalised or refused it. Every write of a decimal stating its digits now goes through
+  `App\Support\DecimalDigits` (a static runtime file, emitted with the two below only for a project
+  with such a decimal): a string or a JSON number (taken as `var_export`'s shortest digits, not
+  PHP's 14-digit string of a float), trimmed, read only when it is ASCII digits with at most one
+  point, an optional sign and an exponent of at most three digits, in at most 100 characters
+  (brick/math writes out every zero an exponent stands for, so `1e100000000` would exhaust memory),
+  parsed by brick/math, rounded half away from zero to the scale, as MySQL's DECIMAL and
+  PostgreSQL's NUMERIC round what they store, and kept with exactly the scale's digits after the
+  point, no exponent, no leading plus or zeros, `-0` as zero, so every database holds the same
+  digits and a unique index sees 1.5 and 1.50 as one. The model casts such a decimal with
+  `App\Casts\DecimalDigitsCast` (`DecimalDigitsCast::class.':p,s'` in place of `decimal:s`), so
+  every write of a model's attributes through Eloquent (either API style, the admin, a seeder,
+  `Model::create`, `save()`) stores that form, and one writing a value that is not a decimal, or
+  has more digits before the point than `precision - scale` after rounding, gets a
+  `ValidationException`; it reads back as the same string, and a stored value it cannot read is
+  answered as stored, so one bad row cannot break a list. The APIs refuse such a value before the
+  model sees it: Strapi's `ValidationError` (400) from the Strapi API style's serializers
+  (`fromWire`), named by its full path, an item's index included (`["entries", "1", "amount"]`,
+  `entries[1].amount must be ...`, as StrapiValidator names one; a zone's item by its place, which
+  `StrapiZones` then passes its columns callback), and Laravel's 422 validation errors from the
+  Laravel API style's controllers (`withDecimals`), as Laravel refuses any invalid field. A value
+  StrapiValidator already refuses as not a number (`"abc"`) is refused there first, as before. The
+  admin's form edits such a decimal as text (`TextInput` with `inputMode('decimal')`, not
+  `->numeric()`, which makes the state a PHP float) with `App\Rules\DecimalDigitsRule`, so it shows
+  a validation message for what the cast would refuse. A unique one is checked by
+  `App\Rules\DecimalDigitsUniqueRule` (emitted only for a project with one) in place of Filament's
+  `->unique()`, which compares the text as typed with the stored digits: on SQLite `1.5` typed
+  beside a stored `1.500000` passed it and the unique index answered a 500, and MySQL compares a
+  string with a DECIMAL as two doubles. The rule compares the value as it is stored, rounded to the
+  scale (`DecimalDigits::canonical`), since that is what the unique index compares (`1.500004` typed
+  beside a stored `1.50000` is that value), bound exactly as a filter binds it
+  (`DecimalDigits::where`), against the table as Laravel's unique rule reads it, ignoring the
+  record being edited, with Laravel's "has already been taken" message; a value the column cannot
+  hold is `DecimalDigitsRule`'s to refuse. The rule is emitted only when a generated form checks it,
+  so not, on the Strapi API style, for one whose only such decimal is in a draft-and-publish or
+  localized type, whose form there leaves a unique field's rule out (the Laravel API style keeps
+  one row per record and keeps the rule). The Strapi API style's unique check had the same flaw: it
+  looked the value up as sent (yup's cast, a float), so a duplicate in another spelling (`1.5`
+  beside a stored `1.50000` on SQLite, `1.500004` on PostgreSQL) reached the unique index and was
+  answered with a bare 400 "Validation failed" with no details. For a project with a unique decimal
+  stating its digits on the Laravel storage layout, its rule in the controller's `RULES` carries
+  `digits` under `unique`, and `StrapiValidator` (patched only for such a project, at its anchors,
+  as `StrapiImport` is) looks it up by the value as sent, rounded to the scale and bound through
+  `DecimalDigits::where`, in the entry's row or its items' rows alike, answering Strapi's "This
+  attribute must be unique". The archive import writes
+  rows with the query builder, past every cast: its transfer map carries such a decimal's `digits`,
+  and `StrapiImport` (patched only for a project with one, at the three lines that write a column,
+  each to call `DecimalDigits::archived`) writes it as `DecimalDigits` keeps it and stops at one
+  that does not fit, as it stops at any value its column cannot take (a located
+  `RuntimeException`).
+- **Filtering.** The Strapi API style's `StrapiQuery` cast every decimal filter value to a float,
+  so `filters[balance][$eq]=12345678901.123456` matched nothing. A decimal stating its digits now
+  carries them in its serializer's `FIELDS`, and `StrapiQuery` (emitted with this only for a
+  project with such a decimal) compares `$eq`, `$ne`, `$in`, `$notIn`, the `$lt`/`$gt` family and
+  `$between` (a value or a list given without an operator, and GraphQL's filters, too) through
+  `DecimalDigits::where`, exactly and never rounding the filter's value: every value the column
+  holds is a multiple of 10^-scale below 10^(precision - scale) in magnitude, so a value with more
+  digits after the point than the scale is compared through the nearest such multiple (`$gt
+  1.00005` on a (9, 4) column is `>= 1.0001`, `$lte 1.00005` is `<= 1.0000`), `$eq` and `$in` find
+  nothing by it and `$ne` and `$notIn` every row with a value, and a value beyond every one the
+  column holds decides the comparison alone; what is bound therefore always fits the column. A
+  comparison decided without its value is still one SQL compares (`x = x` for every value, `x <> x`
+  for none), so it is unknown for a row without a value, as any comparison is, and `$not` leaves
+  that row out too. An item of `$in` or `$notIn` that is not a decimal equals none of the column's
+  values, so the others are still compared exactly, and `$between` takes its first two values as
+  its bounds. It is bound as a parameter, typed: `CAST(? AS DECIMAL(p, s))` on MySQL, which
+  compares a DECIMAL with a string as two doubles (the column's own digits rather than DECIMAL(65,
+  30), which keeps only 35 digits before the point where a column may keep 65), `CAST(? AS
+  NUMERIC)` on PostgreSQL, and as text on SQLite, which compares it with the text column's
+  canonical digits or gives it a numeric column's affinity. A value that is not a decimal (`abc`,
+  or one past the length or exponent bound) is bound as it came, as every other number field's
+  filter value is. On SQLite an equality finds nothing by it, while an ordering or negated
+  comparison compares it as SQLite compares text with the column, as for every number field (`$lt
+  abc` finds every row with a value). PostgreSQL refuses only a value it cannot read as NUMERIC
+  (`abc`), which the Strapi API style answers with its 400 `ValidationError`, and compares one it
+  can (`1e1000`). The admin list's search on such a column compares the same way.
+- **The wire.** A JSON number of 17 significant digits is rounded by every JavaScript client, and
+  PHP's `json_decode` reads it as a double too. The Laravel API style already answered every
+  decimal as a string (its `decimal:N` cast), and keeps doing so. The Strapi API style answers a
+  decimal of 15 digits or more as a string, over REST (`toWire`), GraphQL (`String`, filtered by
+  `StringFilterInput`), the OpenAPI document (answered `string`, taken `string` or `number`) and
+  the content manager's MCP tools (taken as either, and filtered by either, alone or in a list);
+  every other decimal stays the number Strapi answers, so a project without such a decimal answers
+  exactly as before. A client keeps every digit by sending the value as a string; the API takes
+  either, but a JSON number has lost the digits a double does not keep before PHP reads it.
+- **What Filament reports.** A `decimalPrecision` downgrade gap, located at the content type or
+  component and the field, for each decimal of 15 digits or more on the Strapi API style: on SQLite
+  a filter finds equal values exactly (every write keeps the canonical digits), but an ordering
+  comparison or a sort compares its text, not numbers; an exact value is sent as a string; the
+  admin list's number filters (Filament's `NumberConstraint`) compare it through a PHP float, as
+  text on SQLite; and a data-transfer archive carries it as a number, as Strapi's archives do,
+  rounded to 15 digits. On Strapi's storage layout the column is the one Strapi made, which SQLite
+  keeps as a double that PHP reads back with 14 digits: the same gap says so. The Laravel API style
+  neither filters nor sorts, so it reports none.
+- **Strapi.** Strapi 5.48's database layer (the `@strapi/database` the repository's tests install)
+  makes a decimal column decimal(10, 2) and then lays the attribute's `column` over it
+  (`createColumn` spreads `attribute.column` last), and `@strapi/core` 5.48 (read from its published
+  package, which the repository does not install) passes a scalar attribute to it unchanged and
+  does not refuse unknown attribute keys; so a decimal stating its
+  digits gets `"column": { "type": "decimal", "args": [p, s] }`. Strapi reads and writes every
+  decimal as a JavaScript number whatever its column (the database layer's `NumberField` converts
+  with `Number()` and lodash's `toNumber`, the REST API validates `z.number()`), so a decimal
+  beyond a double is rounded to 15 significant digits on every database: a `decimalPrecision` gap,
+  located. It is a downgrade, as `softDelete` and `privateField` are: the project generates and runs
+  and the field keeps its 15 leading digits; an `error` is for what makes a target refuse or
+  overwrite data outright (`reservedFieldName`). Within a double a decimal is exact: its column has
+  the stated digits on MySQL and PostgreSQL, and SQLite's double keeps every value of 15 digits.
+  Strapi's Content-Type Builder does not show `column`, so a type saved there loses it.
+- **Express.** `decimal('x', { precision, scale })` on MySQL, `numeric('x', { precision, scale })`
+  on PostgreSQL; SQLite takes no digits, so `numeric('x')`, or `text('x')` (its default as text) for
+  a decimal beyond a double, whose digits a JavaScript number does not keep. Drizzle answers such a
+  decimal as a string on every database; the generated admin shows and edits it with `TextField`
+  and `TextInput`, since react-admin's `NumberField` and `NumberInput` parse it to a number. The
+  generated list sorts rows in JavaScript, comparing such strings as text, and Express's JSON body
+  parser reads a JSON number as a double: a `decimalPrecision` downgrade gap, located, says the list
+  sorts it as text on every database and that an exact value is sent as a string.
+- **Import.** The Strapi importer reads the digits back from `column`, so a generated schema
+  round trips; column settings on a decimal that are not digits the IR takes are reported
+  (`decimalColumn`, a downgrade) and the field imported without them. The AI authoring prompt says
+  a decimal may state both.
+
+Not covered: sorting, and the Express list's ordering, of a decimal stating no digits or within a
+double is as it was (Drizzle answers every decimal as a string on MySQL and PostgreSQL, so the
+Express list already compared those as text); on Strapi's storage layout only the writes changed,
+the column staying Strapi's (its gap stands); a value StrapiValidator refuses as not a number, or
+reads as an infinite one (`1e400`), still answers a 500 there, because its error carries NaN or
+INF, which `json_encode` refuses (every number field, not only decimals); the admin list's number
+filters compare through a float (the gap says so); a write past the model's cast keeps no
+canonical form: `$model->increment()` or `decrement()`, an Eloquent or query-builder `update()`,
+and any other write through the query builder than the import (the Content-Type Builder's column
+conversion, `ColumnConversion`); a GraphQL filter's `in` or `notIn` list has no length bound
+(REST's query string has PHP's `max_input_vars`, 1000), so a list of 50,000 decimals takes over a
+second to compare. A unique field inside a dynamic zone's component gets the form's unique rule
+(`DecimalDigitsUniqueRule`, like Filament's `->unique()` for every other type) checked against the
+parent's model, whose table has no such column: saving that form fails on PostgreSQL (the column
+does not exist), and SQLite, reading the unknown quoted name as text, lets duplicates through. The
+Laravel API style checks no uniqueness before a write, for any unique field, so a duplicate still
+reaches the unique index there. On Strapi's storage layout `StrapiValidator` compares a unique
+value as sent, as before. Two items of one request are still compared with each other as sent,
+not as stored, so `"7"` beside `"7.0"` in one repeatable passes where `"7"` twice is refused. The
+patched `StrapiValidator`, like the patched `StrapiImport`, is not analysed by the
+`runtime-phpstan` job, which analyses the static files only.
+
+Exit: `fields.test.ts` and `parse.test.ts` in `ir-schema`; `decimals.test.ts` in `adapter-filament`
+(goldens of both API styles' migrations, models, admin forms, the Laravel controller, the Strapi
+serializer and the admin list's search; the 14-digit threshold; `DecimalDigits`, its cast and
+rules, the unique rule in the form and when it is emitted, the unique check's `digits` in `RULES`,
+the patched `StrapiValidator`'s golden and a missing anchor refused, and `StrapiQuery`'s exact
+filter; the import's map, its patched
+golden and a missing anchor refused; the paths a refusal names; GraphQL, OpenAPI and MCP; the
+gaps), `adapter-strapi` (schema.json goldens, the gap, the round trip) and `adapter-express` (a
+schema golden per dialect, the admin, the gap); `attributes.test.ts` in `strapi-schema` and the
+importer. The round trip of 12345678901.123456 with precision 20 and scale 6 runs in CI on SQLite,
+MySQL and PostgreSQL: on the Laravel API style in the `boot` job (the boot fixture's
+`Article.balance`, written through the API and read back, then a value in exponent form kept at its
+scale and one too long refused with a 422), on the Strapi API style in the `decimals` job (the
+decimals fixture, `DecimalsTest`: REST and GraphQL round trips of (20, 6), (18, 2), (15, 5) and
+(14, 4) decimals, every filter operator, filter values beyond the scale or the range compared
+exactly, also under `$not`, a list's unreadable items skipped, values past the length or exponent
+bound refused, writes kept at the scale or refused with their full path in a repeatable or a zone,
+writes through the model's cast past the request's trimming, and the admin's form driven through
+Livewire, a unique decimal checked as it is stored, rounded to the scale, in the form on create and
+edit and over REST on create and update). `DecimalDigits.php`, the cast and the rules are
+analysed by the `runtime-phpstan` job (`scripts/runtime-phpstan.sh` copies `src/php/` into its
+app), in CI only. MySQL, and with it the `CAST(? AS DECIMAL(p, s))` comparison, runs only in CI;
+SQLite and PostgreSQL also ran locally.
+
+---
+
 ## Sequencing rationale (quick reference)
 
 1. **Strapi first** — mature schema validates the IR fastest, with the thinnest adapter.

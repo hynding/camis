@@ -15,6 +15,11 @@ describe("prompts", () => {
     expect(s).toContain("renameField");
     expect(s).toContain("JSON array");
   });
+  it("system prompt says a decimal states its precision and scale together, within their bounds", () => {
+    expect(buildSystemPrompt()).toContain(
+      'A decimal may state "precision" (1 to 65 digits) and "scale" (0 to 30 digits after the point, at most its precision), both or neither.',
+    );
+  });
   it("user prompt embeds the document (stable JSON) and the instruction", () => {
     const u = buildUserPrompt(doc, "add a published boolean to Article");
     expect(u).toContain('"name": "Article"');

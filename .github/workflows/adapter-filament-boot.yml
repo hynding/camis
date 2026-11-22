@@ -191,6 +191,31 @@ jobs:
             $seen = [$refused->getStatusCode(), json_decode((string) $refused->getContent(), true)["message"] ?? null];
             if ($seen[0] !== 403 || $seen[1] === "Policy Failed") { fwrite(STDERR, "ROUTE HOOKS ORDER MISMATCH ".json_encode($seen)."\n"); exit(1); }
             echo "ROUTE HOOKS OK\n";
+            // A decimal beyond a double keeps every digit, written and read through the API (issue #104).
+            $exact = "12345678901.123456";
+            $ledger = \App\Models\Article::create(["title" => "ledger"]);
+            $ledger->forceFill(["status" => "published"])->save();
+            auth()->forgetGuards();
+            auth()->login($u);
+            $put = $kernel->handle(\Illuminate\Http\Request::create("/api/articles/".$ledger->id, "PUT", server: ["HTTP_ACCEPT" => "application/json", "CONTENT_TYPE" => "application/json"], content: json_encode(["balance" => $exact])));
+            auth()->forgetGuards();
+            auth()->login($reader);
+            $read = $kernel->handle(\Illuminate\Http\Request::create("/api/articles/".$ledger->id, "GET", server: ["HTTP_ACCEPT" => "application/json"]));
+            $stored = (string) \Illuminate\Support\Facades\DB::table("articles")->where("id", $ledger->id)->value("balance");
+            $seen = [$put->getStatusCode(), json_decode((string) $read->getContent(), true)["balance"] ?? null, $ledger->fresh()->balance, $stored];
+            if (array_slice($seen, 0, 3) !== [200, $exact, $exact] || ! \Brick\Math\BigDecimal::of($stored)->isEqualTo($exact)) { fwrite(STDERR, "DECIMAL MISMATCH ".json_encode($seen)."\n"); exit(1); }
+            echo "DECIMAL OK\n";
+            // Each write keeps a decimal at its scale on every database, exponent expanded (the request
+            // trimming middleware never alters it), and one that does not fit is refused as Laravel refuses an invalid field.
+            auth()->forgetGuards();
+            auth()->login($u);
+            $put = fn (mixed $balance) => $kernel->handle(\Illuminate\Http\Request::create("/api/articles/".$ledger->id, "PUT", server: ["HTTP_ACCEPT" => "application/json", "CONTENT_TYPE" => "application/json"], content: json_encode(["balance" => $balance])));
+            $expanded = $put("1.2e1");
+            $kept = (string) \Illuminate\Support\Facades\DB::table("articles")->where("id", $ledger->id)->value("balance");
+            $tooLong = $put("123456789012345678901");
+            $seen = [$expanded->getStatusCode(), $kept, $tooLong->getStatusCode(), array_keys(json_decode((string) $tooLong->getContent(), true)["errors"] ?? [])];
+            if ($seen !== [200, "12.000000", 422, ["balance"]]) { fwrite(STDERR, "DECIMAL WRITE MISMATCH ".json_encode($seen)."\n"); exit(1); }
+            echo "DECIMAL WRITES OK\n";
           '
       - name: Schedules run through Laravel's scheduler
         run: |
@@ -219,8 +244,9 @@ jobs:
             echo "ADMIN ACCESS OK\n";
           '
   runtime-phpstan:
-    # The runtime PHP the generator copies (src/strapi-api/<package>/php/), analysed inside the
-    # Laravel app it runs in so Eloquent, Filament and the generated classes it calls resolve.
+    # The runtime PHP the generator copies (src/strapi-api/<package>/php/ and the shared src/php/),
+    # analysed inside the Laravel app it runs in so Eloquent, Filament and the generated classes it
+    # calls resolve.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -430,6 +456,84 @@ jobs:
           php artisan migrate --force
           cp ../packages/adapter-filament/scripts/php/MorphRelationsTest.php tests/Feature/
           php artisan test tests/Feature/MorphRelationsTest.php
+  decimals:
+    # Decimals stating their digits on the Strapi API style (issue #104): a decimal beyond a double
+    # keeps every digit over REST and GraphQL, which each database stores its own way (text on
+    # sqlite, DECIMAL on mysql and pgsql), so it runs on all three.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        db: [sqlite, mysql, pgsql]
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_DATABASE: camis
+          MYSQL_ROOT_PASSWORD: camis
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=5
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: camis
+          POSTGRES_PASSWORD: camis
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready" --health-interval=10s --health-timeout=5s --health-retries=5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: gd
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Scaffold Laravel 12 + Filament v5 + API + Spatie + GraphQL
+        run: |
+          composer create-project laravel/laravel:^12 app --no-interaction
+          cd app
+          composer require filament/filament:"^5.0" --no-interaction
+          php artisan filament:install --panels --no-interaction
+          php artisan install:api --no-interaction
+          composer require spatie/laravel-permission --no-interaction
+          php artisan vendor:publish --provider="Spatie\Permission\PermissionServiceProvider" --no-interaction
+          composer require webonyx/graphql-php:"^15.19" --no-interaction
+          cd "$GITHUB_WORKSPACE"
+          pnpm --filter @camis/cli exec tsx -e "import { readFileSync, writeFileSync } from 'node:fs';
+            import { isPatchedUserModel, patchAdminPanelProvider, patchUserModel } from './src/commands/scaffold';
+            const f = process.env.GITHUB_WORKSPACE + '/app/app/Models/User.php';
+            const patched = patchUserModel(readFileSync(f, 'utf8'));
+            if (!isPatchedUserModel(patched)) { console.error('User model patch did not apply'); process.exit(1); }
+            writeFileSync(f, patched);
+            const p = process.env.GITHUB_WORKSPACE + '/app/app/Providers/Filament/AdminPanelProvider.php';
+            const panel = patchAdminPanelProvider(readFileSync(p, 'utf8'));
+            if (!panel.includes(\"->authGuard('admin')\")) { console.error('admin panel patch did not apply'); process.exit(1); }
+            writeFileSync(p, panel);"
+      - name: Overlay (apiStyle strapi, the decimals fixture)
+        run: pnpm --filter @camis/adapter-filament overlay "$GITHUB_WORKSPACE/app" --style strapi --bundle decimals
+      - name: Patch bootstrap/app.php as camis scaffold does
+        run: >-
+          pnpm --filter @camis/cli exec tsx -e "import { readFileSync, writeFileSync } from 'node:fs';
+          import { patchBootstrapExceptions, patchBootstrapGraphql, patchBootstrapMiddleware, patchBootstrapTransfer } from './src/commands/scaffold';
+          const f = process.env.GITHUB_WORKSPACE + '/app/bootstrap/app.php';
+          writeFileSync(f, patchBootstrapExceptions(patchBootstrapGraphql(patchBootstrapTransfer(patchBootstrapMiddleware(readFileSync(f, 'utf8'))))));"
+      - name: A decimal beyond a double round trips every digit over REST and GraphQL (${{ matrix.db }})
+        run: |
+          cd app
+          # phpunit.xml names an in-memory sqlite database; the environment's database wins over it.
+          case "${{ matrix.db }}" in
+            sqlite) export DB_CONNECTION=sqlite DB_DATABASE=:memory: ;;
+            mysql)  export DB_CONNECTION=mysql DB_HOST=127.0.0.1 DB_PORT=3306 DB_DATABASE=camis DB_USERNAME=root DB_PASSWORD=camis ;;
+            pgsql)  export DB_CONNECTION=pgsql DB_HOST=127.0.0.1 DB_PORT=5432 DB_DATABASE=camis DB_USERNAME=postgres DB_PASSWORD=camis ;;
+          esac
+          cp ../packages/adapter-filament/scripts/php/DecimalsTest.php tests/Feature/
+          php artisan test tests/Feature/DecimalsTest.php
   strapi-api:
     runs-on: ubuntu-latest
     # The REST and populate vectors build SQL per dialect (LIKE escapes, casts, relation

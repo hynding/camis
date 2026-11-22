@@ -59,6 +59,7 @@ import { emitModel } from "./model";
 import { filamentNames, snake, snakeColumn } from "./names";
 import { constrainedColumn, resolveRelations, type ForeignKeyColumn } from "./relations";
 import { filamentReservedNameGaps } from "./reserved-names";
+import { decimalDigitsFiles, filamentDecimalGaps } from "./decimals";
 import { emitResourceFiles } from "./resource";
 import { draftPublishPlan } from "./strapi-api/core/draft-publish";
 import { guestsPlan } from "./strapi-api/core/guests";
@@ -135,6 +136,7 @@ export const filamentAdapter: GenerateAdapter = {
         : fieldEditorGaps(doc, "the Filament admin", CUSTOM_FIELD_REGISTRATIONS_PATH)),
       // The Strapi API style keeps private fields out of its answers; the Laravel one cannot.
       ...(apiStyle === "strapi" ? [] : privateFieldGaps(doc, "the Laravel API style")),
+      ...filamentDecimalGaps(doc, apiStyle, storage),
     ];
     if (storage !== requestedStorage) {
       gaps.push({
@@ -469,18 +471,24 @@ export const filamentAdapter: GenerateAdapter = {
         });
       });
       if (apiStyle === "laravel") {
+        const ownEmits = ct.fields
+          .filter((f) => f.type !== "relation" && f.type !== "component")
+          .map((f) => emitField(f));
         files.push({
           path: `app/Http/Controllers/Api/${names.model}ApiController.php`,
           content: emitApiController(
             ct,
             [
-              ...ct.fields
-                .filter((f) => f.type !== "relation" && f.type !== "component")
-                .map((f) => emitField(f).column),
+              ...ownEmits.map((e) => e.column),
               ...embeddedEmits.map((e) => e.column),
               ...(rel.fkNames.get(ct.name) ?? []),
             ],
-            { secured: ir.roles.length > 0 },
+            {
+              secured: ir.roles.length > 0,
+              decimals: [...ownEmits, ...embeddedEmits].flatMap((e) =>
+                e.decimalDigits === undefined ? [] : [{ column: e.column, ...e.decimalDigits }],
+              ),
+            },
           ),
         });
       }
@@ -499,6 +507,7 @@ export const filamentAdapter: GenerateAdapter = {
       });
     }
     files.push(apiCustomSeed());
+    files.push(...decimalDigitsFiles(doc, files));
     // Edited in the admin, which the Strapi storage layout does not have.
     if (storage !== "strapi" && hasBlocksFields(doc)) {
       files.push(...emitBlocksFiles(fileModel !== undefined));

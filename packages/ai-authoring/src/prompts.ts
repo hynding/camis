@@ -12,6 +12,7 @@ Each op is one of:
 - { "op": "renameField", "contentType": <TypeName>, "from": <FieldName>, "to": <FieldName> }
 A ContentType is { "name", "kind": "collection"|"single", "fields": Field[] }.
 A Field is { "type": <one of string|text|richText|email|uid|integer|bigInteger|float|decimal|boolean|enumeration|date|time|dateTime|timestamp|json|blocks|color|media|relation|component|dynamicZone>, "name", ... }.
+A decimal may state "precision" (1 to 65 digits) and "scale" (0 to 30 digits after the point, at most its precision), both or neither.
 TypeName is PascalCase; FieldName is camelCase. Return ONLY the JSON array of ops.`;
 
 export const buildUserPrompt = (doc: IrDocument, instruction: string): string =>

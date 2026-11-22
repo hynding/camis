@@ -1,4 +1,5 @@
 import type { GeneratedFile } from "@camis/adapter-kernel";
+import type { DecimalDigits } from "@camis/ir-core";
 import {
   ROUTE_ACTIONS,
   servesApiAction,
@@ -7,8 +8,14 @@ import {
 } from "@camis/ir-schema";
 import { filamentNames, snake, snakeColumn } from "./names";
 
+export interface DecimalColumn extends DecimalDigits {
+  column: string;
+}
+
 export interface ApiOptions {
   secured: boolean;
+  /** The columns of decimals stating their digits, each written as its column keeps it. */
+  decimals?: DecimalColumn[];
   /** Content types whose routes run the IR's route policies and middlewares. */
   hooked?: ReadonlySet<string>;
 }
@@ -26,17 +33,22 @@ export const emitApiController = (
   const param = wildcard(ct);
   const fields = columns.map((c) => `'${c}'`).join(", ");
   const upsertBy = ct.options?.upsertBy;
+  const decimals = options.decimals ?? [];
+  const payload =
+    decimals.length === 0
+      ? "$request->only(self::FIELDS)"
+      : "self::withDecimals($request->only(self::FIELDS))";
   const auth = (line: string): string => (options.secured ? `        ${line}\n` : "");
 
   const storeBody = upsertBy
     ? (() => {
         const col = snakeColumn(upsertBy);
-        return `        $payload = $request->only(self::FIELDS);
+        return `        $payload = ${payload};
         $${param} = ${model}::updateOrCreate(['${col}' => $payload['${col}'] ?? null], $payload);
 
         return response()->json($${param}, $${param}->wasRecentlyCreated ? 201 : 200);`;
       })()
-    : `        $payload = $request->only(self::FIELDS);
+    : `        $payload = ${payload};
 
         return response()->json(${model}::create($payload), 201);`;
 
@@ -47,16 +59,16 @@ declare(strict_types=1);
 namespace App\\Http\\Controllers\\Api;
 
 use App\\Http\\Controllers\\Controller;
-use App\\Models\\${model};${
+use App\\Models\\${model};${decimals.length === 0 ? "" : "\nuse App\\Support\\DecimalDigits;"}${
     options.secured ? "\nuse Illuminate\\Foundation\\Auth\\Access\\AuthorizesRequests;" : ""
   }
 use Illuminate\\Http\\JsonResponse;
-use Illuminate\\Http\\Request;
+use Illuminate\\Http\\Request;${decimals.length === 0 ? "" : "\nuse Illuminate\\Validation\\ValidationException;"}
 
 class ${model}ApiController extends Controller
 {
 ${options.secured ? "    use AuthorizesRequests;\n\n" : ""}    private const FIELDS = [${fields}];
-
+${decimalsConstant(decimals)}
     public function index(): JsonResponse
     {
 ${auth(`$this->authorize('viewAny', ${model}::class);`)}        return response()->json(${model}::query()->paginate(50));
@@ -74,7 +86,7 @@ ${auth(`$this->authorize('create', ${model}::class);`)}${storeBody}
 
     public function update(Request $request, ${model} $${param}): JsonResponse
     {
-${auth(`$this->authorize('update', $${param});`)}        $${param}->update($request->only(self::FIELDS));
+${auth(`$this->authorize('update', $${param});`)}        $${param}->update(${payload});
 
         return response()->json($${param});
     }
@@ -84,10 +96,37 @@ ${auth(`$this->authorize('update', $${param});`)}        $${param}->update($requ
 ${auth(`$this->authorize('delete', $${param});`)}        $${param}->delete();
 
         return response()->json(null, 204);
-    }
+    }${decimals.length === 0 ? "" : WITH_DECIMALS}
 }
 `;
 };
+
+const decimalsConstant = (decimals: DecimalColumn[]): string =>
+  decimals.length === 0
+    ? ""
+    : `\n    /** Decimals stating their digits: each column's precision and scale. */\n    private const DECIMALS = [${decimals.map((d) => `'${d.column}' => [${d.precision}, ${d.scale}]`).join(", ")}];\n`;
+
+// SQLite keeps a decimal beyond a PHP float as text, which takes any string: every value is kept
+// as MySQL and PostgreSQL keep it, at its scale, and one that is not a decimal or does not fit is
+// refused before it is written, as Laravel refuses an invalid field: a 422 with its errors.
+const WITH_DECIMALS = `
+
+    /** The payload with each decimal stating its digits as its column keeps it, from a string or a number. */
+    private static function withDecimals(array $payload): array
+    {
+        foreach (self::DECIMALS as $column => [$precision, $scale]) {
+            if (($payload[$column] ?? null) === null) {
+                continue;
+            }
+            $decimal = DecimalDigits::canonical($payload[$column], $precision, $scale);
+            if ($decimal === null) {
+                throw ValidationException::withMessages([$column => "The {$column} field must be a decimal of at most {$precision} digits, {$scale} of them after the point."]);
+            }
+            $payload[$column] = $decimal;
+        }
+
+        return $payload;
+    }`;
 
 // The resource method serving each content API action.
 const RESOURCE_METHODS: Record<RouteAction, string> = {

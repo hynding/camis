@@ -37,7 +37,34 @@ const scopeBody = (secured: boolean): string =>
             $query->forUser($viewer);
         }`;
 
-export const emitStrapiQuery = (secured = false): string =>
+// A project with decimals stating their digits compares a filter's value with one exactly, never
+// through a float (see DecimalDigits::where); every other project's filters are as they were.
+const filteredType = (decimals: boolean): string =>
+  decimals
+    ? `(isset($field['scale']) ? "decimal:{$field['precision']},{$field['scale']}" : $field['type'])`
+    : "$field['type']";
+// A value or a list given without an operator is compared as by $eq or $in.
+const decimalAttribute = (decimals: boolean): string =>
+  decimals
+    ? `
+        if (str_starts_with($type, 'decimal:') && $value !== null && (! is_array($value) || array_is_list($value))) {
+            self::operator($query, $column, $type, is_array($value) ? '$in' : '$eq', $value, $wirePath);
+
+            return;
+        }`
+    : "";
+const decimalOperator = (decimals: boolean): string =>
+  decimals
+    ? `
+        if (str_starts_with($type, 'decimal:')) {
+            [$precision, $scale] = array_map('intval', explode(',', substr($type, 8)));
+            if (DecimalDigits::where($query, $column, $operator, $value, $precision, $scale)) {
+                return;
+            }
+        }`
+    : "";
+
+export const emitStrapiQuery = (secured = false, decimals = false): string =>
   header("App\\Support") +
   String.raw`
 use Carbon\CarbonImmutable;
@@ -237,7 +264,7 @@ ${scopeBody(secured)}
                 throw StrapiError::invalidKey($key, self::join($at, $wirePath), 'filters');
             }
             if (isset($field['column'])) {
-                self::attribute($query, $query->qualifyColumn($field['column']), $field['type'], $value, self::join($at, $wirePath));
+                self::attribute($query, $query->qualifyColumn($field['column']), ${filteredType(decimals)}, $value, self::join($at, $wirePath));
             } elseif (isset($field['component'])) {
                 if (is_array($value)) {
                     $query->whereHas($field['component'], fn (Builder $q) => self::where($q, $value, $field['fields'], null, $viewer, self::join($at, $wirePath)));
@@ -330,7 +357,7 @@ ${scopeBody(secured)}
 
     private static function attribute(Builder $query, string $column, string $type, mixed $value, string $wirePath): void
     {
-        $format = $query->getModel()->getDateFormat();
+        $format = $query->getModel()->getDateFormat();${decimalAttribute(decimals)}
         if (! is_array($value)) {
             $value === null ? $query->whereNull($column) : $query->where($column, self::cast($type, $value, $format));
 
@@ -360,7 +387,7 @@ ${scopeBody(secured)}
     }
 
     private static function operator(Builder $query, string $column, string $type, string $operator, mixed $value, string $wirePath): void
-    {
+    {${decimalOperator(decimals)}
         $format = $query->getModel()->getDateFormat();
         $wrapped = $query->getQuery()->getGrammar()->wrap($column);
         $lower = $query->getConnection()->getDriverName() === 'pgsql' ? "LOWER(CAST({$wrapped} AS VARCHAR))" : "LOWER({$wrapped})";

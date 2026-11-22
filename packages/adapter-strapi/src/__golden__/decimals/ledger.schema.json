@@ -1,0 +1,44 @@
+{
+  "kind": "collectionType",
+  "collectionName": "ledgers",
+  "info": {
+    "singularName": "ledger",
+    "pluralName": "ledgers",
+    "displayName": "Ledger"
+  },
+  "options": {},
+  "pluginOptions": {},
+  "attributes": {
+    "label": {
+      "type": "string"
+    },
+    "balance": {
+      "type": "decimal",
+      "column": {
+        "type": "decimal",
+        "args": [
+          20,
+          6
+        ]
+      }
+    },
+    "rate": {
+      "type": "decimal",
+      "column": {
+        "type": "decimal",
+        "args": [
+          9,
+          4
+        ]
+      }
+    },
+    "fee": {
+      "type": "decimal"
+    },
+    "limit": {
+      "type": "component",
+      "component": "shared.limit",
+      "repeatable": false
+    }
+  }
+}

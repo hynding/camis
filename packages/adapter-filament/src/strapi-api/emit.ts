@@ -104,7 +104,7 @@ import {
   linkOrderColumns,
   toOneLinkOrders,
 } from "./core/link-order";
-import { emitSerializer } from "./core/serializer";
+import { emitSerializer, statesDecimalDigits, zoneItemsStateDigits } from "./core/serializer";
 import {
   emitRoleController,
   emitSessionController,
@@ -313,6 +313,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
   const fileModel = input.media === undefined ? undefined : filamentNames(input.media).model;
 
   const shapes = new Map<string, WireShape>();
+  let uniqueDigits = false;
   for (const ct of emitted) {
     const names = filamentNames(ct);
     const shape: WireShape = {
@@ -322,6 +323,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     };
     shapes.set(ct.name, shape);
     const entity = entityRules(ct, doc, shape, "laravel");
+    uniqueDigits ||= entity.uniqueDigits;
     gaps.push(...entity.gaps);
     files.push({
       path: `app/Http/Serializers/${names.model}Serializer.php`,
@@ -469,7 +471,12 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     content: emitStrapiErrorsMiddleware(),
   });
   files.push({ path: "app/Support/StrapiError.php", content: emitStrapiError() });
-  files.push({ path: "app/Support/StrapiQuery.php", content: emitStrapiQuery(secured) });
+  // Filters, imports and writes compare and keep a decimal stating its digits exactly.
+  const statesDigits = [...shapes.values()].some(statesDecimalDigits);
+  files.push({
+    path: "app/Support/StrapiQuery.php",
+    content: emitStrapiQuery(secured, statesDigits),
+  });
   files.push({ path: "app/Support/StrapiPopulate.php", content: emitStrapiPopulate() });
   files.push({ path: "app/Support/StrapiRelations.php", content: emitStrapiRelations() });
   files.push({ path: "app/Support/StrapiMorphs.php", content: emitStrapiMorphs() });
@@ -482,11 +489,14 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     path: "app/Support/StrapiRelationsOrderer.php",
     content: emitStrapiRelationsOrderer(),
   });
-  files.push({ path: VALIDATOR_PATH, content: emitStrapiValidator() });
+  files.push({ path: VALIDATOR_PATH, content: emitStrapiValidator(uniqueDigits) });
   if (emitted.some((ct) => ct.fields.some((f) => f.type === "dynamicZone")))
     files.push({
       path: "app/Support/StrapiZones.php",
-      content: emitStrapiZones(doc.components.map(componentUid).sort()),
+      content: emitStrapiZones(
+        doc.components.map(componentUid).sort(),
+        [...shapes.values()].some(zoneItemsStateDigits),
+      ),
     });
   files.push({ path: "app/Models/Concerns/HasDocumentId.php", content: emitHasDocumentId() });
   files.push({
@@ -587,7 +597,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
   });
   files.push(
     { path: TRANSFER_MAP_PATH, content: transferMap },
-    { path: IMPORT_ENGINE_PATH, content: emitStrapiImport() },
+    { path: IMPORT_ENGINE_PATH, content: emitStrapiImport(statesDigits) },
     { path: TRANSFER_CIPHER_PATH, content: emitStrapiTransferCipher() },
     {
       path: TRANSFER_SCHEMAS_PATH,

@@ -1,3 +1,4 @@
+import { decimalDigits } from "@camis/ir-core";
 import { fieldApiName, inverseApiName, type Field } from "@camis/ir-schema";
 import { toStrapiMediaKinds } from "./media-kinds";
 import { kebab } from "./names";
@@ -99,6 +100,11 @@ export const toAttribute = (
   put(attr, "targetField", f.targetField);
   put(attr, "multiple", f.multiple);
   put(attr, "regex", f.pattern);
+  // Strapi's database layer lays an attribute's `column` over the column its type makes, which
+  // for a decimal is decimal(10, 2).
+  const digits = decimalDigits(field);
+  if (digits !== undefined)
+    attr.column = { type: "decimal", args: [digits.precision, digits.scale] };
   if (field.type === "media" && field.allowedTypes !== undefined) {
     attr.allowedTypes = toStrapiMediaKinds(field.allowedTypes);
   }

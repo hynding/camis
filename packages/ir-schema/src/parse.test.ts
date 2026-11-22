@@ -65,6 +65,30 @@ describe("parseDocument", () => {
     expect(r.errors.some((e) => e.code === "invalid_default_type")).toBe(true);
   });
 
+  it("locates a decimal's digits a database cannot take at its content type and field", () => {
+    const r = parseDocument(
+      doc({
+        contentTypes: [
+          {
+            name: "Account",
+            kind: "collection",
+            fields: [{ type: "decimal", name: "balance", precision: 70, scale: 6 }],
+          },
+        ],
+      }),
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.errors).toEqual([
+      {
+        code: "invalid_decimal_digits",
+        message: "precision must be a whole number from 1 to 65",
+        location: { contentType: "Account", field: "balance" },
+        path: ["contentTypes", 0, "fields", 0, "precision"],
+      },
+    ]);
+  });
+
   it("emits errors in deterministic (path) order", () => {
     const r = parseDocument(
       doc({
