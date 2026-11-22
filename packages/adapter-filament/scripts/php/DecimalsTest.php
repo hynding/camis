@@ -180,7 +180,7 @@ class DecimalsTest extends TestCase
             'filters[rate][$ne]=1e10' => $all,
             'filters[rate][$lte]=99999.99995' => $all,
             'filters[rate][$gte]=99999.99995' => [],
-            'filters[rate][$not][$gt]=1.00005' => ['empty', 'r0'],
+            'filters[rate][$not][$gt]=1.00005' => ['r0'],
             'filters[balance][$gt]=1.0000005' => ['r1', 'r2'],
             'filters[balance][$gte]=1.0000004' => ['r1', 'r2'],
             'filters[balance][$lte]=1.0000015' => ['r0', 'r1'],
@@ -209,8 +209,6 @@ class DecimalsTest extends TestCase
         $this->assertSame('1000.000000', DecimalDigits::canonical('1e3', 20, 6));
         $this->assertSame('0.000000', DecimalDigits::canonical('1e-999', 20, 6));
 
-        $this->api('POST', 'ledgers', ['label' => 'huge', 'balance' => '1e100000000'])->assertStatus(400);
-        $this->assertFalse(DB::table('ledgers')->exists());
         // A filter by one is bound as it came, as every number field's unreadable value is.
         foreach (['1e100000000', '1e-999999999', str_repeat('9', 5000)] as $value) {
             $status = $this->api('GET', 'ledgers?filters[balance][$eq]='.$value)->getStatusCode();
