@@ -129,9 +129,15 @@ class GraphqlTest extends TestCase
         $jwt = $this->signIn('ann');
         $guess = 'mutation { changePassword(currentPassword: "wrong", password: "secret2", passwordConfirmation: "secret2") { jwt } }';
 
-        $this->graphql($guess, $jwt)->assertJsonPath('errors.0.extensions.code', 'BAD_USER_INPUT');
-        $this->graphql($guess, $jwt)->assertJsonPath('errors.0.extensions.code', 'BAD_USER_INPUT');
-        $this->graphql($guess, $jwt)->assertJsonPath('errors.0.extensions.code', 'STRAPI_RATE_LIMIT_ERROR');
+        // One count per account for REST and GraphQL alike, whichever address each guess comes from.
+        $this->withServerVariables(['REMOTE_ADDR' => '10.0.0.1'])->graphql($guess, $jwt)
+            ->assertJsonPath('errors.0.extensions.code', 'BAD_USER_INPUT');
+        $this->app['auth']->forgetGuards();
+        $this->withServerVariables(['REMOTE_ADDR' => '10.0.0.2'])
+            ->postJson('/api/auth/change-password', ['currentPassword' => 'wrong', 'password' => 'secret2', 'passwordConfirmation' => 'secret2'], ['Authorization' => 'Bearer '.$jwt])
+            ->assertStatus(400);
+        $this->withServerVariables(['REMOTE_ADDR' => '10.0.0.3'])->graphql($guess, $jwt)
+            ->assertJsonPath('errors.0.extensions.code', 'STRAPI_RATE_LIMIT_ERROR');
     }
 
     public function test_a_custom_token_reaches_only_the_actions_it_was_given(): void

@@ -125,7 +125,9 @@ describe("GraphQL", () => {
       (f) => f.path === "app/GraphQL/StrapiGraphqlPlugins.php",
     )!.content;
     const change = plugins.slice(plugins.indexOf("case 'changePassword':"));
-    expect(change.slice(0, change.indexOf("return "))).toContain("self::throttle($request);");
+    expect(change.slice(0, change.indexOf("return "))).toContain(
+      "self::throttle($request, 'password-change');",
+    );
   });
 
   it("serves the media library's files with the entries they are linked from", () => {

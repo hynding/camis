@@ -24,6 +24,10 @@ describe("users-permissions sessions", () => {
       "'idle_refresh_token_lifespan' => (int) env('CAMIS_IDLE_REFRESH_TOKEN_LIFESPAN', 1209600),",
     );
     expect(config).toContain("'http_only' => (bool) env('CAMIS_SESSIONS_HTTP_ONLY', false),");
+    // Refreshes come often (each tab on load): a bucket of their own, at a rate of their own.
+    expect(config).toContain(
+      "'refresh_throttle_per_minute' => max(1, (int) env('CAMIS_REFRESH_THROTTLE_PER_MINUTE', 60)),",
+    );
   });
 
   // Strapi's legacy JWT lasts jwt.expiresIn, 30 days unless configured; a Sanctum token without an
@@ -145,7 +149,7 @@ describe("users-permissions sessions", () => {
   it("routes refresh as a public-only route and the rest behind a session", () => {
     const routes = content("routes/api.php");
     expect(routes).toContain(
-      "Route::post('/auth/refresh', [SessionController::class, 'refresh'])->middleware([$authThrottle, StrapiCredentials::class.':guest']);",
+      "Route::post('/auth/refresh', [SessionController::class, 'refresh'])->middleware([StrapiThrottle::class.':refresh', StrapiCredentials::class.':guest']);",
     );
     expect(routes).toContain("Route::post('/auth/logout', [SessionController::class, 'logout']);");
     expect(routes).toContain(

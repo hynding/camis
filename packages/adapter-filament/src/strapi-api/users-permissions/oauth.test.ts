@@ -81,16 +81,16 @@ describe("users-permissions sign-in providers", () => {
   it("routes the round trip through a session, for callers without one of Strapi's", () => {
     const routes = content("routes/api.php");
     expect(routes).toContain(
-      "Route::middleware([EncryptCookies::class, AddQueuedCookiesToResponse::class, StartSession::class, StrapiCredentials::class.':guest'])->group(function () use ($authThrottle): void {",
+      "Route::middleware([EncryptCookies::class, AddQueuedCookiesToResponse::class, StartSession::class, StrapiCredentials::class.':guest'])->group(function (): void {",
     );
     expect(routes).toContain(
-      "Route::get('/connect/{provider}', [ConnectController::class, 'connect'])->middleware($authThrottle);",
+      "Route::get('/connect/{provider}', [ConnectController::class, 'connect'])->middleware(StrapiThrottle::class.':provider');",
     );
     expect(routes).toContain(
-      "Route::get('/connect/{provider}/callback', [ConnectController::class, 'callback'])->middleware($authThrottle);",
+      "Route::get('/connect/{provider}/callback', [ConnectController::class, 'callback'])->middleware(StrapiThrottle::class.':provider');",
     );
     expect(routes).toContain(
-      "Route::get('/auth/{provider}/callback', [ConnectController::class, 'signIn'])->middleware($authThrottle);",
+      "Route::get('/auth/{provider}/callback', [ConnectController::class, 'signIn'])->middleware(StrapiThrottle::class.':sign-in');",
     );
   });
 

@@ -10,9 +10,9 @@ use Tests\TestCase;
 
 /**
  * Where camis is stricter than Strapi on its credential routes: every route that checks a
- * password is throttled, and a throttled answer keeps its Retry-After. CI copies this into the
- * scaffolded app's tests/Feature and runs it with uncached routes and a low
- * CAMIS_AUTH_THROTTLE_PER_MINUTE, since the rate is read when routes/api.php is loaded.
+ * password or a refresh token is throttled, each group of them in a bucket of its own, a password
+ * change per account, and a throttled answer keeps its Retry-After. The rates are read per
+ * request, so the test sets low ones. CI copies this into the scaffolded app's tests/Feature.
  */
 class AuthSecurityTest extends TestCase
 {
@@ -21,10 +21,15 @@ class AuthSecurityTest extends TestCase
     /** @var list<string> */
     private array $env = [];
 
+    private const RATE = 3;
+
+    private const REFRESH_RATE = 5;
+
     protected function setUp(): void
     {
         parent::setUp();
         $this->seed(\Database\Seeders\RolePermissionSeeder::class);
+        config(['camis.auth_throttle_per_minute' => self::RATE, 'camis.users_permissions.sessions.refresh_throttle_per_minute' => self::REFRESH_RATE]);
     }
 
     protected function tearDown(): void
@@ -56,11 +61,6 @@ class AuthSecurityTest extends TestCase
         ]);
     }
 
-    private static function limit(): int
-    {
-        return (int) config('camis.auth_throttle_per_minute');
-    }
-
     private function register(string $username): string
     {
         return (string) $this->postJson('/api/auth/local/register', ['username' => $username, 'email' => "{$username}@example.test", 'password' => 'secret1'])
@@ -68,25 +68,34 @@ class AuthSecurityTest extends TestCase
     }
 
     /**
-     * Repeats a request until it is throttled, which must happen within the limit: the credential
-     * routes share one bucket per client, so an earlier request may already have used a turn.
-     * Each answer before is $expected; the throttled one is in Strapi's envelope, with its wait.
+     * Repeats a request: each of the first $limit answers is $expected, the next one is throttled
+     * in Strapi's envelope, with its wait.
      *
-     * @param callable(): TestResponse $request
+     * @param callable(int): TestResponse $request called with the attempt's number
      */
-    private static function assertThrottled(callable $request, int $expected): void
+    private static function assertThrottled(callable $request, int $expected, int $limit = self::RATE): void
     {
-        for ($i = 0; $i <= self::limit(); $i++) {
-            $response = $request();
-            if ($response->status() === 429) {
-                $response->assertJsonPath('error.status', 429)->assertJsonPath('data', null);
-                self::assertNotNull($response->headers->get('Retry-After'));
-
-                return;
-            }
-            $response->assertStatus($expected);
+        for ($i = 0; $i < $limit; $i++) {
+            $request($i)->assertStatus($expected);
         }
-        self::fail('Not throttled within '.self::limit().' requests');
+        $response = $request($limit);
+        $response->assertStatus(429)->assertJsonPath('error.status', 429)->assertJsonPath('data', null);
+        self::assertNotNull($response->headers->get('Retry-After'));
+    }
+
+    /** As a fresh request finds the app: StrapiCredentials switches the default guard. */
+    private function freshRequest(): void
+    {
+        $this->app['auth']->shouldUse('web');
+        $this->app['auth']->forgetGuards();
+        $this->flushHeaders();
+    }
+
+    private function login(string $username): TestResponse
+    {
+        $this->freshRequest();
+
+        return $this->postJson('/api/auth/local', ['identifier' => $username, 'password' => 'secret1']);
     }
 
     public function test_a_password_sign_in_through_the_provider_callback_route_is_throttled(): void
@@ -94,18 +103,42 @@ class AuthSecurityTest extends TestCase
         self::assertThrottled(fn (): TestResponse => $this->json('GET', '/api/auth/local/callback', ['identifier' => 'nobody', 'password' => 'wrong']), 400);
     }
 
-    /** A stolen access token must not buy unlimited guesses of the current password. */
-    public function test_a_password_change_is_throttled(): void
+    /** A stolen access token must not buy unlimited guesses, from however many addresses. */
+    public function test_a_password_change_is_throttled_per_account_whatever_the_address(): void
     {
         $jwt = $this->register('alice');
         $guess = ['currentPassword' => 'wrong', 'password' => 'secret2', 'passwordConfirmation' => 'secret2'];
-        self::assertThrottled(function () use ($jwt, $guess): TestResponse {
-            // As a fresh request finds it: StrapiCredentials switched the default guard.
-            $this->app['auth']->shouldUse('web');
-            $this->app['auth']->forgetGuards();
+        self::assertThrottled(function (int $attempt) use ($jwt, $guess): TestResponse {
+            $this->freshRequest();
 
-            return $this->withToken($jwt)->postJson('/api/auth/change-password', $guess);
+            return $this->withServerVariables(['REMOTE_ADDR' => "10.0.0.{$attempt}"])
+                ->withToken($jwt)->postJson('/api/auth/change-password', $guess);
         }, 400);
+
+        // Another account's turns are its own.
+        $other = $this->register('bob');
+        $this->freshRequest();
+        $this->withToken($other)->postJson('/api/auth/change-password', $guess)->assertStatus(400);
+    }
+
+    /** Several tabs refreshing on load, or an office behind one address, must not lock out sign-in. */
+    public function test_refreshes_have_a_bucket_and_a_rate_of_their_own(): void
+    {
+        config(['camis.users_permissions.jwt_management' => 'refresh']);
+        $this->register('alice');
+        self::assertThrottled(fn (): TestResponse => $this->postJson('/api/auth/refresh', ['refreshToken' => 'nope.nope']), 401, self::REFRESH_RATE);
+
+        $this->login('alice')->assertOk();
+    }
+
+    public function test_one_group_of_credential_routes_cannot_use_up_another(): void
+    {
+        $this->register('alice');
+        self::assertThrottled(fn (): TestResponse => $this->postJson('/api/auth/forgot-password', ['email' => 'nobody@example.test']), 200);
+        self::assertThrottled(fn (): TestResponse => $this->login('nobody'), 400, self::RATE);
+        // Neither recovery nor sign-in used up registration, nor the email confirmation.
+        $this->register('bob');
+        $this->postJson('/api/auth/send-email-confirmation', ['email' => 'nobody@example.test'])->assertStatus(400);
     }
 
     /** Credentials for `*` would let any site read what the visitor's refresh cookie buys. */
@@ -146,8 +179,6 @@ class AuthSecurityTest extends TestCase
         $login = $this->withHeader('x-strapi-refresh-cookie', 'httpOnly')
             ->postJson('/api/auth/local', ['identifier' => 'alice', 'password' => 'secret1'])->assertOk();
         $this->flushHeaders();
-        // The refreshes that follow start a fresh credential bucket of their own.
-        cache()->flush();
 
         return (string) $login->getCookie('strapi_up_refresh', false)?->getValue();
     }
@@ -211,12 +242,6 @@ class AuthSecurityTest extends TestCase
         $this->postJson('/api/auth/refresh', ['refreshToken' => $token])->assertOk()->assertJsonStructure(['jwt', 'refreshToken']);
     }
 
-    public function test_refresh_is_throttled(): void
-    {
-        config(['camis.users_permissions.jwt_management' => 'refresh']);
-        self::assertThrottled(fn (): TestResponse => $this->postJson('/api/auth/refresh', ['refreshToken' => 'nope.nope']), 401);
-    }
-
     private function cookieLogin(): \Symfony\Component\HttpFoundation\Cookie
     {
         config(['camis.users_permissions.jwt_management' => 'refresh']);
@@ -265,7 +290,6 @@ class AuthSecurityTest extends TestCase
         self::assertTrue($this->cookieLogin()->isSecure());
 
         $this->app['env'] = 'local';
-        cache()->flush();
         $this->flushHeaders();
         $cookie = $this->withHeader('x-strapi-refresh-cookie', 'httpOnly')
             ->postJson('/api/auth/local', ['identifier' => 'alice', 'password' => 'secret1'])->assertOk()

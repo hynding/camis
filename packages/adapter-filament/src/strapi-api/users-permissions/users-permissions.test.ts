@@ -133,12 +133,41 @@ describe("users-permissions routes", () => {
   // Strapi rate-limits it too: a stolen access token must not buy unlimited guesses of the password.
   it("throttles a password change, which checks the current password", () => {
     expect(routes).toContain(
-      "Route::post('/auth/change-password', [AuthController::class, 'changePassword'])->middleware($authThrottle);",
+      "Route::post('/auth/change-password', [AuthController::class, 'changePassword'])->middleware(StrapiThrottle::class.':password-change');",
+    );
+  });
+  // One bucket per group, so a flood of one (refreshes, recovery mails) never locks out sign-in.
+  it("gives each group of credential routes a bucket of its own", () => {
+    for (const [route, group] of [
+      ["Route::post('/auth/local', [AuthController::class, 'login'])", "sign-in"],
+      ["Route::post('/auth/local/register', [AuthController::class, 'register'])", "register"],
+      ["Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])", "recovery"],
+      [
+        "Route::post('/auth/send-email-confirmation', [AuthController::class, 'sendEmailConfirmation'])",
+        "confirmation",
+      ],
+    ])
+      expect(routes).toContain(
+        `${route}->middleware([StrapiThrottle::class.':${group}', StrapiCredentials::class.':guest']);`,
+      );
+    expect(routes).not.toContain("$authThrottle");
+  });
+  // Keyed by the caller's account once it is known, by its address otherwise, through one limiter
+  // the GraphQL mutations share, so REST and GraphQL count the same turns.
+  it("keys a throttle by the signed-in account, in a limiter GraphQL shares", () => {
+    const limits = content("app/Support/StrapiRateLimits.php");
+    expect(limits).toContain("'user:'.$user->getAuthIdentifier()");
+    expect(limits).toContain("'ip:'.$request->ip()");
+    expect(content("app/Http/Middleware/StrapiThrottle.php")).toContain(
+      "StrapiRateLimits::attempt($request, $group)",
+    );
+    expect(content("app/GraphQL/StrapiGraphqlPlugins.php")).toContain(
+      "self::throttle($request, 'password-change');",
     );
   });
   it("throttles the unauthenticated email endpoints with the credential ones", () => {
     expect(routes).toContain(
-      "Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware([$authThrottle, StrapiCredentials::class.':guest']);",
+      "Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware([StrapiThrottle::class.':recovery', StrapiCredentials::class.':guest']);",
     );
   });
 });

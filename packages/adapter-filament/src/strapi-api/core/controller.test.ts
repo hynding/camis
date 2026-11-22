@@ -138,10 +138,10 @@ describe("strapi-api controllers", () => {
       true,
     );
     expect(php).toContain(
-      "Route::post('/auth/local', [AuthController::class, 'login'])->middleware($authThrottle);",
+      "Route::post('/auth/local', [AuthController::class, 'login'])->middleware($authThrottle.',sign-in');",
     );
     expect(php).toContain(
-      "Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware($authThrottle);",
+      "Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware($authThrottle.',register');",
     );
   });
   // Laravel's unnamed `throttle:N,1` keys on the client IP alone and shares one bucket across

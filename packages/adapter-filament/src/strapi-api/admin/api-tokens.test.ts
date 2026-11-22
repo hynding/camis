@@ -57,7 +57,7 @@ describe("API tokens", () => {
   it("checks a token on every API route before its own credentials", async () => {
     const routes = content("routes/api.php");
     expect(routes).toContain(
-      "Route::middleware([StrapiErrors::class, StrapiApiToken::class])->group(function () use ($authThrottle): void {",
+      "Route::middleware([StrapiErrors::class, StrapiApiToken::class])->group(function (): void {",
     );
     expect(routes).toContain(
       "Route::middleware([StrapiCredentials::class.':required', StrapiActiveUser::class])->group(",
