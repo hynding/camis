@@ -138,7 +138,7 @@ describe("scalar fields", () => {
     expect(decimalIssues({ precision: 4, scale: 4, default: 0.1234, min: -0.5, max: 0 })).toEqual(
       [],
     );
-    expect(decimalIssues({ precision: 20, scale: 6, default: 1e14 })).toEqual([]);
+    expect(decimalIssues({ precision: 20, scale: 6, default: 1e13 })).toEqual([]);
   });
 
   it("refuses a scale larger than the precision", () => {
