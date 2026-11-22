@@ -86,7 +86,7 @@ final class StrapiRateLimits
     {
         $key = 'camis-mail|'.$kind.'|'.substr(hash('sha256', self::folded($address)), 0, 32);
 
-        return RateLimiter::hit($key, 3600) <= max(1, (int) config('camis.users_permissions.account_mail_per_hour', 1));
+        return RateLimiter::hit($key, 3600) <= max(1, (int) config('camis.users_permissions.account_mail_per_hour', 3));
     }
 
     public static function tooMany(string $group, int $wait): ThrottleRequestsException

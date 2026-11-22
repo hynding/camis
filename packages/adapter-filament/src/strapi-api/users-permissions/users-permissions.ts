@@ -77,8 +77,9 @@ export const usersPermissionsConfigKeys = (): string => `
         // The mails a refused registration sends the address it named, with the account
         // confirmation's sender. They name nothing the registration sent.
         // How many mails of one kind (registration notice, confirmation resend, recovery) one
-        // address gets in an hour, since each goes to an address the caller names. Floored at 1.
-        'account_mail_per_hour' => max(1, (int) env('CAMIS_ACCOUNT_MAIL_PER_HOUR', 1)),
+        // address gets in an hour, since each goes to an address the caller names. A small burst,
+        // so another caller cannot spend a requester's only mail; floored at 1.
+        'account_mail_per_hour' => max(1, (int) env('CAMIS_ACCOUNT_MAIL_PER_HOUR', 3)),
         'account_emails' => [
             // One text for a taken address and a taken username, so it says neither was taken.
             'registration_attempted' => [
