@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Field } from "@camis/ir-schema";
 import { expressAdapterFor } from "./generate";
+import { adminResourceFiles } from "./admin-resources";
 import { column } from "./fields";
 import { decimals } from "./__fixtures__/decimals";
 
@@ -56,10 +57,62 @@ describe("Express target: decimals stating their digits (issue #104)", () => {
     });
   }
 
-  it("regenerates it byte for byte and reports no gap", () => {
+  it("regenerates it byte for byte", () => {
     expect(generate("sqlite")).toEqual(generate("sqlite"));
-    expect(generate("sqlite").gaps.gaps.filter((g) => g.feature === "decimalPrecision")).toEqual(
-      [],
+  });
+
+  // Drizzle answers such a decimal as a string, which the generated list sorts in JavaScript.
+  it("reports, located, that the list sorts a decimal beyond a double as text and that it is sent as a string", () => {
+    const message = (field: string, precision: number): string =>
+      `"${field}" keeps its ${precision} digits as a string, which the generated API's list sorts as text, not as a number, on every database; a JSON number sent for it is read as a double first, so an exact value is sent as a string`;
+    for (const dialect of ["sqlite", "mysql", "pgsql"] as const) {
+      expect(generate(dialect).gaps.gaps.filter((g) => g.feature === "decimalPrecision")).toEqual([
+        {
+          feature: "decimalPrecision",
+          location: { contentType: "Ledger", field: "balance" },
+          severity: "downgrade",
+          message: message("balance", 20),
+        },
+        {
+          feature: "decimalPrecision",
+          location: { component: "Limit", field: "ceiling" },
+          severity: "downgrade",
+          message: message("ceiling", 18),
+        },
+      ]);
+    }
+  });
+
+  it("reports nothing where no decimal states more digits than a double keeps", () => {
+    const within = {
+      ...decimals,
+      contentTypes: [
+        {
+          name: "Ledger",
+          kind: "collection" as const,
+          fields: [{ type: "decimal" as const, name: "rate", precision: 15, scale: 4 }],
+        },
+      ],
+      components: [],
+    };
+    const result = expressAdapterFor("sqlite").generate(
+      { document: within, roles: [] },
+      { projectName: "ledger" },
     );
+    expect(result.gaps.gaps.filter((g) => g.feature === "decimalPrecision")).toEqual([]);
+  });
+
+  // react-admin's NumberField and NumberInput parse the value to a JavaScript number.
+  it("shows and edits a decimal beyond a double as text in the admin, and the others as numbers", () => {
+    const view =
+      adminResourceFiles(decimals).find((f) => f.path === "admin/src/resources/ledgers.tsx")
+        ?.content ?? "";
+    expect(view).toContain('<TextField source="balance" />');
+    expect(view).toContain('<TextInput source="balance" />');
+    expect(view).toContain('<NumberField source="rate" />');
+    expect(view).toContain('<NumberInput source="rate" />');
+    expect(view).toContain('<NumberField source="fee" />');
+    expect(view).not.toContain('<NumberField source="balance" />');
+    expect(view).not.toContain('<NumberInput source="balance" />');
   });
 });
