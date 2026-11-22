@@ -298,4 +298,80 @@ class AuthSecurityTest extends TestCase
             ->getCookie('strapi_up_refresh', false);
         self::assertFalse($cookie?->isSecure());
     }
+
+    /** Signs $username in with its refresh token in the cookie: the access token and the cookie. */
+    private function cookieSignIn(string $username): array
+    {
+        $this->freshRequest();
+        $login = $this->withHeader('x-strapi-refresh-cookie', 'httpOnly')
+            ->postJson('/api/auth/local', ['identifier' => $username, 'password' => 'secret1'])->assertOk();
+
+        return [(string) $login->json('jwt'), (string) $login->getCookie('strapi_up_refresh', false)?->getValue()];
+    }
+
+    private function logoutWith(string $jwt, string $cookie, array $body = []): TestResponse
+    {
+        $this->freshRequest();
+
+        return $this->withCredentials()->withUnencryptedCookie('strapi_up_refresh', $cookie)
+            ->withHeaders(['x-strapi-refresh-cookie' => 'httpOnly'])->withToken($jwt)->postJson('/api/auth/logout', $body)->assertOk();
+    }
+
+    private function refreshes(string $cookie): bool
+    {
+        $this->freshRequest();
+
+        return $this->withCredentials()->withUnencryptedCookie('strapi_up_refresh', $cookie)
+            ->withHeaders(['x-strapi-refresh-cookie' => 'httpOnly'])->postJson('/api/auth/refresh', [])->status() === 200;
+    }
+
+    /** A browser replaces a cookie only with one that matches it, SameSite=None and Secure included. */
+    public function test_logout_clears_the_cookie_with_the_attributes_it_was_set_with(): void
+    {
+        config(['camis.users_permissions.jwt_management' => 'refresh', 'camis.users_permissions.sessions.cookie.same_site' => 'none', 'camis.users_permissions.sessions.cookie.domain' => 'api.example.test']);
+        $this->register('alice');
+        [$jwt, $cookie] = $this->cookieSignIn('alice');
+
+        $cleared = $this->logoutWith($jwt, $cookie)->getCookie('strapi_up_refresh', false);
+        self::assertNotNull($cleared);
+        self::assertTrue($cleared->isCleared());
+        self::assertSame('/api/auth', $cleared->getPath());
+        self::assertSame('api.example.test', $cleared->getDomain());
+        self::assertTrue($cleared->isSecure());
+        self::assertTrue($cleared->isHttpOnly());
+        self::assertSame('none', $cleared->getSameSite());
+    }
+
+    /** Without a known expiry the cookie lasts the browser session rather than none at all. */
+    public function test_a_cookie_without_a_known_expiry_lasts_the_browser_session(): void
+    {
+        self::assertSame(0, \App\Support\StrapiSessions::cookie('session.secret', null)->getExpiresTime());
+    }
+
+    /** One browser, two tabs: the cookie is the newer sign-in's, and the older tab signs out. */
+    public function test_logout_ends_its_own_session_and_keeps_another_sessions_cookie(): void
+    {
+        config(['camis.users_permissions.jwt_management' => 'refresh']);
+        $this->register('alice');
+        [$older, $olderCookie] = $this->cookieSignIn('alice');
+        [$newer, $newerCookie] = $this->cookieSignIn('alice');
+
+        $out = $this->logoutWith($older, $newerCookie);
+        self::assertNull($out->getCookie('strapi_up_refresh', false));
+        self::assertFalse($this->refreshes($olderCookie));
+        self::assertTrue($this->refreshes($newerCookie));
+    }
+
+    public function test_logout_clears_the_cookie_of_the_session_it_ends_or_when_it_ends_all(): void
+    {
+        config(['camis.users_permissions.jwt_management' => 'refresh']);
+        $this->register('alice');
+        [$jwt, $cookie] = $this->cookieSignIn('alice');
+        self::assertTrue($this->logoutWith($jwt, $cookie)->getCookie('strapi_up_refresh', false)?->isCleared());
+
+        [$older] = $this->cookieSignIn('alice');
+        [, $newerCookie] = $this->cookieSignIn('alice');
+        self::assertTrue($this->logoutWith($older, $newerCookie, ['scope' => 'all'])->getCookie('strapi_up_refresh', false)?->isCleared());
+        self::assertFalse($this->refreshes($newerCookie));
+    }
 }

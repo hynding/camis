@@ -65,6 +65,34 @@ describe("users-permissions sessions", () => {
     );
   });
 
+  // A browser replaces a cookie only with one that matches it: SameSite=None needs Secure, and a
+  // clearing cookie at another path or domain leaves the refresh token in place.
+  it("clears the refresh cookie with the attributes it was set with", () => {
+    const sessions = content("app/Support/StrapiSessions.php");
+    const forget = sessions.slice(sessions.indexOf("public static function forget"));
+    expect(forget.slice(0, forget.indexOf("\n    }\n"))).toContain("self::make(null, 1)");
+  });
+
+  // The expiry is the one the session was just given: a second read could miss it (a replica
+  // behind), and Max-Age=0 would drop the cookie at once.
+  it("sets the cookie's expiry from the session it issued, and the browser session without one", () => {
+    const sessions = content("app/Support/StrapiSessions.php");
+    expect(sessions).toContain(
+      "public static function cookie(string $refreshToken, ?string $expiresAt): Cookie",
+    );
+    expect(sessions).not.toContain("absoluteExpiry(");
+  });
+
+  // Another tab's newer sign-in may own the cookie: logout ends the access token's session and
+  // clears the cookie only when it named a session this logout ended.
+  it("ends the access token's own session on logout, and keeps another session's cookie", () => {
+    const controller = content("app/Http/Controllers/Api/SessionController.php");
+    expect(controller).toContain(
+      "$session = StrapiSessions::current($request) ?? StrapiSessions::sessionOf(StrapiSessions::presented($request));",
+    );
+    expect(controller).toContain("StrapiSessions::cookieEnded($cookieSession)");
+  });
+
   it("keeps sessions in their own table, timed to the millisecond as Strapi lists them", async () => {
     const migration = content(
       "database/migrations/0001_01_02_000003_create_strapi_sessions_table.php",
