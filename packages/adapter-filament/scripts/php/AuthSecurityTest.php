@@ -146,6 +146,8 @@ class AuthSecurityTest extends TestCase
         $login = $this->withHeader('x-strapi-refresh-cookie', 'httpOnly')
             ->postJson('/api/auth/local', ['identifier' => 'alice', 'password' => 'secret1'])->assertOk();
         $this->flushHeaders();
+        // The refreshes that follow start a fresh credential bucket of their own.
+        cache()->flush();
 
         return (string) $login->getCookie('strapi_up_refresh', false)?->getValue();
     }

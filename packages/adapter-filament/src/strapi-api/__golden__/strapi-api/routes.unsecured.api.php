@@ -41,7 +41,7 @@ Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle):
     Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])->middleware([$authThrottle, StrapiCredentials::class.':guest']);
     Route::get('/auth/email-confirmation', [AuthController::class, 'emailConfirmation'])->middleware(StrapiCredentials::class.':guest');
     Route::post('/auth/send-email-confirmation', [AuthController::class, 'sendEmailConfirmation'])->middleware([$authThrottle, StrapiCredentials::class.':guest']);
-    Route::post('/auth/refresh', [SessionController::class, 'refresh'])->middleware(StrapiCredentials::class.':guest');
+    Route::post('/auth/refresh', [SessionController::class, 'refresh'])->middleware([$authThrottle, StrapiCredentials::class.':guest']);
 
     // A provider's round trip is the browser's: its state and tokens are kept in a session.
     Route::middleware([EncryptCookies::class, AddQueuedCookiesToResponse::class, StartSession::class, StrapiCredentials::class.':guest'])->group(function () use ($authThrottle): void {

@@ -17,6 +17,7 @@ final class SessionController extends Controller
     public function refresh(Request $request): JsonResponse
     {
         self::refreshOnly();
+        StrapiSessions::refuseForeignCookie($request);
         $token = StrapiSessions::presented($request)
             ?? throw new StrapiError(400, 'BadRequestError', 'Missing refresh token');
         $tokens = StrapiSessions::rotate($token)

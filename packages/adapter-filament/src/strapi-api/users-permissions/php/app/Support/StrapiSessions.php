@@ -106,6 +106,22 @@ final class StrapiSessions
     }
 
     /**
+     * A browser attaches the refresh cookie to a request any site makes, and on /auth/refresh it
+     * is the only credential. It is taken from a request whose Origin is this app's own or a CORS
+     * origin allowed credentials, or, with no Origin, one carrying a header that a page of another
+     * site cannot send without a preflight, which CORS refuses it with credentials.
+     */
+    public static function refuseForeignCookie(Request $request): void
+    {
+        $cookie = $request->cookie(self::cookieName());
+        if (! is_string($cookie) || $cookie === '' || self::fromOwnPage($request)) {
+            return;
+        }
+
+        throw new StrapiError(403, 'ForbiddenError', 'The refresh cookie is not accepted from this origin');
+    }
+
+    /**
      * The successor of a refresh token and an access token for it, or null when the token may no
      * longer be used. The old session stays behind as rotated, so the token cannot be used twice.
      *
@@ -350,6 +366,47 @@ final class StrapiSessions
         }
 
         return null;
+    }
+
+    private static function fromOwnPage(Request $request): bool
+    {
+        $origin = $request->headers->get('Origin');
+        if ($origin === null) {
+            return $request->headers->has('X-Requested-With') || $request->headers->has('x-strapi-refresh-cookie');
+        }
+
+        return in_array($origin, [$request->getSchemeAndHttpHost(), self::originOf((string) config('app.url'))], true)
+            || self::credentialedCorsOrigin($origin);
+    }
+
+    /** An origin config/cors.php lets read a response made with credentials, as HandleCors matches it. */
+    private static function credentialedCorsOrigin(string $origin): bool
+    {
+        if (! (bool) config('cors.supports_credentials')) {
+            return false;
+        }
+        foreach ((array) config('cors.allowed_origins', []) as $allowed) {
+            if (is_string($allowed) && $allowed !== '*' && Str::is($allowed, $origin)) {
+                return true;
+            }
+        }
+        foreach ((array) config('cors.allowed_origins_patterns', []) as $pattern) {
+            if (is_string($pattern) && preg_match($pattern, $origin) === 1) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static function originOf(string $url): ?string
+    {
+        $parts = parse_url($url);
+        if (! is_array($parts) || ! isset($parts['scheme'], $parts['host'])) {
+            return null;
+        }
+
+        return $parts['scheme'].'://'.$parts['host'].(isset($parts['port']) ? ':'.$parts['port'] : '');
     }
 
     private static function cookieName(): string
