@@ -74,14 +74,13 @@ export const usersPermissionsConfigKeys = (): string => `
         // every address alike, telling the address by mail instead, and account mail is sent once
         // the answer has gone. false restores Strapi's answers.
         'hide_account_existence' => (bool) env('CAMIS_AUTH_HIDE_ACCOUNT_EXISTENCE', true),
-        // The mails a refused registration sends the address it named, with the account
-        // confirmation's sender. They name nothing the registration sent.
         // How many mails of one kind (registration notice, confirmation resend, recovery) one
         // address gets in an hour, since each goes to an address the caller names. A small burst,
         // so another caller cannot spend a requester's only mail; floored at 1.
         'account_mail_per_hour' => max(1, (int) env('CAMIS_ACCOUNT_MAIL_PER_HOUR', 3)),
+        // The mail a registration of a taken address or username sends the address it named, with
+        // the account confirmation's sender: one text for both, so it says neither was taken.
         'account_emails' => [
-            // One text for a taken address and a taken username, so it says neither was taken.
             'registration_attempted' => [
                 'object' => 'Account registration',
                 'message' => "<p>Someone tried to register an account with this email address.</p>\\n\\n<p>If you already have an account, sign in, or reset your password if you have forgotten it. If you were registering a new account, try again with a different username. Otherwise you can ignore this email.</p>",
