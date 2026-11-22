@@ -6,9 +6,11 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Ledger;
+use App\Support\DecimalDigits;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class LedgerApiController extends Controller
 {
@@ -16,8 +18,8 @@ class LedgerApiController extends Controller
 
     private const FIELDS = ['label', 'balance', 'rate', 'share', 'units', 'fee', 'limit_ceiling'];
 
-    /** Decimals stating their digits. */
-    private const DECIMALS = ['balance', 'rate', 'share', 'units', 'limit_ceiling'];
+    /** Decimals stating their digits: each column's precision and scale. */
+    private const DECIMALS = ['balance' => [20, 6], 'rate' => [9, 4], 'share' => [15, 5], 'units' => [14, 4], 'limit_ceiling' => [18, 2]];
 
     public function index(): JsonResponse
     {
@@ -55,13 +57,18 @@ class LedgerApiController extends Controller
         return response()->json(null, 204);
     }
 
-    /** The payload with each decimal's JSON number as its shortest digits. */
+    /** The payload with each decimal stating its digits as its column keeps it, from a string or a number. */
     private static function withDecimals(array $payload): array
     {
-        foreach (self::DECIMALS as $column) {
-            if (is_float($payload[$column] ?? null)) {
-                $payload[$column] = var_export($payload[$column], true);
+        foreach (self::DECIMALS as $column => [$precision, $scale]) {
+            if (($payload[$column] ?? null) === null) {
+                continue;
             }
+            $decimal = DecimalDigits::canonical($payload[$column], $precision, $scale);
+            if ($decimal === null) {
+                throw ValidationException::withMessages([$column => "The {$column} field must be a decimal of at most {$precision} digits, {$scale} of them after the point."])->status(400);
+            }
+            $payload[$column] = $decimal;
         }
 
         return $payload;

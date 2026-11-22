@@ -6,6 +6,8 @@ declare(strict_types=1);
 namespace App\Http\Serializers;
 
 use App\Models\Ledger;
+use App\Support\DecimalDigits;
+use App\Support\StrapiError;
 
 final class LedgerSerializer
 {
@@ -14,15 +16,15 @@ final class LedgerSerializer
         'id' => ['column' => 'id', 'type' => 'integer'],
         'documentId' => ['column' => 'document_id', 'type' => 'string'],
         'label' => ['column' => 'label', 'type' => 'string'],
-        'balance' => ['column' => 'balance', 'type' => 'decimal'],
-        'rate' => ['column' => 'rate', 'type' => 'decimal'],
-        'share' => ['column' => 'share', 'type' => 'decimal'],
-        'units' => ['column' => 'units', 'type' => 'decimal'],
+        'balance' => ['column' => 'balance', 'type' => 'decimal', 'scale' => 6],
+        'rate' => ['column' => 'rate', 'type' => 'decimal', 'scale' => 4],
+        'share' => ['column' => 'share', 'type' => 'decimal', 'scale' => 5],
+        'units' => ['column' => 'units', 'type' => 'decimal', 'scale' => 4],
         'fee' => ['column' => 'fee', 'type' => 'decimal'],
-        'limit.ceiling' => ['column' => 'limit_ceiling', 'type' => 'decimal'],
+        'limit.ceiling' => ['column' => 'limit_ceiling', 'type' => 'decimal', 'scale' => 2],
         'entries' => ['component' => 'entries', 'fields' => [
             'memo' => ['column' => 'memo', 'type' => 'string'],
-            'amount' => ['column' => 'amount', 'type' => 'decimal'],
+            'amount' => ['column' => 'amount', 'type' => 'decimal', 'scale' => 6],
         ]],
         'createdAt' => ['column' => 'created_at', 'type' => 'dateTime'],
         'updatedAt' => ['column' => 'updated_at', 'type' => 'dateTime'],
@@ -73,18 +75,18 @@ final class LedgerSerializer
     {
         $columns = array_filter([
             'label' => self::dig($data, ['label']),
-            'balance' => self::decimal(self::dig($data, ['balance'])),
-            'rate' => self::decimal(self::dig($data, ['rate'])),
-            'share' => self::decimal(self::dig($data, ['share'])),
-            'units' => self::decimal(self::dig($data, ['units'])),
+            'balance' => self::decimal(self::dig($data, ['balance']), 20, 6, 'balance'),
+            'rate' => self::decimal(self::dig($data, ['rate']), 9, 4, 'rate'),
+            'share' => self::decimal(self::dig($data, ['share']), 15, 5, 'share'),
+            'units' => self::decimal(self::dig($data, ['units']), 14, 4, 'units'),
             'fee' => self::dig($data, ['fee']),
-            'limit_ceiling' => self::decimal(self::dig($data, ['limit', 'ceiling'])),
+            'limit_ceiling' => self::decimal(self::dig($data, ['limit', 'ceiling']), 18, 2, 'limit.ceiling'),
         ], fn ($v) => $v !== null);
         $children = [];
         if (self::has($data, ['entries'])) {
             $children['entries'] = array_map(fn (array $row) => array_filter([
                 'memo' => self::dig($row, ['memo']),
-                'amount' => self::decimal(self::dig($row, ['amount'])),
+                'amount' => self::decimal(self::dig($row, ['amount']), 20, 6, 'amount'),
             ], fn ($v) => $v !== null), is_array(self::dig($data, ['entries'])) ? self::dig($data, ['entries']) : []);
         }
 
@@ -131,9 +133,19 @@ final class LedgerSerializer
         return true;
     }
 
-    /** A decimal as Strapi takes one: its string, or a number as its shortest digits. */
-    private static function decimal(mixed $value): mixed
+    /** A decimal stating its digits as its column keeps it, from a string or a number; refused when it is not one that fits. */
+    private static function decimal(mixed $value, int $precision, int $scale, string $path): ?string
     {
-        return is_float($value) ? var_export($value, true) : $value;
+        if ($value === null) {
+            return null;
+        }
+        $decimal = DecimalDigits::canonical($value, $precision, $scale);
+        if ($decimal === null) {
+            $message = "{$path} must be a decimal of at most {$precision} digits, {$scale} of them after the point";
+
+            throw StrapiError::validation($message, ['errors' => [['path' => explode('.', $path), 'message' => $message, 'name' => 'ValidationError']]]);
+        }
+
+        return $decimal;
     }
 }

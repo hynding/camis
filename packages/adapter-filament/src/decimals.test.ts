@@ -42,35 +42,35 @@ describe("decimals stating their digits (issue #104)", () => {
   });
 
   // PDO SQLite reads a decimal column as a PHP float, which becomes a string of 14 digits.
-  it("reports, located, that the Strapi API style filters and sorts a decimal beyond a PHP float as text on SQLite", () => {
+  it("reports, located, that the Strapi API style compares a decimal beyond a PHP float as text on SQLite in an ordering filter or a sort", () => {
     expect(decimalGaps(generate("strapi"))).toEqual([
       {
         feature: "decimalPrecision",
         location: { contentType: "Ledger", field: "balance" },
         severity: "downgrade",
         message:
-          '"balance" keeps its 20 digits as text on SQLite, where a filter or a sort on it compares text, not numbers; a data-transfer archive carries it as a number, as Strapi\'s archives do, rounded to 15 significant digits',
+          '"balance" keeps its 20 digits as text on SQLite, where a filter on it finds equal values exactly but compares text, not numbers, in an ordering comparison ($lt, $lte, $gt, $gte, $between) or a sort; a JSON number sent for it is read as a double first, so an exact value is sent as a string; a data-transfer archive carries it as a number, as Strapi\'s archives do, rounded to 15 significant digits',
       },
       {
         feature: "decimalPrecision",
         location: { contentType: "Ledger", field: "share" },
         severity: "downgrade",
         message:
-          '"share" keeps its 15 digits as text on SQLite, where a filter or a sort on it compares text, not numbers; a data-transfer archive carries it as a number, as Strapi\'s archives do, rounded to 15 significant digits',
+          '"share" keeps its 15 digits as text on SQLite, where a filter on it finds equal values exactly but compares text, not numbers, in an ordering comparison ($lt, $lte, $gt, $gte, $between) or a sort; a JSON number sent for it is read as a double first, so an exact value is sent as a string; a data-transfer archive carries it as a number, as Strapi\'s archives do, rounded to 15 significant digits',
       },
       {
         feature: "decimalPrecision",
         location: { component: "Limit", field: "ceiling" },
         severity: "downgrade",
         message:
-          '"ceiling" keeps its 18 digits as text on SQLite, where a filter or a sort on it compares text, not numbers; a data-transfer archive carries it as a number, as Strapi\'s archives do, rounded to 15 significant digits',
+          '"ceiling" keeps its 18 digits as text on SQLite, where a filter on it finds equal values exactly but compares text, not numbers, in an ordering comparison ($lt, $lte, $gt, $gte, $between) or a sort; a JSON number sent for it is read as a double first, so an exact value is sent as a string; a data-transfer archive carries it as a number, as Strapi\'s archives do, rounded to 15 significant digits',
       },
       {
         feature: "decimalPrecision",
         location: { component: "Entry", field: "amount" },
         severity: "downgrade",
         message:
-          '"amount" keeps its 20 digits as text on SQLite, where a filter or a sort on it compares text, not numbers; a data-transfer archive carries it as a number, as Strapi\'s archives do, rounded to 15 significant digits',
+          '"amount" keeps its 20 digits as text on SQLite, where a filter on it finds equal values exactly but compares text, not numbers, in an ordering comparison ($lt, $lte, $gt, $gte, $between) or a sort; a JSON number sent for it is read as a double first, so an exact value is sent as a string; a data-transfer archive carries it as a number, as Strapi\'s archives do, rounded to 15 significant digits',
       },
     ]);
   });
@@ -90,11 +90,40 @@ describe("decimals stating their digits (issue #104)", () => {
     expect(result.gaps.gaps.filter((g) => g.feature === "decimalPrecision")).toEqual([]);
   });
 
-  // PHP writes a float as a string of 14 significant digits, which is how PDO binds one.
-  it("takes a JSON number for a decimal stating its digits as its shortest digits on the Laravel API style", async () => {
+  // SQLite's text column takes any string: each API keeps a value as MySQL and PostgreSQL do.
+  it("writes a decimal stating its digits at its scale on the Laravel API style, refusing one that is not a decimal that fits with a 400", async () => {
     await expect(
       contentOf(generate("laravel"))("app/Http/Controllers/Api/LedgerApiController.php"),
     ).toMatchFileSnapshot("./__golden__/decimals/laravel/LedgerApiController.php");
+  });
+
+  it("emits DecimalDigits, which both API styles write a decimal stating its digits through, only for a project with one", () => {
+    const runtime = "app/Support/DecimalDigits.php";
+    for (const apiStyle of ["laravel", "strapi"] as const) {
+      expect(contentOf(generate(apiStyle))(runtime)).toContain("final class DecimalDigits");
+    }
+    expect(contentOf(generate("strapi", "strapi"))(runtime)).toContain("final class DecimalDigits");
+    const blogFiles = filamentAdapter.generate(blog, { projectName: "blog", apiStyle: "strapi" });
+    expect(blogFiles.files.some((f) => f.path === runtime)).toBe(false);
+  });
+
+  // A float holds 15 digits; MySQL compares a DECIMAL with a string as two doubles.
+  it("filters a decimal stating its digits by a value at its scale, never through a float, and every other project as before", () => {
+    const query = contentOf(generate("strapi"))("app/Support/StrapiQuery.php");
+    expect(query).toContain(
+      `self::attribute($query, $query->qualifyColumn($field['column']), (isset($field['scale']) ? "decimal:{$field['scale']}" : $field['type']), $value, self::join($at, $wirePath));`,
+    );
+    expect(query).toContain(
+      "default => str_starts_with($type, 'decimal:') ? DecimalDigits::filter($value, (int) substr($type, 8)) : $value,",
+    );
+    const blogQuery =
+      filamentAdapter
+        .generate(blog, { projectName: "blog", apiStyle: "strapi" })
+        .files.find((f) => f.path === "app/Support/StrapiQuery.php")?.content ?? "";
+    expect(blogQuery).not.toContain("DecimalDigits");
+    expect(blogQuery).toContain(
+      "self::attribute($query, $query->qualifyColumn($field['column']), $field['type'], $value, self::join($at, $wirePath));",
+    );
   });
 
   describe("on the Strapi API style's wire", () => {
@@ -107,7 +136,7 @@ describe("decimals stating their digits (issue #104)", () => {
     const content = contentOf(strapi);
 
     // A JSON number holding more digits than a double keeps is rounded by every JavaScript client.
-    it("answers a decimal beyond a double as a string, as its cast reads it, and the others as numbers, taking a JSON number as its shortest digits", async () => {
+    it("answers a decimal beyond a PHP float as a string and the others as numbers, writes each stating its digits at its scale or refuses it, and gives the filters its scale", async () => {
       await expect(content("app/Http/Serializers/LedgerSerializer.php")).toMatchFileSnapshot(
         "./__golden__/decimals/strapi/LedgerSerializer.php",
       );
@@ -186,6 +215,23 @@ describe("decimals stating their digits (issue #104)", () => {
       expect(data.rate).toEqual({ type: "number" });
       expect(data.share).toEqual({ anyOf: [{ type: "string" }, { type: "number" }] });
       expect(data.units).toEqual({ type: "number" });
+    });
+
+    it("lets the content-manager's MCP tools filter a decimal beyond a PHP float by strings or numbers, alone or in a list", () => {
+      const list = contentManagerMcpTools(decimalsBundle.document).find(
+        (tool) => tool.name === "list_ledger",
+      );
+      const definitions = Object.values(
+        (list?.inputSchema as { $defs: Record<string, { properties?: Record<string, unknown> }> })
+          .$defs,
+      );
+      const balance = definitions.find((d) => d.properties?.balance !== undefined)?.properties
+        ?.balance as { anyOf: [unknown, { properties: Record<string, unknown> }] };
+      const either = [{ type: "string" }, { type: "number" }];
+      const value = { anyOf: [...either, { type: "array", items: { anyOf: either } }] };
+      expect(balance.anyOf[0]).toEqual(value);
+      expect(balance.anyOf[1].properties.$in).toEqual(value);
+      expect(balance.anyOf[1].properties.$notIn).toEqual(value);
     });
   });
 });
