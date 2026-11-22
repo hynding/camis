@@ -10,6 +10,10 @@ set -euo pipefail
 package="$(cd "$(dirname "$0")/.." && pwd)"
 sources="$package/src/strapi-api"
 shared="$package/src/php"
+# find over a missing directory would list nothing and analyse nothing of it.
+for dir in "$sources" "$shared"; do
+  [ -d "$dir" ] || { echo "::error::$dir does not exist"; exit 1; }
+done
 
 # A source's path in the app is what follows its php/ directory.
 in_app() { sed "s#^$sources/[^/]*/php/##"; }
