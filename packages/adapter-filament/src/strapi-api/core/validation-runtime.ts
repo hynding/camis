@@ -72,7 +72,13 @@ const UNIQUE_DIGITS_CHECKS: [string, string][] = [
 /**
  * The validator for a project with a unique decimal stating its digits: SQLite keeps one beyond a
  * PHP float as text, and every database keeps it rounded to its scale, so the value as sent (1.5
- * beside a stored 1.50000, or 1.500004) found no other entry and reached the unique index.
+ * beside a stored 1.50000, or 1.500004) found no other entry and reached the unique index. Each
+ * check is patched at its anchor, which must occur exactly once.
  */
 export const withUniqueDigits = (php: string): string =>
-  UNIQUE_DIGITS_CHECKS.reduce((patched, [from, to]) => patched.replace(from, () => to), php);
+  UNIQUE_DIGITS_CHECKS.reduce((patched, [from, to]) => {
+    if (patched.split(from).length !== 2) {
+      throw new Error(`StrapiValidator.php must hold exactly one "${from}"`);
+    }
+    return patched.replace(from, () => to);
+  }, php);
