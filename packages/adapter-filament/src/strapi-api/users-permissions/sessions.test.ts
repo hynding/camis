@@ -179,6 +179,26 @@ describe("users-permissions sessions", () => {
     expect(deploy).toContain("### Upgrading");
   });
 
+  // Each of these changes an answer a client reads, or is a setting an operator must choose, so a
+  // client author and an operator upgrading must find them without reading PHP.
+  it("documents hidden accounts, JSON-only auth bodies, expiresIn and assigned fields in DEPLOY.md", () => {
+    const deploy = content("DEPLOY.md");
+    const upgrading = deploy.slice(deploy.indexOf("### Upgrading"));
+    for (const text of [
+      "CAMIS_AUTH_HIDE_ACCOUNT_EXISTENCE",
+      '`{"email": ..., "sent": true}`',
+      "415 `UnsupportedMediaTypeError`",
+      "`expiresIn`",
+      "a field the grant assigns",
+    ]) {
+      expect(deploy).toContain(text);
+      expect(upgrading).toContain(text);
+    }
+    // What the setting cannot hide must be said, or an operator trusts it further than it goes.
+    expect(deploy).toContain("Without email confirmation registration cannot answer alike");
+    expect(deploy).toContain("fastcgi_finish_request");
+  });
+
   // Behind a proxy that Laravel does not trust every client has the proxy's address, and so one
   // bucket; the operator must learn that, and that a password change counts per account.
   it("documents the throttle's buckets, the refresh rate and trusted proxies in DEPLOY.md", () => {
