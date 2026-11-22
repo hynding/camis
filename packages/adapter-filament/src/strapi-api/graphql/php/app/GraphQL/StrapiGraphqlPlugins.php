@@ -105,6 +105,7 @@ final class StrapiGraphqlPlugins
                 return self::session(StrapiGraphql::dispatch($auth, 'resetPassword', [], $request, $args, [], false));
             case 'changePassword':
                 self::signedInOrToken($request);
+                self::throttle($request);
 
                 return self::session(StrapiGraphql::dispatch($auth, 'changePassword', [], $request, $args));
             default:

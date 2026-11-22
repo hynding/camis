@@ -158,8 +158,8 @@ one bucket per client address: \`POST /auth/local\`, \`/auth/local/register\`,
 \`/auth/forgot-password\`, \`/auth/reset-password\`, \`/auth/send-email-confirmation\`,
 \`/auth/refresh\` and \`/auth/change-password\`, \`GET /connect/{provider}\` and its callback,
 and \`GET /auth/{provider}/callback\` (for \`/auth/local/callback\` Strapi's password login, which
-Strapi itself leaves unthrottled). A throttled request answers 429 in Strapi's error envelope with
-\`Retry-After\`.
+Strapi itself leaves unthrottled); GraphQL's sign-in and password mutations take turns of the same
+rate. A throttled REST request answers 429 in Strapi's error envelope with \`Retry-After\`.
 
 With \`CAMIS_JWT_MANAGEMENT=refresh\` a client may keep its refresh token in an httpOnly cookie
 rather than the response body: for every request with \`CAMIS_SESSIONS_HTTP_ONLY=true\`, or per
