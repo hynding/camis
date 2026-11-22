@@ -1,5 +1,6 @@
-import { beyondDouble, decimalDigits } from "@camis/ir-core";
+import { decimalDigits } from "@camis/ir-core";
 import type { Field } from "@camis/ir-schema";
+import { beyondPhpFloat } from "./decimals";
 import { snakeColumn } from "./names";
 import { phpSingleQuoted, phpValue } from "./php-literal";
 
@@ -63,18 +64,19 @@ const phpDefault = (v: unknown): string =>
 
 /**
  * A decimal's column: Laravel's default (8, 2) where it states no digits, else its own. SQLite keeps
- * a decimal column's values as doubles, so a decimal beyond a double is text there, which keeps
- * every digit; the other databases keep it as DECIMAL. The driver is the connection's at migration
- * time, so one migration serves every database.
+ * a decimal column's values as doubles, which PDO reads as PHP floats of 14 significant digits, so a
+ * decimal beyond a PHP float is text there, which keeps every digit; the other databases keep it as
+ * DECIMAL. The driver is the connection's at migration time, so one migration serves every
+ * database.
  */
 const decimalColumn = (field: Field, c: string): string => {
   const digits = decimalDigits(field);
   if (digits === undefined) return `$table->decimal('${c}')`;
   const decimal = `$table->decimal('${c}', ${digits.precision}, ${digits.scale})`;
-  if (!beyondDouble(field)) return decimal;
+  if (!beyondPhpFloat(field)) return decimal;
   // Its digits, a sign and a point.
   const text = `$table->string('${c}', ${digits.precision + 2})`;
-  return `(\\Illuminate\\Support\\Facades\\Schema::getConnection()->getDriverName() === 'sqlite' ? ${text} : ${decimal})`;
+  return `(Schema::getConnection()->getDriverName() === 'sqlite' ? ${text} : ${decimal})`;
 };
 
 interface Base {
@@ -135,7 +137,7 @@ const base = (field: Field, c: string): Base => {
         tableColumn: `TextColumn::make('${c}')`,
         formImport: TEXT_INPUT,
         tableImport: TEXT_COLUMN,
-        // Laravel's decimal cast reads the column as a string at the scale, never as a float.
+        // Laravel's decimal cast answers the column as a string at the scale (see decimalColumn).
         cast: `'decimal:${digits?.scale ?? 2}'`,
       };
     }

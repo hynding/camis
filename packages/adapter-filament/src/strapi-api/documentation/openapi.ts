@@ -1,4 +1,3 @@
-import { beyondDouble } from "@camis/ir-core";
 import {
   fieldApiName,
   inverseApiName,
@@ -10,6 +9,7 @@ import {
   type IrDocument,
   type RouteAction,
 } from "@camis/ir-schema";
+import { beyondPhpFloat } from "../../decimals";
 import { componentUid, kebab, routePath } from "../core/names";
 import plugins from "./openapi-plugins.json";
 
@@ -73,7 +73,7 @@ interface Attribute {
   many?: boolean;
   /** The uid a relation, component or media field points at. */
   target?: string;
-  /** A decimal stating more digits than a double keeps, which the API answers as a string. */
+  /** A decimal stating more digits than a PHP float carries, which the API answers as a string. */
   exact?: true;
 }
 
@@ -144,7 +144,7 @@ class DocumentBuilder {
         if ("minLength" in f && f.minLength !== undefined) a.minLength = f.minLength;
         if ("maxLength" in f && f.maxLength !== undefined) a.maxLength = f.maxLength;
         if (f.type === "enumeration") a.values = f.values;
-        if (beyondDouble(f)) a.exact = true;
+        if (beyondPhpFloat(f)) a.exact = true;
         if (f.type === "media") {
           a.target = FILE_UID;
           if (f.multiple === true) a.many = true;

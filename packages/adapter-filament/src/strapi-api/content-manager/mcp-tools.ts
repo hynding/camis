@@ -1,7 +1,7 @@
-import { DOUBLE_DIGITS } from "@camis/ir-core";
 import type { IrDocument } from "@camis/ir-schema";
 import { runtimeSchemas, type RuntimeSchema } from "@camis/strapi-schema";
 import { z } from "zod/v4";
+import { PHP_FLOAT_DIGITS } from "../../decimals";
 
 /**
  * The content-manager tools of Strapi 5's MCP server, as its `tools/list` describes them: per
@@ -202,11 +202,11 @@ const sortSchema = (attributes: Attributes, permitted: ReadonlySet<string>) => {
     );
 };
 
-/** A decimal whose column (Strapi's column settings) keeps more digits than a double does. */
+/** A decimal whose column (Strapi's column settings) keeps more digits than a PHP float carries. */
 const exactDecimal = (attribute: Attribute): boolean => {
   const column = attribute.column as { args?: unknown[] } | undefined;
   const precision = column?.args?.[0];
-  return typeof precision === "number" && precision > DOUBLE_DIGITS;
+  return typeof precision === "number" && precision > PHP_FLOAT_DIGITS;
 };
 
 const filterValue = (attribute: Attribute): z.ZodType => {

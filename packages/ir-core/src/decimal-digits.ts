@@ -19,9 +19,12 @@ export const decimalDigits = (field: AnyField): DecimalDigits | undefined =>
     ? { precision: field.precision, scale: field.scale }
     : undefined;
 
+/** Whether a decimal states more digits than `digits`, the digits a target's number type keeps. */
+export const digitsBeyond = (field: AnyField, digits: number): boolean =>
+  (decimalDigits(field)?.precision ?? 0) > digits;
+
 /** Whether a decimal states more digits than a double keeps, so its values must not pass through one. */
-export const beyondDouble = (field: AnyField): boolean =>
-  (decimalDigits(field)?.precision ?? 0) > DOUBLE_DIGITS;
+export const beyondDouble = (field: AnyField): boolean => digitsBeyond(field, DOUBLE_DIGITS);
 
 export interface LocatedDecimal {
   /** The content type or component holding the field, and the field. */
@@ -29,12 +32,12 @@ export interface LocatedDecimal {
   digits: DecimalDigits;
 }
 
-/** Every decimal stating more digits than a double keeps, a component's included, located. */
-export const decimalsBeyondDouble = (doc: IrDocument): LocatedDecimal[] => {
+/** Every decimal stating more digits than `kept`, a component's included, located. */
+export const decimalsBeyond = (doc: IrDocument, kept: number): LocatedDecimal[] => {
   const located = (holder: IrErrorLocation, fields: readonly AnyField[]): LocatedDecimal[] =>
     fields.flatMap((field) => {
       const digits = decimalDigits(field);
-      return digits !== undefined && beyondDouble(field)
+      return digits !== undefined && digitsBeyond(field, kept)
         ? [{ location: { ...holder, field: field.name }, digits }]
         : [];
     });
@@ -43,3 +46,7 @@ export const decimalsBeyondDouble = (doc: IrDocument): LocatedDecimal[] => {
     ...doc.components.flatMap((c) => located({ component: c.name }, c.fields)),
   ];
 };
+
+/** Every decimal stating more digits than a double keeps, a component's included, located. */
+export const decimalsBeyondDouble = (doc: IrDocument): LocatedDecimal[] =>
+  decimalsBeyond(doc, DOUBLE_DIGITS);

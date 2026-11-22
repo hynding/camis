@@ -1,4 +1,4 @@
-import { beyondDouble, pluralize } from "@camis/ir-core";
+import { pluralize } from "@camis/ir-core";
 import {
   fieldApiName,
   type CapabilityGap,
@@ -8,6 +8,7 @@ import {
   type Field,
   type IrDocument,
 } from "@camis/ir-schema";
+import { beyondPhpFloat } from "../../decimals";
 import { filamentNames } from "../../names";
 import { componentUid, kebab } from "../core/names";
 import {
@@ -167,9 +168,9 @@ const scalarOf = (type: Field["type"]): string => {
       return "String";
   }
 };
-/** A field's scalar: a decimal beyond a double is a String, as the REST API answers it. */
+/** A field's scalar: a decimal beyond a PHP float is a String, as the REST API answers it. */
 const fieldScalarOf = (field: Field | ComponentFieldT): string =>
-  beyondDouble(field) ? "String" : scalarOf(field.type);
+  beyondPhpFloat(field) ? "String" : scalarOf(field.type);
 const GRAPHQL_NAME = /^[_A-Za-z][_0-9A-Za-z]*$/;
 
 /** The upload plugin's file type, as Strapi's content API sends it. */
