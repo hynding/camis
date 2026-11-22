@@ -1,5 +1,5 @@
 import { expandComponents, type ExpandedTable } from "@camis/adapter-kernel";
-import { decimalDigits } from "@camis/ir-core";
+import { decimalDigits, type DecimalDigits } from "@camis/ir-core";
 import { componentDisplayName } from "@camis/strapi-schema";
 import { beyondPhpFloat } from "../../decimals";
 import {
@@ -23,8 +23,8 @@ export interface WireScalar {
   key: string[];
   column: string;
   type: FieldType;
-  /** A decimal stating its digits: a JSON number written to it is taken as its shortest digits. */
-  digits?: true;
+  /** A decimal's stated digits: what is written to it, or filtered by, is kept at its scale. */
+  digits?: DecimalDigits;
   /** A decimal stating more digits than a PHP float carries: answered as a string, never a float. */
   exact?: true;
   /** Written, but never answered, filtered, sorted or selected (Strapi's `private`). */
@@ -124,10 +124,13 @@ export interface LinkOrder {
   table: string;
   column: string;
 }
-const exactness = (field: Field | ComponentFieldT): { digits?: true; exact?: true } => ({
-  ...(decimalDigits(field) === undefined ? {} : { digits: true }),
-  ...(beyondPhpFloat(field) ? { exact: true } : {}),
-});
+const exactness = (field: Field | ComponentFieldT): { digits?: DecimalDigits; exact?: true } => {
+  const digits = decimalDigits(field);
+  return {
+    ...(digits === undefined ? {} : { digits }),
+    ...(beyondPhpFloat(field) ? { exact: true } : {}),
+  };
+};
 
 export interface WireShape {
   model: string;

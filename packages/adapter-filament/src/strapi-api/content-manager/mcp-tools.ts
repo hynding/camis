@@ -210,7 +210,8 @@ const exactDecimal = (attribute: Attribute): boolean => {
 };
 
 const filterValue = (attribute: Attribute): z.ZodType => {
-  if (exactDecimal(attribute)) return z.union([z.string(), z.number(), z.array(z.string())]);
+  if (exactDecimal(attribute))
+    return z.union([z.string(), z.number(), z.array(z.union([z.string(), z.number()]))]);
   switch (attribute.type) {
     case "integer":
     case "biginteger":

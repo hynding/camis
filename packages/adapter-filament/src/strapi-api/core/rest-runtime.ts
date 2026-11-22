@@ -37,7 +37,18 @@ const scopeBody = (secured: boolean): string =>
             $query->forUser($viewer);
         }`;
 
-export const emitStrapiQuery = (secured = false): string =>
+// A project with decimals stating their digits compares a filter's value with one at its scale,
+// never through a float (see DecimalDigits::filter); every other project's filters are as they were.
+const filteredType = (decimals: boolean): string =>
+  decimals
+    ? `(isset($field['scale']) ? "decimal:{$field['scale']}" : $field['type'])`
+    : "$field['type']";
+const otherCast = (decimals: boolean): string =>
+  decimals
+    ? "str_starts_with($type, 'decimal:') ? DecimalDigits::filter($value, (int) substr($type, 8)) : $value"
+    : "$value";
+
+export const emitStrapiQuery = (secured = false, decimals = false): string =>
   header("App\\Support") +
   String.raw`
 use Carbon\CarbonImmutable;
@@ -237,7 +248,7 @@ ${scopeBody(secured)}
                 throw StrapiError::invalidKey($key, self::join($at, $wirePath), 'filters');
             }
             if (isset($field['column'])) {
-                self::attribute($query, $query->qualifyColumn($field['column']), $field['type'], $value, self::join($at, $wirePath));
+                self::attribute($query, $query->qualifyColumn($field['column']), ${filteredType(decimals)}, $value, self::join($at, $wirePath));
             } elseif (isset($field['component'])) {
                 if (is_array($value)) {
                     $query->whereHas($field['component'], fn (Builder $q) => self::where($q, $value, $field['fields'], null, $viewer, self::join($at, $wirePath)));
@@ -410,7 +421,7 @@ ${scopeBody(secured)}
             'float', 'decimal' => is_numeric($value) ? (float) $value : $value,
             'date' => self::parseDate($value)?->format('Y-m-d') ?? $value,
             'dateTime', 'timestamp' => self::parseDate($value)?->utc()->format($dateFormat) ?? $value,
-            default => $value,
+            default => ${otherCast(decimals)},
         };
     }
 

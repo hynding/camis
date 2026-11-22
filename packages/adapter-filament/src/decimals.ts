@@ -1,6 +1,7 @@
-import type { StorageLayout } from "@camis/adapter-kernel";
-import { DOUBLE_DIGITS, decimalsBeyond, digitsBeyond } from "@camis/ir-core";
+import type { GeneratedFile, StorageLayout } from "@camis/adapter-kernel";
+import { DOUBLE_DIGITS, decimalDigits, decimalsBeyond, digitsBeyond } from "@camis/ir-core";
 import type { CapabilityGap, ComponentFieldT, Field, IrDocument } from "@camis/ir-schema";
+import { runtimePhp } from "./runtime-php";
 
 /**
  * The significant digits PHP writes a float with when it becomes a string (its `precision`
@@ -19,9 +20,10 @@ export const beyondPhpFloat = (field: Field | ComponentFieldT): boolean =>
 /**
  * What a decimal beyond a PHP float loses where the app compares or stores it. On the Laravel
  * storage layout its column is text on SQLite (see `decimalColumn`), so the Strapi API style's
- * filters and sorts compare it as text there; the Laravel API style neither filters nor sorts. Its
- * archives carry a decimal as a number, as Strapi's do, for Strapi to import. On Strapi's storage
- * layout the column is the one Strapi made, which SQLite keeps as a double.
+ * ordering filters and sorts compare it as text there, while its equality filters compare the
+ * canonical digits every write keeps (DecimalDigits); the Laravel API style neither filters nor
+ * sorts. Its archives carry a decimal as a number, as Strapi's do, for Strapi to import. On
+ * Strapi's storage layout the column is the one Strapi made, which SQLite keeps as a double.
  */
 export const filamentDecimalGaps = (
   doc: IrDocument,
@@ -37,5 +39,21 @@ export const filamentDecimalGaps = (
         message:
           storage === "strapi"
             ? `"${location.field}" keeps ${digits.precision} digits, but on Strapi's storage layout its column is Strapi's, which SQLite keeps as a double that PHP reads back as a float: on SQLite only ${PHP_FLOAT_DIGITS} significant digits are kept`
-            : `"${location.field}" keeps its ${digits.precision} digits as text on SQLite, where a filter or a sort on it compares text, not numbers; a data-transfer archive carries it as a number, as Strapi's archives do, rounded to ${DOUBLE_DIGITS} significant digits`,
+            : `"${location.field}" keeps its ${digits.precision} digits as text on SQLite, where a filter on it finds equal values exactly but compares text, not numbers, in an ordering comparison ($lt, $lte, $gt, $gte, $between) or a sort; a JSON number sent for it is read as a double first, so an exact value is sent as a string; a data-transfer archive carries it as a number, as Strapi's archives do, rounded to ${DOUBLE_DIGITS} significant digits`,
       }));
+
+/**
+ * What writes a decimal stating its digits, on either API style, and what the Strapi API style
+ * filters one by: emitted only for a project with such a decimal.
+ */
+export const decimalDigitsFiles = (doc: IrDocument): GeneratedFile[] =>
+  [...doc.contentTypes, ...doc.components].some((holder) =>
+    holder.fields.some((field) => decimalDigits(field) !== undefined),
+  )
+    ? [
+        {
+          path: "app/Support/DecimalDigits.php",
+          content: runtimePhp(new URL("./php/app/Support/DecimalDigits.php", import.meta.url)),
+        },
+      ]
+    : [];

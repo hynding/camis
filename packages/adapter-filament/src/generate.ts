@@ -59,7 +59,7 @@ import { emitModel } from "./model";
 import { filamentNames, snake, snakeColumn } from "./names";
 import { constrainedColumn, resolveRelations, type ForeignKeyColumn } from "./relations";
 import { filamentReservedNameGaps } from "./reserved-names";
-import { filamentDecimalGaps } from "./decimals";
+import { decimalDigitsFiles, filamentDecimalGaps } from "./decimals";
 import { emitResourceFiles } from "./resource";
 import { draftPublishPlan } from "./strapi-api/core/draft-publish";
 import { guestsPlan } from "./strapi-api/core/guests";
@@ -485,9 +485,9 @@ export const filamentAdapter: GenerateAdapter = {
             ],
             {
               secured: ir.roles.length > 0,
-              decimals: [...ownEmits, ...embeddedEmits]
-                .filter((e) => e.decimalDigits === true)
-                .map((e) => e.column),
+              decimals: [...ownEmits, ...embeddedEmits].flatMap((e) =>
+                e.decimalDigits === undefined ? [] : [{ column: e.column, ...e.decimalDigits }],
+              ),
             },
           ),
         });
@@ -507,6 +507,7 @@ export const filamentAdapter: GenerateAdapter = {
       });
     }
     files.push(apiCustomSeed());
+    files.push(...decimalDigitsFiles(doc));
     // Edited in the admin, which the Strapi storage layout does not have.
     if (storage !== "strapi" && hasBlocksFields(doc)) {
       files.push(...emitBlocksFiles(fileModel !== undefined));

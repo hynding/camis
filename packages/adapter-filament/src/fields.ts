@@ -1,4 +1,4 @@
-import { decimalDigits } from "@camis/ir-core";
+import { decimalDigits, type DecimalDigits } from "@camis/ir-core";
 import type { Field } from "@camis/ir-schema";
 import { beyondPhpFloat } from "./decimals";
 import { snakeColumn } from "./names";
@@ -12,8 +12,8 @@ export interface FieldEmit {
   formImport: string;
   tableImport: string;
   cast?: string;
-  /** A decimal stating its digits, which an API takes a JSON number for as its shortest digits. */
-  decimalDigits?: true;
+  /** A decimal's stated digits, at which an API writes it. */
+  decimalDigits?: DecimalDigits;
 }
 
 const TEXT_INPUT = "Filament\\Forms\\Components\\TextInput";
@@ -77,6 +77,11 @@ const decimalColumn = (field: Field, c: string): string => {
   // Its digits, a sign and a point.
   const text = `$table->string('${c}', ${digits.precision + 2})`;
   return `(Schema::getConnection()->getDriverName() === 'sqlite' ? ${text} : ${decimal})`;
+};
+
+const digitsOf = (field: Field): { decimalDigits?: DecimalDigits } => {
+  const digits = decimalDigits(field);
+  return digits === undefined ? {} : { decimalDigits: digits };
 };
 
 interface Base {
@@ -265,6 +270,6 @@ export const emitField = (field: Field, columnOverride?: string): FieldEmit => {
     formImport: b.formImport,
     tableImport: b.tableImport,
     ...(b.cast ? { cast: b.cast } : {}),
-    ...(decimalDigits(field) === undefined ? {} : { decimalDigits: true as const }),
+    ...digitsOf(field),
   };
 };

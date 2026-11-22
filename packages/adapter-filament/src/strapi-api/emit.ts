@@ -104,7 +104,7 @@ import {
   linkOrderColumns,
   toOneLinkOrders,
 } from "./core/link-order";
-import { emitSerializer } from "./core/serializer";
+import { emitSerializer, statesDecimalDigits } from "./core/serializer";
 import {
   emitRoleController,
   emitSessionController,
@@ -469,7 +469,10 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     content: emitStrapiErrorsMiddleware(),
   });
   files.push({ path: "app/Support/StrapiError.php", content: emitStrapiError() });
-  files.push({ path: "app/Support/StrapiQuery.php", content: emitStrapiQuery(secured) });
+  files.push({
+    path: "app/Support/StrapiQuery.php",
+    content: emitStrapiQuery(secured, [...shapes.values()].some(statesDecimalDigits)),
+  });
   files.push({ path: "app/Support/StrapiPopulate.php", content: emitStrapiPopulate() });
   files.push({ path: "app/Support/StrapiRelations.php", content: emitStrapiRelations() });
   files.push({ path: "app/Support/StrapiMorphs.php", content: emitStrapiMorphs() });

@@ -194,8 +194,8 @@ const fromWireColumns = (scalars: WireScalar[], src: string, indent: string): st
       const taken =
         s.type === "timestamp"
           ? `self::epoch(${value})`
-          : s.digits === true
-            ? `self::decimal(${value})`
+          : s.digits !== undefined
+            ? `self::decimal(${value}, ${s.digits.precision}, ${s.digits.scale}, '${s.key.join(".")}')`
             : value;
       return `${indent}'${s.column}' => ${taken},`;
     })
@@ -376,15 +376,25 @@ const hasHelper = `
     }`;
 
 // Emitted only for a shape with a timestamp scalar, so no other serializer carries it unused.
-// PHP writes a float as a string of 14 significant digits (its `precision`), which is how PDO
-// binds one: a JSON number written to a decimal stating its digits is taken as var_export's
-// shortest string reading back as the same double instead.
+// Emitted only for a shape writing a decimal stating its digits. SQLite keeps one beyond a PHP
+// float as text, which takes any string: every value is kept as MySQL and PostgreSQL keep it, at
+// its scale, and one that is not a decimal or does not fit is refused before it is written.
 const decimalHelper = `
 
-    /** A decimal as Strapi takes one: its string, or a number as its shortest digits. */
-    private static function decimal(mixed $value): mixed
+    /** A decimal stating its digits as its column keeps it, from a string or a number; refused when it is not one that fits. */
+    private static function decimal(mixed $value, int $precision, int $scale, string $path): ?string
     {
-        return is_float($value) ? var_export($value, true) : $value;
+        if ($value === null) {
+            return null;
+        }
+        $decimal = DecimalDigits::canonical($value, $precision, $scale);
+        if ($decimal === null) {
+            $message = "{$path} must be a decimal of at most {$precision} digits, {$scale} of them after the point";
+
+            throw StrapiError::validation($message, ['errors' => [['path' => explode('.', $path), 'message' => $message, 'name' => 'ValidationError']]]);
+        }
+
+        return $decimal;
     }`;
 
 const epochHelper = `
@@ -419,11 +429,19 @@ const writesScalar = (
   ].some(which);
 };
 
+/** Whether a shape writes or filters a decimal stating its digits, at any depth. */
+export const statesDecimalDigits = (shape: WireShape): boolean =>
+  writesScalar(shape, shape.zones, (s) => s.digits !== undefined);
+
 const privateEntry = (entry: { private?: true }): string =>
   entry.private === true ? ", 'private' => true" : "";
 
+// A decimal stating its digits carries its scale, at which StrapiQuery compares a filter's value.
+const scaleEntry = (s: WireScalar): string =>
+  s.digits === undefined ? "" : `, 'scale' => ${s.digits.scale}`;
+
 const fieldEntry = (s: WireScalar, indent: string): string =>
-  `${indent}'${s.key.join(".")}' => ['column' => '${s.column}', 'type' => '${s.type}'${privateEntry(s)}],`;
+  `${indent}'${s.key.join(".")}' => ['column' => '${s.column}', 'type' => '${s.type}'${scaleEntry(s)}${privateEntry(s)}],`;
 
 const column = (c: string | null | undefined): string => (c == null ? "null" : `'${c}'`);
 
@@ -497,10 +515,13 @@ export const emitSerializer = (shape: WireShape, layout: StorageLayout = "larave
   const hasHelperBody = shape.children.length === 0 ? "" : hasHelper;
   const zoneHelperBody = zones.length === 0 ? "" : zoneHelper;
   const epochHelperBody = hasTimestamp(shape, zones) ? epochHelper : "";
-  const decimalHelperBody = writesScalar(shape, zones, (s) => s.digits === true)
+  const decimalHelperBody = writesScalar(shape, zones, (s) => s.digits !== undefined)
     ? decimalHelper
     : "";
   const zoneImport = [
+    ...(decimalHelperBody === ""
+      ? []
+      : ["\nuse App\\Support\\DecimalDigits;", "\nuse App\\Support\\StrapiError;"]),
     ...(shape.children.some(itemsLinkAnything) ? ["\nuse App\\Support\\StrapiItems;"] : []),
     ...(zones.length === 0 ? [] : ["\nuse App\\Support\\StrapiZones;"]),
   ].join("");

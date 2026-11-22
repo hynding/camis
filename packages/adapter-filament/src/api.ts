@@ -1,4 +1,5 @@
 import type { GeneratedFile } from "@camis/adapter-kernel";
+import type { DecimalDigits } from "@camis/ir-core";
 import {
   ROUTE_ACTIONS,
   servesApiAction,
@@ -7,10 +8,14 @@ import {
 } from "@camis/ir-schema";
 import { filamentNames, snake, snakeColumn } from "./names";
 
+export interface DecimalColumn extends DecimalDigits {
+  column: string;
+}
+
 export interface ApiOptions {
   secured: boolean;
-  /** The columns of decimals stating their digits, whose JSON numbers are taken as their digits. */
-  decimals?: string[];
+  /** The columns of decimals stating their digits, each written as its column keeps it. */
+  decimals?: DecimalColumn[];
   /** Content types whose routes run the IR's route policies and middlewares. */
   hooked?: ReadonlySet<string>;
 }
@@ -54,11 +59,11 @@ declare(strict_types=1);
 namespace App\\Http\\Controllers\\Api;
 
 use App\\Http\\Controllers\\Controller;
-use App\\Models\\${model};${
+use App\\Models\\${model};${decimals.length === 0 ? "" : "\nuse App\\Support\\DecimalDigits;"}${
     options.secured ? "\nuse Illuminate\\Foundation\\Auth\\Access\\AuthorizesRequests;" : ""
   }
 use Illuminate\\Http\\JsonResponse;
-use Illuminate\\Http\\Request;
+use Illuminate\\Http\\Request;${decimals.length === 0 ? "" : "\nuse Illuminate\\Validation\\ValidationException;"}
 
 class ${model}ApiController extends Controller
 {
@@ -96,23 +101,28 @@ ${auth(`$this->authorize('delete', $${param});`)}        $${param}->delete();
 `;
 };
 
-const decimalsConstant = (decimals: string[]): string =>
+const decimalsConstant = (decimals: DecimalColumn[]): string =>
   decimals.length === 0
     ? ""
-    : `\n    /** Decimals stating their digits. */\n    private const DECIMALS = [${decimals.map((c) => `'${c}'`).join(", ")}];\n`;
+    : `\n    /** Decimals stating their digits: each column's precision and scale. */\n    private const DECIMALS = [${decimals.map((d) => `'${d.column}' => [${d.precision}, ${d.scale}]`).join(", ")}];\n`;
 
-// PHP writes a float as a string of 14 significant digits (its `precision`), which is how PDO
-// binds one: a JSON number for a decimal stating its digits is taken as var_export's shortest
-// string reading back as the same double instead.
+// SQLite keeps a decimal beyond a PHP float as text, which takes any string: every value is kept
+// as MySQL and PostgreSQL keep it, at its scale, and one that is not a decimal or does not fit is
+// refused before it is written, with a 400 in Laravel's validation error shape.
 const WITH_DECIMALS = `
 
-    /** The payload with each decimal's JSON number as its shortest digits. */
+    /** The payload with each decimal stating its digits as its column keeps it, from a string or a number. */
     private static function withDecimals(array $payload): array
     {
-        foreach (self::DECIMALS as $column) {
-            if (is_float($payload[$column] ?? null)) {
-                $payload[$column] = var_export($payload[$column], true);
+        foreach (self::DECIMALS as $column => [$precision, $scale]) {
+            if (($payload[$column] ?? null) === null) {
+                continue;
             }
+            $decimal = DecimalDigits::canonical($payload[$column], $precision, $scale);
+            if ($decimal === null) {
+                throw ValidationException::withMessages([$column => "The {$column} field must be a decimal of at most {$precision} digits, {$scale} of them after the point."])->status(400);
+            }
+            $payload[$column] = $decimal;
         }
 
         return $payload;
