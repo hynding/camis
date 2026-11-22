@@ -204,6 +204,16 @@ describe("users-permissions sessions", () => {
       "if ($session === null || ! StrapiSessions::revoke($user, $session)) {",
     );
   });
+  // An operator must learn how a bucket is keyed to judge who shares it, and which knob lifts the
+  // ceiling an office behind one address meets.
+  it("documents per-identifier keying, the address ceiling and failure-only refresh counting", () => {
+    const deploy = content("DEPLOY.md");
+    expect(deploy).toContain("CAMIS_AUTH_ADDRESS_THROTTLE_PER_MINUTE");
+    expect(deploy).toContain("| password-reset |");
+    expect(deploy).toContain("per client address and the account it names");
+    expect(deploy).toContain("Only a refresh that fails is counted");
+    expect(deploy).not.toContain("A bucket counts per client address,\nexcept a password change");
+  });
   it("issues sessions from login, registration and a password change or reset", () => {
     const auth = content("app/Http/Controllers/Api/AuthController.php");
     expect(auth).toContain("StrapiSessions::login($request, $user)");
