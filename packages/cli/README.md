@@ -250,10 +250,15 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
   400, `UnauthorizedError` 401, `ForbiddenError` 403, `NotFoundError` 404, otherwise
   `HttpError`), and the error envelope applies to every route registered in `routes/api.php` or
   `routes/api-custom.php`; requests to unmatched paths under `/api` fall back to Laravel's
-  default 404 shape. Login and registration share one throttle bucket per client IP; its rate
-  comes from the generated `config/camis.php` and is overridable with
+  default 404 shape. Login and registration share one throttle bucket per client IP (with the
+  Strapi API style, so do refresh, password change, the password reset and confirmation routes and
+  the provider callbacks, `GET /auth/local/callback` included, and a 429 carries `Retry-After`);
+  its rate comes from the generated `config/camis.php` and is overridable with
   `CAMIS_AUTH_THROTTLE_PER_MINUTE` in `.env` (default 10 requests per minute, floored at 1, so a
-  typo cannot lock the endpoints out). Set `SANCTUM_TOKEN_EXPIRATION` in `.env` to bound token
+  typo cannot lock the endpoints out). CORS allows credentials only for origins listed in
+  `CAMIS_CORS_ORIGIN`, never with `*`; the refresh cookie is refused cross-site and defaults to
+  `Secure`, `SameSite=Strict` and `Path=/api/auth`. The generated `DEPLOY.md` lists every setting
+  and what an upgrade changes. Set `SANCTUM_TOKEN_EXPIRATION` in `.env` to bound token
   lifetime (tokens do not expire by default).
   Each controller is a generated base under
   `app/Http/Controllers/Api/Generated/` plus a seed-mode subclass you may override. The Strapi

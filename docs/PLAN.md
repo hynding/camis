@@ -3296,6 +3296,39 @@ reaching through it is served (`api-enforcement.test.ts`); roles without any con
 './permissions/conditions'"); the boot job's custom token gets 403, with the message, on
 `/api/notes`, `/api/front` and `/api/upload/files`.
 
+## Phase 96 — credential routes and the refresh cookie hardened (`adapter-filament`)
+
+**Goal:** the strapi-php target answers Strapi's sign-in routes without the weaknesses Strapi 5.48
+ships with, keeping every Strapi client that sends its tokens in the body or the `Authorization`
+header working unchanged.
+
+- **Throttling.** `/auth/refresh`, `/auth/change-password` (Strapi rate-limits it too) and
+  `GET /auth/{provider}/callback` join the credential throttle. For provider `local` that route
+  is Strapi's password login (`auth.callback`), which Strapi leaves without its rate limit; camis
+  keeps the route but never checks a password unthrottled. A throttled answer keeps its
+  `Retry-After`: `StrapiErrors` now carries an HTTP exception's headers onto the envelope.
+- **CORS.** `config/cors.php` allows credentials only for origins listed in `CAMIS_CORS_ORIGIN`,
+  never with `*` (Strapi echoes any origin with credentials, so any site could refresh a visitor's
+  cookie session and read the access token). `X-Requested-With` and `x-strapi-refresh-cookie` are
+  allowed and `Retry-After` exposed by default. This reverses the Phase 50-era default for a
+  cookie client on another origin, which now needs its origin listed.
+- **The refresh cookie.** On `/auth/refresh` the cookie is taken only from the app's own origin, a
+  CORS origin allowed credentials, or a request without an `Origin` carrying `X-Requested-With` or
+  `x-strapi-refresh-cookie`; otherwise 403 `ForbiddenError`. Logout needs the access token, so the
+  cookie is never its only credential. The cookie defaults to `Secure` (`false` honoured only with
+  `APP_ENV=local`), `SameSite=Strict`, `Path=/api/auth`, and a lifetime equal to what its
+  session's absolute lifespan has left, where Strapi sets `lax`, Secure in production only, `/`
+  and a browser-session cookie. Body mode stays the default (`CAMIS_SESSIONS_HTTP_ONLY=false`), as
+  in Strapi: turning the cookie on by default would drop `refreshToken` from every login body.
+- **Docs.** DEPLOY.md gains a CORS and a Sign-in sessions section with an upgrade list;
+  `deployment.env` notes that credentials go to listed origins only.
+
+**Tests:** `cors.test.ts` evaluates `config/cors.php` under PHP for each env contract;
+`sessions.test.ts`, `oauth.test.ts`, `auth.test.ts`, `users-permissions.test.ts` and
+`generate-strapi.test.ts` pin the routes and runtime; `scripts/php/AuthSecurityTest.php` (CI, with
+uncached routes and a rate of 3) exercises the throttles and `Retry-After`, preflights, the refused
+and accepted cookie refreshes, and the cookie's attributes and lifetime.
+
 ---
 
 ## Sequencing rationale (quick reference)

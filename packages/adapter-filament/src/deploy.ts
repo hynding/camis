@@ -76,8 +76,8 @@ The Strapi API style adds a NOT NULL unique \`username\` column to \`users\`; ru
 against an empty users table, or backfill usernames first. Two \`.env\` knobs govern its auth
 endpoints: \`SANCTUM_TOKEN_EXPIRATION\` bounds token lifetime (tokens do not expire by default),
 and \`CAMIS_AUTH_THROTTLE_PER_MINUTE\` (default 10, floored at 1) sets the request rate allowed
-on \`/auth/local\` and \`/auth/local/register\` — one bucket per client address, shared by both
-routes. The throttle is read through the generated \`config/camis.php\`; after changing it
+on \`/auth/local\` and \`/auth/local/register\` (with the Strapi API style, on every credential
+route: see Sign-in sessions) — one bucket per client address, shared by all of them. The throttle is read through the generated \`config/camis.php\`; after changing it
 re-run \`php artisan config:cache\`, and \`php artisan route:cache\` too if routes are cached —
 the rate is baked into the cached route definition.
 
@@ -126,6 +126,78 @@ const offlineStep = (layout: StorageLayout): string =>
 job runner, or locally against the production database.`
     : `Run the migrate/seed steps via your host's one-off job runner, or
 locally against the production database.`;
+
+/** strapi::cors as config/cors.php has it, and where it is stricter than Strapi. */
+const corsSection = `
+
+## CORS
+
+\`config/cors.php\` is Strapi's \`strapi::cors\` with one deliberate difference: credentials
+(cookies) are allowed only for origins listed in \`CAMIS_CORS_ORIGIN\`, never with \`*\`. With the
+default \`*\` any origin is answered with \`Access-Control-Allow-Origin: *\` and no credentials,
+which is all a client sending its token in the \`Authorization\` header needs. Strapi echoes any
+origin with credentials instead, which lets any site read what a visitor's cookies buy.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| \`CAMIS_CORS_ORIGIN\` | \`*\` | Comma-separated origins (\`https://app.example.com,https://admin.example.com\`); \`*\` is any origin, without credentials |
+| \`CAMIS_CORS_CREDENTIALS\` | \`true\` | Allow credentials for the listed origins; never applied with \`*\` |
+| \`CAMIS_CORS_HEADERS\` | \`Content-Type,Authorization,Origin,Accept,X-Requested-With,x-strapi-refresh-cookie\` | Request headers allowed; \`*\` allows any |
+| \`CAMIS_CORS_EXPOSE\` | \`Retry-After\` | Response headers a browser lets the caller read, so a throttled client knows when to retry |
+| \`CAMIS_CORS_METHODS\`, \`CAMIS_CORS_MAX_AGE\` | Strapi's | As in \`strapi::cors\` |
+
+Re-run \`php artisan config:cache\` after changing them.`;
+
+/** users-permissions' credential routes, its refresh cookie and what an upgrade changes. */
+const sessionsSection = `
+
+## Sign-in sessions
+
+Every route that checks a password or a refresh token shares \`CAMIS_AUTH_THROTTLE_PER_MINUTE\`,
+one bucket per client address: \`POST /auth/local\`, \`/auth/local/register\`,
+\`/auth/forgot-password\`, \`/auth/reset-password\`, \`/auth/send-email-confirmation\`,
+\`/auth/refresh\` and \`/auth/change-password\`, \`GET /connect/{provider}\` and its callback,
+and \`GET /auth/{provider}/callback\` (for \`/auth/local/callback\` Strapi's password login, which
+Strapi itself leaves unthrottled). A throttled request answers 429 in Strapi's error envelope with
+\`Retry-After\`.
+
+With \`CAMIS_JWT_MANAGEMENT=refresh\` a client may keep its refresh token in an httpOnly cookie
+rather than the response body: for every request with \`CAMIS_SESSIONS_HTTP_ONLY=true\`, or per
+request with the \`x-strapi-refresh-cookie: httpOnly\` header. The body stays the default, as in
+Strapi. The cookie is always HttpOnly, and stricter than Strapi's by default:
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| \`CAMIS_SESSIONS_COOKIE_SECURE\` | \`true\` | \`false\` is honoured only with \`APP_ENV=local\` (browsers accept a Secure cookie from \`http://localhost\`) |
+| \`CAMIS_SESSIONS_COOKIE_SAME_SITE\` | \`strict\` | A frontend on another site (not the API's own domain or a subdomain of it) needs \`none\` |
+| \`CAMIS_SESSIONS_COOKIE_PATH\` | \`/api/auth\` | Sent to \`/api/auth/refresh\` and \`/api/auth/logout\` alone |
+| \`CAMIS_SESSIONS_COOKIE_DOMAIN\`, \`CAMIS_SESSIONS_COOKIE_NAME\` | host only, \`strapi_up_refresh\` | As in Strapi |
+
+The cookie lasts until its session's absolute expiry (\`CAMIS_MAX_REFRESH_TOKEN_LIFESPAN\`), not
+just the browser session.
+
+On \`/auth/refresh\` the cookie is the only credential, and a browser attaches it to a request any
+site makes. It is taken only from a request whose \`Origin\` is this app's own (\`APP_URL\` or the
+request's own scheme and host) or a CORS origin allowed credentials, or from a request with no
+\`Origin\` that carries \`X-Requested-With\` or \`x-strapi-refresh-cookie\` (headers a page of
+another site cannot send without a preflight CORS refuses). Anything else answers 403
+\`ForbiddenError\`. A refresh token sent in the JSON body is unaffected. Behind a TLS-terminating
+proxy, configure Laravel's trusted proxies so the request's own origin reads \`https\`.
+
+### Upgrading
+
+- A browser client on another origin that sends the refresh cookie needs its origin listed in
+  \`CAMIS_CORS_ORIGIN\`: with \`*\` credentials are no longer allowed.
+- A cookie refresh with neither an allowed \`Origin\` nor one of the two headers is refused:
+  send \`x-strapi-refresh-cookie: httpOnly\` (Strapi's own header) or \`X-Requested-With\`.
+- The cookie moved to \`Path=/api/auth\`, \`SameSite=Strict\`, \`Secure\` and a Max-Age. A cookie set
+  before, at \`/\` for the browser session, stays until the browser closes; the new one is sent
+  first and wins, but logout clears only the new path. A deployment served over plain HTTP outside
+  local development must move to HTTPS, and a frontend on another site must set
+  \`CAMIS_SESSIONS_COOKIE_SAME_SITE=none\`.
+- \`/auth/refresh\`, \`/auth/change-password\` and \`GET /auth/{provider}/callback\` now count
+  against the throttle: raise \`CAMIS_AUTH_THROTTLE_PER_MINUTE\` if many clients share one address,
+  then re-run \`php artisan config:cache\` and \`php artisan route:cache\`.`;
 
 /** Strapi's GraphQL endpoint: its library, its route outside /api, and its parsed-schema cache. */
 const graphqlSection = `
@@ -222,6 +294,10 @@ export interface DeployExtras {
   schedules?: boolean;
   /** Strapi's MCP server: the Strapi API style with roles, so admin tokens to sign in with. */
   mcp?: boolean;
+  /** config/cors.php: the Strapi API style, on either storage layout. */
+  cors?: boolean;
+  /** users-permissions' sessions and credential routes: the Strapi API style over Laravel storage. */
+  sessions?: boolean;
 }
 
 const mcpSection = `
@@ -260,6 +336,8 @@ export const deployFile = (
     transfer = false,
     schedules = false,
     mcp = false,
+    cors = false,
+    sessions = false,
   }: DeployExtras = {},
 ): GeneratedFile => ({
   path: "DEPLOY.md",
@@ -299,7 +377,7 @@ DB_PASSWORD=secret
 
 ${firstDeploy(layout)}
 
-${layout === "strapi" ? "" : adminSection}${graphql ? graphqlSection.slice(2) + "\n\n" : ""}${documentation ? documentationSection.slice(2) + "\n\n" : ""}${transfer ? transferSection.slice(2) + "\n\n" : ""}${schedules ? schedulesSection.slice(2) + "\n\n" : ""}${mcp ? mcpSection.slice(2) + "\n\n" : ""}## Shared hosting (no shell)
+${layout === "strapi" ? "" : adminSection}${cors ? corsSection.slice(2) + "\n\n" : ""}${sessions ? sessionsSection.slice(2) + "\n\n" : ""}${graphql ? graphqlSection.slice(2) + "\n\n" : ""}${documentation ? documentationSection.slice(2) + "\n\n" : ""}${transfer ? transferSection.slice(2) + "\n\n" : ""}${schedules ? schedulesSection.slice(2) + "\n\n" : ""}${mcp ? mcpSection.slice(2) + "\n\n" : ""}## Shared hosting (no shell)
 
 Build locally (scaffold + \`camis build\` + \`composer install\`), upload the whole app
 directory, and point the document root at \`public/\`. Laravel's \`.htaccess\` ships in
