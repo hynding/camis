@@ -43,7 +43,10 @@ const fakeIo = (opts: {
   const madeDirs: string[] = [];
   const lines: string[] = [];
   const written: Record<string, string> = {};
-  const files = { "/proj/app/bootstrap/providers.php": STOCK_PROVIDERS, ...(opts.files ?? {}) };
+  const files: Record<string, string> = {
+    "/proj/app/bootstrap/providers.php": STOCK_PROVIDERS,
+    ...(opts.files ?? {}),
+  };
   const execResults = opts.execResults ?? [];
   const io: Io = {
     readFile: (p) =>
