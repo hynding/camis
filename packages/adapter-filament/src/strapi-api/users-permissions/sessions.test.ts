@@ -201,6 +201,25 @@ describe("users-permissions sessions", () => {
     expect(deploy).toContain("fastcgi_finish_request");
   });
 
+  // What each of these settings costs, and what is still told apart, is the operator's to weigh.
+  it("documents the mail bound, imported hashes, the hash driver and GraphQL registration", () => {
+    const deploy = content("DEPLOY.md");
+    const upgrading = deploy.slice(deploy.indexOf("### Upgrading"));
+    for (const text of [
+      "CAMIS_ACCOUNT_MAIL_PER_HOUR",
+      "ConfirmationPendingError",
+      "prependToPriorityList",
+      "a username that is an email address",
+    ]) {
+      expect(deploy).toContain(text);
+      expect(upgrading).toContain(text);
+    }
+    expect(deploy).toContain("BCRYPT_ROUNDS=10");
+    expect(deploy).toContain("until their first sign-in");
+    expect(deploy).toContain("HASH_DRIVER");
+    expect(deploy).toContain("a confirmation mail instead of the notice");
+  });
+
   // Behind a proxy that Laravel does not trust every client has the proxy's address, and so one
   // bucket; the operator must learn that, and that a password change counts per account.
   it("documents the throttle's buckets, the refresh rate and trusted proxies in DEPLOY.md", () => {
