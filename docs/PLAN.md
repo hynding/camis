@@ -3423,6 +3423,81 @@ none; `generate.test.ts` in the CLI fails with a located message per name and wr
 
 ---
 
+## Phase 98 — decimals state their digits (`ir-schema`, `ir-core`, `strapi-schema`, `adapter-strapi`, `adapter-filament`, `adapter-express`, `ai-authoring`)
+
+A `decimal` could not state its precision or scale (issue #104): the Filament target migrated
+`$table->decimal('value')`, Laravel's (8, 2), cast `decimal:2`, so 12345678901.123456 read back as
+12345678901.12 on SQLite and overflowed MySQL and PostgreSQL; the Strapi target got Strapi's
+decimal(10, 2), and a double on SQLite.
+
+- **The IR.** A decimal takes `precision` and `scale`, both or neither (`invalid_decimal_digits`,
+  located at the field's `precision` or `scale`). Bounds: precision 1 to 65, scale 0 to 30 and at
+  most the precision. They are MySQL's DECIMAL's; PostgreSQL's NUMERIC takes 1000 digits and SQLite
+  declares any, so MySQL's are what every database every target runs on takes. Both together,
+  because the targets' defaults differ ((8, 2), (10, 2), Drizzle's), so a scale alone would mean a
+  different precision per target, and a scale cannot be checked against a precision no one stated.
+  Without them each target emits what it did before, byte for byte (every existing golden is
+  unchanged). `ir-core`'s `decimalDigits`, `beyondDouble` and `decimalsBeyondDouble` are what the
+  targets share: `DOUBLE_DIGITS`, 15, is the significant digits of which a double keeps every
+  decimal exactly (DBL_DIG), so a decimal of more digits must not pass through a float.
+- **Filament.** `$table->decimal('x', p, s)` and the cast `decimal:s` (Laravel 12's decimal cast
+  reads the column as a string at the scale through brick/math, never as a float). SQLite keeps a
+  decimal column (NUMERIC affinity) as a double, which keeps 15 significant digits; a decimal
+  beyond a double is therefore `$table->string('x', p + 2)` on SQLite and DECIMAL elsewhere, chosen
+  by the connection's driver when the migration runs, so one generated migration serves every
+  database with no code change. PHP writes a float as a string of 14 significant digits (its
+  `precision` setting), which is how PDO binds one, so a JSON number written to a decimal stating
+  its digits is taken as `var_export`'s shortest string reading back as the same double: in the
+  Strapi API style's serializers (`fromWire`) and the Laravel API style's controllers
+  (`withDecimals`), each emitted only where a type has such a decimal.
+- **The wire.** A JSON number of 17 significant digits is rounded by every JavaScript client, and
+  PHP's `json_decode` reads it as a double too. The Laravel API style already answered every
+  decimal as a string (its `decimal:N` cast), and keeps doing so. The Strapi API style answers a
+  decimal beyond a double as a string, over REST (`toWire`), GraphQL (`String`, filtered by
+  `StringFilterInput`), the OpenAPI document (answered `string`, taken `string` or `number`) and
+  the content manager's MCP tools (taken as either); every other decimal stays the number Strapi
+  answers, so a project without such a decimal answers exactly as before. A client keeps every
+  digit by sending the value as a string; the API takes either.
+- **What Filament reports.** A `decimalPrecision` downgrade gap, located at the content type or
+  component and the field, for each decimal beyond a double on the Strapi API style: on SQLite its
+  text compares as text in a filter or a sort, and a data-transfer archive carries it as a number,
+  as Strapi's archives do, rounded to 15 digits. On Strapi's storage layout the column is the one
+  Strapi made, which SQLite keeps as a double: the same gap says so. The Laravel API style neither
+  filters nor sorts, so it reports none.
+- **Strapi.** Strapi 5.48's database layer (the `@strapi/database` the repository's tests install)
+  makes a decimal column decimal(10, 2) and then lays the attribute's `column` over it
+  (`createColumn` spreads `attribute.column` last), and `@strapi/core` 5.48 (read from its published
+  package, which the repository does not install) passes a scalar attribute to it unchanged and
+  does not refuse unknown attribute keys; so a decimal stating its
+  digits gets `"column": { "type": "decimal", "args": [p, s] }`. Strapi reads and writes every
+  decimal as a JavaScript number whatever its column (the database layer's `NumberField` converts
+  with `Number()` and lodash's `toNumber`, the REST API validates `z.number()`), so a decimal
+  beyond a double is rounded to 15 significant digits on every database: a `decimalPrecision` gap,
+  located. It is a downgrade, as `softDelete` and `privateField` are: the project generates and runs
+  and the field keeps its 15 leading digits; an `error` is for what makes a target refuse or
+  overwrite data outright (`reservedFieldName`). Within a double a decimal is exact: its column has
+  the stated digits on MySQL and PostgreSQL, and SQLite's double keeps every value of 15 digits.
+  Strapi's Content-Type Builder does not show `column`, so a type saved there loses it.
+- **Express.** `decimal('x', { precision, scale })` on MySQL, `numeric('x', { precision, scale })`
+  on PostgreSQL; SQLite takes no digits, so `numeric('x')`, or `text('x')` (its default as text) for
+  a decimal beyond a double. Drizzle answers decimals as strings on MySQL and PostgreSQL already,
+  and the generated API sorts rows in JavaScript, so text on SQLite changes neither; no gap.
+- **Import.** The Strapi importer reads the digits back from `column`, so a generated schema
+  round trips; column settings on a decimal that are not digits the IR takes are reported
+  (`decimalColumn`, a downgrade) and the field imported without them. The AI authoring prompt says
+  a decimal may state both.
+
+Exit: `fields.test.ts` and `parse.test.ts` in `ir-schema`; `decimals.test.ts` in
+`adapter-filament` (goldens of both API styles' migrations, models, the Laravel controller and the
+Strapi serializer; GraphQL, OpenAPI and MCP; the gaps), `adapter-strapi` (schema.json goldens, the
+gap, the round trip) and `adapter-express` (a schema golden per dialect); `attributes.test.ts` in
+`strapi-schema` and the importer. The round trip of 12345678901.123456 with precision 20 and scale 6
+runs in CI on SQLite, MySQL and PostgreSQL: on the Laravel API style in the `boot` job (the boot
+fixture's `Article.balance`, written through the API and read back), on the Strapi API style in
+the `decimals` job (the decimals fixture, `DecimalsTest`, over REST and GraphQL).
+
+---
+
 ## Sequencing rationale (quick reference)
 
 1. **Strapi first** — mature schema validates the IR fastest, with the thinnest adapter.

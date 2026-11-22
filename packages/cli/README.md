@@ -94,6 +94,34 @@ field. A gap is reported only where the target emits the colliding column or key
 
 `id` is refused by `camis validate` itself, since every target keeps it.
 
+A `decimal` may state its digits, `precision` (all of them, 1 to 65) and `scale` (those after the
+point, 0 to 30 and at most the precision), both or neither: `camis validate` refuses one without
+the other, or out of bounds (`invalid_decimal_digits`), MySQL's DECIMAL being the narrowest
+database every target runs on. Without them each target keeps its own default, as before: (8, 2)
+on Filament, Strapi's (10, 2), Drizzle's `decimal`/`numeric` on Express. With them:
+
+- `filament`: `$table->decimal('x', p, s)` and the cast `decimal:s`, which reads the value as a
+  string. A decimal of more than 15 digits, more than a double keeps, is DECIMAL on MySQL and
+  PostgreSQL and text on SQLite (decided by the connection when it migrates), so every digit is
+  kept on all three. The Laravel API style answers every decimal as a string, as it always has;
+  the Strapi API style answers a decimal of more than 15 digits as a string (a JSON number of that
+  many digits is rounded by every JavaScript client), over REST, GraphQL (`String`), the OpenAPI
+  document and the MCP tools, and every other decimal as the number Strapi answers. Send such a
+  value as a string: a JSON number is a double by the time PHP reads it, and is taken as its
+  shortest digits (not PHP's own 14-digit string of a float). On the Strapi API style a filter or
+  a sort on a decimal of more than 15 digits compares text on SQLite, and a data-transfer archive
+  carries it as a number, as Strapi's do (a `decimalPrecision` downgrade gap, located at the type
+  or component and the field); on Strapi's storage layout the column is Strapi's, which SQLite
+  keeps as a double (the same gap).
+- `strapi`: the attribute's column settings, `"column": { "type": "decimal", "args": [p, s] }`,
+  which Strapi's database layer lays over the decimal(10, 2) it makes. Strapi itself reads and
+  writes a decimal as a JavaScript number on every database, so a decimal of more than 15 digits
+  is rounded to 15 significant digits: a `decimalPrecision` downgrade gap. The importer reads the
+  digits back from these settings, and reports other column settings on a decimal
+  (`decimalColumn`) rather than dropping them silently.
+- `express`: `decimal('x', { precision, scale })` on MySQL, `numeric(...)` on PostgreSQL; SQLite
+  takes no digits, so `numeric('x')`, or `text('x')` for a decimal of more than 15 digits.
+
 ## camis.config.json
 
 ```json
