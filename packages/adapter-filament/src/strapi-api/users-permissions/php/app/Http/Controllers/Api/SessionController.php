@@ -26,7 +26,7 @@ final class SessionController extends Controller
         return StrapiSessions::respond($request, $tokens);
     }
 
-    /** One session (the request's own, by its access token or else its refresh token), a device's, or all. */
+    /** The request's own session (its access token's), a device's, or all. */
     public function logout(Request $request): JsonResponse
     {
         self::refreshOnly();
@@ -38,9 +38,10 @@ final class SessionController extends Controller
         } elseif (is_string($deviceId) && $deviceId !== '') {
             StrapiSessions::invalidate($user, $deviceId);
         } else {
-            // The access token names the caller's own session; the cookie may be another tab's.
-            $session = StrapiSessions::current($request) ?? $cookieSession;
-            $session === null ? StrapiSessions::invalidate($user) : StrapiSessions::revoke($user, $session);
+            // The access token names the caller's own session; the cookie may be another tab's. A
+            // token naming none (one issued before refresh mode) ends itself alone.
+            $session = StrapiSessions::current($request);
+            $session === null ? StrapiSessions::dropAccessToken($request) : StrapiSessions::revoke($user, $session);
         }
         $response = response()->json(['ok' => true]);
 

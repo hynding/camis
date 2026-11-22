@@ -192,6 +192,15 @@ final class StrapiSessions
         return true;
     }
 
+    /** Revokes the request's access token itself, for a token that no session issued. */
+    public static function dropAccessToken(Request $request): void
+    {
+        $token = $request->user()?->currentAccessToken();
+        if (is_a($token, Sanctum::$personalAccessTokenModel)) {
+            $token->delete();
+        }
+    }
+
     /** Ends every session of $user, or every one on a device. */
     public static function invalidate(User $user, ?string $deviceId = null): void
     {

@@ -91,6 +91,8 @@ class AuthSecurityTest extends TestCase
         $this->app['auth']->shouldUse('web');
         $this->app['auth']->forgetGuards();
         $this->flushHeaders();
+        $this->unencryptedCookies = [];
+        $this->withCredentials = false;
     }
 
     private function login(string $username): TestResponse
