@@ -49,17 +49,24 @@ const DECIMAL_DIGITS_RUNTIME = [
   "app/Support/DecimalDigits.php",
 ];
 
+const UNIQUE_RULE = "app/Rules/DecimalDigitsUniqueRule.php";
+
 /**
  * What writes a decimal stating its digits, through Eloquent (DecimalDigitsCast) and the admin's
  * form (DecimalDigitsRule) on either API style, and what the Strapi API style
- * filters one by: emitted only for a project with such a decimal.
+ * filters one by: emitted only for a project with such a decimal. The form's uniqueness rule
+ * (DecimalDigitsUniqueRule) comes only with a unique one.
  */
-export const decimalDigitsFiles = (doc: IrDocument): GeneratedFile[] =>
-  [...doc.contentTypes, ...doc.components].some((holder) =>
-    holder.fields.some((field) => decimalDigits(field) !== undefined),
-  )
-    ? DECIMAL_DIGITS_RUNTIME.map((path) => ({
-        path,
-        content: runtimePhp(new URL(`./php/${path}`, import.meta.url)),
-      }))
-    : [];
+export const decimalDigitsFiles = (doc: IrDocument): GeneratedFile[] => {
+  const fields = [...doc.contentTypes, ...doc.components].flatMap((holder) =>
+    holder.fields.filter((field) => decimalDigits(field) !== undefined),
+  );
+  const paths = [
+    ...(fields.length > 0 ? DECIMAL_DIGITS_RUNTIME : []),
+    ...(fields.some((field) => "unique" in field && field.unique === true) ? [UNIQUE_RULE] : []),
+  ];
+  return paths.map((path) => ({
+    path,
+    content: runtimePhp(new URL(`./php/${path}`, import.meta.url)),
+  }));
+};

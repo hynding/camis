@@ -14,6 +14,8 @@ export interface FieldEmit {
   cast?: string;
   /** A decimal's stated digits, at which an API writes it. */
   decimalDigits?: DecimalDigits;
+  /** A unique field's rule in `formComponent`, which a form whose rows share values leaves out. */
+  uniqueRule?: string;
 }
 
 const TEXT_INPUT = "Filament\\Forms\\Components\\TextInput";
@@ -250,6 +252,17 @@ const base = (field: Field, c: string): Base => {
   }
 };
 
+/**
+ * The form's uniqueness rule. Filament's `->unique()` compares the text as typed with the stored
+ * digits, so a decimal stating its digits is compared as its filters compare it.
+ */
+const uniqueRule = (field: Field, column: string): string => {
+  const digits = decimalDigits(field);
+  return digits === undefined
+    ? "->unique()"
+    : `->rule(fn (?string $model, ?\\Illuminate\\Database\\Eloquent\\Model $record) => new \\App\\Rules\\DecimalDigitsUniqueRule($model, '${column}', ${digits.precision}, ${digits.scale}, $record))`;
+};
+
 export const emitField = (field: Field, columnOverride?: string): FieldEmit => {
   const f = field as Field & Record<string, unknown>;
   const column = columnOverride ?? snakeColumn(field.name);
@@ -269,8 +282,8 @@ export const emitField = (field: Field, columnOverride?: string): FieldEmit => {
     field.editor === undefined
       ? b.formComponent
       : `(\\App\\Support\\CustomFields::input(${phpSingleQuoted(field.editor.name)}, '${column}', ${phpValue(field.editor.options ?? [])}) ?? ${b.formComponent})`;
-  const formComponent =
-    input + (required ? "->required()" : "") + (unique ? "->unique()" : "") + pattern;
+  const formUnique = unique ? uniqueRule(field, column) : undefined;
+  const formComponent = input + (required ? "->required()" : "") + (formUnique ?? "") + pattern;
   return {
     column,
     migration,
@@ -280,5 +293,6 @@ export const emitField = (field: Field, columnOverride?: string): FieldEmit => {
     tableImport: b.tableImport,
     ...(b.cast ? { cast: b.cast } : {}),
     ...digitsOf(field),
+    ...(formUnique === undefined ? {} : { uniqueRule: formUnique }),
   };
 };
