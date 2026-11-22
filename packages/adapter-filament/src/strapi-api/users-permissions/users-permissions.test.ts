@@ -410,6 +410,12 @@ describe("users-permissions register and /users queries", () => {
 });
 
 describe("users-permissions config and errors", () => {
+  // MySQL's unicode collations read a fullwidth or small "@" as "@", so the rule reads names folded.
+  it("refuses an email-shaped username by its folded form", () => {
+    expect(content("app/Http/Controllers/Api/AuthController.php")).toContain(
+      "$folded = StrapiRateLimits::folded($username);",
+    );
+  });
   it("stores a matched password again when its hash is not the configured one", () => {
     expect(content("app/Support/StrapiUsers.php")).toContain("Hash::needsRehash(");
   });

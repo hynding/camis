@@ -1306,5 +1306,18 @@ class AuthSecurityTest extends TestCase
         $this->signInSeen('plain', 'secret1');
         \Illuminate\Support\Facades\Log::shouldHaveReceived('warning')->twice();
     }
+
+    /** A collation may read a look-alike "@" as "@": such a username is an address too. */
+    public function test_a_username_with_a_look_alike_at_sign_is_refused_as_an_address(): void
+    {
+        $this->confirmationOn();
+        $this->register('alice');
+        foreach (["alice\u{FF20}example.test", "alice\u{FE6B}example.test", "ALICE\u{FF20}EXAMPLE.TEST"] as $username) {
+            $this->fromAnywhere('/api/auth/local/register', ['username' => $username, 'email' => 'mallory@example.test', 'password' => 'secret1'])
+                ->assertStatus(400)->assertJsonPath('error.message', 'username must not be an email address other than the one registering');
+        }
+        // Folded, one's own address is no other one.
+        $this->fromAnywhere('/api/auth/local/register', ['username' => "carol\u{FF20}example.test", 'email' => 'carol@example.test', 'password' => 'secret1'])->assertOk();
+    }
 }
 
