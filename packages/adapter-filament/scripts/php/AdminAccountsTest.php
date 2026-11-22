@@ -241,6 +241,7 @@ class AdminAccountsTest extends TestCase
     public function test_the_admin_guard_resolves_while_earlier_providers_boot(): void
     {
         $app = require $this->app->bootstrapPath('app.php');
+        $app->instance('request', \Illuminate\Http\Request::create('/admin/login'));
         $provider = null;
         $app->booting(function ($app) use (&$provider): void {
             $provider = $app['auth']->guard('admin')->getProvider()::class;

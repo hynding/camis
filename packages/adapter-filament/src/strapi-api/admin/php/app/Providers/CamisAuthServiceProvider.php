@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Providers;
 
 use App\Auth\CamisAdminUserProvider;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Auth\AuthManager;
 use Illuminate\Support\ServiceProvider;
 
 /**
@@ -15,13 +15,12 @@ use Illuminate\Support\ServiceProvider;
  */
 final class CamisAuthServiceProvider extends ServiceProvider
 {
+    /** Defined as the auth manager resolves, not at boot: an earlier provider may resolve the guard while it boots. */
     public function register(): void
     {
         config(['auth.providers.admin_users.driver' => 'camis-admin']);
-    }
-
-    public function boot(): void
-    {
-        Auth::provider('camis-admin', fn ($app, array $config): CamisAdminUserProvider => new CamisAdminUserProvider($app['hash'], $config['model']));
+        $this->callAfterResolving('auth', function (AuthManager $auth): void {
+            $auth->provider('camis-admin', fn ($app, array $config): CamisAdminUserProvider => new CamisAdminUserProvider($app['hash'], $config['model']));
+        });
     }
 }

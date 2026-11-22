@@ -3405,9 +3405,13 @@ header working unchanged.
   email) and the admin panel, whose guard's accounts go through `CamisAdminUserProvider` (an unknown
   email gets the stand-in check in `retrieveByCredentials`, since the session guard checks no
   password for an account it did not find). `CamisAuthServiceProvider` swaps the guard's provider
-  driver at register time and the scaffold lists it in `bootstrap/providers.php`, guarded by the
-  class existing; `config/auth.php` keeps Laravel's driver, so an app not yet listing it signs in
-  as before. `StrapiHashes` is emitted with the admin guard, so every layout that has one has it.
+  driver and defines it as the auth manager resolves, both at register time, so a provider that
+  resolves the guard while it boots finds it; the scaffold lists it in `bootstrap/providers.php`
+  after the panel's entry in whatever form that has (indent, line ending, backslash, comma),
+  guarded by the class existing; `config/auth.php` keeps Laravel's driver, so an app not yet
+  listing it signs in as before. Laravel's `make:provider` and `make:filament-panel` rewrite that
+  file and drop the guarded line before a first build, so `camis build` warns, with the line to
+  add, while a Filament app's file does not list it. `StrapiHashes` is emitted with the admin guard, so every layout that has one has it.
   The Strapi storage layout keeps its `password_verify` sign-in, which reads `$2a$` and never
   throws, and has no admin guard. An imported (cost 10) account stops being told apart by timing
   once it has signed in; DEPLOY.md gives `BCRYPT_ROUNDS=10` as the immediate fix and its cost.
