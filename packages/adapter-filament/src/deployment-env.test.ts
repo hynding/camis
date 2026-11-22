@@ -215,6 +215,13 @@ CAMIS_REGISTER_ALLOWED_FIELDS=nickname,picture
 });
 
 describe("deploymentEnv — CORS", () => {
+  // strapi::cors allows credentials for `*` by echoing the origin; the generated app does not.
+  it("says credentials go only to listed origins", () => {
+    expect(deploymentEnv({ cors: { origin: "*", credentials: true } }).env).toContain(
+      "# Credentials are allowed only for origins listed in CAMIS_CORS_ORIGIN, never with `*`.",
+    );
+  });
+
   it("writes strapi::cors's settings as the CAMIS_CORS_* keys config/cors.php reads", () => {
     const { env } = deploymentEnv({
       cors: {

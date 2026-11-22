@@ -114,6 +114,27 @@ describe("users-permissions sessions", () => {
     expect(sessions).toContain("$request->headers->has('x-strapi-refresh-cookie')");
   });
 
+  // An operator upgrading must learn what changed, and how to configure it, without reading PHP.
+  it("documents the refresh cookie, its CSRF defence, CORS and the throttled routes in DEPLOY.md", () => {
+    const deploy = content("DEPLOY.md");
+    for (const knob of [
+      "CAMIS_CORS_ORIGIN",
+      "CAMIS_CORS_CREDENTIALS",
+      "CAMIS_SESSIONS_HTTP_ONLY",
+      "CAMIS_SESSIONS_COOKIE_SECURE",
+      "CAMIS_SESSIONS_COOKIE_SAME_SITE",
+      "CAMIS_SESSIONS_COOKIE_PATH",
+      "X-Requested-With",
+      "x-strapi-refresh-cookie",
+      "Retry-After",
+      "/auth/change-password",
+      "/auth/refresh",
+      "/auth/local/callback",
+    ])
+      expect(deploy).toContain(knob);
+    expect(deploy).toContain("### Upgrading");
+  });
+
   it("issues sessions from login, registration and a password change or reset", () => {
     const auth = content("app/Http/Controllers/Api/AuthController.php");
     expect(auth).toContain("StrapiSessions::login($request, $user)");
