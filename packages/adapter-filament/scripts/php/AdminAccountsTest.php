@@ -134,6 +134,44 @@ class AdminAccountsTest extends TestCase
         $refused(['email' => 'asleep@example.test', 'password' => 'Admin-pass-1'], 'User not active');
     }
 
+    /**
+     * An admin sign-in checks one password hash whatever the email finds: none, a password that
+     * is wrong, or a hash the hasher cannot verify, so its time tells no admin account apart.
+     */
+    public function test_an_admin_sign_in_checks_one_hash_whether_or_not_an_account_matches(): void
+    {
+        $this->admin();
+        $this->admin('plain@example.test');
+        AdminUser::query()->where('email', 'plain@example.test')->toBase()->update(['password' => 'Admin-pass-1']);
+        $checks = new \ArrayObject(['n' => 0]);
+        app('hash')->extend('counting', fn () => new class ((array) config('hashing.bcrypt'), $checks) extends \Illuminate\Hashing\BcryptHasher {
+            public function __construct(array $options, private \ArrayObject $checks)
+            {
+                parent::__construct($options);
+            }
+
+            public function check(#[\SensitiveParameter] $value, $hashedValue, array $options = []): bool
+            {
+                $matches = parent::check($value, $hashedValue, $options);
+                $this->checks['n']++;
+
+                return $matches;
+            }
+        });
+        config(['hashing.driver' => 'counting']);
+        app('hash')->forgetDrivers();
+        $answers = [];
+        foreach ([['nobody@example.test', 'Admin-pass-1'], ['admin@example.test', 'wrong'], ['plain@example.test', 'Admin-pass-1']] as $i => [$email, $password]) {
+            $checks['n'] = 0;
+            $this->app['auth']->forgetGuards();
+            $response = $this->withServerVariables(['REMOTE_ADDR' => "10.30.0.{$i}"])->postJson('/admin/login', ['email' => $email, 'password' => $password]);
+            self::assertSame(1, $checks['n'], "a sign-in as {$email} checks one hash");
+            $answers[] = [$response->status(), $response->json()];
+        }
+        self::assertSame($answers[0], $answers[1]);
+        self::assertSame($answers[0], $answers[2]);
+    }
+
     public function test_a_sign_in_returns_strapis_body_and_a_token_for_the_admin_api(): void
     {
         $admin = $this->admin();
