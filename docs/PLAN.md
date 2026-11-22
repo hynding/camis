@@ -3312,8 +3312,11 @@ header working unchanged.
   (`CAMIS_REFRESH_THROTTLE_PER_MINUTE`, 60). A bucket counts per client address, a password change
   per account: `StrapiThrottle` is listed after the route's credentials and is not Laravel's
   `ThrottleRequests`, which the priority sort runs before `StrapiCredentials` has named the
-  account. The GraphQL mutations take turns of the same buckets, so REST and GraphQL count one
-  password-change total. Rates are read per request, not baked into cached routes. A throttled
+  account. Only a password change counts per account: GraphQL's sign-in, registration and
+  recovery mutations take a caller's session as Strapi's do (`auth: false`), so counting them per
+  account would give every account whose token a caller sends a fresh bucket for its address. The
+  GraphQL mutations take turns of the same buckets, so REST and GraphQL count one password-change
+  total. A throttled REST request answers Strapi's `RateLimitError`, as GraphQL does. Rates are read per request, not baked into cached routes. A throttled
   answer keeps its `Retry-After`: `StrapiErrors` now carries an HTTP exception's headers onto the
   envelope. Behind an untrusted proxy every client shares the proxy's address; DEPLOY.md says how
   to trust it, which the generated app leaves to the deployment.
@@ -3327,7 +3330,10 @@ header working unchanged.
   `x-strapi-refresh-cookie`; otherwise 403 `ForbiddenError`. Logout needs the access token, so the
   cookie is never its only credential; it ends the access token's own session (not the cookie's,
   which may be another tab's newer sign-in) and clears the cookie only when the cookie named a
-  session it ended, with the attributes the cookie was set with. The cookie defaults to `Secure` (`false` honoured only with
+  session it ended, with the attributes the cookie was set with. An access token that names no
+  session (one issued before refresh mode) revokes itself alone. The provider routes encrypt
+  their cookies through `StrapiEncryptCookies`, which leaves the refresh cookie a provider sign-in
+  sets as `/auth/refresh` reads it. The cookie defaults to `Secure` (`false` honoured only with
   `APP_ENV=local`), `SameSite=Strict`, `Path=/api/auth`, and a lifetime equal to what its
   session's absolute lifespan has left (the expiry the session was issued with, never a second
   read; without one, the browser session), where Strapi sets `lax`, Secure in production only, `/`

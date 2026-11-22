@@ -170,7 +170,9 @@ rates are read per request, so \`php artisan config:cache\` is enough after chan
 | password-change | \`POST /auth/change-password\`, GraphQL \`changePassword\`, per account | the same |
 | refresh | \`POST /auth/refresh\` | \`CAMIS_REFRESH_THROTTLE_PER_MINUTE\` (60) |
 
-A throttled REST request answers 429 in Strapi's error envelope with \`Retry-After\`.
+A throttled request answers 429 \`RateLimitError\` in Strapi's error envelope, over REST with
+\`Retry-After\`. A rate of 0, or one that is not a number, means 1 per minute: a typo cannot turn
+the throttle off, nor lock every client out.
 
 The client address is the one the request comes from. Behind a reverse proxy or load balancer
 that Laravel does not trust, every client has the proxy's address, shares its buckets with every
@@ -189,7 +191,7 @@ Strapi. The cookie is always HttpOnly, and stricter than Strapi's by default:
 | --- | --- | --- |
 | \`CAMIS_SESSIONS_COOKIE_SECURE\` | \`true\` | \`false\` is honoured only with \`APP_ENV=local\` (browsers accept a Secure cookie from \`http://localhost\`) |
 | \`CAMIS_SESSIONS_COOKIE_SAME_SITE\` | \`strict\` | A frontend on another site (not the API's own domain or a subdomain of it) needs \`none\` |
-| \`CAMIS_SESSIONS_COOKIE_PATH\` | \`/api/auth\` | Sent to \`/api/auth/refresh\` and \`/api/auth/logout\` alone |
+| \`CAMIS_SESSIONS_COOKIE_PATH\` | \`/api/auth\` | Sent to every route under \`/api/auth\` (refresh and logout read it), and to no content route |
 | \`CAMIS_SESSIONS_COOKIE_DOMAIN\`, \`CAMIS_SESSIONS_COOKIE_NAME\` | host only, \`strapi_up_refresh\` | As in Strapi |
 
 The cookie lasts until its session's absolute expiry (\`CAMIS_MAX_REFRESH_TOKEN_LIFESPAN\`), not
