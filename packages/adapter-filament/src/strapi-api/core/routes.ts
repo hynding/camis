@@ -272,7 +272,8 @@ export const emitStrapiRoutes = (
     Route::middleware([EncryptCookies::class, AddQueuedCookiesToResponse::class, StartSession::class, StrapiCredentials::class.':guest'])->group(function () use ($authThrottle): void {
         Route::get('/connect/{provider}', [ConnectController::class, 'connect'])->middleware($authThrottle);
         Route::get('/connect/{provider}/callback', [ConnectController::class, 'callback'])->middleware($authThrottle);
-        Route::get('/auth/{provider}/callback', [ConnectController::class, 'signIn']);
+        // Provider local is the password login, as in Strapi, so it shares the credential throttle.
+        Route::get('/auth/{provider}/callback', [ConnectController::class, 'signIn'])->middleware($authThrottle);
     });
 
     // Roles live in the IR, so no grant opens these: an API token that holds the action reads them.
