@@ -5,6 +5,7 @@ import { parseRolesFile, validateBundle, type Role } from "@camis/permissions";
 import type { Io } from "../io";
 import { loadConfig } from "../config";
 import { adapterFor } from "../registry";
+import { warnUnlistedAuthProvider } from "./scaffold";
 import { locStr } from "./validate";
 
 export const printGaps = (io: Io, gaps: CapabilityGap[]): boolean => {
@@ -101,6 +102,7 @@ export const generateCommand = async (
     } else {
       io.out(`${t.target}: ${result.files.length} files → ${t.out} (dry-run)`);
     }
+    if (t.target === "filament") await warnUnlistedAuthProvider(io, result, t.out);
   }
   return exit;
 };

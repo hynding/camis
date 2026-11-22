@@ -1,5 +1,5 @@
 import { isAbsolute, dirname, join, resolve } from "node:path";
-import type { StorageLayout } from "@camis/adapter-kernel";
+import type { GenerationResult, StorageLayout } from "@camis/adapter-kernel";
 import type { Io } from "../io";
 
 const STOCK_TRAIT_USE = "use HasFactory, Notifiable;";
@@ -86,6 +86,28 @@ export const patchBootstrapProviders = (source: string): string =>
         (_entry, indent: string, panel: string, lineEnding: string) =>
           `${indent}${panel},${lineEnding}${indent}${AUTH_PROVIDER_ENTRY}${lineEnding}`,
       );
+
+const AUTH_SERVICE_PROVIDER_PATH = "app/Providers/CamisAuthServiceProvider.php";
+
+/**
+ * Warn when a build emits camis's auth service provider but the app's bootstrap/providers.php no
+ * longer lists it: Laravel's make:provider and Filament's make:filament-panel rewrite that file from
+ * its evaluated array, dropping the scaffold's guarded entry before a first build, and the panel then
+ * quietly signs in through Laravel's own provider. Quiet before the app is scaffolded.
+ */
+export const warnUnlistedAuthProvider = async (
+  io: Io,
+  result: GenerationResult,
+  appDir: string,
+): Promise<void> => {
+  if (!result.files.some((f) => f.path === AUTH_SERVICE_PROVIDER_PATH)) return;
+  const providersPath = join(appDir, "bootstrap/providers.php");
+  const providers = await io.readFile(providersPath).catch(() => undefined);
+  if (providers === undefined || providers.includes("CamisAuthServiceProvider")) return;
+  io.out(
+    `⚠ filament: ${providersPath} does not list CamisAuthServiceProvider, so the admin panel signs in through Laravel's own user provider (one hash check per sign-in is lost). Add this line to its array, after the admin panel's provider:\n    ${AUTH_PROVIDER_ENTRY}`,
+  );
+};
 
 /**
  * Sign the admin panel in on the generated `admin` guard, whose accounts are AdminUser rows apart
