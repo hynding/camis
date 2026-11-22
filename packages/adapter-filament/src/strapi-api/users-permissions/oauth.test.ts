@@ -90,7 +90,17 @@ describe("users-permissions sign-in providers", () => {
       "Route::get('/connect/{provider}/callback', [ConnectController::class, 'callback'])->middleware($authThrottle);",
     );
     expect(routes).toContain(
-      "Route::get('/auth/{provider}/callback', [ConnectController::class, 'signIn']);",
+      "Route::get('/auth/{provider}/callback', [ConnectController::class, 'signIn'])->middleware($authThrottle);",
+    );
+  });
+
+  // Strapi answers GET /auth/local/callback as the password login, without its rate limit; camis
+  // keeps the route but never checks a password unthrottled.
+  it("throttles the provider callback, which signs in with a password for provider local", () => {
+    const routes = content("routes/api.php");
+    expect(routes).not.toContain("[ConnectController::class, 'signIn']);");
+    expect(content("app/Http/Controllers/Api/ConnectController.php")).toContain(
+      "return app(AuthController::class)->login($request);",
     );
   });
 
