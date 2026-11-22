@@ -46,6 +46,25 @@ final class DecimalDigits
         return (string) $decimal;
     }
 
+    /**
+     * An archived value as the import writes it to $column: a decimal stating its digits (the
+     * transfer map's `digits`) as its column keeps it, as every write through this class keeps it;
+     * a value that is not a decimal that fits stops the import, as any value its column cannot take
+     * does. Any other value is written as it came.
+     *
+     * @param array<string, mixed> $attribute the column's entry in the transfer map
+     */
+    public static function archived(mixed $value, array $attribute, string $column): mixed
+    {
+        if ($value === null || ! isset($attribute['digits'])) {
+            return $value;
+        }
+        [$precision, $scale] = $attribute['digits'];
+
+        return self::canonical($value, $precision, $scale)
+            ?? throw new \RuntimeException("{$column} takes a decimal of at most {$precision} digits, {$scale} of them after the point, not " . var_export($value, true));
+    }
+
     /** Why a value is refused, in Laravel's validation message form. */
     public static function refusal(string $attribute, int $precision, int $scale): string
     {
