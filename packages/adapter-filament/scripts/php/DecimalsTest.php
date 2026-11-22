@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Filament\Resources\Ledgers\Pages\CreateLedger;
+use App\Filament\Resources\Ledgers\Pages\EditLedger;
 use App\Models\AdminUser;
 use App\Models\Ledger;
 use App\Models\User;
 use App\Support\DecimalDigits;
 use Brick\Math\BigDecimal;
 use Filament\Facades\Filament;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
@@ -330,12 +332,17 @@ class DecimalsTest extends TestCase
         $this->api('GET', 'ledgers?pagination[pageSize]=100')->assertOk()->assertJsonCount(3, 'data');
     }
 
-    public function test_the_admin_form_keeps_every_digit_and_refuses_a_value_that_does_not_fit(): void
+    private function actingAsAdmin(): void
     {
         $admin = AdminUser::query()->forceCreate(['firstname' => 'Admin', 'email' => 'admin@example.test', 'is_active' => true]);
         $admin->givePermissionTo(['ledger.create', 'ledger.read', 'ledger.update']);
         $this->actingAs($admin, 'admin');
         Filament::setCurrentPanel(Filament::getPanel('admin'));
+    }
+
+    public function test_the_admin_form_keeps_every_digit_and_refuses_a_value_that_does_not_fit(): void
+    {
+        $this->actingAsAdmin();
 
         Livewire::test(CreateLedger::class)
             ->fillForm(['label' => 'admin', 'balance' => self::BALANCE, 'share' => self::SHARE, 'rate' => '1.50', 'units' => '', 'limit_ceiling' => self::CEILING])
@@ -356,6 +363,31 @@ class DecimalsTest extends TestCase
 
         app('auth')->forgetGuards();
         $this->api('GET', 'ledgers?pagination[pageSize]=100')->assertOk()->assertJsonPath('data.0.balance', self::BALANCE);
+    }
+
+    public function test_the_admin_form_checks_a_unique_decimal_by_its_digits_not_its_text(): void
+    {
+        $this->actingAsAdmin();
+        $held = Ledger::query()->create(['label' => 'held', 'share' => '1.5']);
+
+        foreach (['1.5', '1.50000', '1.500000000', '15e-1', ' 1.5'] as $share) {
+            try {
+                $test = Livewire::test(CreateLedger::class)->fillForm(['label' => 'copy', 'share' => $share])->call('create');
+            } catch (UniqueConstraintViolationException $e) {
+                $this->fail("{$share} passed the form and reached the unique index");
+            }
+            $this->assertSame(['The share has already been taken.'], $test->errors()->get('data.share'), $share);
+        }
+        $this->assertSame(['held'], DB::table('ledgers')->pluck('label')->all());
+
+        Livewire::test(CreateLedger::class)->fillForm(['label' => 'other', 'share' => '1.50001'])->call('create')->assertHasNoFormErrors();
+        Livewire::test(CreateLedger::class)->fillForm(['label' => 'none', 'share' => ''])->call('create')->assertHasNoFormErrors();
+        // The record being edited keeps its own value.
+        Livewire::test(EditLedger::class, ['record' => $held->getRouteKey()])
+            ->fillForm(['share' => '1.50'])
+            ->call('save')
+            ->assertHasNoFormErrors();
+        $this->assertSame('1.50000', (string) DB::table('ledgers')->where('label', 'held')->value('share'));
     }
 
     public function test_graphql_round_trips_every_digit_of_a_decimal_beyond_a_double(): void

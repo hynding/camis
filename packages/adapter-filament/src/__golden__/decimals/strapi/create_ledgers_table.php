@@ -16,7 +16,7 @@ return new class extends Migration
             $table->string('label')->nullable();
             (Schema::getConnection()->getDriverName() === 'sqlite' ? $table->string('balance', 22) : $table->decimal('balance', 20, 6))->nullable();
             $table->decimal('rate', 9, 4)->nullable();
-            (Schema::getConnection()->getDriverName() === 'sqlite' ? $table->string('share', 17) : $table->decimal('share', 15, 5))->nullable();
+            (Schema::getConnection()->getDriverName() === 'sqlite' ? $table->string('share', 17) : $table->decimal('share', 15, 5))->nullable()->unique();
             $table->decimal('units', 14, 4)->nullable();
             $table->decimal('fee')->nullable();
             (Schema::getConnection()->getDriverName() === 'sqlite' ? $table->string('limit_ceiling', 20) : $table->decimal('limit_ceiling', 18, 2))->nullable();

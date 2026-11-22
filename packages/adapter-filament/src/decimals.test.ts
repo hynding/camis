@@ -126,6 +126,49 @@ describe("decimals stating their digits (issue #104)", () => {
     });
   }
 
+  // Filament's ->unique() compares the text as typed with the stored digits.
+  it("checks a unique decimal stating its digits in the admin's form as its filters compare it", () => {
+    const rule = "app/Rules/DecimalDigitsUniqueRule.php";
+    expect(contentOf(generate("strapi"))(rule)).toContain(
+      "final class DecimalDigitsUniqueRule implements ValidationRule",
+    );
+    expect(contentOf(generate("strapi"))(rule)).toContain(
+      "DecimalDigits::where($query, $this->column, '$eq', $value, $this->precision, $this->scale)",
+    );
+    const withoutUnique: typeof decimalsBundle = {
+      ...decimalsBundle,
+      document: {
+        ...decimalsBundle.document,
+        contentTypes: decimalsBundle.document.contentTypes.map((ct) => ({
+          ...ct,
+          fields: ct.fields.map((f) => ({ ...f, unique: false })),
+        })),
+      },
+    };
+    const plain = filamentAdapter.generate(withoutUnique, {
+      projectName: "ledger",
+      apiStyle: "strapi",
+    });
+    expect(plain.files.map((f) => f.path)).not.toContain(rule);
+    // A draft-and-publish document's rows share their values, so its form checks no uniqueness.
+    const drafted: typeof decimalsBundle = {
+      ...decimalsBundle,
+      document: {
+        ...decimalsBundle.document,
+        contentTypes: decimalsBundle.document.contentTypes.map((ct) => ({
+          ...ct,
+          options: { draftPublish: true },
+        })),
+      },
+    };
+    const form = filamentAdapter
+      .generate(drafted, { projectName: "ledger", apiStyle: "strapi" })
+      .files.find((f) => f.path === "app/Filament/Resources/Ledgers/Schemas/LedgerForm.php");
+    expect(form?.content).toContain(
+      "TextInput::make('share')->inputMode('decimal')->rule(new \\App\\Rules\\DecimalDigitsRule(15, 5)),",
+    );
+  });
+
   it("searches the admin's list by a decimal stating its digits as its filters compare it", async () => {
     await expect(
       contentOf(generate("strapi"))("app/Filament/Resources/Ledgers/Schemas/LedgersTable.php"),

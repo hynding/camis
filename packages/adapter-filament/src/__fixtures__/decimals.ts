@@ -19,7 +19,7 @@ export const decimalsBundle: IrBundle = {
           { type: "string", name: "label" },
           { type: "decimal", name: "balance", precision: 20, scale: 6 },
           { type: "decimal", name: "rate", precision: 9, scale: 4 },
-          { type: "decimal", name: "share", precision: 15, scale: 5 },
+          { type: "decimal", name: "share", precision: 15, scale: 5, unique: true },
           { type: "decimal", name: "units", precision: 14, scale: 4 },
           { type: "decimal", name: "fee" },
           { type: "component", name: "limit", component: "Limit", repeatable: false },

@@ -55,11 +55,11 @@ class LedgersTable
                     ->label('Duplicate')
                     ->icon('heroicon-o-document-duplicate')
                     ->visible(fn (): bool => LedgerResource::canCreate())
-                    ->action(function (Ledger $record, $livewire): void {
-                        $copy = LedgerResource::duplicate($record);
-                        Notification::make()->success()->title('Duplicated')->send();
-                        $livewire->redirect(LedgerResource::getUrl('edit', ['record' => $copy]));
-                    }),
+                    ->requiresConfirmation()
+                    ->modalHeading('This entry can\'t be duplicated directly')
+                    ->modalDescription('A new entry will be created with the same content, but you will have to change the following fields to save it: ' . implode(', ', LedgerResource::PROHIBITED_CLONING_FIELDS))
+                    ->modalSubmitActionLabel('Create')
+                    ->action(fn (Ledger $record, $livewire) => $livewire->redirect(LedgerResource::getUrl('create', ['duplicate' => $record->getKey()]))),
                 DeleteAction::make(),
             ])
             ->toolbarActions(StrapiContentManager::bulkActions(LedgerResource::CONTENT_MANAGER, [

@@ -16,7 +16,7 @@ class LedgerForm
             TextInput::make('label'),
             TextInput::make('balance')->inputMode('decimal')->rule(new \App\Rules\DecimalDigitsRule(20, 6)),
             TextInput::make('rate')->inputMode('decimal')->rule(new \App\Rules\DecimalDigitsRule(9, 4)),
-            TextInput::make('share')->inputMode('decimal')->rule(new \App\Rules\DecimalDigitsRule(15, 5)),
+            TextInput::make('share')->inputMode('decimal')->rule(new \App\Rules\DecimalDigitsRule(15, 5))->rule(fn (?string $model, ?\Illuminate\Database\Eloquent\Model $record) => new \App\Rules\DecimalDigitsUniqueRule($model, 'share', 15, 5, $record)),
             TextInput::make('units')->inputMode('decimal')->rule(new \App\Rules\DecimalDigitsRule(14, 4)),
             TextInput::make('fee')->numeric(),
             TextInput::make('lines'),
