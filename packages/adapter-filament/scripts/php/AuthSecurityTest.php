@@ -182,7 +182,7 @@ class AuthSecurityTest extends TestCase
 
     public function test_the_refresh_cookie_is_taken_from_the_apps_own_origin(): void
     {
-        $this->refreshWithCookie($this->cookieSession(), ['Origin' => 'http://localhost'])
+        $this->refreshWithCookie($this->cookieSession(), ['Origin' => rtrim((string) config('app.url'), '/')])
             ->assertOk()->assertJsonStructure(['jwt']);
     }
 
