@@ -220,6 +220,17 @@ describe("users-permissions sessions", () => {
     expect(deploy).toContain("the notice in place of a confirmation mail");
   });
 
+  // The bound's two costs, the store a count needs and the collation a lookup runs through are
+  // the operator's choices, so each must be written down.
+  it("documents the mail burst's trade-off, the cache store counts need and the collation", () => {
+    const deploy = content("DEPLOY.md");
+    expect(deploy).toContain("default 3");
+    expect(deploy).toContain("is told nothing");
+    expect(deploy).toContain("`CACHE_STORE`");
+    expect(deploy).toContain("the `file` store does not count atomically");
+    expect(deploy).toContain("collation");
+  });
+
   // Behind a proxy that Laravel does not trust every client has the proxy's address, and so one
   // bucket; the operator must learn that, and that a password change counts per account.
   it("documents the throttle's buckets, the refresh rate and trusted proxies in DEPLOY.md", () => {
