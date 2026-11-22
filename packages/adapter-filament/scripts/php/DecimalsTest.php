@@ -186,6 +186,19 @@ class DecimalsTest extends TestCase
             'filters[rate][$lte]=99999.99995' => $all,
             'filters[rate][$gte]=99999.99995' => [],
             'filters[rate][$not][$gt]=1.00005' => ['r0'],
+            // Decided without comparing a value, a filter still finds no row without one under $not.
+            'filters[rate][$not][$eq]=1.00005' => $all,
+            'filters[rate][$not][$ne]=1.00005' => [],
+            'filters[rate][$not][$in][0]=1.00005' => $all,
+            'filters[rate][$not][$notIn][0]=1.00005' => [],
+            'filters[rate][$not][$eq]=1e10' => $all,
+            'filters[rate][$not][$ne]=1e10' => [],
+            'filters[rate][$not][$gt]=1e10' => $all,
+            'filters[rate][$not][$lt]=1e10' => [],
+            'filters[rate][$not][$gte]=-1e10' => [],
+            'filters[rate][$not][$lte]=-1e10' => $all,
+            'filters[$not][rate][$eq]=1.00005' => $all,
+            'filters[$not][balance][$ne]=1e30' => [],
             'filters[balance][$gt]=1.0000005' => ['r1', 'r2'],
             'filters[balance][$gte]=1.0000004' => ['r1', 'r2'],
             'filters[balance][$lte]=1.0000015' => ['r0', 'r1'],
@@ -203,6 +216,8 @@ class DecimalsTest extends TestCase
         $this->assertSame([], $labels('{ rate: { eq: 1.00004 } }'));
         $this->assertSame(['r1', 'r2'], $labels('{ balance: { gt: "1.0000005" } }'));
         $this->assertSame([], $labels('{ balance: { in: ["1.0000004"] } }'));
+        $this->assertSame($all, $labels('{ not: { rate: { eq: 1.00005 } } }'));
+        $this->assertSame([], $labels('{ not: { balance: { notIn: ["1e30"] } } }'));
     }
 
     public function test_a_value_too_long_or_with_too_large_an_exponent_is_not_a_decimal(): void
