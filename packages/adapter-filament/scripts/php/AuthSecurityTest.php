@@ -638,4 +638,181 @@ class AuthSecurityTest extends TestCase
         self::assertNotNull($cookie);
         self::assertTrue($this->refreshes((string) $cookie->getValue()));
     }
+
+    // ---------------------------------------------------------------- account existence
+
+    /** The messages the array mailer holds: who each went to, and its subject. */
+    private static function mails(): array
+    {
+        return array_map(
+            fn ($sent): array => [$sent->getEnvelope()->getRecipients()[0]->getAddress(), $sent->getOriginalMessage()->getSubject()],
+            \Illuminate\Support\Facades\Mail::mailer('array')->getSymfonyTransport()->messages()->all(),
+        );
+    }
+
+    private static function forgetMails(): void
+    {
+        \Illuminate\Support\Facades\Mail::mailer('array')->getSymfonyTransport()->flush();
+    }
+
+    private function confirmationOn(): void
+    {
+        config(['camis.users_permissions.advanced.email_confirmation' => true, 'mail.from.address' => 'hello@example.test']);
+    }
+
+    /** A request's answer as a client sees it: status and body, with the address it echoes left out. */
+    private static function seen(TestResponse $response): array
+    {
+        $body = $response->json();
+        unset($body['email']);
+
+        return [$response->status(), $body];
+    }
+
+    /**
+     * With email confirmation on, registration answers a taken address or username exactly as a
+     * new account, hashes the password on both paths, creates nothing for a taken one and tells
+     * the address by mail instead.
+     */
+    public function test_registration_answers_a_taken_address_or_username_as_a_new_one(): void
+    {
+        $this->register('alice');
+        $this->confirmationOn();
+        self::forgetMails();
+        $hashes = 0;
+        \Illuminate\Support\Facades\Hash::partialMock()->shouldReceive('make')->andReturnUsing(function (...$args) use (&$hashes) {
+            $hashes++;
+
+            return password_hash((string) $args[0], PASSWORD_BCRYPT, ['cost' => 4]);
+        });
+        $answers = [];
+        foreach ([['carol', 'carol@example.test'], ['alice2', 'alice@example.test'], ['alice', 'dave@example.test']] as $i => [$username, $email]) {
+            $this->freshRequest();
+            $hashes = 0;
+            $answers[] = $response = $this->withServerVariables(['REMOTE_ADDR' => "10.5.0.{$i}"])
+                ->postJson('/api/auth/local/register', ['username' => $username, 'email' => $email, 'password' => 'secret1']);
+            self::assertSame(1, $hashes, "registration {$i} hashes the password once");
+            $response->assertOk()->assertJsonPath('sent', true)->assertJsonPath('email', $email);
+        }
+        self::assertSame(self::seen($answers[0]), self::seen($answers[1]));
+        self::assertSame(self::seen($answers[0]), self::seen($answers[2]));
+
+        self::assertSame(['carol'], \App\Models\User::query()->where('username', '!=', 'alice')->pluck('username')->all());
+        self::assertEqualsCanonicalizing(
+            [['carol@example.test', 'Account confirmation'], ['alice@example.test', 'Account registration'], ['dave@example.test', 'Account registration']],
+            self::mails(),
+        );
+    }
+
+    /** Without email confirmation a new account gets its tokens at once, so a taken one is said so, as in Strapi. */
+    public function test_registration_without_confirmation_still_says_an_address_is_taken(): void
+    {
+        $this->register('alice');
+        $this->freshRequest();
+        $this->postJson('/api/auth/local/register', ['username' => 'alice2', 'email' => 'alice@example.test', 'password' => 'secret1'])
+            ->assertStatus(400)->assertJsonPath('error.message', 'Email or Username are already taken');
+    }
+
+    /** Turned off, registration and the confirmation resend answer as Strapi does. */
+    public function test_strapis_own_answers_return_with_the_setting_off(): void
+    {
+        $this->register('alice');
+        config(['camis.users_permissions.hide_account_existence' => false]);
+        $this->confirmationOn();
+        $this->freshRequest();
+        $this->postJson('/api/auth/local/register', ['username' => 'alice2', 'email' => 'alice@example.test', 'password' => 'secret1'])
+            ->assertStatus(400)->assertJsonPath('error.message', 'Email or Username are already taken');
+        $this->freshRequest();
+        \App\Models\User::query()->where('username', 'alice')->update(['confirmed' => true]);
+        $this->postJson('/api/auth/send-email-confirmation', ['email' => 'alice@example.test'])
+            ->assertStatus(400)->assertJsonPath('error.message', 'Already confirmed');
+    }
+
+    /** Resending the confirmation answers alike for a confirmed, blocked, unconfirmed or unknown address. */
+    public function test_the_confirmation_resend_answers_every_address_alike(): void
+    {
+        $this->confirmationOn();
+        foreach (['confirmed', 'blocked', 'pending'] as $username) {
+            \App\Models\User::forceCreate(['name' => $username, 'username' => $username, 'email' => "{$username}@example.test", 'password' => 'x', 'provider' => 'local', 'confirmed' => $username === 'confirmed', 'blocked' => $username === 'blocked']);
+        }
+        self::forgetMails();
+        $answers = [];
+        foreach (['confirmed', 'blocked', 'pending', 'nobody'] as $i => $username) {
+            $this->freshRequest();
+            $answers[] = $this->withServerVariables(['REMOTE_ADDR' => "10.6.0.{$i}"])
+                ->postJson('/api/auth/send-email-confirmation', ['email' => strtoupper($username).'@example.test'])
+                ->assertOk()->assertJsonPath('email', "{$username}@example.test")->assertJsonPath('sent', true);
+        }
+        foreach ($answers as $answer) {
+            self::assertSame(self::seen($answers[0]), self::seen($answer));
+        }
+        self::assertSame([['pending@example.test', 'Account confirmation']], self::mails());
+    }
+
+    /** Sign-in checks one password hash whether or not the name finds an account that has one. */
+    public function test_sign_in_checks_one_password_hash_whether_or_not_an_account_matches(): void
+    {
+        $this->register('alice');
+        \App\Models\User::forceCreate(['name' => 'oauth', 'username' => 'oauth', 'email' => 'oauth@example.test', 'password' => '', 'provider' => 'local']);
+        $checks = 0;
+        $hasher = app('hash');
+        \Illuminate\Support\Facades\Hash::partialMock()->shouldReceive('check')->andReturnUsing(function (...$args) use (&$checks, $hasher) {
+            $checks++;
+
+            return $hasher->check(...$args);
+        });
+        foreach (['alice', 'nobody', 'oauth'] as $i => $identifier) {
+            $this->freshRequest();
+            $checks = 0;
+            $this->withServerVariables(['REMOTE_ADDR' => "10.7.0.{$i}"])->postJson('/api/auth/local', ['identifier' => $identifier, 'password' => 'wrong'])
+                ->assertStatus(400)->assertJsonPath('error.message', 'Invalid identifier or password');
+            self::assertSame(1, $checks, "a sign-in as {$identifier} checks one hash");
+        }
+    }
+
+    /**
+     * At a production cost the answer for a name that finds no account takes as long as a wrong
+     * password's: medians of several tries, within a factor that wall-clock noise does not reach.
+     */
+    public function test_a_sign_in_for_no_account_takes_as_long_as_a_wrong_password(): void
+    {
+        config(['hashing.bcrypt.rounds' => 11]);
+        app('hash')->forgetDrivers();
+        $this->register('alice');
+        $median = function (string $identifier): float {
+            $times = [];
+            for ($i = 0; $i < 5; $i++) {
+                $this->freshRequest();
+                $started = hrtime(true);
+                $this->withServerVariables(['REMOTE_ADDR' => '10.8.'.crc32($identifier) % 200 .'.'.$i])->postJson('/api/auth/local', ['identifier' => $identifier, 'password' => 'wrong'])->assertStatus(400);
+                $times[] = hrtime(true) - $started;
+            }
+            sort($times);
+
+            return (float) $times[2];
+        };
+        $median('nobody');
+        $wrong = $median('alice');
+        $unknown = $median('nobody');
+        self::assertGreaterThan(0.5, $unknown / $wrong, "no account: {$unknown}ns, wrong password: {$wrong}ns");
+        self::assertLessThan(2.0, $unknown / $wrong, "no account: {$unknown}ns, wrong password: {$wrong}ns");
+    }
+
+    /** An account's mail is sent once the answer is out, so the answer's time does not show it. */
+    public function test_account_mail_is_sent_after_the_answer(): void
+    {
+        $this->register('alice');
+        self::forgetMails();
+        config(['mail.from.address' => 'hello@example.test']);
+        $atAnswer = null;
+        \Illuminate\Support\Facades\Event::listen(\Illuminate\Foundation\Http\Events\RequestHandled::class, function () use (&$atAnswer): void {
+            $atAnswer = count(self::mails());
+        });
+        $this->freshRequest();
+        $this->postJson('/api/auth/forgot-password', ['email' => 'alice@example.test'])->assertOk()->assertExactJson(['ok' => true]);
+
+        self::assertSame(0, $atAnswer);
+        self::assertSame([['alice@example.test', 'Reset password']], self::mails());
+    }
 }
+

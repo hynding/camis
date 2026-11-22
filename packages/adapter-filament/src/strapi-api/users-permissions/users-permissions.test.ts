@@ -269,6 +269,20 @@ describe("users-permissions routes", () => {
     expect(login).toContain("mb_strlen($identifier) > self::MAX_IDENTIFIER_LENGTH");
     expect(login.indexOf("MAX_IDENTIFIER_LENGTH")).toBeLessThan(login.indexOf("refuseNamed"));
   });
+  // Strapi's answers tell a caller whether an account exists; camis hides it unless told not to.
+  it("hides whether an account exists, unless the deployment turns it off", () => {
+    expect(content("config/camis.php")).toContain(
+      "'hide_account_existence' => (bool) env('CAMIS_AUTH_HIDE_ACCOUNT_EXISTENCE', true),",
+    );
+    const users = content("app/Support/StrapiUsers.php");
+    expect(users).toContain("app()->terminating(");
+    expect(users).toContain(
+      "public static function passwordMatches(?User $user, string $password): bool",
+    );
+    const auth = content("app/Http/Controllers/Api/AuthController.php");
+    expect(auth).toContain("StrapiUsers::passwordMatches($user, (string) $body['password'])");
+    expect(auth).toContain("StrapiUsers::later(");
+  });
   // Checking and then counting lets parallel requests all pass the check: the count hit() returns
   // is the decision.
   it("decides on the count it takes, so parallel requests cannot pass one check together", () => {
