@@ -74,7 +74,7 @@ describe("filamentAdapter apiStyle strapi without roles", () => {
   });
   it("throttles a password change behind the session it needs", () => {
     expect(result.files.find((f) => f.path === "routes/api.php")!.content).toContain(
-      "Route::post('/auth/change-password', [AuthController::class, 'changePassword'])->middleware(['auth:sanctum', StrapiActiveUser::class, StrapiThrottle::class.':password-change']);",
+      "Route::post('/auth/change-password', [AuthController::class, 'changePassword'])->middleware([StrapiJsonBody::class, 'auth:sanctum', StrapiActiveUser::class, StrapiThrottle::class.':password-change']);",
     );
   });
   it("unsecured routes golden", async () => {

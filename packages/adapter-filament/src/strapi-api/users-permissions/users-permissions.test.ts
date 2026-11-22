@@ -133,7 +133,7 @@ describe("users-permissions routes", () => {
   // Strapi rate-limits it too: a stolen access token must not buy unlimited guesses of the password.
   it("throttles a password change, which checks the current password", () => {
     expect(routes).toContain(
-      "Route::post('/auth/change-password', [AuthController::class, 'changePassword'])->middleware(StrapiThrottle::class.':password-change');",
+      "Route::post('/auth/change-password', [AuthController::class, 'changePassword'])->middleware([StrapiJsonBody::class, StrapiThrottle::class.':password-change']);",
     );
   });
   // One bucket per group, so a flood of one (refreshes, recovery mails) never locks out sign-in.
@@ -146,7 +146,7 @@ describe("users-permissions routes", () => {
       ],
     ])
       expect(routes).toContain(
-        `${route}->middleware([StrapiThrottle::class.':${group}', StrapiCredentials::class.':guest']);`,
+        `${route}->middleware([StrapiJsonBody::class, StrapiThrottle::class.':${group}', StrapiCredentials::class.':guest']);`,
       );
     expect(routes).not.toContain("$authThrottle");
   });
@@ -214,7 +214,31 @@ describe("users-permissions routes", () => {
       "Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])",
       "Route::post('/auth/send-email-confirmation', [AuthController::class, 'sendEmailConfirmation'])",
     ])
-      expect(routes).toContain(`${route}->middleware(StrapiCredentials::class.':guest');`);
+      expect(routes).toContain(
+        `${route}->middleware([StrapiJsonBody::class, StrapiCredentials::class.':guest']);`,
+      );
+  });
+  // A body of text/plain or a form is a request a page of another site sends with no CORS
+  // preflight, so a route that reads its body as JSON whatever its type would take a foreign
+  // page's sign-in, registration or recovery mail. Strapi's own clients all send JSON.
+  it("takes an auth write's body only as JSON, refusing any other type with 415", () => {
+    for (const route of [
+      "Route::post('/auth/local', [AuthController::class, 'login'])",
+      "Route::post('/auth/local/register', [AuthController::class, 'register'])",
+      "Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])",
+      "Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])",
+      "Route::post('/auth/send-email-confirmation', [AuthController::class, 'sendEmailConfirmation'])",
+      "Route::post('/auth/refresh', [SessionController::class, 'refresh'])",
+      "Route::post('/auth/change-password', [AuthController::class, 'changePassword'])",
+      "Route::post('/auth/logout', [SessionController::class, 'logout'])",
+    ])
+      expect(routes).toContain(`${route}->middleware([StrapiJsonBody::class`);
+    expect(routes).toContain("use App\\Http\\Middleware\\StrapiJsonBody;");
+    const middleware = content("app/Http/Middleware/StrapiJsonBody.php");
+    expect(middleware).toContain("new StrapiError(415, 'UnsupportedMediaTypeError'");
+    expect(middleware).toContain("$request->getContent() === ''");
+    expect(middleware).toContain("$type === 'application/json'");
+    expect(middleware).toContain("str_ends_with($type, '+json')");
   });
   // Strapi validates strictly: yup's string() refuses a number, boolean, null, array or object.
   it("refuses a name that is not a string as Strapi's strict validation does", () => {

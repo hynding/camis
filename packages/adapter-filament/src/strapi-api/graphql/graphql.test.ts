@@ -81,6 +81,13 @@ describe("GraphQL", () => {
     expect(content("routes/graphql.php")).toContain("->match(['get', 'post'], '/graphql'");
   });
 
+  // Its login, register and forgotPassword mutations are a guest's, as their REST routes are.
+  it("takes a POST body only as JSON, as the auth routes do", () => {
+    expect(content("routes/graphql.php")).toContain(
+      "Route::middleware([StrapiErrors::class, StrapiJsonBody::class, ",
+    );
+  });
+
   // strapi-php answers a token that does not verify on /graphql with the REST error body, a 401.
   it("answers a refused request on /graphql with Strapi's error body", () => {
     expect(content("app/Http/Middleware/StrapiErrors.php")).toContain(

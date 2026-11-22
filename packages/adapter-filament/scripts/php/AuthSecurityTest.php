@@ -158,29 +158,75 @@ class AuthSecurityTest extends TestCase
     }
 
     /**
-     * A body of another content type (which the controller still reads as JSON) with a fresh name
-     * in the query string each time: the turn is the name the controller looked up, never another.
+     * A JSON body with a fresh name in the query string each time: the turn is the name the
+     * controller looked up, never another.
      *
      * @return callable(int): TestResponse
      */
-    private function plainText(string $method, string $path, array $body, string $address = '127.0.0.1'): callable
+    private function queryNamed(string $method, string $path, array $body, string $address = '127.0.0.1'): callable
     {
         return function (int $attempt) use ($method, $path, $body, $address): TestResponse {
             $this->freshRequest();
 
-            return $this->call($method, $path.'?identifier=fresh'.$attempt.'&email=fresh'.$attempt.'%40example.test', [], [], [], ['CONTENT_TYPE' => 'text/plain', 'HTTP_ACCEPT' => 'application/json', 'REMOTE_ADDR' => $address], (string) json_encode($body));
+            return $this->call($method, $path.'?identifier=fresh'.$attempt.'&email=fresh'.$attempt.'%40example.test', [], [], [], ['CONTENT_TYPE' => 'application/json', 'HTTP_ACCEPT' => 'application/json', 'REMOTE_ADDR' => $address], (string) json_encode($body));
         };
     }
 
     public function test_the_turn_is_the_name_the_controller_looks_up_whatever_the_query_string_says(): void
     {
         $this->register('alice');
-        self::assertThrottled($this->plainText('POST', '/api/auth/local', ['identifier' => 'alice', 'password' => 'wrong']), 400);
+        self::assertThrottled($this->queryNamed('POST', '/api/auth/local', ['identifier' => 'alice', 'password' => 'wrong']), 400);
         $this->freshRequest();
         // Another address, so the sign-in ceiling the first address has used is not in the way.
-        self::assertThrottled($this->plainText('GET', '/api/auth/local/callback', ['identifier' => 'bob', 'password' => 'wrong'], '10.1.0.1'), 400);
-        self::assertThrottled($this->plainText('POST', '/api/auth/forgot-password', ['email' => 'alice@example.test']), 200);
-        self::assertThrottled($this->plainText('POST', '/api/auth/send-email-confirmation', ['email' => 'carol@example.test']), 200);
+        self::assertThrottled($this->queryNamed('GET', '/api/auth/local/callback', ['identifier' => 'bob', 'password' => 'wrong'], '10.1.0.1'), 400);
+        self::assertThrottled($this->queryNamed('POST', '/api/auth/forgot-password', ['email' => 'alice@example.test']), 200);
+        self::assertThrottled($this->queryNamed('POST', '/api/auth/send-email-confirmation', ['email' => 'carol@example.test']), 200);
+    }
+
+    /** A body sent as $type, as a page of another site can send it with no CORS preflight. */
+    private function postAs(string $path, string $type, string $body, ?string $jwt = null): TestResponse
+    {
+        $this->freshRequest();
+        $server = ['CONTENT_TYPE' => $type, 'HTTP_ACCEPT' => 'application/json'] + ($jwt === null ? [] : ['HTTP_AUTHORIZATION' => 'Bearer '.$jwt]);
+
+        return $this->call('POST', $path, [], [], [], $server, $body);
+    }
+
+    private static function assertUnsupported(TestResponse $response): void
+    {
+        $response->assertStatus(415)->assertJsonPath('data', null)->assertJsonPath('error.status', 415)
+            ->assertJsonPath('error.name', 'UnsupportedMediaTypeError')
+            ->assertJsonPath('error.message', 'The request body must be JSON (Content-Type: application/json)');
+    }
+
+    public function test_an_auth_write_with_a_body_that_is_not_json_is_refused_unread(): void
+    {
+        $jwt = $this->register('alice');
+        $sent = (string) json_encode(['identifier' => 'alice', 'username' => 'mallory', 'email' => 'mallory@example.test', 'password' => 'secret1', 'currentPassword' => 'secret1', 'passwordConfirmation' => 'secret2', 'code' => 'x', 'refreshToken' => 'x']);
+        $paths = ['/api/auth/local', '/api/auth/local/register', '/api/auth/forgot-password', '/api/auth/reset-password', '/api/auth/send-email-confirmation', '/api/auth/refresh'];
+        foreach (['text/plain', 'text/plain; charset=utf-8', 'application/x-www-form-urlencoded', 'multipart/form-data; boundary=x', 'application/jsonp', 'text/json'] as $type) {
+            foreach ($paths as $path) {
+                self::assertUnsupported($this->postAs($path, $type, $sent));
+            }
+            self::assertUnsupported($this->postAs('/api/auth/change-password', $type, $sent, $jwt));
+            self::assertUnsupported($this->postAs('/api/auth/logout', $type, $sent, $jwt));
+        }
+        self::assertUnsupported($this->postAs('/api/auth/local/register', 'application/x-www-form-urlencoded', 'username=mallory&email=mallory%40example.test&password=secret1'));
+        $this->assertDatabaseMissing('users', ['username' => 'mallory']);
+        // Nothing read, so nothing counted: the sign-in bucket is still full.
+        $this->login('alice')->assertOk();
+    }
+
+    public function test_an_auth_write_takes_json_by_any_of_its_names_and_an_empty_body(): void
+    {
+        config(['camis.auth_throttle_per_minute' => 10, 'camis.users_permissions.auth_address_throttle_per_minute' => 10]);
+        $this->register('alice');
+        $login = (string) json_encode(['identifier' => 'alice', 'password' => 'secret1']);
+        foreach (['application/json', 'application/json; charset=UTF-8', 'Application/JSON', 'application/vnd.api+json'] as $type) {
+            $this->postAs('/api/auth/local', $type, $login)->assertOk();
+        }
+        // No body has no type to check: Strapi's own validation answers it.
+        $this->postAs('/api/auth/local', '', '')->assertStatus(400)->assertJsonPath('error.name', 'ValidationError');
     }
 
     /**

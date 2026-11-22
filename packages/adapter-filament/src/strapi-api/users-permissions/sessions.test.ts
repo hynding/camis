@@ -257,9 +257,11 @@ describe("users-permissions sessions", () => {
   it("routes refresh as a public-only route and the rest behind a session", () => {
     const routes = content("routes/api.php");
     expect(routes).toContain(
-      "Route::post('/auth/refresh', [SessionController::class, 'refresh'])->middleware(StrapiCredentials::class.':guest');",
+      "Route::post('/auth/refresh', [SessionController::class, 'refresh'])->middleware([StrapiJsonBody::class, StrapiCredentials::class.':guest']);",
     );
-    expect(routes).toContain("Route::post('/auth/logout', [SessionController::class, 'logout']);");
+    expect(routes).toContain(
+      "Route::post('/auth/logout', [SessionController::class, 'logout'])->middleware([StrapiJsonBody::class]);",
+    );
     expect(routes).toContain(
       "Route::get('/auth/sessions', [SessionController::class, 'sessions']);",
     );
