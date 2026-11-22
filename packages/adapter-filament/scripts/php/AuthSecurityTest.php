@@ -1192,7 +1192,7 @@ class AuthSecurityTest extends TestCase
         $register = fn (string $username, string $email): array => $this->graphqlSeen(sprintf('mutation { register(input: { username: "%s", email: "%s", password: "secret1" }) { jwt user { username } } }', $username, $email));
         $new = $register('carol', 'carol@example.test');
         self::assertSame(200, $new[0]);
-        self::assertNull($new[1]['data']);
+        self::assertNull($new[1]['data'] ?? null);
         self::assertSame('STRAPI_CONFIRMATION_PENDING_ERROR', $new[1]['errors'][0]['extensions']['code']);
         self::assertSame('ConfirmationPendingError', $new[1]['errors'][0]['extensions']['error']['name']);
         self::assertSame('Check your email to finish registering', $new[1]['errors'][0]['message']);

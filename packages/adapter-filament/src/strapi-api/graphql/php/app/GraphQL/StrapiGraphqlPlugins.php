@@ -92,8 +92,14 @@ final class StrapiGraphqlPlugins
                 return self::session(StrapiGraphql::dispatch($auth, 'login', [], $request, ['identifier' => $input['identifier'], 'password' => $input['password']], [], false));
             case 'register':
                 self::throttle($request, 'register');
+                $registered = StrapiGraphql::dispatch($auth, 'register', [], $request, $args['input'], [], false);
+                // A registration answered alike for every address (accounts hidden, email to
+                // confirm) has no user for the payload's non-null one to show: one error says so.
+                if (($registered['sent'] ?? false) === true) {
+                    throw new StrapiError(400, 'ConfirmationPendingError', 'Check your email to finish registering');
+                }
 
-                return self::session(StrapiGraphql::dispatch($auth, 'register', [], $request, $args['input'], [], false));
+                return self::session($registered);
             case 'forgotPassword':
                 return StrapiGraphql::dispatch($auth, 'forgotPassword', [], $request, $args, [], false);
             case 'resetPassword':
