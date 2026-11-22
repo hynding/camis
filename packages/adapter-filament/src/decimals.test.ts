@@ -3,6 +3,7 @@ import { filamentAdapter } from "./generate";
 import { blog } from "./__fixtures__/blog";
 import { decimalsBundle } from "./__fixtures__/decimals";
 import { contentManagerMcpTools } from "./strapi-api/content-manager/mcp-tools";
+import { emitStrapiImport, withDecimalDigits } from "./strapi-api/data-transfer/transfer-runtime";
 import { strapiApiBundle } from "./strapi-api/__fixtures__/strapi-api";
 
 const generate = (
@@ -176,7 +177,7 @@ describe("decimals stating their digits (issue #104)", () => {
   });
 
   // The import writes rows with the query builder, past every model's cast.
-  it("imports a decimal stating its digits from an archive as every write keeps it, stopping at one that does not fit", () => {
+  it("imports a decimal stating its digits from an archive as every write keeps it, stopping at one that does not fit", async () => {
     const content = contentOf(generate("strapi"));
     const map = content("app/Support/StrapiTransferMap.php");
     expect(map).toContain(
@@ -185,23 +186,32 @@ describe("decimals stating their digits (issue #104)", () => {
     expect(map).toContain(
       "'fee' => [\n                    'column' => 'fee',\n                    'type' => 'decimal',\n                ],",
     );
-    const importer = content("app/Support/StrapiImport.php");
-    expect(importer.match(/= self::digits\(self::value\(/g)).toHaveLength(3);
-    expect(importer).toContain(
-      "private static function digits(mixed $value, array $attribute, string $column): mixed",
+    // Only the writes are patched; what they call is DecimalDigits' own.
+    await expect(content("app/Support/StrapiImport.php")).toMatchFileSnapshot(
+      "./__golden__/decimals/strapi/StrapiImport.php",
     );
-    expect(importer).toContain(
-      `?? throw new \\RuntimeException("{$column} takes a decimal of at most {$precision} digits, {$scale} of them after the point, not " . var_export($value, true));`,
+    expect(content("app/Support/DecimalDigits.php")).toContain(
+      "public static function archived(mixed $value, array $attribute, string $column): mixed",
     );
     // Every other project imports exactly as before.
     const blogImporter =
       filamentAdapter
         .generate(blog, { projectName: "blog", apiStyle: "strapi" })
         .files.find((f) => f.path === "app/Support/StrapiImport.php")?.content ?? "";
-    expect(blogImporter).not.toContain("self::digits(");
+    expect(blogImporter).not.toContain("DecimalDigits::archived(");
     expect(blogImporter).toContain(
       "$row[$attribute['column']] = self::value($value, $attribute['type'], $model->getDateFormat());",
     );
+  });
+
+  it("refuses to patch an import that lacks a write it patches", () => {
+    const php = emitStrapiImport();
+    const anchor =
+      "$row[$scalar['column']] = self::value(self::at($item, $scalar['key']), $scalar['type'], $relation->getRelated()->getDateFormat());";
+    expect(() => withDecimalDigits(php.replace(anchor, ""))).toThrow(
+      `StrapiImport.php must hold exactly one "${anchor}"`,
+    );
+    expect(() => withDecimalDigits(php + anchor)).toThrow("must hold exactly one");
   });
 
   // A float holds 15 digits; MySQL compares a DECIMAL with a string as two doubles.
