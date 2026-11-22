@@ -214,6 +214,16 @@ describe("users-permissions sessions", () => {
     expect(deploy).toContain("Only a refresh that fails is counted");
     expect(deploy).not.toContain("A bucket counts per client address,\nexcept a password change");
   });
+  // A foreign page's refused refreshes are failures of the visitor's address too; the operator
+  // must not read "cannot stop" as covering a failing refresh. And many names from one address
+  // are bounded by its ceiling, the bucket following the account a name finds.
+  it("says what a foreign page's refreshes can and cannot stop, and what bounds many names", () => {
+    const deploy = content("DEPLOY.md");
+    expect(deploy).not.toContain("cannot stop that visitor's own refreshes");
+    expect(deploy).toContain("may answer 429 rather than 401");
+    expect(deploy).toContain("the per-address ceiling is the bound");
+    expect(deploy).toContain("counts against the account it finds");
+  });
   it("issues sessions from login, registration and a password change or reset", () => {
     const auth = content("app/Http/Controllers/Api/AuthController.php");
     expect(auth).toContain("StrapiSessions::login($request, $user)");
