@@ -106,7 +106,7 @@ final class StrapiRateLimits
     }
 
     /** The name without the case, width and accents a database collation may ignore. */
-    private static function folded(string $identifier): string
+    public static function folded(string $identifier): string
     {
         $decomposed = \Normalizer::normalize(trim($identifier), \Normalizer::FORM_KD);
 

@@ -47,7 +47,9 @@ class AuthController extends Controller
         $username = (string) $body['username'];
         // A username is looked up as an address too, as Strapi looks it up, so one naming another
         // address would tell its registrant whether that address has an account: refused first.
-        if (StrapiUsers::hidesAccounts() && str_contains($username, '@') && mb_strtolower($username) !== $email) {
+        // Read folded, since a collation may read a look-alike "@" (fullwidth, small) as "@".
+        $folded = StrapiRateLimits::folded($username);
+        if (StrapiUsers::hidesAccounts() && str_contains($folded, '@') && $folded !== StrapiRateLimits::folded($email)) {
             throw StrapiError::validation('username must not be an email address other than the one registering');
         }
         $taken = User::query()->where(fn ($q) => $q->where('email', $email)->orWhere('username', $email)
