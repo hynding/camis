@@ -237,6 +237,20 @@ class AuthSecurityTest extends TestCase
         $this->assertDatabaseMissing('users', ['username' => 'mallory']);
     }
 
+    /** Laravel's throttle sorts ahead of unlisted middleware: a refused body must still not take a turn. */
+    public function test_a_body_refused_as_not_json_takes_no_turn_of_laravels_throttle(): void
+    {
+        \Illuminate\Support\Facades\Route::middleware(['api', \App\Http\Middleware\StrapiErrors::class])->group(function (): void {
+            \Illuminate\Support\Facades\Route::post('/api/camis-test-order', fn () => response()->json(['ok' => true]))
+                ->middleware([\App\Http\Middleware\StrapiJsonBody::class, 'throttle:1,1']);
+        });
+        app('router')->getRoutes()->refreshNameLookups();
+        for ($i = 0; $i < 3; $i++) {
+            self::assertUnsupported($this->postAs('/api/camis-test-order', 'text/plain', '{}'));
+        }
+        $this->postAs('/api/camis-test-order', 'application/json', '{}')->assertOk();
+    }
+
     public function test_an_auth_write_takes_json_by_any_of_its_names_and_an_empty_body(): void
     {
         config(['camis.auth_throttle_per_minute' => 10, 'camis.users_permissions.auth_address_throttle_per_minute' => 10]);

@@ -295,6 +295,13 @@ describe("patchBootstrapMiddleware", () => {
     expect(patched).toContain("$middleware->trimStrings(except: [$strapiRoutes]);");
     expect(patched).toContain("$middleware->convertEmptyStringsToNull(except: [$strapiRoutes]);");
   });
+  // Laravel's priority sort runs ThrottleRequests ahead of any unlisted route middleware, so a body
+  // StrapiJsonBody refuses would take a throttle turn first unless it is listed ahead of it.
+  it("runs the JSON body check ahead of Laravel's throttle", () => {
+    expect(patchBootstrapMiddleware(STOCK_BOOTSTRAP)).toContain(
+      "$middleware->prependToPriorityList(\\Illuminate\\Routing\\Middleware\\ThrottleRequests::class, \\App\\Http\\Middleware\\StrapiJsonBody::class);",
+    );
+  });
   it("is idempotent", () => {
     const once = patchBootstrapMiddleware(STOCK_BOOTSTRAP);
     expect(patchBootstrapMiddleware(once)).toBe(once);
