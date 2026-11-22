@@ -216,4 +216,59 @@ class AuthSecurityTest extends TestCase
         config(['camis.users_permissions.jwt_management' => 'refresh']);
         self::assertThrottled(fn (): TestResponse => $this->postJson('/api/auth/refresh', ['refreshToken' => 'nope.nope']), 401);
     }
+
+    private function cookieLogin(): \Symfony\Component\HttpFoundation\Cookie
+    {
+        config(['camis.users_permissions.jwt_management' => 'refresh']);
+        $this->register('alice');
+        $cookie = $this->withHeader('x-strapi-refresh-cookie', 'httpOnly')
+            ->postJson('/api/auth/local', ['identifier' => 'alice', 'password' => 'secret1'])->assertOk()
+            ->getCookie('strapi_up_refresh', false);
+        self::assertNotNull($cookie);
+
+        return $cookie;
+    }
+
+    public function test_the_refresh_cookie_is_http_only_strict_secure_and_sent_to_the_auth_routes_alone(): void
+    {
+        $cookie = $this->cookieLogin();
+
+        self::assertTrue($cookie->isHttpOnly());
+        self::assertTrue($cookie->isSecure());
+        self::assertSame('strict', $cookie->getSameSite());
+        self::assertSame('/api/auth', $cookie->getPath());
+    }
+
+    /** The browser drops the cookie when its session can no longer be refreshed, not before. */
+    public function test_the_refresh_cookie_lasts_what_the_sessions_absolute_lifespan_has_left(): void
+    {
+        $lifespan = (int) config('camis.users_permissions.sessions.max_refresh_token_lifespan');
+        $opened = time();
+        $cookie = $this->cookieLogin();
+        self::assertEqualsWithDelta($opened + $lifespan, $cookie->getExpiresTime(), 2);
+
+        $this->travel(1)->days();
+        $this->flushHeaders();
+        $this->app['auth']->forgetGuards();
+        $rotated = $this->withCredentials()->withUnencryptedCookie('strapi_up_refresh', (string) $cookie->getValue())
+            ->withHeader('x-strapi-refresh-cookie', 'httpOnly')->postJson('/api/auth/refresh', [])->assertOk()
+            ->getCookie('strapi_up_refresh', false);
+        self::assertNotNull($rotated);
+        self::assertEqualsWithDelta($cookie->getExpiresTime(), $rotated->getExpiresTime(), 2);
+        self::assertEqualsWithDelta($lifespan - 86400, $rotated->getMaxAge(), 2);
+    }
+
+    public function test_the_refresh_cookie_goes_without_secure_only_when_asked_in_local_development(): void
+    {
+        config(['camis.users_permissions.sessions.cookie.secure' => false]);
+        self::assertTrue($this->cookieLogin()->isSecure());
+
+        $this->app['env'] = 'local';
+        cache()->flush();
+        $this->flushHeaders();
+        $cookie = $this->withHeader('x-strapi-refresh-cookie', 'httpOnly')
+            ->postJson('/api/auth/local', ['identifier' => 'alice', 'password' => 'secret1'])->assertOk()
+            ->getCookie('strapi_up_refresh', false);
+        self::assertFalse($cookie?->isSecure());
+    }
 }

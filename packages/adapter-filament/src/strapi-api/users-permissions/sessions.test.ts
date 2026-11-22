@@ -41,6 +41,26 @@ describe("users-permissions sessions", () => {
     );
   });
 
+  // Stricter than Strapi's lax, Secure-in-production, path `/` browser-session cookie: the refresh
+  // token is sent only to the auth routes, never over plain HTTP outside local development, never
+  // with a request another site starts, and the browser drops it when the session can no longer
+  // be refreshed. Each stays configurable.
+  it("sets the refresh cookie Secure, SameSite=Strict, on the auth routes alone, by default", () => {
+    const config = content("config/camis.php");
+    expect(config).toContain("'secure' => (bool) env('CAMIS_SESSIONS_COOKIE_SECURE', true),");
+    expect(config).toContain("'same_site' => env('CAMIS_SESSIONS_COOKIE_SAME_SITE', 'strict'),");
+    expect(config).toContain("'path' => env('CAMIS_SESSIONS_COOKIE_PATH', '/api/auth'),");
+    const sessions = content("app/Support/StrapiSessions.php");
+    expect(sessions).toContain("|| app()->environment('local');");
+  });
+
+  it("keeps the refresh cookie as long as its session's absolute lifespan has left", () => {
+    const sessions = content("app/Support/StrapiSessions.php");
+    expect(sessions).toContain(
+      "$expires = CarbonImmutable::parse((string) self::absoluteExpiry($refreshToken));",
+    );
+  });
+
   it("keeps sessions in their own table, timed to the millisecond as Strapi lists them", async () => {
     const migration = content(
       "database/migrations/0001_01_02_000003_create_strapi_sessions_table.php",
