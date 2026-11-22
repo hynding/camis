@@ -32,7 +32,7 @@ class AuthSecurityTest extends TestCase
     {
         parent::setUp();
         $this->seed(\Database\Seeders\RolePermissionSeeder::class);
-        config(['camis.auth_throttle_per_minute' => self::RATE, 'camis.users_permissions.sessions.refresh_throttle_per_minute' => self::REFRESH_RATE, 'camis.users_permissions.auth_address_throttle_per_minute' => self::ADDRESS_RATE]);
+        config(['camis.auth_throttle_per_minute' => self::RATE, 'camis.users_permissions.sessions.refresh_throttle_per_minute' => self::REFRESH_RATE, 'camis.users_permissions.auth_address_throttle_per_minute' => self::ADDRESS_RATE, 'camis.users_permissions.hide_account_existence' => true]);
     }
 
     protected function tearDown(): void
@@ -655,6 +655,41 @@ class AuthSecurityTest extends TestCase
         \Illuminate\Support\Facades\Mail::mailer('array')->getSymfonyTransport()->flush();
     }
 
+    /**
+     * Counts the hasher's makes and checks from here on: a bcrypt hasher of the configured cost
+     * that keeps a tally, installed as the default driver.
+     *
+     * @return \ArrayObject<string, int>
+     */
+    private function countHashing(): \ArrayObject
+    {
+        $tally = new \ArrayObject(['make' => 0, 'check' => 0]);
+        app('hash')->extend('counting', fn () => new class ((array) config('hashing.bcrypt'), $tally) extends \Illuminate\Hashing\BcryptHasher {
+            public function __construct(array $options, private \ArrayObject $tally)
+            {
+                parent::__construct($options);
+            }
+
+            public function make(#[\SensitiveParameter] $value, array $options = []): string
+            {
+                $this->tally['make']++;
+
+                return parent::make($value, $options);
+            }
+
+            public function check(#[\SensitiveParameter] $value, $hashedValue, array $options = []): bool
+            {
+                $this->tally['check']++;
+
+                return parent::check($value, $hashedValue, $options);
+            }
+        });
+        config(['hashing.driver' => 'counting']);
+        app('hash')->forgetDrivers();
+
+        return $tally;
+    }
+
     private function confirmationOn(): void
     {
         config(['camis.users_permissions.advanced.email_confirmation' => true, 'mail.from.address' => 'hello@example.test']);
@@ -679,19 +714,14 @@ class AuthSecurityTest extends TestCase
         $this->register('alice');
         $this->confirmationOn();
         self::forgetMails();
-        $hashes = 0;
-        \Illuminate\Support\Facades\Hash::partialMock()->shouldReceive('make')->andReturnUsing(function (...$args) use (&$hashes) {
-            $hashes++;
-
-            return password_hash((string) $args[0], PASSWORD_BCRYPT, ['cost' => 4]);
-        });
+        $tally = $this->countHashing();
         $answers = [];
         foreach ([['carol', 'carol@example.test'], ['alice2', 'alice@example.test'], ['alice', 'dave@example.test']] as $i => [$username, $email]) {
             $this->freshRequest();
-            $hashes = 0;
+            $tally['make'] = 0;
             $answers[] = $response = $this->withServerVariables(['REMOTE_ADDR' => "10.5.0.{$i}"])
                 ->postJson('/api/auth/local/register', ['username' => $username, 'email' => $email, 'password' => 'secret1']);
-            self::assertSame(1, $hashes, "registration {$i} hashes the password once");
+            self::assertSame(1, $tally['make'], "registration {$i} hashes the password once");
             $response->assertOk()->assertJsonPath('sent', true)->assertJsonPath('email', $email);
         }
         self::assertSame(self::seen($answers[0]), self::seen($answers[1]));
@@ -754,19 +784,13 @@ class AuthSecurityTest extends TestCase
     {
         $this->register('alice');
         \App\Models\User::forceCreate(['name' => 'oauth', 'username' => 'oauth', 'email' => 'oauth@example.test', 'password' => '', 'provider' => 'local']);
-        $checks = 0;
-        $hasher = app('hash');
-        \Illuminate\Support\Facades\Hash::partialMock()->shouldReceive('check')->andReturnUsing(function (...$args) use (&$checks, $hasher) {
-            $checks++;
-
-            return $hasher->check(...$args);
-        });
+        $tally = $this->countHashing();
         foreach (['alice', 'nobody', 'oauth'] as $i => $identifier) {
             $this->freshRequest();
-            $checks = 0;
+            $tally['check'] = 0;
             $this->withServerVariables(['REMOTE_ADDR' => "10.7.0.{$i}"])->postJson('/api/auth/local', ['identifier' => $identifier, 'password' => 'wrong'])
                 ->assertStatus(400)->assertJsonPath('error.message', 'Invalid identifier or password');
-            self::assertSame(1, $checks, "a sign-in as {$identifier} checks one hash");
+            self::assertSame(1, $tally['check'], "a sign-in as {$identifier} checks one hash");
         }
     }
 

@@ -510,6 +510,8 @@ jobs:
           esac
           # The auth vectors make more credential requests in a minute than the default allows.
           echo "CAMIS_AUTH_THROTTLE_PER_MINUTE=600" >> .env
+          # The vectors record Strapi's own answers, which name a taken or confirmed account.
+          echo "CAMIS_AUTH_HIDE_ACCOUNT_EXISTENCE=false" >> .env
           # The OAuth redirect URI is built from it, and the vectors mask the origin they call.
           sed -i 's#^APP_URL=.*#APP_URL=http://127.0.0.1:8765#' .env
           php artisan migrate --force

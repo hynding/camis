@@ -8,7 +8,10 @@ use App\Models\Concerns\HasDocumentId;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Mail\Message;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 
 final class StrapiUsers
 {
@@ -25,6 +28,12 @@ final class StrapiUsers
         // A user is published when it is made; Laravel's users table keeps no separate column.
         'publishedAt' => ['column' => 'created_at', 'type' => 'dateTime'],
     ];
+
+    /** @var list<\Closure> Work waiting for the answer to go (later()). */
+    private static array $later = [];
+
+    /** @var \WeakMap<object, true>|null The applications whose terminate drains it. */
+    private static ?\WeakMap $drains = null;
 
     public static function wire(User $user): array
     {
@@ -74,9 +83,63 @@ final class StrapiUsers
         return StrapiSettings::get('users-permissions.email', (array) config('camis.users_permissions.email', []));
     }
 
+    /**
+     * Whether the auth routes keep from a caller whether an account exists
+     * (CAMIS_AUTH_HIDE_ACCOUNT_EXISTENCE): a deliberate difference from Strapi, whose answers say.
+     */
+    public static function hidesAccounts(): bool
+    {
+        return (bool) config('camis.users_permissions.hide_account_existence', true);
+    }
+
+    /**
+     * Work for after the answer has gone (an account's mail), so how long the answer takes does not
+     * show whether there was any. It runs as the request terminates, with no queue worker: PHP-FPM
+     * and LiteSpeed have sent the answer by then. A failure is reported, never answered.
+     */
+    public static function later(\Closure $work): void
+    {
+        self::$later[] = $work;
+        // Once per application: its terminating callbacks run at every terminate a long-lived
+        // process makes, so each drains the work waiting then, and none runs twice.
+        self::$drains ??= new \WeakMap();
+        if (! isset(self::$drains[app()])) {
+            self::$drains[app()] = true;
+            app()->terminating(function (): void {
+                while (($work = array_shift(self::$later)) !== null) {
+                    try {
+                        $work();
+                    } catch (\Throwable $error) {
+                        report($error);
+                    }
+                }
+            });
+        }
+    }
+
+
+    /**
+     * Whether $password is the account's, after exactly one hash check of the configured cost
+     * whether or not there is an account with a password: a name that finds none is checked
+     * against a stand-in hash, so the answer takes as long as a wrong password's.
+     */
+    public static function passwordMatches(?User $user, string $password): bool
+    {
+        $standIn = self::standInHash();
+        $hash = $user !== null && ($user->password ?? '') !== '' ? (string) $user->password : null;
+
+        return Hash::check($password, $hash ?? $standIn) && $hash !== null;
+    }
+
+    /** A hash of a random secret at the configured algorithm and cost, read on every sign-in. */
+    private static function standInHash(): string
+    {
+        return Cache::rememberForever('camis-stand-in-hash:'.md5((string) json_encode(config('hashing'))), fn (): string => Hash::make(Str::random(40)));
+    }
+
     public static function sendResetPassword(User $user, string $token): void
     {
-        self::send($user, self::emails()['reset_password'] ?? [], [
+        self::send($user->email, self::emails()['reset_password'] ?? [], [
             'URL' => self::advanced()['email_reset_password'] ?? null,
             'SERVER_URL' => url('/'),
             'USER' => self::wire($user),
@@ -88,7 +151,7 @@ final class StrapiUsers
     {
         $token = bin2hex(random_bytes(20));
         $user->forceFill(['confirmation_token' => $token])->save();
-        self::send($user, self::emails()['email_confirmation'] ?? [], [
+        self::send($user->email, self::emails()['email_confirmation'] ?? [], [
             'URL' => url('/api/auth/email-confirmation'),
             'SERVER_URL' => url('/'),
             'USER' => self::wire($user),
@@ -257,13 +320,25 @@ final class StrapiUsers
         return is_nan($number) ? 'NaN' : (self::isInteger($number) ? (string) (int) $number : (string) $number);
     }
 
-    private static function send(User $user, array $template, array $variables): void
+    /**
+     * A registration that named an address or username already taken, with confirmation on: the
+     * address is told by mail rather than in the answer. The mail names neither the account nor
+     * what was sent, so a stranger's registration puts nothing of theirs into it.
+     */
+    public static function sendRegistrationRefused(string $email, bool $hasAccount): void
+    {
+        $mail = (array) config('camis.users_permissions.account_emails.'.($hasAccount ? 'account_exists' : 'username_taken'), []);
+        $sender = self::emails()['email_confirmation'] ?? [];
+        self::send($email, ['from' => $sender['from'] ?? [], 'response_email' => $sender['response_email'] ?? ''] + $mail, ['USER' => []]);
+    }
+
+    private static function send(string $to, array $template, array $variables): void
     {
         $html = self::template((string) ($template['message'] ?? ''), $variables);
         $subject = self::template((string) ($template['object'] ?? ''), ['USER' => $variables['USER']]);
         $from = (array) ($template['from'] ?? []);
-        Mail::html($html, function (Message $message) use ($user, $subject, $from, $template): void {
-            $message->to($user->email)->subject($subject);
+        Mail::html($html, function (Message $message) use ($to, $subject, $from, $template): void {
+            $message->to($to)->subject($subject);
             if (($from['email'] ?? '') !== '') {
                 $message->from($from['email'], ($from['name'] ?? '') !== '' ? $from['name'] : null);
             }

@@ -69,6 +69,23 @@ export const usersPermissionsConfigKeys = (): string => `
         // auth_throttle_per_minute; this caps one address's turns across every name it gives
         // (never below that rate), high enough that the address's other users are not locked out.
         'auth_address_throttle_per_minute' => max(1, (int) env('CAMIS_AUTH_ADDRESS_THROTTLE_PER_MINUTE', 50)),
+        // A deliberate difference from Strapi, whose answers tell a caller whether an account
+        // exists: registration (with email confirmation on) and the confirmation resend answer
+        // every address alike, telling the address by mail instead, and account mail is sent once
+        // the answer has gone. false restores Strapi's answers.
+        'hide_account_existence' => (bool) env('CAMIS_AUTH_HIDE_ACCOUNT_EXISTENCE', true),
+        // The mails a refused registration sends the address it named, with the account
+        // confirmation's sender. They name nothing the registration sent.
+        'account_emails' => [
+            'account_exists' => [
+                'object' => 'Account registration',
+                'message' => "<p>Someone tried to register a new account with this email address, which already has one.</p>\\n\\n<p>If it was you, sign in, or reset your password if you have forgotten it. Otherwise you can ignore this email.</p>",
+            ],
+            'username_taken' => [
+                'object' => 'Account registration',
+                'message' => "<p>Someone tried to register an account with this email address, but the username they chose is not available.</p>\\n\\n<p>If it was you, register again with another username. Otherwise you can ignore this email.</p>",
+            ],
+        ],
         // users-permissions' register.allowedFields: body keys register takes beside username,
         // email and password (comma separated). A key the user has no column for is accepted and
         // dropped, as Strapi drops it.

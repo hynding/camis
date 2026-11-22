@@ -44,20 +44,36 @@ class AuthController extends Controller
         $email = mb_strtolower((string) $body['email']);
         $username = (string) $body['username'];
         $taken = User::query()->where(fn ($q) => $q->where('email', $email)->orWhere('username', $email)
-            ->orWhere('username', $username)->orWhere('email', $username));
-        if ($taken->exists()) {
+            ->orWhere('username', $username)->orWhere('email', $username))->exists();
+        $confirm = (bool) ($settings['email_confirmation'] ?? false);
+        // With confirmation on, a new account's answer carries nothing of it, so a taken address or
+        // username can be answered alike, at the same hashing cost, and told by mail instead.
+        // Without it a new account is answered with its session, which a taken one cannot fake.
+        $hidden = $confirm && StrapiUsers::hidesAccounts();
+        if ($taken && ! $hidden) {
             throw StrapiUsers::application('Email or Username are already taken');
         }
-        $confirm = (bool) ($settings['email_confirmation'] ?? false);
+        $password = Hash::make((string) $body['password']);
+        if ($taken) {
+            $hasAccount = User::query()->where('email', $email)->exists();
+            StrapiUsers::later(fn () => StrapiUsers::sendRegistrationRefused($email, $hasAccount));
+
+            return response()->json(['email' => $email, 'sent' => true]);
+        }
         $user = StrapiUsers::add([
             ...array_intersect_key($body, array_flip($allowed)),
             'provider' => 'local',
             'username' => $username,
             'email' => $email,
-            'password' => Hash::make((string) $body['password']),
+            'password' => $password,
             'confirmed' => ! $confirm,
         ]);
         $user->assignRole($role);
+        if ($hidden) {
+            StrapiUsers::later(fn () => StrapiUsers::sendConfirmation($user));
+
+            return response()->json(['email' => $email, 'sent' => true]);
+        }
         if ($confirm) {
             try {
                 StrapiUsers::sendConfirmation($user);
@@ -90,7 +106,9 @@ class AuthController extends Controller
         $user = User::query()->where('provider', 'local')
             ->where(fn ($q) => $q->where('email', mb_strtolower($identifier))->orWhere('username', $identifier))
             ->first();
-        if ($user === null || ($user->password ?? '') === '' || ! Hash::check((string) $body['password'], $user->password)) {
+        // One hash check whether or not the name found an account with a password, as Strapi's
+        // order of errors already hides which of them failed.
+        if (! StrapiUsers::passwordMatches($user, (string) $body['password'])) {
             throw StrapiError::validation('Invalid identifier or password');
         }
         if ((bool) (StrapiUsers::advanced()['email_confirmation'] ?? false) && ! (bool) $user->confirmed) {
@@ -129,10 +147,13 @@ class AuthController extends Controller
         if ($user === null || (bool) $user->blocked) {
             return response()->json(['ok' => true]);
         }
-        $token = bin2hex(random_bytes(64));
-        // Saved before sending, so an administrator can still hand out the link if the mail fails.
-        $user->forceFill(['reset_password_token' => $token])->save();
-        StrapiUsers::sendResetPassword($user, $token);
+        $reset = function () use ($user): void {
+            $token = bin2hex(random_bytes(64));
+            // Saved before sending, so an administrator can still hand out the link if the mail fails.
+            $user->forceFill(['reset_password_token' => $token])->save();
+            StrapiUsers::sendResetPassword($user, $token);
+        };
+        StrapiUsers::hidesAccounts() ? StrapiUsers::later($reset) : $reset();
 
         return response()->json(['ok' => true]);
     }
@@ -167,6 +188,14 @@ class AuthController extends Controller
         $email = mb_strtolower((string) $body['email']);
         StrapiRateLimits::refuseNamed($request, 'confirmation', $email);
         $user = User::query()->where('email', $email)->first();
+        if (StrapiUsers::hidesAccounts()) {
+            // Every address is answered alike; only an account still to be confirmed gets the mail.
+            if ($user !== null && ! (bool) $user->confirmed && ! (bool) $user->blocked) {
+                StrapiUsers::later(fn () => StrapiUsers::sendConfirmation($user));
+            }
+
+            return response()->json(['email' => $email, 'sent' => true]);
+        }
         if ($user === null) {
             return response()->json(['email' => $body['email'], 'sent' => true]);
         }
