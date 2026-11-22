@@ -43,7 +43,7 @@ describe("strapi-api auth", () => {
     expect(php).toContain(
       "$e instanceof HttpExceptionInterface => $this->errorForStatus($e->getStatusCode(), $e->getMessage(), $e->getHeaders()),",
     );
-    expect(php).toContain("], $status, $headers);");
+    expect(php).toContain("return response()->json($body, $status, $headers);");
   });
   it("errors middleware golden", async () => {
     await expect(emitStrapiErrorsMiddleware()).toMatchFileSnapshot(
