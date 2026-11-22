@@ -222,7 +222,12 @@ describe("users-permissions sessions", () => {
     expect(deploy).not.toContain("cannot stop that visitor's own refreshes");
     expect(deploy).toContain("may answer 429 rather than 401");
     expect(deploy).toContain("the per-address ceiling is the bound");
-    expect(deploy).toContain("counts against the account it finds");
+    // Nothing the lookup finds has a bucket: an account's other names, and names a collation
+    // matches, are bounded by the ceiling alone.
+    expect(deploy).not.toContain("counts against the account it finds");
+    expect(deploy).not.toContain("answer alike");
+    expect(deploy).toContain("whether it finds an account has no bearing on the throttle");
+    expect(deploy).toContain("an account's username and email, or two names the database matches");
   });
   it("issues sessions from login, registration and a password change or reset", () => {
     const auth = content("app/Http/Controllers/Api/AuthController.php");
