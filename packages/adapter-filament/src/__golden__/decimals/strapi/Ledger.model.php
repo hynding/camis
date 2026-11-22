@@ -52,6 +52,11 @@ class Ledger extends Model
         return $this->hasMany(LedgerEntries::class, 'ledger_id')->orderBy('id');
     }
 
+    public function linesLimit(): HasMany
+    {
+        return $this->hasMany(LedgerLinesLimit::class, 'ledger_id')->orderBy('position');
+    }
+
     /** Rows visible to $user (Strapi API style list scope): each role's read condition, in SQL. */
     public function scopeForUser(Builder $q, ?User $user): Builder
     {

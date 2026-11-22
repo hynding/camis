@@ -18,6 +18,7 @@ class Ledger extends Model
         'share',
         'units',
         'fee',
+        'lines',
         'limit_ceiling',
     ];
 

@@ -18,6 +18,7 @@ return new class extends Migration
             (Schema::getConnection()->getDriverName() === 'sqlite' ? $table->string('share', 17) : $table->decimal('share', 15, 5))->nullable();
             $table->decimal('units', 14, 4)->nullable();
             $table->decimal('fee')->nullable();
+            $table->string('lines')->nullable();
             (Schema::getConnection()->getDriverName() === 'sqlite' ? $table->string('limit_ceiling', 20) : $table->decimal('limit_ceiling', 18, 2))->nullable();
             $table->timestamps();
         });

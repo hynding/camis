@@ -19,6 +19,7 @@ class LedgerForm
             TextInput::make('share')->inputMode('decimal')->rule(new \App\Rules\DecimalDigitsRule(15, 5)),
             TextInput::make('units')->inputMode('decimal')->rule(new \App\Rules\DecimalDigitsRule(14, 4)),
             TextInput::make('fee')->numeric(),
+            TextInput::make('lines'),
             TextInput::make('limit_ceiling')->inputMode('decimal')->rule(new \App\Rules\DecimalDigitsRule(18, 2)),
             Repeater::make('entries')->relationship()->schema([
                 TextInput::make('memo'),

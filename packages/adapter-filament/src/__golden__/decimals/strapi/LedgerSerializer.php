@@ -8,6 +8,7 @@ namespace App\Http\Serializers;
 use App\Models\Ledger;
 use App\Support\DecimalDigits;
 use App\Support\StrapiError;
+use App\Support\StrapiZones;
 
 final class LedgerSerializer
 {
@@ -26,16 +27,21 @@ final class LedgerSerializer
             'memo' => ['column' => 'memo', 'type' => 'string'],
             'amount' => ['column' => 'amount', 'type' => 'decimal', 'precision' => 20, 'scale' => 6],
         ]],
+        'lines' => ['zone' => true],
         'createdAt' => ['column' => 'created_at', 'type' => 'dateTime'],
         'updatedAt' => ['column' => 'updated_at', 'type' => 'dateTime'],
         'publishedAt' => ['column' => 'updated_at', 'type' => 'dateTime'],
     ];
 
     /** Component keys, which Strapi leaves off the wire unless populate names them. */
-    public const COMPONENTS = ['limit', 'entries'];
+    public const COMPONENTS = ['limit', 'entries', 'lines'];
 
     /** Each dynamic zone's member components by uid: the child relation its items live in, its own component keys, its media fields, its relations and its repeatables. */
-    public const ZONES = [];
+    public const ZONES = [
+        'lines' => [
+            'shared.limit' => ['relation' => 'linesLimit', 'components' => []],
+        ],
+    ];
 
     /** Whether each document has a draft and, once published, a published version. */
     public const DRAFT_PUBLISH = false;
@@ -60,6 +66,13 @@ final class LedgerSerializer
                 'memo' => $c->memo,
                 'amount' => $c->amount === null ? null : (string) $c->amount,
             ])->all(),
+            'lines' => self::zone([
+                ...$m->linesLimit->map(fn ($c) => [$c->position, [
+                    '__component' => 'shared.limit',
+                    'id' => $c->id,
+                    'ceiling' => $c->ceiling === null ? null : (string) $c->ceiling,
+                ]])->all(),
+            ]),
             'createdAt' => $m->created_at?->toIso8601ZuluString('millisecond'),
             'updatedAt' => $m->updated_at?->toIso8601ZuluString('millisecond'),
             'publishedAt' => $m->updated_at?->toIso8601ZuluString('millisecond'),
@@ -75,19 +88,26 @@ final class LedgerSerializer
     {
         $columns = array_filter([
             'label' => self::dig($data, ['label']),
-            'balance' => self::decimal(self::dig($data, ['balance']), 20, 6, 'balance'),
-            'rate' => self::decimal(self::dig($data, ['rate']), 9, 4, 'rate'),
-            'share' => self::decimal(self::dig($data, ['share']), 15, 5, 'share'),
-            'units' => self::decimal(self::dig($data, ['units']), 14, 4, 'units'),
+            'balance' => self::decimal(self::dig($data, ['balance']), 20, 6, ['balance']),
+            'rate' => self::decimal(self::dig($data, ['rate']), 9, 4, ['rate']),
+            'share' => self::decimal(self::dig($data, ['share']), 15, 5, ['share']),
+            'units' => self::decimal(self::dig($data, ['units']), 14, 4, ['units']),
             'fee' => self::dig($data, ['fee']),
-            'limit_ceiling' => self::decimal(self::dig($data, ['limit', 'ceiling']), 18, 2, 'limit.ceiling'),
+            'limit_ceiling' => self::decimal(self::dig($data, ['limit', 'ceiling']), 18, 2, ['limit', 'ceiling']),
         ], fn ($v) => $v !== null);
         $children = [];
         if (self::has($data, ['entries'])) {
-            $children['entries'] = array_map(fn (array $row) => array_filter([
+            $children['entries'] = array_map(fn (array $row, int|string $i) => array_filter([
                 'memo' => self::dig($row, ['memo']),
-                'amount' => self::decimal(self::dig($row, ['amount']), 20, 6, 'amount'),
-            ], fn ($v) => $v !== null), is_array(self::dig($data, ['entries'])) ? self::dig($data, ['entries']) : []);
+                'amount' => self::decimal(self::dig($row, ['amount']), 20, 6, ['entries', (string) $i, 'amount']),
+            ], fn ($v) => $v !== null), is_array(self::dig($data, ['entries'])) ? self::dig($data, ['entries']) : [], array_keys(is_array(self::dig($data, ['entries'])) ? self::dig($data, ['entries']) : []));
+        }
+        if (array_key_exists('lines', $data)) {
+            $children['lines'] = StrapiZones::items($data['lines'], 'lines', self::ZONES['lines'], fn (string $uid, array $item, int $position) => match ($uid) {
+                'shared.limit' => [
+                    'ceiling' => self::decimal(self::dig($item, ['ceiling']), 18, 2, ['lines', (string) $position, 'ceiling']),
+                ],
+            });
         }
 
         return ['columns' => $columns, 'children' => $children];
@@ -98,6 +118,9 @@ final class LedgerSerializer
         if (array_key_exists('entries', $children)) {
             $m->entries()->delete();
             $m->entries()->createMany($children['entries']);
+        }
+        if (array_key_exists('lines', $children)) {
+            StrapiZones::sync($m, 'lines', self::ZONES['lines'], $children['lines']);
         }
     }
 
@@ -133,17 +156,30 @@ final class LedgerSerializer
         return true;
     }
 
-    /** A decimal stating its digits as its column keeps it, from a string or a number; refused when it is not one that fits. */
-    private static function decimal(mixed $value, int $precision, int $scale, string $path): ?string
+    /** @param list<array{0: int, 1: array}> $items [position, item] pairs from every member */
+    private static function zone(array $items): array
+    {
+        usort($items, fn (array $a, array $b) => $a[0] <=> $b[0]);
+
+        return array_column($items, 1);
+    }
+
+    /** A decimal stating its digits as its column keeps it, from a string or a number; refused, named by its path, when it is not one that fits. */
+    private static function decimal(mixed $value, int $precision, int $scale, array $path): ?string
     {
         if ($value === null) {
             return null;
         }
         $decimal = DecimalDigits::canonical($value, $precision, $scale);
         if ($decimal === null) {
-            $message = "{$path} must be a decimal of at most {$precision} digits, {$scale} of them after the point";
+            // StrapiValidator's form: ['entries', '1', 'amount'] reads entries[1].amount.
+            $label = '';
+            foreach ($path as $segment) {
+                $label .= ctype_digit($segment) ? "[{$segment}]" : ($label === '' ? $segment : ".{$segment}");
+            }
+            $message = "{$label} must be a decimal of at most {$precision} digits, {$scale} of them after the point";
 
-            throw StrapiError::validation($message, ['errors' => [['path' => explode('.', $path), 'message' => $message, 'name' => 'ValidationError']]]);
+            throw StrapiError::validation($message, ['errors' => [['path' => $path, 'message' => $message, 'name' => 'ValidationError']]]);
         }
 
         return $decimal;

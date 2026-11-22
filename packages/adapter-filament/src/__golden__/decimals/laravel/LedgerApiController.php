@@ -16,7 +16,7 @@ class LedgerApiController extends Controller
 {
     use AuthorizesRequests;
 
-    private const FIELDS = ['label', 'balance', 'rate', 'share', 'units', 'fee', 'limit_ceiling'];
+    private const FIELDS = ['label', 'balance', 'rate', 'share', 'units', 'fee', 'lines', 'limit_ceiling'];
 
     /** Decimals stating their digits: each column's precision and scale. */
     private const DECIMALS = ['balance' => [20, 6], 'rate' => [9, 4], 'share' => [15, 5], 'units' => [14, 4], 'limit_ceiling' => [18, 2]];
@@ -66,7 +66,7 @@ class LedgerApiController extends Controller
             }
             $decimal = DecimalDigits::canonical($payload[$column], $precision, $scale);
             if ($decimal === null) {
-                throw ValidationException::withMessages([$column => "The {$column} field must be a decimal of at most {$precision} digits, {$scale} of them after the point."])->status(400);
+                throw ValidationException::withMessages([$column => "The {$column} field must be a decimal of at most {$precision} digits, {$scale} of them after the point."]);
             }
             $payload[$column] = $decimal;
         }

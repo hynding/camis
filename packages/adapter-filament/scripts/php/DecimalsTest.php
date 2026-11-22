@@ -264,6 +264,27 @@ class DecimalsTest extends TestCase
         $this->api('GET', 'ledgers?pagination[pageSize]=100')->assertOk()->assertJsonCount(count($taken), 'data');
     }
 
+    public function test_a_refused_decimal_in_a_repeatable_or_a_zone_is_named_by_its_full_path(): void
+    {
+        $tooLong = '123456789012345678901';
+        $this->api('POST', 'ledgers', ['label' => 'entries', 'entries' => [['memo' => 'a', 'amount' => '1'], ['memo' => 'b', 'amount' => $tooLong]]])
+            ->assertStatus(400)
+            ->assertJsonPath('error.message', 'entries[1].amount must be a decimal of at most 20 digits, 6 of them after the point')
+            ->assertJsonPath('error.details.errors.0.path', ['entries', '1', 'amount']);
+        $this->api('POST', 'ledgers', ['label' => 'lines', 'lines' => [['__component' => 'shared.limit', 'ceiling' => '1'], ['__component' => 'shared.limit', 'ceiling' => $tooLong]]])
+            ->assertStatus(400)
+            ->assertJsonPath('error.message', 'lines[1].ceiling must be a decimal of at most 18 digits, 2 of them after the point')
+            ->assertJsonPath('error.details.errors.0.path', ['lines', '1', 'ceiling']);
+        $this->api('POST', 'ledgers', ['label' => 'limit', 'limit' => ['ceiling' => $tooLong]])
+            ->assertStatus(400)
+            ->assertJsonPath('error.details.errors.0.path', ['limit', 'ceiling']);
+        $this->assertFalse(DB::table('ledgers')->exists());
+
+        // A zone's items that fit are kept at their scale, in their order.
+        $created = $this->api('POST', 'ledgers?populate=*', ['label' => 'kept', 'lines' => [['__component' => 'shared.limit', 'ceiling' => self::CEILING], ['__component' => 'shared.limit', 'ceiling' => '1.5']]])->assertCreated();
+        $this->assertSame([self::CEILING, '1.50'], array_column($created->json('data.lines'), 'ceiling'));
+    }
+
     public function test_every_write_through_eloquent_keeps_a_decimal_as_its_column_keeps_it(): void
     {
         // Past the request's trimming middleware: the model's cast trims, reads and rounds itself.

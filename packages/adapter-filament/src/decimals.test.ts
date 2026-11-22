@@ -3,6 +3,7 @@ import { filamentAdapter } from "./generate";
 import { blog } from "./__fixtures__/blog";
 import { decimalsBundle } from "./__fixtures__/decimals";
 import { contentManagerMcpTools } from "./strapi-api/content-manager/mcp-tools";
+import { strapiApiBundle } from "./strapi-api/__fixtures__/strapi-api";
 
 const generate = (
   apiStyle: "laravel" | "strapi",
@@ -91,7 +92,7 @@ describe("decimals stating their digits (issue #104)", () => {
   });
 
   // SQLite's text column takes any string: each API keeps a value as MySQL and PostgreSQL do.
-  it("writes a decimal stating its digits at its scale on the Laravel API style, refusing one that is not a decimal that fits with a 400", async () => {
+  it("writes a decimal stating its digits at its scale on the Laravel API style, refusing one that is not a decimal that fits with Laravel's 422", async () => {
     await expect(
       contentOf(generate("laravel"))("app/Http/Controllers/Api/LedgerApiController.php"),
     ).toMatchFileSnapshot("./__golden__/decimals/laravel/LedgerApiController.php");
@@ -199,6 +200,26 @@ describe("decimals stating their digits (issue #104)", () => {
       await expect(content("app/Http/Serializers/LedgerSerializer.php")).toMatchFileSnapshot(
         "./__golden__/decimals/strapi/LedgerSerializer.php",
       );
+    });
+
+    // StrapiValidator names a field in an item by its index: ['entries', '1', 'amount'].
+    it("names a refused decimal in a repeatable's item or a zone's by its full path, its index included, and every other zone as before", () => {
+      const serializer = content("app/Http/Serializers/LedgerSerializer.php");
+      expect(serializer).toContain("['entries', (string) $i, 'amount']");
+      expect(serializer).toContain(
+        "fn (string $uid, array $item, int $position) => match ($uid) {",
+      );
+      expect(serializer).toContain("['lines', (string) $position, 'ceiling']");
+      expect(content("app/Support/StrapiZones.php")).toContain(
+        "array_filter($columns($uid, $item, $position), fn ($v) => $v !== null);",
+      );
+      const other = filamentAdapter.generate(strapiApiBundle, {
+        projectName: "api",
+        apiStyle: "strapi",
+      });
+      const zones = other.files.find((f) => f.path === "app/Support/StrapiZones.php")?.content;
+      expect(zones).toContain("array_filter($columns($uid, $item), fn ($v) => $v !== null);");
+      expect(other.files.map((f) => f.content).join("\n")).not.toContain("int $position) => match");
     });
 
     it("types a decimal beyond a double as a String over GraphQL, filtered as one", () => {

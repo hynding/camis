@@ -3,7 +3,8 @@ import type { IrBundle } from "@camis/permissions";
 /**
  * Decimals stating their digits (issue #104): `balance`, `share`, a limit's `ceiling` and an
  * entry's `amount` keep more digits than PHP writes a float with (14), `units` exactly those and
- * `rate` fewer, and `fee` states none, keeping the target's default. CI's boot job round trips `balance` on the Laravel API style (the boot
+ * `rate` fewer, and `fee` states none, keeping the target's default; the `lines` zone holds limits.
+ * CI's boot job round trips `balance` on the Laravel API style (the boot
  * fixture holds it too), its decimals job this fixture on the Strapi API style
  * (scripts/overlay.ts --bundle decimals, DecimalsTest), each on SQLite, MySQL and PostgreSQL.
  */
@@ -23,6 +24,7 @@ export const decimalsBundle: IrBundle = {
           { type: "decimal", name: "fee" },
           { type: "component", name: "limit", component: "Limit", repeatable: false },
           { type: "component", name: "entries", component: "Entry", repeatable: true },
+          { type: "dynamicZone", name: "lines", components: ["Limit"] },
         ],
       },
     ],
