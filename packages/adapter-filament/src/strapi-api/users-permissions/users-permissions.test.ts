@@ -171,7 +171,7 @@ describe("users-permissions routes", () => {
     const limits = content("app/Support/StrapiRateLimits.php");
     expect(limits).toContain("private const NAMED = ['sign-in', 'recovery', 'confirmation'];");
     expect(limits).toContain("substr(hash('sha256', self::folded($identifier)), 0, 32)");
-    expect(limits).not.toContain("'account:'");
+    expect(limits).not.toContain("account:");
     expect(limits).toContain(
       "public static function refuseNamed(Request $request, string $group, string $identifier): void",
     );
@@ -216,9 +216,14 @@ describe("users-permissions routes", () => {
     ])
       expect(routes).toContain(`${route}->middleware(StrapiCredentials::class.':guest');`);
   });
-  // Strapi's yup string() casts a number and refuses an array or object with a ValidationError.
-  it("refuses a name that is not a string or number as Strapi's validation does", () => {
-    expect(content("app/Support/StrapiUsers.php")).toContain(
+  // Strapi validates strictly: yup's string() refuses a number, boolean, null, array or object.
+  it("refuses a name that is not a string as Strapi's strict validation does", () => {
+    const users = content("app/Support/StrapiUsers.php");
+    expect(users).toContain(
+      "$check === 'string' => array_key_exists($field, $body) && ! is_string($value),",
+    );
+    expect(users).not.toContain("casts a number");
+    expect(users).toContain(
       "\"{$field} must be a `string` type, but the final value was: `\".self::yupPrinted($value).'`.'",
     );
     const auth = content("app/Http/Controllers/Api/AuthController.php");
@@ -232,7 +237,6 @@ describe("users-permissions routes", () => {
   it("checks every auth and user field it casts to be a string first", () => {
     const auth = content("app/Http/Controllers/Api/AuthController.php");
     for (const rules of [
-      "['email' => ['string', 'required', 'email'], 'username' => ['string', 'required'], 'password' => ['string', 'required', 'maxPassword']]",
       "['password' => ['string', 'required', 'maxPassword'], 'passwordConfirmation' => ['string', 'required', 'same:password'], 'currentPassword' => ['string', 'required']]",
       "['password' => ['string', 'required', 'maxPassword'], 'passwordConfirmation' => ['string', 'required', 'same:password'], 'code' => ['string', 'required']]",
       "StrapiUsers::validate($query, ['confirmation' => ['string', 'required']]);",
@@ -240,10 +244,21 @@ describe("users-permissions routes", () => {
       expect(auth).toContain(rules);
     const users = content("app/Http/Controllers/Api/UserController.php");
     expect(users).toContain(
-      "['email' => ['string', 'required', 'email'], 'username' => ['string', 'required'], 'password' => ['string', 'required']",
+      "['email' => ['string', 'required', 'email', 'max:255'], 'username' => ['string', 'required', 'max:255'], 'password' => ['string', 'required'], 'role' => ['required', 'id']]",
     );
+    // Strapi's update takes a missing, null or empty password (then refused as password.notNull)
+    // and refuses any other value that is not a string.
     expect(users).toContain(
-      "['email' => ['string', 'email', 'nonEmpty'], 'username' => ['string', 'nonEmpty'], 'password' => ['string']]",
+      "['email' => ['string', 'email', 'nonEmpty', 'max:255'], 'username' => ['string', 'nonEmpty', 'max:255'], 'password' => ['updatePassword']]",
+    );
+  });
+  // Login refuses a name longer than the name columns: no account may be made with one.
+  it("refuses a username or email longer than login takes on registration", () => {
+    expect(content("app/Http/Controllers/Api/AuthController.php")).toContain(
+      "['email' => ['string', 'required', 'email', 'max:255'], 'username' => ['string', 'required', 'max:255'], 'password' => ['string', 'required', 'maxPassword']]",
+    );
+    expect(content("app/Support/StrapiUsers.php")).toContain(
+      "str_starts_with($check, 'max:') => \"{$field} must be at most \".substr($check, 4).' characters',",
     );
   });
   // No account's username or email is longer than its column; a longer name is refused as a wrong

@@ -210,7 +210,7 @@ describe("users-permissions sessions", () => {
     const deploy = content("DEPLOY.md");
     expect(deploy).toContain("CAMIS_AUTH_ADDRESS_THROTTLE_PER_MINUTE");
     expect(deploy).toContain("| password-reset |");
-    expect(deploy).toContain("per client address and the account it names");
+    expect(deploy).toContain("per client address and the name it gives");
     expect(deploy).toContain("Only a refresh that fails is counted");
     expect(deploy).not.toContain("A bucket counts per client address,\nexcept a password change");
   });
@@ -228,6 +228,24 @@ describe("users-permissions sessions", () => {
     expect(deploy).not.toContain("answer alike");
     expect(deploy).toContain("whether it finds an account has no bearing on the throttle");
     expect(deploy).toContain("an account's username and email, or two names the database matches");
+  });
+  // The throttle counts the name a request gives, never an account it names: the docs must not
+  // say otherwise, and an upgrader learns every answer that changed.
+  it("says per address and name given, and lists the changed answers under Upgrading", () => {
+    const deploy = content("DEPLOY.md");
+    for (const stale of ["per account named", "the account it names", "with the name it looked up"])
+      expect(deploy).not.toContain(stale);
+    expect(deploy).toContain("per client address and the name it gives");
+    const upgrading = deploy.slice(deploy.indexOf("### Upgrading"));
+    expect(upgrading).toContain("Too many requests, please try again later.");
+    expect(upgrading).toContain("255 characters");
+    expect(upgrading).toContain("answers 400 `ValidationError`");
+    const routes = content("routes/api.php");
+    expect(routes).not.toContain("the account named");
+    expect(routes).not.toContain("the account it names");
+    expect(content("app/Http/Middleware/StrapiThrottle.php")).not.toContain(
+      "the account the body names",
+    );
   });
   it("issues sessions from login, registration and a password change or reset", () => {
     const auth = content("app/Http/Controllers/Api/AuthController.php");

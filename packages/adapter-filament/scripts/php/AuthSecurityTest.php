@@ -240,15 +240,49 @@ class AuthSecurityTest extends TestCase
     /** A name longer than any account's is refused as a wrong one, before it is folded or looked up. */
     public function test_an_identifier_longer_than_any_accounts_name_is_refused_unread(): void
     {
+        \Illuminate\Support\Facades\DB::enableQueryLog();
         $this->postJson('/api/auth/local', ['identifier' => str_repeat('é', 256), 'password' => 'wrong'])->assertStatus(400)
             ->assertJsonPath('error.name', 'ValidationError')->assertJsonPath('error.message', 'Invalid identifier or password');
+
+        $lookups = array_filter(\Illuminate\Support\Facades\DB::getQueryLog(), fn (array $q): bool => preg_match('/from ["`]?users["`]?/i', $q['query']) === 1);
+        self::assertSame([], array_values($lookups));
+        // No turn was taken: not even the address's ceiling counted it.
+        self::assertSame(0, \Illuminate\Support\Facades\RateLimiter::attempts('camis-throttle|sign-in|ip:127.0.0.1'));
     }
 
-    /** A number is the string the lookup casts it to; accents, width and case are folded out of a name. */
+    /** No account can be made with a name longer than login takes: it could never sign in. */
+    public function test_a_name_longer_than_login_takes_is_refused_on_registration(): void
+    {
+        $long = str_repeat('a', 256);
+        $this->postJson('/api/auth/local/register', ['username' => $long, 'email' => 'long@example.test', 'password' => 'secret1'])->assertStatus(400)
+            ->assertJsonPath('error.name', 'ValidationError')->assertJsonPath('error.message', 'username must be at most 255 characters');
+        $this->freshRequest();
+        $this->postJson('/api/auth/local/register', ['username' => 'long', 'email' => $long.'@example.test', 'password' => 'secret1'])->assertStatus(400)
+            ->assertJsonPath('error.name', 'ValidationError');
+        $this->freshRequest();
+        $this->register(str_repeat('b', 255));
+    }
+
+    /** A user made over the API gets exactly one role: an array of them is refused, never applied. */
+    public function test_a_user_made_over_the_api_names_a_single_role(): void
+    {
+        $token = \App\Support\StrapiApiTokens::create(['name' => 'full', 'type' => 'full-access'])['accessKey'];
+        $roles = \Spatie\Permission\Models\Role::query()->pluck('id')->all();
+        $user = ['username' => 'made', 'email' => 'made@example.test', 'password' => 'secret1'];
+        $this->withToken($token)->postJson('/api/users', $user + ['role' => $roles])->assertStatus(400)
+            ->assertJsonPath('error.name', 'ValidationError');
+        $this->withToken($token)->postJson('/api/users', $user + ['role' => [$roles[0]]])->assertStatus(400);
+        $this->withToken($token)->postJson('/api/users', ['username' => str_repeat('m', 256), 'email' => 'm@example.test', 'password' => 'secret1', 'role' => $roles[0]])->assertStatus(400);
+        self::assertFalse(\App\Models\User::query()->where('email', 'made@example.test')->exists());
+
+        $this->withToken($token)->postJson('/api/users', $user + ['role' => $roles[0]])->assertCreated();
+    }
+
+    /** Spaces, width, accents and case are folded out of a name; a number is no name at all. */
     public function test_a_name_buys_no_fresh_bucket_by_its_type_case_width_or_accents(): void
     {
-        $names = [12345, '12345', ' 12345 '];
-        self::assertThrottled(fn (int $attempt): TestResponse => $this->postJson('/api/auth/local', ['identifier' => $names[$attempt] ?? '１２３４５', 'password' => 'wrong']), 400);
+        $names = ['12345', ' 12345 ', '１２３４５'];
+        self::assertThrottled(fn (int $attempt): TestResponse => $this->postJson('/api/auth/local', ['identifier' => $names[$attempt] ?? '12345 ', 'password' => 'wrong']), 400);
         $folded = ['nobody', 'NÖBODY', 'ｎｏｂｏｄｙ'];
         self::assertThrottled(function (int $attempt) use ($folded): TestResponse {
             $this->freshRequest();
@@ -257,12 +291,28 @@ class AuthSecurityTest extends TestCase
         }, 400);
     }
 
-    /** Strapi's yup string() refuses an array or object: a ValidationError, never a server error. */
-    public function test_a_name_that_is_neither_string_nor_number_is_a_validation_error(): void
+    /**
+     * Strapi validates strictly: a number, boolean, null, array or object is no string, and is
+     * refused with yup's printed value, never cast or answered with a server error.
+     */
+    public function test_a_name_that_is_not_a_string_is_a_validation_error(): void
     {
-        $this->postJson('/api/auth/local', ['identifier' => ['alice'], 'password' => 'wrong'])->assertStatus(400)
-            ->assertJsonPath('error.name', 'ValidationError')
-            ->assertJsonPath('error.message', "identifier must be a `string` type, but the final value was: `[\n  \"alice\"\n]`.");
+        $printed = [
+            "`[\n  \"\\\"alice\\\"\"\n]`" => ['alice'],
+            "`{\n  \"a\": \"\\\"b\\\"\"\n}`" => ['a' => 'b'],
+            '`12345`' => 12345,
+            '`true`' => true,
+            '`null`' => null,
+        ];
+        foreach ($printed as $shown => $identifier) {
+            $this->freshRequest();
+            $this->postJson('/api/auth/local', ['identifier' => $identifier, 'password' => 'wrong'])->assertStatus(400)
+                ->assertJsonPath('error.name', 'ValidationError')
+                ->assertJsonPath('error.message', "identifier must be a `string` type, but the final value was: {$shown}.");
+        }
+        $this->freshRequest();
+        $this->postJson('/api/auth/local', ['identifier' => 'alice', 'password' => 123456])->assertStatus(400)
+            ->assertJsonPath('error.message', 'password must be a `string` type, but the final value was: `123456`.');
         $this->postJson('/api/auth/forgot-password', ['email' => ['a' => 1]])->assertStatus(400)
             ->assertJsonPath('error.name', 'ValidationError');
         $this->postJson('/api/auth/send-email-confirmation', ['email' => [1]])->assertStatus(400)
