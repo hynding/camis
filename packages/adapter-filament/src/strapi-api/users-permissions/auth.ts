@@ -36,9 +36,11 @@ use App\\Support\\StrapiProviders;
 use App\\Support\\StrapiRateLimits;
 use App\\Support\\StrapiSessions;
 use App\\Support\\StrapiUsers;
+use Illuminate\\Database\\UniqueConstraintViolationException;
 use Illuminate\\Http\\JsonResponse;
 use Illuminate\\Http\\RedirectResponse;
 use Illuminate\\Http\\Request;
+use Illuminate\\Support\\Facades\\DB;
 use Illuminate\\Support\\Facades\\Hash;${defaultRole !== undefined ? "\nuse Spatie\\Permission\\Models\\Role;" : ""}
 
 class AuthController extends Controller
@@ -86,7 +88,26 @@ ${
             throw StrapiUsers::application('Email or Username are already taken');
         }
         $password = Hash::make((string) $body['password']);
-        if ($taken) {
+        $user = null;
+        if (! $taken) {
+            try {
+                // Its own savepoint, so a refused insert leaves an enclosing transaction usable.
+                $user = DB::transaction(fn (): User => StrapiUsers::add([
+                    ...array_intersect_key($body, array_flip($allowed)),
+                    'provider' => 'local',
+                    'username' => $username,
+                    'email' => $email,
+                    'password' => $password,
+                    'confirmed' => ! $confirm,
+                ]));
+            } catch (UniqueConstraintViolationException) {
+                // A concurrent registration took the name after the check: it is a taken one.
+                if (! $hidden) {
+                    throw StrapiUsers::application('Email or Username are already taken');
+                }
+            }
+        }
+        if ($user === null) {
             StrapiUsers::later(function () use ($email): void {
                 if (StrapiRateLimits::mailable('registration-notice', $email)) {
                     StrapiUsers::sendRegistrationNotice($email);
@@ -94,15 +115,7 @@ ${
             });
 
             return response()->json(['email' => $email, 'sent' => true]);
-        }
-        $user = StrapiUsers::add([
-            ...array_intersect_key($body, array_flip($allowed)),
-            'provider' => 'local',
-            'username' => $username,
-            'email' => $email,
-            'password' => $password,
-            'confirmed' => ! $confirm,
-        ]);${defaultRole !== undefined ? "\n        $user->assignRole($role);" : ""}
+        }${defaultRole !== undefined ? "\n        $user->assignRole($role);" : ""}
         if ($hidden) {
             StrapiUsers::later(fn () => StrapiUsers::sendConfirmation($user));
 

@@ -1111,16 +1111,26 @@ class AuthSecurityTest extends TestCase
         self::assertCount(3, self::mails());
     }
 
-    /** The next account made has its name taken just before it is inserted, as a concurrent registration takes it. */
-    private function loseTheNextRace(string $username): void
+    /**
+     * As a concurrent registration leaves it: $username's account exists, but the check before the
+     * insert does not see it (a model scope hides it until the returned callable is called), so the
+     * insert is the first to find the name taken.
+     *
+     * @return callable(): void
+     */
+    private function loseTheNextRace(string $username): callable
     {
-        $armed = true;
-        \App\Models\User::creating(function () use (&$armed, $username): void {
-            if ($armed) {
-                $armed = false;
-                \App\Models\User::withoutEvents(fn () => \App\Models\User::forceCreate(['name' => $username, 'username' => $username, 'email' => "{$username}@example.test", 'password' => 'x', 'provider' => 'local']));
+        \App\Models\User::withoutEvents(fn () => \App\Models\User::forceCreate(['name' => $username, 'username' => $username, 'email' => "{$username}@example.test", 'password' => 'x', 'provider' => 'local']));
+        $hidden = new \ArrayObject(['on' => true]);
+        \App\Models\User::addGlobalScope('camis-test-race', function ($query) use ($hidden, $username): void {
+            if ($hidden['on']) {
+                $query->where('username', '!=', $username)->where('email', '!=', "{$username}@example.test");
             }
         });
+
+        return function () use ($hidden): void {
+            $hidden['on'] = false;
+        };
     }
 
     /** Two registrations for one new name at once answer as a taken name does, never 400 "Validation failed". */
@@ -1129,17 +1139,19 @@ class AuthSecurityTest extends TestCase
         $this->confirmationOn();
         self::forgetMails();
         $body = ['username' => 'carol', 'email' => 'carol@example.test', 'password' => 'secret1'];
-        $this->loseTheNextRace('carol');
+        $settled = $this->loseTheNextRace('carol');
         $lost = $this->fromAnywhere('/api/auth/local/register', $body);
+        $settled();
         $taken = $this->fromAnywhere('/api/auth/local/register', $body);
         $lost->assertOk()->assertJsonPath('sent', true);
         self::assertSame([$taken->status(), $taken->json()], [$lost->status(), $lost->json()]);
         self::assertSame([['carol@example.test', 'Account registration']], self::mails());
 
         config(['camis.users_permissions.hide_account_existence' => false]);
-        $this->loseTheNextRace('dave');
+        $settled = $this->loseTheNextRace('dave');
         $this->fromAnywhere('/api/auth/local/register', ['username' => 'dave', 'email' => 'dave@example.test', 'password' => 'secret1'])
             ->assertStatus(400)->assertJsonPath('error.name', 'ApplicationError')->assertJsonPath('error.message', 'Email or Username are already taken');
+        $settled();
     }
 }
 
