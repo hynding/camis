@@ -3306,13 +3306,24 @@ header working unchanged.
   `GET /auth/{provider}/callback` join the credential throttle. For provider `local` that route
   is Strapi's password login (`auth.callback`), which Strapi leaves without its rate limit; camis
   keeps the route but never checks a password unthrottled. Each group of credential routes
-  (sign-in, register, recovery, confirmation, provider, refresh, password-change) takes turns of a
-  bucket of its own in `StrapiRateLimits`, through the `StrapiThrottle` route middleware, so a
-  flood of refreshes never locks out sign-in; refresh has its own rate
-  (`CAMIS_REFRESH_THROTTLE_PER_MINUTE`, 60). A bucket counts per client address, a password change
-  per account: `StrapiThrottle` is listed after the route's credentials and is not Laravel's
-  `ThrottleRequests`, which the priority sort runs before `StrapiCredentials` has named the
-  account. Only a password change counts per account: GraphQL's sign-in, registration and
+  (sign-in, register, recovery, password-reset, confirmation, provider, refresh, password-change)
+  takes turns of a bucket of its own in `StrapiRateLimits`, through the `StrapiThrottle` route
+  middleware, so a flood of one never locks out another; refresh has its own rate
+  (`CAMIS_REFRESH_THROTTLE_PER_MINUTE`, 60). Sign-in, recovery mail and confirmation mail count per
+  client address and the account named (a 32-character SHA-256 prefix of the trimmed, lower-cased
+  identifier or email, never raw body text in a key), so neither a guesser at one account nor a
+  foreign client sharing an office's address locks another account out, under a per-address
+  ceiling across every account named (`CAMIS_AUTH_ADDRESS_THROTTLE_PER_MINUTE`, 50, never below the
+  credential rate). Strapi keys `/auth/local` by address alone (GHSA-7mqx-wwh4-f9fw, so a varied
+  `email` cannot split its key); the ceiling is what bounds a guesser varying the identifier here.
+  Refresh is counted in `SessionController` and only when it fails, and once full refuses only
+  failures: a foreign page firing cookie refreshes from a visitor's browser cannot stop the
+  visitor's own. A refresh token is a random 128-bit id and 256-bit secret, so it is its length,
+  not the throttle, that bounds guessing; the throttle bounds the work failures cost. The decision is the count `RateLimiter::hit()` returns, so parallel requests
+  cannot all pass one check. A password change counts per account: `StrapiThrottle` is not
+  Laravel's `ThrottleRequests`, which the priority sort runs before every unprioritised route
+  middleware, so it runs where the route lists it, after the session's credentials there. Only a
+  password change counts per account: GraphQL's sign-in, registration and
   recovery mutations take a caller's session as Strapi's do (`auth: false`), so counting them per
   account would give every account whose token a caller sends a fresh bucket for its address. The
   GraphQL mutations take turns of the same buckets, so REST and GraphQL count one password-change
@@ -3331,7 +3342,8 @@ header working unchanged.
   cookie is never its only credential; it ends the access token's own session (not the cookie's,
   which may be another tab's newer sign-in) and clears the cookie only when the cookie named a
   session it ended, with the attributes the cookie was set with. An access token that names no
-  session (one issued before refresh mode) revokes itself alone. The provider routes encrypt
+  session (one issued before refresh mode), or whose session row is already swept, revokes itself
+  alone. The provider routes encrypt
   their cookies through `StrapiEncryptCookies`, which leaves the refresh cookie a provider sign-in
   sets as `/auth/refresh` reads it. The cookie defaults to `Secure` (`false` honoured only with
   `APP_ENV=local`), `SameSite=Strict`, `Path=/api/auth`, and a lifetime equal to what its
@@ -3339,7 +3351,8 @@ header working unchanged.
   read; without one, the browser session), where Strapi sets `lax`, Secure in production only, `/`
   and a browser-session cookie. Body mode stays the default (`CAMIS_SESSIONS_HTTP_ONLY=false`), as
   in Strapi: turning the cookie on by default would drop `refreshToken` from every login body.
-- **Import.** A strapi::cors allowing credentials for any origin (its defaults among them) is a
+- **Import.** A strapi::cors allowing credentials for any origin (its defaults among them, and an
+  origin read from a variable without a fallback, unset where the variable is) is a
   `corsCredentialsAnyOrigin` capability gap, since the app answers `*` without credentials.
 - **Docs.** DEPLOY.md gains a CORS and a Sign-in sessions section with an upgrade list;
   `deployment.env` notes that credentials go to listed origins only.
@@ -3347,9 +3360,10 @@ header working unchanged.
 **Tests:** `cors.test.ts` evaluates `config/cors.php` under PHP for each env contract;
 `sessions.test.ts`, `oauth.test.ts`, `auth.test.ts`, `users-permissions.test.ts` and
 `generate-strapi.test.ts` pin the routes and runtime; `scripts/php/AuthSecurityTest.php` (CI, with
-low rates set per test) exercises each bucket on its own, a password change from changing addresses,
+low rates set per test) exercises each bucket on its own, sign-in per identifier and the address
+ceiling, a foreign page's refreshes leaving the victim's valid refresh, a password change from changing addresses,
 `Retry-After`, preflights, the refused and accepted cookie refreshes, the cookie's attributes and
-lifetime, and logout with another tab's cookie; `GraphqlTest.php` counts REST and GraphQL password
+lifetime, logout with another tab's cookie and after its session row is swept; `GraphqlTest.php` counts REST and GraphQL password
 changes together; `deployment-settings.test.ts` the import gap.
 
 ---
