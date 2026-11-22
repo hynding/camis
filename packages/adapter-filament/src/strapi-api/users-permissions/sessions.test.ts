@@ -51,7 +51,7 @@ describe("users-permissions sessions", () => {
     expect(config).toContain("'same_site' => env('CAMIS_SESSIONS_COOKIE_SAME_SITE', 'strict'),");
     expect(config).toContain("'path' => env('CAMIS_SESSIONS_COOKIE_PATH', '/api/auth'),");
     const sessions = content("app/Support/StrapiSessions.php");
-    expect(sessions).toContain("|| app()->environment('local');");
+    expect(sessions).toContain("|| ! app()->environment('local');");
   });
 
   it("keeps the refresh cookie as long as its session's absolute lifespan has left", () => {

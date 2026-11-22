@@ -201,21 +201,22 @@ final class StrapiSessions
         return (bool) config('camis.users_permissions.sessions.http_only') || $request->header('x-strapi-refresh-cookie') === 'httpOnly';
     }
 
+    /** The refresh cookie, kept until its session's absolute expiry: refreshing cannot outlast it. */
     public static function cookie(string $refreshToken): Cookie
     {
         $options = (array) config('camis.users_permissions.sessions.cookie', []);
-        $secure = $options['secure'] ?? null;
+        $expires = CarbonImmutable::parse((string) self::absoluteExpiry($refreshToken));
 
-        return cookie(
+        return new Cookie(
             self::cookieName(),
             $refreshToken,
-            0,
-            (string) ($options['path'] ?? '/'),
+            $expires,
+            self::cookiePath(),
             $options['domain'] ?? null,
-            $secure === null ? app()->isProduction() : (bool) $secure,
+            self::cookieSecure(),
             true,
             true,
-            (string) ($options['same_site'] ?? 'lax'),
+            (string) ($options['same_site'] ?? 'strict'),
         );
     }
 
@@ -223,7 +224,7 @@ final class StrapiSessions
     {
         $options = (array) config('camis.users_permissions.sessions.cookie', []);
 
-        return cookie()->forget(self::cookieName(), (string) ($options['path'] ?? '/'), $options['domain'] ?? null);
+        return cookie()->forget(self::cookieName(), self::cookiePath(), $options['domain'] ?? null);
     }
 
     /** @param array{jwt: string, refreshToken: string} $tokens */
@@ -407,6 +408,26 @@ final class StrapiSessions
         }
 
         return $parts['scheme'].'://'.$parts['host'].(isset($parts['port']) ? ':'.$parts['port'] : '');
+    }
+
+    private static function absoluteExpiry(string $refreshToken): ?string
+    {
+        $value = DB::table(self::TABLE)->where('session_id', explode('.', $refreshToken, 2)[0])->value('absolute_expires_at');
+
+        return is_string($value) ? $value : null;
+    }
+
+    private static function cookiePath(): string
+    {
+        $path = config('camis.users_permissions.sessions.cookie.path');
+
+        return is_string($path) && $path !== '' ? $path : '/api/auth';
+    }
+
+    /** Plain HTTP only where it is asked for in local development, where http://localhost serves. */
+    private static function cookieSecure(): bool
+    {
+        return (bool) config('camis.users_permissions.sessions.cookie.secure', true) || ! app()->environment('local');
     }
 
     private static function cookieName(): string
