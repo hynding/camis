@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support;
 
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -18,8 +19,10 @@ use Illuminate\Support\Facades\RateLimiter;
  * more addresses. Every other group counts per address. No group may count per caller account but
  * the password change: GraphQL's sign-in, registration and recovery take a caller's session as
  * Strapi's do, and each account whose token a caller sent would buy its address a fresh bucket.
- * The REST routes (StrapiThrottle) and the GraphQL mutations take their turns here, so both count
- * the same ones. Rates are read per request, so a cached route file keeps no stale number.
+ * A named group's turn is taken by its controller, with the very name it looked the account up
+ * by: nothing here reads a request's fields, so the turn and the lookup cannot disagree. The REST
+ * routes and the GraphQL mutations take their turns here, so both count the same ones. Rates are
+ * read per request, so a cached route file keeps no stale number.
  */
 final class StrapiRateLimits
 {
@@ -29,34 +32,49 @@ final class StrapiRateLimits
     /** Groups counted per account: each needs a session, so its account is the caller. */
     private const PER_ACCOUNT = ['password-change'];
 
-    /** Groups counted per address and the account they name, by the body key that names it. */
-    private const IDENTIFIED = ['sign-in' => 'identifier', 'recovery' => 'email', 'confirmation' => 'email'];
+    /** Groups counted per address and the account they name, by refuseNamed alone. */
+    private const NAMED = ['sign-in', 'recovery', 'confirmation'];
 
     private const ADDRESS_RATE = 'camis.users_permissions.auth_address_throttle_per_minute';
 
-    /**
-     * Takes a turn of $group's bucket: null when allowed, else the seconds until the next one.
-     * $identifier is the account the request names where its body is not the request's own (a
-     * GraphQL mutation's arguments); a REST route's is read from the body.
-     */
-    public static function attempt(Request $request, string $group, mixed $identifier = null): ?int
+    /** Takes a turn of $group's bucket: null when allowed, else the seconds until the next one. */
+    public static function attempt(Request $request, string $group): ?int
     {
-        $caller = 'camis-throttle|'.$group.'|'.self::caller($request, $group);
-        if (! isset(self::IDENTIFIED[$group])) {
-            return self::take($caller, self::rate($group));
+        if (in_array($group, self::NAMED, true)) {
+            throw new \LogicException("The {$group} throttle counts the account named: take its turn with refuseNamed()");
         }
-        $name = self::hashed($identifier ?? $request->input(self::IDENTIFIED[$group]));
-        $named = self::take($caller.'|id:'.$name, self::rate($group));
-        $ceiling = self::take($caller, max(self::rate($group), (int) config(self::ADDRESS_RATE, 50)));
 
-        return $named === null && $ceiling === null ? null : max($named ?? 0, $ceiling ?? 0);
+        return self::take('camis-throttle|'.$group.'|'.self::caller($request, $group), self::rate($group));
     }
 
-    /** Counts a failed attempt, refused once its bucket is full; a success is never counted. */
-    public static function refuseFailure(Request $request, string $group): void
+    /** Takes a turn of $group's bucket, refused with the wait once it is full. */
+    public static function refuse(Request $request, string $group): void
     {
         $wait = self::attempt($request, $group);
         if ($wait !== null) {
+            throw self::tooMany($group, $wait);
+        }
+    }
+
+    /**
+     * A named group's turn: $identifier is the name the account was looked up by, and $account
+     * what the lookup found. Two buckets per name, whether or not an account was found, so a turn
+     * costs and answers the same either way: the folded name's, and the account's (the folded
+     * name's again when none was found), which catches the names a database collation matches
+     * that folding does not. The address's turns across every name stop at its ceiling.
+     */
+    public static function refuseNamed(Request $request, string $group, string $identifier, ?Authenticatable $account): void
+    {
+        $address = 'camis-throttle|'.$group.'|ip:'.$request->ip();
+        $name = substr(hash('sha256', self::folded($identifier)), 0, 32);
+        $owner = $account === null ? 'name:'.$name : 'account:'.$account->getAuthIdentifier();
+        $waits = [
+            self::take($address.'|id:'.$name, self::rate($group)),
+            self::take($address.'|'.$owner, self::rate($group)),
+            self::take($address, max(self::rate($group), (int) config(self::ADDRESS_RATE, 50))),
+        ];
+        $wait = max(array_map(fn (?int $w): int => $w ?? 0, $waits));
+        if ($wait > 0) {
             throw self::tooMany($group, $wait);
         }
     }
@@ -77,12 +95,12 @@ final class StrapiRateLimits
         return RateLimiter::hit($key, 60) > $max ? max(1, RateLimiter::availableIn($key)) : null;
     }
 
-    /** A fixed-length digest of the normalised name, so no body text becomes part of a key. */
-    private static function hashed(mixed $identifier): string
+    /** The name without the case, width and accents a database collation may ignore. */
+    private static function folded(string $identifier): string
     {
-        $identifier = is_string($identifier) ? $identifier : '';
+        $decomposed = \Normalizer::normalize(trim($identifier), \Normalizer::FORM_KD);
 
-        return substr(hash('sha256', mb_strtolower(trim($identifier))), 0, 32);
+        return mb_convert_case((string) preg_replace('/\p{Mn}+/u', '', is_string($decomposed) ? $decomposed : $identifier), MB_CASE_FOLD);
     }
 
     private static function caller(Request $request, string $group): string

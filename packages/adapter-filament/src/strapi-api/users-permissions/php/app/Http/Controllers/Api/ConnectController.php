@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Support\StrapiError;
 use App\Support\StrapiOAuth;
 use App\Support\StrapiProviders;
+use App\Support\StrapiRateLimits;
 use App\Support\StrapiSessions;
 use App\Support\StrapiUsers;
 use Illuminate\Http\JsonResponse;
@@ -57,6 +58,7 @@ final class ConnectController extends Controller
         if ($provider === 'local') {
             return app(AuthController::class)->login($request);
         }
+        StrapiRateLimits::refuse($request, 'provider');
         self::enabled($provider);
         try {
             $grant = StrapiOAuth::grant($request)['response'] ?? null;

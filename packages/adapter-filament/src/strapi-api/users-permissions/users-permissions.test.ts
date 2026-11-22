@@ -213,7 +213,7 @@ describe("users-permissions routes", () => {
   // Strapi's yup string() casts a number and refuses an array or object with a ValidationError.
   it("refuses a name that is not a string or number as Strapi's validation does", () => {
     expect(content("app/Support/StrapiUsers.php")).toContain(
-      "\"{$field} must be a `string` type, but the final value was: `\".self::printed($value).'`.'",
+      "\"{$field} must be a `string` type, but the final value was: `\".self::yupPrinted($value).'`.'",
     );
     const auth = content("app/Http/Controllers/Api/AuthController.php");
     expect(auth).toContain(

@@ -163,12 +163,12 @@ class AuthSecurityTest extends TestCase
      *
      * @return callable(int): TestResponse
      */
-    private function plainText(string $method, string $path, array $body): callable
+    private function plainText(string $method, string $path, array $body, string $address = '127.0.0.1'): callable
     {
-        return function (int $attempt) use ($method, $path, $body): TestResponse {
+        return function (int $attempt) use ($method, $path, $body, $address): TestResponse {
             $this->freshRequest();
 
-            return $this->call($method, $path.'?identifier=fresh'.$attempt.'&email=fresh'.$attempt.'%40example.test', [], [], [], ['CONTENT_TYPE' => 'text/plain', 'HTTP_ACCEPT' => 'application/json'], (string) json_encode($body));
+            return $this->call($method, $path.'?identifier=fresh'.$attempt.'&email=fresh'.$attempt.'%40example.test', [], [], [], ['CONTENT_TYPE' => 'text/plain', 'HTTP_ACCEPT' => 'application/json', 'REMOTE_ADDR' => $address], (string) json_encode($body));
         };
     }
 
@@ -177,7 +177,8 @@ class AuthSecurityTest extends TestCase
         $this->register('alice');
         self::assertThrottled($this->plainText('POST', '/api/auth/local', ['identifier' => 'alice', 'password' => 'wrong']), 400);
         $this->freshRequest();
-        self::assertThrottled($this->plainText('GET', '/api/auth/local/callback', ['identifier' => 'bob', 'password' => 'wrong']), 400);
+        // Another address, so the sign-in ceiling the first address has used is not in the way.
+        self::assertThrottled($this->plainText('GET', '/api/auth/local/callback', ['identifier' => 'bob', 'password' => 'wrong'], '10.1.0.1'), 400);
         self::assertThrottled($this->plainText('POST', '/api/auth/forgot-password', ['email' => 'alice@example.test']), 200);
         self::assertThrottled($this->plainText('POST', '/api/auth/send-email-confirmation', ['email' => 'carol@example.test']), 200);
     }
@@ -198,9 +199,12 @@ class AuthSecurityTest extends TestCase
     {
         $names = [12345, '12345', ' 12345 '];
         self::assertThrottled(fn (int $attempt): TestResponse => $this->postJson('/api/auth/local', ['identifier' => $names[$attempt] ?? '１２３４５', 'password' => 'wrong']), 400);
-        $this->freshRequest();
         $folded = ['nobody', 'NÖBODY', 'ｎｏｂｏｄｙ'];
-        self::assertThrottled(fn (int $attempt): TestResponse => $this->postJson('/api/auth/forgot-password', ['email' => ($folded[$attempt] ?? 'nóbody').'@example.test']), 200);
+        self::assertThrottled(function (int $attempt) use ($folded): TestResponse {
+            $this->freshRequest();
+
+            return $this->withServerVariables(['REMOTE_ADDR' => '10.2.0.1'])->postJson('/api/auth/local', ['identifier' => $folded[$attempt] ?? 'nóbody', 'password' => 'wrong']);
+        }, 400);
     }
 
     /** Strapi's yup string() refuses an array or object: a ValidationError, never a server error. */

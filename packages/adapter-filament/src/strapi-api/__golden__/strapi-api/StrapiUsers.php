@@ -172,6 +172,8 @@ final class StrapiUsers
         $present = $value !== null && $value !== '';
         foreach ($checks as $check) {
             $failed = match (true) {
+                // yup's string() casts a number or boolean, and refuses what it cannot cast.
+                $check === 'string' => $value !== null && ! is_scalar($value),
                 $check === 'required' => ! $present,
                 $check === 'email' => $present && filter_var($value, FILTER_VALIDATE_EMAIL) === false,
                 $check === 'nonEmpty' => array_key_exists($field, $body) && (! is_scalar($value) || (string) $value === ''),
@@ -181,6 +183,7 @@ final class StrapiUsers
             };
             if ($failed) {
                 return match (true) {
+                    $check === 'string' => "{$field} must be a `string` type, but the final value was: `".self::yupPrinted($value).'`.',
                     $check === 'required' => "{$field} is a required field",
                     $check === 'email' => "{$field} must be a valid email",
                     $check === 'nonEmpty' => "{$field} must be at least 1 characters",
@@ -191,6 +194,14 @@ final class StrapiUsers
         }
 
         return null;
+    }
+
+    /** yup's printValue of an array or object: JSON indented by two spaces. */
+    private static function yupPrinted(mixed $value): string
+    {
+        $json = (string) json_encode($value, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+        return (string) preg_replace_callback('/^((?:    )+)/m', fn (array $m): string => str_repeat('  ', intdiv(strlen($m[1]), 4)), $json);
     }
 
     /** JavaScript's Number() of a query value: '' is 0, and what does not parse is NaN. */

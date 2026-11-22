@@ -27,7 +27,7 @@ final class SessionController extends Controller
             $tokens = StrapiSessions::rotate($token)
                 ?? throw new StrapiError(401, 'UnauthorizedError', 'Invalid refresh token');
         } catch (StrapiError $failure) {
-            StrapiRateLimits::refuseFailure($request, 'refresh');
+            StrapiRateLimits::refuse($request, 'refresh');
 
             throw $failure;
         }

@@ -33,6 +33,7 @@ use App\\Http\\Controllers\\Controller;
 use App\\Models\\User;
 use App\\Support\\StrapiError;
 use App\\Support\\StrapiProviders;
+use App\\Support\\StrapiRateLimits;
 use App\\Support\\StrapiSessions;
 use App\\Support\\StrapiUsers;
 use Illuminate\\Http\\JsonResponse;
@@ -101,11 +102,13 @@ ${
             throw StrapiUsers::application('This provider is disabled');
         }
         $body = $request->json()->all();
-        StrapiUsers::validate($body, ['identifier' => ['required'], 'password' => ['required']]);
+        StrapiUsers::validate($body, ['identifier' => ['string', 'required'], 'password' => ['string', 'required']]);
         $identifier = (string) $body['identifier'];
         $user = User::query()->where('provider', 'local')
             ->where(fn ($q) => $q->where('email', mb_strtolower($identifier))->orWhere('username', $identifier))
             ->first();
+        // The turn is the name just looked up, so no other field of the request can stand in for it.
+        StrapiRateLimits::refuseNamed($request, 'sign-in', $identifier, $user);
         if ($user === null || ($user->password ?? '') === '' || ! Hash::check((string) $body['password'], $user->password)) {
             throw StrapiError::validation('Invalid identifier or password');
         }
@@ -138,8 +141,10 @@ ${
     public function forgotPassword(Request $request): JsonResponse
     {
         $body = $request->json()->all();
-        StrapiUsers::validate($body, ['email' => ['required', 'email']]);
-        $user = User::query()->where('email', mb_strtolower((string) $body['email']))->first();
+        StrapiUsers::validate($body, ['email' => ['string', 'required', 'email']]);
+        $email = mb_strtolower((string) $body['email']);
+        $user = User::query()->where('email', $email)->first();
+        StrapiRateLimits::refuseNamed($request, 'recovery', $email, $user);
         if ($user === null || (bool) $user->blocked) {
             return response()->json(['ok' => true]);
         }
@@ -177,8 +182,10 @@ ${
     public function sendEmailConfirmation(Request $request): JsonResponse
     {
         $body = $request->json()->all();
-        StrapiUsers::validate($body, ['email' => ['required', 'email']]);
-        $user = User::query()->where('email', mb_strtolower((string) $body['email']))->first();
+        StrapiUsers::validate($body, ['email' => ['string', 'required', 'email']]);
+        $email = mb_strtolower((string) $body['email']);
+        $user = User::query()->where('email', $email)->first();
+        StrapiRateLimits::refuseNamed($request, 'confirmation', $email, $user);
         if ($user === null) {
             return response()->json(['email' => $body['email'], 'sent' => true]);
         }

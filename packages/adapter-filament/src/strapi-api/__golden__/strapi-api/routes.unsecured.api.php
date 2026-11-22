@@ -37,12 +37,12 @@ Route::prependMiddlewareToGroup('api', StrapiErrors::class);
 
 Route::middleware([StrapiErrors::class])->group(function (): void {
     Route::get('/_health', fn () => response()->noContent());
-    Route::post('/auth/local', [AuthController::class, 'login'])->middleware([StrapiThrottle::class.':sign-in', StrapiCredentials::class.':guest']);
+    Route::post('/auth/local', [AuthController::class, 'login'])->middleware(StrapiCredentials::class.':guest');
     Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware([StrapiThrottle::class.':register', StrapiCredentials::class.':guest']);
-    Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware([StrapiThrottle::class.':recovery', StrapiCredentials::class.':guest']);
+    Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware(StrapiCredentials::class.':guest');
     Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])->middleware([StrapiThrottle::class.':password-reset', StrapiCredentials::class.':guest']);
     Route::get('/auth/email-confirmation', [AuthController::class, 'emailConfirmation'])->middleware(StrapiCredentials::class.':guest');
-    Route::post('/auth/send-email-confirmation', [AuthController::class, 'sendEmailConfirmation'])->middleware([StrapiThrottle::class.':confirmation', StrapiCredentials::class.':guest']);
+    Route::post('/auth/send-email-confirmation', [AuthController::class, 'sendEmailConfirmation'])->middleware(StrapiCredentials::class.':guest');
     // Throttled in the controller, which counts the refreshes that fail alone.
     Route::post('/auth/refresh', [SessionController::class, 'refresh'])->middleware(StrapiCredentials::class.':guest');
 
@@ -50,8 +50,9 @@ Route::middleware([StrapiErrors::class])->group(function (): void {
     Route::middleware([StrapiEncryptCookies::class, AddQueuedCookiesToResponse::class, StartSession::class, StrapiCredentials::class.':guest'])->group(function (): void {
         Route::get('/connect/{provider}', [ConnectController::class, 'connect'])->middleware(StrapiThrottle::class.':provider');
         Route::get('/connect/{provider}/callback', [ConnectController::class, 'callback'])->middleware(StrapiThrottle::class.':provider');
-        // Provider local is the password login, as in Strapi, so it shares the credential throttle.
-        Route::get('/auth/{provider}/callback', [ConnectController::class, 'signIn'])->middleware(StrapiThrottle::class.':sign-in');
+        // Provider local is the password login, as in Strapi, which takes its own turn of sign-in;
+        // another provider's takes one of the provider routes' bucket.
+        Route::get('/auth/{provider}/callback', [ConnectController::class, 'signIn']);
     });
 
     // Roles live in the IR, so no grant opens these: an API token that holds the action reads them.

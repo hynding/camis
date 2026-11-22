@@ -194,7 +194,7 @@ describe("users-permissions sessions", () => {
   // refresh that rotated nothing is counted, and only such a one is refused once the bucket is full.
   it("counts and refuses only failed refreshes, so a valid refresh token is never throttled", () => {
     const controller = content("app/Http/Controllers/Api/SessionController.php");
-    expect(controller).toContain("StrapiRateLimits::refuseFailure($request, 'refresh');");
+    expect(controller).toContain("StrapiRateLimits::refuse($request, 'refresh');");
     expect(content("routes/api.php")).not.toContain("StrapiThrottle::class.':refresh'");
   });
   // A session row swept at its absolute expiry leaves its access token in date: logout must still

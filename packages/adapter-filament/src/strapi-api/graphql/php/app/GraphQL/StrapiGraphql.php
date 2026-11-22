@@ -31,6 +31,7 @@ use GraphQL\Utils\AST;
 use GraphQL\Utils\BuildSchema;
 use GraphQL\Validator\DocumentValidator;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
@@ -869,6 +870,11 @@ final class StrapiGraphql
     private static function format(Error $error, ?string $code = null): array
     {
         $previous = $error->getPrevious();
+        // A controller's throttled turn (a sign-in or recovery mail run in process) is Strapi's
+        // RateLimitError here too.
+        if ($previous instanceof ThrottleRequestsException) {
+            $previous = new StrapiError(429, 'RateLimitError', 'Too many requests, please try again later.');
+        }
         $message = $error->getMessage();
         $extensions = [];
         if ($code !== null) {
