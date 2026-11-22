@@ -219,6 +219,7 @@ import {
 import {
   emitSettingsMigration,
   emitStrapiActiveUser,
+  emitStrapiEncryptCookies,
   emitStrapiRateLimits,
   emitStrapiThrottle,
   emitStrapiCredentials,
@@ -646,6 +647,7 @@ const usersPermissionsFiles = (
   },
   { path: "app/Http/Middleware/StrapiActiveUser.php", content: emitStrapiActiveUser() },
   { path: "app/Http/Middleware/StrapiThrottle.php", content: emitStrapiThrottle() },
+  { path: "app/Http/Middleware/StrapiEncryptCookies.php", content: emitStrapiEncryptCookies() },
   { path: "app/Support/StrapiRateLimits.php", content: emitStrapiRateLimits() },
   { path: "app/Http/Middleware/StrapiCredentials.php", content: emitStrapiCredentials(secured) },
   { path: USERS_PERMISSIONS_MIGRATION_PATH, content: emitUsersPermissionsMigration() },

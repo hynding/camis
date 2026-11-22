@@ -215,6 +215,7 @@ export const emitStrapiRoutes = (
           "App\\Http\\Controllers\\Api\\UserController",
           "App\\Http\\Middleware\\StrapiActiveUser",
           "App\\Http\\Middleware\\StrapiCredentials",
+          "App\\Http\\Middleware\\StrapiEncryptCookies",
           "App\\Http\\Middleware\\StrapiThrottle",
         ]
       : []),
@@ -228,7 +229,6 @@ export const emitStrapiRoutes = (
     ...(usersPermissions
       ? [
           "Illuminate\\Cookie\\Middleware\\AddQueuedCookiesToResponse",
-          "Illuminate\\Cookie\\Middleware\\EncryptCookies",
           "Illuminate\\Session\\Middleware\\StartSession",
         ]
       : []),
@@ -280,7 +280,7 @@ export const emitStrapiRoutes = (
     Route::post('/auth/refresh', [SessionController::class, 'refresh'])->middleware(${throttled("refresh")});
 
     // A provider's round trip is the browser's: its state and tokens are kept in a session.
-    Route::middleware([EncryptCookies::class, AddQueuedCookiesToResponse::class, StartSession::class, StrapiCredentials::class.':guest'])->group(function (): void {
+    Route::middleware([StrapiEncryptCookies::class, AddQueuedCookiesToResponse::class, StartSession::class, StrapiCredentials::class.':guest'])->group(function (): void {
         Route::get('/connect/{provider}', [ConnectController::class, 'connect'])->middleware(StrapiThrottle::class.':provider');
         Route::get('/connect/{provider}/callback', [ConnectController::class, 'callback'])->middleware(StrapiThrottle::class.':provider');
         // Provider local is the password login, as in Strapi, so it shares the credential throttle.

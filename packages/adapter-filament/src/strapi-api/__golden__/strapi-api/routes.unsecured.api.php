@@ -16,10 +16,10 @@ use App\Http\Controllers\Api\UploadController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Middleware\StrapiActiveUser;
 use App\Http\Middleware\StrapiCredentials;
+use App\Http\Middleware\StrapiEncryptCookies;
 use App\Http\Middleware\StrapiErrors;
 use App\Http\Middleware\StrapiThrottle;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
-use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
 
@@ -45,7 +45,7 @@ Route::middleware([StrapiErrors::class])->group(function (): void {
     Route::post('/auth/refresh', [SessionController::class, 'refresh'])->middleware([StrapiThrottle::class.':refresh', StrapiCredentials::class.':guest']);
 
     // A provider's round trip is the browser's: its state and tokens are kept in a session.
-    Route::middleware([EncryptCookies::class, AddQueuedCookiesToResponse::class, StartSession::class, StrapiCredentials::class.':guest'])->group(function (): void {
+    Route::middleware([StrapiEncryptCookies::class, AddQueuedCookiesToResponse::class, StartSession::class, StrapiCredentials::class.':guest'])->group(function (): void {
         Route::get('/connect/{provider}', [ConnectController::class, 'connect'])->middleware(StrapiThrottle::class.':provider');
         Route::get('/connect/{provider}/callback', [ConnectController::class, 'callback'])->middleware(StrapiThrottle::class.':provider');
         // Provider local is the password login, as in Strapi, so it shares the credential throttle.

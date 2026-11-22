@@ -207,7 +207,11 @@ ${
 export const emitStrapiActiveUser = (): string =>
   runtimePhp(new URL("./php/app/Http/Middleware/StrapiActiveUser.php", import.meta.url));
 
-/** The credential throttle: a bucket per group of routes, by account once signed in. */
+/** Cookie encryption on the provider routes, which leaves the refresh cookie as issued. */
+export const emitStrapiEncryptCookies = (): string =>
+  runtimePhp(new URL("./php/app/Http/Middleware/StrapiEncryptCookies.php", import.meta.url));
+
+/** The credential throttle: a bucket per group of routes, by address (a password change by account). */
 export const emitStrapiRateLimits = (): string =>
   runtimePhp(new URL("./php/app/Support/StrapiRateLimits.php", import.meta.url));
 
