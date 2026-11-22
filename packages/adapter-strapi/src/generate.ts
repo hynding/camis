@@ -22,6 +22,7 @@ import {
   componentUids,
   contentTypeSchema,
   kebab,
+  strapiDecimalGaps,
   strapiNames,
   strapiReservedNameGaps,
   synthesizedInverses,
@@ -158,7 +159,13 @@ export const strapiAdapter: GenerateAdapter = {
       manifest: buildManifest(allFiles),
       gaps: {
         target: "strapi",
-        gaps: [...strapiReservedNameGaps(doc), ...softDeleteGaps(doc), ...perm.gaps, ...aiGaps],
+        gaps: [
+          ...strapiReservedNameGaps(doc),
+          ...strapiDecimalGaps(doc),
+          ...softDeleteGaps(doc),
+          ...perm.gaps,
+          ...aiGaps,
+        ],
       },
     };
   },
