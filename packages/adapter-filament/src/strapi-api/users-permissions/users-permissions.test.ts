@@ -406,6 +406,12 @@ describe("users-permissions register and /users queries", () => {
 });
 
 describe("users-permissions config and errors", () => {
+  // A concurrent registration can take the name between the check and the insert.
+  it("answers a registration whose insert finds its name taken as a taken one", () => {
+    expect(content("app/Http/Controllers/Api/AuthController.php")).toContain(
+      "} catch (UniqueConstraintViolationException) {",
+    );
+  });
   // A mail goes to an address the caller names, so a caller could otherwise mail anyone at will.
   it("bounds each kind of account mail per recipient, by a setting", () => {
     expect(content("config/camis.php")).toContain(
