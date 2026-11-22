@@ -35,6 +35,20 @@ describe("Express target: decimals stating their digits (issue #104)", () => {
     );
   });
 
+  it("gives a decimal kept as text its default as text", () => {
+    const balance = {
+      type: "decimal",
+      name: "balance",
+      precision: 20,
+      scale: 6,
+      default: 1.5,
+    } as Field;
+    expect(column("sqlite", balance).drizzle).toBe("text('balance').default('1.5')");
+    expect(column("mysql", balance).drizzle).toBe(
+      "decimal('balance', { precision: 20, scale: 6 }).default(1.5)",
+    );
+  });
+
   for (const dialect of ["sqlite", "mysql", "pgsql"] as const) {
     it(`emits the schema with each decimal's column on ${dialect}`, async () => {
       const schema = generate(dialect).files.find((f) => f.path === "src/db/schema.ts")?.content;
