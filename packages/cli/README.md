@@ -265,6 +265,9 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
   and what an upgrade changes. Tokens last as Strapi's settings say (`CAMIS_JWT_LIFESPAN`, 30
   days by default; `CAMIS_ACCESS_TOKEN_LIFESPAN` in refresh mode); Laravel's
   `SANCTUM_TOKEN_EXPIRATION` is not read, and `expiration` in `config/sanctum.php` stays null.
+  `CAMIS_AUTH_HIDE_ACCOUNT_EXISTENCE` (on by default) keeps registration, the confirmation resend
+  and sign-in from telling whether an account exists (fully with email confirmation on), auth
+  writes take only JSON bodies (415 otherwise), and refresh-mode token answers add `expiresIn`.
   Each controller is a generated base under
   `app/Http/Controllers/Api/Generated/` plus a seed-mode subclass you may override. The Strapi
   API style adds a NOT NULL unique `username` column to `users`; run its migration against an

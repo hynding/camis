@@ -202,6 +202,39 @@ deployment: add \`$middleware->trustProxies(at: ['10.0.0.0/8']);\` (the proxy's 
 \`'*'\` when only the proxy can reach the app) inside \`->withMiddleware(...)\` in
 \`bootstrap/app.php\`.
 
+Every auth write (\`/auth/local\`, \`/auth/local/register\`, \`/auth/forgot-password\`,
+\`/auth/reset-password\`, \`/auth/send-email-confirmation\`, \`/auth/refresh\`,
+\`/auth/change-password\`, \`/auth/logout\`) and a GraphQL POST takes its body only as JSON: a
+body whose \`Content-Type\` is not \`application/json\` or an \`application/*+json\` type answers
+415 \`UnsupportedMediaTypeError\` in Strapi's error envelope, unread and uncounted. A text/plain
+body or a form is what a page of another site can post with no CORS preflight; Strapi parses a
+form, and it is refused here on purpose. A request with no body goes on as Strapi takes it.
+
+\`CAMIS_AUTH_HIDE_ACCOUNT_EXISTENCE\` (default \`true\`) keeps the auth routes from telling a
+caller whether an account exists, where Strapi tells. With email confirmation on (the
+users-permissions advanced setting), registration answers a new address and a registered one, or
+a username already taken, alike: 200 \`{"email": ..., "sent": true}\`, after hashing the password
+on both paths. The new address gets its confirmation mail; a registered one gets a mail saying
+someone tried to register with it (\`account_emails\` in \`config/camis.php\`).
+\`/auth/send-email-confirmation\` answers every address \`{"email": ..., "sent": true}\` and mails
+only an account that is neither confirmed nor blocked. Sign-in checks one password hash whether
+or not an account matches, whatever the setting. Account mail (confirmation, recovery and these
+notices) is sent after the answer, with no queue: under PHP-FPM or LiteSpeed the response is
+finished first (\`fastcgi_finish_request\`), while under mod_php or \`php artisan serve\` the client
+still waits for the mail, and its time shows. A mail that fails is logged, not answered.
+Without email confirmation registration cannot answer every address the same: a new account gets its token at
+once, so a taken address or username still answers Strapi's 400 "Email or Username are already
+taken". Turn confirmation on to hide it. What the setting leaves distinguishable: a new
+registration's insert, a few milliseconds; the blocked and unconfirmed errors, which come only
+after a correct password, as in Strapi; an account whose stored hash has an older cost, which
+takes another time to check. \`false\` restores Strapi's answers (registration's \`{"user": ...}\`,
+the resend's errors for a confirmed or blocked account) and sends mail inside the request.
+
+In refresh mode every answer that issues an access token (sign-in, registration, refresh, password
+change and reset) adds \`expiresIn\`, the seconds the token lasts (\`CAMIS_ACCESS_TOKEN_LIFESPAN\`), so
+a client can renew it before it is refused. Strapi's answers have no such field; a legacy token's
+answer is Strapi's own.
+
 With \`CAMIS_JWT_MANAGEMENT=refresh\` a client may keep its refresh token in an httpOnly cookie
 rather than the response body: for every request with \`CAMIS_SESSIONS_HTTP_ONLY=true\`, or per
 request with the \`x-strapi-refresh-cookie: httpOnly\` header. The body stays the default, as in
@@ -253,6 +286,21 @@ proxy, trust it as above so the request's own origin reads \`https\`.
   object answers 400 \`ValidationError\` with yup's message, as Strapi's strict validation does,
   where a number was taken as its string and an array or object answered 500. \`POST /users\`
   takes a single role id.
+- \`CAMIS_AUTH_HIDE_ACCOUNT_EXISTENCE\` is on by default. With email confirmation on, registration
+  answers \`{"email": ..., "sent": true}\` for every address, where a new account answered
+  \`{"user": ...}\` and a taken address or username answered 400 (it is now told by mail), and
+  \`/auth/send-email-confirmation\` answers \`{"email": ..., "sent": true}\` for every address,
+  where a confirmed or blocked account answered an error. A failed mail is logged where it
+  answered "Error sending confirmation email". Set it to \`false\` for Strapi's answers.
+- An auth write or a GraphQL POST whose body is not JSON answers
+  415 \`UnsupportedMediaTypeError\`: a client posting a form or text/plain must send
+  \`Content-Type: application/json\`.
+- In refresh mode the answers that issue an access token add \`expiresIn\`.
+- An entry created or updated without a field the grant assigns (an \`owner\` taken from the
+  session, say) is accepted, where a required one answered 400 "owner must be defined"; the
+  body's value for a field the grant assigns is still never taken.
+- \`PUT /users\` refuses a \`role\` that is not a single role id with 400 \`ValidationError\`, where
+  \`true\` was taken as a role id.
 - Logout without \`scope\` or \`deviceId\` ends the session of the access token it is sent with,
   where it ended the refresh cookie's; it clears the cookie only when the cookie named a session it
   ended, so another tab's newer sign-in keeps its cookie.`;

@@ -195,7 +195,9 @@ describe("users-permissions sessions", () => {
       expect(upgrading).toContain(text);
     }
     // What the setting cannot hide must be said, or an operator trusts it further than it goes.
-    expect(deploy).toContain("Without email confirmation registration cannot answer alike");
+    expect(deploy).toContain(
+      "Without email confirmation registration cannot answer every address the same",
+    );
     expect(deploy).toContain("fastcgi_finish_request");
   });
 

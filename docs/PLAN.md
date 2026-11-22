@@ -3361,6 +3361,38 @@ header working unchanged.
   read; without one, the browser session), where Strapi sets `lax`, Secure in production only, `/`
   and a browser-session cookie. Body mode stays the default (`CAMIS_SESSIONS_HTTP_ONLY=false`), as
   in Strapi: turning the cookie on by default would drop `refreshToken` from every login body.
+- **Account existence.** `CAMIS_AUTH_HIDE_ACCOUNT_EXISTENCE` (on by default, a deliberate
+  departure from Strapi, which names a taken or confirmed account) hides whether an account
+  exists. With email confirmation on, registration answers a new and a taken address or username
+  alike (200 `{email, sent: true}`, one password hash on each path) and tells the address by mail
+  (`account_emails`: confirmation for a new account, a notice for a registered address or taken
+  username); the confirmation resend answers every address `{email, sent: true}` and mails only a
+  pending account. Sign-in always checks one password hash (`StrapiUsers::passwordMatches`, against
+  a cached stand-in hash when no account or password matches), whatever the setting, since that
+  changes no answer. Account mail goes after the answer through `StrapiUsers::later`, drained once
+  per application in `terminating` (no queue needed; fastcgi_finish_request finishes the response
+  first under PHP-FPM or LiteSpeed, not under mod_php or `artisan serve`), and a failed mail is
+  logged, not answered. Without confirmation registration cannot be uniform, since a new account
+  gets its token at once; DEPLOY.md recommends confirmation on. What stays distinguishable: the
+  insert on a new registration, the blocked and unconfirmed errors after a correct password (as in
+  Strapi), a stored hash of another cost, and mail time without fastcgi_finish_request. `false`
+  restores Strapi's answers; the CI auth vectors run with it, as they record Strapi's.
+- **JSON bodies.** Every auth write and `POST /graphql` takes its body only as JSON
+  (`StrapiJsonBody`): another type, a form included, answers 415 `UnsupportedMediaTypeError`
+  before the body is read or a throttle turn taken, since Laravel's `json()` decodes a text/plain
+  body a foreign page posts with no preflight. Strapi parses forms; refusing them is deliberate. An
+  empty body passes.
+- **Token lifetime.** In refresh mode the answers that issue an access token add `expiresIn`, its
+  lifetime in seconds (`CAMIS_ACCESS_TOKEN_LIFESPAN`), a field Strapi 5.48 lacks (its controllers
+  answer `jwt` and `refreshToken` only); the auth vectors leave it out of the comparison.
+  `SANCTUM_TOKEN_EXPIRATION`, which DEPLOY.md claimed bounded token lifetime, is read by nothing:
+  the docs now name `CAMIS_JWT_LIFESPAN` and `CAMIS_ACCESS_TOKEN_LIFESPAN`, set per token, and say
+  to leave Sanctum's `expiration` null, a global cap by age that would cut those lifetimes short;
+  wiring it would add a second, conflicting knob.
+- **Assigned fields.** A field a grant assigns (`assign: { owner: "user.id" }`) has no rule of its
+  own (`entityRules` skips it), so a create that leaves out a required assigned relation is filled
+  by the grant rather than refused "owner must be defined"; the client's value is still never taken.
+  `PUT /users` validates `role` as a single id (`true` was taken as one).
 - **Import.** A strapi::cors allowing credentials for any origin (its defaults among them, and an
   origin read from a variable without a fallback, unset where the variable is) is a
   `corsCredentialsAnyOrigin` capability gap, since the app answers `*` without credentials.
@@ -3373,7 +3405,12 @@ header working unchanged.
 low rates set per test) exercises each bucket on its own, sign-in per identifier and the address
 ceiling, a foreign page's refreshes leaving the victim's valid refresh, a password change from changing addresses,
 `Retry-After`, preflights, the refused and accepted cookie refreshes, the cookie's attributes and
-lifetime, logout with another tab's cookie and after its session row is swept; `GraphqlTest.php` counts REST and GraphQL password
+lifetime, logout with another tab's cookie and after its session row is swept, registration and
+the confirmation resend answering every address alike with the mail each address gets, one hash
+check per sign-in (a counting hasher) and its timing against a wrong password, mail sent after
+`RequestHandled`, 415 for text/plain, form and multipart bodies on every auth write, `expiresIn`
+and the token's actual expiry, and `PUT /users` role ids; `AuthorRoleTest.php` creates and
+updates an owned entry without, and against, the assigned owner; `GraphqlTest.php` counts REST and GraphQL password
 changes together; `deployment-settings.test.ts` the import gap.
 
 ---
