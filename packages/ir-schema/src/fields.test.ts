@@ -65,6 +65,60 @@ describe("scalar fields", () => {
   it("rejects min > max on a numeric field (S3)", () => {
     expect(parse({ type: "integer", name: "rank", min: 10, max: 1 }).success).toBe(false);
   });
+
+  it("keeps a decimal's precision and scale, also in a component, and none by default", () => {
+    const balance = { type: "decimal", name: "balance", precision: 20, scale: 6 };
+    expect(parse(balance).data).toEqual(balance);
+    expect(componentField.safeParse(balance).data).toEqual(balance);
+    expect(parse({ type: "decimal", name: "value" }).data).toEqual({
+      type: "decimal",
+      name: "value",
+    });
+    expect(parse({ type: "decimal", name: "whole", precision: 1, scale: 0 }).success).toBe(true);
+    expect(parse({ type: "decimal", name: "widest", precision: 65, scale: 30 }).success).toBe(true);
+  });
+
+  const decimalIssues = (digits: Record<string, unknown>) =>
+    (parse({ type: "decimal", name: "value", ...digits }).error?.issues ?? []).map((issue) => ({
+      code: (issue as { params?: { irCode?: string } }).params?.irCode,
+      path: issue.path,
+    }));
+
+  it("states a decimal's precision and scale together", () => {
+    expect(decimalIssues({ precision: 20 })).toEqual([
+      { code: "invalid_decimal_digits", path: ["scale"] },
+    ]);
+    expect(decimalIssues({ scale: 6 })).toEqual([
+      { code: "invalid_decimal_digits", path: ["precision"] },
+    ]);
+  });
+
+  it("refuses a scale larger than the precision", () => {
+    expect(decimalIssues({ precision: 4, scale: 5 })).toEqual([
+      { code: "invalid_decimal_digits", path: ["scale"] },
+    ]);
+  });
+
+  it("bounds a precision to 1..65 and a scale to 0..30, whole numbers, as MySQL's DECIMAL does", () => {
+    expect(decimalIssues({ precision: 0, scale: 0 })).toEqual([
+      { code: "invalid_decimal_digits", path: ["precision"] },
+    ]);
+    expect(decimalIssues({ precision: 66, scale: 2 })).toEqual([
+      { code: "invalid_decimal_digits", path: ["precision"] },
+    ]);
+    expect(decimalIssues({ precision: 20.5, scale: 2 })).toEqual([
+      { code: "invalid_decimal_digits", path: ["precision"] },
+    ]);
+    expect(decimalIssues({ precision: 40, scale: 31 })).toEqual([
+      { code: "invalid_decimal_digits", path: ["scale"] },
+    ]);
+    expect(decimalIssues({ precision: 10, scale: -1 })).toEqual([
+      { code: "invalid_decimal_digits", path: ["scale"] },
+    ]);
+    expect(decimalIssues({ precision: 10, scale: 1.5 })).toEqual([
+      { code: "invalid_decimal_digits", path: ["scale"] },
+    ]);
+  });
 });
 
 describe("structural fields", () => {
