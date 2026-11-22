@@ -58,7 +58,7 @@ const DECIMAL_DIGITS_WRITES: [string, string][] = [
  * The import for a project with decimals stating their digits: SQLite keeps one beyond a PHP float
  * as text, which takes any string, so an archived value is written as every other write keeps it.
  */
-const withDecimalDigits = (php: string): string =>
+export const withDecimalDigits = (php: string): string =>
   DECIMAL_DIGITS_WRITES.reduce((patched, [from, to]) => {
     if (patched.split(from).length !== 2) {
       throw new Error(`StrapiImport.php must hold exactly one "${from}"`);
