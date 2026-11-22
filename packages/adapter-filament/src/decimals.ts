@@ -21,8 +21,9 @@ export const beyondPhpFloat = (field: Field | ComponentFieldT): boolean =>
  * What a decimal beyond a PHP float loses where the app compares or stores it. On the Laravel
  * storage layout its column is text on SQLite (see `decimalColumn`), so the Strapi API style's
  * ordering filters and sorts compare it as text there, while its equality filters compare the
- * canonical digits every write keeps (DecimalDigits); the Laravel API style neither filters nor
- * sorts. Its archives carry a decimal as a number, as Strapi's do, for Strapi to import. On
+ * canonical digits every write through Eloquent or the import keeps (DecimalDigits), and the
+ * admin list's number filters (Filament's NumberConstraint) compare it through a float; the
+ * Laravel API style neither filters nor sorts. Its archives carry a decimal as a number, as Strapi's do, for Strapi to import. On
  * Strapi's storage layout the column is the one Strapi made, which SQLite keeps as a double.
  */
 export const filamentDecimalGaps = (
@@ -39,7 +40,7 @@ export const filamentDecimalGaps = (
         message:
           storage === "strapi"
             ? `"${location.field}" keeps ${digits.precision} digits, but on Strapi's storage layout its column is Strapi's, which SQLite keeps as a double that PHP reads back as a float: on SQLite only ${PHP_FLOAT_DIGITS} significant digits are kept`
-            : `"${location.field}" keeps its ${digits.precision} digits as text on SQLite, where a filter on it finds equal values exactly but compares text, not numbers, in an ordering comparison ($lt, $lte, $gt, $gte, $between) or a sort; a JSON number sent for it is read as a double first, so an exact value is sent as a string; a data-transfer archive carries it as a number, as Strapi's archives do, rounded to ${DOUBLE_DIGITS} significant digits`,
+            : `"${location.field}" keeps its ${digits.precision} digits as text on SQLite, where a filter on it finds equal values exactly but compares text, not numbers, in an ordering comparison ($lt, $lte, $gt, $gte, $between) or a sort; a JSON number sent for it is read as a double first, so an exact value is sent as a string; the admin list's number filters compare it through a PHP float, as text on SQLite; a data-transfer archive carries it as a number, as Strapi's archives do, rounded to ${DOUBLE_DIGITS} significant digits`,
       }));
 
 const DECIMAL_DIGITS_RUNTIME = [
