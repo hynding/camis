@@ -948,13 +948,11 @@ jobs:
           S=../packages/adapter-filament/scripts/php
           cp $S/DraftAdminTest.php $S/LocaleAdminTest.php $S/MediaAdminTest.php $S/FoldersTest.php $S/UsersAdminTest.php $S/ProvidersTest.php $S/ApiTokensTest.php $S/TransferTokensTest.php $S/DataTransferTest.php $S/StrapiAdminTest.php $S/WebhooksTest.php $S/DynamicZonesTest.php $S/GraphqlTest.php $S/LinkOrderAdminTest.php $S/TokenImportTest.php $S/ContentManagerListTest.php $S/ComponentIdTest.php $S/ComponentRelationsAdminTest.php $S/ContentManagerViewTest.php $S/SettingsPagesTest.php $S/EmailApiTest.php $S/ContentTypeBuilderTest.php $S/AdminAccountsTest.php $S/AdminTokensTest.php $S/TransferTimestampsTest.php $S/TransferPushPullTest.php tests/Feature/
           php artisan test tests/Feature/DraftAdminTest.php tests/Feature/LocaleAdminTest.php tests/Feature/MediaAdminTest.php tests/Feature/FoldersTest.php tests/Feature/UsersAdminTest.php tests/Feature/ProvidersTest.php tests/Feature/ApiTokensTest.php tests/Feature/TransferTokensTest.php tests/Feature/DataTransferTest.php tests/Feature/StrapiAdminTest.php tests/Feature/WebhooksTest.php tests/Feature/DynamicZonesTest.php tests/Feature/GraphqlTest.php tests/Feature/LinkOrderAdminTest.php tests/Feature/TokenImportTest.php tests/Feature/ContentManagerListTest.php tests/Feature/ComponentIdTest.php tests/Feature/ComponentRelationsAdminTest.php tests/Feature/ContentManagerViewTest.php tests/Feature/SettingsPagesTest.php tests/Feature/EmailApiTest.php tests/Feature/ContentTypeBuilderTest.php tests/Feature/AdminAccountsTest.php tests/Feature/AdminTokensTest.php tests/Feature/TransferTimestampsTest.php tests/Feature/TransferPushPullTest.php
-      - name: Credential routes are throttled with their Retry-After, the refresh cookie is refused cross-site and set narrowly, CORS credentials go to listed origins only
+      - name: Credential routes are throttled per group (a password change per account) with their Retry-After, the refresh cookie is refused cross-site and set narrowly, CORS credentials go to listed origins only
         run: |
           cd app
-          # The rate is read when routes/api.php loads: uncached routes and a low rate keep this quick.
-          php artisan route:clear
           cp ../packages/adapter-filament/scripts/php/AuthSecurityTest.php tests/Feature/
-          CAMIS_AUTH_THROTTLE_PER_MINUTE=3 php artisan test tests/Feature/AuthSecurityTest.php
+          php artisan test tests/Feature/AuthSecurityTest.php
       - name: camis:schema-sync brings the database up to the generated migrations and keeps its rows (${{ matrix.db }})
         run: |
           cd app

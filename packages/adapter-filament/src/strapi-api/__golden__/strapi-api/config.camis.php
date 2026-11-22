@@ -5,8 +5,9 @@
 declare(strict_types=1);
 
 return [
-    // Requests per minute allowed on the unauthenticated credential endpoints
-    // (POST /auth/local and /auth/local/register), keyed by client address.
+    // Requests per minute allowed on each group of credential routes (sign-in, registration,
+    // password recovery, ...), each group in a bucket of its own per client address, or per
+    // account for a password change.
     'auth_throttle_per_minute' => max(1, (int) env('CAMIS_AUTH_THROTTLE_PER_MINUTE', 10)),
 
     // Strapi's api.rest config, as a new Strapi project ships it: the page size when a request

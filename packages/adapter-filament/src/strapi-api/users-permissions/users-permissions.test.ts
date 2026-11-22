@@ -161,9 +161,6 @@ describe("users-permissions routes", () => {
     expect(content("app/Http/Middleware/StrapiThrottle.php")).toContain(
       "StrapiRateLimits::attempt($request, $group)",
     );
-    expect(content("app/GraphQL/StrapiGraphqlPlugins.php")).toContain(
-      "self::throttle($request, 'password-change');",
-    );
   });
   it("throttles the unauthenticated email endpoints with the credential ones", () => {
     expect(routes).toContain(

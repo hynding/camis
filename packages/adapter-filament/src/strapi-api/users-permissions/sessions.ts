@@ -20,6 +20,9 @@ export const sessionsConfigKeys = (): string => `
             'access_token_lifespan' => (int) env('CAMIS_ACCESS_TOKEN_LIFESPAN', 600),
             'max_refresh_token_lifespan' => (int) env('CAMIS_MAX_REFRESH_TOKEN_LIFESPAN', 2592000),
             'idle_refresh_token_lifespan' => (int) env('CAMIS_IDLE_REFRESH_TOKEN_LIFESPAN', 1209600),
+            // Requests per minute to /auth/refresh per client address, in a bucket of its own:
+            // each tab of a browser client refreshes on load.
+            'refresh_throttle_per_minute' => max(1, (int) env('CAMIS_REFRESH_THROTTLE_PER_MINUTE', 60)),
             // The refresh token in an httpOnly cookie rather than the body (also per request,
             // with the x-strapi-refresh-cookie: httpOnly header). The cookie is stricter than
             // Strapi's: Secure (false is honoured in local development only, APP_ENV=local),

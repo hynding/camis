@@ -207,6 +207,14 @@ ${
 export const emitStrapiActiveUser = (): string =>
   runtimePhp(new URL("./php/app/Http/Middleware/StrapiActiveUser.php", import.meta.url));
 
+/** The credential throttle: a bucket per group of routes, by account once signed in. */
+export const emitStrapiRateLimits = (): string =>
+  runtimePhp(new URL("./php/app/Support/StrapiRateLimits.php", import.meta.url));
+
+/** A credential route's turn of its group's bucket, taken after the route's credentials. */
+export const emitStrapiThrottle = (): string =>
+  runtimePhp(new URL("./php/app/Http/Middleware/StrapiThrottle.php", import.meta.url));
+
 /**
  * users-permissions' /users routes: the list, count and read are the builtin user's read grant,
  * and its writes its create, update and delete grants. /users/me is every session's.

@@ -256,6 +256,7 @@ overwrite app/Http/Middleware/StrapiApiToken.php
 overwrite app/Http/Middleware/StrapiCredentials.php
 overwrite app/Http/Middleware/StrapiErrors.php
 overwrite app/Http/Middleware/StrapiPublicRoute.php
+overwrite app/Http/Middleware/StrapiThrottle.php
 overwrite app/Http/Serializers/ActivitySerializer.php
 overwrite app/Http/Serializers/ActivitySessionSerializer.php
 overwrite app/Http/Serializers/ArticleSerializer.php
@@ -397,6 +398,7 @@ overwrite app/Support/StrapiOAuth.php
 overwrite app/Support/StrapiPopulate.php
 overwrite app/Support/StrapiProviders.php
 overwrite app/Support/StrapiQuery.php
+overwrite app/Support/StrapiRateLimits.php
 overwrite app/Support/StrapiRelations.php
 overwrite app/Support/StrapiRelationsOrderer.php
 overwrite app/Support/StrapiRoles.php

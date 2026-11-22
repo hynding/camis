@@ -116,6 +116,7 @@ class AuthSecurityTest extends TestCase
         }, 400);
 
         // Another account's turns are its own.
+        $this->freshRequest();
         $other = $this->register('bob');
         $this->freshRequest();
         $this->withToken($other)->postJson('/api/auth/change-password', $guess)->assertStatus(400);
@@ -137,8 +138,9 @@ class AuthSecurityTest extends TestCase
         self::assertThrottled(fn (): TestResponse => $this->postJson('/api/auth/forgot-password', ['email' => 'nobody@example.test']), 200);
         self::assertThrottled(fn (): TestResponse => $this->login('nobody'), 400, self::RATE);
         // Neither recovery nor sign-in used up registration, nor the email confirmation.
+        $this->freshRequest();
         $this->register('bob');
-        $this->postJson('/api/auth/send-email-confirmation', ['email' => 'nobody@example.test'])->assertStatus(400);
+        $this->postJson('/api/auth/send-email-confirmation', ['email' => 'nobody@example.test'])->assertOk();
     }
 
     /** Credentials for `*` would let any site read what the visitor's refresh cookie buys. */
