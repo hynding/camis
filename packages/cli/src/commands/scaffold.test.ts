@@ -9,6 +9,7 @@ import {
   patchConsoleRoutes,
   isPatchedUserModel,
   patchAdminPanelProvider,
+  patchBootstrapProviders,
   patchUserModel,
   scaffoldCommand,
   setAppName,
@@ -19,6 +20,14 @@ interface ExecCall {
   args: string[];
   cwd: string;
 }
+
+const STOCK_PROVIDERS = `<?php
+
+return [
+    App\\Providers\\AppServiceProvider::class,
+    App\\Providers\\Filament\\AdminPanelProvider::class,
+];
+`;
 
 const fakeIo = (opts: {
   files?: Record<string, string>;
@@ -34,7 +43,7 @@ const fakeIo = (opts: {
   const madeDirs: string[] = [];
   const lines: string[] = [];
   const written: Record<string, string> = {};
-  const files = opts.files ?? {};
+  const files = { "/proj/app/bootstrap/providers.php": STOCK_PROVIDERS, ...(opts.files ?? {}) };
   const execResults = opts.execResults ?? [];
   const io: Io = {
     readFile: (p) =>
@@ -164,6 +173,34 @@ class AdminPanelProvider extends PanelProvider
     }
 }
 `;
+
+// The admin guard's accounts are checked through camis's own user provider (one hash check
+// whatever the email finds), which a service provider registers; the Strapi storage layout has no
+// admin accounts, so the entry is guarded by the class existing.
+describe("patchBootstrapProviders", () => {
+  const ENTRY =
+    "    ...(class_exists(\\App\\Providers\\CamisAuthServiceProvider::class) ? [\\App\\Providers\\CamisAuthServiceProvider::class] : []),";
+  it("registers camis's auth service provider when it exists", () => {
+    const patched = patchBootstrapProviders(STOCK_PROVIDERS);
+    expect(patched).toContain(ENTRY);
+    expect(patched.indexOf("AdminPanelProvider::class")).toBeLessThan(patched.indexOf(ENTRY));
+  });
+  it("is idempotent", () => {
+    const once = patchBootstrapProviders(STOCK_PROVIDERS);
+    expect(patchBootstrapProviders(once)).toBe(once);
+  });
+  it("is patched by the scaffold", async () => {
+    const { io, written } = fakeIo({
+      files: {
+        "/proj/app/app/Models/User.php": STOCK_USER,
+        "/proj/app/app/Providers/Filament/AdminPanelProvider.php": STOCK_PANEL,
+        "/proj/app/bootstrap/app.php": STOCK_BOOTSTRAP,
+      },
+    });
+    expect(await scaffoldCommand("filament", "app", io)).toBe(0);
+    expect(written["/proj/app/bootstrap/providers.php"]).toContain(ENTRY);
+  });
+});
 
 describe("patchAdminPanelProvider", () => {
   // Admin accounts are AdminUser rows on the generated admin guard, apart from the API's users.

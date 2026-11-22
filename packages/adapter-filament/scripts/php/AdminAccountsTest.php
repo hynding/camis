@@ -187,6 +187,48 @@ class AdminAccountsTest extends TestCase
         $this->signIn();
     }
 
+    /**
+     * The panel's sign-in (Filament on the admin guard) checks one hash whatever the email finds,
+     * fails a hash it cannot read as a wrong password, takes Strapi's $2a$ hashes, and stores a
+     * matched password again at the configured cost.
+     */
+    public function test_the_panel_sign_in_checks_one_hash_whatever_the_email_finds(): void
+    {
+        $this->admin();
+        $this->admin('plain@example.test');
+        $this->admin('imported@example.test');
+        $rounds = (int) config('hashing.bcrypt.rounds');
+        AdminUser::query()->where('email', 'plain@example.test')->toBase()->update(['password' => 'Admin-pass-1']);
+        AdminUser::query()->where('email', 'imported@example.test')->toBase()->update(['password' => '$2a'.substr(password_hash('Admin-pass-1', PASSWORD_BCRYPT, ['cost' => $rounds + 1]), 3)]);
+        $checks = new \ArrayObject(['n' => 0]);
+        app('hash')->extend('counting', fn () => new class ((array) config('hashing.bcrypt'), $checks) extends \Illuminate\Hashing\BcryptHasher {
+            public function __construct(array $options, private \ArrayObject $checks)
+            {
+                parent::__construct($options);
+            }
+
+            public function check(#[\SensitiveParameter] $value, $hashedValue, array $options = []): bool
+            {
+                $matches = parent::check($value, $hashedValue, $options);
+                $this->checks['n']++;
+
+                return $matches;
+            }
+        });
+        config(['hashing.driver' => 'counting']);
+        app('hash')->forgetDrivers();
+        $auth = Filament::getPanel('admin')->auth();
+        foreach ([['nobody@example.test', 'Admin-pass-1'], ['admin@example.test', 'wrong'], ['plain@example.test', 'Admin-pass-1']] as [$email, $password]) {
+            $checks['n'] = 0;
+            self::assertFalse($auth->attempt(['email' => $email, 'password' => $password]), $email);
+            self::assertSame(1, $checks['n'], "a panel sign-in as {$email} checks one hash");
+        }
+        self::assertTrue($auth->attempt(['email' => 'imported@example.test', 'password' => 'Admin-pass-1']));
+        $auth->logout();
+        self::assertStringStartsWith(sprintf('$2y$%02d$', $rounds), (string) AdminUser::query()->where('email', 'imported@example.test')->value('password'));
+        self::assertTrue($auth->attempt(['email' => 'admin@example.test', 'password' => 'Admin-pass-1']));
+    }
+
     public function test_a_sign_in_returns_strapis_body_and_a_token_for_the_admin_api(): void
     {
         $admin = $this->admin();
