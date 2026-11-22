@@ -60,7 +60,11 @@ class AuthController extends Controller
         }
         $password = Hash::make((string) $body['password']);
         if ($taken) {
-            StrapiUsers::later(fn () => StrapiUsers::sendRegistrationNotice($email));
+            StrapiUsers::later(function () use ($email): void {
+                if (StrapiRateLimits::mailable('registration-notice', $email)) {
+                    StrapiUsers::sendRegistrationNotice($email);
+                }
+            });
 
             return response()->json(['email' => $email, 'sent' => true]);
         }
@@ -152,6 +156,9 @@ class AuthController extends Controller
             return response()->json(['ok' => true]);
         }
         $reset = function () use ($user): void {
+            if (! StrapiRateLimits::mailable('reset-password', (string) $user->email)) {
+                return;
+            }
             $token = bin2hex(random_bytes(64));
             // Saved before sending, so an administrator can still hand out the link if the mail fails.
             $user->forceFill(['reset_password_token' => $token])->save();
@@ -195,7 +202,11 @@ class AuthController extends Controller
         if (StrapiUsers::hidesAccounts()) {
             // Every address is answered alike; only an account still to be confirmed gets the mail.
             if ($user !== null && ! (bool) $user->confirmed && ! (bool) $user->blocked) {
-                StrapiUsers::later(fn () => StrapiUsers::sendConfirmation($user));
+                StrapiUsers::later(function () use ($user): void {
+                    if (StrapiRateLimits::mailable('confirmation', (string) $user->email)) {
+                        StrapiUsers::sendConfirmation($user);
+                    }
+                });
             }
 
             return response()->json(['email' => $email, 'sent' => true]);
@@ -209,7 +220,9 @@ class AuthController extends Controller
         if ((bool) $user->blocked) {
             throw StrapiUsers::application('User blocked');
         }
-        StrapiUsers::sendConfirmation($user);
+        if (StrapiRateLimits::mailable('confirmation', (string) $user->email)) {
+            StrapiUsers::sendConfirmation($user);
+        }
 
         return response()->json(['email' => $user->email, 'sent' => true]);
     }

@@ -76,6 +76,9 @@ export const usersPermissionsConfigKeys = (): string => `
         'hide_account_existence' => (bool) env('CAMIS_AUTH_HIDE_ACCOUNT_EXISTENCE', true),
         // The mails a refused registration sends the address it named, with the account
         // confirmation's sender. They name nothing the registration sent.
+        // How many mails of one kind (registration notice, confirmation resend, recovery) one
+        // address gets in an hour, since each goes to an address the caller names. Floored at 1.
+        'account_mail_per_hour' => max(1, (int) env('CAMIS_ACCOUNT_MAIL_PER_HOUR', 1)),
         'account_emails' => [
             // One text for a taken address and a taken username, so it says neither was taken.
             'registration_attempted' => [

@@ -76,6 +76,19 @@ final class StrapiRateLimits
         }
     }
 
+    /**
+     * Whether a mail of $kind may go to $address now, taking its turn: each kind of account mail
+     * goes to an address the caller names, so it is bounded per recipient, whoever asks. Its turn is
+     * taken where the mail is sent, after the answer when accounts are hidden, so a mail skipped
+     * changes neither the answer nor its time.
+     */
+    public static function mailable(string $kind, string $address): bool
+    {
+        $key = 'camis-mail|'.$kind.'|'.substr(hash('sha256', self::folded($address)), 0, 32);
+
+        return RateLimiter::hit($key, 3600) <= max(1, (int) config('camis.users_permissions.account_mail_per_hour', 1));
+    }
+
     public static function tooMany(string $group, int $wait): ThrottleRequestsException
     {
         return new ThrottleRequestsException('Too Many Attempts.', null, ['Retry-After' => $wait, 'X-RateLimit-Limit' => self::rate($group), 'X-RateLimit-Remaining' => 0]);
