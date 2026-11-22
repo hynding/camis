@@ -73,9 +73,14 @@ Laravel reading route files, so without the bootstrap line a cached app loses St
 envelope.
 
 The Strapi API style adds a NOT NULL unique \`username\` column to \`users\`; run its migration
-against an empty users table, or backfill usernames first. Two \`.env\` knobs govern its auth
-endpoints: \`SANCTUM_TOKEN_EXPIRATION\` bounds token lifetime (tokens do not expire by default),
-and \`CAMIS_AUTH_THROTTLE_PER_MINUTE\` (default 10, floored at 1) sets the request rate allowed
+against an empty users table, or backfill usernames first. Its tokens last as long as Strapi's
+settings say, each set on the token itself: \`CAMIS_JWT_LIFESPAN\` seconds (default 2592000, 30
+days; 0: no expiry) for the token sign-in returns by default (\`CAMIS_JWT_MANAGEMENT=legacy-support\`), and with \`CAMIS_JWT_MANAGEMENT=refresh\`
+\`CAMIS_ACCESS_TOKEN_LIFESPAN\` seconds (default 600) for each access token, renewed through
+\`/auth/refresh\` (see Sign-in sessions). Laravel's \`SANCTUM_TOKEN_EXPIRATION\` is not read:
+leave \`expiration\` null in \`config/sanctum.php\`, since Sanctum applies it to every token by
+age, on top of the token's own expiry, and so would cut those lifetimes short.
+\`CAMIS_AUTH_THROTTLE_PER_MINUTE\` (default 10, floored at 1) sets the request rate allowed
 on \`/auth/local\` and \`/auth/local/register\` — each in a bucket of its own per client address
 (with the Strapi API style, every credential route: see Sign-in sessions). It is read through the
 generated \`config/camis.php\`; after changing it re-run \`php artisan config:cache\`. Without the

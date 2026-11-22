@@ -262,8 +262,9 @@ an unreadable/invalid config, an unknown command, or an `error`-severity capabil
   typo cannot lock the endpoints out). CORS allows credentials only for origins listed in
   `CAMIS_CORS_ORIGIN`, never with `*`; the refresh cookie is refused cross-site and defaults to
   `Secure`, `SameSite=Strict` and `Path=/api/auth`. The generated `DEPLOY.md` lists every setting
-  and what an upgrade changes. Set `SANCTUM_TOKEN_EXPIRATION` in `.env` to bound token
-  lifetime (tokens do not expire by default).
+  and what an upgrade changes. Tokens last as Strapi's settings say (`CAMIS_JWT_LIFESPAN`, 30
+  days by default; `CAMIS_ACCESS_TOKEN_LIFESPAN` in refresh mode); Laravel's
+  `SANCTUM_TOKEN_EXPIRATION` is not read, and `expiration` in `config/sanctum.php` stays null.
   Each controller is a generated base under
   `app/Http/Controllers/Api/Generated/` plus a seed-mode subclass you may override. The Strapi
   API style adds a NOT NULL unique `username` column to `users`; run its migration against an
