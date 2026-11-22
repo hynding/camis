@@ -396,17 +396,21 @@ const cors = (middlewares: unknown[], gaps: CapabilityGap[]): CorsSettings | und
 };
 
 /**
- * strapi::cors's origin is any origin: unset (its default), or `*` in a list, in a string it splits
- * on commas, or in a variable's fallback.
+ * strapi::cors's origin is any origin: unset (its default), or read from a variable without a
+ * fallback (unset where the variable is), or `*` in a list, in a string it splits on commas, or in
+ * a variable's fallback.
  */
-const anyOrigin = (origin: unknown): boolean => {
-  if (origin === undefined || origin === null) return true;
-  if (isEnvReference(origin)) return anyOrigin(origin.default ?? "");
+const anyOrigin = (origin: unknown): boolean =>
+  origin === undefined ||
+  origin === null ||
+  (isEnvReference(origin) && origin.default === undefined) ||
+  listsAnyOrigin(origin);
+
+/** A list entry left unset matches no request's origin, so only a `*` in it counts. */
+const listsAnyOrigin = (origin: unknown): boolean => {
+  if (isEnvReference(origin)) return listsAnyOrigin(origin.default ?? "");
   if (typeof origin === "string") return origin.split(",").some((item) => item.trim() === "*");
-  return (
-    Array.isArray(origin) &&
-    origin.some((item) => item !== undefined && item !== null && anyOrigin(item))
-  );
+  return Array.isArray(origin) && origin.some(listsAnyOrigin);
 };
 
 // Strapi serves its admin at /admin unless config/admin's url says otherwise; so does camis.
