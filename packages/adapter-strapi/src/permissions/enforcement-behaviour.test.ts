@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { strapiAdapter } from "../generate";
 import { ownershipBundle } from "../__fixtures__/ownership";
+import type { IrBundle } from "@camis/permissions";
+import { tokenState } from "../__fixtures__/token-states";
 
 // Strapi cannot be booted here, so the emitted enforcement modules run against a small fake of
 // the surface they use: the request context, the core controller Strapi builds them on, its
@@ -14,6 +16,8 @@ import { ownershipBundle } from "../__fixtures__/ownership";
 const NOTE = "api::note.note";
 const TAG = "api::tag.tag";
 const CATEGORY = "api::category.category";
+const BOOKMARK = "api::bookmark.bookmark";
+const FRONT = "api::front.front";
 
 type Row = Record<string, unknown> & { id: number; documentId: string };
 type Filter = Record<string, unknown>;
@@ -34,6 +38,8 @@ const SCHEMA: Record<string, Record<string, { relation: string } | { component: 
     refs: { component: "shared.reference" },
   },
   "shared.reference": { note: { relation: NOTE } },
+  [BOOKMARK]: { parent: { relation: BOOKMARK } },
+  [FRONT]: { featured: { relation: CATEGORY } },
 };
 
 /**
@@ -112,7 +118,7 @@ const asUser = (id: number, role: string) => ({
   user: user(id, role),
 });
 const asGuest = { auth: { strategy: { name: "users-permissions" }, credentials: null } };
-const asToken = { auth: { strategy: { name: "api-token" }, credentials: { type: "full-access" } } };
+const asToken = tokenState("full-access");
 const member = () => asUser(10, "member");
 
 const tables: Record<string, Row[]> = {};
@@ -150,6 +156,9 @@ const seed = (): void => {
   tables[NOTE] = [mine, theirs, open];
   tables[TAG] = [t1, t2, t3];
   tables[CATEGORY] = [c1, c2];
+  const b1: Row = { id: 1, documentId: "b1", label: "b1", parent: null };
+  tables[FRONT] = [{ id: 1, documentId: "front", headline: "hello", featured: c1 }];
+  tables[BOOKMARK] = [b1, { id: 2, documentId: "b2", label: "b2", parent: b1 }];
 };
 const rowsOf = (uid: string): Row[] => tables[uid]!;
 const byDocument = (uid: string, documentId: unknown) =>
@@ -316,7 +325,12 @@ beforeAll(async () => {
   dir = await mkdtemp(join(tmpdir(), "camis-enforcement-"));
   const result = strapiAdapter.generate(ownershipBundle, { projectName: "notes" });
   await mkdir(join(dir, "permissions"));
-  for (const name of ["api-conditions.ts", "api-controller.ts"]) {
+  for (const name of [
+    "api-conditions.ts",
+    "api-controller.ts",
+    "api-uploads.ts",
+    "api-upload-controller.ts",
+  ]) {
     const content = result.files.find((f) => f.path === `src/permissions/${name}`)!.content;
     await writeFile(join(dir, "permissions", name), content);
   }
@@ -330,6 +344,59 @@ beforeAll(async () => {
     controllers[uid] = createCoreController(uid, ({ strapi: s }) =>
       enforcedController(s, uid, TABLES),
     );
+  const { checkedSingle } = await import(
+    pathToFileURL(join(dir, "permissions", "api-controller.ts")).href
+  );
+  controllers[FRONT] = createCoreController(FRONT, () => checkedSingle(FRONT, TABLES));
+  // A type with no rules of its own and nothing it reaches, served only so a restricted write's
+  // body is checked: members create and update bookmarks, each under a parent bookmark.
+  const withBookmarks: IrBundle = {
+    document: {
+      ...ownershipBundle.document,
+      contentTypes: [
+        ...ownershipBundle.document.contentTypes,
+        {
+          name: "Bookmark",
+          kind: "collection",
+          fields: [
+            { type: "string", name: "label" },
+            { type: "relation", name: "parent", relationKind: "manyToOne", target: "Bookmark" },
+          ],
+        },
+      ],
+    },
+    roles: ownershipBundle.roles.map((r) =>
+      r.name === "member"
+        ? {
+            ...r,
+            grants: [
+              ...r.grants,
+              { contentType: "Bookmark", actions: ["create", "read", "update", "delete"] },
+            ],
+          }
+        : r,
+    ),
+  };
+  const bookmarks = strapiAdapter.generate(withBookmarks, { projectName: "notes" });
+  await mkdir(join(dir, "bookmarks"));
+  for (const name of [
+    "api-conditions.ts",
+    "api-controller.ts",
+    "api-uploads.ts",
+    "api-upload-controller.ts",
+  ]) {
+    const content = bookmarks.files.find((f) => f.path === `src/permissions/${name}`)!.content;
+    await writeFile(join(dir, "bookmarks", name), content);
+  }
+  const bookmarkTables = (
+    await import(pathToFileURL(join(dir, "bookmarks", "api-conditions.ts")).href)
+  ).TABLES;
+  const bookmarkController = (
+    await import(pathToFileURL(join(dir, "bookmarks", "api-controller.ts")).href)
+  ).enforcedController;
+  controllers[BOOKMARK] = createCoreController(BOOKMARK, ({ strapi: s }) =>
+    bookmarkController(s, BOOKMARK, bookmarkTables),
+  );
 });
 afterAll(async () => {
   await rm(dir, { recursive: true, force: true });
@@ -676,6 +743,36 @@ describe("callers no role restricts", () => {
   });
 });
 
+// A content API token stands for no role: a full-access or read-only one reads every type, so its
+// requests are Strapi's as they come. A custom one is checked against its own scopes by Strapi,
+// whose sanitizer keeps a polymorphic list whole when the token may read none of its entries, at
+// any depth (the built-in user's inverses included): camis does not support it on a route it
+// serves, and refuses every action before Strapi reads anything.
+describe("API tokens, by their type", () => {
+  const related = { attachment: { populate: { related: true } } };
+  it("passes a full-access or read-only token's request to Strapi, related entries included", async () => {
+    for (const type of ["full-access", "read-only"] as const) {
+      const ctx = context(tokenState(type), { query: { populate: related } });
+      await notes().find(ctx);
+      expect(ctx.status, type).toBeUndefined();
+    }
+    expect(calls).toEqual([`core.find ${NOTE}`, `core.find ${NOTE}`]);
+  });
+  it("refuses a custom token every action on every served type, before Strapi", async () => {
+    const custom = tokenState("custom");
+    for (const controller of [notes(), tags(), controllers[BOOKMARK]!] as const)
+      for (const method of ["find", "findOne", "create", "update", "delete"] as const) {
+        const ctx = context(custom, {
+          params: { id: "mine" },
+          request: { body: { data: { title: "t" } } },
+        });
+        await (controller as Record<string, (c: Context) => Promise<unknown>>)[method]!(ctx);
+        expect(ctx.status, method).toBe(403);
+      }
+    expect(calls).toEqual([]);
+  });
+});
+
 describe("callers the rules do not know are refused", () => {
   it("a role the IR does not grant the type lists nothing and edits nothing", async () => {
     expect(documentIds(await notes().find(context(asUser(13, "stranger"))))).toEqual([]);
@@ -704,5 +801,130 @@ describe("callers the rules do not know are refused", () => {
     await notes().create(none);
     expect(none.status).toBe(403);
     expect(calls).toEqual([]);
+  });
+});
+
+// Strapi's database layer spreads a relation item's __pivot into the join row: on a type with no
+// rules, a member with create alone could otherwise add links to existing entries.
+describe("a type with no rules, served only to check a restricted write's body", () => {
+  const bookmarks = () => controllers[BOOKMARK]!;
+  it("creates and updates as Strapi does", async () => {
+    const created = context(member(), {
+      request: { body: { data: { label: "new", parent: "b2" } } },
+    });
+    await bookmarks().create(created);
+    expect(created.status).toBe(201);
+    expect(rowsOf(BOOKMARK).map((r) => r.label)).toEqual(["b1", "b2", "new"]);
+    const updated = context(member(), {
+      params: { id: "b1" },
+      request: { body: { data: { label: "edited", parent: { connect: [{ id: 2 }] } } } },
+    });
+    await bookmarks().update(updated);
+    expect(updated.status).toBeUndefined();
+    expect(byDocument(BOOKMARK, "b1")).toMatchObject({ label: "edited" });
+  });
+  it("refuses a __pivot, or any key that is no attribute, before Strapi sees the write", async () => {
+    for (const data of [
+      { label: "x", parent: { connect: [{ id: 1, __pivot: { bookmark_id: 2 } }] } },
+      { label: "x", documentId: "b1" },
+    ]) {
+      const create = context(member(), { request: { body: { data } } });
+      await bookmarks().create(create);
+      expect(create.status, JSON.stringify(data)).toBe(400);
+      const update = context(member(), { params: { id: "b1" }, request: { body: { data } } });
+      await bookmarks().update(update);
+      expect(update.status, JSON.stringify(data)).toBe(400);
+    }
+    expect(rowsOf(BOOKMARK).map((r) => [r.documentId, r.label])).toEqual([
+      ["b1", "b1"],
+      ["b2", "b2"],
+    ]);
+  });
+  it("leaves reads and deletes to Strapi's own controller, query parameters and all", async () => {
+    await bookmarks().find(context(member(), { query: { publicationFilter: "never-published" } }));
+    await bookmarks().findOne(context(member(), { params: { id: "b1" } }));
+    await bookmarks().delete(context(member(), { params: { id: "b1" }, query: { filters: {} } }));
+    expect(calls).toEqual([
+      `core.find ${BOOKMARK}`,
+      `core.findOne ${BOOKMARK}`,
+      `core.delete ${BOOKMARK}`,
+    ]);
+  });
+});
+
+// Strapi's single type controller writes through the same database layer, which spreads a
+// relation item's __pivot into the join row: a restricted caller's body is checked first.
+describe("a single type a restricted role writes, over Strapi's single type controller", () => {
+  const front = () => controllers[FRONT]!;
+  const reviewer = () => asUser(12, "reviewer");
+  it("passes a write of its attributes on to Strapi's own update", async () => {
+    const ctx = context(reviewer(), {
+      request: { body: { data: { headline: "new", featured: { connect: [{ id: 2 }] } } } },
+    });
+    await front().update(ctx);
+    expect(ctx.status).toBeUndefined();
+    expect(calls).toEqual([`core.update ${FRONT}`]);
+  });
+  it("refuses a __pivot or a key that is no attribute, before Strapi sees it", async () => {
+    for (const data of [
+      { featured: { connect: [{ id: 2, __pivot: { front_id: 9 } }] } },
+      { featured: { set: [2], connect: [1] } },
+      { headline: "x", publishedAt: null },
+      { locale: "fr" },
+    ]) {
+      const ctx = context(reviewer(), { request: { body: { data } } });
+      await front().update(ctx);
+      expect(ctx.status, JSON.stringify(data)).toBe(400);
+    }
+    const guest = context(asGuest, {
+      request: { body: { data: { featured: { connect: [{ id: 2, __pivot: {} }] } } } },
+    });
+    await front().update(guest);
+    expect(guest.status).toBe(400);
+    expect(calls).toEqual([]);
+  });
+  // A file's related entries are polymorphic: no populate of them is answered, at any depth, on a
+  // read or in a write's response, as on a collection type.
+  it("refuses a populate of a file's related entries, on a read or a write", async () => {
+    const related = {
+      featured: { populate: { notes: { populate: { attachment: { populate: "related" } } } } },
+    };
+    for (const state of [reviewer(), asGuest]) {
+      const read = context(state, { query: { populate: related } });
+      await front().find(read);
+      expect(read.status).toBe(400);
+      const write = context(state, {
+        query: { populate: related },
+        request: { body: { data: { headline: "x" } } },
+      });
+      await front().update(write);
+      expect(write.status).toBe(400);
+    }
+    expect(calls).toEqual([]);
+    await front().find(context(reviewer(), { query: { populate: { featured: true } } }));
+    expect(calls).toEqual([`core.find ${FRONT}`]);
+    calls.length = 0;
+    for (const method of ["find", "update", "delete"] as const) {
+      const custom = context(tokenState("custom"), {
+        request: { body: { data: { headline: "x" } } },
+      });
+      await front()[method](custom);
+      expect(custom.status, method).toBe(403);
+    }
+    await front().find(context(tokenState("read-only"), { query: { populate: related } }));
+    expect(calls).toEqual([`core.find ${FRONT}`]);
+  });
+  it("leaves an admin role's and an API token's requests, and every delete, to Strapi", async () => {
+    const data = { featured: { connect: [{ id: 2, __pivot: { front_id: 9 } }] } };
+    for (const state of [asUser(13, "manager"), asToken])
+      await front().update(context(state, { request: { body: { data } } }));
+    await front().find(context(reviewer()));
+    await front().delete(context(reviewer()));
+    expect(calls).toEqual([
+      `core.update ${FRONT}`,
+      `core.update ${FRONT}`,
+      `core.find ${FRONT}`,
+      `core.delete ${FRONT}`,
+    ]);
   });
 });

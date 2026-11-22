@@ -1,0 +1,251 @@
+import {
+  callerOf,
+  mediaIds,
+  own,
+  recordVerdict,
+  rowId,
+  type Caller,
+  type Checked,
+  type Tables,
+  type TypeRules,
+  type Uploads,
+} from "./api-conditions";
+
+// The upload API's decisions, copied into each generated Strapi project as
+// src/permissions/api-uploads.ts. Pure, like the decisions it builds on: the upload extension and
+// the entry controllers load what these read and act on the verdict.
+
+export const FILE_UID = "plugin::upload.file";
+/** The file's private attribute holding its uploader's users-permissions id. */
+export const UPLOADER = "camisUploader";
+
+/** The entry a new file is to be attached to: Strapi's `ref`, `refId` and `field`. */
+export interface Attach {
+  uid: string;
+  id: number;
+  field: string;
+}
+
+/** A new upload (attached or not), or a change to a stored file (`?id=`: replace, or its info). */
+export type UploadRequest =
+  | { kind: "upload"; attach: Attach | null }
+  | { kind: "change"; id: number };
+
+/** A stored file as the checks see it: its uploader, and the rows of each entry it is on. */
+export interface StoredFile {
+  uploader: unknown;
+  related: { uid: string; rows: readonly unknown[] }[];
+}
+
+/**
+ * The body fields Strapi 5.48's upload documents. It keeps every other field as a meta of the
+ * stored file (`path` among them), so anything else is refused until reviewed.
+ */
+const BODY_FIELDS = ["fileInfo", "ref", "refId", "field"];
+const QUERY_PARAMETERS = ["id"];
+const ATTACH_FIELDS = ["ref", "refId", "field"] as const;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const field = (source: unknown, key: string): unknown =>
+  isRecord(source) ? source[key] : undefined;
+
+const refuse = (message: string): { ok: false; message: string } => ({ ok: false, message });
+
+/**
+ * A restricted caller's POST /api/upload as it will be served. Strapi attaches the new file when
+ * `ref`, `refId` and `field` are all truthy and ignores them otherwise; here they come together or
+ * not at all, each a single non-empty value (a repeated multipart field arrives as an array), and
+ * `refId` a row id, which is what Strapi stores in the link. A replace takes none of them.
+ */
+export const uploadRequest = (query: unknown, body: unknown): Checked<UploadRequest> => {
+  const parameters = isRecord(query) ? query : {};
+  const unknownParameter = Object.keys(parameters).find((k) => !QUERY_PARAMETERS.includes(k));
+  if (unknownParameter !== undefined) return refuse(`Invalid query parameter ${unknownParameter}`);
+  if (body !== undefined && body !== null && !isRecord(body)) return refuse("Invalid upload body");
+  const fields: Record<string, unknown> = isRecord(body) ? body : {};
+  const unknownField = Object.keys(fields).find((k) => !BODY_FIELDS.includes(k));
+  if (unknownField !== undefined) return refuse(`Invalid upload field ${unknownField}`);
+  const named = ATTACH_FIELDS.filter((k) => own(fields, k) !== undefined);
+  if (own(parameters, "id") !== undefined) {
+    const id = rowId(parameters.id);
+    if (id === null) return refuse("Invalid id");
+    if (named.length > 0) return refuse("Invalid ref, refId and field on a replace");
+    return { ok: true, value: { kind: "change", id } };
+  }
+  if (named.length === 0) return { ok: true, value: { kind: "upload", attach: null } };
+  if (named.length < ATTACH_FIELDS.length) return refuse("ref, refId and field go together");
+  const { ref, refId, field: attribute } = fields;
+  const id = rowId(refId);
+  if (typeof ref !== "string" || ref === "") return refuse("Invalid ref");
+  if (id === null) return refuse("Invalid refId");
+  if (typeof attribute !== "string" || attribute === "") return refuse("Invalid field");
+  return { ok: true, value: { kind: "upload", attach: { uid: ref, id, field: attribute } } };
+};
+
+/**
+ * Whether `attach` names a content type's own media field. A component's rows belong to the entry
+ * holding them, which an upload does not name, so a component, a plugin's type and a nested path
+ * are refused rather than traced to their entry.
+ */
+export const attachField = (uploads: Uploads, attach: Attach): boolean =>
+  own(uploads.grants, attach.uid) !== undefined &&
+  (own(uploads.holders, attach.uid)?.fields.includes(attach.field) ?? false);
+
+/** Rules naming no role: who is asking, as any type's rules would see it. */
+const anyType = (uploads: Uploads): TypeRules => ({
+  own: true,
+  defaults: {},
+  relations: {},
+  variables: {},
+  open: [],
+  assign: [],
+  admins: uploads.admins,
+  roles: {},
+});
+
+/** Who is asking the upload API: an API token or admin role unrestricted, a session its role. */
+export const uploadCaller = (uploads: Uploads, state: unknown): Caller =>
+  callerOf(anyType(uploads), state, "");
+
+/** The session user's id, recorded as a new file's uploader; none for a guest or a token. */
+export const uploaderOf = (state: unknown): number | null => {
+  const id = field(field(state, "user"), "id");
+  return typeof id === "number" ? id : null;
+};
+
+/**
+ * Whether the caller may act on an entry, from `rows` (every row of it, as a type with rules
+ * loads them with recordQuery; none when it does not exist): a type with rules by its verdict, any
+ * other content type by the roles holding the action outright. A component's row, or a type the
+ * tables do not know, is refused.
+ */
+export const entryVerdict = (
+  tables: Tables,
+  uid: string,
+  state: unknown,
+  action: "read" | "update",
+  rows: readonly unknown[],
+): boolean => {
+  const uploads = tables.uploads;
+  const grants = uploads === undefined ? undefined : own(uploads.grants, uid);
+  if (uploads === undefined || grants === undefined || rows.length === 0) return false;
+  const rules = own(tables.rules, uid);
+  if (rules?.own === true)
+    return recordVerdict(rules, callerOf(rules, state, ""), action, rows) === "allow";
+  const caller = uploadCaller(uploads, state);
+  if (caller.kind === "unrestricted") return true;
+  return caller.kind === "role" && grants[action].includes(caller.role);
+};
+
+/** Whether the caller's session user uploaded the file, where uploaders are recorded. */
+const uploadedBy = (uploads: Uploads, state: unknown, file: StoredFile): boolean => {
+  const caller = uploadCaller(uploads, state);
+  const user = caller.kind === "refused" ? null : caller.user;
+  return (
+    uploads.uploaderRecorded &&
+    user !== null &&
+    user.id !== null &&
+    file.uploader !== null &&
+    file.uploader !== undefined &&
+    String(file.uploader) === String(user.id)
+  );
+};
+
+/**
+ * Whether the caller may replace or delete a stored file (or change its info): its uploader always
+ * may, wherever it is attached; anyone else only a file attached to entries, every one of which
+ * the caller may update. Linking a file needs as much (attachVerdict), so no one takes a file
+ * from its uploader by linking it, nor from an entry's updaters without being one.
+ */
+export const changeVerdict = (tables: Tables, state: unknown, file: StoredFile | null): boolean => {
+  const uploads = tables.uploads;
+  if (uploads === undefined || file === null) return false;
+  if (uploadCaller(uploads, state).kind === "unrestricted") return true;
+  if (uploadedBy(uploads, state, file)) return true;
+  return (
+    file.related.length > 0 &&
+    file.related.every((r) => entryVerdict(tables, r.uid, state, "update", r.rows))
+  );
+};
+
+/**
+ * Whether the caller may link a stored file to an entry through a media field: it uploaded the
+ * file, or the file is on an entry the caller may update. Reading an entry is not enough: the link
+ * would let the reader hold a file it has no say over, and Strapi's url is all reading needs.
+ */
+export const attachVerdict = (tables: Tables, state: unknown, file: StoredFile | null): boolean => {
+  const uploads = tables.uploads;
+  if (uploads === undefined || file === null) return false;
+  if (uploadCaller(uploads, state).kind === "unrestricted") return true;
+  if (uploadedBy(uploads, state, file)) return true;
+  return file.related.some((r) => entryVerdict(tables, r.uid, state, "update", r.rows));
+};
+
+/**
+ * The stored files a restricted caller's entry write links through media fields, at any depth of
+ * its components and dynamic zones; a message for a media value of a form it cannot read. An
+ * unrestricted caller, or a project with no upload enforcement, needs none checked.
+ */
+export const mediaFileIds = (
+  tables: Tables,
+  uid: string,
+  state: unknown,
+  data: Record<string, unknown>,
+): Checked<number[]> => {
+  const uploads = tables.uploads;
+  if (uploads === undefined || uploadCaller(uploads, state).kind === "unrestricted")
+    return { ok: true, value: [] };
+  const ids: number[] = [];
+  const walk = (holderUid: string, values: unknown): string | undefined => {
+    const holder = own(uploads.holders, holderUid);
+    if (holder === undefined || !isRecord(values)) return undefined;
+    for (const [key, value] of Object.entries(values)) {
+      const nested = own(holder.nested, key);
+      if (holder.fields.includes(key)) {
+        const linked = mediaIds(value);
+        if (linked === null) return `Invalid media value for ${key}`;
+        ids.push(...linked);
+      } else if (nested !== undefined && "component" in nested) {
+        for (const item of Array.isArray(value) ? value : [value]) {
+          const problem = walk(nested.component, item);
+          if (problem !== undefined) return problem;
+        }
+      } else if (nested !== undefined && "zone" in nested && Array.isArray(value)) {
+        for (const item of value) {
+          const component = field(item, "__component");
+          if (typeof component !== "string" || !nested.zone.includes(component)) continue;
+          const problem = walk(component, item);
+          if (problem !== undefined) return problem;
+        }
+      }
+    }
+    return undefined;
+  };
+  const problem = walk(uid, data);
+  return problem === undefined ? { ok: true, value: ids } : refuse(problem);
+};
+
+/** What to load of a stored file: its uploader, where recorded, and the entries it is attached to. */
+export const fileQuery = (id: number, uploaderRecorded: boolean): Record<string, unknown> => ({
+  where: { id },
+  select: uploaderRecorded ? ["id", UPLOADER] : ["id"],
+  populate: { related: true },
+});
+
+/** Each entry a loaded file is attached to; one of no readable type as the unknown type "". */
+export const relatedEntries = (file: unknown): { uid: string; id: number }[] => {
+  const related = field(file, "related");
+  if (!Array.isArray(related)) return [];
+  return related.map((entry) => {
+    const type = field(entry, "__type");
+    return { uid: typeof type === "string" ? type : "", id: Number(field(entry, "id")) };
+  });
+};
+
+/** What to load of an entry by its row id first: its documentId, to load every row of it. */
+export const entryHeadQuery = (id: number): Record<string, unknown> => ({
+  where: { id },
+  select: ["id", "documentId"],
+});

@@ -27,6 +27,21 @@ describe("content API enforcement golden", () => {
       "../__golden__/ownership/api-controller.ts.txt",
     );
   });
+  it("api-uploads.ts (the upload API's decisions) matches the golden", async () => {
+    await expect(emitted(result, "src/permissions/api-uploads.ts")).toMatchFileSnapshot(
+      "../__golden__/ownership/api-uploads.ts.txt",
+    );
+  });
+  it("api-upload-controller.ts (the upload controller wrapper) matches the golden", async () => {
+    await expect(emitted(result, "src/permissions/api-upload-controller.ts")).toMatchFileSnapshot(
+      "../__golden__/ownership/api-upload-controller.ts.txt",
+    );
+  });
+  it("the upload extension records the uploader and wraps the plugin's controller", async () => {
+    await expect(emitted(result, "src/extensions/upload/strapi-server.ts")).toMatchFileSnapshot(
+      "../__golden__/ownership/upload.strapi-server.ts.txt",
+    );
+  });
   it("an enforced type's controller wraps the core controller with its rules", async () => {
     await expect(emitted(result, "src/api/note/controllers/note.ts")).toMatchFileSnapshot(
       "../__golden__/ownership/note.controller.ts.txt",
@@ -42,10 +57,18 @@ describe("content API enforcement golden", () => {
       "../__golden__/ownership/category.controller.ts.txt",
     );
   });
+  it("a single type a restricted role writes gets the body check over Strapi's single type controller", async () => {
+    await expect(emitted(result, "src/api/front/controllers/front.ts")).toMatchFileSnapshot(
+      "../__golden__/ownership/front.controller.ts.txt",
+    );
+  });
   it("every enforcement file carries the generated marker", () => {
     for (const path of [
       "src/permissions/api-conditions.ts",
       "src/permissions/api-controller.ts",
+      "src/permissions/api-uploads.ts",
+      "src/permissions/api-upload-controller.ts",
+      "src/extensions/upload/strapi-server.ts",
       "src/api/note/controllers/note.ts",
       "src/api/tag/controllers/tag.ts",
       "src/api/category/controllers/category.ts",
@@ -77,6 +100,25 @@ describe("content API enforcement golden", () => {
       "downgrade userRelationWrite Note.reviewer",
       "downgrade userRelationWrite Note.manager",
     ]);
+  });
+  // Strapi links a stored file through a media field with no upload permission, so the media
+  // checks run without file grants; the extension still checks the upload API's reads (a custom
+  // API token may hold their scope), but records no uploader.
+  it("with no role writing files, tables the media checks and records no uploader", () => {
+    const noFiles = {
+      ...ownershipBundle,
+      roles: ownershipBundle.roles.map((r) => ({
+        ...r,
+        grants: r.grants.filter((g) => g.contentType !== "File"),
+      })),
+    };
+    const files = strapiAdapter.generate(noFiles, { projectName: "notes" });
+    expect(file(files, "src/extensions/upload/strapi-server.ts")).toContain("enforcedUpload");
+    expect(file(files, "src/extensions/upload/strapi-server.ts")).not.toContain("camisUploader");
+    expect(emitted(files, "src/permissions/api-conditions.ts")).toContain(
+      "uploaderRecorded: false,",
+    );
+    expect(file(files, "src/permissions/api-upload-controller.ts")).toBeDefined();
   });
   it("regeneration is idempotent", () => {
     expect(strapiAdapter.generate(ownershipBundle, { projectName: "notes" })).toEqual(result);

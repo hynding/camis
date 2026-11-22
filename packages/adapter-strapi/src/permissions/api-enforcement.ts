@@ -18,6 +18,8 @@ import { strapiNames } from "@camis/strapi-schema";
 import { CORE_ACTIONS } from "../hooks/route-hooks";
 import { projectReach, typeKey } from "./api-reach";
 import { builtinWriteGaps } from "./api-builtin-writes";
+import { projectUploads, type ApiUploads } from "./api-upload-enforcement";
+import { linkWritten, projectShapes, type ApiAttributeShape } from "./api-shapes";
 import { projectRelationWrites, relationWriteGaps } from "./api-relation-writes";
 import { conditionName } from "./condition-name";
 import { codePointOrder } from "./code-point-order";
@@ -68,7 +70,9 @@ export type ApiHolderLink =
   | { component: string }
   | { zone: string[] }
   /** A media field: the file's `related` entries reach every type a file can be attached to. */
-  | { media: true };
+  | { media: true }
+  /** A polymorphic relation or inverse: its entries may be of any type. */
+  | { polymorphic: true };
 
 /** What a write through a relation attribute changes besides the entry written. */
 export interface ApiRelationWrite {
@@ -85,12 +89,23 @@ export interface ApiRelationWrite {
 export interface ApiHolder {
   /** Every attribute `populate=*` populates. */
   populatable: string[];
+  /** The relations Strapi adds that the reach graph does not walk. */
+  unwalked: string[];
   links: Record<string, ApiHolderLink>;
 }
 
 export interface ApiEnforcement {
   types: ApiTypeRules[];
   holders: Record<string, ApiHolder>;
+  /** The writable attributes of each served type and the components it embeds, by uid. */
+  shapes: Record<string, Record<string, ApiAttributeShape>>;
+  /** What the media checks read; null when no restricted caller writes files or media fields. */
+  uploads: ApiUploads | null;
+  /**
+   * The served single types, by uid: Strapi's single type controller serves them, with a
+   * restricted caller's query and write body checked first.
+   */
+  singles: string[];
   gaps: CapabilityGap[];
 }
 
@@ -297,23 +312,29 @@ export const projectApiEnforcement = (doc: IrDocument, roles: Role[]): ApiEnforc
   }
 
   const reach = projectReach(doc, roles, types);
+  const uploads = projectUploads(doc, roles);
   gaps.push(
     ...reach.gaps,
     ...relationWriteGaps(doc, roles, types),
     ...builtinWriteGaps(doc, roles),
+    ...uploads.gaps,
   );
   const writes = projectRelationWrites(doc, enforced);
-  const core = CORE_ACTIONS.collection;
   const openOf = (ct: ContentType): string[] =>
     (ct.options?.publicApiActions ?? [])
-      .map((a) => core[a])
+      .map((a) => CORE_ACTIONS[ct.kind][a])
       .filter((a): a is string => a !== undefined);
+  const checked = linkWritten(doc, roles);
   const served = doc.contentTypes.filter(
     (ct) =>
       enforced.has(ct.name) ||
+      (ct.kind === "single" && (checked.has(ct.name) || reach.reaching.has(typeKey(ct)))) ||
       (ct.kind === "collection" &&
         ct.builtin === undefined &&
-        (reach.reaching.has(typeKey(ct)) || writes.has(ct.name))),
+        (reach.reaching.has(typeKey(ct)) ||
+          writes.has(ct.name) ||
+          uploads.served.has(ct.name) ||
+          checked.has(ct.name))),
   );
   return {
     types: served.map((ct): ApiTypeRules => {
@@ -336,6 +357,9 @@ export const projectApiEnforcement = (doc: IrDocument, roles: Role[]): ApiEnforc
           };
     }),
     holders: reach.holders,
+    shapes: projectShapes(doc, served),
+    uploads: uploads.uploads,
+    singles: served.filter((ct) => ct.kind === "single").map((ct) => strapiNames(ct).uid),
     gaps,
   };
 };

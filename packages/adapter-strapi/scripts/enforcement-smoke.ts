@@ -3,6 +3,7 @@
 // against a real Strapi 5 (the unit tests run them against a fake of its surface only).
 // Runs in the gated CI job; cannot run in the restricted dev sandbox (npm denied).
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { createHmac, randomBytes } from "node:crypto";
 import { copyFileSync, readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -79,6 +80,59 @@ const pollUntilUp = async (timeoutMs: number): Promise<boolean> => {
   return false;
 };
 
+interface Database {
+  prepare(sql: string): {
+    run(...args: unknown[]): { changes: number };
+    all(...args: unknown[]): Record<string, unknown>[];
+  };
+  close(): void;
+}
+
+/** The project's sqlite database, opened with the better-sqlite3 it installed. */
+const database = (dir: string): Database => {
+  const require = createRequire(join(dir, "package.json"));
+  const Sqlite = require("better-sqlite3") as new (file: string) => Database;
+  return new Sqlite(join(dir, ".tmp", "data.db"));
+};
+
+/** Rows of a query on the project's database, which stays closed between requests. */
+const select = (dir: string, sql: string, ...args: unknown[]): Record<string, unknown>[] => {
+  const db = database(dir);
+  try {
+    return db.prepare(sql).all(...args);
+  } finally {
+    db.close();
+  }
+};
+
+/** A statement on the project's database. */
+const run = (dir: string, sql: string, ...args: unknown[]): void => {
+  const db = database(dir);
+  try {
+    db.prepare(sql).run(...args);
+  } finally {
+    db.close();
+  }
+};
+
+/** A body for POST /api/upload: its text fields, and one small file unless `file` is false. */
+const form = (fields: Record<string, string>, file = true): FormData => {
+  const body = new FormData();
+  if (file) body.append("files", new Blob(["camis"], { type: "text/plain" }), "note.txt");
+  for (const [key, value] of Object.entries(fields)) body.append(key, value);
+  return body;
+};
+
+const send = async (method: string, path: string, jwt: string, body?: FormData) => {
+  const res = await fetch(`${BASE}${path}`, {
+    method,
+    headers: { authorization: `Bearer ${jwt}` },
+    ...(body === undefined ? {} : { body }),
+  });
+  const text = await res.text();
+  return { status: res.status, body: text === "" ? null : (JSON.parse(text) as unknown) };
+};
+
 /** A registered account (which users-permissions puts in its default role), moved to `role`. */
 const member = async (dir: string, name: string, role = "member") => {
   const registered = await call("POST", "/api/auth/local/register", undefined, {
@@ -90,12 +144,7 @@ const member = async (dir: string, name: string, role = "member") => {
     throw new Error(`register ${name}: ${JSON.stringify(registered)}`);
   // users-permissions has no API to change a user's role short of the admin panel, so move the
   // account in the database. The JWT names only the user; its role is loaded on every request.
-  const require = createRequire(join(dir, "package.json"));
-  const Database = require("better-sqlite3") as new (file: string) => {
-    prepare(sql: string): { run(...args: unknown[]): { changes: number } };
-    close(): void;
-  };
-  const db = new Database(join(dir, ".tmp", "data.db"));
+  const db = database(dir);
   try {
     const moved = db
       .prepare(
@@ -369,6 +418,9 @@ const scenario = async (dir: string): Promise<void> => {
   );
   check("alice's update filtered by a guess is refused", updateGuess.status === 400, updateGuess);
 
+  await uploads(dir, alice, bob);
+  await tokens(dir);
+
   const link = await call("POST", "/api/tags", alice.jwt, {
     data: { label: "a", note: { connect: [{ documentId: bobNoteId }] } },
   });
@@ -382,11 +434,405 @@ const scenario = async (dir: string): Promise<void> => {
   );
 };
 
+interface Account {
+  jwt: string;
+  id: number;
+}
+
+/**
+ * The upload API for a member, who may upload and delete files: a new file attaches only to an
+ * entry the caller may update, a replace or delete needs update on every entry the file is on
+ * (or, unattached, that the caller uploaded it), and an entry links only a file the caller
+ * uploaded or one on an entry it may read.
+ */
+const uploads = async (dir: string, alice: Account, bob: Account): Promise<void> => {
+  const note = async (who: Account, title: string) => {
+    const r = await call("POST", "/api/notes", who.jwt, { data: { title, shared: false } });
+    const data = r.body?.data as { id: number; documentId: string } | undefined;
+    if (r.status !== 201 || data === undefined)
+      throw new Error(`note ${title}: ${JSON.stringify(r)}`);
+    return data;
+  };
+  const files = () => Number(select(dir, "SELECT COUNT(*) AS n FROM files")[0]!.n);
+  const attachedTo = (noteId: number) =>
+    select(
+      dir,
+      "SELECT file_id FROM files_related_mph WHERE related_type = 'api::note.note' AND related_id = ?",
+      noteId,
+    ).map((r) => Number(r.file_id));
+  const created = (r: { body: unknown }): number =>
+    (r.body as { id: number }[] | null)?.[0]?.id ?? 0;
+  const onNote = (id: number) => ({
+    ref: "api::note.note",
+    refId: String(id),
+    field: "attachment",
+  });
+
+  const mine = await note(alice, "alice's upload target");
+  const theirs = await note(bob, "bob's upload target");
+
+  const own = await send("POST", "/api/upload", alice.jwt, form(onNote(mine.id)));
+  check("alice uploads a file to her own note", own.status === 201, own);
+  check(
+    "the file is attached to alice's note",
+    attachedTo(mine.id).includes(created(own)),
+    attachedTo(mine.id),
+  );
+  const uploader = select(dir, "SELECT camis_uploader FROM files WHERE id = ?", created(own));
+  check(
+    "the file records alice as its uploader",
+    uploader[0]?.camis_uploader === alice.id,
+    uploader,
+  );
+
+  const before = files();
+  for (const [what, fields] of [
+    ["to bob's note", onNote(theirs.id)],
+    ["to a note that does not exist", onNote(999_999)],
+    ["to a component's uid", { ref: "shared.reference", refId: "1", field: "image" }],
+    ["to a non-media field", { ...onNote(mine.id), field: "title" }],
+  ] as const) {
+    const r = await send("POST", "/api/upload", alice.jwt, form(fields));
+    check(`alice's upload ${what} is 403`, r.status === 403, r);
+  }
+  for (const [what, fields] of [
+    ["with a documentId refId", { ...onNote(mine.id), refId: mine.documentId }],
+    ["with a path", { path: "elsewhere" }],
+  ] as const) {
+    const r = await send("POST", "/api/upload", alice.jwt, form(fields));
+    check(`alice's upload ${what} is 400`, r.status === 400, r);
+  }
+  check("the refused uploads stored no file", files() === before, { before, after: files() });
+  check(
+    "bob's note has no attachment of alice's",
+    attachedTo(theirs.id).length === 0,
+    attachedTo(theirs.id),
+  );
+
+  const bobs = await send("POST", "/api/upload", bob.jwt, form(onNote(theirs.id)));
+  check("bob uploads a file to his own note", bobs.status === 201, bobs);
+  const loose = await send("POST", "/api/upload", bob.jwt, form({}));
+  check("bob uploads an unattached file", loose.status === 201, loose);
+  const fileOfBob = created(bobs);
+  const looseOfBob = created(loose);
+
+  const replace = await send("POST", `/api/upload?id=${fileOfBob}`, alice.jwt, form({}));
+  check("alice's replace of the file on bob's note is 403", replace.status === 403, replace);
+  const info = await send(
+    "POST",
+    `/api/upload?id=${fileOfBob}`,
+    alice.jwt,
+    form({ fileInfo: JSON.stringify({ name: "alice's now" }) }, false),
+  );
+  check("alice's info update of the file on bob's note is 403", info.status === 403, info);
+  for (const id of [fileOfBob, looseOfBob]) {
+    const del = await send("DELETE", `/api/upload/files/${id}`, alice.jwt);
+    check(`alice's delete of bob's file ${id} is 403`, del.status === 403, del);
+  }
+  check(
+    "bob's file is still on his note",
+    attachedTo(theirs.id).includes(fileOfBob),
+    attachedTo(theirs.id),
+  );
+
+  for (const attachment of [looseOfBob, fileOfBob]) {
+    const put = await call("PUT", `/api/notes/${mine.documentId}`, alice.jwt, {
+      data: { attachment },
+    });
+    check(`alice cannot attach bob's file ${attachment} to her note`, put.status === 403, put);
+    const post = await call("POST", "/api/notes", alice.jwt, {
+      data: { title: "with bob's file", shared: false, attachment },
+    });
+    check(`alice cannot create a note with bob's file ${attachment}`, post.status === 403, post);
+  }
+  check(
+    "alice's note links none of bob's files",
+    !attachedTo(mine.id).some((id) => id === fileOfBob || id === looseOfBob),
+    attachedTo(mine.id),
+  );
+
+  const hers = await send("POST", "/api/upload", alice.jwt, form({}));
+  check("alice uploads an unattached file", hers.status === 201, hers);
+  const attach = await call("PUT", `/api/notes/${mine.documentId}`, alice.jwt, {
+    data: { attachment: created(hers) },
+  });
+  check("alice attaches her own upload to her note", attach.status === 200, attach);
+  const swap = await send("POST", `/api/upload?id=${created(hers)}`, alice.jwt, form({}));
+  check("alice replaces the file on her own note", swap.status === 200, swap);
+  const drop = await send("DELETE", `/api/upload/files/${created(hers)}`, alice.jwt);
+  check("alice deletes the file on her own note", drop.status === 200, drop);
+  const tidy = await send("DELETE", `/api/upload/files/${looseOfBob}`, bob.jwt);
+  check("bob deletes his own unattached file", tidy.status === 200, tidy);
+
+  // Strapi's database layer spreads an item's __pivot into the join row after the id it links:
+  // file_id, related_id or note_id there would name a file or entry no check decided on.
+  const links = () => select(dir, "SELECT COUNT(*) AS n FROM files_related_mph")[0]!.n;
+  const linksBefore = links();
+  const aliceFile = created(own);
+  for (const [what, method, path, data] of [
+    [
+      "a media connect item's __pivot file_id",
+      "PUT",
+      `/api/notes/${mine.documentId}`,
+      { attachment: { connect: [{ id: aliceFile, __pivot: { file_id: fileOfBob } }] } },
+    ],
+    [
+      "a media connect item's __pivot related_id",
+      "PUT",
+      `/api/notes/${mine.documentId}`,
+      { attachment: { connect: [{ id: aliceFile, __pivot: { related_id: theirs.id } }] } },
+    ],
+    [
+      "a media set item's __pivot file_id, on create",
+      "POST",
+      "/api/notes",
+      {
+        title: "pivot",
+        shared: false,
+        attachment: { set: [{ id: aliceFile, __pivot: { file_id: fileOfBob } }] },
+      },
+    ],
+  ] as const) {
+    const r = await call(method, path, alice.jwt, { data });
+    check(`alice's ${what} is 400`, r.status === 400, r);
+  }
+  check("the refused media items linked nothing", links() === linksBefore, {
+    before: linksBefore,
+    after: links(),
+  });
+  check(
+    "bob's file is on no note of alice's",
+    !attachedTo(mine.id).includes(fileOfBob),
+    attachedTo(mine.id),
+  );
+  const tagLinks = () => select(dir, "SELECT COUNT(*) AS n FROM tags_note_lnk")[0]!.n;
+  const tagLinksBefore = tagLinks();
+  const pivotTag = await call("POST", "/api/tags", alice.jwt, {
+    data: { label: "pivot", note: { connect: [{ id: mine.id, __pivot: { note_id: theirs.id } }] } },
+  });
+  check(
+    "alice's relation connect item with a __pivot note_id is 400",
+    pivotTag.status === 400,
+    pivotTag,
+  );
+  check("the refused relation item linked nothing", tagLinks() === tagLinksBefore, {
+    before: tagLinksBefore,
+    after: tagLinks(),
+  });
+  const ownTag = await call("POST", "/api/tags", alice.jwt, {
+    data: { label: "plain", note: { connect: [{ id: mine.id }] } },
+  });
+  check("alice's plain connect item links her note", ownTag.status === 201, ownTag);
+
+  // A reviewer reads every note and updates only its own, and holds no file write grant: Strapi
+  // needs none to link a stored file, so reading bob's note must not let it link his file.
+  const rita = await member(dir, "rita", "reviewer");
+  const ritas = await note(alice, "rita's note");
+  run(
+    dir,
+    "UPDATE notes_owner_lnk SET user_id = ? WHERE note_id IN (SELECT id FROM notes WHERE document_id = ?)",
+    rita.id,
+    ritas.documentId,
+  );
+  const borrow = await call("PUT", `/api/notes/${ritas.documentId}`, rita.jwt, {
+    data: { attachment: fileOfBob },
+  });
+  check("rita cannot link bob's file from a note she only reads", borrow.status === 403, borrow);
+  const retitle = await call("PUT", `/api/notes/${ritas.documentId}`, rita.jwt, {
+    data: { title: "rita's own" },
+  });
+  check("rita updates her own note", retitle.status === 200, retitle);
+
+  // Rita reads the media library: Strapi returns a file's related entries whole when it can read
+  // none of them (bob's note was one), so any populate of them is refused.
+  const library = await call("GET", "/api/upload/files", rita.jwt);
+  check("rita lists the media library", library.status === 200, library);
+  for (const path of [
+    "/api/upload/files?populate=related",
+    "/api/upload/files?populate=*",
+    "/api/upload/files?populate[0]=related.owner",
+    `/api/upload/files/${fileOfBob}?populate=related`,
+    `/api/upload/files/${fileOfBob}?populate[related][populate]=*`,
+    `/api/upload/files/${fileOfBob}?populate[related][on][api::note.note]=true`,
+  ]) {
+    const r = await call("GET", path, rita.jwt);
+    check(`rita's ${path} is 400`, r.status === 400, r);
+  }
+
+  // Strapi replaces a relation for any set it finds truthy, one entry included: a set naming only
+  // rita's note drops alice's from the category, which rita may not update.
+  const category = `category-${Date.now()}`;
+  run(
+    dir,
+    "INSERT INTO categories (document_id, label, created_at, updated_at, published_at) VALUES (?, ?, ?, ?, ?)",
+    category,
+    "shared",
+    Date.now(),
+    Date.now(),
+    Date.now(),
+  );
+  const categoryId = select(dir, "SELECT id FROM categories WHERE document_id = ?", category)[0]!
+    .id;
+  run(
+    dir,
+    "INSERT INTO notes_category_lnk (note_id, category_id, note_ord) VALUES (?, ?, 1)",
+    mine.id,
+    categoryId,
+  );
+  const held = () =>
+    select(dir, "SELECT note_id FROM notes_category_lnk WHERE category_id = ?", categoryId).map(
+      (r) => Number(r.note_id),
+    );
+  for (const [what, set] of [
+    ["a set of her note's documentId", ritas.documentId],
+    ["a set of her note's row id", ritas.id],
+  ] as const) {
+    const r = await call("PUT", `/api/categories/${category}`, rita.jwt, {
+      data: { notes: { set } },
+    });
+    check(`rita's ${what} cannot drop alice's note from a category`, r.status === 403, r);
+  }
+  check(
+    "alice's note stays in the category",
+    JSON.stringify(held()) === JSON.stringify([mine.id]),
+    held(),
+  );
+
+  // Strapi's single type controller writes through the same database layer: a restricted
+  // caller's __pivot there would name the join row's front_id or category_id.
+  const featured = () => select(dir, "SELECT COUNT(*) AS n FROM fronts_featured_lnk")[0]!.n;
+  const featuredBefore = featured();
+  const pivotFront = await call("PUT", "/api/front", rita.jwt, {
+    data: { featured: { connect: [{ id: categoryId, __pivot: { front_id: 999 } }] } },
+  });
+  check("rita's single type write with a __pivot is 400", pivotFront.status === 400, pivotFront);
+  check("the refused single type write linked nothing", featured() === featuredBefore, {
+    before: featuredBefore,
+    after: featured(),
+  });
+  const plainFront = await call("PUT", "/api/front", rita.jwt, {
+    data: { headline: "welcome", featured: category },
+  });
+  check("rita's plain single type write is 200", plainFront.status === 200, plainFront);
+};
+
 /**
  * Every content API route Strapi registers that a role may reach (one it holds the action of, or
  * one open to anyone) must be in content-api-allowlist.json, which names where it is enforced or
  * why it is safe: a route a new Strapi version, plugin or grant adds fails here until reviewed.
  */
+/**
+ * A content API token, stored as Strapi 5.48's admin stores one (the access key hashed with the
+ * project's API_TOKEN_SALT, a custom token's actions as its permissions); its key.
+ */
+const token = (dir: string, type: string, actions: string[] = []): string => {
+  const salt = /^API_TOKEN_SALT=(.*)$/m.exec(readFileSync(join(dir, ".env"), "utf8"))![1]!;
+  const key = randomBytes(32).toString("hex");
+  const now = Date.now();
+  const name = `${type}-${now}-${randomBytes(4).toString("hex")}`;
+  run(
+    dir,
+    "INSERT INTO strapi_api_tokens (document_id, name, description, kind, type, access_key, created_at, updated_at, published_at) VALUES (?, ?, '', 'content-api', ?, ?, ?, ?, ?)",
+    name,
+    name,
+    type,
+    createHmac("sha512", salt).update(key).digest("hex"),
+    now,
+    now,
+    now,
+  );
+  const tokenId = select(dir, "SELECT id FROM strapi_api_tokens WHERE name = ?", name)[0]!.id;
+  for (const action of actions) {
+    const permission = `${name}-${action}`;
+    run(
+      dir,
+      "INSERT INTO strapi_api_token_permissions (document_id, action, created_at, updated_at, published_at) VALUES (?, ?, ?, ?, ?)",
+      permission,
+      action,
+      now,
+      now,
+      now,
+    );
+    const permissionId = select(
+      dir,
+      "SELECT id FROM strapi_api_token_permissions WHERE document_id = ?",
+      permission,
+    )[0]!.id;
+    run(
+      dir,
+      "INSERT INTO strapi_api_token_permissions_token_lnk (api_token_permission_id, api_token_id) VALUES (?, ?)",
+      permissionId,
+      tokenId,
+    );
+  }
+  return key;
+};
+
+/**
+ * Content API tokens, created in the booted project. The strategy name camis recognises is the one
+ * the installed Strapi registers, so a rename fails here rather than in production. A full-access
+ * or read-only token reads every type as Strapi serves it; a custom token is refused.
+ */
+const tokens = async (dir: string): Promise<void> => {
+  const require = createRequire(join(dir, "package.json"));
+  const strategy = // Not among the package's exports: loaded by its path in the installed project.
+    (
+      require(
+        join(
+          dir,
+          "node_modules/@strapi/admin/dist/server/server/src/strategies/content-api-token.js",
+        ),
+      ) as {
+        default: { name: string };
+      }
+    ).default.name;
+  check(
+    "camis recognises the token strategy the installed Strapi registers",
+    readFileSync(join(dir, "src/permissions/api-conditions.ts"), "utf8").includes(
+      `TOKEN_STRATEGY = ${JSON.stringify(strategy)}`,
+    ),
+    strategy,
+  );
+  const related = "populate[attachment][populate]=related";
+  const full = token(dir, "full-access");
+  for (const path of [
+    "/api/notes",
+    `/api/notes?${related}`,
+    "/api/upload/files",
+    "/api/upload/files?populate=related",
+  ]) {
+    const r = await call("GET", path, full);
+    check(`a full-access token's GET ${path} is 200`, r.status === 200, r);
+  }
+  const readOnly = token(dir, "read-only");
+  for (const path of [
+    "/api/notes",
+    `/api/notes?${related}`,
+    "/api/upload/files?populate=related",
+  ]) {
+    const r = await call("GET", path, readOnly);
+    check(`a read-only token's GET ${path} is 200`, r.status === 200, r);
+  }
+  const readOnlyWrite = await call("POST", "/api/tags", readOnly, { data: { label: "ro" } });
+  check("a read-only token's create is refused", readOnlyWrite.status === 403, readOnlyWrite);
+  // A custom token is checked against its own scopes by Strapi, whose sanitizer keeps a polymorphic
+  // list whole when the token may read none of its entries: camis refuses it on every route it
+  // serves, whatever it holds.
+  const custom = token(dir, "custom", [
+    "api::note.note.find",
+    "api::front.front.find",
+    "plugin::upload.content-api.find",
+  ]);
+  for (const path of ["/api/notes", "/api/front", "/api/upload/files"]) {
+    const r = await call("GET", path, custom);
+    check(
+      `a custom token's GET ${path} is 403, saying why`,
+      r.status === 403 && JSON.stringify(r.body).includes("custom API token"),
+      r,
+    );
+  }
+};
+
 const routeGuard = (dir: string): void => {
   copyFileSync(new URL("./content-api-routes.mjs", import.meta.url), join(dir, "camis-routes.mjs"));
   const run = spawnSync("node", ["camis-routes.mjs"], { cwd: dir, encoding: "utf8" });
@@ -417,6 +863,136 @@ const routeGuard = (dir: string): void => {
     check(`granted action ${action} names a registered route`, actions.has(action), action);
 };
 
+/**
+ * A role that writes a single type without reading it still reaches what the type links: Strapi's
+ * single type controller populates a write's response and links what it is told, unnarrowed. The
+ * build must fail for it, before any project boots.
+ */
+const writerGaps = (): void => {
+  const writesFront = {
+    ...ownershipBundle,
+    roles: ownershipBundle.roles.map((r) =>
+      r.name === "member"
+        ? { ...r, grants: [...r.grants, { contentType: "Front", actions: ["update" as const] }] }
+        : r,
+    ),
+  };
+  const errors = strapiAdapter
+    .generate(writesFront, { projectName: "notes" })
+    .gaps.gaps.filter((g) => g.severity === "error");
+  check(
+    "a member that writes the single type without reading it fails the build",
+    errors.some(
+      (g) =>
+        g.feature === "apiRelationReach" &&
+        g.location.contentType === "Front" &&
+        g.location.rule === "member",
+    ),
+    errors,
+  );
+};
+
+/**
+ * On an `auth: false` route Strapi strips an ordinary relation from populate but not a polymorphic
+ * one, which returns entries of any type: an open action on a type with one fails the build.
+ */
+const openPolymorphicGaps = (): void => {
+  const board = {
+    ...ownershipBundle,
+    document: {
+      ...ownershipBundle.document,
+      contentTypes: [
+        ...ownershipBundle.document.contentTypes,
+        {
+          name: "Board",
+          kind: "collection" as const,
+          options: { publicApiActions: ["list" as const, "read" as const] },
+          fields: [{ type: "polymorphicRelation" as const, name: "subjects", many: true }],
+        },
+      ],
+    },
+  };
+  const errors = strapiAdapter
+    .generate(board, { projectName: "notes" })
+    .gaps.gaps.filter((g) => g.severity === "error");
+  check(
+    "an open list of a type with a polymorphic relation fails the build",
+    errors.some(
+      (g) =>
+        g.feature === "apiPolymorphicReach" &&
+        g.location.contentType === "Board" &&
+        g.location.rule === "public",
+    ),
+    errors,
+  );
+};
+
+/**
+ * An open route is open whatever roles the IR names, none included; and Strapi keeps a polymorphic
+ * list whole when it can read none of its entries, so a role reading one with no condition
+ * anywhere fails the build too.
+ */
+const unconditionedGaps = (): void => {
+  const board = (publicApiActions?: ("list" | "read")[]) => ({
+    name: "Board",
+    kind: "collection" as const,
+    ...(publicApiActions === undefined ? {} : { options: { publicApiActions } }),
+    fields: [{ type: "polymorphicRelation" as const, name: "subjects", many: true }],
+  });
+  const noRoles = strapiAdapter.generate(
+    {
+      document: {
+        ...ownershipBundle.document,
+        contentTypes: [...ownershipBundle.document.contentTypes, board(["list"])],
+      },
+      roles: [],
+    },
+    { projectName: "notes" },
+  );
+  check(
+    "with no roles, an open list of a type with a polymorphic relation fails the build",
+    noRoles.gaps.gaps.some(
+      (g) =>
+        g.severity === "error" &&
+        g.feature === "apiPolymorphicReach" &&
+        g.location.contentType === "Board",
+    ),
+    noRoles.gaps.gaps,
+  );
+  check(
+    "with no roles, an open route still has each type leading to a media field served",
+    noRoles.files.some(
+      (f) =>
+        f.path === "src/api/note/controllers/note.ts" && f.content.includes("enforcedController"),
+    ),
+    noRoles.files.map((f) => f.path),
+  );
+  const viewer = strapiAdapter.generate(
+    {
+      document: {
+        ...ownershipBundle.document,
+        contentTypes: [...ownershipBundle.document.contentTypes, board()],
+      },
+      roles: [{ name: "viewer", grants: [{ contentType: "Board", actions: ["read"] }] }],
+    },
+    { projectName: "notes" },
+  );
+  check(
+    "a role reading a type with a polymorphic relation, no condition anywhere, fails the build",
+    viewer.gaps.gaps.some(
+      (g) =>
+        g.severity === "error" &&
+        g.feature === "apiPolymorphicReach" &&
+        g.location.contentType === "Board" &&
+        g.location.rule === "viewer",
+    ),
+    viewer.gaps.gaps,
+  );
+};
+
+writerGaps();
+openPolymorphicGaps();
+unconditionedGaps();
 const dir = await mkdtemp(join(tmpdir(), "camis-enforcement-"));
 try {
   await materialize(strapiAdapter.generate(ownershipBundle, { projectName: "notes" }), dir);

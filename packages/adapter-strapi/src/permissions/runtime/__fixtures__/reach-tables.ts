@@ -71,6 +71,7 @@ export const tables: Tables = {
   holders: {
     [TAG]: {
       populatable: ["note", "parent", "refs", "blocks"],
+      unwalked: ["createdBy", "updatedBy"],
       links: {
         note: { relation: NOTE },
         parent: { relation: TAG },
@@ -79,7 +80,35 @@ export const tables: Tables = {
         pinnedOn: { relation: NOTE },
       },
     },
-    [REF]: { populatable: ["note"], links: { note: { relation: NOTE } } },
-    [NOTE]: { populatable: ["attachment", "owner"], links: { attachment: { media: true } } },
+    [REF]: { populatable: ["note"], unwalked: [], links: { note: { relation: NOTE } } },
+    [NOTE]: {
+      populatable: ["attachment", "owner"],
+      unwalked: ["createdBy", "updatedBy"],
+      links: { attachment: { media: true } },
+    },
+  },
+  shapes: {
+    [NOTE]: {
+      owner: "toOneRelation",
+      title: "scalar",
+      shared: "scalar",
+      attachment: "media",
+      category: "toOneRelation",
+      pinned: "relation",
+    },
+    [CATEGORY]: { label: "scalar", notes: "relation" },
+    [TAG]: {
+      label: "scalar",
+      note: "toOneRelation",
+      parent: "toOneRelation",
+      refs: { component: REF, repeatable: true },
+      single: { component: REF, repeatable: false },
+      blocks: { zone: [REF] },
+      pinnedOn: "toOneRelation",
+      subject: "polymorphic",
+      about: "toOnePolymorphic",
+      cover: "toOneMedia",
+    },
+    [REF]: { label: "scalar", note: "toOneRelation", image: "media" },
   },
 };
