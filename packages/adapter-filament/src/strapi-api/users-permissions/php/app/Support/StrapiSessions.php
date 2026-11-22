@@ -243,18 +243,19 @@ final class StrapiSessions
             return response()->json(self::body($tokens) + $body);
         }
 
-        return response()->json(['jwt' => $tokens['jwt']] + $body)->withCookie(self::cookie($tokens['refreshToken'], $tokens['expiresAt'] ?? null));
+        return response()->json(['jwt' => $tokens['jwt'], 'expiresIn' => self::lifespan('access_token_lifespan')] + $body)->withCookie(self::cookie($tokens['refreshToken'], $tokens['expiresAt'] ?? null));
     }
 
     /**
-     * The tokens as a response body shows them.
+     * The tokens as a response body shows them, with the seconds the access token lasts, which
+     * Strapi's answers do not say: without it a client learns its token expired only when refused.
      *
      * @param array{jwt: string, refreshToken: string, expiresAt?: string} $tokens
-     * @return array{jwt: string, refreshToken: string}
+     * @return array{jwt: string, refreshToken: string, expiresIn: int}
      */
     private static function body(array $tokens): array
     {
-        return ['jwt' => $tokens['jwt'], 'refreshToken' => $tokens['refreshToken']];
+        return ['jwt' => $tokens['jwt'], 'refreshToken' => $tokens['refreshToken'], 'expiresIn' => self::lifespan('access_token_lifespan')];
     }
 
     private static function make(?string $value, int|\DateTimeInterface $expires): Cookie
