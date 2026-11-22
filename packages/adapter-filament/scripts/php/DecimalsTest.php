@@ -370,7 +370,8 @@ class DecimalsTest extends TestCase
         $this->actingAsAdmin();
         $held = Ledger::query()->create(['label' => 'held', 'share' => '1.5']);
 
-        foreach (['1.5', '1.50000', '1.500000000', '15e-1', ' 1.5'] as $share) {
+        // 1.500004 and 1.499995 are stored rounded to the scale, as 1.50000.
+        foreach (['1.5', '1.50000', '1.500000000', '15e-1', ' 1.5', '1.500004', '1.499995'] as $share) {
             try {
                 $test = Livewire::test(CreateLedger::class)->fillForm(['label' => 'copy', 'share' => $share])->call('create');
             } catch (UniqueConstraintViolationException $e) {
@@ -382,11 +383,42 @@ class DecimalsTest extends TestCase
 
         Livewire::test(CreateLedger::class)->fillForm(['label' => 'other', 'share' => '1.50001'])->call('create')->assertHasNoFormErrors();
         Livewire::test(CreateLedger::class)->fillForm(['label' => 'none', 'share' => ''])->call('create')->assertHasNoFormErrors();
+        // Another record edited to the held value as stored.
+        $other = Ledger::query()->where('label', 'other')->sole();
+        try {
+            $test = Livewire::test(EditLedger::class, ['record' => $other->getRouteKey()])->fillForm(['share' => '1.500004'])->call('save');
+        } catch (UniqueConstraintViolationException $e) {
+            $this->fail('1.500004 passed the edit form and reached the unique index');
+        }
+        $this->assertSame(['The share has already been taken.'], $test->errors()->get('data.share'));
         // The record being edited keeps its own value.
         Livewire::test(EditLedger::class, ['record' => $held->getRouteKey()])
             ->fillForm(['share' => '1.50'])
             ->call('save')
             ->assertHasNoFormErrors();
+        $this->assertSame('1.50000', (string) DB::table('ledgers')->where('label', 'held')->value('share'));
+    }
+
+    public function test_the_api_checks_a_unique_decimal_by_its_digits_as_it_is_stored(): void
+    {
+        $held = $this->api('POST', 'ledgers', ['label' => 'held', 'share' => '1.5'])->assertCreated();
+        $other = $this->api('POST', 'ledgers', ['label' => 'other', 'share' => '2'])->assertCreated();
+
+        // Each is stored as 1.50000, so Strapi's unique check refuses it before the unique index does.
+        foreach (['1.5', '1.50', '1.500000000', '15e-1', ' 1.5', '1.500004', '1.499995', 1.5] as $share) {
+            foreach ([['POST', 'ledgers'], ['PUT', 'ledgers/'.$other->json('data.documentId')]] as [$method, $uri]) {
+                $this->api($method, $uri, ['label' => 'copy', 'share' => $share])
+                    ->assertStatus(400)
+                    ->assertJsonPath('error.message', 'This attribute must be unique')
+                    ->assertJsonPath('error.details.errors.0.path', ['share']);
+            }
+        }
+        $this->assertSame(['held', 'other'], DB::table('ledgers')->orderBy('id')->pluck('label')->all());
+        $this->assertSame('2.00000', (string) DB::table('ledgers')->where('label', 'other')->value('share'));
+
+        $this->api('POST', 'ledgers', ['label' => 'near', 'share' => '1.50001'])->assertCreated();
+        // The entry being updated keeps its own value.
+        $this->api('PUT', 'ledgers/'.$held->json('data.documentId'), ['share' => '1.50'])->assertOk();
         $this->assertSame('1.50000', (string) DB::table('ledgers')->where('label', 'held')->value('share'));
     }
 

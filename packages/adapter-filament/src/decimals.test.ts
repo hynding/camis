@@ -3,6 +3,7 @@ import { filamentAdapter } from "./generate";
 import { blog } from "./__fixtures__/blog";
 import { decimalsBundle } from "./__fixtures__/decimals";
 import { contentManagerMcpTools } from "./strapi-api/content-manager/mcp-tools";
+import { emitStrapiValidator } from "./strapi-api/core/validation-runtime";
 import { emitStrapiImport, withDecimalDigits } from "./strapi-api/data-transfer/transfer-runtime";
 import { strapiApiBundle } from "./strapi-api/__fixtures__/strapi-api";
 
@@ -128,13 +129,16 @@ describe("decimals stating their digits (issue #104)", () => {
   }
 
   // Filament's ->unique() compares the text as typed with the stored digits.
-  it("checks a unique decimal stating its digits in the admin's form as its filters compare it", () => {
+  it("checks a unique decimal stating its digits in the admin's form as it is stored, rounded to its scale", () => {
     const rule = "app/Rules/DecimalDigitsUniqueRule.php";
     expect(contentOf(generate("strapi"))(rule)).toContain(
       "final class DecimalDigitsUniqueRule implements ValidationRule",
     );
     expect(contentOf(generate("strapi"))(rule)).toContain(
-      "DecimalDigits::where($query, $this->column, '$eq', $value, $this->precision, $this->scale)",
+      "$canonical = DecimalDigits::canonical($value, $this->precision, $this->scale);",
+    );
+    expect(contentOf(generate("strapi"))(rule)).toContain(
+      "DecimalDigits::where($query, $this->column, '$eq', $canonical, $this->precision, $this->scale)",
     );
     const withoutUnique: typeof decimalsBundle = {
       ...decimalsBundle,
@@ -162,12 +166,35 @@ describe("decimals stating their digits (issue #104)", () => {
         })),
       },
     };
-    const form = filamentAdapter
-      .generate(drafted, { projectName: "ledger", apiStyle: "strapi" })
-      .files.find((f) => f.path === "app/Filament/Resources/Ledgers/Schemas/LedgerForm.php");
+    const draftedFiles = filamentAdapter.generate(drafted, {
+      projectName: "ledger",
+      apiStyle: "strapi",
+    }).files;
+    const form = draftedFiles.find(
+      (f) => f.path === "app/Filament/Resources/Ledgers/Schemas/LedgerForm.php",
+    );
     expect(form?.content).toContain(
       "TextInput::make('share')->inputMode('decimal')->rule(new \\App\\Rules\\DecimalDigitsRule(15, 5)),",
     );
+    // Nor is the rule emitted when no form checks it.
+    expect(draftedFiles.map((f) => f.path)).not.toContain(rule);
+  });
+
+  // The unique index compares the stored digits: 1.5 beside a stored 1.50000 is a duplicate.
+  it("checks a unique decimal stating its digits over the Strapi API as it is stored, rounded to its scale, and every other project as before", async () => {
+    const content = contentOf(generate("strapi"));
+    expect(content("app/Http/Controllers/Api/Generated/LedgerApiController.php")).toContain(
+      "'share' => ['type' => 'decimal', 'unique' => ['column' => 'share', 'digits' => [15, 5]]],",
+    );
+    await expect(content("app/Support/StrapiValidator.php")).toMatchFileSnapshot(
+      "./__golden__/decimals/strapi/StrapiValidator.php",
+    );
+    const blogValidator =
+      filamentAdapter
+        .generate(blog, { projectName: "blog", apiStyle: "strapi" })
+        .files.find((f) => f.path === "app/Support/StrapiValidator.php")?.content ?? "";
+    expect(blogValidator).toBe(emitStrapiValidator());
+    expect(blogValidator).not.toContain("DecimalDigits");
   });
 
   it("searches the admin's list by a decimal stating its digits as its filters compare it", async () => {
