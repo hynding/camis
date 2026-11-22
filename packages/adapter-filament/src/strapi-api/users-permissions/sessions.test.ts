@@ -217,7 +217,7 @@ describe("users-permissions sessions", () => {
     expect(deploy).toContain("BCRYPT_ROUNDS=10");
     expect(deploy).toContain("until their first sign-in");
     expect(deploy).toContain("HASH_DRIVER");
-    expect(deploy).toContain("a confirmation mail instead of the notice");
+    expect(deploy).toContain("the notice in place of a confirmation mail");
   });
 
   // Behind a proxy that Laravel does not trust every client has the proxy's address, and so one

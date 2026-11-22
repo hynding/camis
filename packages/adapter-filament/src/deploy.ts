@@ -248,8 +248,7 @@ once, so a taken address or username still answers Strapi's 400 "Email or Userna
 taken". Turn confirmation on to hide it. What the setting leaves distinguishable: a new
 registration's insert, a few milliseconds; the blocked and unconfirmed errors, which come only
 after a correct password, as in Strapi; a person registering with their own address learns a
-username is taken from getting the notice where a new account gets a confirmation mail instead of the notice,
-which unique usernames make inherent; and an account whose stored hash has another cost, which
+username is taken by getting the notice in place of a confirmation mail, which unique usernames make inherent; and an account whose stored hash has another cost, which
 takes another time to check. Every account imported from Strapi is bcryptjs cost 10, so imported
 accounts stay distinguishable by timing until their first sign-in, which stores the password again
 at the configured cost. \`BCRYPT_ROUNDS=10\` closes that at once, at the price of hashing every new
