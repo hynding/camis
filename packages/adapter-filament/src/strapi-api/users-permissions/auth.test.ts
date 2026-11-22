@@ -45,6 +45,12 @@ describe("strapi-api auth", () => {
     );
     expect(php).toContain("return response()->json($body, $status, $headers);");
   });
+  // Strapi's rate limiter answers RateLimitError with its own words, as camis's GraphQL does.
+  it("renders a throttled request as Strapi's RateLimitError, keeping its headers", () => {
+    expect(emitStrapiErrorsMiddleware()).toContain(
+      "429 => $this->error(429, 'RateLimitError', 'Too many requests, please try again later.', headers: $headers),",
+    );
+  });
   it("errors middleware golden", async () => {
     await expect(emitStrapiErrorsMiddleware()).toMatchFileSnapshot(
       "../__golden__/strapi-api/StrapiErrors.php",

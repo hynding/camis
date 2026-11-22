@@ -79,7 +79,9 @@ class AuthSecurityTest extends TestCase
             $request($i)->assertStatus($expected);
         }
         $response = $request($limit);
-        $response->assertStatus(429)->assertJsonPath('error.status', 429)->assertJsonPath('data', null);
+        $response->assertStatus(429)->assertJsonPath('error.status', 429)->assertJsonPath('data', null)
+            ->assertJsonPath('error.name', 'RateLimitError')
+            ->assertJsonPath('error.message', 'Too many requests, please try again later.');
         self::assertNotNull($response->headers->get('Retry-After'));
     }
 
