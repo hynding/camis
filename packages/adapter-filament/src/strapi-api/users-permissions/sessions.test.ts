@@ -60,9 +60,8 @@ describe("users-permissions sessions", () => {
 
   it("keeps the refresh cookie as long as its session's absolute lifespan has left", () => {
     const sessions = content("app/Support/StrapiSessions.php");
-    expect(sessions).toContain(
-      "$expires = CarbonImmutable::parse((string) self::absoluteExpiry($refreshToken));",
-    );
+    expect(sessions).toContain("'expiresAt' => (string) $current->absolute_expires_at]");
+    expect(sessions).toContain("'expiresAt' => $absolute];");
   });
 
   // A browser replaces a cookie only with one that matches it: SameSite=None needs Secure, and a
@@ -87,9 +86,7 @@ describe("users-permissions sessions", () => {
   // clears the cookie only when it named a session this logout ended.
   it("ends the access token's own session on logout, and keeps another session's cookie", () => {
     const controller = content("app/Http/Controllers/Api/SessionController.php");
-    expect(controller).toContain(
-      "$session = StrapiSessions::current($request) ?? StrapiSessions::sessionOf(StrapiSessions::presented($request));",
-    );
+    expect(controller).toContain("$session = StrapiSessions::current($request) ?? $cookieSession;");
     expect(controller).toContain("StrapiSessions::cookieEnded($cookieSession)");
   });
 

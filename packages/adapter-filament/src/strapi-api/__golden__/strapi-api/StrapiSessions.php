@@ -77,7 +77,7 @@ final class StrapiSessions
             return ['jwt' => self::lasting($user)] + $wire;
         }
 
-        return self::open($user, (string) Str::uuid(), self::metadata($request)) + $wire;
+        return self::body(self::open($user, (string) Str::uuid(), self::metadata($request))) + $wire;
     }
 
     /** After a password change or reset every session ends, and one starts on a new device. */
@@ -91,7 +91,7 @@ final class StrapiSessions
         }
         self::invalidate($user);
 
-        return self::open($user, (string) Str::uuid(), null) + $wire;
+        return self::body(self::open($user, (string) Str::uuid(), null)) + $wire;
     }
 
     /** The refresh token a request presents: its cookie first, then its body. */
@@ -126,7 +126,7 @@ final class StrapiSessions
      * The successor of a refresh token and an access token for it, or null when the token may no
      * longer be used. The old session stays behind as rotated, so the token cannot be used twice.
      *
-     * @return array{jwt: string, refreshToken: string}|null
+     * @return array{jwt: string, refreshToken: string, expiresAt: string}|null
      */
     public static function rotate(string $token): ?array
     {
@@ -149,7 +149,9 @@ final class StrapiSessions
             return true;
         });
 
-        return $rotated ? ['jwt' => self::accessToken($user, $sessionId), 'refreshToken' => $sessionId.'.'.$secret] : null;
+        return $rotated
+            ? ['jwt' => self::accessToken($user, $sessionId), 'refreshToken' => $sessionId.'.'.$secret, 'expiresAt' => (string) $current->absolute_expires_at]
+            : null;
     }
 
     /** The session a usable refresh token names. */
@@ -202,15 +204,58 @@ final class StrapiSessions
         return (bool) config('camis.users_permissions.sessions.http_only') || $request->header('x-strapi-refresh-cookie') === 'httpOnly';
     }
 
-    /** The refresh cookie, kept until its session's absolute expiry: refreshing cannot outlast it. */
-    public static function cookie(string $refreshToken): Cookie
+    /**
+     * The refresh cookie, kept until its session's absolute expiry (refreshing cannot outlast it),
+     * which the caller had when it issued the token; without one, for the browser session.
+     */
+    public static function cookie(string $refreshToken, ?string $expiresAt): Cookie
+    {
+        return self::make($refreshToken, $expiresAt === null ? 0 : CarbonImmutable::parse($expiresAt));
+    }
+
+    /** A browser replaces a cookie only with one that matches it, so it is cleared as it was set. */
+    public static function forget(): Cookie
+    {
+        return self::make(null, 1);
+    }
+
+    /**
+     * Whether a logout should clear the cookie that named $session (null: no usable session):
+     * only when that session is gone, since another tab's newer sign-in may own the cookie.
+     */
+    public static function cookieEnded(?string $session): bool
+    {
+        return $session === null || ! DB::table(self::TABLE)->where('session_id', $session)->exists();
+    }
+
+    /** @param array{jwt: string, refreshToken: string, expiresAt?: string} $tokens */
+    public static function respond(Request $request, array $tokens, array $body = []): JsonResponse
+    {
+        if (! self::cookieMode($request)) {
+            return response()->json(self::body($tokens) + $body);
+        }
+
+        return response()->json(['jwt' => $tokens['jwt']] + $body)->withCookie(self::cookie($tokens['refreshToken'], $tokens['expiresAt'] ?? null));
+    }
+
+    /**
+     * The tokens as a response body shows them.
+     *
+     * @param array{jwt: string, refreshToken: string, expiresAt?: string} $tokens
+     * @return array{jwt: string, refreshToken: string}
+     */
+    private static function body(array $tokens): array
+    {
+        return ['jwt' => $tokens['jwt'], 'refreshToken' => $tokens['refreshToken']];
+    }
+
+    private static function make(?string $value, int|\DateTimeInterface $expires): Cookie
     {
         $options = (array) config('camis.users_permissions.sessions.cookie', []);
-        $expires = CarbonImmutable::parse((string) self::absoluteExpiry($refreshToken));
 
         return new Cookie(
             self::cookieName(),
-            $refreshToken,
+            $value,
             $expires,
             self::cookiePath(),
             $options['domain'] ?? null,
@@ -221,23 +266,6 @@ final class StrapiSessions
         );
     }
 
-    public static function forget(): Cookie
-    {
-        $options = (array) config('camis.users_permissions.sessions.cookie', []);
-
-        return cookie()->forget(self::cookieName(), self::cookiePath(), $options['domain'] ?? null);
-    }
-
-    /** @param array{jwt: string, refreshToken: string} $tokens */
-    public static function respond(Request $request, array $tokens, array $body = []): JsonResponse
-    {
-        if (! self::cookieMode($request)) {
-            return response()->json($tokens + $body);
-        }
-
-        return response()->json(['jwt' => $tokens['jwt']] + $body)->withCookie(self::cookie($tokens['refreshToken']));
-    }
-
     /** Strapi's legacy token, good for jwt.expiresIn (30 days unless configured; 0: no expiry). */
     private static function lasting(User $user): string
     {
@@ -246,7 +274,7 @@ final class StrapiSessions
         return $user->createToken(self::LEGACY, ['*'], $lifespan > 0 ? now()->addSeconds($lifespan) : null)->plainTextToken;
     }
 
-    /** @return array{jwt: string, refreshToken: string} */
+    /** @return array{jwt: string, refreshToken: string, expiresAt: string} */
     private static function open(User $user, ?string $deviceId, ?array $metadata): array
     {
         self::sweep();
@@ -255,7 +283,7 @@ final class StrapiSessions
         $absolute = self::stamp(CarbonImmutable::now()->addSeconds(self::lifespan('max_refresh_token_lifespan')));
         self::insert($user->getKey(), $sessionId, $secret, $deviceId, $metadata === null ? null : json_encode($metadata), $absolute);
 
-        return ['jwt' => self::accessToken($user, $sessionId), 'refreshToken' => $sessionId.'.'.$secret];
+        return ['jwt' => self::accessToken($user, $sessionId), 'refreshToken' => $sessionId.'.'.$secret, 'expiresAt' => $absolute];
     }
 
     private static function insert(mixed $userId, string $sessionId, string $secret, ?string $deviceId, ?string $metadata, string $absolute): void
@@ -409,13 +437,6 @@ final class StrapiSessions
         }
 
         return $parts['scheme'].'://'.$parts['host'].(isset($parts['port']) ? ':'.$parts['port'] : '');
-    }
-
-    private static function absoluteExpiry(string $refreshToken): ?string
-    {
-        $value = DB::table(self::TABLE)->where('session_id', explode('.', $refreshToken, 2)[0])->value('absolute_expires_at');
-
-        return is_string($value) ? $value : null;
     }
 
     private static function cookiePath(): string
