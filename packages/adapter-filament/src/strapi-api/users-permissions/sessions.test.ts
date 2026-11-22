@@ -90,6 +90,13 @@ describe("users-permissions sessions", () => {
     expect(controller).toContain("StrapiSessions::cookieEnded($cookieSession)");
   });
 
+  // A token that names no session ends itself alone, not the account's sessions nor the cookie's.
+  it("ends only the access token on logout when it names no session", () => {
+    const controller = content("app/Http/Controllers/Api/SessionController.php");
+    expect(controller).toContain("StrapiSessions::dropAccessToken($request);");
+    expect(controller).not.toContain("$session === null ? StrapiSessions::invalidate($user)");
+  });
+
   it("keeps sessions in their own table, timed to the millisecond as Strapi lists them", async () => {
     const migration = content(
       "database/migrations/0001_01_02_000003_create_strapi_sessions_table.php",

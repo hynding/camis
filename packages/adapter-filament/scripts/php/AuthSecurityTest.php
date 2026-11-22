@@ -376,4 +376,25 @@ class AuthSecurityTest extends TestCase
         self::assertTrue($this->logoutWith($older, $newerCookie, ['scope' => 'all'])->getCookie('strapi_up_refresh', false)?->isCleared());
         self::assertFalse($this->refreshes($newerCookie));
     }
+
+    /**
+     * An access token that names no session (a legacy token from before refresh mode) ends itself
+     * on logout, not every session of its account, nor the session another tab's cookie names.
+     */
+    public function test_logout_with_a_token_that_names_no_session_ends_that_token_alone(): void
+    {
+        $legacy = $this->register('alice');
+        config(['camis.users_permissions.jwt_management' => 'refresh']);
+        $elsewhere = (string) $this->login('alice')->assertOk()->json('refreshToken');
+        [, $cookie] = $this->cookieSignIn('alice');
+
+        $out = $this->logoutWith($legacy, $cookie);
+
+        self::assertNull($out->getCookie('strapi_up_refresh', false));
+        self::assertTrue($this->refreshes($cookie));
+        $this->freshRequest();
+        $this->postJson('/api/auth/refresh', ['refreshToken' => $elsewhere])->assertOk();
+        $this->freshRequest();
+        self::assertContains($this->withToken($legacy)->getJson('/api/users/me')->status(), [401, 403]);
+    }
 }
