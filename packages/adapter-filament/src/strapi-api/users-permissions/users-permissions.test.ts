@@ -164,14 +164,17 @@ describe("users-permissions routes", () => {
     );
   });
   // A bucket per address alone is one a foreign client fills for every user behind that address;
-  // per address and the account named, each account's guesses are counted apart, under a
-  // per-address ceiling. No raw body text is a key: an account by its id, a name not found by a
-  // fixed-length digest of its folded form.
-  it("keys sign-in, recovery and confirmation by address and the account named, under a ceiling", () => {
+  // per address and name, each name's guesses are counted apart, under a per-address ceiling. No
+  // raw body text is a key: a fixed-length digest of the folded name. Nothing the lookup found
+  // has a bucket, which would tell a caller which names are one account, or that one exists.
+  it("keys sign-in, recovery and confirmation by address and the name, under a ceiling", () => {
     const limits = content("app/Support/StrapiRateLimits.php");
     expect(limits).toContain("private const NAMED = ['sign-in', 'recovery', 'confirmation'];");
     expect(limits).toContain("substr(hash('sha256', self::folded($identifier)), 0, 32)");
-    expect(limits).toContain("'account:'.$account->getAuthIdentifier()");
+    expect(limits).not.toContain("account:");
+    expect(limits).toContain(
+      "public static function refuseNamed(Request $request, string $group, string $identifier): void",
+    );
     expect(limits).toContain("'camis.users_permissions.auth_address_throttle_per_minute'");
     expect(content("config/camis.php")).toContain(
       "'auth_address_throttle_per_minute' => max(1, (int) env('CAMIS_AUTH_ADDRESS_THROTTLE_PER_MINUTE', 50)),",
@@ -195,14 +198,17 @@ describe("users-permissions routes", () => {
       auth.indexOf("public function login"),
       auth.indexOf("public function changePassword"),
     );
-    expect(login).toContain(
-      "StrapiRateLimits::refuseNamed($request, 'sign-in', $identifier, $user);",
-    );
-    expect(login.indexOf("refuseNamed")).toBeLessThan(login.indexOf("Hash::check"));
-    expect(auth).toContain("StrapiRateLimits::refuseNamed($request, 'recovery', $email, $user);");
-    expect(auth).toContain(
-      "StrapiRateLimits::refuseNamed($request, 'confirmation', $email, $user);",
-    );
+    expect(login).toContain("StrapiRateLimits::refuseNamed($request, 'sign-in', $identifier);");
+    // Taken before the lookup, so what it finds cannot bear on the turn.
+    expect(login.indexOf("refuseNamed")).toBeLessThan(login.indexOf("User::query()"));
+    for (const [method, group] of [
+      ["forgotPassword", "recovery"],
+      ["sendEmailConfirmation", "confirmation"],
+    ]) {
+      const body = auth.slice(auth.indexOf(`public function ${method}`));
+      expect(body).toContain(`StrapiRateLimits::refuseNamed($request, '${group}', $email);`);
+      expect(body.indexOf("refuseNamed")).toBeLessThan(body.indexOf("User::query()"));
+    }
     for (const route of [
       "Route::post('/auth/local', [AuthController::class, 'login'])",
       "Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])",
@@ -220,6 +226,33 @@ describe("users-permissions routes", () => {
       "['identifier' => ['string', 'required'], 'password' => ['string', 'required']]",
     );
     expect(auth.match(/\['email' => \['string', 'required', 'email'\]\]/g)).toHaveLength(2);
+  });
+  // Every value an auth route casts to a string is first checked to be one, so an array or object
+  // answers Strapi's ValidationError rather than a server error.
+  it("checks every auth and user field it casts to be a string first", () => {
+    const auth = content("app/Http/Controllers/Api/AuthController.php");
+    for (const rules of [
+      "['email' => ['string', 'required', 'email'], 'username' => ['string', 'required'], 'password' => ['string', 'required', 'maxPassword']]",
+      "['password' => ['string', 'required', 'maxPassword'], 'passwordConfirmation' => ['string', 'required', 'same:password'], 'currentPassword' => ['string', 'required']]",
+      "['password' => ['string', 'required', 'maxPassword'], 'passwordConfirmation' => ['string', 'required', 'same:password'], 'code' => ['string', 'required']]",
+      "StrapiUsers::validate($query, ['confirmation' => ['string', 'required']]);",
+    ])
+      expect(auth).toContain(rules);
+    const users = content("app/Http/Controllers/Api/UserController.php");
+    expect(users).toContain(
+      "['email' => ['string', 'required', 'email'], 'username' => ['string', 'required'], 'password' => ['string', 'required']",
+    );
+    expect(users).toContain(
+      "['email' => ['string', 'email', 'nonEmpty'], 'username' => ['string', 'nonEmpty'], 'password' => ['string']]",
+    );
+  });
+  // No account's username or email is longer than its column; a longer name is refused as a wrong
+  // one before it is folded or looked up.
+  it("refuses an identifier longer than any account's name before folding or looking it up", () => {
+    const auth = content("app/Http/Controllers/Api/AuthController.php");
+    const login = auth.slice(auth.indexOf("public function login"));
+    expect(login).toContain("mb_strlen($identifier) > self::MAX_IDENTIFIER_LENGTH");
+    expect(login.indexOf("MAX_IDENTIFIER_LENGTH")).toBeLessThan(login.indexOf("refuseNamed"));
   });
   // Checking and then counting lets parallel requests all pass the check: the count hit() returns
   // is the decision.

@@ -183,15 +183,63 @@ class AuthSecurityTest extends TestCase
         self::assertThrottled($this->plainText('POST', '/api/auth/send-email-confirmation', ['email' => 'carol@example.test']), 200);
     }
 
-    /** The bucket follows the account, whichever of its names a guesser uses. */
-    public function test_an_accounts_names_share_its_bucket(): void
+    /**
+     * Whether a name finds an account, or which names are one account, must not show in the
+     * throttle: an account's username then its email answer as a missing name's pair does.
+     *
+     * @return list<array{int, bool}>
+     */
+    private function guesses(array $names, string $address): array
+    {
+        $answers = [];
+        foreach ($names as $name) {
+            $this->freshRequest();
+            $response = $this->withServerVariables(['REMOTE_ADDR' => $address])->postJson('/api/auth/local', ['identifier' => $name, 'password' => 'wrong']);
+            $answers[] = [$response->status(), $response->headers->has('Retry-After')];
+        }
+
+        return $answers;
+    }
+
+    public function test_an_accounts_names_answer_as_a_missing_names_do(): void
     {
         $this->register('alice');
-        self::assertThrottled(function (int $attempt): TestResponse {
-            $this->freshRequest();
+        $existing = $this->guesses(['alice', 'alice', 'alice', 'alice@example.test', 'alice@example.test'], '10.3.0.1');
+        $missing = $this->guesses(['zed', 'zed', 'zed', 'zed@example.test', 'zed@example.test'], '10.3.0.2');
 
-            return $this->postJson('/api/auth/local', ['identifier' => $attempt % 2 === 0 ? 'alice' : 'alice@example.test', 'password' => 'wrong']);
-        }, 400);
+        self::assertSame($missing, $existing);
+        self::assertSame([400, false], $existing[3]);
+    }
+
+    /** Strapi's yup string() refuses an array: each auth field answers 400, never a server error. */
+    public function test_an_array_in_any_auth_field_is_a_validation_error(): void
+    {
+        $secret = ['password' => 'secret1', 'passwordConfirmation' => 'secret1'];
+        $jwt = $this->register('alice');
+        $requests = [
+            fn (): TestResponse => $this->postJson('/api/auth/local/register', ['username' => ['x'], 'email' => 'x@example.test', 'password' => 'secret1']),
+            fn (): TestResponse => $this->postJson('/api/auth/local/register', ['username' => 'x', 'email' => ['x@example.test'], 'password' => 'secret1']),
+            fn (): TestResponse => $this->postJson('/api/auth/local/register', ['username' => 'x', 'email' => 'x@example.test', 'password' => ['secret1']]),
+            fn (): TestResponse => $this->postJson('/api/auth/reset-password', ['code' => ['x']] + $secret),
+            fn (): TestResponse => $this->postJson('/api/auth/reset-password', ['code' => 'x', 'password' => ['a'], 'passwordConfirmation' => ['a']]),
+            fn (): TestResponse => $this->getJson('/api/auth/email-confirmation?confirmation[]=x'),
+            fn (): TestResponse => $this->postJson('/api/auth/local', ['identifier' => 'alice', 'password' => ['secret1']]),
+            fn (): TestResponse => $this->withToken($jwt)->postJson('/api/auth/change-password', ['currentPassword' => ['secret1'], 'password' => 'secret2', 'passwordConfirmation' => 'secret2']),
+            fn (): TestResponse => $this->withToken($jwt)->postJson('/api/auth/change-password', ['currentPassword' => 'secret1', 'password' => ['secret2'], 'passwordConfirmation' => ['secret2']]),
+        ];
+        foreach ($requests as $i => $request) {
+            $this->freshRequest();
+            $response = $request();
+            self::assertSame(400, $response->status(), "request {$i}: ".$response->getContent());
+            $response->assertJsonPath('error.name', 'ValidationError');
+        }
+    }
+
+    /** A name longer than any account's is refused as a wrong one, before it is folded or looked up. */
+    public function test_an_identifier_longer_than_any_accounts_name_is_refused_unread(): void
+    {
+        $this->postJson('/api/auth/local', ['identifier' => str_repeat('é', 256), 'password' => 'wrong'])->assertStatus(400)
+            ->assertJsonPath('error.name', 'ValidationError')->assertJsonPath('error.message', 'Invalid identifier or password');
     }
 
     /** A number is the string the lookup casts it to; accents, width and case are folded out of a name. */
