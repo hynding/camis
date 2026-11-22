@@ -129,9 +129,9 @@ final class StrapiUsers
     {
         $standIn = self::standInHash();
         $hash = $user !== null && ($user->password ?? '') !== '' ? (string) $user->password : null;
-        $matches = $hash === null ? null : StrapiHashes::verify($password, $hash);
+        $matches = $hash === null ? null : StrapiHashes::verify($password, $hash, 'user', $user?->getKey());
         if ($matches === null) {
-            StrapiHashes::check($password, $standIn);
+            Hash::check($password, $standIn);
         }
         // A hash of another cost (a Strapi import's bcryptjs 10) takes another time to check, which
         // tells the account apart; once the password is known it is stored at the configured one.

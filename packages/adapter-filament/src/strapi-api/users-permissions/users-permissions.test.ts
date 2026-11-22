@@ -454,7 +454,7 @@ describe("users-permissions config and errors", () => {
       "'password' => StrapiHashes::fromBcryptjs($data['password'] ?? null),",
     );
     expect(content("app/Support/StrapiAdminImport.php")).toContain("StrapiHashes::fromBcryptjs(");
-    expect(content("app/Support/StrapiUsers.php")).toContain("StrapiHashes::check(");
+    expect(content("app/Support/StrapiUsers.php")).toContain("StrapiHashes::verify(");
     expect(content("app/Http/Controllers/Api/AuthController.php")).toContain(
       "StrapiUsers::passwordMatches($user, (string) $body['currentPassword'])",
     );
