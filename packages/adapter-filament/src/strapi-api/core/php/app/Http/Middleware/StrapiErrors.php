@@ -85,6 +85,7 @@ class StrapiErrors
             401 => $this->error(401, 'UnauthorizedError', 'Missing or invalid credentials', headers: $headers),
             403 => $this->error(403, 'ForbiddenError', 'Forbidden', headers: $headers),
             404 => $this->error(404, 'NotFoundError', 'Not Found', headers: $headers),
+            429 => $this->error(429, 'RateLimitError', 'Too many requests, please try again later.', headers: $headers),
             default => $this->error($status, 'HttpError', $message !== '' ? $message : 'Error', headers: $headers),
         };
     }
