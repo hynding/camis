@@ -182,8 +182,23 @@ const MAX_DECIMAL_SCALE = 30;
 const wholeIn = (value: unknown, min: number, max: number): boolean =>
   typeof value === "number" && Number.isInteger(value) && value >= min && value <= max;
 
+/** A finite number's digits before and after the point, as its shortest decimal form writes them. */
+const pointDigits = (value: number): { whole: number; fraction: number } => {
+  const [mantissa = "0", exponent = "0"] = Math.abs(value).toExponential().split("e");
+  const digits = mantissa.replace(".", "").length;
+  const beforePoint = Number(exponent) + 1;
+  return {
+    whole: Math.abs(value) < 1 ? 0 : beforePoint,
+    fraction: Math.max(digits - beforePoint, 0),
+  };
+};
+
+const plural = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? "" : "s"}`;
+
+type DecimalKey = "precision" | "scale" | "default" | "min" | "max";
+
 const refineDecimalDigits = (f: Record<string, unknown>, ctx: z.RefinementCtx): void => {
-  const issue = (key: "precision" | "scale", message: string): void =>
+  const issue = (key: DecimalKey, message: string): void =>
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message,
@@ -192,8 +207,8 @@ const refineDecimalDigits = (f: Record<string, unknown>, ctx: z.RefinementCtx): 
     });
   const { precision, scale } = f;
   if (precision === undefined && scale === undefined) return;
-  if (precision === undefined) return issue("precision", "scale is stated with a precision");
-  if (scale === undefined) return issue("scale", "precision is stated with a scale");
+  if (precision === undefined) return issue("precision", "scale must be stated with a precision");
+  if (scale === undefined) return issue("scale", "precision must be stated with a scale");
   if (!wholeIn(precision, 1, MAX_DECIMAL_PRECISION))
     return issue(
       "precision",
@@ -201,7 +216,22 @@ const refineDecimalDigits = (f: Record<string, unknown>, ctx: z.RefinementCtx): 
     );
   if (!wholeIn(scale, 0, MAX_DECIMAL_SCALE))
     return issue("scale", `scale must be a whole number from 0 to ${MAX_DECIMAL_SCALE}`);
-  if ((scale as number) > (precision as number)) issue("scale", "scale must be <= precision");
+  const p = precision as number;
+  const s = scale as number;
+  if (s > p) return issue("scale", "scale must be <= precision");
+  // A value the column cannot hold fails the migration's default or every write it bounds.
+  for (const key of ["default", "min", "max"] as const) {
+    const value = f[key];
+    if (typeof value !== "number" || !Number.isFinite(value)) continue;
+    const { whole, fraction } = pointDigits(value);
+    if (whole > p - s)
+      issue(
+        key,
+        `${key} has ${plural(whole, "digit")} before the point; precision ${p} with scale ${s} keeps ${p - s}`,
+      );
+    else if (key === "default" && fraction > s)
+      issue(key, `default has ${plural(fraction, "digit")} after the point; scale ${s} keeps ${s}`);
+  }
 };
 
 export const perFieldRefine = (f: unknown, ctx: z.RefinementCtx) => {
