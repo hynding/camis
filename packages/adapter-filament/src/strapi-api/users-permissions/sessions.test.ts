@@ -116,6 +116,14 @@ describe("users-permissions sessions", () => {
     await expect(sessions).toMatchFileSnapshot("../__golden__/strapi-api/StrapiSessions.php");
   });
 
+  // Strapi's answers carry no lifetime, so a client learns an access token has expired only by a
+  // 401; camis adds the seconds it lasts, under a name Strapi does not use.
+  it("tells a client how many seconds its access token lasts, in refresh mode alone", () => {
+    const sessions = content("app/Support/StrapiSessions.php");
+    expect(sessions).toContain("'expiresIn' => self::lifespan('access_token_lifespan')");
+    expect(sessions).toContain("return response()->json(['jwt' => self::lasting($user)] + $wire);");
+  });
+
   it("names a device from its user agent as Strapi does", () => {
     const sessions = content("app/Support/StrapiSessions.php");
     expect(sessions).toContain('"{$browser} on {$os}"');

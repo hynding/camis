@@ -505,6 +505,38 @@ class AuthSecurityTest extends TestCase
         $this->postJson('/api/auth/refresh', ['refreshToken' => $token])->assertOk()->assertJsonStructure(['jwt', 'refreshToken']);
     }
 
+    public function test_every_answer_with_an_access_token_says_how_long_it_lasts_in_refresh_mode(): void
+    {
+        config(['camis.users_permissions.jwt_management' => 'refresh', 'camis.users_permissions.sessions.access_token_lifespan' => 900, 'camis.auth_throttle_per_minute' => 10]);
+        $register = $this->postJson('/api/auth/local/register', ['username' => 'alice', 'email' => 'alice@example.test', 'password' => 'secret1'])->assertOk();
+        self::assertSame(900, $register->json('expiresIn'));
+        $login = $this->login('alice')->assertOk();
+        self::assertSame(900, $login->json('expiresIn'));
+        $this->freshRequest();
+        $cookie = $this->withHeader('x-strapi-refresh-cookie', 'httpOnly')->postJson('/api/auth/local', ['identifier' => 'alice', 'password' => 'secret1'])->assertOk();
+        self::assertSame(900, $cookie->json('expiresIn'));
+        self::assertNull($cookie->json('refreshToken'));
+        $this->freshRequest();
+        $refresh = $this->postJson('/api/auth/refresh', ['refreshToken' => $login->json('refreshToken')])->assertOk();
+        self::assertSame(900, $refresh->json('expiresIn'));
+        $this->freshRequest();
+        $change = $this->withToken((string) $refresh->json('jwt'))->postJson('/api/auth/change-password', ['currentPassword' => 'secret1', 'password' => 'secret2', 'passwordConfirmation' => 'secret2'])->assertOk();
+        self::assertSame(900, $change->json('expiresIn'));
+        // The token lasts what the answer says, no longer.
+        $this->travel(899)->seconds();
+        $this->freshRequest();
+        $this->withToken((string) $change->json('jwt'))->getJson('/api/users/me')->assertOk();
+        $this->travel(2)->seconds();
+        $this->freshRequest();
+        $this->withToken((string) $change->json('jwt'))->getJson('/api/users/me')->assertUnauthorized();
+    }
+
+    public function test_a_legacy_token_answer_is_strapis_own(): void
+    {
+        $this->register('alice');
+        self::assertArrayNotHasKey('expiresIn', $this->login('alice')->assertOk()->json());
+    }
+
     private function cookieLogin(): \Symfony\Component\HttpFoundation\Cookie
     {
         config(['camis.users_permissions.jwt_management' => 'refresh']);
