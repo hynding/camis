@@ -3314,11 +3314,18 @@ header working unchanged.
   identifier or email, never raw body text in a key), so neither a guesser at one account nor a
   foreign client sharing an office's address locks another account out, under a per-address
   ceiling across every account named (`CAMIS_AUTH_ADDRESS_THROTTLE_PER_MINUTE`, 50, never below the
-  credential rate). Strapi keys `/auth/local` by address alone (GHSA-7mqx-wwh4-f9fw, so a varied
+  credential rate). The controller takes a named turn (`StrapiRateLimits::refuseNamed`) with the
+  very value it looked the account up by, and the limiter reads no request field, so a query
+  string or another content type cannot split the key; a name counts in two buckets, its folded
+  form's (NFKD, marks stripped, case-folded) and the account's it found (the folded name's again
+  when none), so a name a collation matches buys no fresh bucket and found and not found cost and
+  answer alike. A name that is neither string nor number answers yup's ValidationError. Strapi
+  keys `/auth/local` by address alone (GHSA-7mqx-wwh4-f9fw, so a varied
   `email` cannot split its key); the ceiling is what bounds a guesser varying the identifier here.
   Refresh is counted in `SessionController` and only when it fails, and once full refuses only
-  failures: a foreign page firing cookie refreshes from a visitor's browser cannot stop the
-  visitor's own. A refresh token is a random 128-bit id and 256-bit secret, so it is its length,
+  failures: a foreign page firing cookie refreshes from a visitor's browser never stops a valid
+  refresh, though the visitor's own failing refresh may then answer 429 rather than
+  401. A refresh token is a random 128-bit id and 256-bit secret, so it is its length,
   not the throttle, that bounds guessing; the throttle bounds the work failures cost. The decision is the count `RateLimiter::hit()` returns, so parallel requests
   cannot all pass one check. A password change counts per account: `StrapiThrottle` is not
   Laravel's `ThrottleRequests`, which the priority sort runs before every unprioritised route

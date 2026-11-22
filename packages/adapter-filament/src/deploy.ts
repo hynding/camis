@@ -156,25 +156,30 @@ const sessionsSection = `
 
 Every route that checks a password or a refresh token is throttled, each group of routes in a
 bucket of its own so a flood of one never locks out another. A sign-in, recovery mail or
-confirmation mail counts per client address and the account it names (its identifier or email,
-case and surrounding spaces ignored), so a guesser at one account, or everyone else behind the same
-address, does not lock another account out; one address's turns across every account it names stop
-at \`CAMIS_AUTH_ADDRESS_THROTTLE_PER_MINUTE\` (default 50, never below the credential rate). A
-password change counts per account: a stolen access token gets no more guesses from more
-addresses. Every other group counts per client address. Only a refresh that fails is counted, and
-once its bucket is full only failures are refused: a page of another site that fires refreshes from
-a visitor's browser cannot stop that visitor's own refreshes. The GraphQL mutations take turns of
-the same buckets as their REST routes. The rates are read per request, so
+confirmation mail counts per client address and the account it names, so a guesser at one account,
+or everyone else behind the same address, does not lock another account out.
+A name counts against the account it finds, whichever of the account's names it is (username or email, in any form the
+database matches), and against the name itself with case, width, accents and surrounding spaces
+folded out, so an account found and a name that finds none answer alike. A guesser who tries many
+names gets a turn for each, so the per-address ceiling is the bound:
+\`CAMIS_AUTH_ADDRESS_THROTTLE_PER_MINUTE\` (default 50, never below the credential rate) turns a
+minute across every name one address tries. A password change counts per account: a stolen access
+token gets no more guesses from more addresses. Every other group counts per client address.
+Only a refresh that fails is counted, and once its bucket is full only failures are refused: a page of
+another site that fires refreshes from a visitor's browser never stops a refresh with a valid
+token, but its refused requests are failures from the visitor's address, so the visitor's own
+failing refresh (an expired or revoked token) may answer 429 rather than 401 until the bucket
+empties. The GraphQL mutations take turns of the same buckets as their REST routes. The rates are read per request, so
 \`php artisan config:cache\` is enough after changing them.
 
 | Group | Routes | Rate per minute |
 | --- | --- | --- |
-| sign-in | \`POST /auth/local\`, \`GET /auth/{provider}/callback\` (for \`/auth/local/callback\` Strapi's password login, which Strapi leaves unthrottled), GraphQL \`login\`, per account named | \`CAMIS_AUTH_THROTTLE_PER_MINUTE\` (10) |
+| sign-in | \`POST /auth/local\`, \`GET /auth/local/callback\` (Strapi's password login, which Strapi leaves unthrottled), GraphQL \`login\`, per account named | \`CAMIS_AUTH_THROTTLE_PER_MINUTE\` (10) |
 | register | \`POST /auth/local/register\`, GraphQL \`register\` | the same |
 | recovery | \`POST /auth/forgot-password\`, GraphQL \`forgotPassword\`, per account named | the same |
 | password-reset | \`POST /auth/reset-password\`, GraphQL \`resetPassword\` | the same |
 | confirmation | \`POST /auth/send-email-confirmation\`, per account named | the same |
-| provider | \`GET /connect/{provider}\` and its callback | the same |
+| provider | \`GET /connect/{provider}\` and its callback, \`GET /auth/{provider}/callback\` for another provider than \`local\` | the same |
 | password-change | \`POST /auth/change-password\`, GraphQL \`changePassword\`, per account | the same |
 | refresh | \`POST /auth/refresh\`, failures only | \`CAMIS_REFRESH_THROTTLE_PER_MINUTE\` (60) |
 
