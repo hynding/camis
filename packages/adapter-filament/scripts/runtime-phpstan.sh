@@ -2,11 +2,14 @@
 # PHPStan over the runtime PHP the generator copies (src/strapi-api/<package>/php/<path>), checked
 # where it runs: inside a Laravel app with the overlay materialized, so Eloquent, Filament and the
 # generated classes it calls resolve. The Strapi storage layout's runtime (storage/php) is checked
-# in a second app overlaid with that layout.
+# in a second app overlaid with that layout. The static PHP both API styles share (src/php/<path>,
+# which needs only brick/math and Laravel) is emitted only for a project that uses it, so it is
+# copied into the first app and checked with the Strapi API style's runtime.
 # Usage: runtime-phpstan.sh <app overlaid --style strapi> <app overlaid --style strapi --storage strapi>
 set -euo pipefail
 package="$(cd "$(dirname "$0")/.." && pwd)"
 sources="$package/src/strapi-api"
+shared="$package/src/php"
 
 # A source's path in the app is what follows its php/ directory.
 in_app() { sed "s#^$sources/[^/]*/php/##"; }
@@ -29,9 +32,19 @@ analyse() {
   (cd "$app" && vendor/bin/phpstan analyse --no-progress --memory-limit=1G --error-format=raw "${paths[@]}")
 }
 
+shared_paths() { (cd "$shared" && find . -name '*.php' | sed 's#^\./##'); }
+
+app="$(cd "$1" && pwd)"
+while IFS= read -r path; do
+  mkdir -p "$app/$(dirname "$path")"
+  cp "$shared/$path" "$app/$path"
+done < <(shared_paths)
+
 st=0
-find "$sources" -mindepth 3 -path "$sources/*/php/*" ! -path "$sources/storage/*" -name '*.php' |
-  in_app | sort | analyse "$(cd "$1" && pwd)" phpstan-baseline.neon || st=1
+{
+  find "$sources" -mindepth 3 -path "$sources/*/php/*" ! -path "$sources/storage/*" -name '*.php' | in_app
+  shared_paths
+} | sort | analyse "$app" phpstan-baseline.neon || st=1
 find "$sources/storage/php" -name '*.php' | in_app | sort |
   analyse "$(cd "$2" && pwd)" phpstan-baseline.storage.neon || st=1
 exit "$st"

@@ -244,8 +244,9 @@ jobs:
             echo "ADMIN ACCESS OK\n";
           '
   runtime-phpstan:
-    # The runtime PHP the generator copies (src/strapi-api/<package>/php/), analysed inside the
-    # Laravel app it runs in so Eloquent, Filament and the generated classes it calls resolve.
+    # The runtime PHP the generator copies (src/strapi-api/<package>/php/ and the shared src/php/),
+    # analysed inside the Laravel app it runs in so Eloquent, Filament and the generated classes it
+    # calls resolve.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
