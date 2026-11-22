@@ -95,11 +95,17 @@ class AuthSecurityTest extends TestCase
     }
 
     /** A stolen access token must not buy unlimited guesses of the current password. */
-    public function test_a_password_change_is_throttled_per_account(): void
+    public function test_a_password_change_is_throttled(): void
     {
         $jwt = $this->register('alice');
         $guess = ['currentPassword' => 'wrong', 'password' => 'secret2', 'passwordConfirmation' => 'secret2'];
-        self::assertThrottled(fn (): TestResponse => $this->withToken($jwt)->postJson('/api/auth/change-password', $guess), 400);
+        self::assertThrottled(function () use ($jwt, $guess): TestResponse {
+            // As a fresh request finds it: StrapiCredentials switched the default guard.
+            $this->app['auth']->shouldUse('web');
+            $this->app['auth']->forgetGuards();
+
+            return $this->withToken($jwt)->postJson('/api/auth/change-password', $guess);
+        }, 400);
     }
 
     /** Credentials for `*` would let any site read what the visitor's refresh cookie buys. */
@@ -149,7 +155,7 @@ class AuthSecurityTest extends TestCase
         $this->app['auth']->forgetGuards();
         $this->flushHeaders();
 
-        return $this->withUnencryptedCookie('strapi_up_refresh', $cookie)->withHeaders($headers)->postJson('/api/auth/refresh', []);
+        return $this->withCredentials()->withUnencryptedCookie('strapi_up_refresh', $cookie)->withHeaders($headers)->postJson('/api/auth/refresh', []);
     }
 
     private static function assertRefused(TestResponse $response): void
