@@ -24,12 +24,12 @@ class Ledger extends Model
     protected function casts(): array
     {
         return [
-            'balance' => 'decimal:6',
-            'rate' => 'decimal:4',
-            'share' => 'decimal:5',
-            'units' => 'decimal:4',
+            'balance' => \App\Casts\DecimalDigitsCast::class.':20,6',
+            'rate' => \App\Casts\DecimalDigitsCast::class.':9,4',
+            'share' => \App\Casts\DecimalDigitsCast::class.':15,5',
+            'units' => \App\Casts\DecimalDigitsCast::class.':14,4',
             'fee' => 'decimal:2',
-            'limit_ceiling' => 'decimal:2',
+            'limit_ceiling' => \App\Casts\DecimalDigitsCast::class.':18,2',
         ];
     }
 

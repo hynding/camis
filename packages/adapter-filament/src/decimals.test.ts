@@ -97,14 +97,67 @@ describe("decimals stating their digits (issue #104)", () => {
     ).toMatchFileSnapshot("./__golden__/decimals/laravel/LedgerApiController.php");
   });
 
-  it("emits DecimalDigits, which both API styles write a decimal stating its digits through, only for a project with one", () => {
-    const runtime = "app/Support/DecimalDigits.php";
-    for (const apiStyle of ["laravel", "strapi"] as const) {
-      expect(contentOf(generate(apiStyle))(runtime)).toContain("final class DecimalDigits");
+  it("emits DecimalDigits, its Eloquent cast and its form rule, which every write of a decimal stating its digits goes through, only for a project with one", () => {
+    const runtime = {
+      "app/Support/DecimalDigits.php": "final class DecimalDigits",
+      "app/Casts/DecimalDigitsCast.php": "final class DecimalDigitsCast implements CastsAttributes",
+      "app/Rules/DecimalDigitsRule.php": "final class DecimalDigitsRule implements ValidationRule",
+    };
+    for (const [path, declaration] of Object.entries(runtime)) {
+      for (const result of [
+        generate("laravel"),
+        generate("strapi"),
+        generate("strapi", "strapi"),
+      ]) {
+        expect(contentOf(result)(path)).toContain(declaration);
+      }
     }
-    expect(contentOf(generate("strapi", "strapi"))(runtime)).toContain("final class DecimalDigits");
     const blogFiles = filamentAdapter.generate(blog, { projectName: "blog", apiStyle: "strapi" });
-    expect(blogFiles.files.some((f) => f.path === runtime)).toBe(false);
+    expect(blogFiles.files.filter((f) => f.path in runtime)).toEqual([]);
+  });
+
+  // Filament's ->numeric() makes the state a PHP float, which keeps 14 significant digits.
+  for (const apiStyle of ["laravel", "strapi"] as const) {
+    it(`edits each decimal stating its digits in the admin as text its digits rule refuses on the ${apiStyle} API style`, async () => {
+      await expect(
+        contentOf(generate(apiStyle))("app/Filament/Resources/Ledgers/Schemas/LedgerForm.php"),
+      ).toMatchFileSnapshot(`./__golden__/decimals/${apiStyle}/LedgerForm.php`);
+    });
+  }
+
+  it("searches the admin's list by a decimal stating its digits as its filters compare it", async () => {
+    await expect(
+      contentOf(generate("strapi"))("app/Filament/Resources/Ledgers/Schemas/LedgersTable.php"),
+    ).toMatchFileSnapshot("./__golden__/decimals/strapi/LedgersTable.php");
+  });
+
+  // The import writes rows with the query builder, past every model's cast.
+  it("imports a decimal stating its digits from an archive as every write keeps it, stopping at one that does not fit", () => {
+    const content = contentOf(generate("strapi"));
+    const map = content("app/Support/StrapiTransferMap.php");
+    expect(map).toContain(
+      "'balance' => [\n                    'column' => 'balance',\n                    'type' => 'decimal',\n                    'digits' => [20, 6],\n                ],",
+    );
+    expect(map).toContain(
+      "'fee' => [\n                    'column' => 'fee',\n                    'type' => 'decimal',\n                ],",
+    );
+    const importer = content("app/Support/StrapiImport.php");
+    expect(importer.match(/= self::digits\(self::value\(/g)).toHaveLength(3);
+    expect(importer).toContain(
+      "private static function digits(mixed $value, array $attribute, string $column): mixed",
+    );
+    expect(importer).toContain(
+      `?? throw new \\RuntimeException("{$column} takes a decimal of at most {$precision} digits, {$scale} of them after the point, not " . var_export($value, true));`,
+    );
+    // Every other project imports exactly as before.
+    const blogImporter =
+      filamentAdapter
+        .generate(blog, { projectName: "blog", apiStyle: "strapi" })
+        .files.find((f) => f.path === "app/Support/StrapiImport.php")?.content ?? "";
+    expect(blogImporter).not.toContain("self::digits(");
+    expect(blogImporter).toContain(
+      "$row[$attribute['column']] = self::value($value, $attribute['type'], $model->getDateFormat());",
+    );
   });
 
   // A float holds 15 digits; MySQL compares a DECIMAL with a string as two doubles.

@@ -4,13 +4,18 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Filament\Resources\Ledgers\Pages\CreateLedger;
+use App\Models\AdminUser;
 use App\Models\Ledger;
 use App\Models\User;
 use App\Support\DecimalDigits;
 use Brick\Math\BigDecimal;
+use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
+use Illuminate\Validation\ValidationException;
+use Livewire\Livewire;
 use Tests\TestCase;
 
 /**
@@ -257,6 +262,59 @@ class DecimalsTest extends TestCase
         $this->api('POST', 'ledgers', ['share' => '12345678901.12345'])->assertStatus(400);
 
         $this->api('GET', 'ledgers?pagination[pageSize]=100')->assertOk()->assertJsonCount(count($taken), 'data');
+    }
+
+    public function test_every_write_through_eloquent_keeps_a_decimal_as_its_column_keeps_it(): void
+    {
+        // Past the request's trimming middleware: the model's cast trims, reads and rounds itself.
+        $this->assertSame('12.000000', Ledger::query()->create(['label' => 'model', 'balance' => ' 12 '])->balance);
+        $this->assertSame('12.000000', (string) DB::table('ledgers')->where('label', 'model')->value('balance'));
+        $this->assertSame('1.123457', Ledger::query()->create(['label' => 'rounded', 'balance' => 1.1234565])->balance);
+        $this->assertNull(Ledger::query()->create(['label' => 'empty', 'balance' => null])->balance);
+        foreach (['INF', '12 x', '1e400', '123456789012345678901'] as $refused) {
+            try {
+                Ledger::query()->create(['label' => 'refused', 'balance' => $refused]);
+                $this->fail("{$refused} was written");
+            } catch (ValidationException $e) {
+                $this->assertSame([DecimalDigits::refusal('balance', 20, 6)], $e->errors()['balance']);
+            }
+        }
+        $this->assertFalse(DB::table('ledgers')->where('label', 'refused')->exists());
+
+        if (DB::connection()->getDriverName() === 'sqlite') {
+            // A value an earlier writer left on SQLite's text column is answered as it is, not a 500.
+            DB::table('ledgers')->where('label', 'model')->update(['balance' => '12 x']);
+            $this->assertSame('12 x', Ledger::query()->where('label', 'model')->sole()->balance);
+        }
+        $this->api('GET', 'ledgers?pagination[pageSize]=100')->assertOk()->assertJsonCount(3, 'data');
+    }
+
+    public function test_the_admin_form_keeps_every_digit_and_refuses_a_value_that_does_not_fit(): void
+    {
+        $admin = AdminUser::query()->forceCreate(['firstname' => 'Admin', 'email' => 'admin@example.test', 'is_active' => true]);
+        $admin->givePermissionTo(['ledger.create', 'ledger.read', 'ledger.update']);
+        $this->actingAs($admin, 'admin');
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+
+        Livewire::test(CreateLedger::class)
+            ->fillForm(['label' => 'admin', 'balance' => self::BALANCE, 'share' => self::SHARE, 'rate' => '1.50', 'units' => '', 'limit_ceiling' => self::CEILING])
+            ->call('create')
+            ->assertHasNoFormErrors();
+        $row = DB::table('ledgers')->where('label', 'admin')->sole();
+        $this->assertSame([self::BALANCE, self::SHARE, null, self::CEILING], [(string) $row->balance, (string) $row->share, $row->units, (string) $row->limit_ceiling]);
+        // Within a PHP float SQLite's column is numeric, which keeps 1.5 as a double.
+        $this->assertSame('1.5000', Ledger::query()->where('label', 'admin')->sole()->rate);
+
+        foreach (['exponent beyond a double' => '1e400', 'not a decimal' => '12 x', 'too many digits' => '123456789012345678901'] as $label => $balance) {
+            Livewire::test(CreateLedger::class)
+                ->fillForm(['label' => $label, 'balance' => $balance])
+                ->call('create')
+                ->assertHasFormErrors(['balance']);
+            $this->assertFalse(DB::table('ledgers')->where('label', $label)->exists(), $label);
+        }
+
+        app('auth')->forgetGuards();
+        $this->api('GET', 'ledgers?pagination[pageSize]=100')->assertOk()->assertJsonPath('data.0.balance', self::BALANCE);
     }
 
     public function test_graphql_round_trips_every_digit_of_a_decimal_beyond_a_double(): void
