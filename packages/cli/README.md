@@ -102,28 +102,36 @@ located at the key), MySQL's DECIMAL being the narrowest database every target r
 digits each target keeps its own default, as before: (8, 2) on Filament, Strapi's (10, 2),
 Drizzle's `decimal`/`numeric` on Express. With them:
 
-- `filament`: `$table->decimal('x', p, s)` and the cast `decimal:s`, which answers the value as a
-  string at the scale. PDO reads a SQLite decimal column as a PHP float, which becomes a string of
-  14 significant digits, so a decimal of 15 digits or more is DECIMAL on MySQL and PostgreSQL and
-  text on SQLite (decided by the connection when it migrates): every digit is kept on all three.
-  Both API styles write a decimal stating its digits as MySQL and PostgreSQL keep it, whatever the
-  database: a string or a JSON number, trimmed, exponent form expanded, rounded half away from zero
-  to the scale, stored with exactly the scale's digits after the point (so `1.5` and `1.50` are one
-  value, also on SQLite's text); a value that is not a decimal, or has more digits before the point
-  than `precision - scale`, is refused with a 400 (Strapi's `ValidationError` on the Strapi API
-  style, Laravel's validation errors on the Laravel API style). The Laravel API style answers every
-  decimal as a string, as it always has; the Strapi API style answers a decimal of 15 digits or
-  more as a string (a JSON number of that many digits is rounded by every JavaScript client), over
-  REST, GraphQL (`String`), the OpenAPI document and the MCP tools, and every other decimal as the
-  number Strapi answers. Its filters compare a decimal stating its digits with the filter's value at
-  the field's scale, never through a float (as a numeric literal on MySQL and PostgreSQL, as text on
-  SQLite). Send an exact value as a string: a JSON number is a double by the time PHP reads it, so
-  the digits a double does not keep are gone before the API sees them. On the Strapi API style a
+- `filament`: `$table->decimal('x', p, s)`. PDO reads a SQLite decimal column as a PHP float,
+  which becomes a string of 14 significant digits, so a decimal of 15 digits or more is DECIMAL on
+  MySQL and PostgreSQL and text on SQLite (decided by the connection when it migrates). Every write
+  through Eloquent keeps a decimal stating its digits as MySQL and PostgreSQL keep it, whatever the
+  database: its model's cast (`App\Casts\DecimalDigitsCast`, in place of `decimal:s`) takes a string
+  or a JSON number of at most 100 characters (ASCII digits, one point, a sign, an exponent of at
+  most three digits), trimmed, exponent form expanded, rounded half away from zero to the scale,
+  stored with exactly the scale's digits after the point (so `1.5` and `1.50` are one value, also on
+  SQLite's text) and read back as that string; a value that is not a decimal, or has more digits
+  before the point than `precision - scale`, is refused. So are the APIs' writes (Strapi's 400
+  `ValidationError` on the Strapi API style, named by its full path, `entries[1].amount` inside a
+  repeatable; Laravel's 422 validation errors on the Laravel API style), the admin's form (a text
+  input with a validation rule, never a float) and the Strapi API style's archive import (which
+  stops at a value that does not fit): every digit is kept on all three databases. The Laravel API
+  style answers every decimal as a string, as it always has; the Strapi API style answers a decimal
+  of 15 digits or more as a string (a JSON number of that many digits is rounded by every
+  JavaScript client), over REST, GraphQL (`String`), the OpenAPI document and the MCP tools, and
+  every other decimal as the number Strapi answers. Its filters, and the admin list's search,
+  compare a decimal stating its digits with the filter's exact value, never through a float and
+  never rounding it (bound as `DECIMAL(p, s)` on MySQL, `NUMERIC` on PostgreSQL, text on SQLite; a
+  value with more digits after the point than the scale equals nothing and orders by its nearest
+  neighbours). Send an exact value as a string: a JSON number is a double by the time PHP reads it,
+  so the digits a double does not keep are gone before the API sees them. On the Strapi API style a
   decimal of 15 digits or more on SQLite matches equal values exactly in a filter, but an ordering
-  comparison (`$lt`, `$lte`, `$gt`, `$gte`, `$between`) or a sort on it compares text, and a
-  data-transfer archive carries it as a number, as Strapi's do (a `decimalPrecision` downgrade gap,
-  located at the type or component and the field); on Strapi's storage layout the column is
-  Strapi's, which SQLite keeps as a double read back with 14 digits (the same gap).
+  comparison (`$lt`, `$lte`, `$gt`, `$gte`, `$between`) or a sort on it compares text, the admin
+  list's number filters compare it through a float, and a data-transfer archive carries it as a
+  number, as Strapi's do (a `decimalPrecision` downgrade gap, located at the type or component and
+  the field); on Strapi's storage layout the column is Strapi's, which SQLite keeps as a double read
+  back with 14 digits (the same gap). A write through the query builder past Eloquent, other than
+  the import, keeps no canonical form.
 - `strapi`: the attribute's column settings, `"column": { "type": "decimal", "args": [p, s] }`,
   which Strapi's database layer lays over the decimal(10, 2) it makes. Strapi itself reads and
   writes a decimal as a JavaScript number on every database, so a decimal of more than 15 digits
