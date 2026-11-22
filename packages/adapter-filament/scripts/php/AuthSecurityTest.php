@@ -827,6 +827,13 @@ class AuthSecurityTest extends TestCase
         self::assertSame(400, $unknown[0]);
         self::assertSame($unknown, $this->signInSeen('plain', 'secret1'));
         self::assertSame($unknown, $this->signInSeen('argon', 'secret1'));
+        // Each takes one hash check, as an unknown name does: the stand-in's.
+        $tally = $this->countHashing();
+        foreach (['plain', 'argon', 'nobody'] as $name) {
+            $tally['check'] = 0;
+            $this->signInSeen($name, 'secret1');
+            self::assertSame(1, $tally['check'], "a sign-in as {$name} checks one hash");
+        }
         // A password change checks the current password the same way: refused, never a 500.
         $jwt = $this->register('changer');
         \App\Models\User::query()->where('username', 'changer')->toBase()->update(['password' => 'secret1']);
@@ -869,11 +876,13 @@ class AuthSecurityTest extends TestCase
                 return parent::make($value, $options);
             }
 
+            /** Counted once it has hashed: a hash refused unread costs no time, and so counts none. */
             public function check(#[\SensitiveParameter] $value, $hashedValue, array $options = []): bool
             {
+                $matches = parent::check($value, $hashedValue, $options);
                 $this->tally['check']++;
 
-                return parent::check($value, $hashedValue, $options);
+                return $matches;
             }
         });
         config(['hashing.driver' => 'counting']);
@@ -1265,6 +1274,23 @@ class AuthSecurityTest extends TestCase
         // A confirmation that names no account is refused as REST refuses it.
         $confirm = $this->graphqlSeen('mutation { emailConfirmation(confirmation: "nope") { jwt } }');
         self::assertSame('Invalid token', $confirm[1]['errors'][0]['message']);
+    }
+
+    /** A mail skipped by the bound leaves the link already mailed working: no token is rotated. */
+    public function test_a_skipped_mail_keeps_the_token_already_mailed(): void
+    {
+        $this->register('alice');
+        \App\Models\User::forceCreate(['name' => 'pending', 'username' => 'pending', 'email' => 'pending@example.test', 'password' => 'x', 'provider' => 'local', 'confirmed' => false, 'blocked' => false]);
+        $this->confirmationOn();
+        config(['camis.users_permissions.account_mail_per_hour' => 1]);
+        $token = fn (string $column, string $username): ?string => \App\Models\User::query()->where('username', $username)->value($column);
+        foreach ([['/api/auth/forgot-password', 'alice', 'reset_password_token'], ['/api/auth/send-email-confirmation', 'pending', 'confirmation_token']] as [$path, $username, $column]) {
+            $this->fromAnywhere($path, ['email' => "{$username}@example.test"])->assertOk();
+            $mailed = $token($column, $username);
+            self::assertNotNull($mailed);
+            $this->fromAnywhere($path, ['email' => "{$username}@example.test"])->assertOk();
+            self::assertSame($mailed, $token($column, $username), "{$path} skipped keeps its token");
+        }
     }
 }
 
