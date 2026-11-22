@@ -8,6 +8,13 @@ const isCreator: Expression = {
   right: { kind: "var", name: "user.id" },
 };
 
+/** A content API account's own entry: the entry's owner is the signed-in account. */
+const isOwner: Expression = {
+  kind: "eq",
+  left: { kind: "var", name: "record.ownerId" },
+  right: { kind: "var", name: "user.id" },
+};
+
 /** Strapi's admin::has-same-role-as-creator: the entry's creator holds one of the account's roles. */
 const sharesRole: Expression = {
   kind: "eq",
@@ -51,6 +58,25 @@ export const authorRoleBundle: IrBundle = {
         // Its router's find and findOne set auth: false (PublicActionsTest).
         options: { publicApiActions: ["list", "read"] },
         fields: [{ type: "string", name: "title", required: true }],
+      },
+      // An account's own profile: its owner is required and filled by the grant's assign, so a
+      // client never names it (AuthorRoleTest).
+      {
+        name: "Profile",
+        kind: "collection",
+        names: { plural: "Profiles" },
+        fields: [
+          { type: "string", name: "displayName", required: true },
+          { type: "text", name: "bio" },
+          { type: "boolean", name: "marketingOptIn" },
+          {
+            type: "relation",
+            name: "owner",
+            relationKind: "manyToOne",
+            target: "User",
+            required: true,
+          },
+        ],
       },
     ],
     components: [],
@@ -100,7 +126,15 @@ export const authorRoleBundle: IrBundle = {
     // The content API's users read every story: an admin role's condition is not theirs.
     {
       name: "authenticated",
-      grants: [{ contentType: "Story", actions: ["read"] }],
+      grants: [
+        { contentType: "Story", actions: ["read"] },
+        {
+          contentType: "Profile",
+          actions: ["create", "read", "update"],
+          condition: isOwner,
+          assign: { owner: "user.id" },
+        },
+      ],
       endpoints: ["MemoPin"],
     },
   ],

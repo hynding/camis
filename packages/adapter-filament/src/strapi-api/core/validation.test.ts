@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { filamentAdapter } from "../../generate";
+import { authorRoleBundle } from "../__fixtures__/author-role";
 import { strapiApiBundle } from "../__fixtures__/strapi-api";
 
 // Strapi's entity validator on REST and GraphQL writes. validation-vectors.json, recorded from
@@ -88,6 +89,24 @@ describe("entity validation", () => {
     );
     expect(content("config/camis.php")).toContain(
       "'strict_relations' => (bool) env('CAMIS_STRICT_RELATIONS', true),",
+    );
+  });
+
+  // A grant's assign fills the field from the session, and the client's own value for it is
+  // never taken: a rule for it would refuse every write that leaves it out, which is every write a
+  // client should make. The author-role fixture's Profile has a required owner its grant assigns.
+  it("leaves a field the grant assigns out of the rules, and never takes the client's value", () => {
+    const profile =
+      filamentAdapter
+        .generate(authorRoleBundle, { projectName: "oyl", apiStyle: "strapi" })
+        .files.find((f) => f.path === "app/Http/Controllers/Api/Generated/ProfileApiController.php")
+        ?.content ?? "";
+    expect(profile).toContain("'displayName' => ['type' => 'string', 'required' => true],");
+    expect(profile).not.toContain("'owner' => ['type' => 'relation'");
+    expect(profile).toContain("'owner' => true");
+    const store = profile.slice(profile.indexOf("public function store("));
+    expect(store.indexOf("$m->owner_id = $request->user()?->id;")).toBeGreaterThan(
+      store.indexOf("new Profile($wire['columns'])"),
     );
   });
 
