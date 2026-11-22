@@ -158,10 +158,12 @@ Every route that checks a password or a refresh token is throttled, each group o
 bucket of its own so a flood of one never locks out another. A sign-in, recovery mail or
 confirmation mail counts per client address and the account it names, so a guesser at one account,
 or everyone else behind the same address, does not lock another account out.
-A name counts against the account it finds, whichever of the account's names it is (username or email, in any form the
-database matches), and against the name itself with case, width, accents and surrounding spaces
-folded out, so an account found and a name that finds none answer alike. A guesser who tries many
-names gets a turn for each, so the per-address ceiling is the bound:
+A name counts with its case, width, accents and surrounding spaces folded out, and the turn is
+taken before the account is looked up: whether it finds an account has no bearing on the throttle,
+so the throttle tells a caller neither that an account exists nor which names are one account. A
+guesser who tries many names gets a turn for each, among them
+an account's username and email, or two names the database matches (its collation may ignore what
+folding keeps), so the per-address ceiling is the bound:
 \`CAMIS_AUTH_ADDRESS_THROTTLE_PER_MINUTE\` (default 50, never below the credential rate) turns a
 minute across every name one address tries. A password change counts per account: a stolen access
 token gets no more guesses from more addresses. Every other group counts per client address.

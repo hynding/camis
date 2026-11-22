@@ -3316,12 +3316,15 @@ header working unchanged.
   ceiling across every account named (`CAMIS_AUTH_ADDRESS_THROTTLE_PER_MINUTE`, 50, never below the
   credential rate). The controller takes a named turn (`StrapiRateLimits::refuseNamed`) with the
   very value it looked the account up by, and the limiter reads no request field, so a query
-  string or another content type cannot split the key; a name counts in two buckets, its folded
-  form's (NFKD, marks stripped, case-folded) and the account's it found (the folded name's again
-  when none), so a name a collation matches buys no fresh bucket and found and not found cost and
-  answer alike. A name that is neither string nor number answers yup's ValidationError. Strapi
-  keys `/auth/local` by address alone (GHSA-7mqx-wwh4-f9fw, so a varied
-  `email` cannot split its key); the ceiling is what bounds a guesser varying the identifier here.
+  string or another content type cannot split the key. A name counts in one bucket, its folded
+  form's (NFKD, marks stripped, case-folded), taken before the lookup: nothing the lookup finds
+  bears on the turn, since a bucket per account would tell a caller that an account exists, or
+  that a username and an email are one account. An account's other names, and names a collation
+  matches that folding keeps apart, are bounded by the per-address ceiling. Every auth and user
+  field cast to a string is checked to be one first (yup's `string()`), so an array answers
+  ValidationError, and an identifier longer than the 255-character name columns is refused as a
+  wrong one before folding or lookup. Strapi keys `/auth/local` by address alone
+  (GHSA-7mqx-wwh4-f9fw, so a varied `email` cannot split its key); the ceiling is what bounds a guesser varying the identifier here.
   Refresh is counted in `SessionController` and only when it fails, and once full refuses only
   failures: a foreign page firing cookie refreshes from a visitor's browser never stops a valid
   refresh, though the visitor's own failing refresh may then answer 429 rather than
