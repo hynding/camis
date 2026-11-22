@@ -96,7 +96,7 @@ final class UserController extends Controller
         $this->allow($request, 'user.update');
         $user = User::query()->find($id) ?? throw new StrapiError(404, 'NotFoundError', 'User not found');
         $body = $request->json()->all();
-        StrapiUsers::validate($body, ['email' => ['string', 'email', 'nonEmpty', 'max:255'], 'username' => ['string', 'nonEmpty', 'max:255'], 'password' => ['updatePassword']]);
+        StrapiUsers::validate($body, ['email' => ['string', 'email', 'nonEmpty', 'max:255'], 'username' => ['string', 'nonEmpty', 'max:255'], 'password' => ['updatePassword'], 'role' => ['id']]);
         if (($user->provider ?? 'local') === 'local' && array_key_exists('password', $body) && in_array($body['password'], [null, ''], true)) {
             throw StrapiError::validation('password.notNull');
         }
