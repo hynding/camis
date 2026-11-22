@@ -65,10 +65,12 @@ const PROFILE_AND_LOCALE =
   "            ->profile(class_exists(\\App\\Filament\\Pages\\AdminProfile::class) ? \\App\\Filament\\Pages\\AdminProfile::class : null, isSimple: false)\n" +
   "            ->middleware(class_exists(\\App\\Http\\Middleware\\AdminLocale::class) ? [\\App\\Http\\Middleware\\AdminLocale::class] : [], isPersistent: true)\n";
 
-const STOCK_PANEL_PROVIDER_ENTRY = "    App\\Providers\\Filament\\AdminPanelProvider::class,\n";
+// Any indent, line ending (Laravel writes PHP_EOL), leading backslash or trailing comma.
+const PANEL_PROVIDER_ENTRY =
+  /^([ \t]*)(\\?App\\Providers\\Filament\\AdminPanelProvider::class)[ \t]*,?[ \t]*(\r?\n)/m;
 // Guarded: an app on Strapi's own storage layout has no admin accounts, so camis emits no provider.
-const AUTH_PROVIDER_ENTRY =
-  "    ...(class_exists(\\App\\Providers\\CamisAuthServiceProvider::class) ? [\\App\\Providers\\CamisAuthServiceProvider::class] : []),\n";
+export const AUTH_PROVIDER_ENTRY =
+  "...(class_exists(\\App\\Providers\\CamisAuthServiceProvider::class) ? [\\App\\Providers\\CamisAuthServiceProvider::class] : []),";
 
 /**
  * Register camis's auth service provider in bootstrap/providers.php, after the admin panel's: it
@@ -80,8 +82,9 @@ export const patchBootstrapProviders = (source: string): string =>
   source.includes("CamisAuthServiceProvider")
     ? source
     : source.replace(
-        STOCK_PANEL_PROVIDER_ENTRY,
-        `${STOCK_PANEL_PROVIDER_ENTRY}${AUTH_PROVIDER_ENTRY}`,
+        PANEL_PROVIDER_ENTRY,
+        (_entry, indent: string, panel: string, lineEnding: string) =>
+          `${indent}${panel},${lineEnding}${indent}${AUTH_PROVIDER_ENTRY}${lineEnding}`,
       );
 
 /**
