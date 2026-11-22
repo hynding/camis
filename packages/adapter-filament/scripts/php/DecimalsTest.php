@@ -206,6 +206,11 @@ class DecimalsTest extends TestCase
             'filters[balance][$ne]=1.0000004' => $all,
             'filters[balance][$eq]=1.000001' => ['r1'],
             'filters[balance][$eq]=1e-999' => [],
+            // A list's unreadable item equals none of its values; the others still compare exactly.
+            'filters[balance][$in][0]=abc&filters[balance][$in][1]=1.0000010' => ['r1'],
+            'filters[balance][$notIn][0]=abc&filters[balance][$notIn][1]=1.0000010' => ['r0', 'r2'],
+            // $between takes its first two values as its bounds.
+            'filters[balance][$between][0]=1e0&filters[balance][$between][1]=1.000001e0&filters[balance][$between][2]=7' => ['r0', 'r1'],
         ] as $query => $expected) {
             $this->assertSame($expected, $this->labels($query), $query);
         }
