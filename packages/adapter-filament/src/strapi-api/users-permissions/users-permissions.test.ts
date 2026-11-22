@@ -406,6 +406,9 @@ describe("users-permissions register and /users queries", () => {
 });
 
 describe("users-permissions config and errors", () => {
+  it("stores a matched password again when its hash is not the configured one", () => {
+    expect(content("app/Support/StrapiUsers.php")).toContain("Hash::needsRehash(");
+  });
   // A concurrent registration can take the name between the check and the insert.
   it("answers a registration whose insert finds its name taken as a taken one", () => {
     expect(content("app/Http/Controllers/Api/AuthController.php")).toContain(

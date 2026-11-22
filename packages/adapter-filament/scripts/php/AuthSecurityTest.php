@@ -1153,5 +1153,23 @@ class AuthSecurityTest extends TestCase
             ->assertStatus(400)->assertJsonPath('error.name', 'ApplicationError')->assertJsonPath('error.message', 'Email or Username are already taken');
         $settled();
     }
+
+    /**
+     * A hash of another cost (every Strapi import is bcryptjs cost 10) takes another time to check,
+     * which tells the account apart: the first sign-in that matches stores it at the configured cost.
+     */
+    public function test_a_sign_in_stores_the_password_again_at_the_configured_cost(): void
+    {
+        config(['camis.auth_throttle_per_minute' => 10, 'camis.users_permissions.auth_address_throttle_per_minute' => 10]);
+        $rounds = (int) config('hashing.bcrypt.rounds');
+        $this->accountWithHash('imported', '$2a'.substr(password_hash('secret1', PASSWORD_BCRYPT, ['cost' => $rounds + 1]), 3));
+        $stored = fn (): string => (string) \App\Models\User::query()->where('username', 'imported')->value('password');
+        $before = $stored();
+        $this->signInSeen('imported', 'wrong');
+        self::assertSame($before, $stored(), 'a wrong password changes nothing');
+        $this->login('imported')->assertOk();
+        self::assertStringStartsWith(sprintf('$2y$%02d$', $rounds), $stored());
+        $this->login('imported')->assertOk();
+    }
 }
 
