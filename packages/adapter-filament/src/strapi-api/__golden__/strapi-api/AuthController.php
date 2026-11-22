@@ -43,6 +43,11 @@ class AuthController extends Controller
             ?? throw StrapiUsers::application('Impossible to find the default role');
         $email = mb_strtolower((string) $body['email']);
         $username = (string) $body['username'];
+        // A username is looked up as an address too, as Strapi looks it up, so one naming another
+        // address would tell its registrant whether that address has an account: refused first.
+        if (StrapiUsers::hidesAccounts() && str_contains($username, '@') && mb_strtolower($username) !== $email) {
+            throw StrapiError::validation('username must not be an email address other than the one registering');
+        }
         $taken = User::query()->where(fn ($q) => $q->where('email', $email)->orWhere('username', $email)
             ->orWhere('username', $username)->orWhere('email', $username))->exists();
         $confirm = (bool) ($settings['email_confirmation'] ?? false);
@@ -55,8 +60,7 @@ class AuthController extends Controller
         }
         $password = Hash::make((string) $body['password']);
         if ($taken) {
-            $hasAccount = User::query()->where('email', $email)->exists();
-            StrapiUsers::later(fn () => StrapiUsers::sendRegistrationRefused($email, $hasAccount));
+            StrapiUsers::later(fn () => StrapiUsers::sendRegistrationNotice($email));
 
             return response()->json(['email' => $email, 'sent' => true]);
         }

@@ -77,13 +77,10 @@ export const usersPermissionsConfigKeys = (): string => `
         // The mails a refused registration sends the address it named, with the account
         // confirmation's sender. They name nothing the registration sent.
         'account_emails' => [
-            'account_exists' => [
+            // One text for a taken address and a taken username, so it says neither was taken.
+            'registration_attempted' => [
                 'object' => 'Account registration',
-                'message' => "<p>Someone tried to register a new account with this email address, which already has one.</p>\\n\\n<p>If it was you, sign in, or reset your password if you have forgotten it. Otherwise you can ignore this email.</p>",
-            ],
-            'username_taken' => [
-                'object' => 'Account registration',
-                'message' => "<p>Someone tried to register an account with this email address, but the username they chose is not available.</p>\\n\\n<p>If it was you, register again with another username. Otherwise you can ignore this email.</p>",
+                'message' => "<p>Someone tried to register an account with this email address.</p>\\n\\n<p>If you already have an account, sign in, or reset your password if you have forgotten it. If you were registering a new account, try again with a different username. Otherwise you can ignore this email.</p>",
             ],
         ],
         // users-permissions' register.allowedFields: body keys register takes beside username,

@@ -331,9 +331,9 @@ final class StrapiUsers
      * address is told by mail rather than in the answer. The mail names neither the account nor
      * what was sent, so a stranger's registration puts nothing of theirs into it.
      */
-    public static function sendRegistrationRefused(string $email, bool $hasAccount): void
+    public static function sendRegistrationNotice(string $email): void
     {
-        $mail = (array) config('camis.users_permissions.account_emails.'.($hasAccount ? 'account_exists' : 'username_taken'), []);
+        $mail = (array) config('camis.users_permissions.account_emails.registration_attempted', []);
         $sender = self::emails()['email_confirmation'] ?? [];
         self::send($email, ['from' => $sender['from'] ?? [], 'response_email' => $sender['response_email'] ?? ''] + $mail, ['USER' => []]);
     }
