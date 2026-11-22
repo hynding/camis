@@ -89,6 +89,13 @@ const textLike = (type: "string" | "text" | "richText" | "email") =>
     ...(type === "email" ? {} : { ai: ai.optional() }),
   });
 
+/**
+ * A decimal's digits in all (`precision`) and after the point (`scale`), stated together; without
+ * them each target keeps its own default. Bounded in `perFieldRefine` by MySQL's DECIMAL, the
+ * narrowest database every target runs on.
+ */
+const decimalDigits = { precision: z.number().optional(), scale: z.number().optional() };
+
 const numeric = (type: "integer" | "bigInteger" | "float" | "decimal") =>
   z.object({
     type: z.literal(type),
@@ -96,6 +103,7 @@ const numeric = (type: "integer" | "bigInteger" | "float" | "decimal") =>
     unique: z.boolean().optional(),
     ...bound,
     default: z.number().optional(),
+    ...(type === "decimal" ? decimalDigits : {}),
   });
 
 const temporal = (type: "date" | "time" | "dateTime" | "timestamp") =>
@@ -164,8 +172,41 @@ export const SCALAR_VARIANTS = [
   mediaField,
 ] as const;
 
+/**
+ * MySQL's DECIMAL takes at most 65 digits, 30 of them after the point; PostgreSQL's NUMERIC takes
+ * 1000 and SQLite declares any, so MySQL's bounds are what every supported database takes.
+ */
+const MAX_DECIMAL_PRECISION = 65;
+const MAX_DECIMAL_SCALE = 30;
+
+const wholeIn = (value: unknown, min: number, max: number): boolean =>
+  typeof value === "number" && Number.isInteger(value) && value >= min && value <= max;
+
+const refineDecimalDigits = (f: Record<string, unknown>, ctx: z.RefinementCtx): void => {
+  const issue = (key: "precision" | "scale", message: string): void =>
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message,
+      params: { irCode: "invalid_decimal_digits" },
+      path: [key],
+    });
+  const { precision, scale } = f;
+  if (precision === undefined && scale === undefined) return;
+  if (precision === undefined) return issue("precision", "scale is stated with a precision");
+  if (scale === undefined) return issue("scale", "precision is stated with a scale");
+  if (!wholeIn(precision, 1, MAX_DECIMAL_PRECISION))
+    return issue(
+      "precision",
+      `precision must be a whole number from 1 to ${MAX_DECIMAL_PRECISION}`,
+    );
+  if (!wholeIn(scale, 0, MAX_DECIMAL_SCALE))
+    return issue("scale", `scale must be a whole number from 0 to ${MAX_DECIMAL_SCALE}`);
+  if ((scale as number) > (precision as number)) issue("scale", "scale must be <= precision");
+};
+
 export const perFieldRefine = (f: unknown, ctx: z.RefinementCtx) => {
   const anyF = f as Record<string, unknown>;
+  if (anyF.type === "decimal") refineDecimalDigits(anyF, ctx);
   if (
     typeof anyF.minLength === "number" &&
     typeof anyF.maxLength === "number" &&
