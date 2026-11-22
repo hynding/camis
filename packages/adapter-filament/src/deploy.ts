@@ -130,6 +130,18 @@ accounts were separate still signs its admins in as users: add \`->authGuard('ad
 \`->login()\` in \`app/Providers/Filament/AdminPanelProvider.php\`, make each admin again with
 \`camis:admin\`, then delete their old rows from \`users\`, where the API still lists them.
 
+The panel's sign-in checks one password hash whether or not the email names an account, so its
+time tells no admin account apart; a stored hash the hasher cannot read fails as a wrong password
+rather than a 500, Strapi's \`$2a$\` hashes match, and a matched password of another cost is stored
+again at the configured one. The generated \`CamisAuthServiceProvider\` sets that up, and
+\`camis scaffold filament\` registers it in \`bootstrap/providers.php\`. On an app scaffolded
+before, add this line to that file's array, after the admin panel's provider; until then the panel
+signs in as Laravel's own provider does:
+
+\`\`\`php
+    ...(class_exists(\\App\\Providers\\CamisAuthServiceProvider::class) ? [\\App\\Providers\\CamisAuthServiceProvider::class] : []),
+\`\`\`
+
 `;
 
 const offlineStep = (layout: StorageLayout): string =>
@@ -349,7 +361,9 @@ proxy, trust it as above so the request's own origin reads \`https\`.
   (\`account_emails.registration_attempted\`), and over GraphQL a registration waiting on its email
   answers \`ConfirmationPendingError\`, where the account was made but the answer failed.
 - Account mail to one address is bounded by \`CAMIS_ACCOUNT_MAIL_PER_HOUR\` (default 3) per kind.
-- An admin sign-in checks one password hash whether or not the email names an account.
+- Strapi's \`POST /admin/login\` and the admin panel's sign-in check one password hash whether or
+  not the email names an account; the panel's needs \`CamisAuthServiceProvider\` in
+  \`bootstrap/providers.php\` (see Admin sign-in).
 - Imported \`$2a$\` hashes sign in, a hash the hasher cannot verify answers as a wrong password
   instead of 500, and a sign-in stores a hash of another cost again at the configured one.
 - Add \`$middleware->prependToPriorityList(\\Illuminate\\Routing\\Middleware\\ThrottleRequests::class, \\App\\Http\\Middleware\\StrapiJsonBody::class);\`

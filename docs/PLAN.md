@@ -3400,11 +3400,17 @@ header working unchanged.
   stored hash the configured hasher refuses (another `HASH_DRIVER`'s, or not a hash) fails as a
   wrong password, checked against the stand-in so it takes as long, and is logged with the
   account's kind and id once an hour per account, where it answered 500. `StrapiHashes::matches`
-  holds the one-check rule for users and admins alike: an admin sign-in no longer returns before
-  any hash check for an unknown email. The Strapi storage layout keeps its `password_verify`
-  sign-in, which reads `$2a$` and never throws, and so does not emit `StrapiHashes`. The first sign-in that matches a hash of another cost stores the password again at
-  the configured one, so an imported (cost 10) account stops being told apart by timing; DEPLOY.md
-  gives `BCRYPT_ROUNDS=10` as the immediate fix and its cost.
+  holds the one-check rule, and the rehash of a matched password of another cost, for every
+  sign-in: users, Strapi's `POST /admin/login` (which returned before any hash check for an unknown
+  email) and the admin panel, whose guard's accounts go through `CamisAdminUserProvider` (an unknown
+  email gets the stand-in check in `retrieveByCredentials`, since the session guard checks no
+  password for an account it did not find). `CamisAuthServiceProvider` swaps the guard's provider
+  driver at register time and the scaffold lists it in `bootstrap/providers.php`, guarded by the
+  class existing; `config/auth.php` keeps Laravel's driver, so an app not yet listing it signs in
+  as before. `StrapiHashes` is emitted with the admin guard, so every layout that has one has it.
+  The Strapi storage layout keeps its `password_verify` sign-in, which reads `$2a$` and never
+  throws, and has no admin guard. An imported (cost 10) account stops being told apart by timing
+  once it has signed in; DEPLOY.md gives `BCRYPT_ROUNDS=10` as the immediate fix and its cost.
 - **JSON bodies.** Every auth write and `POST /graphql` takes its body only as JSON
   (`StrapiJsonBody`): another type, a form included, answers 415 `UnsupportedMediaTypeError`
   before the body is read or a throttle turn taken, since Laravel's `json()` decodes a text/plain
