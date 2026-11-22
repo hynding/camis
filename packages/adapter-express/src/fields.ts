@@ -1,3 +1,4 @@
+import { beyondDouble, decimalDigits } from "@camis/ir-core";
 import type { Field } from "@camis/ir-schema";
 import type { Dialect } from "./dialect";
 import { snakeColumn } from "./names";
@@ -41,6 +42,25 @@ const tsLiteral = (v: unknown): string =>
       ? String(v)
       : `'${String(v).replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
 
+/**
+ * A decimal's column, with its digits where it states them. SQLite keeps a NUMERIC column's values
+ * as doubles and takes no digits, so a decimal beyond a double is text there, keeping every digit.
+ */
+const decimalColumn = (
+  dialect: Dialect,
+  field: Field,
+  c: string,
+): { expr: string; import: string } => {
+  const digits = decimalDigits(field);
+  const config =
+    digits === undefined ? "" : `, { precision: ${digits.precision}, scale: ${digits.scale} }`;
+  if (dialect === "mysql") return { expr: `decimal('${c}'${config})`, import: "decimal" };
+  if (dialect === "pgsql") return { expr: `numeric('${c}'${config})`, import: "numeric" };
+  return beyondDouble(field)
+    ? { expr: `text('${c}')`, import: "text" }
+    : { expr: `numeric('${c}')`, import: "numeric" };
+};
+
 // Per-dialect base column (expression WITHOUT modifiers) + the drizzle-core import it needs.
 const base = (dialect: Dialect, field: Field, c: string): { expr: string; import: string } => {
   switch (field.type) {
@@ -69,9 +89,7 @@ const base = (dialect: Dialect, field: Field, c: string): { expr: string; import
         ? { expr: `float('${c}')`, import: "float" }
         : { expr: `real('${c}')`, import: "real" };
     case "decimal":
-      return dialect === "mysql"
-        ? { expr: `decimal('${c}')`, import: "decimal" }
-        : { expr: `numeric('${c}')`, import: "numeric" };
+      return decimalColumn(dialect, field, c);
     case "boolean":
       return dialect === "sqlite"
         ? { expr: `integer('${c}', { mode: 'boolean' })`, import: "integer" }
