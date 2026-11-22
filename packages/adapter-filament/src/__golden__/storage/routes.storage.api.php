@@ -21,8 +21,8 @@ use Illuminate\Support\Facades\Route;
 // every route in the group; the resolved list is deduplicated, so it still runs exactly once.
 Route::prependMiddlewareToGroup('api', StrapiErrors::class);
 
-// The only unauthenticated credential endpoints: throttled so they are not a guessing oracle.
-// The rate is deployment-specific — see config/camis.php.
+// Every route that checks a password or a refresh token is throttled so it is not a guessing
+// oracle, one bucket per client. The rate is deployment-specific — see config/camis.php.
 $authThrottle = 'throttle:'.(int) config('camis.auth_throttle_per_minute', 10).',1';
 
 Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle): void {
