@@ -1,4 +1,5 @@
 import type { GeneratedFile } from "@camis/adapter-kernel";
+import { beyondDouble } from "@camis/ir-core";
 import type { ContentType, Field, IrDocument } from "@camis/ir-schema";
 import { expressNames, snakeColumn } from "./names";
 
@@ -14,6 +15,8 @@ const refTable = (doc: IrDocument, target: string): string | null => {
 
 const listField = (f: Field, doc: IrDocument): Emit | null => {
   const c = snakeColumn(f.name);
+  // A number field parses its value to a JavaScript number, which keeps 15 of its digits.
+  if (beyondDouble(f)) return { jsx: `<TextField source="${c}" />`, comp: "TextField" };
   switch (f.type) {
     case "string":
     case "text":
@@ -52,6 +55,7 @@ const listField = (f: Field, doc: IrDocument): Emit | null => {
 
 const input = (f: Field, doc: IrDocument): Emit | null => {
   const c = snakeColumn(f.name);
+  if (beyondDouble(f)) return { jsx: `<TextInput source="${c}" />`, comp: "TextInput" };
   switch (f.type) {
     case "string":
     case "text":

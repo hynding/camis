@@ -8,8 +8,8 @@ import {
   type GeneratedFile,
   type GenerationResult,
 } from "@camis/adapter-kernel";
-import { normalize } from "@camis/ir-core";
-import type { CapabilityGap } from "@camis/ir-schema";
+import { decimalsBeyondDouble, normalize } from "@camis/ir-core";
+import type { CapabilityGap, IrDocument } from "@camis/ir-schema";
 import { adminResourceFiles } from "./admin-resources";
 import { adminStaticFiles } from "./admin-app";
 import { aiColumnsOf, aiFiles, hasAiField } from "./ai";
@@ -58,6 +58,19 @@ const namedConditions = (perms: ExpressPermissions): NamedCondition[] => {
   return out;
 };
 
+/**
+ * Drizzle answers a decimal as a string on MySQL and PostgreSQL, and one beyond a double on SQLite
+ * too (its column is text there), and the generated list sorts rows in JavaScript, comparing such
+ * strings as text. Express's JSON body parser reads a JSON number as a double.
+ */
+const expressDecimalGaps = (doc: IrDocument): CapabilityGap[] =>
+  decimalsBeyondDouble(doc).map(({ location, digits }) => ({
+    feature: "decimalPrecision",
+    location,
+    severity: "downgrade",
+    message: `"${location.field}" keeps its ${digits.precision} digits as a string, which the generated API's list sorts as text, not as a number, on every database; a JSON number sent for it is read as a double first, so an exact value is sent as a string`,
+  }));
+
 export const expressAdapterFor = (dialect: Dialect): GenerateAdapter => ({
   target: "express",
   generate: (ir, options): GenerationResult => {
@@ -71,6 +84,7 @@ export const expressAdapterFor = (dialect: Dialect): GenerateAdapter => ({
       ...customCodeGaps(doc),
       ...apiActionGaps(doc),
       ...publicApiActionGaps(doc),
+      ...expressDecimalGaps(doc),
     ];
     const files: GeneratedFile[] = [
       ...skeletonFiles(doc, options.projectName, dialect, { secured }),
