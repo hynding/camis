@@ -33,12 +33,13 @@ final class StrapiHashes
     public static function matches(string $password, ?Model $owner, string $account): bool
     {
         $stored = $owner?->getAttribute('password');
-        $hash = is_string($stored) && $stored !== '' ? $stored : null;
-        $matches = $hash === null ? null : self::verify($password, $hash, $account, $owner?->getKey());
+        $matches = $owner !== null && is_string($stored) && $stored !== ''
+            ? self::verify($password, $stored, $account, $owner->getKey())
+            : null;
         if ($matches === null) {
             Hash::check($password, self::standIn());
         }
-        if ($matches === true && $owner !== null && Hash::needsRehash((string) self::fromBcryptjs($hash))) {
+        if ($matches === true && $owner !== null && is_string($stored) && Hash::needsRehash((string) self::fromBcryptjs($stored))) {
             $owner->forceFill(['password' => Hash::make($password)])->save();
         }
 
