@@ -57,6 +57,8 @@ interface RuleContext {
   contentType: string;
   /** Set once a field's uniqueness is checked against the stored rows. */
   unique: boolean;
+  /** The entry's own fields a grant assigns from the session, which the client never writes. */
+  assigned: ReadonlySet<string>;
   /** Set once that field is a decimal stating its digits, compared as it is stored. */
   uniqueDigits: boolean;
 }
@@ -164,6 +166,8 @@ const rules = (
   const out: Record<string, Rule> = {};
   for (const field of fields) {
     if (derived(field)) continue;
+    // The grant fills it after the check, whatever the body says: a rule would refuse its absence.
+    if (path.length === 0 && ctx.assigned.has(field.name)) continue;
     const key = fieldApiName(field);
     if (field.type === "relation" || field.type === "media") {
       const rule = linkRule(field, ctx);
@@ -241,6 +245,7 @@ export const entityRules = (
   doc: IrDocument,
   shape: WireShape,
   layout: StorageLayout,
+  assigned: readonly string[] = [],
 ): EntityRules => {
   const ctx: RuleContext = {
     doc,
@@ -249,6 +254,7 @@ export const entityRules = (
     gaps: [],
     contentType: ct.name,
     unique: false,
+    assigned: new Set(assigned),
     uniqueDigits: false,
   };
   const built = rules(ct.fields, ctx, pathAt(ctx, []), []);

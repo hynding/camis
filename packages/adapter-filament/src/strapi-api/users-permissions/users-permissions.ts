@@ -65,6 +65,27 @@ export const usersPermissionsConfigKeys = (): string => `
     // Strapi's users-permissions settings as a new project starts with them; the admin's
     // Users & Permissions settings page overrides them at runtime (strapi_settings).
     'users_permissions' => [${sessionsConfigKeys()}
+        // A sign-in or recovery mail counts per client address and the name it gives, at
+        // auth_throttle_per_minute; this caps one address's turns across every name it gives
+        // (never below that rate), high enough that the address's other users are not locked out.
+        'auth_address_throttle_per_minute' => max(1, (int) env('CAMIS_AUTH_ADDRESS_THROTTLE_PER_MINUTE', 50)),
+        // A deliberate difference from Strapi, whose answers tell a caller whether an account
+        // exists: registration (with email confirmation on) and the confirmation resend answer
+        // every address alike, telling the address by mail instead, and account mail is sent once
+        // the answer has gone. false restores Strapi's answers.
+        'hide_account_existence' => (bool) env('CAMIS_AUTH_HIDE_ACCOUNT_EXISTENCE', true),
+        // How many mails of one kind (registration notice, confirmation resend, recovery) one
+        // address gets in an hour, since each goes to an address the caller names. A small burst,
+        // so another caller cannot spend a requester's only mail; floored at 1.
+        'account_mail_per_hour' => max(1, (int) env('CAMIS_ACCOUNT_MAIL_PER_HOUR', 3)),
+        // The mail a registration of a taken address or username sends the address it named, with
+        // the account confirmation's sender: one text for both, so it says neither was taken.
+        'account_emails' => [
+            'registration_attempted' => [
+                'object' => 'Account registration',
+                'message' => "<p>Someone tried to register an account with this email address.</p>\\n\\n<p>If you already have an account, sign in, or reset your password if you have forgotten it. If you were registering a new account, try again with a different username. Otherwise you can ignore this email.</p>",
+            ],
+        ],
         // users-permissions' register.allowedFields: body keys register takes beside username,
         // email and password (comma separated). A key the user has no column for is accepted and
         // dropped, as Strapi drops it.
@@ -207,6 +228,18 @@ ${
 export const emitStrapiActiveUser = (): string =>
   runtimePhp(new URL("./php/app/Http/Middleware/StrapiActiveUser.php", import.meta.url));
 
+/** Cookie encryption on the provider routes, which leaves the refresh cookie as issued. */
+export const emitStrapiEncryptCookies = (): string =>
+  runtimePhp(new URL("./php/app/Http/Middleware/StrapiEncryptCookies.php", import.meta.url));
+
+/** The credential throttle: a bucket per group of routes, by address, name given or caller account. */
+export const emitStrapiRateLimits = (): string =>
+  runtimePhp(new URL("./php/app/Support/StrapiRateLimits.php", import.meta.url));
+
+/** A credential route's turn of its group's bucket, taken where the route lists it. */
+export const emitStrapiThrottle = (): string =>
+  runtimePhp(new URL("./php/app/Http/Middleware/StrapiThrottle.php", import.meta.url));
+
 /**
  * users-permissions' /users routes: the list, count and read are the builtin user's read grant,
  * and its writes its create, update and delete grants. /users/me is every session's.
@@ -215,7 +248,7 @@ export const emitStrapiActiveUser = (): string =>
 export const emitUserController = (secured: boolean, guests = false): string => {
   const allow = (permission: string): string =>
     secured ? `\n        $this->allow($request, '${permission}');` : "";
-  const roleRule = secured ? ", 'role' => ['required']" : "";
+  const roleRule = secured ? ", 'role' => ['required', 'id']" : "";
   const assignRole = secured
     ? `
         $role = Role::query()->find($body['role']);
@@ -300,7 +333,7 @@ final class UserController extends Controller
     public function create(Request $request): JsonResponse
     {${allow("user.create")}
         $body = $request->json()->all();
-        StrapiUsers::validate($body, ['email' => ['required', 'email'], 'username' => ['required'], 'password' => ['required']${roleRule}]);
+        StrapiUsers::validate($body, ['email' => ['string', 'required', 'email', 'max:255'], 'username' => ['string', 'required', 'max:255'], 'password' => ['string', 'required']${roleRule}]);
         if ((bool) (StrapiUsers::advanced()['unique_email'] ?? false) && User::query()->where('email', mb_strtolower((string) $body['email']))->exists()) {
             throw StrapiUsers::application('Email already taken');
         }
@@ -317,8 +350,8 @@ ${assignRole}        $user = StrapiUsers::add([...$body, 'password' => Hash::mak
     {${allow("user.update")}
         $user = User::query()->find($id) ?? throw new StrapiError(404, 'NotFoundError', 'User not found');
         $body = $request->json()->all();
-        StrapiUsers::validate($body, ['email' => ['email', 'nonEmpty'], 'username' => ['nonEmpty']]);
-        if (($user->provider ?? 'local') === 'local' && array_key_exists('password', $body) && in_array($body['password'], [null, '', false, 0], true)) {
+        StrapiUsers::validate($body, ['email' => ['string', 'email', 'nonEmpty', 'max:255'], 'username' => ['string', 'nonEmpty', 'max:255'], 'password' => ['updatePassword']${secured ? ", 'role' => ['id']" : ""}]);
+        if (($user->provider ?? 'local') === 'local' && array_key_exists('password', $body) && in_array($body['password'], [null, ''], true)) {
             throw StrapiError::validation('password.notNull');
         }
         if (array_key_exists('username', $body) && User::query()->where('username', $body['username'])->whereKeyNot($user->getKey())->exists()) {

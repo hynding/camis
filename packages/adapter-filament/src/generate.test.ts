@@ -505,7 +505,12 @@ describe("DEPLOY.md", () => {
     const result = filamentAdapter.generate(bundle, { projectName: "blog" });
     const deploy = result.files.find((f) => f.path === "DEPLOY.md")!;
     expect(deploy.content).toContain("CAMIS_AUTH_THROTTLE_PER_MINUTE");
-    expect(deploy.content).toContain("SANCTUM_TOKEN_EXPIRATION");
+    // Sanctum's own expiry is a global cap by token age that no generated file sets; the token
+    // lifetimes are Strapi's, set on each token, so the docs must name those and warn off the cap.
+    expect(deploy.content).not.toContain("`SANCTUM_TOKEN_EXPIRATION` bounds token lifetime");
+    expect(deploy.content).toContain("CAMIS_JWT_LIFESPAN");
+    expect(deploy.content).toContain("CAMIS_ACCESS_TOKEN_LIFESPAN");
+    expect(deploy.content).toContain("leave `expiration` null in `config/sanctum.php`");
     // The rate is interpolated into the middleware string at route registration, so a cached
     // route file holds the old number: clearing only the config cache silently does nothing.
     expect(deploy.content).toContain("the rate is baked into the cached route definition");

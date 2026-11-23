@@ -1,4 +1,5 @@
 overwrite DEPLOY.md
+overwrite app/Auth/CamisAdminUserProvider.php
 overwrite app/Console/Commands/CamisAdmin.php
 overwrite app/Filament/Pages/AdminProfile.php
 overwrite app/Filament/Resources/Articles/ArticleResource.php
@@ -12,6 +13,8 @@ overwrite app/Http/Middleware/AdminLocale.php
 overwrite app/Models/AdminUser.php
 overwrite app/Models/Article.php
 overwrite app/Models/Concerns/AdminAccess.php
+overwrite app/Providers/CamisAuthServiceProvider.php
+overwrite app/Support/StrapiHashes.php
 overwrite config/auth.php
 overwrite config/camis-admin.php
 overwrite database/migrations/0001_01_01_000003_create_admin_users_table.php

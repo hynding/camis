@@ -64,7 +64,7 @@ class StrapiErrors
                 $e instanceof AuthenticationException && $request->bearerToken() === null => $this->error(403, 'ForbiddenError', 'Forbidden'),
                 $e instanceof AuthenticationException => $this->error(401, 'UnauthorizedError', 'Missing or invalid credentials'),
                 $e instanceof HttpResponseException => null,
-                $e instanceof HttpExceptionInterface => $this->errorForStatus($e->getStatusCode(), $e->getMessage()),
+                $e instanceof HttpExceptionInterface => $this->errorForStatus($e->getStatusCode(), $e->getMessage(), $e->getHeaders()),
                 default => $this->error(500, 'InternalServerError', 'Internal Server Error'),
             };
         });
@@ -74,23 +74,33 @@ class StrapiErrors
      * Handler::render() rewrites certain framework exceptions (a missing Eloquent model, a failed
      * policy check) into equivalent HTTP exceptions before this callback ever runs, so they only
      * ever reach us here as an HttpExceptionInterface — name by the status code that survives
-     * that rewrite, not by the original (already-lost) exception class.
+     * that rewrite, not by the original (already-lost) exception class. Its headers are kept: a
+     * throttled request's Retry-After is how a client knows when to try again.
+     *
+     * @param array<string, mixed> $headers
      */
-    private function errorForStatus(int $status, string $message): JsonResponse
+    private function errorForStatus(int $status, string $message, array $headers): JsonResponse
     {
         return match ($status) {
-            401 => $this->error(401, 'UnauthorizedError', 'Missing or invalid credentials'),
-            403 => $this->error(403, 'ForbiddenError', 'Forbidden'),
-            404 => $this->error(404, 'NotFoundError', 'Not Found'),
-            default => $this->error($status, 'HttpError', $message !== '' ? $message : 'Error'),
+            401 => $this->error(401, 'UnauthorizedError', 'Missing or invalid credentials', headers: $headers),
+            403 => $this->error(403, 'ForbiddenError', 'Forbidden', headers: $headers),
+            404 => $this->error(404, 'NotFoundError', 'Not Found', headers: $headers),
+            429 => $this->error(429, 'RateLimitError', 'Too many requests, please try again later.', headers: $headers),
+            default => $this->error($status, 'HttpError', $message !== '' ? $message : 'Error', headers: $headers),
         };
     }
 
-    /** Strapi's error body: `data` is always null and `details` always an object. */
-    private function error(int $status, string $name, string $message, array $details = []): JsonResponse
+    /**
+     * Strapi's error body: `data` is always null and `details` always an object.
+     *
+     * @param array<string, mixed> $headers
+     */
+    private function error(int $status, string $name, string $message, array $details = [], array $headers = []): JsonResponse
     {
         $details = $details === [] ? new \stdClass() : $details;
 
-        return response()->json(['data' => null, 'error' => ['status' => $status, 'name' => $name, 'message' => $message, 'details' => $details]], $status);
+        $body = ['data' => null, 'error' => ['status' => $status, 'name' => $name, 'message' => $message, 'details' => $details]];
+
+        return response()->json($body, $status, $headers);
     }
 }

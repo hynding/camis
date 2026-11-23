@@ -4,14 +4,21 @@
 declare(strict_types=1);
 
 /*
- * Laravel's HandleCors set up as Strapi's strapi::cors. Laravel's own defaults answer
- * `Access-Control-Allow-Origin: *` without credentials, and a browser drops every response to a
- * request made with `credentials: 'include'` (how a Strapi client keeps its httpOnly refresh
- * cookie) when the origin is `*`. Strapi allows credentials and echoes the request's origin;
- * HandleCors does the same once credentials are supported.
+ * Laravel's HandleCors set up as Strapi's strapi::cors, with one deliberate difference.
  *
- * The CAMIS_CORS_* keys are strapi::cors's options; `camis import strapi` writes them from the
- * Strapi project's config/middlewares. Each list is comma-separated.
+ * Strapi allows credentials and echoes the request's origin even when its origin list is `*`, so
+ * any site can make a request carrying the visitor's cookies (the users-permissions refresh
+ * cookie among them) and read the answer. Here credentials are allowed only for origins listed
+ * explicitly: with `*` anywhere in CAMIS_CORS_ORIGIN, any origin is answered with
+ * `Access-Control-Allow-Origin: *` and no credentials, which is all a client sending its token in
+ * the Authorization header needs. A browser client that keeps its refresh token in the httpOnly
+ * cookie (`credentials: 'include'`) from another origin must have that origin listed.
+ *
+ * The env contract (each list comma-separated; `camis import strapi` writes them from the Strapi
+ * project's config/middlewares):
+ *   CAMIS_CORS_ORIGIN       origins allowed; `*` (the default) is any origin, without credentials
+ *   CAMIS_CORS_CREDENTIALS  allow credentials for the listed origins (default true; never for `*`)
+ *   CAMIS_CORS_METHODS, CAMIS_CORS_HEADERS, CAMIS_CORS_EXPOSE, CAMIS_CORS_MAX_AGE
  */
 
 /** @return list<string> */
@@ -20,23 +27,27 @@ $list = static fn (string $name, string $default): array => array_values(array_f
     static fn (string $item): bool => $item !== '',
 ));
 
+$origins = $list('CAMIS_CORS_ORIGIN', '*');
+
 return [
     // strapi::cors runs on every route, not only the API.
     'paths' => ['*'],
 
     'allowed_methods' => $list('CAMIS_CORS_METHODS', 'GET,POST,PUT,PATCH,DELETE,HEAD,OPTIONS'),
 
-    // `*` allows any origin, which is echoed back.
-    'allowed_origins' => $list('CAMIS_CORS_ORIGIN', '*'),
+    'allowed_origins' => $origins,
 
     'allowed_origins_patterns' => [],
 
-    // `*` allows whichever headers a preflight asks for, as Strapi does for an empty list.
-    'allowed_headers' => $list('CAMIS_CORS_HEADERS', 'Content-Type,Authorization,Origin,Accept'),
+    // Strapi's headers, and those a client sends to show the refresh cookie comes from its own
+    // page (StrapiSessions refuses the cookie cross-site without one). `*` allows whichever
+    // headers a preflight asks for, as Strapi does for an empty list.
+    'allowed_headers' => $list('CAMIS_CORS_HEADERS', 'Content-Type,Authorization,Origin,Accept,X-Requested-With,x-strapi-refresh-cookie'),
 
-    'exposed_headers' => $list('CAMIS_CORS_EXPOSE', ''),
+    // A throttled answer's Retry-After says when to try again.
+    'exposed_headers' => $list('CAMIS_CORS_EXPOSE', 'Retry-After'),
 
     'max_age' => (int) env('CAMIS_CORS_MAX_AGE', 31536000),
 
-    'supports_credentials' => (bool) env('CAMIS_CORS_CREDENTIALS', true),
+    'supports_credentials' => (bool) env('CAMIS_CORS_CREDENTIALS', true) && ! in_array('*', $origins, true),
 ];

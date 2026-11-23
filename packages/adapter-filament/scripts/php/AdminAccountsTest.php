@@ -134,6 +134,134 @@ class AdminAccountsTest extends TestCase
         $refused(['email' => 'asleep@example.test', 'password' => 'Admin-pass-1'], 'User not active');
     }
 
+    /**
+     * An admin sign-in checks one password hash whatever the email finds: none, a password that
+     * is wrong, or a hash the hasher cannot verify, so its time tells no admin account apart.
+     */
+    public function test_an_admin_sign_in_checks_one_hash_whether_or_not_an_account_matches(): void
+    {
+        $this->admin();
+        $this->admin('plain@example.test');
+        AdminUser::query()->where('email', 'plain@example.test')->toBase()->update(['password' => 'Admin-pass-1']);
+        $checks = new \ArrayObject(['n' => 0]);
+        app('hash')->extend('counting', fn () => new class ((array) config('hashing.bcrypt'), $checks) extends \Illuminate\Hashing\BcryptHasher {
+            public function __construct(array $options, private \ArrayObject $checks)
+            {
+                parent::__construct($options);
+            }
+
+            public function check(#[\SensitiveParameter] $value, $hashedValue, array $options = []): bool
+            {
+                $matches = parent::check($value, $hashedValue, $options);
+                $this->checks['n']++;
+
+                return $matches;
+            }
+        });
+        config(['hashing.driver' => 'counting']);
+        app('hash')->forgetDrivers();
+        $answers = [];
+        foreach ([['nobody@example.test', 'Admin-pass-1'], ['admin@example.test', 'wrong'], ['plain@example.test', 'Admin-pass-1']] as $i => [$email, $password]) {
+            $checks['n'] = 0;
+            $this->app['auth']->forgetGuards();
+            $response = $this->withServerVariables(['REMOTE_ADDR' => "10.30.0.{$i}"])->postJson('/admin/login', ['email' => $email, 'password' => $password]);
+            self::assertSame(1, $checks['n'], "a sign-in as {$email} checks one hash");
+            $answers[] = [$response->status(), $response->json()];
+        }
+        self::assertSame($answers[0], $answers[1]);
+        self::assertSame($answers[0], $answers[2]);
+    }
+
+    /** An imported admin (bcryptjs, another cost) is stored at the configured cost by its first sign-in. */
+    public function test_an_admin_sign_in_stores_the_password_again_at_the_configured_cost(): void
+    {
+        $this->admin();
+        $rounds = (int) config('hashing.bcrypt.rounds');
+        AdminUser::query()->where('email', 'admin@example.test')->toBase()->update(['password' => '$2a'.substr(password_hash('Admin-pass-1', PASSWORD_BCRYPT, ['cost' => $rounds + 1]), 3)]);
+        $stored = fn (): string => (string) AdminUser::query()->where('email', 'admin@example.test')->value('password');
+        $before = $stored();
+        $this->postJson('/admin/login', ['email' => 'admin@example.test', 'password' => 'wrong'])->assertStatus(400);
+        self::assertSame($before, $stored(), 'a wrong password changes nothing');
+        $this->signIn();
+        self::assertStringStartsWith(sprintf('$2y$%02d$', $rounds), $stored());
+        $this->signIn();
+    }
+
+    /**
+     * The panel's sign-in (Filament on the admin guard) checks one hash whatever the email finds,
+     * fails a hash it cannot read as a wrong password, takes Strapi's $2a$ hashes, and stores a
+     * matched password again at the configured cost.
+     */
+    public function test_the_panel_sign_in_checks_one_hash_whatever_the_email_finds(): void
+    {
+        $this->admin();
+        $this->admin('plain@example.test');
+        $this->admin('imported@example.test');
+        $this->admin('current@example.test');
+        $rounds = (int) config('hashing.bcrypt.rounds');
+        $current = '$2b'.substr(password_hash('Admin-pass-1', PASSWORD_BCRYPT, ['cost' => $rounds]), 3);
+        AdminUser::query()->where('email', 'current@example.test')->toBase()->update(['password' => $current]);
+        AdminUser::query()->where('email', 'plain@example.test')->toBase()->update(['password' => 'Admin-pass-1']);
+        AdminUser::query()->where('email', 'imported@example.test')->toBase()->update(['password' => '$2a'.substr(password_hash('Admin-pass-1', PASSWORD_BCRYPT, ['cost' => $rounds + 1]), 3)]);
+        $checks = new \ArrayObject(['n' => 0]);
+        app('hash')->extend('counting', fn () => new class ((array) config('hashing.bcrypt'), $checks) extends \Illuminate\Hashing\BcryptHasher {
+            public function __construct(array $options, private \ArrayObject $checks)
+            {
+                parent::__construct($options);
+            }
+
+            public function check(#[\SensitiveParameter] $value, $hashedValue, array $options = []): bool
+            {
+                $matches = parent::check($value, $hashedValue, $options);
+                $this->checks['n']++;
+
+                return $matches;
+            }
+        });
+        config(['hashing.driver' => 'counting']);
+        app('hash')->forgetDrivers();
+        $auth = Filament::getPanel('admin')->auth();
+        foreach ([['nobody@example.test', 'Admin-pass-1'], ['admin@example.test', 'wrong'], ['plain@example.test', 'Admin-pass-1']] as [$email, $password]) {
+            $checks['n'] = 0;
+            self::assertFalse($auth->attempt(['email' => $email, 'password' => $password]), $email);
+            self::assertSame(1, $checks['n'], "a panel sign-in as {$email} checks one hash");
+        }
+        self::assertTrue($auth->attempt(['email' => 'imported@example.test', 'password' => 'Admin-pass-1']));
+        $auth->logout();
+        self::assertStringStartsWith(sprintf('$2y$%02d$', $rounds), (string) AdminUser::query()->where('email', 'imported@example.test')->value('password'));
+        // Strapi's $2b$ hash at the configured cost already serves: the session guard's own rehash
+        // (needsRehash reads $2b$ as another algorithm) must not store it again.
+        self::assertTrue($auth->attempt(['email' => 'current@example.test', 'password' => 'Admin-pass-1']));
+        $auth->logout();
+        self::assertSame($current, AdminUser::query()->where('email', 'current@example.test')->value('password'));
+        self::assertTrue($auth->attempt(['email' => 'admin@example.test', 'password' => 'Admin-pass-1']));
+    }
+
+    /** An earlier provider (AppServiceProvider, say) may resolve the admin guard while it boots. */
+    public function test_the_admin_guard_resolves_while_earlier_providers_boot(): void
+    {
+        $app = require $this->app->bootstrapPath('app.php');
+        $app->instance('request', \Illuminate\Http\Request::create('/admin/login'));
+        $provider = null;
+        $app->booting(function ($app) use (&$provider): void {
+            $provider = $app['auth']->guard('admin')->getProvider()::class;
+        });
+        try {
+            $app->bootstrapWith([
+                \Illuminate\Foundation\Bootstrap\LoadEnvironmentVariables::class,
+                \Illuminate\Foundation\Bootstrap\LoadConfiguration::class,
+                \Illuminate\Foundation\Bootstrap\RegisterFacades::class,
+                \Illuminate\Foundation\Bootstrap\RegisterProviders::class,
+                \Illuminate\Foundation\Bootstrap\BootProviders::class,
+            ]);
+        } finally {
+            \Illuminate\Container\Container::setInstance($this->app);
+            \Illuminate\Support\Facades\Facade::clearResolvedInstances();
+            \Illuminate\Support\Facades\Facade::setFacadeApplication($this->app);
+        }
+        self::assertSame(\App\Auth\CamisAdminUserProvider::class, $provider);
+    }
+
     public function test_a_sign_in_returns_strapis_body_and_a_token_for_the_admin_api(): void
     {
         $admin = $this->admin();

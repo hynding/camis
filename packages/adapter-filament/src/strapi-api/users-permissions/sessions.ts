@@ -20,14 +20,21 @@ export const sessionsConfigKeys = (): string => `
             'access_token_lifespan' => (int) env('CAMIS_ACCESS_TOKEN_LIFESPAN', 600),
             'max_refresh_token_lifespan' => (int) env('CAMIS_MAX_REFRESH_TOKEN_LIFESPAN', 2592000),
             'idle_refresh_token_lifespan' => (int) env('CAMIS_IDLE_REFRESH_TOKEN_LIFESPAN', 1209600),
+            // Requests per minute to /auth/refresh per client address, in a bucket of its own:
+            // each tab of a browser client refreshes on load.
+            'refresh_throttle_per_minute' => max(1, (int) env('CAMIS_REFRESH_THROTTLE_PER_MINUTE', 60)),
             // The refresh token in an httpOnly cookie rather than the body (also per request,
-            // with the x-strapi-refresh-cookie: httpOnly header). Secure unset is production only.
+            // with the x-strapi-refresh-cookie: httpOnly header). The cookie is stricter than
+            // Strapi's: Secure (false is honoured in local development only, APP_ENV=local),
+            // SameSite=Strict, sent to the auth routes alone, and kept as long as its session's
+            // absolute lifespan has left rather than for the browser session.
             'http_only' => (bool) env('CAMIS_SESSIONS_HTTP_ONLY', false),
             'cookie' => [
                 'name' => env('CAMIS_SESSIONS_COOKIE_NAME', 'strapi_up_refresh'),
-                'secure' => env('CAMIS_SESSIONS_COOKIE_SECURE'),
-                'same_site' => env('CAMIS_SESSIONS_COOKIE_SAME_SITE', 'lax'),
-                'path' => env('CAMIS_SESSIONS_COOKIE_PATH', '/'),
+                'secure' => (bool) env('CAMIS_SESSIONS_COOKIE_SECURE', true),
+                'same_site' => env('CAMIS_SESSIONS_COOKIE_SAME_SITE', 'strict'),
+                // The narrowest path that still reaches /api/auth/refresh and /api/auth/logout.
+                'path' => env('CAMIS_SESSIONS_COOKIE_PATH', '/api/auth'),
                 'domain' => env('CAMIS_SESSIONS_COOKIE_DOMAIN'),
             ],
         ],`;

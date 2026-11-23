@@ -16,9 +16,11 @@ use App\Http\Controllers\Api\UploadController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Middleware\StrapiActiveUser;
 use App\Http\Middleware\StrapiCredentials;
+use App\Http\Middleware\StrapiEncryptCookies;
 use App\Http\Middleware\StrapiErrors;
+use App\Http\Middleware\StrapiJsonBody;
+use App\Http\Middleware\StrapiThrottle;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
-use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
 
@@ -29,24 +31,28 @@ use Illuminate\Support\Facades\Route;
 // every route in the group; the resolved list is deduplicated, so it still runs exactly once.
 Route::prependMiddlewareToGroup('api', StrapiErrors::class);
 
-// The only unauthenticated credential endpoints: throttled so they are not a guessing oracle.
-// The rate is deployment-specific — see config/camis.php.
-$authThrottle = 'throttle:'.(int) config('camis.auth_throttle_per_minute', 10).',1';
+// Every route that checks a password or a refresh token is throttled so it is not a guessing
+// oracle (StrapiRateLimits): a bucket per group of routes, per account for a password change, per
+// client address and the name given for a sign-in or recovery mail, per address otherwise. The
+// rates are deployment-specific and read per request — see config/camis.php.
 
-Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle): void {
+Route::middleware([StrapiErrors::class])->group(function (): void {
     Route::get('/_health', fn () => response()->noContent());
-    Route::post('/auth/local', [AuthController::class, 'login'])->middleware([$authThrottle, StrapiCredentials::class.':guest']);
-    Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware([$authThrottle, StrapiCredentials::class.':guest']);
-    Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware([$authThrottle, StrapiCredentials::class.':guest']);
-    Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])->middleware([$authThrottle, StrapiCredentials::class.':guest']);
+    Route::post('/auth/local', [AuthController::class, 'login'])->middleware([StrapiJsonBody::class, StrapiCredentials::class.':guest']);
+    Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware([StrapiJsonBody::class, StrapiThrottle::class.':register', StrapiCredentials::class.':guest']);
+    Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware([StrapiJsonBody::class, StrapiCredentials::class.':guest']);
+    Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])->middleware([StrapiJsonBody::class, StrapiThrottle::class.':password-reset', StrapiCredentials::class.':guest']);
     Route::get('/auth/email-confirmation', [AuthController::class, 'emailConfirmation'])->middleware(StrapiCredentials::class.':guest');
-    Route::post('/auth/send-email-confirmation', [AuthController::class, 'sendEmailConfirmation'])->middleware([$authThrottle, StrapiCredentials::class.':guest']);
-    Route::post('/auth/refresh', [SessionController::class, 'refresh'])->middleware(StrapiCredentials::class.':guest');
+    Route::post('/auth/send-email-confirmation', [AuthController::class, 'sendEmailConfirmation'])->middleware([StrapiJsonBody::class, StrapiCredentials::class.':guest']);
+    // Throttled in the controller, which counts the refreshes that fail alone.
+    Route::post('/auth/refresh', [SessionController::class, 'refresh'])->middleware([StrapiJsonBody::class, StrapiCredentials::class.':guest']);
 
     // A provider's round trip is the browser's: its state and tokens are kept in a session.
-    Route::middleware([EncryptCookies::class, AddQueuedCookiesToResponse::class, StartSession::class, StrapiCredentials::class.':guest'])->group(function () use ($authThrottle): void {
-        Route::get('/connect/{provider}', [ConnectController::class, 'connect'])->middleware($authThrottle);
-        Route::get('/connect/{provider}/callback', [ConnectController::class, 'callback'])->middleware($authThrottle);
+    Route::middleware([StrapiEncryptCookies::class, AddQueuedCookiesToResponse::class, StartSession::class, StrapiCredentials::class.':guest'])->group(function (): void {
+        Route::get('/connect/{provider}', [ConnectController::class, 'connect'])->middleware(StrapiThrottle::class.':provider');
+        Route::get('/connect/{provider}/callback', [ConnectController::class, 'callback'])->middleware(StrapiThrottle::class.':provider');
+        // Provider local is the password login, as in Strapi, which takes its own turn of sign-in;
+        // another provider's takes one of the provider routes' bucket.
         Route::get('/auth/{provider}/callback', [ConnectController::class, 'signIn']);
     });
 
@@ -67,8 +73,8 @@ Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle):
 
     Route::middleware([])->group(function (): void {
         Route::get('/users/me', [UserController::class, 'me'])->middleware(['auth:sanctum', StrapiActiveUser::class]);
-        Route::post('/auth/change-password', [AuthController::class, 'changePassword'])->middleware(['auth:sanctum', StrapiActiveUser::class]);
-        Route::post('/auth/logout', [SessionController::class, 'logout'])->middleware(['auth:sanctum', StrapiActiveUser::class]);
+        Route::post('/auth/change-password', [AuthController::class, 'changePassword'])->middleware([StrapiJsonBody::class, 'auth:sanctum', StrapiActiveUser::class, StrapiThrottle::class.':password-change']);
+        Route::post('/auth/logout', [SessionController::class, 'logout'])->middleware([StrapiJsonBody::class, 'auth:sanctum', StrapiActiveUser::class]);
         Route::get('/auth/sessions', [SessionController::class, 'sessions'])->middleware(['auth:sanctum', StrapiActiveUser::class]);
         Route::delete('/auth/sessions/{sessionId}', [SessionController::class, 'revoke'])->middleware(['auth:sanctum', StrapiActiveUser::class]);
 

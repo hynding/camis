@@ -81,6 +81,20 @@ describe("GraphQL", () => {
     expect(content("routes/graphql.php")).toContain("->match(['get', 'post'], '/graphql'");
   });
 
+  // Register's payload holds a user, which a registration answered alike for every address has not.
+  it("answers a registration that waits on its email with one error a client can recognise", () => {
+    expect(content("app/GraphQL/StrapiGraphqlPlugins.php")).toContain(
+      "new StrapiError(400, 'ConfirmationPendingError', 'Check your email to finish registering')",
+    );
+  });
+
+  // Its login, register and forgotPassword mutations are a guest's, as their REST routes are.
+  it("takes a POST body only as JSON, as the auth routes do", () => {
+    expect(content("routes/graphql.php")).toContain(
+      "Route::middleware([StrapiErrors::class, StrapiJsonBody::class, ",
+    );
+  });
+
   // strapi-php answers a token that does not verify on /graphql with the REST error body, a 401.
   it("answers a refused request on /graphql with Strapi's error body", () => {
     expect(content("app/Http/Middleware/StrapiErrors.php")).toContain(
@@ -118,6 +132,34 @@ describe("GraphQL", () => {
 
   // strapi-php answers UploadFile.related with an internal error, so the links are checked by
   // media-vectors.json over REST and by GraphqlTest.php here.
+  // The mutation reaches the controller in process, past the REST route's throttle, so it takes
+  // its own turn of the same rate: a stolen session must not guess the current password freely.
+  it("throttles changePassword as the REST route is", () => {
+    const plugins = generate(true).files.find(
+      (f) => f.path === "app/GraphQL/StrapiGraphqlPlugins.php",
+    )!.content;
+    const change = plugins.slice(plugins.indexOf("case 'changePassword':"));
+    expect(change.slice(0, change.indexOf("return "))).toContain(
+      "self::throttle($request, 'password-change');",
+    );
+  });
+
+  // The mutation runs the REST controller in process, which takes the named turn itself; a
+  // throttled turn answers Strapi's RateLimitError.
+  it("leaves the named turns to the controller, and a reset in a bucket of its own", () => {
+    const plugins = generate(true).files.find(
+      (f) => f.path === "app/GraphQL/StrapiGraphqlPlugins.php",
+    )!.content;
+    // The controller the mutation runs takes the named turn, with the name it looks up.
+    expect(plugins).not.toContain("self::throttle($request, 'sign-in'");
+    expect(plugins).not.toContain("self::throttle($request, 'recovery'");
+    expect(plugins).toContain("self::throttle($request, 'password-reset');");
+    const graphql = generate(true).files.find(
+      (f) => f.path === "app/GraphQL/StrapiGraphql.php",
+    )!.content;
+    expect(graphql).toContain("if ($previous instanceof ThrottleRequestsException) {");
+  });
+
   it("serves the media library's files with the entries they are linked from", () => {
     expect(fields(ours.get("UploadFile") ?? "")).toEqual(fields(oracle.get("UploadFile")!));
     // The fixture has more content types than the oracle project; the shared ones keep its order.

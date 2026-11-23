@@ -41,7 +41,7 @@ parameters:
       count: 1
       path: app/GraphQL/StrapiGraphqlPlugins.php
     -
-      rawMessage: 'Call to an undefined static method class@anonymous/app/Support/StrapiUsers.php:251::creating().'
+      message: '#^Call to an undefined static method class@anonymous/app/Support/StrapiUsers\.php\:\d+\:\:creating\(\)\.$#'
       count: 1
       path: app/Models/Concerns/HasDocumentId.php
     -

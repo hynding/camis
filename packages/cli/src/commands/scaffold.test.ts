@@ -9,6 +9,7 @@ import {
   patchConsoleRoutes,
   isPatchedUserModel,
   patchAdminPanelProvider,
+  patchBootstrapProviders,
   patchUserModel,
   scaffoldCommand,
   setAppName,
@@ -19,6 +20,14 @@ interface ExecCall {
   args: string[];
   cwd: string;
 }
+
+const STOCK_PROVIDERS = `<?php
+
+return [
+    App\\Providers\\AppServiceProvider::class,
+    App\\Providers\\Filament\\AdminPanelProvider::class,
+];
+`;
 
 const fakeIo = (opts: {
   files?: Record<string, string>;
@@ -34,7 +43,10 @@ const fakeIo = (opts: {
   const madeDirs: string[] = [];
   const lines: string[] = [];
   const written: Record<string, string> = {};
-  const files = opts.files ?? {};
+  const files: Record<string, string> = {
+    "/proj/app/bootstrap/providers.php": STOCK_PROVIDERS,
+    ...(opts.files ?? {}),
+  };
   const execResults = opts.execResults ?? [];
   const io: Io = {
     readFile: (p) =>
@@ -165,6 +177,63 @@ class AdminPanelProvider extends PanelProvider
 }
 `;
 
+// The admin guard's accounts are checked through camis's own user provider (one hash check
+// whatever the email finds), which a service provider registers; the Strapi storage layout has no
+// admin accounts, so the entry is guarded by the class existing.
+describe("patchBootstrapProviders", () => {
+  const ENTRY =
+    "    ...(class_exists(\\App\\Providers\\CamisAuthServiceProvider::class) ? [\\App\\Providers\\CamisAuthServiceProvider::class] : []),";
+  it("registers camis's auth service provider when it exists", () => {
+    const patched = patchBootstrapProviders(STOCK_PROVIDERS);
+    expect(patched).toContain(ENTRY);
+    expect(patched.indexOf("AdminPanelProvider::class")).toBeLessThan(patched.indexOf(ENTRY));
+  });
+  it("is idempotent", () => {
+    const once = patchBootstrapProviders(STOCK_PROVIDERS);
+    expect(patchBootstrapProviders(once)).toBe(once);
+  });
+  // Laravel writes the file with PHP_EOL, and a hand-edited one may use any indent or form.
+  it.each([
+    [
+      "CRLF line endings",
+      STOCK_PROVIDERS.replaceAll("\n", "\r\n"),
+      "    App\\Providers\\Filament\\AdminPanelProvider::class,\r\n" + ENTRY + "\r\n];",
+    ],
+    [
+      "a tab indent",
+      STOCK_PROVIDERS.replaceAll("    ", "\t"),
+      "\tApp\\Providers\\Filament\\AdminPanelProvider::class,\n" +
+        ENTRY.replace("    ", "\t") +
+        "\n];",
+    ],
+    [
+      "no trailing comma",
+      STOCK_PROVIDERS.replace("AdminPanelProvider::class,", "AdminPanelProvider::class"),
+      "    App\\Providers\\Filament\\AdminPanelProvider::class,\n" + ENTRY + "\n];",
+    ],
+    [
+      "a leading backslash",
+      STOCK_PROVIDERS.replace("    App\\Providers\\Filament", "    \\App\\Providers\\Filament"),
+      "    \\App\\Providers\\Filament\\AdminPanelProvider::class,\n" + ENTRY + "\n];",
+    ],
+  ])("registers the provider after an entry with %s, idempotently", (_form, source, expected) => {
+    const once = patchBootstrapProviders(source);
+    expect(once).toContain(expected);
+    expect(patchBootstrapProviders(once)).toBe(once);
+  });
+  it("is patched by the scaffold", async () => {
+    const { io, written } = fakeIo({
+      files: {
+        "/proj/app/app/Models/User.php": STOCK_USER,
+        "/proj/app/app/Providers/Filament/AdminPanelProvider.php": STOCK_PANEL,
+        "/proj/app/bootstrap/app.php": STOCK_BOOTSTRAP,
+      },
+    });
+    expect(await scaffoldCommand("filament", "app", io)).toBe(0);
+    expect(written["/proj/app/bootstrap/providers.php"]).toContain(ENTRY);
+  });
+});
+
 describe("patchAdminPanelProvider", () => {
   // Admin accounts are AdminUser rows on the generated admin guard, apart from the API's users.
   it("signs the admin panel in on the admin guard", () => {
@@ -294,6 +363,13 @@ describe("patchBootstrapMiddleware", () => {
     );
     expect(patched).toContain("$middleware->trimStrings(except: [$strapiRoutes]);");
     expect(patched).toContain("$middleware->convertEmptyStringsToNull(except: [$strapiRoutes]);");
+  });
+  // Laravel's priority sort runs ThrottleRequests ahead of any unlisted route middleware, so a body
+  // StrapiJsonBody refuses would take a throttle turn first unless it is listed ahead of it.
+  it("runs the JSON body check ahead of Laravel's throttle", () => {
+    expect(patchBootstrapMiddleware(STOCK_BOOTSTRAP)).toContain(
+      "$middleware->prependToPriorityList(\\Illuminate\\Routing\\Middleware\\ThrottleRequests::class, \\App\\Http\\Middleware\\StrapiJsonBody::class);",
+    );
   });
   it("is idempotent", () => {
     const once = patchBootstrapMiddleware(STOCK_BOOTSTRAP);
@@ -459,6 +535,7 @@ describe("scaffoldCommand", () => {
         "/proj/generated/filament/app/Models/User.php": STOCK_USER,
         "/proj/generated/filament/app/Providers/Filament/AdminPanelProvider.php": STOCK_PANEL,
         "/proj/generated/filament/bootstrap/app.php": STOCK_BOOTSTRAP,
+        "/proj/generated/filament/bootstrap/providers.php": STOCK_PROVIDERS,
       },
     });
     expect(await scaffoldCommand("filament", "generated/filament", io)).toBe(0);

@@ -340,11 +340,24 @@ Drizzle's `decimal`/`numeric` on Express. With them:
   400, `UnauthorizedError` 401, `ForbiddenError` 403, `NotFoundError` 404, otherwise
   `HttpError`), and the error envelope applies to every route registered in `routes/api.php` or
   `routes/api-custom.php`; requests to unmatched paths under `/api` fall back to Laravel's
-  default 404 shape. Login and registration share one throttle bucket per client IP; its rate
-  comes from the generated `config/camis.php` and is overridable with
+  default 404 shape. Login and registration are throttled per client IP, each in a bucket of its
+  own (with the Strapi API style, so is each group of credential routes, refresh, password
+  recovery and reset, confirmation and the provider callbacks, `GET /auth/local/callback` included,
+  with sign-in and recovery counted per address and the name given (taken by the controller
+  with the name it looks up, before the lookup) under a per-address
+  `CAMIS_AUTH_ADDRESS_THROTTLE_PER_MINUTE`, a password change counted per account, only failed
+  refreshes counted at `CAMIS_REFRESH_THROTTLE_PER_MINUTE`, and a 429 carries `Retry-After`); its rate comes from the generated `config/camis.php` and is
+  overridable with
   `CAMIS_AUTH_THROTTLE_PER_MINUTE` in `.env` (default 10 requests per minute, floored at 1, so a
-  typo cannot lock the endpoints out). Set `SANCTUM_TOKEN_EXPIRATION` in `.env` to bound token
-  lifetime (tokens do not expire by default).
+  typo cannot lock the endpoints out). CORS allows credentials only for origins listed in
+  `CAMIS_CORS_ORIGIN`, never with `*`; the refresh cookie is refused cross-site and defaults to
+  `Secure`, `SameSite=Strict` and `Path=/api/auth`. The generated `DEPLOY.md` lists every setting
+  and what an upgrade changes. Tokens last as Strapi's settings say (`CAMIS_JWT_LIFESPAN`, 30
+  days by default; `CAMIS_ACCESS_TOKEN_LIFESPAN` in refresh mode); Laravel's
+  `SANCTUM_TOKEN_EXPIRATION` is not read, and `expiration` in `config/sanctum.php` stays null.
+  `CAMIS_AUTH_HIDE_ACCOUNT_EXISTENCE` (on by default) keeps registration, the confirmation resend
+  and sign-in from telling whether an account exists (fully with email confirmation on), auth
+  writes take only JSON bodies (415 otherwise), and refresh-mode token answers add `expiresIn`.
   Each controller is a generated base under
   `app/Http/Controllers/Api/Generated/` plus a seed-mode subclass you may override. The Strapi
   API style adds a NOT NULL unique `username` column to `users`; run its migration against an

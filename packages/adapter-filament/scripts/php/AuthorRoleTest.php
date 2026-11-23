@@ -228,4 +228,38 @@ class AuthorRoleTest extends TestCase
         $this->assertFalse($reader->can('update', $story));
         $this->assertFalse($impostor->can('update', $story));
     }
+
+    private function apiAccount(string $username): string
+    {
+        $user = User::forceCreate(['name' => $username, 'username' => $username, 'email' => "{$username}@example.test", 'password' => 'secret-pass-1']);
+        $user->assignRole('authenticated');
+
+        return $user->createToken('test')->plainTextToken;
+    }
+
+    /**
+     * A required relation the grant assigns from the session is the grant's to fill: a create that
+     * leaves it out is made, and neither a create naming another account nor an update moving the
+     * entry to one changes whose it is.
+     */
+    public function test_a_field_the_grant_assigns_is_the_callers_whatever_the_body_says(): void
+    {
+        $this->apiAccount('bob');
+        $bob = User::query()->where('username', 'bob')->firstOrFail();
+        $token = $this->apiAccount('ada');
+        $ada = User::query()->where('username', 'ada')->firstOrFail();
+
+        $made = $this->withToken($token)->postJson('/api/profiles', ['data' => ['displayName' => 'Ada', 'bio' => null, 'marketingOptIn' => false]])
+            ->assertCreated()->json('data.documentId');
+        $this->app['auth']->forgetGuards();
+        $other = $this->withToken($token)->postJson('/api/profiles', ['data' => ['displayName' => 'Not Bob', 'owner' => $bob->getKey()]])
+            ->assertCreated()->json('data.documentId');
+        $this->app['auth']->forgetGuards();
+        $this->withToken($token)->putJson("/api/profiles/{$made}", ['data' => ['displayName' => 'Ada L.', 'owner' => ['connect' => [$bob->getKey()]]]])
+            ->assertOk()->assertJsonPath('data.displayName', 'Ada L.');
+
+        foreach ([$made, $other] as $documentId) {
+            $this->assertSame($ada->getKey(), (int) \App\Models\Profile::query()->where('document_id', $documentId)->value('owner_id'));
+        }
+    }
 }

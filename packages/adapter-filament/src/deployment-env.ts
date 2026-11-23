@@ -247,6 +247,10 @@ const corsLines = (cors: CorsSettings): string[] => [
   ...line("CAMIS_CORS_EXPOSE", commaList(cors.expose)),
   ...line("CAMIS_CORS_MAX_AGE", cors.maxAge),
   ...line("CAMIS_CORS_CREDENTIALS", cors.credentials),
+  // strapi::cors echoes any origin with credentials; config/cors.php does not.
+  ...(cors.credentials === false
+    ? []
+    : ["# Credentials are allowed only for origins listed in CAMIS_CORS_ORIGIN, never with `*`."]),
 ];
 
 const serverLines = (server: ServerSettings): string[] => {

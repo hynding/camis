@@ -359,7 +359,7 @@ const cors = (middlewares: unknown[], gaps: CapabilityGap[]): CorsSettings | und
     gaps.push(
       gap(
         "corsMiddleware",
-        "config/middlewares has no strapi::cors; the app still answers cross-origin requests as CAMIS_CORS_ORIGIN says (any origin unless set).",
+        "config/middlewares has no strapi::cors; the app still answers cross-origin requests as CAMIS_CORS_ORIGIN says (any origin, without credentials, unless set).",
       ),
     );
     return undefined;
@@ -385,7 +385,32 @@ const cors = (middlewares: unknown[], gaps: CapabilityGap[]): CorsSettings | und
       ["credentials", options.credentials],
     ]),
   );
+  if (anyOrigin(options.origin) && options.credentials !== false)
+    gaps.push(
+      gap(
+        "corsCredentialsAnyOrigin",
+        "strapi::cors allows credentials for any origin (it echoes the request's origin); the app answers any origin without credentials, so list the origins of cookie clients in CAMIS_CORS_ORIGIN.",
+      ),
+    );
   return Object.keys(read).length > 0 ? read : undefined;
+};
+
+/**
+ * strapi::cors's origin is any origin: unset (its default), or read from a variable without a
+ * fallback (unset where the variable is), or `*` in a list, in a string it splits on commas, or in
+ * a variable's fallback.
+ */
+const anyOrigin = (origin: unknown): boolean =>
+  origin === undefined ||
+  origin === null ||
+  (isEnvReference(origin) && origin.default === undefined) ||
+  listsAnyOrigin(origin);
+
+/** A list entry left unset matches no request's origin, so only a `*` in it counts. */
+const listsAnyOrigin = (origin: unknown): boolean => {
+  if (isEnvReference(origin)) return listsAnyOrigin(origin.default ?? "");
+  if (typeof origin === "string") return origin.split(",").some((item) => item.trim() === "*");
+  return Array.isArray(origin) && origin.some(listsAnyOrigin);
 };
 
 // Strapi serves its admin at /admin unless config/admin's url says otherwise; so does camis.

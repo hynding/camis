@@ -37,6 +37,21 @@ const AUTH_CONFIG = "config/auth.php";
 describe("admin access", () => {
   const result = filamentAdapter.generate(bundle([editor, reader]), { projectName: "blog" });
 
+  // Laravel's own provider checks no hash for an unknown email and throws on a hash it cannot read:
+  // the admin guard's goes through StrapiHashes, as Strapi's POST /admin/login does.
+  it("checks the admin guard's passwords through the shared one-check helper", () => {
+    const provider = file(result, "app/Auth/CamisAdminUserProvider.php");
+    expect(provider).toContain("StrapiHashes::matches($password, null, 'admin');");
+    expect(provider).toContain("StrapiHashes::matches($password, $user, 'admin')");
+    expect(file(result, "app/Providers/CamisAuthServiceProvider.php")).toContain(
+      "config(['auth.providers.admin_users.driver' => 'camis-admin']);",
+    );
+    expect(file(result, "app/Support/StrapiHashes.php")).toContain(
+      "public static function matches(",
+    );
+    expect(result.files.filter((f) => f.path === "app/Support/StrapiHashes.php")).toHaveLength(1);
+  });
+
   // Strapi's config/admin url, without its slashes; the panel provider reads it.
   it("reads the admin panel's path from CAMIS_ADMIN_PATH, /admin by default", () => {
     expect(file(result, "config/camis-admin.php")).toContain(
@@ -133,6 +148,14 @@ describe("admin access", () => {
     expect(deploy).toContain("php artisan camis:admin admin@example.com");
     expect(deploy).toContain("`admin_users`");
     expect(deploy).toContain("config/auth.php");
+    // The panel's sign-in checks one hash only once its provider is registered.
+    expect(deploy).toContain(
+      "...(class_exists(\\App\\Providers\\CamisAuthServiceProvider::class) ? [\\App\\Providers\\CamisAuthServiceProvider::class] : []),",
+    );
+    expect(deploy).toContain("one password hash whether or not the email names an account");
+    // Laravel's provider commands rewrite the file and drop the guarded line; a build says so.
+    expect(deploy).toContain("`php artisan make:provider`");
+    expect(deploy).toContain("`camis build` warns");
   });
 
   it("has no admin to let anyone into on the Strapi storage layout", () => {

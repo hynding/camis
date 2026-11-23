@@ -11,12 +11,12 @@ use App\Http\Controllers\Api\UserController;
 use App\Models\User;
 use App\Support\StrapiError;
 use App\Support\StrapiQuery;
+use App\Support\StrapiRateLimits;
 use App\Support\StrapiSessions;
 use App\Support\StrapiUsers;
 use GraphQL\Type\Definition\ResolveInfo;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\RateLimiter;
 use Spatie\Permission\Models\Role;
 
 final class StrapiGraphqlPlugins
@@ -88,23 +88,27 @@ final class StrapiGraphqlPlugins
                 if (($input['provider'] ?? 'local') !== 'local') {
                     throw StrapiError::validation('Only the local provider signs in through GraphQL');
                 }
-                self::throttle($request);
 
                 return self::session(StrapiGraphql::dispatch($auth, 'login', [], $request, ['identifier' => $input['identifier'], 'password' => $input['password']], [], false));
             case 'register':
-                self::throttle($request);
+                self::throttle($request, 'register');
+                $registered = StrapiGraphql::dispatch($auth, 'register', [], $request, $args['input'], [], false);
+                // A registration answered alike for every address (accounts hidden, email to
+                // confirm) has no user for the payload's non-null one to show: one error says so.
+                if (($registered['sent'] ?? false) === true) {
+                    throw new StrapiError(400, 'ConfirmationPendingError', 'Check your email to finish registering');
+                }
 
-                return self::session(StrapiGraphql::dispatch($auth, 'register', [], $request, $args['input'], [], false));
+                return self::session($registered);
             case 'forgotPassword':
-                self::throttle($request);
-
                 return StrapiGraphql::dispatch($auth, 'forgotPassword', [], $request, $args, [], false);
             case 'resetPassword':
-                self::throttle($request);
+                self::throttle($request, 'password-reset');
 
                 return self::session(StrapiGraphql::dispatch($auth, 'resetPassword', [], $request, $args, [], false));
             case 'changePassword':
                 self::signedInOrToken($request);
+                self::throttle($request, 'password-change');
 
                 return self::session(StrapiGraphql::dispatch($auth, 'changePassword', [], $request, $args));
             default:
@@ -205,14 +209,12 @@ final class StrapiGraphqlPlugins
         return ['jwt' => $body['jwt'] ?? null, 'user' => $body['user'] ?? null];
     }
 
-    /** The REST auth routes' throttle, which an in-process call does not pass through. */
-    private static function throttle(Request $request): void
+    /** The REST routes' turn of the same bucket, which an in-process call does not pass through. */
+    private static function throttle(Request $request, string $group): void
     {
-        $key = 'camis-graphql-auth|'.$request->ip();
-        if (RateLimiter::tooManyAttempts($key, (int) config('camis.auth_throttle_per_minute', 10))) {
+        if (StrapiRateLimits::attempt($request, $group) !== null) {
             throw new StrapiError(429, 'RateLimitError', 'Too many requests, please try again later.');
         }
-        RateLimiter::hit($key, 60);
     }
 
     // ------------------------------------------------------------------------------- i18n, upload

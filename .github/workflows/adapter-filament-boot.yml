@@ -53,7 +53,7 @@ jobs:
           php artisan vendor:publish --provider="Spatie\Permission\PermissionServiceProvider" --no-interaction
           cd "$GITHUB_WORKSPACE"
           pnpm --filter @camis/cli exec tsx -e "import { readFileSync, writeFileSync } from 'node:fs';
-            import { isPatchedUserModel, patchAdminPanelProvider, patchUserModel } from './src/commands/scaffold';
+            import { isPatchedUserModel, patchAdminPanelProvider, patchBootstrapProviders, patchUserModel } from './src/commands/scaffold';
             const f = process.env.GITHUB_WORKSPACE + '/app/app/Models/User.php';
             const patched = patchUserModel(readFileSync(f, 'utf8'));
             if (!isPatchedUserModel(patched)) { console.error('User model patch did not apply'); process.exit(1); }
@@ -61,7 +61,11 @@ jobs:
             const p = process.env.GITHUB_WORKSPACE + '/app/app/Providers/Filament/AdminPanelProvider.php';
             const panel = patchAdminPanelProvider(readFileSync(p, 'utf8'));
             if (!panel.includes(\"->authGuard('admin')\")) { console.error('admin panel patch did not apply'); process.exit(1); }
-            writeFileSync(p, panel);"
+            writeFileSync(p, panel);
+            const b = process.env.GITHUB_WORKSPACE + '/app/bootstrap/providers.php';
+            const providers = patchBootstrapProviders(readFileSync(b, 'utf8'));
+            if (!providers.includes('CamisAuthServiceProvider')) { console.error('bootstrap/providers.php patch did not apply'); process.exit(1); }
+            writeFileSync(b, providers);"
       - name: Overlay camis-generated files
         run: pnpm --filter @camis/adapter-filament overlay "$GITHUB_WORKSPACE/app"
       - name: Hook reference impl (uppercase title on publish)
@@ -272,7 +276,7 @@ jobs:
           composer require --dev larastan/larastan:"^3.0" --no-interaction
           cd "$GITHUB_WORKSPACE"
           pnpm --filter @camis/cli exec tsx -e "import { readFileSync, writeFileSync } from 'node:fs';
-            import { isPatchedUserModel, patchAdminPanelProvider, patchUserModel } from './src/commands/scaffold';
+            import { isPatchedUserModel, patchAdminPanelProvider, patchBootstrapProviders, patchUserModel } from './src/commands/scaffold';
             const f = process.env.GITHUB_WORKSPACE + '/app/app/Models/User.php';
             const patched = patchUserModel(readFileSync(f, 'utf8'));
             if (!isPatchedUserModel(patched)) { console.error('User model patch did not apply'); process.exit(1); }
@@ -280,7 +284,11 @@ jobs:
             const p = process.env.GITHUB_WORKSPACE + '/app/app/Providers/Filament/AdminPanelProvider.php';
             const panel = patchAdminPanelProvider(readFileSync(p, 'utf8'));
             if (!panel.includes(\"->authGuard('admin')\")) { console.error('admin panel patch did not apply'); process.exit(1); }
-            writeFileSync(p, panel);"
+            writeFileSync(p, panel);
+            const b = process.env.GITHUB_WORKSPACE + '/app/bootstrap/providers.php';
+            const providers = patchBootstrapProviders(readFileSync(b, 'utf8'));
+            if (!providers.includes('CamisAuthServiceProvider')) { console.error('bootstrap/providers.php patch did not apply'); process.exit(1); }
+            writeFileSync(b, providers);"
       - name: Overlay the Strapi API style on both storage layouts
         run: |
           cp -r app app-storage
@@ -316,7 +324,7 @@ jobs:
           composer require webonyx/graphql-php:"^15.19" --no-interaction
           cd "$GITHUB_WORKSPACE"
           pnpm --filter @camis/cli exec tsx -e "import { readFileSync, writeFileSync } from 'node:fs';
-            import { isPatchedUserModel, patchAdminPanelProvider, patchUserModel } from './src/commands/scaffold';
+            import { isPatchedUserModel, patchAdminPanelProvider, patchBootstrapProviders, patchUserModel } from './src/commands/scaffold';
             const f = process.env.GITHUB_WORKSPACE + '/app/app/Models/User.php';
             const patched = patchUserModel(readFileSync(f, 'utf8'));
             if (!isPatchedUserModel(patched)) { console.error('User model patch did not apply'); process.exit(1); }
@@ -324,7 +332,11 @@ jobs:
             const p = process.env.GITHUB_WORKSPACE + '/app/app/Providers/Filament/AdminPanelProvider.php';
             const panel = patchAdminPanelProvider(readFileSync(p, 'utf8'));
             if (!panel.includes(\"->authGuard('admin')\")) { console.error('admin panel patch did not apply'); process.exit(1); }
-            writeFileSync(p, panel);"
+            writeFileSync(p, panel);
+            const b = process.env.GITHUB_WORKSPACE + '/app/bootstrap/providers.php';
+            const providers = patchBootstrapProviders(readFileSync(b, 'utf8'));
+            if (!providers.includes('CamisAuthServiceProvider')) { console.error('bootstrap/providers.php patch did not apply'); process.exit(1); }
+            writeFileSync(b, providers);"
       - name: Overlay (apiStyle strapi, the author-role fixture)
         run: pnpm --filter @camis/adapter-filament overlay "$GITHUB_WORKSPACE/app" --style strapi --bundle author-role
       - name: Patch bootstrap/app.php as camis scaffold does
@@ -378,7 +390,7 @@ jobs:
           composer require webonyx/graphql-php:"^15.19" --no-interaction
           cd "$GITHUB_WORKSPACE"
           pnpm --filter @camis/cli exec tsx -e "import { readFileSync, writeFileSync } from 'node:fs';
-            import { isPatchedUserModel, patchAdminPanelProvider, patchUserModel } from './src/commands/scaffold';
+            import { isPatchedUserModel, patchAdminPanelProvider, patchBootstrapProviders, patchUserModel } from './src/commands/scaffold';
             const f = process.env.GITHUB_WORKSPACE + '/app/app/Models/User.php';
             const patched = patchUserModel(readFileSync(f, 'utf8'));
             if (!isPatchedUserModel(patched)) { console.error('User model patch did not apply'); process.exit(1); }
@@ -386,7 +398,11 @@ jobs:
             const p = process.env.GITHUB_WORKSPACE + '/app/app/Providers/Filament/AdminPanelProvider.php';
             const panel = patchAdminPanelProvider(readFileSync(p, 'utf8'));
             if (!panel.includes(\"->authGuard('admin')\")) { console.error('admin panel patch did not apply'); process.exit(1); }
-            writeFileSync(p, panel);"
+            writeFileSync(p, panel);
+            const b = process.env.GITHUB_WORKSPACE + '/app/bootstrap/providers.php';
+            const providers = patchBootstrapProviders(readFileSync(b, 'utf8'));
+            if (!providers.includes('CamisAuthServiceProvider')) { console.error('bootstrap/providers.php patch did not apply'); process.exit(1); }
+            writeFileSync(b, providers);"
       - name: Overlay (apiStyle strapi, the unique-components fixture)
         run: pnpm --filter @camis/adapter-filament overlay "$GITHUB_WORKSPACE/app" --style strapi --bundle unique-components
       - name: Patch bootstrap/app.php as camis scaffold does
@@ -431,7 +447,7 @@ jobs:
           composer require webonyx/graphql-php:"^15.19" --no-interaction
           cd "$GITHUB_WORKSPACE"
           pnpm --filter @camis/cli exec tsx -e "import { readFileSync, writeFileSync } from 'node:fs';
-            import { isPatchedUserModel, patchAdminPanelProvider, patchUserModel } from './src/commands/scaffold';
+            import { isPatchedUserModel, patchAdminPanelProvider, patchBootstrapProviders, patchUserModel } from './src/commands/scaffold';
             const f = process.env.GITHUB_WORKSPACE + '/app/app/Models/User.php';
             const patched = patchUserModel(readFileSync(f, 'utf8'));
             if (!isPatchedUserModel(patched)) { console.error('User model patch did not apply'); process.exit(1); }
@@ -439,7 +455,11 @@ jobs:
             const p = process.env.GITHUB_WORKSPACE + '/app/app/Providers/Filament/AdminPanelProvider.php';
             const panel = patchAdminPanelProvider(readFileSync(p, 'utf8'));
             if (!panel.includes(\"->authGuard('admin')\")) { console.error('admin panel patch did not apply'); process.exit(1); }
-            writeFileSync(p, panel);"
+            writeFileSync(p, panel);
+            const b = process.env.GITHUB_WORKSPACE + '/app/bootstrap/providers.php';
+            const providers = patchBootstrapProviders(readFileSync(b, 'utf8'));
+            if (!providers.includes('CamisAuthServiceProvider')) { console.error('bootstrap/providers.php patch did not apply'); process.exit(1); }
+            writeFileSync(b, providers);"
       - name: Overlay (apiStyle strapi, the morph-relations fixture)
         run: pnpm --filter @camis/adapter-filament overlay "$GITHUB_WORKSPACE/app" --style strapi --bundle morph-relations
       - name: Patch bootstrap/app.php as camis scaffold does
@@ -583,7 +603,7 @@ jobs:
           composer require webonyx/graphql-php:"^15.19" --no-interaction
           cd "$GITHUB_WORKSPACE"
           pnpm --filter @camis/cli exec tsx -e "import { readFileSync, writeFileSync } from 'node:fs';
-            import { isPatchedUserModel, patchAdminPanelProvider, patchUserModel } from './src/commands/scaffold';
+            import { isPatchedUserModel, patchAdminPanelProvider, patchBootstrapProviders, patchUserModel } from './src/commands/scaffold';
             const f = process.env.GITHUB_WORKSPACE + '/app/app/Models/User.php';
             const patched = patchUserModel(readFileSync(f, 'utf8'));
             if (!isPatchedUserModel(patched)) { console.error('User model patch did not apply'); process.exit(1); }
@@ -591,7 +611,11 @@ jobs:
             const p = process.env.GITHUB_WORKSPACE + '/app/app/Providers/Filament/AdminPanelProvider.php';
             const panel = patchAdminPanelProvider(readFileSync(p, 'utf8'));
             if (!panel.includes(\"->authGuard('admin')\")) { console.error('admin panel patch did not apply'); process.exit(1); }
-            writeFileSync(p, panel);"
+            writeFileSync(p, panel);
+            const b = process.env.GITHUB_WORKSPACE + '/app/bootstrap/providers.php';
+            const providers = patchBootstrapProviders(readFileSync(b, 'utf8'));
+            if (!providers.includes('CamisAuthServiceProvider')) { console.error('bootstrap/providers.php patch did not apply'); process.exit(1); }
+            writeFileSync(b, providers);"
       - name: Overlay (apiStyle strapi)
         run: pnpm --filter @camis/adapter-filament overlay "$GITHUB_WORKSPACE/app" --style strapi
       - name: Patch bootstrap/app.php as camis scaffold does
@@ -614,6 +638,8 @@ jobs:
           esac
           # The auth vectors make more credential requests in a minute than the default allows.
           echo "CAMIS_AUTH_THROTTLE_PER_MINUTE=600" >> .env
+          # The vectors record Strapi's own answers, which name a taken or confirmed account.
+          echo "CAMIS_AUTH_HIDE_ACCOUNT_EXISTENCE=false" >> .env
           # The OAuth redirect URI is built from it, and the vectors mask the origin they call.
           sed -i 's#^APP_URL=.*#APP_URL=http://127.0.0.1:8765#' .env
           php artisan migrate --force
@@ -1052,6 +1078,11 @@ jobs:
           S=../packages/adapter-filament/scripts/php
           cp $S/DraftAdminTest.php $S/LocaleAdminTest.php $S/MediaAdminTest.php $S/FoldersTest.php $S/UsersAdminTest.php $S/ProvidersTest.php $S/ApiTokensTest.php $S/TransferTokensTest.php $S/DataTransferTest.php $S/StrapiAdminTest.php $S/WebhooksTest.php $S/DynamicZonesTest.php $S/GraphqlTest.php $S/LinkOrderAdminTest.php $S/TokenImportTest.php $S/ContentManagerListTest.php $S/ComponentIdTest.php $S/ComponentRelationsAdminTest.php $S/ContentManagerViewTest.php $S/SettingsPagesTest.php $S/EmailApiTest.php $S/ContentTypeBuilderTest.php $S/AdminAccountsTest.php $S/AdminTokensTest.php $S/TransferTimestampsTest.php $S/TransferPushPullTest.php tests/Feature/
           php artisan test tests/Feature/DraftAdminTest.php tests/Feature/LocaleAdminTest.php tests/Feature/MediaAdminTest.php tests/Feature/FoldersTest.php tests/Feature/UsersAdminTest.php tests/Feature/ProvidersTest.php tests/Feature/ApiTokensTest.php tests/Feature/TransferTokensTest.php tests/Feature/DataTransferTest.php tests/Feature/StrapiAdminTest.php tests/Feature/WebhooksTest.php tests/Feature/DynamicZonesTest.php tests/Feature/GraphqlTest.php tests/Feature/LinkOrderAdminTest.php tests/Feature/TokenImportTest.php tests/Feature/ContentManagerListTest.php tests/Feature/ComponentIdTest.php tests/Feature/ComponentRelationsAdminTest.php tests/Feature/ContentManagerViewTest.php tests/Feature/SettingsPagesTest.php tests/Feature/EmailApiTest.php tests/Feature/ContentTypeBuilderTest.php tests/Feature/AdminAccountsTest.php tests/Feature/AdminTokensTest.php tests/Feature/TransferTimestampsTest.php tests/Feature/TransferPushPullTest.php
+      - name: Credential routes are throttled per group (a password change per account) with their Retry-After, the refresh cookie is refused cross-site and set narrowly, CORS credentials go to listed origins only
+        run: |
+          cd app
+          cp ../packages/adapter-filament/scripts/php/AuthSecurityTest.php tests/Feature/
+          php artisan test tests/Feature/AuthSecurityTest.php
       - name: camis:schema-sync brings the database up to the generated migrations and keeps its rows (${{ matrix.db }})
         run: |
           cd app

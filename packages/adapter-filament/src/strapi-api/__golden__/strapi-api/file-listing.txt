@@ -1,4 +1,5 @@
 overwrite DEPLOY.md
+overwrite app/Auth/CamisAdminUserProvider.php
 overwrite app/Console/Commands/CamisAdmin.php
 overwrite app/Console/Commands/CamisSchemaSync.php
 overwrite app/Console/Commands/StrapiExport.php
@@ -254,8 +255,11 @@ overwrite app/Http/Middleware/AdminLocale.php
 overwrite app/Http/Middleware/StrapiActiveUser.php
 overwrite app/Http/Middleware/StrapiApiToken.php
 overwrite app/Http/Middleware/StrapiCredentials.php
+overwrite app/Http/Middleware/StrapiEncryptCookies.php
 overwrite app/Http/Middleware/StrapiErrors.php
+overwrite app/Http/Middleware/StrapiJsonBody.php
 overwrite app/Http/Middleware/StrapiPublicRoute.php
+overwrite app/Http/Middleware/StrapiThrottle.php
 overwrite app/Http/Serializers/ActivitySerializer.php
 overwrite app/Http/Serializers/ActivitySessionSerializer.php
 overwrite app/Http/Serializers/ArticleSerializer.php
@@ -357,6 +361,7 @@ overwrite app/Policies/TopicPolicy.php
 overwrite app/Policies/TransactionPolicy.php
 overwrite app/Policies/UploadFolderPolicy.php
 overwrite app/Policies/UserPolicy.php
+overwrite app/Providers/CamisAuthServiceProvider.php
 overwrite app/Support/CamisSchemaSync.php
 overwrite app/Support/ColumnConversion.php
 overwrite app/Support/ContentTypeBuilder.php
@@ -379,6 +384,7 @@ overwrite app/Support/StrapiEmail.php
 overwrite app/Support/StrapiError.php
 overwrite app/Support/StrapiExport.php
 overwrite app/Support/StrapiFolders.php
+overwrite app/Support/StrapiHashes.php
 overwrite app/Support/StrapiHomepage.php
 overwrite app/Support/StrapiImport.php
 overwrite app/Support/StrapiItems.php
@@ -397,6 +403,7 @@ overwrite app/Support/StrapiOAuth.php
 overwrite app/Support/StrapiPopulate.php
 overwrite app/Support/StrapiProviders.php
 overwrite app/Support/StrapiQuery.php
+overwrite app/Support/StrapiRateLimits.php
 overwrite app/Support/StrapiRelations.php
 overwrite app/Support/StrapiRelationsOrderer.php
 overwrite app/Support/StrapiRoles.php

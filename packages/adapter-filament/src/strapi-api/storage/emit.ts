@@ -4,7 +4,7 @@ import { filamentNames } from "../../names";
 import { projectFilamentPermissions } from "../../permissions/project";
 import { emitGeneratedController, emitProtectedController } from "../core/controller";
 import type { StrapiApiEmission, StrapiApiInput } from "../emit";
-import { emitStrapiErrorsMiddleware } from "../core/errors";
+import { emitStrapiErrorsMiddleware, emitStrapiJsonBody } from "../core/errors";
 import { emitStrapiError } from "../core/rest-runtime";
 import { emitApiConfig, emitStrapiRoutes } from "../core/routes";
 import { emitCorsConfig } from "../core/cors";
@@ -90,7 +90,7 @@ export const emitStrapiStorage = (input: StrapiApiInput): StrapiApiEmission => {
     // No foreign-key columns on this layout: an owning relation is a link-table row, so the
     // serializer's `$wire['columns']` must name only columns the model can actually fill.
     const shape = wireShape(doc, ct, [], new Set(), new Set(), undefined, false);
-    const entity = entityRules(ct, doc, shape, "strapi");
+    const entity = entityRules(ct, doc, shape, "strapi", perm.assigns.get(ct.name) ?? []);
     gaps.push(...entity.gaps);
     files.push({
       path: `app/Http/Serializers/${names.model}Serializer.php`,
@@ -174,6 +174,7 @@ export const emitStrapiStorage = (input: StrapiApiInput): StrapiApiEmission => {
   });
   // The middleware renders the validator's.
   files.push({ path: "app/Support/StrapiError.php", content: emitStrapiError() });
+  files.push({ path: "app/Http/Middleware/StrapiJsonBody.php", content: emitStrapiJsonBody() });
   files.push({
     path: "app/Console/Commands/CamisStrapiSchemaCheck.php",
     content: emitSchemaCheck(expectedSchema(doc, emitted)),

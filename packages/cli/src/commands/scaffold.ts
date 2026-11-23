@@ -1,5 +1,5 @@
 import { isAbsolute, dirname, join, resolve } from "node:path";
-import type { StorageLayout } from "@camis/adapter-kernel";
+import type { GenerationResult, StorageLayout } from "@camis/adapter-kernel";
 import type { Io } from "../io";
 
 const STOCK_TRAIT_USE = "use HasFactory, Notifiable;";
@@ -65,6 +65,50 @@ const PROFILE_AND_LOCALE =
   "            ->profile(class_exists(\\App\\Filament\\Pages\\AdminProfile::class) ? \\App\\Filament\\Pages\\AdminProfile::class : null, isSimple: false)\n" +
   "            ->middleware(class_exists(\\App\\Http\\Middleware\\AdminLocale::class) ? [\\App\\Http\\Middleware\\AdminLocale::class] : [], isPersistent: true)\n";
 
+// Any indent, line ending (Laravel writes PHP_EOL), leading backslash or trailing comma.
+const PANEL_PROVIDER_ENTRY =
+  /^([ \t]*)(\\?App\\Providers\\Filament\\AdminPanelProvider::class)[ \t]*,?[ \t]*(\r?\n)/m;
+// Guarded: an app on Strapi's own storage layout has no admin accounts, so camis emits no provider.
+export const AUTH_PROVIDER_ENTRY =
+  "...(class_exists(\\App\\Providers\\CamisAuthServiceProvider::class) ? [\\App\\Providers\\CamisAuthServiceProvider::class] : []),";
+
+/**
+ * Register camis's auth service provider in bootstrap/providers.php, after the admin panel's: it
+ * puts the admin guard's accounts behind camis's user provider, whose sign-in checks one hash
+ * whatever the email finds. Idempotent. A source without the panel provider's entry is returned
+ * unchanged; the caller treats that as a failure.
+ */
+export const patchBootstrapProviders = (source: string): string =>
+  source.includes("CamisAuthServiceProvider")
+    ? source
+    : source.replace(
+        PANEL_PROVIDER_ENTRY,
+        (_entry, indent: string, panel: string, lineEnding: string) =>
+          `${indent}${panel},${lineEnding}${indent}${AUTH_PROVIDER_ENTRY}${lineEnding}`,
+      );
+
+const AUTH_SERVICE_PROVIDER_PATH = "app/Providers/CamisAuthServiceProvider.php";
+
+/**
+ * Warn when a build emits camis's auth service provider but the app's bootstrap/providers.php no
+ * longer lists it: Laravel's make:provider and Filament's make:filament-panel rewrite that file from
+ * its evaluated array, dropping the scaffold's guarded entry before a first build, and the panel then
+ * quietly signs in through Laravel's own provider. Quiet before the app is scaffolded.
+ */
+export const warnUnlistedAuthProvider = async (
+  io: Io,
+  result: GenerationResult,
+  appDir: string,
+): Promise<void> => {
+  if (!result.files.some((f) => f.path === AUTH_SERVICE_PROVIDER_PATH)) return;
+  const providersPath = join(appDir, "bootstrap/providers.php");
+  const providers = await io.readFile(providersPath).catch(() => undefined);
+  if (providers === undefined || providers.includes("CamisAuthServiceProvider")) return;
+  io.out(
+    `⚠ filament: ${providersPath} does not list CamisAuthServiceProvider, so the admin panel signs in through Laravel's own user provider (one hash check per sign-in is lost). Add this line to its array, after the admin panel's provider:\n    ${AUTH_PROVIDER_ENTRY}`,
+  );
+};
+
 /**
  * Sign the admin panel in on the generated `admin` guard, whose accounts are AdminUser rows apart
  * from the API's users, and give it the admin's profile page and interface language (Strapi's
@@ -108,6 +152,8 @@ const STRAPI_ERRORS_FIRST = `->withMiddleware(function (Middleware $middleware):
         // camis: the Strapi error envelope must wrap every API route, ahead of auth and throttling.
         if (class_exists(\\App\\Http\\Middleware\\StrapiErrors::class)) {
             $middleware->prependToGroup('api', \\App\\Http\\Middleware\\StrapiErrors::class);
+            // A body refused as not JSON must take no throttle turn: Laravel sorts its throttle first.
+            $middleware->prependToPriorityList(\\Illuminate\\Routing\\Middleware\\ThrottleRequests::class, \\App\\Http\\Middleware\\StrapiJsonBody::class);
             // Strapi stores a string as sent, spaces and empty ones included.
             $strapiRoutes = fn (\\Illuminate\\Http\\Request $request): bool => $request->is('api', 'api/*', 'graphql');
             $middleware->trimStrings(except: [$strapiRoutes]);
@@ -445,6 +491,22 @@ export const scaffoldCommand = async (
     io.out("✓ patched the admin panel to sign in on the admin guard (admin accounts)");
   } catch (e) {
     io.out(`✗ cannot patch ${panelPath}: ${(e as Error).message}`);
+    return 1;
+  }
+
+  const providersPath = join(appDir, "bootstrap/providers.php");
+  try {
+    const patched = patchBootstrapProviders(await io.readFile(providersPath));
+    if (!patched.includes("CamisAuthServiceProvider")) {
+      io.out("✗ could not patch bootstrap/providers.php: no admin panel provider entry");
+      return 1;
+    }
+    await io.writeFile(providersPath, patched);
+    io.out(
+      "✓ registered camis's admin sign-in (one hash check per sign-in) in bootstrap/providers.php",
+    );
+  } catch (e) {
+    io.out(`✗ cannot patch ${providersPath}: ${(e as Error).message}`);
     return 1;
   }
 

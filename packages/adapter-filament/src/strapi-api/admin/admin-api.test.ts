@@ -133,7 +133,15 @@ describe("Strapi's admin accounts and admin API", () => {
     expect(engine).toContain("'admin_users_roles_lnk'");
     expect(engine).toContain("'strapi-super-admin'");
     // bcryptjs writes $2a$, which PHP verifies as $2y$.
-    expect(engine).toContain("'$2y$'");
+    expect(engine).toContain("StrapiHashes::fromBcryptjs($row->password ?? null)");
+    expect(content("app/Support/StrapiHashes.php")).toContain("'$2y$'");
+  });
+
+  // An unknown email returning before any hash check would time an admin account apart.
+  it("checks one password hash on an admin sign-in whether or not the email finds an account", () => {
+    expect(content("app/Http/Controllers/Admin/StrapiAdminController.php")).toContain(
+      "StrapiHashes::matches($password, $admin, 'admin')",
+    );
   });
 
   it("counts admin accounts on the Home page", () => {

@@ -27,6 +27,12 @@ final class StrapiUsers
         'publishedAt' => ['column' => 'created_at', 'type' => 'dateTime'],
     ];
 
+    /** @var list<\Closure> Work waiting for the answer to go (later()). */
+    private static array $later = [];
+
+    /** @var \WeakMap<object, true>|null The applications whose terminate drains it. */
+    private static ?\WeakMap $drains = null;
+
     public static function wire(User $user): array
     {
         if (($user->document_id ?? '') === '') {
@@ -75,9 +81,50 @@ final class StrapiUsers
         return StrapiSettings::get('users-permissions.email', (array) config('camis.users_permissions.email', []));
     }
 
+    /**
+     * Whether the auth routes keep from a caller whether an account exists
+     * (CAMIS_AUTH_HIDE_ACCOUNT_EXISTENCE): a deliberate difference from Strapi, whose answers say.
+     */
+    public static function hidesAccounts(): bool
+    {
+        return (bool) config('camis.users_permissions.hide_account_existence', true);
+    }
+
+    /**
+     * Work for after the answer has gone (an account's mail), so how long the answer takes does not
+     * show whether there was any. It runs as the request terminates, with no queue worker: PHP-FPM
+     * and LiteSpeed have sent the answer by then. A failure is reported, never answered.
+     */
+    public static function later(\Closure $work): void
+    {
+        self::$later[] = $work;
+        // Once per application: its terminating callbacks run at every terminate a long-lived
+        // process makes, so each drains the work waiting then, and none runs twice.
+        self::$drains ??= new \WeakMap();
+        if (! isset(self::$drains[app()])) {
+            self::$drains[app()] = true;
+            app()->terminating(function (): void {
+                while (($work = array_shift(self::$later)) !== null) {
+                    try {
+                        $work();
+                    } catch (\Throwable $error) {
+                        report($error);
+                    }
+                }
+            });
+        }
+    }
+
+
+    /** Whether $password is the account's, by one hash check whatever the name found (StrapiHashes::matches). */
+    public static function passwordMatches(?User $user, string $password): bool
+    {
+        return StrapiHashes::matches($password, $user, 'user');
+    }
+
     public static function sendResetPassword(User $user, string $token): void
     {
-        self::send($user, self::emails()['reset_password'] ?? [], [
+        self::send($user->email, self::emails()['reset_password'] ?? [], [
             'URL' => self::advanced()['email_reset_password'] ?? null,
             'SERVER_URL' => url('/'),
             'USER' => self::wire($user),
@@ -89,7 +136,7 @@ final class StrapiUsers
     {
         $token = bin2hex(random_bytes(20));
         $user->forceFill(['confirmation_token' => $token])->save();
-        self::send($user, self::emails()['email_confirmation'] ?? [], [
+        self::send($user->email, self::emails()['email_confirmation'] ?? [], [
             'URL' => url('/api/auth/email-confirmation'),
             'SERVER_URL' => url('/'),
             'USER' => self::wire($user),
@@ -172,6 +219,13 @@ final class StrapiUsers
         $present = $value !== null && $value !== '';
         foreach ($checks as $check) {
             $failed = match (true) {
+                // Strapi validates strictly: a number, boolean or null is no string either.
+                $check === 'string' => array_key_exists($field, $body) && ! is_string($value),
+                // yup's strapiID(): a string or a non-negative integer, never a list of them.
+                $check === 'id' => array_key_exists($field, $body) && ! is_string($value) && ! (is_int($value) && $value >= 0),
+                // users-permissions' update test: a missing, null or empty password passes here.
+                $check === 'updatePassword' => $present && ! is_string($value),
+                str_starts_with($check, 'max:') => is_string($value) && mb_strlen($value) > (int) substr($check, 4),
                 $check === 'required' => ! $present,
                 $check === 'email' => $present && filter_var($value, FILTER_VALIDATE_EMAIL) === false,
                 $check === 'nonEmpty' => array_key_exists($field, $body) && (! is_scalar($value) || (string) $value === ''),
@@ -181,6 +235,10 @@ final class StrapiUsers
             };
             if ($failed) {
                 return match (true) {
+                    $check === 'string' => "{$field} must be a `string` type, but the final value was: `".self::yupPrinted($value).'`.',
+                    $check === 'id' => "{$field} must be a `strapiID` type, but the final value was: `".self::yupPrinted($value).'`.',
+                    $check === 'updatePassword' => 'Password must be at least 1 character',
+                    str_starts_with($check, 'max:') => "{$field} must be at most ".substr($check, 4).' characters',
                     $check === 'required' => "{$field} is a required field",
                     $check === 'email' => "{$field} must be a valid email",
                     $check === 'nonEmpty' => "{$field} must be at least 1 characters",
@@ -191,6 +249,36 @@ final class StrapiUsers
         }
 
         return null;
+    }
+
+    /**
+     * yup's printValue with quoted strings: a scalar as JavaScript prints it, an array or object as
+     * JSON indented by two spaces, each scalar in it replaced by its own printed form first.
+     */
+    private static function yupPrinted(mixed $value): string
+    {
+        if (! is_array($value)) {
+            return self::yupPrintedScalar($value);
+        }
+        $json = (string) json_encode(self::yupPrintedLeaves($value), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+        return (string) preg_replace_callback('/^((?:    )+)/m', fn (array $m): string => str_repeat('  ', intdiv(strlen($m[1]), 4)), $json);
+    }
+
+    private static function yupPrintedLeaves(array $value): array
+    {
+        return array_map(fn (mixed $item): mixed => is_array($item) ? self::yupPrintedLeaves($item) : self::yupPrintedScalar($item), $value);
+    }
+
+    private static function yupPrintedScalar(mixed $value): string
+    {
+        return match (true) {
+            $value === null => 'null',
+            is_bool($value) => $value ? 'true' : 'false',
+            is_string($value) => '"'.$value.'"',
+            is_float($value) && is_finite($value) && floor($value) === $value && abs($value) < 1e21 => sprintf('%.0f', $value),
+            default => (string) json_encode($value),
+        };
     }
 
     /** JavaScript's Number() of a query value: '' is 0, and what does not parse is NaN. */
@@ -217,13 +305,25 @@ final class StrapiUsers
         return is_nan($number) ? 'NaN' : (self::isInteger($number) ? (string) (int) $number : (string) $number);
     }
 
-    private static function send(User $user, array $template, array $variables): void
+    /**
+     * A registration that named an address or username already taken, with confirmation on: the
+     * address is told by mail rather than in the answer. The mail names neither the account nor
+     * what was sent, so a stranger's registration puts nothing of theirs into it.
+     */
+    public static function sendRegistrationNotice(string $email): void
+    {
+        $mail = (array) config('camis.users_permissions.account_emails.registration_attempted', []);
+        $sender = self::emails()['email_confirmation'] ?? [];
+        self::send($email, ['from' => $sender['from'] ?? [], 'response_email' => $sender['response_email'] ?? ''] + $mail, ['USER' => []]);
+    }
+
+    private static function send(string $to, array $template, array $variables): void
     {
         $html = self::template((string) ($template['message'] ?? ''), $variables);
         $subject = self::template((string) ($template['object'] ?? ''), ['USER' => $variables['USER']]);
         $from = (array) ($template['from'] ?? []);
-        Mail::html($html, function (Message $message) use ($user, $subject, $from, $template): void {
-            $message->to($user->email)->subject($subject);
+        Mail::html($html, function (Message $message) use ($to, $subject, $from, $template): void {
+            $message->to($to)->subject($subject);
             if (($from['email'] ?? '') !== '') {
                 $message->from($from['email'], ($from['name'] ?? '') !== '' ? $from['name'] : null);
             }

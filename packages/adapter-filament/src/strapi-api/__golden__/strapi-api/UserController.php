@@ -72,7 +72,7 @@ final class UserController extends Controller
     {
         $this->allow($request, 'user.create');
         $body = $request->json()->all();
-        StrapiUsers::validate($body, ['email' => ['required', 'email'], 'username' => ['required'], 'password' => ['required'], 'role' => ['required']]);
+        StrapiUsers::validate($body, ['email' => ['string', 'required', 'email', 'max:255'], 'username' => ['string', 'required', 'max:255'], 'password' => ['string', 'required'], 'role' => ['required', 'id']]);
         if ((bool) (StrapiUsers::advanced()['unique_email'] ?? false) && User::query()->where('email', mb_strtolower((string) $body['email']))->exists()) {
             throw StrapiUsers::application('Email already taken');
         }
@@ -96,8 +96,8 @@ final class UserController extends Controller
         $this->allow($request, 'user.update');
         $user = User::query()->find($id) ?? throw new StrapiError(404, 'NotFoundError', 'User not found');
         $body = $request->json()->all();
-        StrapiUsers::validate($body, ['email' => ['email', 'nonEmpty'], 'username' => ['nonEmpty']]);
-        if (($user->provider ?? 'local') === 'local' && array_key_exists('password', $body) && in_array($body['password'], [null, '', false, 0], true)) {
+        StrapiUsers::validate($body, ['email' => ['string', 'email', 'nonEmpty', 'max:255'], 'username' => ['string', 'nonEmpty', 'max:255'], 'password' => ['updatePassword'], 'role' => ['id']]);
+        if (($user->provider ?? 'local') === 'local' && array_key_exists('password', $body) && in_array($body['password'], [null, ''], true)) {
             throw StrapiError::validation('password.notNull');
         }
         if (array_key_exists('username', $body) && User::query()->where('username', $body['username'])->whereKeyNot($user->getKey())->exists()) {

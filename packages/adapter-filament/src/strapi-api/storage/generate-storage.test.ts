@@ -34,6 +34,18 @@ const content = (p: string): string => {
 };
 
 describe("filamentAdapter storageLayout strapi — file set", () => {
+  // A route naming a middleware the layout does not emit fails on every request to it.
+  it("emits every App middleware its routes name", () => {
+    const named = [...content("routes/api.php").matchAll(/^use App\\Http\\Middleware\\(\w+);$/gm)];
+    expect(named.length).toBeGreaterThan(0);
+    for (const [, middleware] of named)
+      expect(paths).toContain(`app/Http/Middleware/${middleware}.php`);
+  });
+  // Its sign-in reads the shared table with password_verify, which takes Strapi's $2a$ hashes and
+  // never throws, so the hasher-backed StrapiHashes would be unused here.
+  it("emits no StrapiHashes, which its password_verify sign-in has no use for", () => {
+    expect(paths).not.toContain("app/Support/StrapiHashes.php");
+  });
   it("file listing golden", async () => {
     await expect(
       result.files

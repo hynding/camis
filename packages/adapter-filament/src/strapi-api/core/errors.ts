@@ -31,3 +31,11 @@ import { runtimePhp } from "../../runtime-php";
  */
 export const emitStrapiErrorsMiddleware = (): string =>
   runtimePhp(new URL("./php/app/Http/Middleware/StrapiErrors.php", import.meta.url));
+
+/** Refuses a body that does not say it is JSON (415), on routes a foreign page must not post to. */
+export const emitStrapiJsonBody = (): string =>
+  runtimePhp(new URL("./php/app/Http/Middleware/StrapiJsonBody.php", import.meta.url));
+
+/** Reads Strapi's bcryptjs hashes, and fails a hash the hasher cannot verify as a wrong password. */
+export const emitStrapiHashes = (): string =>
+  runtimePhp(new URL("./php/app/Support/StrapiHashes.php", import.meta.url));

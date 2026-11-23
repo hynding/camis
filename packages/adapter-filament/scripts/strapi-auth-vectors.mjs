@@ -142,6 +142,9 @@ const cookiesOf = (response) =>
 // Server-assigned keys differ between runs and runtimes; tokens, session times and generated
 // device ids are compared by presence.
 const VOLATILE = new Set(["id", "documentId", "createdAt", "updatedAt", "publishedAt"]);
+// What camis adds to Strapi's answers on purpose (an access token's lifetime in refresh mode), so
+// the recorded answers, which lack it, still compare.
+const OWN = new Set(["expiresIn"]);
 const PRESENCE = {
   jwt: "<jwt>",
   refreshToken: "<token>",
@@ -162,7 +165,7 @@ const normalize = (value) => {
   if (value !== null && typeof value === "object")
     return Object.fromEntries(
       Object.entries(value)
-        .filter(([k]) => !VOLATILE.has(k))
+        .filter(([k]) => !VOLATILE.has(k) && !OWN.has(k))
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([k, v]) => [k, masked(k, v)]),
     );

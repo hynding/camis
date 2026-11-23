@@ -33,16 +33,22 @@ use App\\Http\\Controllers\\Controller;
 use App\\Models\\User;
 use App\\Support\\StrapiError;
 use App\\Support\\StrapiProviders;
+use App\\Support\\StrapiRateLimits;
 use App\\Support\\StrapiSessions;
 use App\\Support\\StrapiUsers;
+use Illuminate\\Database\\UniqueConstraintViolationException;
 use Illuminate\\Http\\JsonResponse;
 use Illuminate\\Http\\RedirectResponse;
 use Illuminate\\Http\\Request;
+use Illuminate\\Support\\Facades\\DB;
 use Illuminate\\Support\\Facades\\Hash;${defaultRole !== undefined ? "\nuse Spatie\\Permission\\Models\\Role;" : ""}
 
 class AuthController extends Controller
 {
     private const ALWAYS_ALLOWED_KEYS = ['username', 'password', 'email'];
+
+    /** The users table's username and email columns: no account has a longer name. */
+    private const MAX_IDENTIFIER_LENGTH = 255;
 
     public function register(Request $request): JsonResponse
     {
@@ -57,7 +63,7 @@ class AuthController extends Controller
         if ($invalid !== []) {
             throw StrapiError::validation('Invalid parameters: '.implode(', ', $invalid));
         }
-        StrapiUsers::validate($body, ['email' => ['required', 'email'], 'username' => ['required'], 'password' => ['required', 'maxPassword']]);
+        StrapiUsers::validate($body, ['email' => ['string', 'required', 'email', 'max:255'], 'username' => ['string', 'required', 'max:255'], 'password' => ['string', 'required', 'maxPassword']]);
 ${
   defaultRole !== undefined
     ? `        $role = Role::query()->where('name', ${phpSingleQuoted(defaultRole)})->first()
@@ -66,20 +72,57 @@ ${
     : ""
 }        $email = mb_strtolower((string) $body['email']);
         $username = (string) $body['username'];
+        // A username is looked up as an address too, as Strapi looks it up, so one naming another
+        // address would tell its registrant whether that address has an account: refused first.
+        // Read folded, since a collation may read a look-alike "@" (fullwidth, small) as "@".
+        $folded = StrapiRateLimits::folded($username);
+        if (StrapiUsers::hidesAccounts() && str_contains($folded, '@') && $folded !== StrapiRateLimits::folded($email)) {
+            throw StrapiError::validation('username must not be an email address other than the one registering');
+        }
         $taken = User::query()->where(fn ($q) => $q->where('email', $email)->orWhere('username', $email)
-            ->orWhere('username', $username)->orWhere('email', $username));
-        if ($taken->exists()) {
+            ->orWhere('username', $username)->orWhere('email', $username))->exists();
+        $confirm = (bool) ($settings['email_confirmation'] ?? false);
+        // With confirmation on, a new account's answer carries nothing of it, so a taken address or
+        // username can be answered alike, at the same hashing cost, and told by mail instead.
+        // Without it a new account is answered with its session, which a taken one cannot fake.
+        $hidden = $confirm && StrapiUsers::hidesAccounts();
+        if ($taken && ! $hidden) {
             throw StrapiUsers::application('Email or Username are already taken');
         }
-        $confirm = (bool) ($settings['email_confirmation'] ?? false);
-        $user = StrapiUsers::add([
-            ...array_intersect_key($body, array_flip($allowed)),
-            'provider' => 'local',
-            'username' => $username,
-            'email' => $email,
-            'password' => Hash::make((string) $body['password']),
-            'confirmed' => ! $confirm,
-        ]);${defaultRole !== undefined ? "\n        $user->assignRole($role);" : ""}
+        $password = Hash::make((string) $body['password']);
+        $user = null;
+        if (! $taken) {
+            try {
+                // Its own savepoint, so a refused insert leaves an enclosing transaction usable.
+                $user = DB::transaction(fn (): User => StrapiUsers::add([
+                    ...array_intersect_key($body, array_flip($allowed)),
+                    'provider' => 'local',
+                    'username' => $username,
+                    'email' => $email,
+                    'password' => $password,
+                    'confirmed' => ! $confirm,
+                ]));
+            } catch (UniqueConstraintViolationException) {
+                // A concurrent registration took the name after the check: it is a taken one.
+                if (! $hidden) {
+                    throw StrapiUsers::application('Email or Username are already taken');
+                }
+            }
+        }
+        if ($user === null) {
+            StrapiUsers::later(function () use ($email): void {
+                if (StrapiRateLimits::mailable('registration-notice', $email)) {
+                    StrapiUsers::sendRegistrationNotice($email);
+                }
+            });
+
+            return response()->json(['email' => $email, 'sent' => true]);
+        }${defaultRole !== undefined ? "\n        $user->assignRole($role);" : ""}
+        if ($hidden) {
+            StrapiUsers::later(fn () => StrapiUsers::sendConfirmation($user));
+
+            return response()->json(['email' => $email, 'sent' => true]);
+        }
         if ($confirm) {
             try {
                 StrapiUsers::sendConfirmation($user);
@@ -101,12 +144,20 @@ ${
             throw StrapiUsers::application('This provider is disabled');
         }
         $body = $request->json()->all();
-        StrapiUsers::validate($body, ['identifier' => ['required'], 'password' => ['required']]);
+        StrapiUsers::validate($body, ['identifier' => ['string', 'required'], 'password' => ['string', 'required']]);
         $identifier = (string) $body['identifier'];
+        if (mb_strlen($identifier) > self::MAX_IDENTIFIER_LENGTH) {
+            throw StrapiError::validation('Invalid identifier or password');
+        }
+        // The turn is the name about to be looked up, so no other field of the request can stand
+        // in for it, and taken first, so nothing the lookup finds can bear on it.
+        StrapiRateLimits::refuseNamed($request, 'sign-in', $identifier);
         $user = User::query()->where('provider', 'local')
             ->where(fn ($q) => $q->where('email', mb_strtolower($identifier))->orWhere('username', $identifier))
             ->first();
-        if ($user === null || ($user->password ?? '') === '' || ! Hash::check((string) $body['password'], $user->password)) {
+        // One hash check whether or not the name found an account with a password, as Strapi's
+        // order of errors already hides which of them failed.
+        if (! StrapiUsers::passwordMatches($user, (string) $body['password'])) {
             throw StrapiError::validation('Invalid identifier or password');
         }
         if ((bool) (StrapiUsers::advanced()['email_confirmation'] ?? false) && ! (bool) $user->confirmed) {
@@ -123,8 +174,8 @@ ${
     {
         $user = $request->user() ?? throw StrapiUsers::application('You must be authenticated to reset your password');
         $body = $request->json()->all();
-        StrapiUsers::validate($body, ['password' => ['required', 'maxPassword'], 'passwordConfirmation' => ['required', 'same:password'], 'currentPassword' => ['required']]);
-        if (! Hash::check((string) $body['currentPassword'], $user->password)) {
+        StrapiUsers::validate($body, ['password' => ['string', 'required', 'maxPassword'], 'passwordConfirmation' => ['string', 'required', 'same:password'], 'currentPassword' => ['string', 'required']]);
+        if (! StrapiUsers::passwordMatches($user, (string) $body['currentPassword'])) {
             throw StrapiError::validation('The provided current password is invalid');
         }
         if ($body['currentPassword'] === $body['password']) {
@@ -138,15 +189,23 @@ ${
     public function forgotPassword(Request $request): JsonResponse
     {
         $body = $request->json()->all();
-        StrapiUsers::validate($body, ['email' => ['required', 'email']]);
-        $user = User::query()->where('email', mb_strtolower((string) $body['email']))->first();
+        StrapiUsers::validate($body, ['email' => ['string', 'required', 'email']]);
+        $email = mb_strtolower((string) $body['email']);
+        StrapiRateLimits::refuseNamed($request, 'recovery', $email);
+        $user = User::query()->where('email', $email)->first();
         if ($user === null || (bool) $user->blocked) {
             return response()->json(['ok' => true]);
         }
-        $token = bin2hex(random_bytes(64));
-        // Saved before sending, so an administrator can still hand out the link if the mail fails.
-        $user->forceFill(['reset_password_token' => $token])->save();
-        StrapiUsers::sendResetPassword($user, $token);
+        $reset = function () use ($user): void {
+            if (! StrapiRateLimits::mailable('reset-password', (string) $user->email)) {
+                return;
+            }
+            $token = bin2hex(random_bytes(64));
+            // Saved before sending, so an administrator can still hand out the link if the mail fails.
+            $user->forceFill(['reset_password_token' => $token])->save();
+            StrapiUsers::sendResetPassword($user, $token);
+        };
+        StrapiUsers::hidesAccounts() ? StrapiUsers::later($reset) : $reset();
 
         return response()->json(['ok' => true]);
     }
@@ -154,7 +213,7 @@ ${
     public function resetPassword(Request $request): JsonResponse
     {
         $body = $request->json()->all();
-        StrapiUsers::validate($body, ['password' => ['required', 'maxPassword'], 'passwordConfirmation' => ['required', 'same:password'], 'code' => ['required']]);
+        StrapiUsers::validate($body, ['password' => ['string', 'required', 'maxPassword'], 'passwordConfirmation' => ['string', 'required', 'same:password'], 'code' => ['string', 'required']]);
         $user = User::query()->where('reset_password_token', (string) $body['code'])->first()
             ?? throw StrapiError::validation('Incorrect code provided');
         $user->forceFill(['reset_password_token' => null, 'password' => Hash::make((string) $body['password'])])->save();
@@ -165,7 +224,7 @@ ${
     public function emailConfirmation(Request $request): RedirectResponse
     {
         $query = $request->query();
-        StrapiUsers::validate($query, ['confirmation' => ['required']]);
+        StrapiUsers::validate($query, ['confirmation' => ['string', 'required']]);
         $user = User::query()->where('confirmation_token', (string) $query['confirmation'])->first()
             ?? throw StrapiError::validation('Invalid token');
         $user->forceFill(['confirmed' => true, 'confirmation_token' => null])->save();
@@ -177,8 +236,22 @@ ${
     public function sendEmailConfirmation(Request $request): JsonResponse
     {
         $body = $request->json()->all();
-        StrapiUsers::validate($body, ['email' => ['required', 'email']]);
-        $user = User::query()->where('email', mb_strtolower((string) $body['email']))->first();
+        StrapiUsers::validate($body, ['email' => ['string', 'required', 'email']]);
+        $email = mb_strtolower((string) $body['email']);
+        StrapiRateLimits::refuseNamed($request, 'confirmation', $email);
+        $user = User::query()->where('email', $email)->first();
+        if (StrapiUsers::hidesAccounts()) {
+            // Every address is answered alike; only an account still to be confirmed gets the mail.
+            if ($user !== null && ! (bool) $user->confirmed && ! (bool) $user->blocked) {
+                StrapiUsers::later(function () use ($user): void {
+                    if (StrapiRateLimits::mailable('confirmation', (string) $user->email)) {
+                        StrapiUsers::sendConfirmation($user);
+                    }
+                });
+            }
+
+            return response()->json(['email' => $email, 'sent' => true]);
+        }
         if ($user === null) {
             return response()->json(['email' => $body['email'], 'sent' => true]);
         }
@@ -188,7 +261,9 @@ ${
         if ((bool) $user->blocked) {
             throw StrapiUsers::application('User blocked');
         }
-        StrapiUsers::sendConfirmation($user);
+        if (StrapiRateLimits::mailable('confirmation', (string) $user->email)) {
+            StrapiUsers::sendConfirmation($user);
+        }
 
         return response()->json(['email' => $user->email, 'sent' => true]);
     }

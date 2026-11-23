@@ -52,7 +52,7 @@ import {
   LOCALES_MIGRATION_PATH,
 } from "./i18n/i18n-runtime";
 import { emitResourceFiles } from "../resource";
-import { emitStrapiErrorsMiddleware } from "./core/errors";
+import { emitStrapiErrorsMiddleware, emitStrapiJsonBody } from "./core/errors";
 import { mediaFields } from "./upload/media";
 import {
   emitFileModel,
@@ -219,6 +219,9 @@ import {
 import {
   emitSettingsMigration,
   emitStrapiActiveUser,
+  emitStrapiEncryptCookies,
+  emitStrapiRateLimits,
+  emitStrapiThrottle,
   emitStrapiCredentials,
   emitStrapiSettings,
   emitStrapiUsers,
@@ -322,7 +325,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
       morphInverses: (input.morphs?.inverses.get(ct.name) ?? []).map((i) => i.wire),
     };
     shapes.set(ct.name, shape);
-    const entity = entityRules(ct, doc, shape, "laravel");
+    const entity = entityRules(ct, doc, shape, "laravel", perm.assigns.get(ct.name) ?? []);
     uniqueDigits ||= entity.uniqueDigits;
     gaps.push(...entity.gaps);
     files.push({
@@ -470,6 +473,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
     path: "app/Http/Middleware/StrapiErrors.php",
     content: emitStrapiErrorsMiddleware(),
   });
+  files.push({ path: "app/Http/Middleware/StrapiJsonBody.php", content: emitStrapiJsonBody() });
   files.push({ path: "app/Support/StrapiError.php", content: emitStrapiError() });
   // Filters, imports and writes compare and keep a decimal stating its digits exactly.
   const statesDigits = [...shapes.values()].some(statesDecimalDigits);
@@ -653,6 +657,9 @@ const usersPermissionsFiles = (
     content: emitUserController(secured, guests),
   },
   { path: "app/Http/Middleware/StrapiActiveUser.php", content: emitStrapiActiveUser() },
+  { path: "app/Http/Middleware/StrapiThrottle.php", content: emitStrapiThrottle() },
+  { path: "app/Http/Middleware/StrapiEncryptCookies.php", content: emitStrapiEncryptCookies() },
+  { path: "app/Support/StrapiRateLimits.php", content: emitStrapiRateLimits() },
   { path: "app/Http/Middleware/StrapiCredentials.php", content: emitStrapiCredentials(secured) },
   { path: USERS_PERMISSIONS_MIGRATION_PATH, content: emitUsersPermissionsMigration() },
   { path: SETTINGS_MIGRATION_PATH, content: emitSettingsMigration() },

@@ -3296,6 +3296,168 @@ reaching through it is served (`api-enforcement.test.ts`); roles without any con
 './permissions/conditions'"); the boot job's custom token gets 403, with the message, on
 `/api/notes`, `/api/front` and `/api/upload/files`.
 
+## Phase 96 — credential routes and the refresh cookie hardened (`adapter-filament`, `adapter-strapi`)
+
+**Goal:** the strapi-php target answers Strapi's sign-in routes without the weaknesses Strapi 5.48
+ships with, keeping every Strapi client that sends its tokens in the body or the `Authorization`
+header working unchanged.
+
+- **Throttling.** `/auth/refresh`, `/auth/change-password` (Strapi rate-limits it too) and
+  `GET /auth/{provider}/callback` join the credential throttle. For provider `local` that route
+  is Strapi's password login (`auth.callback`), which Strapi leaves without its rate limit; camis
+  keeps the route but never checks a password unthrottled. Each group of credential routes
+  (sign-in, register, recovery, password-reset, confirmation, provider, refresh, password-change)
+  takes turns of a bucket of its own in `StrapiRateLimits`, through the `StrapiThrottle` route
+  middleware, so a flood of one never locks out another; refresh has its own rate
+  (`CAMIS_REFRESH_THROTTLE_PER_MINUTE`, 60). Sign-in, recovery mail and confirmation mail count per
+  client address and the name given (a 32-character SHA-256 prefix of the trimmed, lower-cased
+  identifier or email, never raw body text in a key), so neither a guesser at one account nor a
+  foreign client sharing an office's address locks another account out, under a per-address
+  ceiling across every name given (`CAMIS_AUTH_ADDRESS_THROTTLE_PER_MINUTE`, 50, never below the
+  credential rate). The controller takes a named turn (`StrapiRateLimits::refuseNamed`) with the
+  very value it looked the account up by, and the limiter reads no request field, so a query
+  string or another content type cannot split the key. A name counts in one bucket, its folded
+  form's (NFKD, marks stripped, case-folded), taken before the lookup: nothing the lookup finds
+  bears on the turn, since a bucket per account would tell a caller that an account exists, or
+  that a username and an email are one account. An account's other names, and names a collation
+  matches that folding keeps apart, are bounded by the per-address ceiling. Every auth and user
+  field cast to a string is checked to be one first (yup's `string()`), so an array answers
+  ValidationError, and an identifier longer than the 255-character name columns is refused as a
+  wrong one before folding or lookup. Strapi keys `/auth/local` by address alone
+  (GHSA-7mqx-wwh4-f9fw, so a varied `email` cannot split its key); the ceiling is what bounds a guesser varying the identifier here.
+  Refresh is counted in `SessionController` and only when it fails, and once full refuses only
+  failures: a foreign page firing cookie refreshes from a visitor's browser never stops a valid
+  refresh, though the visitor's own failing refresh may then answer 429 rather than
+  401. A refresh token is a random 128-bit id and 256-bit secret, so it is its length,
+  not the throttle, that bounds guessing; the throttle bounds the work failures cost. The decision is the count `RateLimiter::hit()` returns, so parallel requests
+  cannot all pass one check. A password change counts per account: `StrapiThrottle` is not
+  Laravel's `ThrottleRequests`, which the priority sort runs before every unprioritised route
+  middleware, so it runs where the route lists it, after the session's credentials there. Only a
+  password change counts per account: GraphQL's sign-in, registration and
+  recovery mutations take a caller's session as Strapi's do (`auth: false`), so counting them per
+  account would give every account whose token a caller sends a fresh bucket for its address. The
+  GraphQL mutations take turns of the same buckets, so REST and GraphQL count one password-change
+  total. A throttled REST request answers Strapi's `RateLimitError`, as GraphQL does. Rates are read per request, not baked into cached routes. A throttled
+  answer keeps its `Retry-After`: `StrapiErrors` now carries an HTTP exception's headers onto the
+  envelope. Behind an untrusted proxy every client shares the proxy's address; DEPLOY.md says how
+  to trust it, which the generated app leaves to the deployment.
+- **CORS.** `config/cors.php` allows credentials only for origins listed in `CAMIS_CORS_ORIGIN`,
+  never with `*` (Strapi echoes any origin with credentials, so any site could refresh a visitor's
+  cookie session and read the access token). `X-Requested-With` and `x-strapi-refresh-cookie` are
+  allowed and `Retry-After` exposed by default. This reverses the Phase 50-era default for a
+  cookie client on another origin, which now needs its origin listed.
+- **The refresh cookie.** On `/auth/refresh` the cookie is taken only from the app's own origin, a
+  CORS origin allowed credentials, or a request without an `Origin` carrying `X-Requested-With` or
+  `x-strapi-refresh-cookie`; otherwise 403 `ForbiddenError`. Logout needs the access token, so the
+  cookie is never its only credential; it ends the access token's own session (not the cookie's,
+  which may be another tab's newer sign-in) and clears the cookie only when the cookie named a
+  session it ended, with the attributes the cookie was set with. An access token that names no
+  session (one issued before refresh mode), or whose session row is already swept, revokes itself
+  alone. The provider routes encrypt
+  their cookies through `StrapiEncryptCookies`, which leaves the refresh cookie a provider sign-in
+  sets as `/auth/refresh` reads it. The cookie defaults to `Secure` (`false` honoured only with
+  `APP_ENV=local`), `SameSite=Strict`, `Path=/api/auth`, and a lifetime equal to what its
+  session's absolute lifespan has left (the expiry the session was issued with, never a second
+  read; without one, the browser session), where Strapi sets `lax`, Secure in production only, `/`
+  and a browser-session cookie. Body mode stays the default (`CAMIS_SESSIONS_HTTP_ONLY=false`), as
+  in Strapi: turning the cookie on by default would drop `refreshToken` from every login body.
+- **Account existence.** `CAMIS_AUTH_HIDE_ACCOUNT_EXISTENCE` (on by default, a deliberate
+  departure from Strapi, which names a taken or confirmed account) hides whether an account
+  exists. With email confirmation on, registration answers a new and a taken address or username
+  alike (200 `{email, sent: true}`, one password hash on each path) and tells the address by mail
+  (`account_emails`: confirmation for a new account, a notice for a registered address or taken
+  username); the confirmation resend answers every address `{email, sent: true}` and mails only a
+  pending account. Sign-in always checks one password hash (`StrapiUsers::passwordMatches`, against
+  a cached stand-in hash when no account or password matches), whatever the setting, since that
+  changes no answer. Account mail goes after the answer through `StrapiUsers::later`, drained once
+  per application in `terminating` (no queue needed; fastcgi_finish_request finishes the response
+  first under PHP-FPM or LiteSpeed, not under mod_php or `artisan serve`), and a failed mail is
+  logged, not answered. Without confirmation registration cannot be uniform, since a new account
+  gets its token at once; DEPLOY.md recommends confirmation on. What stays distinguishable: the
+  insert on a new registration, the blocked and unconfirmed errors after a correct password (as in
+  Strapi), a stored hash of another cost, and mail time without fastcgi_finish_request. `false`
+  restores Strapi's answers; the CI auth vectors run with it, as they record Strapi's.
+- **Account existence, second pass.** With accounts hidden a username that is an email address
+  other than the one registering is refused before any lookup (Strapi looks a username up as an
+  email too, so it would tell its registrant whether that address has an account); a taken address
+  and a taken username get one notice (`account_emails.registration_attempted`) that names
+  neither. A registrant using their own address can still tell a taken username from the notice
+  arriving instead of a confirmation, which unique usernames make inherent. Each kind of mail a
+  caller can aim (registration notice, confirmation resend, recovery) goes to one address at most
+  `CAMIS_ACCOUNT_MAIL_PER_HOUR` (3, a burst so a stranger cannot spend an owner's only mail) times
+  an hour, keyed by the folded recipient through the throttles' limiter (`StrapiRateLimits::mailable`)
+  and counted where the mail is sent, so a skipped mail changes neither answer nor time. The count
+  is atomic on the `database` (Laravel's default), `redis` and `memcached` cache stores, not on
+  `file`; DEPLOY.md says so rather than locking around the file store's count. The email-shaped
+  username rule reads folded names, since MySQL's collation reads a fullwidth or small "@" as "@";
+  the taken check still runs through the collation, which DEPLOY.md records. An insert that loses a race for its name (a unique
+  violation inside its own savepoint) is a taken name: the notice when hidden, Strapi's taken error
+  otherwise, never "Validation failed". GraphQL's `register`, whose payload's user is non-null,
+  answers a hidden registration with `ConfirmationPendingError` (`STRAPI_CONFIRMATION_PENDING_ERROR`)
+  for every address; its `login` and `forgotPassword` run REST's controllers and so its protections.
+- **Hashes.** `StrapiHashes` reads Strapi's bcryptjs `$2a$`/`$2b$` as PHP's `$2y$`: the users and
+  admin imports store it rewritten, and a hash stored by an earlier import is read rewritten. A
+  stored hash the configured hasher refuses (another `HASH_DRIVER`'s, or not a hash) fails as a
+  wrong password, checked against the stand-in so it takes as long, and is logged with the
+  account's kind and id once an hour per account, where it answered 500. `StrapiHashes::matches`
+  holds the one-check rule, and the rehash of a matched password of another cost, for every
+  sign-in: users, Strapi's `POST /admin/login` (which returned before any hash check for an unknown
+  email) and the admin panel, whose guard's accounts go through `CamisAdminUserProvider` (an unknown
+  email gets the stand-in check in `retrieveByCredentials`, since the session guard checks no
+  password for an account it did not find). `CamisAuthServiceProvider` swaps the guard's provider
+  driver and defines it as the auth manager resolves, both at register time, so a provider that
+  resolves the guard while it boots finds it; the scaffold lists it in `bootstrap/providers.php`
+  after the panel's entry in whatever form that has (indent, line ending, backslash, comma),
+  guarded by the class existing; `config/auth.php` keeps Laravel's driver, so an app not yet
+  listing it signs in as before. Laravel's `make:provider` and `make:filament-panel` rewrite that
+  file and drop the guarded line before a first build, so `camis build` warns, with the line to
+  add, while a Filament app's file does not list it. `StrapiHashes` is emitted with the admin guard, so every layout that has one has it.
+  The Strapi storage layout keeps its `password_verify` sign-in, which reads `$2a$` and never
+  throws, and has no admin guard. An imported (cost 10) account stops being told apart by timing
+  once it has signed in; DEPLOY.md gives `BCRYPT_ROUNDS=10` as the immediate fix and its cost.
+- **JSON bodies.** Every auth write and `POST /graphql` takes its body only as JSON
+  (`StrapiJsonBody`): another type, a form included, answers 415 `UnsupportedMediaTypeError`
+  before the body is read or a throttle turn taken, since Laravel's `json()` decodes a text/plain
+  body a foreign page posts with no preflight. Strapi parses forms; refusing them is deliberate. A
+  form type, or fields and files PHP has already parsed from a form, count as a body; an empty body
+  passes. The scaffold lists `StrapiJsonBody` ahead of Laravel's `ThrottleRequests` in the middleware
+  priority (`bootstrap/app.php`), which otherwise sorts the throttle first in the variant without
+  users-permissions. The Strapi storage layout now emits the middleware its routes name.
+- **Token lifetime.** In refresh mode the answers that issue an access token add `expiresIn`, its
+  lifetime in seconds (`CAMIS_ACCESS_TOKEN_LIFESPAN`), a field Strapi 5.48 lacks (its controllers
+  answer `jwt` and `refreshToken` only); the auth vectors leave it out of the comparison.
+  `SANCTUM_TOKEN_EXPIRATION`, which DEPLOY.md claimed bounded token lifetime, is read by nothing:
+  the docs now name `CAMIS_JWT_LIFESPAN` and `CAMIS_ACCESS_TOKEN_LIFESPAN`, set per token, and say
+  to leave Sanctum's `expiration` null, a global cap by age that would cut those lifetimes short;
+  wiring it would add a second, conflicting knob.
+- **Assigned fields.** A field a grant assigns (`assign: { owner: "user.id" }`) has no rule of its
+  own (`entityRules` skips it), so a create that leaves out a required assigned relation is filled
+  by the grant rather than refused "owner must be defined"; the client's value is still never taken.
+  `PUT /users` validates `role` as a single id (`true` was taken as one).
+- **Import.** A strapi::cors allowing credentials for any origin (its defaults among them, and an
+  origin read from a variable without a fallback, unset where the variable is) is a
+  `corsCredentialsAnyOrigin` capability gap, since the app answers `*` without credentials.
+- **Docs.** DEPLOY.md gains a CORS and a Sign-in sessions section with an upgrade list;
+  `deployment.env` notes that credentials go to listed origins only.
+
+**Tests:** `cors.test.ts` evaluates `config/cors.php` under PHP for each env contract;
+`sessions.test.ts`, `oauth.test.ts`, `auth.test.ts`, `users-permissions.test.ts` and
+`generate-strapi.test.ts` pin the routes and runtime; `scripts/php/AuthSecurityTest.php` (CI, with
+low rates set per test) exercises each bucket on its own, sign-in per identifier and the address
+ceiling, a foreign page's refreshes leaving the victim's valid refresh, a password change from changing addresses,
+`Retry-After`, preflights, the refused and accepted cookie refreshes, the cookie's attributes and
+lifetime, logout with another tab's cookie and after its session row is swept, registration and
+the confirmation resend answering every address alike with the mail each address gets, one hash
+check per sign-in (a counting hasher) and its timing against a wrong password, mail sent after
+`RequestHandled`, 415 for text/plain, form and multipart bodies on every auth write, `expiresIn`
+and the token's actual expiry, `PUT /users` role ids, imported `$2a$` and unverifiable hashes (another
+driver's included) answering as no account, the rehash at sign-in, email-shaped usernames refused
+alike, one notice text, the per-recipient mail bound, a registration losing a race (an existing
+account hidden from the check), GraphQL registration, login and recovery, parsed forms refused, and
+a refused body taking no turn of Laravel's throttle; `AuthorRoleTest.php` creates and
+updates an owned entry without, and against, the assigned owner; `GraphqlTest.php` counts REST and GraphQL password
+changes together; `deployment-settings.test.ts` the import gap.
+
 ---
 
 ## Phase 96 — the Strapi target boots with any mix of conditions (`adapter-strapi`)

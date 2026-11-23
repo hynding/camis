@@ -126,8 +126,9 @@ export const emitApiConfig = (
 declare(strict_types=1);
 
 return [
-    // Requests per minute allowed on the unauthenticated credential endpoints
-    // (POST /auth/local and /auth/local/register), keyed by client address.
+    // Requests per minute allowed on each group of credential routes (sign-in, registration,
+    // password recovery, ...), each group in a bucket of its own per client address, or per
+    // account for a password change.
     'auth_throttle_per_minute' => max(1, (int) env('CAMIS_AUTH_THROTTLE_PER_MINUTE', ${AUTH_THROTTLE_PER_MINUTE})),${strapiKeys}${i18nKeys}${uploadKeys}${usersPermissions ? usersPermissionsConfigKeys() + emailConfigKeys() : ""}${apiTokens ? apiTokensConfigKeys() + transferTokensConfigKeys() + adminAuthConfigKeys() + mcpConfigKeys() : ""}${webhooks ? webhooksConfigKeys() : ""}${graphqlKeys}
 ];
 `;
@@ -214,6 +215,8 @@ export const emitStrapiRoutes = (
           "App\\Http\\Controllers\\Api\\UserController",
           "App\\Http\\Middleware\\StrapiActiveUser",
           "App\\Http\\Middleware\\StrapiCredentials",
+          "App\\Http\\Middleware\\StrapiEncryptCookies",
+          "App\\Http\\Middleware\\StrapiThrottle",
         ]
       : []),
     ...(tokens
@@ -222,11 +225,11 @@ export const emitStrapiRoutes = (
     ...sorted.map((ct) => `App\\Http\\Controllers\\Api\\${filamentNames(ct).model}ApiController`),
     ...(endpoints.length > 0 ? [`App\\Http\\Controllers\\Api\\${ENDPOINTS_CONTROLLER}`] : []),
     "App\\Http\\Middleware\\StrapiErrors",
+    "App\\Http\\Middleware\\StrapiJsonBody",
     ...(hooked.size > 0 ? ["App\\Http\\Middleware\\CamisRouteHooks"] : []),
     ...(usersPermissions
       ? [
           "Illuminate\\Cookie\\Middleware\\AddQueuedCookiesToResponse",
-          "Illuminate\\Cookie\\Middleware\\EncryptCookies",
           "Illuminate\\Session\\Middleware\\StartSession",
         ]
       : []),
@@ -257,21 +260,45 @@ export const emitStrapiRoutes = (
       : sanctum;
   // A session's own routes need one even where nothing else is guarded.
   const own = secured ? "" : "->middleware(['auth:sanctum', StrapiActiveUser::class])";
+  // A write's body is taken only as JSON (StrapiJsonBody), so a page of another site cannot post
+  // one without the preflight CORS answers.
+  const ownWrite = secured
+    ? "->middleware([StrapiJsonBody::class])"
+    : "->middleware([StrapiJsonBody::class, 'auth:sanctum', StrapiActiveUser::class])";
+  // A password change checks the current password, so it is throttled as Strapi does, after the
+  // session that names the account it is counted by.
+  const ownThrottled = secured
+    ? "->middleware([StrapiJsonBody::class, StrapiThrottle::class.':password-change'])"
+    : "->middleware([StrapiJsonBody::class, 'auth:sanctum', StrapiActiveUser::class, StrapiThrottle::class.':password-change'])";
   // Strapi grants these to its public role alone, so a session is refused on them.
   const guestOnly = usersPermissions ? ", StrapiCredentials::class.':guest'" : "";
-  const throttled = usersPermissions ? `[$authThrottle${guestOnly}]` : "$authThrottle";
+  // Each group of credential routes has a bucket of its own, so one cannot use up another.
+  const throttled = (group: string): string =>
+    usersPermissions
+      ? `[StrapiJsonBody::class, StrapiThrottle::class.':${group}'${guestOnly}]`
+      : `[StrapiJsonBody::class, $authThrottle.',${group}']`;
+  // A sign-in or recovery mail counts per address and the name it gives, so its controller takes
+  // the turn with the name it then looks up (StrapiRateLimits::refuseNamed); the route only
+  // refuses a session.
+  const named = (group: string): string =>
+    usersPermissions
+      ? "[StrapiJsonBody::class, StrapiCredentials::class.':guest']"
+      : throttled(group);
   const accountRoutes = usersPermissions
     ? `
-    Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware(${throttled});
-    Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])->middleware(${throttled});
+    Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware(${named("recovery")});
+    Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])->middleware(${throttled("password-reset")});
     Route::get('/auth/email-confirmation', [AuthController::class, 'emailConfirmation'])->middleware(StrapiCredentials::class.':guest');
-    Route::post('/auth/send-email-confirmation', [AuthController::class, 'sendEmailConfirmation'])->middleware(${throttled});
-    Route::post('/auth/refresh', [SessionController::class, 'refresh'])->middleware(StrapiCredentials::class.':guest');
+    Route::post('/auth/send-email-confirmation', [AuthController::class, 'sendEmailConfirmation'])->middleware(${named("confirmation")});
+    // Throttled in the controller, which counts the refreshes that fail alone.
+    Route::post('/auth/refresh', [SessionController::class, 'refresh'])->middleware([StrapiJsonBody::class, StrapiCredentials::class.':guest']);
 
     // A provider's round trip is the browser's: its state and tokens are kept in a session.
-    Route::middleware([EncryptCookies::class, AddQueuedCookiesToResponse::class, StartSession::class, StrapiCredentials::class.':guest'])->group(function () use ($authThrottle): void {
-        Route::get('/connect/{provider}', [ConnectController::class, 'connect'])->middleware($authThrottle);
-        Route::get('/connect/{provider}/callback', [ConnectController::class, 'callback'])->middleware($authThrottle);
+    Route::middleware([StrapiEncryptCookies::class, AddQueuedCookiesToResponse::class, StartSession::class, StrapiCredentials::class.':guest'])->group(function (): void {
+        Route::get('/connect/{provider}', [ConnectController::class, 'connect'])->middleware(StrapiThrottle::class.':provider');
+        Route::get('/connect/{provider}/callback', [ConnectController::class, 'callback'])->middleware(StrapiThrottle::class.':provider');
+        // Provider local is the password login, as in Strapi, which takes its own turn of sign-in;
+        // another provider's takes one of the provider routes' bucket.
         Route::get('/auth/{provider}/callback', [ConnectController::class, 'signIn']);
     });
 
@@ -312,16 +339,17 @@ ${services.map((r) => `    ${r}`).join("\n")}`;
         Route::put('/users/{id}', [UserController::class, 'update']);
         Route::delete('/users/{id}', [UserController::class, 'destroy']);`;
   const ownRoutes = `Route::get('/users/me', [UserController::class, 'me'])${own};
-        Route::post('/auth/change-password', [AuthController::class, 'changePassword'])${own};
-        Route::post('/auth/logout', [SessionController::class, 'logout'])${own};
+        Route::post('/auth/change-password', [AuthController::class, 'changePassword'])${ownThrottled};
+        Route::post('/auth/logout', [SessionController::class, 'logout'])${ownWrite};
         Route::get('/auth/sessions', [SessionController::class, 'sessions'])${own};
         Route::delete('/auth/sessions/{sessionId}', [SessionController::class, 'revoke'])${own};`;
   const sessionRoutes = usersPermissions
     ? `${ownRoutes}${secured && !guests ? userRoutes : ""}`
     : "Route::get('/users/me', [AuthController::class, 'me']);";
   // With a public role, content is served without a session; a session's own routes still need one.
+  const sessionGroup = "->group(function (): void {";
   const groups = guests
-    ? `${sanctum}->group(function (): void {
+    ? `${sanctum}${sessionGroup}
         ${ownRoutes}
     });
 
@@ -329,7 +357,7 @@ ${services.map((r) => `    ${r}`).join("\n")}`;
 
 ${resources}${uploads}
     });`
-    : `${group}->group(function (): void {
+    : `${group}${sessionGroup}
         ${sessionRoutes}
 
 ${resources}${uploads}
@@ -349,20 +377,29 @@ ${uses}
 // every route in the group; the resolved list is deduplicated, so it still runs exactly once.
 Route::prependMiddlewareToGroup('api', StrapiErrors::class);
 
-// The only unauthenticated credential endpoints: throttled so they are not a guessing oracle.
-// The rate is deployment-specific — see config/camis.php.
+${
+  usersPermissions
+    ? `// Every route that checks a password or a refresh token is throttled so it is not a guessing
+// oracle (StrapiRateLimits): a bucket per group of routes, per account for a password change, per
+// client address and the name given for a sign-in or recovery mail, per address otherwise. The
+// rates are deployment-specific and read per request — see config/camis.php.
+
+`
+    : `// The credential routes are throttled so they are not a guessing oracle, each in a bucket of
+// its own per client address. The rate is deployment-specific — see config/camis.php.
 $authThrottle = 'throttle:'.(int) config('camis.auth_throttle_per_minute', ${AUTH_THROTTLE_PER_MINUTE}).',1';
 
-${
-  tokens
-    ? `// Strapi tries an API token before a session, on every content API route: StrapiApiToken checks
+`
+}${
+    tokens
+      ? `// Strapi tries an API token before a session, on every content API route: StrapiApiToken checks
 // the token against the route's action, ahead of each route's own credentials.
 `
-    : ""
-}Route::middleware([StrapiErrors::class${tokens ? ", StrapiApiToken::class" : ""}])->group(function () use ($authThrottle): void {
+      : ""
+  }Route::middleware([StrapiErrors::class${tokens ? ", StrapiApiToken::class" : ""}])->group(function ()${usersPermissions ? "" : " use ($authThrottle)"}: void {
     Route::get('/_health', fn () => response()->noContent());
-    Route::post('/auth/local', [AuthController::class, 'login'])->middleware(${throttled});
-    Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware(${throttled});${accountRoutes}${serviceRoutes}${
+    Route::post('/auth/local', [AuthController::class, 'login'])->middleware(${named("sign-in")});
+    Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware(${throttled("register")});${accountRoutes}${serviceRoutes}${
       opened === ""
         ? ""
         : `

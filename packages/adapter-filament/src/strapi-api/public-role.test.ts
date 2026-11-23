@@ -77,10 +77,10 @@ describe("the public role on the Strapi API style", () => {
   it("refuses a session on the routes only the public role holds, as Strapi does", () => {
     const routes = content("routes/api.php");
     expect(routes).toContain(
-      "Route::post('/auth/local', [AuthController::class, 'login'])->middleware([$authThrottle, StrapiCredentials::class.':guest']);",
+      "Route::post('/auth/local', [AuthController::class, 'login'])->middleware([StrapiJsonBody::class, StrapiCredentials::class.':guest']);",
     );
     expect(routes).toContain(
-      "Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware([$authThrottle, StrapiCredentials::class.':guest']);",
+      "Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware([StrapiJsonBody::class, StrapiCredentials::class.':guest']);",
     );
   });
 

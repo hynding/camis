@@ -36,6 +36,21 @@ describe("strapi-api auth", () => {
       "$table->string('username')->nullable()->unique()->after('name');",
     );
   });
+  // A throttled request's Retry-After, or any header an HTTP exception carries, must survive the
+  // envelope: a client backs off by it.
+  it("keeps an HTTP exception's headers on the error it renders", () => {
+    const php = emitStrapiErrorsMiddleware();
+    expect(php).toContain(
+      "$e instanceof HttpExceptionInterface => $this->errorForStatus($e->getStatusCode(), $e->getMessage(), $e->getHeaders()),",
+    );
+    expect(php).toContain("return response()->json($body, $status, $headers);");
+  });
+  // Strapi's rate limiter answers RateLimitError with its own words, as camis's GraphQL does.
+  it("renders a throttled request as Strapi's RateLimitError, keeping its headers", () => {
+    expect(emitStrapiErrorsMiddleware()).toContain(
+      "429 => $this->error(429, 'RateLimitError', 'Too many requests, please try again later.', headers: $headers),",
+    );
+  });
   it("errors middleware golden", async () => {
     await expect(emitStrapiErrorsMiddleware()).toMatchFileSnapshot(
       "../__golden__/strapi-api/StrapiErrors.php",

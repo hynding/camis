@@ -264,6 +264,64 @@ describe("generateCommand strapi style", () => {
   });
 });
 
+// Laravel's make:provider and Filament's make:filament-panel rewrite bootstrap/providers.php from
+// its evaluated array, which drops the scaffold's guarded entry while the class does not exist yet.
+describe("generateCommand on a Filament app whose bootstrap/providers.php lost camis's auth provider", () => {
+  const filamentConfig = JSON.stringify({
+    ir: "./camis.json",
+    targets: [{ target: "filament", out: "./out/admin" }],
+  });
+  const ENTRY =
+    "    ...(class_exists(\\App\\Providers\\CamisAuthServiceProvider::class) ? [\\App\\Providers\\CamisAuthServiceProvider::class] : []),";
+  const filamentIo = (lines: string[], providers: string | undefined): Io => ({
+    readFile: (p) => {
+      if (p.endsWith("camis.config.json")) return Promise.resolve(filamentConfig);
+      if (p.endsWith("bootstrap/providers.php")) {
+        return providers === undefined
+          ? Promise.reject(new Error("ENOENT"))
+          : Promise.resolve(providers);
+      }
+      return Promise.resolve(ir);
+    },
+    writeFile: () => Promise.resolve(),
+    materialize: () => Promise.resolve(),
+    makeDir: () => Promise.resolve(),
+    copyDir: () => Promise.resolve(),
+    exec: () => Promise.resolve(0),
+    out: (l) => lines.push(l),
+    cwd: "/p",
+  });
+  const rewritten =
+    "<?php\n\nreturn [\n    App\\Providers\\AppServiceProvider::class,\n    App\\Providers\\Filament\\AdminPanelProvider::class,\n];\n";
+
+  it("warns with the exact line to add, and still builds", async () => {
+    const lines: string[] = [];
+    expect(
+      await generateCommand("camis.config.json", filamentIo(lines, rewritten), { write: true }),
+    ).toBe(0);
+    const output = lines.join("\n");
+    expect(output).toContain(
+      "⚠ filament: /p/out/admin/bootstrap/providers.php does not list CamisAuthServiceProvider",
+    );
+    expect(output).toContain(ENTRY);
+  });
+  it("is quiet when the file lists the provider, guarded or not", async () => {
+    for (const listed of [
+      rewritten.replace("];", `${ENTRY.trimStart()}\n];`),
+      rewritten.replace("];", "    App\\Providers\\CamisAuthServiceProvider::class,\n];"),
+    ]) {
+      const lines: string[] = [];
+      await generateCommand("camis.config.json", filamentIo(lines, listed), { write: true });
+      expect(lines.join("\n")).not.toContain("CamisAuthServiceProvider");
+    }
+  });
+  it("is quiet before the app is scaffolded, which registers the provider", async () => {
+    const lines: string[] = [];
+    await generateCommand("camis.config.json", filamentIo(lines, undefined), { write: true });
+    expect(lines.join("\n")).not.toContain("CamisAuthServiceProvider");
+  });
+});
+
 describe("generateCommand — names a target reserves", () => {
   const reservedIr = JSON.stringify({
     version: 1,

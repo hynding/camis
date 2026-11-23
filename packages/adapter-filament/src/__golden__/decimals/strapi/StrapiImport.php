@@ -706,7 +706,7 @@ final class StrapiImport
             'name' => (string) ($data['username'] ?? $email),
             'username' => $data['username'] ?? null,
             'email' => $email,
-            'password' => $data['password'] ?? null,
+            'password' => StrapiHashes::fromBcryptjs($data['password'] ?? null),
             'provider' => $data['provider'] ?? 'local',
             'reset_password_token' => $data['resetPasswordToken'] ?? null,
             'confirmation_token' => $data['confirmationToken'] ?? null,

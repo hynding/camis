@@ -78,20 +78,39 @@ describe("users-permissions sign-in providers", () => {
     );
   });
 
+  // Laravel would encrypt every cookie these routes set, the refresh cookie among them, which
+  // /auth/refresh reads as it was issued: StrapiEncryptCookies leaves that one alone.
+  it("leaves the refresh cookie unencrypted on the provider routes", () => {
+    expect(content("app/Http/Middleware/StrapiEncryptCookies.php")).toContain(
+      "config('camis.users_permissions.sessions.cookie.name')",
+    );
+  });
+
   it("routes the round trip through a session, for callers without one of Strapi's", () => {
     const routes = content("routes/api.php");
     expect(routes).toContain(
-      "Route::middleware([EncryptCookies::class, AddQueuedCookiesToResponse::class, StartSession::class, StrapiCredentials::class.':guest'])->group(function () use ($authThrottle): void {",
+      "Route::middleware([StrapiEncryptCookies::class, AddQueuedCookiesToResponse::class, StartSession::class, StrapiCredentials::class.':guest'])->group(function (): void {",
     );
     expect(routes).toContain(
-      "Route::get('/connect/{provider}', [ConnectController::class, 'connect'])->middleware($authThrottle);",
+      "Route::get('/connect/{provider}', [ConnectController::class, 'connect'])->middleware(StrapiThrottle::class.':provider');",
     );
     expect(routes).toContain(
-      "Route::get('/connect/{provider}/callback', [ConnectController::class, 'callback'])->middleware($authThrottle);",
+      "Route::get('/connect/{provider}/callback', [ConnectController::class, 'callback'])->middleware(StrapiThrottle::class.':provider');",
     );
+    // The local callback is the password login, which takes its own turn of sign-in.
     expect(routes).toContain(
       "Route::get('/auth/{provider}/callback', [ConnectController::class, 'signIn']);",
     );
+  });
+
+  // Strapi answers GET /auth/local/callback as the password login, without its rate limit; camis
+  // keeps the route but never checks a password unthrottled.
+  it("throttles the provider callback, which signs in with a password for provider local", () => {
+    const connect = content("app/Http/Controllers/Api/ConnectController.php");
+    const signIn = connect.slice(connect.indexOf("public function signIn"));
+    expect(signIn).toContain("return app(AuthController::class)->login($request);");
+    // Another provider's callback takes a turn of the provider routes' bucket.
+    expect(signIn).toContain("StrapiRateLimits::refuse($request, 'provider');");
   });
 
   it("lets an account made through a provider have no password", () => {

@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\NoteApiController;
 use App\Http\Controllers\Api\TaskApiController;
 use App\Http\Controllers\Api\TransactionApiController;
 use App\Http\Middleware\StrapiErrors;
+use App\Http\Middleware\StrapiJsonBody;
 use App\Http\Middleware\StrapiJwtGuard;
 use Illuminate\Support\Facades\Route;
 
@@ -21,14 +22,14 @@ use Illuminate\Support\Facades\Route;
 // every route in the group; the resolved list is deduplicated, so it still runs exactly once.
 Route::prependMiddlewareToGroup('api', StrapiErrors::class);
 
-// The only unauthenticated credential endpoints: throttled so they are not a guessing oracle.
-// The rate is deployment-specific — see config/camis.php.
+// The credential routes are throttled so they are not a guessing oracle, each in a bucket of
+// its own per client address. The rate is deployment-specific — see config/camis.php.
 $authThrottle = 'throttle:'.(int) config('camis.auth_throttle_per_minute', 10).',1';
 
 Route::middleware([StrapiErrors::class])->group(function () use ($authThrottle): void {
     Route::get('/_health', fn () => response()->noContent());
-    Route::post('/auth/local', [AuthController::class, 'login'])->middleware($authThrottle);
-    Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware($authThrottle);
+    Route::post('/auth/local', [AuthController::class, 'login'])->middleware([StrapiJsonBody::class, $authThrottle.',sign-in']);
+    Route::post('/auth/local/register', [AuthController::class, 'register'])->middleware([StrapiJsonBody::class, $authThrottle.',register']);
 
     Route::middleware(StrapiJwtGuard::class)->group(function (): void {
         Route::get('/users/me', [AuthController::class, 'me']);
