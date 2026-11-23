@@ -36,14 +36,16 @@ final class StrapiHashes
         $matches = $owner !== null && is_string($stored) && $stored !== ''
             ? self::verify($password, $stored, $account, $owner->getKey())
             : null;
-        if ($matches === null) {
+        if ($owner === null || ! is_string($stored) || $matches === null) {
             Hash::check($password, self::standIn());
+
+            return false;
         }
-        if ($matches === true && $owner !== null && is_string($stored) && Hash::needsRehash((string) self::fromBcryptjs($stored))) {
+        if ($matches && Hash::needsRehash((string) self::fromBcryptjs($stored))) {
             $owner->forceFill(['password' => Hash::make($password)])->save();
         }
 
-        return $matches === true;
+        return $matches;
     }
 
     /** A hash of a random secret at the configured algorithm and cost, read on every check. */
