@@ -51,10 +51,11 @@ const indent = (depth: number): string => "    ".repeat(depth);
 const php = (value: unknown, depth: number): string => {
   if (value === null) return "null";
   if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "number") return String(value);
   if (typeof value === "string")
     return value.startsWith("\\") ? `${value}::class` : phpSingleQuoted(value);
   if (Array.isArray(value)) {
-    if (value.every((v) => typeof v === "string"))
+    if (value.every((v) => typeof v === "string" || typeof v === "number"))
       return `[${value.map((v) => php(v, 0)).join(", ")}]`;
     return `[\n${value.map((v) => `${indent(depth + 1)}${php(v, depth + 1)},\n`).join("")}${indent(depth)}]`;
   }
@@ -65,10 +66,15 @@ const php = (value: unknown, depth: number): string => {
     .join("")}${indent(depth)}]`;
 };
 
+// A decimal stating its digits carries them, at which StrapiImport writes it.
+const digits = (s: WireScalar) =>
+  s.digits === undefined ? {} : { digits: [s.digits.precision, s.digits.scale] };
+
 const scalar = (s: WireScalar, from: number) => ({
   key: s.key.slice(from),
   column: s.column,
   type: s.type,
+  ...digits(s),
 });
 
 /**
@@ -118,7 +124,7 @@ const attributes = (shape: WireShape) => {
     const [first] = s.key;
     if (first === undefined) continue;
     if (s.key.length === 1) {
-      out[first] = { column: s.column, type: s.type };
+      out[first] = { column: s.column, type: s.type, ...digits(s) };
     } else {
       const group = (out[first] ??= { component: [] }) as { component: unknown[] };
       group.component.push(scalar(s, 1));

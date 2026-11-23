@@ -387,3 +387,40 @@ describe("irField — private and regex", () => {
     expect(r.gap?.feature).toBe("fieldPattern");
   });
 });
+
+describe("irField — decimal digits", () => {
+  it("reads a decimal's digits from Strapi's column settings", () => {
+    const r = irField(
+      "balance",
+      { type: "decimal", column: { type: "decimal", args: [20, 6] } },
+      loc,
+    );
+    expect(r).toEqual({ field: { type: "decimal", name: "balance", precision: 20, scale: 6 } });
+  });
+
+  it("imports a decimal without column settings as one stating no digits", () => {
+    expect(irField("fee", { type: "decimal" }, loc)).toEqual({
+      field: { type: "decimal", name: "fee" },
+    });
+  });
+
+  it("reports column settings that are not digits a database takes, instead of dropping them silently", () => {
+    for (const column of [
+      { type: "decimal", args: [70, 6] },
+      { type: "decimal", args: [4, 5] },
+      { type: "decimal", args: [20] },
+      { type: "double" },
+      { type: "decimal", args: [20, 6], unsigned: true },
+    ]) {
+      expect(irField("balance", { type: "decimal", column }, loc), JSON.stringify(column)).toEqual({
+        field: { type: "decimal", name: "balance" },
+        gap: {
+          feature: "decimalColumn",
+          location: { contentType: "Article", field: "balance" },
+          severity: "downgrade",
+          message: `the column settings of "balance" (${JSON.stringify(column)}) are not a decimal's digits camis keeps (precision 1 to 65, scale 0 to 30 and at most the precision); the field is imported without them.`,
+        },
+      });
+    }
+  });
+});

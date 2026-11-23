@@ -1,4 +1,5 @@
 import type { StorageLayout } from "@camis/adapter-kernel";
+import { decimalDigits } from "@camis/ir-core";
 import {
   fieldApiName,
   type CapabilityGap,
@@ -58,6 +59,8 @@ interface RuleContext {
   unique: boolean;
   /** The entry's own fields a grant assigns from the session, which the client never writes. */
   assigned: ReadonlySet<string>;
+  /** Set once that field is a decimal stating its digits, compared as it is stored. */
+  uniqueDigits: boolean;
 }
 
 const sameKey = (a: readonly string[], b: readonly string[]): boolean =>
@@ -120,8 +123,13 @@ const constraints = (field: Field, locate: Locate, ctx: RuleContext, path: strin
     const target = locate(fieldApiName(field));
     if (target === undefined) ctx.gaps.push(uncheckedUnique(ctx, [...path, fieldApiName(field)]));
     else {
-      rule.unique = target;
+      // Every write on the laravel layout keeps such a decimal rounded to its scale (DecimalDigits),
+      // which is what its unique index compares.
+      const digits = ctx.layout === "laravel" ? decimalDigits(field) : undefined;
+      rule.unique =
+        digits === undefined ? target : { ...target, digits: [digits.precision, digits.scale] };
       ctx.unique = true;
+      ctx.uniqueDigits ||= digits !== undefined;
     }
   }
   return rule;
@@ -226,6 +234,8 @@ export interface EntityRules {
   constant: string;
   /** Whether a field is unique, so the controller hands the validator the other entries. */
   unique: boolean;
+  /** Whether a unique field is a decimal stating its digits (see `emitStrapiValidator`). */
+  uniqueDigits: boolean;
   gaps: CapabilityGap[];
 }
 
@@ -245,11 +255,13 @@ export const entityRules = (
     contentType: ct.name,
     unique: false,
     assigned: new Set(assigned),
+    uniqueDigits: false,
   };
   const built = rules(ct.fields, ctx, pathAt(ctx, []), []);
   return {
     constant: `    /** Each written field's Strapi attribute, for StrapiValidator. */\n    private const RULES = ${literal(built, "    ")};\n`,
     unique: ctx.unique,
+    uniqueDigits: ctx.uniqueDigits,
     gaps: ctx.gaps,
   };
 };

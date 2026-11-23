@@ -8,6 +8,7 @@ import { strapiApiBundle } from "../src/strapi-api/__fixtures__/strapi-api";
 import { uniqueComponentsBundle } from "../src/strapi-api/__fixtures__/unique-components";
 import { morphRelationsBundle } from "../src/strapi-api/__fixtures__/morph-relations";
 import { storageBundle } from "../src/strapi-api/storage/__fixtures__/storage";
+import { decimalsBundle } from "../src/__fixtures__/decimals";
 
 const [dest, ...flags] = process.argv.slice(2);
 const flag = (name: string): string | undefined => {
@@ -22,6 +23,8 @@ const BUNDLES = {
   "unique-components": { bundle: uniqueComponentsBundle, projectName: "fest" },
   // MorphRelationsTest reads the links over GraphQL as well as REST.
   "morph-relations": { bundle: morphRelationsBundle, projectName: "notes", graphql: true },
+  // DecimalsTest round trips the decimals over GraphQL as well as REST.
+  decimals: { bundle: decimalsBundle, projectName: "ledger", graphql: true },
 } as const;
 const bundle = flag("--bundle");
 const own = bundle === undefined ? undefined : BUNDLES[bundle as keyof typeof BUNDLES];
@@ -31,7 +34,7 @@ if (
   (bundle !== undefined && (own === undefined || style !== "strapi" || storage !== undefined))
 ) {
   console.error(
-    "usage: tsx scripts/overlay.ts <laravel-app-dir> [--style strapi [--storage strapi | --bundle author-role|unique-components|morph-relations]]",
+    "usage: tsx scripts/overlay.ts <laravel-app-dir> [--style strapi [--storage strapi | --bundle author-role|unique-components|morph-relations|decimals]]",
   );
   process.exit(1);
 }

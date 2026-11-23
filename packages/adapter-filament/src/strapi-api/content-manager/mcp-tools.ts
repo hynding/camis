@@ -1,6 +1,7 @@
 import type { IrDocument } from "@camis/ir-schema";
 import { runtimeSchemas, type RuntimeSchema } from "@camis/strapi-schema";
 import { z } from "zod/v4";
+import { PHP_FLOAT_DIGITS } from "../../decimals";
 
 /**
  * The content-manager tools of Strapi 5's MCP server, as its `tools/list` describes them: per
@@ -201,7 +202,16 @@ const sortSchema = (attributes: Attributes, permitted: ReadonlySet<string>) => {
     );
 };
 
+/** A decimal whose column (Strapi's column settings) keeps more digits than a PHP float carries. */
+const exactDecimal = (attribute: Attribute): boolean => {
+  const column = attribute.column as { args?: unknown[] } | undefined;
+  const precision = column?.args?.[0];
+  return typeof precision === "number" && precision > PHP_FLOAT_DIGITS;
+};
+
 const filterValue = (attribute: Attribute): z.ZodType => {
+  if (exactDecimal(attribute))
+    return z.union([z.string(), z.number(), z.array(z.union([z.string(), z.number()]))]);
   switch (attribute.type) {
     case "integer":
     case "biginteger":
@@ -449,6 +459,10 @@ const attributeInput = (
     case "integer":
       return finish(bounded(z.number().int()));
     case "decimal":
+      // A decimal beyond a double is answered as a string, and taken as one or as a number.
+      return finish(
+        exactDecimal(attribute) ? z.union([z.string(), bounded(z.number())]) : bounded(z.number()),
+      );
     case "float":
       return finish(bounded(z.number()));
     case "boolean":

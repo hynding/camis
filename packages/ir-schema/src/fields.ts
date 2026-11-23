@@ -89,7 +89,14 @@ const textLike = (type: "string" | "text" | "richText" | "email") =>
     ...(type === "email" ? {} : { ai: ai.optional() }),
   });
 
-const numeric = (type: "integer" | "bigInteger" | "float" | "decimal") =>
+/**
+ * A decimal's digits in all (`precision`) and after the point (`scale`), stated together; without
+ * them each target keeps its own default. Bounded in `perFieldRefine` by MySQL's DECIMAL, the
+ * narrowest database every target runs on.
+ */
+const decimalDigits = { precision: z.number().optional(), scale: z.number().optional() };
+
+const numeric = <T extends "integer" | "bigInteger" | "float" | "decimal">(type: T) =>
   z.object({
     type: z.literal(type),
     ...common,
@@ -97,6 +104,7 @@ const numeric = (type: "integer" | "bigInteger" | "float" | "decimal") =>
     ...bound,
     default: z.number().optional(),
   });
+const decimalField = numeric("decimal").extend(decimalDigits);
 
 const temporal = (type: "date" | "time" | "dateTime" | "timestamp") =>
   z.object({ type: z.literal(type), ...common, default: z.string().optional() });
@@ -151,7 +159,7 @@ export const SCALAR_VARIANTS = [
   numeric("integer"),
   numeric("bigInteger"),
   numeric("float"),
-  numeric("decimal"),
+  decimalField,
   booleanField,
   enumerationField,
   temporal("date"),
@@ -164,8 +172,71 @@ export const SCALAR_VARIANTS = [
   mediaField,
 ] as const;
 
+/**
+ * MySQL's DECIMAL takes at most 65 digits, 30 of them after the point; PostgreSQL's NUMERIC takes
+ * 1000 and SQLite declares any, so MySQL's bounds are what every supported database takes.
+ */
+const MAX_DECIMAL_PRECISION = 65;
+const MAX_DECIMAL_SCALE = 30;
+
+const wholeIn = (value: unknown, min: number, max: number): boolean =>
+  typeof value === "number" && Number.isInteger(value) && value >= min && value <= max;
+
+/** A finite number's digits before and after the point, as its shortest decimal form writes them. */
+const pointDigits = (value: number): { whole: number; fraction: number } => {
+  const [mantissa = "0", exponent = "0"] = Math.abs(value).toExponential().split("e");
+  const digits = mantissa.replace(".", "").length;
+  const beforePoint = Number(exponent) + 1;
+  return {
+    whole: Math.abs(value) < 1 ? 0 : beforePoint,
+    fraction: Math.max(digits - beforePoint, 0),
+  };
+};
+
+const plural = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? "" : "s"}`;
+
+type DecimalKey = "precision" | "scale" | "default" | "min" | "max";
+
+const refineDecimalDigits = (f: Record<string, unknown>, ctx: z.RefinementCtx): void => {
+  const issue = (key: DecimalKey, message: string): void =>
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message,
+      params: { irCode: "invalid_decimal_digits" },
+      path: [key],
+    });
+  const { precision, scale } = f;
+  if (precision === undefined && scale === undefined) return;
+  if (precision === undefined) return issue("precision", "scale must be stated with a precision");
+  if (scale === undefined) return issue("scale", "precision must be stated with a scale");
+  if (!wholeIn(precision, 1, MAX_DECIMAL_PRECISION))
+    return issue(
+      "precision",
+      `precision must be a whole number from 1 to ${MAX_DECIMAL_PRECISION}`,
+    );
+  if (!wholeIn(scale, 0, MAX_DECIMAL_SCALE))
+    return issue("scale", `scale must be a whole number from 0 to ${MAX_DECIMAL_SCALE}`);
+  const p = precision as number;
+  const s = scale as number;
+  if (s > p) return issue("scale", "scale must be <= precision");
+  // A value the column cannot hold fails the migration's default or every write it bounds.
+  for (const key of ["default", "min", "max"] as const) {
+    const value = f[key];
+    if (typeof value !== "number" || !Number.isFinite(value)) continue;
+    const { whole, fraction } = pointDigits(value);
+    if (whole > p - s)
+      issue(
+        key,
+        `${key} has ${plural(whole, "digit")} before the point; precision ${p} with scale ${s} keeps ${p - s}`,
+      );
+    else if (key === "default" && fraction > s)
+      issue(key, `default has ${plural(fraction, "digit")} after the point; scale ${s} keeps ${s}`);
+  }
+};
+
 export const perFieldRefine = (f: unknown, ctx: z.RefinementCtx) => {
   const anyF = f as Record<string, unknown>;
+  if (anyF.type === "decimal") refineDecimalDigits(anyF, ctx);
   if (
     typeof anyF.minLength === "number" &&
     typeof anyF.maxLength === "number" &&

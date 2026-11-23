@@ -8,6 +8,9 @@ import type { ResolvedRelations } from "./relations";
 
 const snakePath = (path: string[]): string => path.map(snakeColumn).join("_");
 
+/** The key an item table's rows keep to their entry, beside the item's own columns. */
+export const itemEntryKey = (ct: ContentType): string => `${snakeColumn(ct.name)}_id`;
+
 const camelPath = (path: string[]): string =>
   path.map((seg, i) => (i === 0 ? seg : seg.charAt(0).toUpperCase() + seg.slice(1))).join("");
 
@@ -60,7 +63,7 @@ ${body}
     const childRel: string[] = [];
     for (const t of expansion?.tables ?? []) {
       const childTable = `${n.table}_${snakePath(t.path)}`;
-      const fkCol = `${snakeColumn(ct.name)}_id`;
+      const fkCol = itemEntryKey(ct);
       importNames.add(fkImport);
       const childCols = t.scalars.map((s) =>
         column(dialect, { ...columnField(s), name: snakePath(s.path) } as Field),

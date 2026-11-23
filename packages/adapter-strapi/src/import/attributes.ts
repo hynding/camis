@@ -1,4 +1,4 @@
-import { FIELD_TYPES, type CapabilityGap, type Field } from "@camis/ir-schema";
+import { FIELD_TYPES, componentField, type CapabilityGap, type Field } from "@camis/ir-schema";
 import { COLOR_PICKER_UID, fromStrapiMediaKinds } from "@camis/strapi-schema";
 import { fieldNameOf, irName } from "./names";
 
@@ -248,5 +248,32 @@ export const irField = (
   if (irType === "media" && Array.isArray(attr.allowedTypes)) {
     field.allowedTypes = fromStrapiMediaKinds(attr.allowedTypes);
   }
+  if (irType === "decimal" && attr.column !== undefined) {
+    const digits = decimalDigitsOf(attr.column);
+    if (digits !== undefined) Object.assign(field, digits);
+    else
+      gap = {
+        feature: "decimalColumn",
+        location: { ...location, field: name },
+        severity: "downgrade",
+        message: `the column settings of "${attribute}" (${JSON.stringify(attr.column)}) are not a decimal's digits camis keeps (precision 1 to 65, scale 0 to 30 and at most the precision); the field is imported without them.`,
+      };
+  }
   return { field: field as Field, ...(gap === undefined ? {} : { gap }) };
+};
+
+/**
+ * A decimal's digits from Strapi's column settings, as camis writes them (`{ type: "decimal",
+ * args: [precision, scale] }`) and the IR bounds them; undefined for any other settings.
+ */
+const decimalDigitsOf = (column: unknown): { precision: number; scale: number } | undefined => {
+  if (column === null || typeof column !== "object") return undefined;
+  const { type, args, ...rest } = column as Record<string, unknown>;
+  if (type !== "decimal" || Object.keys(rest).length > 0 || !Array.isArray(args)) return undefined;
+  if (args.length !== 2) return undefined;
+  const [precision, scale] = args as unknown[];
+  const candidate = { type: "decimal", name: "digits", precision, scale };
+  return componentField.safeParse(candidate).success
+    ? { precision: precision as number, scale: scale as number }
+    : undefined;
 };

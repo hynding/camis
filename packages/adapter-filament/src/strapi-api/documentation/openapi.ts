@@ -9,6 +9,7 @@ import {
   type IrDocument,
   type RouteAction,
 } from "@camis/ir-schema";
+import { beyondPhpFloat } from "../../decimals";
 import { componentUid, kebab, routePath } from "../core/names";
 import plugins from "./openapi-plugins.json";
 
@@ -72,6 +73,8 @@ interface Attribute {
   many?: boolean;
   /** The uid a relation, component or media field points at. */
   target?: string;
+  /** A decimal stating more digits than a PHP float carries, which the API answers as a string. */
+  exact?: true;
 }
 
 export interface OpenApiInput {
@@ -141,6 +144,7 @@ class DocumentBuilder {
         if ("minLength" in f && f.minLength !== undefined) a.minLength = f.minLength;
         if ("maxLength" in f && f.maxLength !== undefined) a.maxLength = f.maxLength;
         if (f.type === "enumeration") a.values = f.values;
+        if (beyondPhpFloat(f)) a.exact = true;
         if (f.type === "media") {
           a.target = FILE_UID;
           if (f.multiple === true) a.many = true;
@@ -534,6 +538,9 @@ const scalarSchema = (a: Attribute, input: boolean): JsonSchema => {
       };
     case "float":
     case "decimal":
+      // A decimal beyond a double is answered as a string, and taken as one or as a number.
+      if (a.exact === true)
+        return input ? { anyOf: [{ type: "string" }, { type: "number" }] } : { type: "string" };
       return { type: "number", ...bounds("minimum", "maximum", a.min, a.max) };
     case "biginteger":
       // Strapi bounds a biginteger's string by its length, each bound on its own.

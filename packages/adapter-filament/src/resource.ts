@@ -92,7 +92,9 @@ export const emitResourceFiles = (
       : undefined;
   const cmCollection = cm !== undefined && !single;
   const formComponentOf = (e: FieldEmit): string =>
-    manyRows ? e.formComponent.replace("->unique()", "") : e.formComponent;
+    manyRows && e.uniqueRule !== undefined
+      ? e.formComponent.replace(e.uniqueRule, "")
+      : e.formComponent;
   const mediaComponent = (m: NonNullable<typeof options.media>[number]): string =>
     `MediaPicker::make('${m.field}', multiple: ${m.multiple}${m.allowedTypes === undefined ? "" : `, allowedTypes: [${m.allowedTypes.map((t) => `'${t}'`).join(", ")}]`})`;
   const cmForm =

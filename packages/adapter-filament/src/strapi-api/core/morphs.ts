@@ -31,9 +31,21 @@ export type WireMorph =
 const isPolymorphic = (f: { type: string }): boolean =>
   f.type === "polymorphicRelation" || f.type === "polymorphicInverse";
 
+/** The columns a polymorphic relation's link names its entry by: on the row, or its link table's. */
+export const morphLinkColumns = (
+  f: PolymorphicRelation,
+): { idColumn: string; typeColumn: string } => {
+  const base = snakeColumn(f.name);
+  return { idColumn: `${base}_id`, typeColumn: `${base}_type` };
+};
+
+/** Polymorphic relations are served on the Strapi API style over Laravel storage only. */
+export const servesMorphs = (apiStyle: string, storage: string): boolean =>
+  apiStyle === "strapi" && storage !== "strapi";
+
 const owning = (ct: ContentType, f: PolymorphicRelation): WireMorph => {
   const base = snakeColumn(f.name);
-  const columns = { idColumn: `${base}_id`, typeColumn: `${base}_type` };
+  const columns = morphLinkColumns(f);
   const privacy = f.private === true ? { private: true as const } : {};
   return f.many
     ? {
@@ -134,7 +146,7 @@ export const morphPlan = (
     localized?: ReadonlySet<string>;
   } = {},
 ): MorphPlan => {
-  const served = apiStyle === "strapi" && storage !== "strapi";
+  const served = servesMorphs(apiStyle, storage);
   const byName = new Map(doc.contentTypes.map((c) => [c.name, c]));
   const gaps: CapabilityGap[] = [];
   const owners = new Map<string, WireMorph[]>();

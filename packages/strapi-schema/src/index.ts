@@ -14,3 +14,9 @@ export { dual, synthesizedInverses } from "./relations";
 export { contentTypeSchema } from "./schema";
 export { runtimeSchemas, type RuntimeSchema } from "./runtime-schema";
 export { SERVICE_ACTIONS } from "./service-actions";
+export {
+  STRAPI_RESERVED_NAMES,
+  strapiAttributeNames,
+  strapiReservedNameGaps,
+} from "./reserved-names";
+export { strapiDecimalGaps } from "./decimals";

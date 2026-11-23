@@ -1,3 +1,4 @@
+import { decimalDigits } from "@camis/ir-core";
 import type { ContentType, Field } from "@camis/ir-schema";
 
 // Strapi's `_q` search: text fields match as a substring, number fields when the search is one.
@@ -14,12 +15,21 @@ const NUMBER_SEARCHED = new Set(["integer", "bigInteger", "float", "decimal"]);
 // The Content Manager's NON_SORTABLES (components and relations are not columns here).
 const NOT_SORTED = new Set(["json", "media", "richText", "blocks"]);
 
+// A decimal stating its digits is searched as its filters compare it: exactly, never as a float or
+// as the text SQLite keeps it as.
+const numberSearch = (field: Field, column: string): string => {
+  const digits = decimalDigits(field);
+  return digits === undefined
+    ? `is_numeric($search) ? $query->where('${column}', $search) : $query->whereRaw('0 = 1')`
+    : `\\App\\Support\\DecimalDigits::where($query, '${column}', '$eq', $search, ${digits.precision}, ${digits.scale}) ? $query : $query->whereRaw('0 = 1')`;
+};
+
 /** A list column as Strapi's Content Manager offers it: searched and sorted where Strapi does. */
 export const listedColumn = (field: Field, column: string, tableColumn: string): string => {
   const search = TEXT_SEARCHED.has(field.type)
     ? "->searchable()"
     : NUMBER_SEARCHED.has(field.type)
-      ? `->searchable(query: fn (Builder $query, string $search): Builder => is_numeric($search) ? $query->where('${column}', $search) : $query->whereRaw('0 = 1'))`
+      ? `->searchable(query: fn (Builder $query, string $search): Builder => ${numberSearch(field, column)})`
       : "";
   const sort = NOT_SORTED.has(field.type) ? "" : "->sortable()";
   return `${tableColumn}${search}${sort}`;

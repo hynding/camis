@@ -13,8 +13,10 @@ const header = `<?php\n${PHP_MARKER}\n\ndeclare(strict_types=1);\n\nnamespace Ap
  * $members is a serializer's `ZONES[zone]`: uid → ['relation' => ..., 'components' => [...]],
  * 'fields' => its media fields and 'links' => its relations, which an item's row links through
  * `StrapiRelations` once written, and 'children' => the repeatables inside it (`StrapiItems`).
+ * `positions` passes $columns an item's place too, for a project whose zones hold a decimal
+ * stating its digits, which a refusal names by it.
  */
-export const emitStrapiZones = (componentUids: readonly string[]): string =>
+export const emitStrapiZones = (componentUids: readonly string[], positions = false): string =>
   header +
   String.raw`
 use Closure;
@@ -44,7 +46,7 @@ final class StrapiZones
             if (! isset($members[$uid])) {
                 continue;
             }
-            $row = ['position' => $position] + array_filter($columns($uid, $item), fn ($v) => $v !== null);
+            $row = ['position' => $position] + array_filter($columns($uid, $item${positions ? ", $position" : ""}), fn ($v) => $v !== null);
             if (isset($item['id'])) {
                 $row['id'] = $item['id'];
             }

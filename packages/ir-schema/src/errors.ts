@@ -4,6 +4,7 @@ export type IrErrorCode =
   | "empty_enumeration"
   | "invalid_min_max"
   | "invalid_pattern"
+  | "invalid_decimal_digits"
   | "enum_default_not_member"
   | "duplicate_field"
   | "empty_dynamic_zone"

@@ -1,4 +1,6 @@
+import { decimalDigits, type DecimalDigits } from "@camis/ir-core";
 import type { Field } from "@camis/ir-schema";
+import { beyondPhpFloat } from "./decimals";
 import { snakeColumn } from "./names";
 import { phpSingleQuoted, phpValue } from "./php-literal";
 
@@ -10,6 +12,10 @@ export interface FieldEmit {
   formImport: string;
   tableImport: string;
   cast?: string;
+  /** A decimal's stated digits, at which an API writes it. */
+  decimalDigits?: DecimalDigits;
+  /** A unique field's rule in `formComponent`, which a form whose rows share values leaves out. */
+  uniqueRule?: string;
 }
 
 const TEXT_INPUT = "Filament\\Forms\\Components\\TextInput";
@@ -57,6 +63,28 @@ const phpDefault = (v: unknown): string =>
     : typeof v === "number"
       ? JSON.stringify(v)
       : phpSingleQuoted(String(v));
+
+/**
+ * A decimal's column: Laravel's default (8, 2) where it states no digits, else its own. SQLite keeps
+ * a decimal column's values as doubles, which PDO reads as PHP floats of 14 significant digits, so a
+ * decimal beyond a PHP float is text there, which keeps every digit; the other databases keep it as
+ * DECIMAL. The driver is the connection's at migration time, so one migration serves every
+ * database.
+ */
+const decimalColumn = (field: Field, c: string): string => {
+  const digits = decimalDigits(field);
+  if (digits === undefined) return `$table->decimal('${c}')`;
+  const decimal = `$table->decimal('${c}', ${digits.precision}, ${digits.scale})`;
+  if (!beyondPhpFloat(field)) return decimal;
+  // Its digits, a sign and a point.
+  const text = `$table->string('${c}', ${digits.precision + 2})`;
+  return `(Schema::getConnection()->getDriverName() === 'sqlite' ? ${text} : ${decimal})`;
+};
+
+const digitsOf = (field: Field): { decimalDigits?: DecimalDigits } => {
+  const digits = decimalDigits(field);
+  return digits === undefined ? {} : { decimalDigits: digits };
+};
 
 interface Base {
   migration: string;
@@ -108,15 +136,27 @@ const base = (field: Field, c: string): Base => {
         formImport: TEXT_INPUT,
         tableImport: TEXT_COLUMN,
       };
-    case "decimal":
+    case "decimal": {
+      const digits = decimalDigits(field);
       return {
-        migration: `$table->decimal('${c}')`,
-        formComponent: `TextInput::make('${c}')->numeric()`,
+        migration: decimalColumn(field, c),
+        // ->numeric() makes the state a PHP float, which keeps 14 digits: a decimal stating its
+        // digits is taken as text, refused as its model's cast would refuse it.
+        formComponent:
+          digits === undefined
+            ? `TextInput::make('${c}')->numeric()`
+            : `TextInput::make('${c}')->inputMode('decimal')->rule(new \\App\\Rules\\DecimalDigitsRule(${digits.precision}, ${digits.scale}))`,
         tableColumn: `TextColumn::make('${c}')`,
         formImport: TEXT_INPUT,
         tableImport: TEXT_COLUMN,
-        cast: "'decimal:2'",
+        // Laravel's decimal cast answers the column as a string at the scale; a decimal stating its
+        // digits is written as DecimalDigits keeps it by whatever writes through Eloquent.
+        cast:
+          digits === undefined
+            ? "'decimal:2'"
+            : `\\App\\Casts\\DecimalDigitsCast::class.':${digits.precision},${digits.scale}'`,
       };
+    }
     case "boolean":
       return {
         migration: `$table->boolean('${c}')`,
@@ -212,6 +252,17 @@ const base = (field: Field, c: string): Base => {
   }
 };
 
+/**
+ * The form's uniqueness rule. Filament's `->unique()` compares the text as typed with the stored
+ * digits, so a decimal stating its digits is compared as it will be stored, rounded to its scale.
+ */
+const uniqueRule = (field: Field, column: string): string => {
+  const digits = decimalDigits(field);
+  return digits === undefined
+    ? "->unique()"
+    : `->rule(fn (?string $model, ?\\Illuminate\\Database\\Eloquent\\Model $record) => new \\App\\Rules\\DecimalDigitsUniqueRule($model, '${column}', ${digits.precision}, ${digits.scale}, $record))`;
+};
+
 export const emitField = (field: Field, columnOverride?: string): FieldEmit => {
   const f = field as Field & Record<string, unknown>;
   const column = columnOverride ?? snakeColumn(field.name);
@@ -231,8 +282,8 @@ export const emitField = (field: Field, columnOverride?: string): FieldEmit => {
     field.editor === undefined
       ? b.formComponent
       : `(\\App\\Support\\CustomFields::input(${phpSingleQuoted(field.editor.name)}, '${column}', ${phpValue(field.editor.options ?? [])}) ?? ${b.formComponent})`;
-  const formComponent =
-    input + (required ? "->required()" : "") + (unique ? "->unique()" : "") + pattern;
+  const formUnique = unique ? uniqueRule(field, column) : undefined;
+  const formComponent = input + (required ? "->required()" : "") + (formUnique ?? "") + pattern;
   return {
     column,
     migration,
@@ -241,5 +292,7 @@ export const emitField = (field: Field, columnOverride?: string): FieldEmit => {
     formImport: b.formImport,
     tableImport: b.tableImport,
     ...(b.cast ? { cast: b.cast } : {}),
+    ...digitsOf(field),
+    ...(formUnique === undefined ? {} : { uniqueRule: formUnique }),
   };
 };

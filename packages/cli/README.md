@@ -59,6 +59,96 @@ components, and repeatables nested inside repeatables, are reported as downgrade
 Exit codes: `0` on success (capability *downgrades* are warnings); non-zero on a validation failure,
 an unreadable/invalid config, an unknown command, or an `error`-severity capability gap.
 
+A field named as a target names its own keys or columns is such an error (`reservedFieldName`,
+located at the content type or component and the field, before anything is written), since the
+target would overwrite or refuse it. Names are compared as the target maps them, so
+`published_at` and `PublishedAt` (an imported API key) are caught as `publishedAt` is. A relation's
+inverse is located on the type it lands on, a built-in type's included. Where a target flattens a
+non-repeatable component into the row holding it, its fields' columns are named by their path
+(`created` holding `at` is `created_at`) and checked too, located at the content type, the
+component and its field; where it stores a component's items as rows of a table of their own, an
+item's fields are checked against that table's own columns, located at the component and its
+field. A gap is reported only where the target emits the colliding column or key:
+
+- `strapi`, and `filament` with `apiStyle: "strapi"`: `documentId`, `createdAt`, `updatedAt`,
+  `publishedAt`, `createdBy`, `updatedBy`, `locale`, `localizations` (and `createdById`,
+  `updatedById`), the API keys `__component` and `__contentType`, and any name starting with
+  `strapi`, `_strapi` or `__strapi`, compared snake_cased; for a field, its API key, a relation's
+  inverse and a component's field. The Filament target also checks a to-one relation's key column,
+  so a relation named `document` (`document_id`) is refused there, and on the Laravel storage
+  layout a one-to-many's key column on its target's rows, named by its inverse (an inverse
+  `document`) or, without one, by the type holding it (a type `Document`), and a to-one
+  polymorphic relation's `<name>_id` and `<name>_type`. Strapi's Content-Type Builder additionally
+  refuses `status`, `meta` and `entry_id`; camis lets them through, since none is a key of an entry
+  and Strapi reads and writes such a field as it should.
+- `filament` with `apiStyle: "laravel"`: `createdAt` and `updatedAt`, whose columns are Laravel's
+  timestamps.
+- `filament` on the Laravel storage layout (either API style): an embedded component's columns on
+  the entry's row, and an item's columns on its item table's rows, which keep the timestamps, the
+  key to the row holding them (`note_id`, or `note_items_id` in a nested table) and, a dynamic zone
+  member's on the Strapi API style, `position`. A media field inside a component is a column there
+  unless the project keeps a media library.
+- `express`: `createdAt` and `updatedAt` on a content type, a built-in one included, and an
+  embedded component's columns on the entry's table; an item's columns on its item table, whose
+  rows keep the key to their entry (`note_id`).
+
+`id` is refused by `camis validate` itself, since every target keeps it.
+
+A `decimal` may state its digits, `precision` (all of them, 1 to 65) and `scale` (those after the
+point, 0 to 30 and at most the precision), both or neither: `camis validate` refuses one without
+the other, or out of bounds, and a `default`, `min` or `max` with more digits before the point than
+`precision - scale`, or a `default` with more after it than `scale` (`invalid_decimal_digits`,
+located at the key), MySQL's DECIMAL being the narrowest database every target runs on. Without
+digits each target keeps its own default, as before: (8, 2) on Filament, Strapi's (10, 2),
+Drizzle's `decimal`/`numeric` on Express. With them:
+
+- `filament`: `$table->decimal('x', p, s)`. PDO reads a SQLite decimal column as a PHP float, which
+  becomes a string of 14 significant digits, so a decimal of 15 digits or more is DECIMAL on MySQL
+  and PostgreSQL and text on SQLite (decided by the connection when it migrates). Every write of a
+  model's attributes through Eloquent keeps a decimal stating its digits as MySQL and PostgreSQL
+  keep it, whatever the database: its model's cast (`App\Casts\DecimalDigitsCast`, in place of
+  `decimal:s`) takes a string or a JSON number of at most 100 characters (ASCII digits, one point,
+  a sign, an exponent of at most three digits), trimmed, exponent form expanded, rounded half away
+  from zero to the scale, stored with exactly the scale's digits after the point (so `1.5` and
+  `1.50` are one value, also on SQLite's text) and read back as that string; a value that is not a
+  decimal, or has more digits before the point than `precision - scale`, is refused. So are the
+  APIs' writes (Strapi's 400 `ValidationError` on the Strapi API style, named by its full path,
+  `entries[1].amount` inside a repeatable; Laravel's 422 validation errors on the Laravel API
+  style), the admin's form (a text input with a validation rule, never a float, which checks a
+  unique one as it is stored, rounded to the scale, as the Strapi API style's unique check does
+  too) and the Strapi API style's archive import (which stops at a value that does not fit): every
+  digit is kept on all three databases. The Laravel API
+  style answers every decimal as a string, as it always has; the Strapi API style answers a decimal
+  of 15 digits or more as a string (a JSON number of that many digits is rounded by every
+  JavaScript client), over REST, GraphQL (`String`), the OpenAPI document and the MCP tools, and
+  every other decimal as the number Strapi answers. Its filters, and the admin list's search,
+  compare a decimal stating its digits with the filter's exact value, never through a float and
+  never rounding it (bound as `DECIMAL(p, s)` on MySQL, `NUMERIC` on PostgreSQL, text on SQLite; a
+  value with more digits after the point than the scale equals nothing and orders by its nearest
+  neighbours). Send an exact value as a string: a JSON number is a double by the time PHP reads it,
+  so the digits a double does not keep are gone before the API sees them. On the Strapi API style a
+  decimal of 15 digits or more on SQLite matches equal values exactly in a filter, but an ordering
+  comparison (`$lt`, `$lte`, `$gt`, `$gte`, `$between`) or a sort on it compares text, the admin
+  list's number filters compare it through a float, and a data-transfer archive carries it as a
+  number, as Strapi's do (a `decimalPrecision` downgrade gap, located at the type or component and
+  the field); on Strapi's storage layout the column is Strapi's, which SQLite keeps as a double
+  read back with 14 digits (the same gap). A write past the model's cast keeps no canonical form:
+  `$model->increment()` or `decrement()`, an Eloquent or query-builder `update()`, and any other
+  write through the query builder than the import.
+- `strapi`: the attribute's column settings, `"column": { "type": "decimal", "args": [p, s] }`,
+  which Strapi's database layer lays over the decimal(10, 2) it makes. Strapi itself reads and
+  writes a decimal as a JavaScript number on every database, so a decimal of more than 15 digits
+  is rounded to 15 significant digits: a `decimalPrecision` downgrade gap. The importer reads the
+  digits back from these settings, and reports other column settings on a decimal
+  (`decimalColumn`) rather than dropping them silently.
+- `express`: `decimal('x', { precision, scale })` on MySQL, `numeric(...)` on PostgreSQL; SQLite
+  takes no digits, so `numeric('x')`, or `text('x')` for a decimal of more than 15 digits, which a
+  JavaScript number keeps. Drizzle answers such a decimal as a string on every database, and the
+  generated admin shows and edits it as text (`TextField`, `TextInput`), not as a number that would
+  round it. The generated list sorts rows in JavaScript, comparing such strings as text, and the
+  JSON body parser reads a JSON number as a double, so send an exact value as a string: a
+  `decimalPrecision` downgrade gap, located, says both.
+
 ## camis.config.json
 
 ```json

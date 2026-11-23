@@ -321,3 +321,67 @@ describe("generateCommand on a Filament app whose bootstrap/providers.php lost c
     expect(lines.join("\n")).not.toContain("CamisAuthServiceProvider");
   });
 });
+
+describe("generateCommand — names a target reserves", () => {
+  const reservedIr = JSON.stringify({
+    version: 1,
+    contentTypes: [
+      {
+        name: "Note",
+        kind: "collection",
+        fields: [
+          { type: "string", name: "title" },
+          { type: "dateTime", name: "publishedAt" },
+          { type: "dateTime", name: "updatedAt" },
+        ],
+      },
+    ],
+    components: [],
+  });
+  const mk = (
+    target: string,
+    lines: string[],
+    materialize = vi.fn(() => Promise.resolve()),
+  ): Io => ({
+    readFile: (p) =>
+      Promise.resolve(
+        p.endsWith("camis.config.json")
+          ? JSON.stringify({ ir: "./camis.json", targets: [{ target, out: "./out/x" }] })
+          : reservedIr,
+      ),
+    writeFile: () => Promise.resolve(),
+    materialize,
+    makeDir: () => Promise.resolve(),
+    copyDir: () => Promise.resolve(),
+    exec: () => Promise.resolve(0),
+    out: (l) => lines.push(l),
+    cwd: "/p",
+  });
+
+  it("fails before writing, with a located message for each", async () => {
+    const lines: string[] = [];
+    const spy = vi.fn(() => Promise.resolve());
+    const code = await generateCommand("camis.config.json", mk("strapi", lines, spy), {
+      write: true,
+    });
+    expect(code).toBe(1);
+    expect(spy).not.toHaveBeenCalled();
+    const out = lines.join("\n");
+    expect(out).toContain(
+      `reservedFieldName @ Note.publishedAt — field "publishedAt" collides with Strapi's own "publishedAt"; rename it`,
+    );
+    expect(out).toContain(`reservedFieldName @ Note.updatedAt`);
+    expect(out).toContain("✗ strapi: aborted");
+  });
+
+  it("fails on the Express target only for the names its tables keep", async () => {
+    const lines: string[] = [];
+    const code = await generateCommand("camis.config.json", mk("express", lines), {
+      write: false,
+    });
+    expect(code).toBe(1);
+    const out = lines.join("\n");
+    expect(out).toContain(`reservedFieldName @ Note.updatedAt`);
+    expect(out).not.toContain(`reservedFieldName @ Note.publishedAt`);
+  });
+});
