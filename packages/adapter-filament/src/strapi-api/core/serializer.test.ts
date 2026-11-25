@@ -209,6 +209,19 @@ describe("emitSerializer", () => {
     );
     expect(brandKit).toContain("], ['keywords'], fn (): bool => $m->seo_sponsor_id !== null),");
   });
+  // A zone's item kept by its id is written as the entry is: a key named with null clears, and a null
+  // component names the repeatables inside it, whose items are then deleted.
+  it("reads a zone item's columns and repeatables by the keys it names, null included", () => {
+    const brandDoc = normalize(nullClearsBundle.document);
+    const brandKit = emitSerializer(
+      wireShape(brandDoc, brandDoc.contentTypes.find((c) => c.name === "BrandKit")!, []),
+    );
+    expect(brandKit).toContain(
+      "'shared.link' => [\n                ...self::named($item, [\n                    'label' => [['label'], self::dig($item, ['label'])],",
+    );
+    expect(brandKit).toContain("'seoKeywords' => self::given($item, ['seo', 'keywords']) ?");
+    expect(brandKit).not.toContain("self::has(");
+  });
   it("ConsumableNested serializer golden (repeatable nested under a non-repeatable branch, PSR-12 indentation)", async () => {
     await expect(
       emitSerializer(wireShape(nestedDoc, nestedDoc.contentTypes[0]!, [])),

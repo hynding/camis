@@ -280,6 +280,37 @@ class NullClearsTest extends TestCase
         $this->show($id)->assertJsonPath('data.seo.extra', [])->assertJsonPath('data.seo.headline', null);
     }
 
+    public function test_a_zone_item_kept_by_its_id_is_cleared_by_null_and_keeps_a_key_it_leaves_out(): void
+    {
+        $id = $this->make(['blocks' => [
+            ['__component' => 'shared.link', 'label' => 'z'],
+            ['__component' => 'shared.card', 'title' => 'c', 'seo' => ['headline' => 'h', 'keywords' => [['label' => 'k']]]],
+        ]]);
+        $deep = "brand-kits/{$id}?populate[blocks][on][shared.card][populate][seo][populate]=*&populate[blocks][on][shared.link]=true";
+        $made = $this->api('GET', $deep)->assertOk()->assertJsonCount(1, 'data.blocks.1.seo.keywords');
+        [$link, $card] = [$made->json('data.blocks.0.id'), $made->json('data.blocks.1.id')];
+
+        $this->api('PUT', "brand-kits/{$id}", ['blocks' => [
+            ['__component' => 'shared.link', 'id' => $link, 'label' => null],
+            ['__component' => 'shared.card', 'id' => $card, 'seo' => null],
+        ]])->assertOk();
+        $this->api('GET', $deep)->assertOk()
+            ->assertJsonPath('data.blocks.0.id', $link)
+            ->assertJsonPath('data.blocks.0.label', null)
+            ->assertJsonPath('data.blocks.1.id', $card)
+            ->assertJsonPath('data.blocks.1.title', 'c')
+            ->assertJsonPath('data.blocks.1.seo', null);
+        // Written again, the item's component holds none of the items it held before it was cleared.
+        $this->api('PUT', "brand-kits/{$id}", ['blocks' => [
+            ['__component' => 'shared.link', 'id' => $link],
+            ['__component' => 'shared.card', 'id' => $card, 'seo' => ['headline' => 'Back']],
+        ]])->assertOk();
+        $this->api('GET', $deep)->assertOk()
+            ->assertJsonPath('data.blocks.0.label', null)
+            ->assertJsonPath('data.blocks.1.seo.headline', 'Back')
+            ->assertJsonCount(0, 'data.blocks.1.seo.keywords');
+    }
+
     public function test_a_repeatable_component_and_a_dynamic_zone_refuse_null(): void
     {
         $id = $this->make(['links' => [['label' => 'a']], 'blocks' => [['__component' => 'shared.link', 'label' => 'z']]]);

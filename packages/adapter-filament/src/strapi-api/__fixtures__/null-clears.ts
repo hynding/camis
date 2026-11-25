@@ -73,7 +73,7 @@ export const nullClearsBundle: IrBundle = {
             required: true,
           },
           { type: "component", name: "links", component: "Link", repeatable: true },
-          { type: "dynamicZone", name: "blocks", components: ["Link"] },
+          { type: "dynamicZone", name: "blocks", components: ["Link", "Card"] },
         ],
       },
       // A draft takes a null for a required component, which a published write refuses.
@@ -126,6 +126,14 @@ export const nullClearsBundle: IrBundle = {
       },
       { name: "Link", fields: [{ type: "string", name: "label" }] },
       { name: "Identity", fields: [{ type: "string", name: "mark" }] },
+      // A zone's item kept by its id, whose null clears as an entry's does, its Seo's items with it.
+      {
+        name: "Card",
+        fields: [
+          { type: "string", name: "title" },
+          { type: "component", name: "seo", component: "Seo", repeatable: false },
+        ],
+      },
     ],
   },
   roles: [
