@@ -27,24 +27,35 @@ describe("Express target: text columns sized by their bound (issue #123)", () =>
     expect(column("pgsql", text()).drizzle).toBe("text('body')");
   });
 
-  it("reports a bound LONGTEXT cannot hold rather than truncating", () => {
-    const result = expressAdapterFor("mysql").generate(
-      {
-        document: {
-          version: 1,
-          contentTypes: [
-            {
-              name: "Page",
-              kind: "collection",
-              fields: [text(1_073_741_824)],
-            },
-          ],
-          components: [],
+  describe("a bound the largest MySQL text cannot hold", () => {
+    const generate = (dialect: "sqlite" | "mysql" | "pgsql") =>
+      expressAdapterFor(dialect).generate(
+        {
+          document: {
+            version: 1,
+            contentTypes: [{ name: "Page", kind: "collection", fields: [text(1_073_741_824)] }],
+            components: [],
+          },
+          roles: [],
         },
-        roles: [],
-      },
-      { projectName: "docs" },
-    );
-    expect(result.gaps.gaps.filter((g) => g.feature === "textLength")).toHaveLength(1);
+        { projectName: "docs" },
+      );
+    const gaps = (dialect: "sqlite" | "mysql" | "pgsql") =>
+      generate(dialect).gaps.gaps.filter((g) => g.feature === "textLength");
+
+    it("is reported on MySQL, where its column is the largest text, not truncated", () => {
+      expect(gaps("mysql")).toEqual([
+        {
+          feature: "textLength",
+          location: { contentType: "Page", field: "body" },
+          severity: "downgrade",
+          message: expect.stringContaining("1073741824 characters"),
+        },
+      ]);
+    });
+
+    it.each(["sqlite", "pgsql"] as const)("is no gap on %s, whose text has one type", (dialect) => {
+      expect(gaps(dialect)).toEqual([]);
+    });
   });
 });
