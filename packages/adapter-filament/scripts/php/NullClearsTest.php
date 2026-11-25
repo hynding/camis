@@ -26,6 +26,9 @@ class NullClearsTest extends TestCase
 {
     use RefreshDatabase;
 
+    /** BrandKit's required component, which every create sends. */
+    private const IDENTITY = ['identity' => ['mark' => 'M']];
+
     private User $user;
 
     private string $jwt;
@@ -50,7 +53,7 @@ class NullClearsTest extends TestCase
     /** @param array<string, mixed> $data */
     private function make(array $data): string
     {
-        return $this->api('POST', 'brand-kits', ['title' => 'Kit', ...$data])->assertCreated()->json('data.documentId');
+        return $this->api('POST', 'brand-kits', ['title' => 'Kit', ...self::IDENTITY, ...$data])->assertCreated()->json('data.documentId');
     }
 
     private function show(string $documentId): TestResponse
@@ -138,27 +141,27 @@ class NullClearsTest extends TestCase
 
     public function test_null_on_a_create_is_no_value_and_runs_no_validation(): void
     {
-        $first = $this->api('POST', 'brand-kits', ['title' => 'One', 'tagline' => null, 'code' => null, 'rank' => null, 'launchedOn' => null])
+        $first = $this->api('POST', 'brand-kits', ['title' => 'One', ...self::IDENTITY, 'tagline' => null, 'code' => null, 'rank' => null, 'launchedOn' => null])
             ->assertCreated()
             ->assertJsonPath('data.tagline', null)
             ->assertJsonPath('data.code', null)
             ->assertJsonPath('data.rank', null);
         // A second null breaks neither the unique index nor the pattern, length and bounds.
-        $this->api('POST', 'brand-kits', ['title' => 'Two', 'code' => null, 'rank' => null])->assertCreated();
+        $this->api('POST', 'brand-kits', ['title' => 'Two', ...self::IDENTITY, 'code' => null, 'rank' => null])->assertCreated();
         $this->api('PUT', 'brand-kits/'.$first->json('data.documentId'), ['code' => null, 'rank' => null])->assertOk();
     }
 
     public function test_a_null_for_a_field_with_a_default_is_stored_as_null_not_the_default(): void
     {
         // Strapi's database layer takes a default for a key that is missing, not for a null.
-        $this->api('POST', 'brand-kits', ['title' => 'A'])->assertCreated()->assertJsonPath('data.tone', 'plain');
-        $this->api('POST', 'brand-kits', ['title' => 'B', 'tone' => null])->assertCreated()->assertJsonPath('data.tone', null);
+        $this->api('POST', 'brand-kits', ['title' => 'A', ...self::IDENTITY])->assertCreated()->assertJsonPath('data.tone', 'plain');
+        $this->api('POST', 'brand-kits', ['title' => 'B', ...self::IDENTITY, 'tone' => null])->assertCreated()->assertJsonPath('data.tone', null);
     }
 
     public function test_a_required_field_refuses_null_on_create_and_update(): void
     {
         $this->assertRefused(
-            $this->api('POST', 'brand-kits', ['title' => null]),
+            $this->api('POST', 'brand-kits', ['title' => null, ...self::IDENTITY]),
             ['title'],
             'title must be a `string` type, but the final value was: `null`.',
         );
@@ -177,11 +180,19 @@ class NullClearsTest extends TestCase
         $this->assertRefused($this->api('POST', 'brand-kits', ['title' => 'Kit', 'identity' => null]), ['identity'], $refusal);
         $this->assertSame(0, BrandKit::query()->count());
 
-        $id = $this->make(['identity' => ['mark' => 'M']]);
+        $id = $this->make([]);
         $this->assertRefused($this->api('PUT', "brand-kits/{$id}", ['identity' => null]), ['identity'], $refusal);
         $this->show($id)->assertJsonPath('data.identity.mark', 'M');
-        // Strapi's validator casts a missing component to one built from its fields, which is defined.
-        $this->api('POST', 'brand-kits', ['title' => 'Bare'])->assertCreated();
+    }
+
+    public function test_a_create_must_send_a_required_component_which_an_update_and_a_draft_need_not(): void
+    {
+        $this->assertRefused($this->api('POST', 'brand-kits', ['title' => 'Bare']), ['identity'], 'identity must be defined.');
+        $this->assertSame(0, BrandKit::query()->count());
+
+        $id = $this->make([]);
+        $this->api('PUT', "brand-kits/{$id}", ['tagline' => 'Kept'])->assertOk()->assertJsonPath('data.identity.mark', 'M');
+        $this->api('POST', 'campaigns?status=draft', ['title' => 'Draft'])->assertCreated();
     }
 
     public function test_a_draft_takes_null_for_a_required_component_which_a_published_write_refuses(): void
