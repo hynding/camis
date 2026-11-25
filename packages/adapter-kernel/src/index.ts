@@ -41,3 +41,10 @@ export type {
   Setting,
   UploadSettings,
 } from "./deployment-settings";
+export {
+  TIER_BYTES,
+  WORST_CASE_BYTES_PER_CHARACTER,
+  textTier,
+  textsBeyondTiers,
+} from "./text-size";
+export type { LocatedText, TextTier } from "./text-size";

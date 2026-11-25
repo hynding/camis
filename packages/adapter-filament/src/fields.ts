@@ -1,4 +1,5 @@
-import { decimalDigits, textColumnSize, type DecimalDigits } from "@camis/ir-core";
+import { decimalDigits, type DecimalDigits } from "@camis/ir-core";
+import { textTier } from "@camis/adapter-kernel";
 import type { Field } from "@camis/ir-schema";
 import { beyondPhpFloat } from "./decimals";
 import { snakeColumn } from "./names";
@@ -86,6 +87,9 @@ const digitsOf = (field: Field): { decimalDigits?: DecimalDigits } => {
   return digits === undefined ? {} : { decimalDigits: digits };
 };
 
+/** Laravel's text column for each tier of text (MySQL's TEXT, MEDIUMTEXT and LONGTEXT). */
+const TEXT_COLUMN_BY_TIER = { small: "text", medium: "mediumText", large: "longText" } as const;
+
 interface Base {
   migration: string;
   formComponent: string;
@@ -111,7 +115,7 @@ const base = (field: Field, c: string): Base => {
       };
     case "text":
       return {
-        migration: `$table->${textColumnSize(field)}('${c}')`,
+        migration: `$table->${TEXT_COLUMN_BY_TIER[textTier(field)]}('${c}')`,
         formComponent: `Textarea::make('${c}')`,
         tableColumn: `TextColumn::make('${c}')`,
         formImport: "Filament\\Forms\\Components\\Textarea",
