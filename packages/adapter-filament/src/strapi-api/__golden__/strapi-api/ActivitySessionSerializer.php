@@ -57,9 +57,10 @@ final class ActivitySessionSerializer
     /** Inverse of toWire: ['columns' => [...], 'children' => [relation => list<row>]]. Unknown keys ignored. */
     public static function fromWire(array $data): array
     {
-        $columns = array_filter([
-            'record_id' => self::dig($data, ['recordId']),
-        ], fn ($v) => $v !== null);
+        $columns = [];
+        if (self::given($data, ['recordId'])) {
+            $columns['record_id'] = self::dig($data, ['recordId']);
+        }
         $children = [];
         if (self::has($data, ['quantities'])) {
             $children['quantities'] = array_map(fn (array $row) => array_filter([
@@ -96,6 +97,22 @@ final class ActivitySessionSerializer
         }
 
         return $cur;
+    }
+
+    private static function given(array $a, array $path): bool
+    {
+        $cur = $a;
+        foreach ($path as $seg) {
+            if ($cur === null) {
+                return true;
+            }
+            if (! is_array($cur) || ! array_key_exists($seg, $cur)) {
+                return false;
+            }
+            $cur = $cur[$seg];
+        }
+
+        return true;
     }
 
     private static function has(array $a, array $path): bool

@@ -199,7 +199,7 @@ describe("emitSerializer", () => {
     expect(php).toContain(
       "'seenAt' => $m->seen_at === null ? null : (string) $m->seen_at->getTimestampMs(),",
     );
-    expect(php).toContain("'seen_at' => self::epoch(self::dig($data, ['seenAt'])),");
+    expect(php).toContain("$columns['seen_at'] = self::epoch(self::dig($data, ['seenAt']));");
     expect(php).toContain("private static function epoch(mixed $value): mixed");
     expect(emitSerializer(shape("Note"))).not.toContain("function epoch");
   });
@@ -263,8 +263,8 @@ describe("private fields", () => {
 
   it("still writes them", () => {
     const fromWire = php.slice(php.indexOf("function fromWire"));
-    expect(fromWire).toContain("'moderator_note' => self::dig($data, ['moderatorNote'])");
-    expect(fromWire).toContain("'score_reason' => self::dig($data, ['score', 'reason'])");
+    expect(fromWire).toContain("$columns['moderator_note'] = self::dig($data, ['moderatorNote']);");
+    expect(fromWire).toContain("$columns['score_reason'] = self::dig($data, ['score', 'reason']);");
     expect(fromWire).toContain("'reason' => self::dig($row, ['reason'])");
   });
 

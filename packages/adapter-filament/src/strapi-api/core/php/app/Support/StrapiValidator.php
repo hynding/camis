@@ -239,7 +239,13 @@ final class StrapiValidator
      */
     private static function zone(mixed $value, array $rule, array $path, array $context, array &$errors): void
     {
-        $items = is_array($value) && array_is_list($value) ? $value : [];
+        if (! is_array($value) || ! array_is_list($value)) {
+            // Strapi's zone is a required array: a null is refused like any other value that is not one.
+            $errors[] = self::notType($path, 'array', $value);
+
+            return;
+        }
+        $items = $value;
         foreach ($items as $i => $item) {
             $uid = is_array($item) ? ($item['__component'] ?? '') : '';
             $fields = $rule['components'][$uid] ?? null;

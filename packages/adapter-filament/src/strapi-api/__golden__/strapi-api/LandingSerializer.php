@@ -83,9 +83,10 @@ final class LandingSerializer
     /** Inverse of toWire: ['columns' => [...], 'children' => [relation => list<row>]]. Unknown keys ignored. */
     public static function fromWire(array $data): array
     {
-        $columns = array_filter([
-            'title' => self::dig($data, ['title']),
-        ], fn ($v) => $v !== null);
+        $columns = [];
+        if (self::given($data, ['title'])) {
+            $columns['title'] = self::dig($data, ['title']);
+        }
         $children = [];
         if (array_key_exists('blocks', $data)) {
             $children['blocks'] = StrapiZones::items($data['blocks'], 'blocks', self::ZONES['blocks'], fn (string $uid, array $item) => match ($uid) {
@@ -133,6 +134,22 @@ final class LandingSerializer
         }
 
         return $cur;
+    }
+
+    private static function given(array $a, array $path): bool
+    {
+        $cur = $a;
+        foreach ($path as $seg) {
+            if ($cur === null) {
+                return true;
+            }
+            if (! is_array($cur) || ! array_key_exists($seg, $cur)) {
+                return false;
+            }
+            $cur = $cur[$seg];
+        }
+
+        return true;
     }
 
     /** @param list<array{0: int, 1: array}> $items [position, item] pairs from every member */

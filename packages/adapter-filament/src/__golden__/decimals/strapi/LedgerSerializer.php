@@ -86,15 +86,28 @@ final class LedgerSerializer
     /** Inverse of toWire: ['columns' => [...], 'children' => [relation => list<row>]]. Unknown keys ignored. */
     public static function fromWire(array $data): array
     {
-        $columns = array_filter([
-            'label' => self::dig($data, ['label']),
-            'balance' => self::decimal(self::dig($data, ['balance']), 20, 6, ['balance']),
-            'rate' => self::decimal(self::dig($data, ['rate']), 9, 4, ['rate']),
-            'share' => self::decimal(self::dig($data, ['share']), 15, 5, ['share']),
-            'units' => self::decimal(self::dig($data, ['units']), 14, 4, ['units']),
-            'fee' => self::dig($data, ['fee']),
-            'limit_ceiling' => self::decimal(self::dig($data, ['limit', 'ceiling']), 18, 2, ['limit', 'ceiling']),
-        ], fn ($v) => $v !== null);
+        $columns = [];
+        if (self::given($data, ['label'])) {
+            $columns['label'] = self::dig($data, ['label']);
+        }
+        if (self::given($data, ['balance'])) {
+            $columns['balance'] = self::decimal(self::dig($data, ['balance']), 20, 6, ['balance']);
+        }
+        if (self::given($data, ['rate'])) {
+            $columns['rate'] = self::decimal(self::dig($data, ['rate']), 9, 4, ['rate']);
+        }
+        if (self::given($data, ['share'])) {
+            $columns['share'] = self::decimal(self::dig($data, ['share']), 15, 5, ['share']);
+        }
+        if (self::given($data, ['units'])) {
+            $columns['units'] = self::decimal(self::dig($data, ['units']), 14, 4, ['units']);
+        }
+        if (self::given($data, ['fee'])) {
+            $columns['fee'] = self::dig($data, ['fee']);
+        }
+        if (self::given($data, ['limit', 'ceiling'])) {
+            $columns['limit_ceiling'] = self::decimal(self::dig($data, ['limit', 'ceiling']), 18, 2, ['limit', 'ceiling']);
+        }
         $children = [];
         if (self::has($data, ['entries'])) {
             $children['entries'] = array_map(fn (array $row, int|string $i) => array_filter([
@@ -141,6 +154,22 @@ final class LedgerSerializer
         }
 
         return $cur;
+    }
+
+    private static function given(array $a, array $path): bool
+    {
+        $cur = $a;
+        foreach ($path as $seg) {
+            if ($cur === null) {
+                return true;
+            }
+            if (! is_array($cur) || ! array_key_exists($seg, $cur)) {
+                return false;
+            }
+            $cur = $cur[$seg];
+        }
+
+        return true;
     }
 
     private static function has(array $a, array $path): bool

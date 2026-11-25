@@ -189,22 +189,33 @@ const zoneWire = (zone: WireZone, indent: string): string =>
 
 const quoted = (keys: readonly string[]): string => keys.map((k) => `'${k}'`).join(", ");
 
+const takenValue = (s: WireScalar, src: string, at: string): string => {
+  const value = `self::dig(${src}, [${quoted(s.key)}])`;
+  return s.type === "timestamp"
+    ? `self::epoch(${value})`
+    : s.digits !== undefined
+      ? `self::decimal(${value}, ${s.digits.precision}, ${s.digits.scale}, [${at}${quoted(s.key)}])`
+      : value;
+};
+
 /**
  * Each column of a row read from `src`. `at` is the PHP list of the path to `src` within the
  * request (a repeatable's key and an item's index, say), which a refused decimal names.
  */
 const fromWireColumns = (scalars: WireScalar[], src: string, indent: string, at = ""): string =>
+  scalars.map((s) => `${indent}'${s.column}' => ${takenValue(s, src, at)},`).join("\n");
+
+/**
+ * The entry's own columns, each set only when the payload names its key: an explicit null clears
+ * the column, as Strapi does, and a missing key leaves it. Items are not read this way, as their
+ * rows are written afresh and a null is no value in one.
+ */
+const fromWireEntryColumns = (scalars: WireScalar[], indent: string): string =>
   scalars
-    .map((s) => {
-      const value = `self::dig(${src}, [${quoted(s.key)}])`;
-      const taken =
-        s.type === "timestamp"
-          ? `self::epoch(${value})`
-          : s.digits !== undefined
-            ? `self::decimal(${value}, ${s.digits.precision}, ${s.digits.scale}, [${at}${quoted(s.key)}])`
-            : value;
-      return `${indent}'${s.column}' => ${taken},`;
-    })
+    .map(
+      (s) =>
+        `${indent}if (self::given($data, [${quoted(s.key)}])) {\n${indent}${UNIT}$columns['${s.column}'] = ${takenValue(s, "$data", "")};\n${indent}}`,
+    )
     .join("\n");
 
 // Each child key is set only when the wire payload mentions it, mirroring `syncChildren`'s
@@ -402,6 +413,26 @@ const hasHelper = `
         return true;
     }`;
 
+// Whether the payload names a path. A null where a component sits names every field inside it,
+// which clears the component as Strapi does; a key that is missing names nothing.
+const givenHelper = `
+
+    private static function given(array $a, array $path): bool
+    {
+        $cur = $a;
+        foreach ($path as $seg) {
+            if ($cur === null) {
+                return true;
+            }
+            if (! is_array($cur) || ! array_key_exists($seg, $cur)) {
+                return false;
+            }
+            $cur = $cur[$seg];
+        }
+
+        return true;
+    }`;
+
 // Emitted only for a shape writing a decimal stating its digits. SQLite keeps one beyond a PHP
 // float as text, which takes any string: every value is kept as MySQL and PostgreSQL keep it, at
 // its scale, and one that is not a decimal or does not fit is refused before it is written.
@@ -550,6 +581,7 @@ export const emitSerializer = (shape: WireShape, layout: StorageLayout = "larave
   ]
     .map((body) => `\n${body}`)
     .join("");
+  const givenHelperBody = shape.scalars.length === 0 ? "" : givenHelper;
   const hasHelperBody = shape.children.length === 0 ? "" : hasHelper;
   const zoneHelperBody = zones.length === 0 ? "" : zoneHelper;
   const epochHelperBody = hasTimestamp(shape, zones) ? epochHelper : "";
@@ -585,9 +617,8 @@ ${toWireBody(shape, l3, layout)}
     /** Inverse of toWire: ['columns' => [...], 'children' => [relation => list<row>]]. Unknown keys ignored. */
     public static function fromWire(array $data): array
     {
-        $columns = array_filter([
-${fromWireColumns(shape.scalars, "$data", l3)}
-        ], fn ($v) => $v !== null);
+        $columns = [];
+${fromWireEntryColumns(shape.scalars, l2)}
 ${fromWireChildStatements(shape.children, l2)}${zones.length === 0 ? "" : `\n${fromWireZoneStatements(zones, l2)}`}
 
         return ['columns' => $columns, 'children' => $children];
@@ -614,7 +645,7 @@ ${fromWireChildStatements(shape.children, l2)}${zones.length === 0 ? "" : `\n${f
         }
 
         return $cur;
-    }${hasHelperBody}${zoneHelperBody}${epochHelperBody}${decimalHelperBody}
+    }${givenHelperBody}${hasHelperBody}${zoneHelperBody}${epochHelperBody}${decimalHelperBody}
 }
 `;
 };
