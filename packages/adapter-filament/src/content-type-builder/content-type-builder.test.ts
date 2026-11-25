@@ -92,7 +92,7 @@ describe("the Content-Type Builder", () => {
     );
     expect(paths).toContain("app/Support/ColumnConversion.php");
     expect(content("app/Support/CamisSchemaSync.php")).toContain(
-      '$this->report[] = "converted {$table}.{$name} from {$before} to {$declared}";',
+      '$this->report[] = "converted {$table}.{$name} from {$was} to {$declared}";',
     );
   });
 

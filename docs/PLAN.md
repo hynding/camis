@@ -3807,7 +3807,11 @@ stay; `packages/cli/README.md` ("Text columns") gives the hand-written change. O
 style with the Content-Type Builder, `CamisSchemaSync::changeColumnTypes` compares recorded and
 declared types; `ColumnConversion::sizeChange` makes a change between text sizes a no-op on SQLite
 and PostgreSQL (one type there, so no table rebuild), a `->change()` on MySQL when it widens, and
-a reported `kept` when it would narrow, which the sync never does on its own.
+a reported `kept` when it would narrow, which the sync never does on its own. On MySQL and
+MariaDB the size compared is the live column's (`Schema::getColumnType`, information_schema's
+`DATA_TYPE`: `tinytext`, `text`, `mediumtext`, `longtext`), not the recorded one: a `kept` record
+would otherwise skip a later widening once the owner had narrowed the column by hand. What is
+recorded is what the column has.
 
 Limits, tracked in #126: string columns with a large `maxLength`, and targets that do not enforce
 `maxLength` at all, are not covered.
@@ -3820,7 +3824,8 @@ Exit: `text-size.test.ts` (kernel), `text-columns.test.ts` in each adapter (gold
 `text-sizes/create_pages_table.php`; the Express gap on MySQL only), and in the `text-columns` job
 on SQLite, MySQL and PostgreSQL, with the matrix database exported: `TextSizesTest.php` (the
 text-sizes fixture, values past 64 KiB) and `TextSchemaSyncTest.php` (a real TEXT column widened and
-a longText column kept past a refused narrowing, each with a value past 64 KiB read back, and
+a longText column kept past a refused narrowing (the guard's own message, also where narrowing would
+succeed), a column narrowed by hand widened again, each with a value past 64 KiB read back, and
 `sizeChange`'s decision). SQLite and PostgreSQL ran locally; MySQL runs only in CI.
 
 ---

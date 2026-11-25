@@ -169,12 +169,15 @@ Schema::table('articles', fn (Blueprint $table) => $table->longText('body')->nul
 or `ALTER TABLE articles MODIFY body LONGTEXT NULL;` (Express too). On Express with MySQL, adding
 or lowering a `maxLength` makes the next `drizzle-kit push` narrow the column (`MODIFY ... TEXT`),
 which fails in strict mode or truncates what no longer fits: read the SQL it proposes before
-applying it. The Content-Type Builder's `camis:schema-sync` widens a text column to the size the
-model now declares on MySQL, leaves the three sizes alone on SQLite and PostgreSQL (one type
-there), and never narrows a text column on its own: where the model declares a smaller text size
+applying it. The Content-Type Builder's `camis:schema-sync` reads a text column's size from the
+live column on MySQL and MariaDB, not from what it recorded: it widens a column that is smaller than
+the model declares, and never narrows one on its own. Where the model declares a smaller text size
 than the column has, the sync reports `kept <table>.<column> as <type>` and leaves the column as it
-is. This guards the text sizes only; a change of a text column to a string, or of a string's length,
-is made as before.
+is; narrow it yourself once you know no value is longer, for instance
+`ALTER TABLE articles MODIFY body TEXT NULL;`, and the next sync stops reporting it and records the
+size the column has (a later widening in the model is then made). SQLite and PostgreSQL keep one
+text type, so the sync leaves the three sizes alone there. This guards the text sizes only; a change
+of a text column to a string, or of a string's length, is made as before.
 
 The `textLength` gap covers the column type only. It does not cover the limits of the server or the
 request (MySQL's `max_allowed_packet`, PostgreSQL's and SQLite's own value limits, near 1 GB), nor
