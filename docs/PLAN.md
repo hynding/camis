@@ -3844,6 +3844,54 @@ Not done:
   keeping the fields a body leaves out would part from Strapi for an id-less component, and the
   wire answers a component of nulls as null on both layouts (`nested`).
 
+## Phase 100 — text columns sized by their bound (`adapter-kernel`, `adapter-filament`, `adapter-express`)
+
+Issue #123: the Filament adapter migrated every `text` field as `$table->text(...)`, and the Express
+target's MySQL schema used `text(...)`, whatever the field's `maxLength`; MySQL's TEXT holds 65,535
+bytes, so a longer value failed the insert in strict mode. `textTier` (`adapter-kernel`) is neutral:
+it picks the smallest of three tiers that holds `maxLength` characters at the worst case of four
+bytes each, and the large tier for a text with no bound, as Strapi's longtext is, and for rich text
+whatever its bound. Each adapter names its own columns: Filament `text`, `mediumText` and
+`longText` (up to 16,383, 4,194,303 and 1,073,741,823 characters), on every database, as Laravel maps
+all three to `text` on SQLite and PostgreSQL; Express `text`, `mediumtext` and `longtext` on MySQL
+only. A bound the large tier cannot hold is a `textLength` capability gap from each adapter that
+makes the column (Filament on the Laravel storage layout, Express on MySQL), the column staying
+the large tier, which refuses a larger value in strict mode rather than truncating it.
+
+The Strapi adapter reports no such gap: Strapi's database layer makes both `text` and `richtext`
+a `longtext` whatever the bound (`@strapi/database` schema.js, checked in 5.48), so the column is
+Strapi's, not camis's, and its validator enforces the bound.
+
+Existing databases: a create-table migration that has run is not run again, so old `text` columns
+stay; `packages/cli/README.md` ("Text columns") gives the hand-written change. On the Strapi API
+style with the Content-Type Builder, `CamisSchemaSync::changeColumnTypes` compares recorded and
+declared types; `ColumnConversion::sizeChange` makes a change between text sizes a no-op on SQLite
+and PostgreSQL (one type there, so no table rebuild), a `->change()` on MySQL when it widens, and
+a reported `kept` when it would narrow, which the sync never does on its own. On MySQL and
+MariaDB the size compared is the live column's (`Schema::getColumnType`, information_schema's
+`DATA_TYPE`: `tinytext`, `text`, `mediumtext`, `longtext`), not the recorded one: a `kept` record
+would otherwise skip a later widening once the owner had narrowed the column by hand. What is
+recorded is what the column has, and a failed widening reports and records the live type. The live size is
+read only where the record is missing or a text type (`ColumnConversion::readsLiveSize`): MariaDB keeps
+JSON as a LONGTEXT, so a recorded `json` column changed to text still goes through `convertColumn`. The
+remaining gap: a column with no record whose live MariaDB type is JSON reads as a longText and is left
+alone, as every unrecorded column is.
+
+Limits, tracked in #126: string columns with a large `maxLength`, and targets that do not enforce
+`maxLength` at all, are not covered.
+
+The gap covers the column type only, not the server's or request's limits (MySQL's
+`max_allowed_packet`, PostgreSQL's and SQLite's value limits, near 1 GB), which stop a value
+before LONGTEXT's 4 GiB; #126 tracks those and targets that do not enforce `maxLength`.
+
+Exit: `text-size.test.ts` (kernel), `text-columns.test.ts` in each adapter (golden
+`text-sizes/create_pages_table.php`; the Express gap on MySQL only), and in the `text-columns` job
+on SQLite, MySQL and PostgreSQL, with the matrix database exported: `TextSizesTest.php` (the
+text-sizes fixture, values past 64 KiB) and `TextSchemaSyncTest.php` (a real TEXT column widened and
+a longText column kept past a refused narrowing (the guard's own message, also where narrowing would
+succeed), a column narrowed by hand widened again, each with a value past 64 KiB read back, and
+`sizeChange`'s decision). SQLite and PostgreSQL ran locally; MySQL runs only in CI.
+
 ---
 
 ## Sequencing rationale (quick reference)

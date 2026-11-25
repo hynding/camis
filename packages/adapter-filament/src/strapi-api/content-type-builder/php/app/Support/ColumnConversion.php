@@ -44,6 +44,57 @@ final class ColumnConversion
 
     private const TIME_FORMATS = ['H:i:s.u', 'H:i:s', 'H:i'];
 
+    /** The plain text types by what they hold, MySQL's TINYTEXT to LONGTEXT. */
+    private const TEXT_SIZES = ['tinyText' => 1, 'text' => 2, 'mediumText' => 3, 'longText' => 4];
+
+    /**
+     * What a change between two plain text types is on a driver: null when either is not one, 'same'
+     * where the database keeps text of every size in one type (SQLite, PostgreSQL), else 'widen' or
+     * 'narrow'. A narrower column would cut the values it holds, so the sync never makes one.
+     */
+    public static function sizeChange(string $driver, string $before, string $declared): ?string
+    {
+        $from = self::TEXT_SIZES[$before] ?? null;
+        $to = self::TEXT_SIZES[$declared] ?? null;
+        if ($from === null || $to === null) {
+            return null;
+        }
+        if (! in_array($driver, ['mysql', 'mariadb'], true) || $from === $to) {
+            return 'same';
+        }
+
+        return $to > $from ? 'widen' : 'narrow';
+    }
+
+    /**
+     * A live column's text size by the name the database gives its type (information_schema's
+     * DATA_TYPE, which Schema::getColumnType answers on MySQL and MariaDB), as the sync records it;
+     * null for a column that is not a plain text.
+     */
+    public static function textSizeOf(string $liveType): ?string
+    {
+        return ['tinytext' => 'tinyText', 'text' => 'text', 'mediumtext' => 'mediumText', 'longtext' => 'longText'][strtolower($liveType)] ?? null;
+    }
+
+    /**
+     * Whether the sync reads a text column's size from the live column: where a database has several
+     * text sizes, the declared type is a text size, and the record is missing or is a text (or
+     * string) type. A recorded change of group (MariaDB stores JSON as a LONGTEXT, which the live
+     * column would pass for a text size) is converted, not read as one.
+     */
+    public static function readsLiveSize(string $driver, ?string $before, string $declared): bool
+    {
+        return in_array($driver, ['mysql', 'mariadb'], true)
+            && self::sizeChange($driver, 'text', $declared) !== null
+            && ($before === null || self::group($before) === 'text');
+    }
+
+    /** The type a column has: the live one whenever it was read, else the recorded one. */
+    public static function currentType(?string $live, ?string $before): ?string
+    {
+        return $live ?? $before;
+    }
+
     /** The group a recorded column type belongs to: a change within one is the database's to make. */
     public static function group(string $type): string
     {

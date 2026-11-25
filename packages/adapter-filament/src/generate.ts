@@ -1,3 +1,4 @@
+import { filamentTextLengthGaps } from "./text-columns";
 import {
   buildManifest,
   columnField,
@@ -137,6 +138,7 @@ export const filamentAdapter: GenerateAdapter = {
       // The Strapi API style keeps private fields out of its answers; the Laravel one cannot.
       ...(apiStyle === "strapi" ? [] : privateFieldGaps(doc, "the Laravel API style")),
       ...filamentDecimalGaps(doc, apiStyle, storage),
+      ...filamentTextLengthGaps(doc, storage),
     ];
     if (storage !== requestedStorage) {
       gaps.push({

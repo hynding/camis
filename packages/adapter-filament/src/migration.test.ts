@@ -23,7 +23,7 @@ describe("migration", () => {
     expect(php).toContain("Schema::create('articles', function (Blueprint $table): void {");
     expect(php).toContain("$table->id();");
     expect(php).toContain("$table->string('title');");
-    expect(php).toContain("$table->text('body')->nullable();");
+    expect(php).toContain("$table->longText('body')->nullable();");
     expect(php).toContain("$table->boolean('published')->nullable();");
     expect(php).toContain("$table->timestamps();");
     expect(php).toContain("Schema::dropIfExists('articles');");

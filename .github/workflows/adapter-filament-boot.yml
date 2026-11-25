@@ -631,6 +631,83 @@ jobs:
           esac
           cp ../packages/adapter-filament/scripts/php/NullClearsTest.php tests/Feature/
           php artisan test tests/Feature/NullClearsTest.php
+  text-columns:
+    # Text columns sized by their bound (issue #123): MySQL stores a TEXT of 65,535 bytes at most and a
+    # strict-mode insert past it fails, so a value past 64 KiB is round tripped on all three databases.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        db: [sqlite, mysql, pgsql]
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_DATABASE: camis
+          MYSQL_ROOT_PASSWORD: camis
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=5
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: camis
+          POSTGRES_PASSWORD: camis
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready" --health-interval=10s --health-timeout=5s --health-retries=5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: gd
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Scaffold Laravel 12 + Filament v5 + API + Spatie + GraphQL
+        run: |
+          composer create-project laravel/laravel:^12 app --no-interaction
+          cd app
+          composer require filament/filament:"^5.0" --no-interaction
+          php artisan filament:install --panels --no-interaction
+          php artisan install:api --no-interaction
+          composer require spatie/laravel-permission --no-interaction
+          php artisan vendor:publish --provider="Spatie\Permission\PermissionServiceProvider" --no-interaction
+          composer require webonyx/graphql-php:"^15.19" --no-interaction
+          cd "$GITHUB_WORKSPACE"
+          pnpm --filter @camis/cli exec tsx -e "import { readFileSync, writeFileSync } from 'node:fs';
+            import { isPatchedUserModel, patchAdminPanelProvider, patchUserModel } from './src/commands/scaffold';
+            const f = process.env.GITHUB_WORKSPACE + '/app/app/Models/User.php';
+            const patched = patchUserModel(readFileSync(f, 'utf8'));
+            if (!isPatchedUserModel(patched)) { console.error('User model patch did not apply'); process.exit(1); }
+            writeFileSync(f, patched);
+            const p = process.env.GITHUB_WORKSPACE + '/app/app/Providers/Filament/AdminPanelProvider.php';
+            const panel = patchAdminPanelProvider(readFileSync(p, 'utf8'));
+            if (!panel.includes(\"->authGuard('admin')\")) { console.error('admin panel patch did not apply'); process.exit(1); }
+            writeFileSync(p, panel);"
+      - name: Overlay (apiStyle strapi, the text-sizes fixture)
+        run: pnpm --filter @camis/adapter-filament overlay "$GITHUB_WORKSPACE/app" --style strapi --bundle text-sizes
+      - name: Patch bootstrap/app.php as camis scaffold does
+        run: >-
+          pnpm --filter @camis/cli exec tsx -e "import { readFileSync, writeFileSync } from 'node:fs';
+          import { patchBootstrapExceptions, patchBootstrapGraphql, patchBootstrapMiddleware, patchBootstrapTransfer } from './src/commands/scaffold';
+          const f = process.env.GITHUB_WORKSPACE + '/app/bootstrap/app.php';
+          writeFileSync(f, patchBootstrapExceptions(patchBootstrapGraphql(patchBootstrapTransfer(patchBootstrapMiddleware(readFileSync(f, 'utf8'))))));"
+      - name: A text past 64 KiB is stored and read back whole, and the schema sync widens a text column and never narrows one (${{ matrix.db }})
+        run: |
+          cd app
+          # phpunit.xml names an in-memory sqlite database; the environment's database wins over it.
+          case "${{ matrix.db }}" in
+            sqlite) export DB_CONNECTION=sqlite DB_DATABASE=:memory: ;;
+            mysql)  export DB_CONNECTION=mysql DB_HOST=127.0.0.1 DB_PORT=3306 DB_DATABASE=camis DB_USERNAME=root DB_PASSWORD=camis ;;
+            pgsql)  export DB_CONNECTION=pgsql DB_HOST=127.0.0.1 DB_PORT=5432 DB_DATABASE=camis DB_USERNAME=postgres DB_PASSWORD=camis ;;
+          esac
+          cp ../packages/adapter-filament/scripts/php/TextSizesTest.php ../packages/adapter-filament/scripts/php/TextSchemaSyncTest.php tests/Feature/
+          php artisan test tests/Feature/TextSizesTest.php tests/Feature/TextSchemaSyncTest.php
   strapi-api:
     runs-on: ubuntu-latest
     # The REST and populate vectors build SQL per dialect (LIKE escapes, casts, relation

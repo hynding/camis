@@ -13,7 +13,7 @@ return new class extends Migration
         Schema::create('articles', function (Blueprint $table): void {
             $table->id();
             $table->string('title');
-            $table->text('body')->nullable();
+            $table->longText('body')->nullable();
             $table->boolean('published')->nullable();
             $table->dateTime('published_at')->nullable();
             $table->timestamps();

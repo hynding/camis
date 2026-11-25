@@ -149,6 +149,43 @@ Drizzle's `decimal`/`numeric` on Express. With them:
   JSON body parser reads a JSON number as a double, so send an exact value as a string: a
   `decimalPrecision` downgrade gap, located, says both.
 
+### Text columns
+
+A `text` field's column is sized by its `maxLength` at four bytes a character (MySQL's worst case,
+utf8mb4): `text` up to 16,383 characters, `mediumText` up to 4,194,303, `longText` above that and for
+a text with no bound, as Strapi's longtext is; rich text is always `longText`. SQLite and PostgreSQL
+keep one text type, so only MySQL sees the difference. A bound above 1,073,741,823 characters is
+more than any MySQL text holds: the column stays `longText` and a `textLength` downgrade gap says
+so. `filament` (Laravel storage) and `express` on MySQL choose the column; Strapi's own columns are
+always longtext.
+
+A migration that has already run is not run again, so a database made before this keeps its old
+`text` columns (65,535 bytes on MySQL). Widen one by hand:
+
+```php
+Schema::table('articles', fn (Blueprint $table) => $table->longText('body')->nullable()->change());
+```
+
+or `ALTER TABLE articles MODIFY body LONGTEXT NULL;` (Express too). On Express with MySQL, adding
+or lowering a `maxLength` makes the next `drizzle-kit push` narrow the column (`MODIFY ... TEXT`),
+which fails in strict mode or truncates what no longer fits: read the SQL it proposes before
+applying it. The Content-Type Builder's `camis:schema-sync` reads a text column's size from the
+live column on MySQL and MariaDB, not from what it recorded: it widens a column that is smaller than
+the model declares, and never narrows one on its own. Where the model declares a smaller text size
+than the column has, the sync reports `kept <table>.<column> as <type>` and leaves the column as it
+is; narrow it yourself once you know no value is longer, for instance
+`ALTER TABLE articles MODIFY body TEXT NULL;`, and the next sync stops reporting it and records the
+size the column has (a later widening in the model is then made). SQLite and PostgreSQL keep one
+text type, so the sync leaves the three sizes alone there. The live size is read only where the record is missing or a text type: MariaDB stores JSON as a
+LONGTEXT, so a column recorded as `json` that the model turns into text is converted as any change
+of type is, not taken for a text size. A column with no record whose live MariaDB type is really
+JSON reads as a longText and is left alone, as any unrecorded column is. This guards the text sizes only; a change
+of a text column to a string, or of a string's length, is made as before.
+
+The `textLength` gap covers the column type only. It does not cover the limits of the server or the
+request (MySQL's `max_allowed_packet`, PostgreSQL's and SQLite's own value limits, near 1 GB), nor
+targets that do not enforce `maxLength` at all (camis#126).
+
 ## camis.config.json
 
 ```json
