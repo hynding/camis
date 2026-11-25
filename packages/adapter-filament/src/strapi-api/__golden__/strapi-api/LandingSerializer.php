@@ -83,24 +83,31 @@ final class LandingSerializer
     /** Inverse of toWire: ['columns' => [...], 'children' => [relation => list<row>]]. Unknown keys ignored. */
     public static function fromWire(array $data): array
     {
-        $columns = array_filter([
-            'title' => self::dig($data, ['title']),
-        ], fn ($v) => $v !== null);
+        $columns = [];
+        if (self::given($data, ['title'])) {
+            $columns['title'] = self::dig($data, ['title']);
+        }
         $children = [];
         if (array_key_exists('blocks', $data)) {
             $children['blocks'] = StrapiZones::items($data['blocks'], 'blocks', self::ZONES['blocks'], fn (string $uid, array $item) => match ($uid) {
                 'shared.hero' => [
-                    'heading' => self::dig($item, ['heading']),
-                    'subheading' => self::dig($item, ['subheading']),
-                    'price_minor' => self::dig($item, ['price', 'minor']),
-                    'price_currency' => self::dig($item, ['price', 'currency']),
+                    ...self::named($item, [
+                        'heading' => [['heading'], self::dig($item, ['heading'])],
+                        'subheading' => [['subheading'], self::dig($item, ['subheading'])],
+                        'price_minor' => [['price', 'minor'], self::dig($item, ['price', 'minor'])],
+                        'price_currency' => [['price', 'currency'], self::dig($item, ['price', 'currency'])],
+                    ]),
                 ],
                 'shared.quantity' => [
-                    'amount' => self::dig($item, ['amount']),
-                    'unit' => self::dig($item, ['unit']),
+                    ...self::named($item, [
+                        'amount' => [['amount'], self::dig($item, ['amount'])],
+                        'unit' => [['unit'], self::dig($item, ['unit'])],
+                    ]),
                 ],
                 'shared.frame' => [
-                    'caption' => self::dig($item, ['caption']),
+                    ...self::named($item, [
+                        'caption' => [['caption'], self::dig($item, ['caption'])],
+                    ]),
                     '__links' => array_intersect_key($item, ['image' => true]),
                 ],
             });
@@ -116,10 +123,19 @@ final class LandingSerializer
         }
     }
 
-    /** A component's fields, or null when none has a value (its id, the row's, is not one). */
-    private static function nested(array $a): ?array
+    /**
+     * A component's fields, or null when none has a value: its id (the row's) is not one, nor a
+     * repeatable or set of files ($lists) holding none; a link it holds ($linked) is one.
+     */
+    private static function nested(array $a, array $lists = [], ?\Closure $linked = null): ?array
     {
-        return array_filter(array_diff_key($a, ['id' => true]), fn ($v) => $v !== null) === [] ? null : $a;
+        foreach (array_diff_key($a, ['id' => true]) as $key => $value) {
+            if ($value !== null && ($value !== [] || ! in_array($key, $lists, true))) {
+                return $a;
+            }
+        }
+
+        return $linked !== null && $linked() ? $a : null;
     }
 
     private static function dig(array $a, array $path): mixed
@@ -133,6 +149,35 @@ final class LandingSerializer
         }
 
         return $cur;
+    }
+
+    private static function given(array $a, array $path): bool
+    {
+        $cur = $a;
+        foreach ($path as $seg) {
+            if ($cur === null) {
+                return true;
+            }
+            if (! is_array($cur) || ! array_key_exists($seg, $cur)) {
+                return false;
+            }
+            $cur = $cur[$seg];
+        }
+
+        return true;
+    }
+
+    /** The columns a zone's item names, each given as [its key path, its value]. */
+    private static function named(array $item, array $columns): array
+    {
+        $named = [];
+        foreach ($columns as $column => [$path, $value]) {
+            if (self::given($item, $path)) {
+                $named[$column] = $value;
+            }
+        }
+
+        return $named;
     }
 
     /** @param list<array{0: int, 1: array}> $items [position, item] pairs from every member */

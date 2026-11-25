@@ -182,6 +182,12 @@ final class StrapiValidator
     {
         if (! ($rule['repeatable'] ?? false)) {
             if ($value === null) {
+                // A required one is Strapi's notNil on a create and notNull on an update, but on a
+                // draft; its object type is checked first, which refuses the null.
+                if (! $context['draft'] && ($rule['required'] ?? false)) {
+                    $errors[] = self::notType($path, 'object', null);
+                }
+
                 return;
             }
             if (! is_array($value) || ($value !== [] && array_is_list($value))) {
@@ -240,7 +246,13 @@ final class StrapiValidator
      */
     private static function zone(mixed $value, array $rule, array $path, array $context, array &$errors): void
     {
-        $items = is_array($value) && array_is_list($value) ? $value : [];
+        if (! is_array($value) || ! array_is_list($value)) {
+            // Strapi's zone is a required array: a null is refused like any other value that is not one.
+            $errors[] = self::notType($path, 'array', $value);
+
+            return;
+        }
+        $items = $value;
         foreach ($items as $i => $item) {
             $uid = is_array($item) ? ($item['__component'] ?? '') : '';
             $fields = $rule['components'][$uid] ?? null;

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { normalize } from "@camis/ir-core";
 import type { IrDocument } from "@camis/ir-schema";
+import { nullClearsBundle } from "../__fixtures__/null-clears";
 import { strapiApiBundle } from "../__fixtures__/strapi-api";
 import { emitSerializer } from "./serializer";
 import { wireShape } from "./wire-shape";
@@ -141,8 +142,23 @@ describe("emitSerializer", () => {
   it("fromWire only sets a child key when the wire payload mentions it (partial-update safe)", () => {
     const php = emitSerializer(shape("ActivitySession"));
     expect(php).toContain("$children = [];");
-    expect(php).toContain("if (self::has($data, ['quantities'])) {");
+    expect(php).toContain("if (self::given($data, ['quantities'])) {");
     expect(php).toContain("$children['quantities'] = array_map(");
+  });
+  // Strapi clears a field the update names as null and leaves one it does not name (issue #122).
+  it("writes a column only when the payload names it, so null clears it and a missing key keeps it", () => {
+    const php = emitSerializer(wireShape(stampedDoc, stampedDoc.contentTypes[0]!, []));
+    expect(php).toContain(
+      "$columns = [];\n        if (self::given($data, ['seenAt'])) {\n            $columns['seen_at'] = self::epoch(self::dig($data, ['seenAt']));\n        }",
+    );
+    expect(php).toContain("private static function given(array $a, array $path): bool");
+    expect(php.slice(php.indexOf("function fromWire"))).not.toContain(
+      "array_filter([\n            'seen_at'",
+    );
+  });
+  it("counts a field of a component the payload sets to null as named, so the component is cleared", () => {
+    const php = emitSerializer(wireShape(nestedDoc, nestedDoc.contentTypes[0]!, []));
+    expect(php).toContain("if (self::given($data, ['facts', 'calories'])) {");
   });
   // A component with no value is null; one with a value sends its own nulls.
   it("uses self::nested for an embedded component so an all-null one is null, not []", () => {
@@ -169,8 +185,50 @@ describe("emitSerializer", () => {
     expect(php).toContain("'additional' => $m->factsAdditional->map(");
     // Only the FIELDS map (the query runtime's lookup table) spells the path with a dot.
     expect(php.slice(php.indexOf("function toWire"))).not.toContain("'facts.additional'");
-    expect(php).toContain("if (self::has($data, ['facts', 'additional'])) {");
+    expect(php).toContain("if (self::given($data, ['facts', 'additional'])) {");
     expect(php).toContain("self::dig($data, ['facts', 'additional'])");
+  });
+  // A null component names its repeatables too: `self::dig` reads null there, which is no items,
+  // so they are deleted rather than reappearing when the component is next written.
+  it("empties a repeatable inside a component the payload sets to null", () => {
+    const php = emitSerializer(wireShape(nestedDoc, nestedDoc.contentTypes[0]!, []));
+    expect(php).not.toContain("self::has(");
+    expect(php).not.toContain("private static function has(");
+  });
+  // A component's repeatable with no items is no value, so a component holding nothing else is null;
+  // any other value counts, an empty json among them, and so does a link it holds.
+  it("counts only an empty repeatable or set of files in a component as no value, and a link as one", () => {
+    const nested = emitSerializer(wireShape(nestedDoc, nestedDoc.contentTypes[0]!, []));
+    expect(nested).toContain("], ['additional']),");
+    expect(nested).toContain(
+      "private static function nested(array $a, array $lists = [], ?\\Closure $linked = null): ?array",
+    );
+    const brandDoc = normalize(nullClearsBundle.document);
+    const brandKit = emitSerializer(
+      wireShape(brandDoc, brandDoc.contentTypes.find((c) => c.name === "BrandKit")!, []),
+    );
+    expect(brandKit).toContain("], ['keywords'], fn (): bool => $m->seo_sponsor_id !== null),");
+  });
+  // A zone's item kept by its id is written as the entry is: a key named with null clears, and a null
+  // component names the repeatables inside it, whose items are then deleted.
+  it("reads a zone item's columns and repeatables by the keys it names, null included", () => {
+    const brandDoc = normalize(nullClearsBundle.document);
+    const brandKit = emitSerializer(
+      wireShape(brandDoc, brandDoc.contentTypes.find((c) => c.name === "BrandKit")!, []),
+    );
+    expect(brandKit).toContain(
+      "'shared.link' => [\n                    ...self::named($item, [\n                        'label' => [['label'], self::dig($item, ['label'])],",
+    );
+    expect(brandKit).toContain("'seoKeywords' => self::given($item, ['seo', 'keywords']) ?");
+    expect(brandKit).not.toContain("self::has(");
+  });
+  // An update reads the body before StrapiValidator refuses it: an item that is not an object is
+  // left for the validator to refuse by its path, not a TypeError.
+  it("reads only the items of a repeatable that are objects", () => {
+    const php = emitSerializer(wireShape(nestedDoc, nestedDoc.contentTypes[0]!, []));
+    expect(php).toContain(
+      "array_filter(is_array(self::dig($data, ['facts', 'additional'])) ? self::dig($data, ['facts', 'additional']) : [], 'is_array')",
+    );
   });
   it("ConsumableNested serializer golden (repeatable nested under a non-repeatable branch, PSR-12 indentation)", async () => {
     await expect(
@@ -184,7 +242,7 @@ describe("emitSerializer", () => {
     expect(php).toContain(
       "'seenAt' => $m->seen_at === null ? null : (string) $m->seen_at->getTimestampMs(),",
     );
-    expect(php).toContain("'seen_at' => self::epoch(self::dig($data, ['seenAt'])),");
+    expect(php).toContain("$columns['seen_at'] = self::epoch(self::dig($data, ['seenAt']));");
     expect(php).toContain("private static function epoch(mixed $value): mixed");
     expect(emitSerializer(shape("Note"))).not.toContain("function epoch");
   });
@@ -248,8 +306,8 @@ describe("private fields", () => {
 
   it("still writes them", () => {
     const fromWire = php.slice(php.indexOf("function fromWire"));
-    expect(fromWire).toContain("'moderator_note' => self::dig($data, ['moderatorNote'])");
-    expect(fromWire).toContain("'score_reason' => self::dig($data, ['score', 'reason'])");
+    expect(fromWire).toContain("$columns['moderator_note'] = self::dig($data, ['moderatorNote']);");
+    expect(fromWire).toContain("$columns['score_reason'] = self::dig($data, ['score', 'reason']);");
     expect(fromWire).toContain("'reason' => self::dig($row, ['reason'])");
   });
 

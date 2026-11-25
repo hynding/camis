@@ -86,26 +86,41 @@ final class LedgerSerializer
     /** Inverse of toWire: ['columns' => [...], 'children' => [relation => list<row>]]. Unknown keys ignored. */
     public static function fromWire(array $data): array
     {
-        $columns = array_filter([
-            'label' => self::dig($data, ['label']),
-            'balance' => self::decimal(self::dig($data, ['balance']), 20, 6, ['balance']),
-            'rate' => self::decimal(self::dig($data, ['rate']), 9, 4, ['rate']),
-            'share' => self::decimal(self::dig($data, ['share']), 15, 5, ['share']),
-            'units' => self::decimal(self::dig($data, ['units']), 14, 4, ['units']),
-            'fee' => self::dig($data, ['fee']),
-            'limit_ceiling' => self::decimal(self::dig($data, ['limit', 'ceiling']), 18, 2, ['limit', 'ceiling']),
-        ], fn ($v) => $v !== null);
+        $columns = [];
+        if (self::given($data, ['label'])) {
+            $columns['label'] = self::dig($data, ['label']);
+        }
+        if (self::given($data, ['balance'])) {
+            $columns['balance'] = self::decimal(self::dig($data, ['balance']), 20, 6, ['balance']);
+        }
+        if (self::given($data, ['rate'])) {
+            $columns['rate'] = self::decimal(self::dig($data, ['rate']), 9, 4, ['rate']);
+        }
+        if (self::given($data, ['share'])) {
+            $columns['share'] = self::decimal(self::dig($data, ['share']), 15, 5, ['share']);
+        }
+        if (self::given($data, ['units'])) {
+            $columns['units'] = self::decimal(self::dig($data, ['units']), 14, 4, ['units']);
+        }
+        if (self::given($data, ['fee'])) {
+            $columns['fee'] = self::dig($data, ['fee']);
+        }
+        if (self::given($data, ['limit', 'ceiling'])) {
+            $columns['limit_ceiling'] = self::decimal(self::dig($data, ['limit', 'ceiling']), 18, 2, ['limit', 'ceiling']);
+        }
         $children = [];
-        if (self::has($data, ['entries'])) {
+        if (self::given($data, ['entries'])) {
             $children['entries'] = array_map(fn (array $row, int|string $i) => array_filter([
                 'memo' => self::dig($row, ['memo']),
                 'amount' => self::decimal(self::dig($row, ['amount']), 20, 6, ['entries', (string) $i, 'amount']),
-            ], fn ($v) => $v !== null), is_array(self::dig($data, ['entries'])) ? self::dig($data, ['entries']) : [], array_keys(is_array(self::dig($data, ['entries'])) ? self::dig($data, ['entries']) : []));
+            ], fn ($v) => $v !== null), array_filter(is_array(self::dig($data, ['entries'])) ? self::dig($data, ['entries']) : [], 'is_array'), array_keys(array_filter(is_array(self::dig($data, ['entries'])) ? self::dig($data, ['entries']) : [], 'is_array')));
         }
         if (array_key_exists('lines', $data)) {
             $children['lines'] = StrapiZones::items($data['lines'], 'lines', self::ZONES['lines'], fn (string $uid, array $item, int $position) => match ($uid) {
                 'shared.limit' => [
-                    'ceiling' => self::decimal(self::dig($item, ['ceiling']), 18, 2, ['lines', (string) $position, 'ceiling']),
+                    ...self::named($item, [
+                        'ceiling' => [['ceiling'], self::decimal(self::dig($item, ['ceiling']), 18, 2, ['lines', (string) $position, 'ceiling'])],
+                    ]),
                 ],
             });
         }
@@ -124,10 +139,19 @@ final class LedgerSerializer
         }
     }
 
-    /** A component's fields, or null when none has a value (its id, the row's, is not one). */
-    private static function nested(array $a): ?array
+    /**
+     * A component's fields, or null when none has a value: its id (the row's) is not one, nor a
+     * repeatable or set of files ($lists) holding none; a link it holds ($linked) is one.
+     */
+    private static function nested(array $a, array $lists = [], ?\Closure $linked = null): ?array
     {
-        return array_filter(array_diff_key($a, ['id' => true]), fn ($v) => $v !== null) === [] ? null : $a;
+        foreach (array_diff_key($a, ['id' => true]) as $key => $value) {
+            if ($value !== null && ($value !== [] || ! in_array($key, $lists, true))) {
+                return $a;
+            }
+        }
+
+        return $linked !== null && $linked() ? $a : null;
     }
 
     private static function dig(array $a, array $path): mixed
@@ -143,10 +167,13 @@ final class LedgerSerializer
         return $cur;
     }
 
-    private static function has(array $a, array $path): bool
+    private static function given(array $a, array $path): bool
     {
         $cur = $a;
         foreach ($path as $seg) {
+            if ($cur === null) {
+                return true;
+            }
             if (! is_array($cur) || ! array_key_exists($seg, $cur)) {
                 return false;
             }
@@ -154,6 +181,19 @@ final class LedgerSerializer
         }
 
         return true;
+    }
+
+    /** The columns a zone's item names, each given as [its key path, its value]. */
+    private static function named(array $item, array $columns): array
+    {
+        $named = [];
+        foreach ($columns as $column => [$path, $value]) {
+            if (self::given($item, $path)) {
+                $named[$column] = $value;
+            }
+        }
+
+        return $named;
     }
 
     /** @param list<array{0: int, 1: array}> $items [position, item] pairs from every member */
