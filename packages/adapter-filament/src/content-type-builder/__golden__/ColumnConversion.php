@@ -45,6 +45,28 @@ final class ColumnConversion
 
     private const TIME_FORMATS = ['H:i:s.u', 'H:i:s', 'H:i'];
 
+    /** The plain text types by what they hold, MySQL's TINYTEXT to LONGTEXT. */
+    private const TEXT_SIZES = ['tinyText' => 1, 'text' => 2, 'mediumText' => 3, 'longText' => 4];
+
+    /**
+     * What a change between two plain text types is on a driver: null when either is not one, 'same'
+     * where the database keeps text of every size in one type (SQLite, PostgreSQL), else 'widen' or
+     * 'narrow'. A narrower column would cut the values it holds, so the sync never makes one.
+     */
+    public static function sizeChange(string $driver, string $before, string $declared): ?string
+    {
+        $from = self::TEXT_SIZES[$before] ?? null;
+        $to = self::TEXT_SIZES[$declared] ?? null;
+        if ($from === null || $to === null) {
+            return null;
+        }
+        if (! in_array($driver, ['mysql', 'mariadb'], true) || $from === $to) {
+            return 'same';
+        }
+
+        return $to > $from ? 'widen' : 'narrow';
+    }
+
     /** The group a recorded column type belongs to: a change within one is the database's to make. */
     public static function group(string $type): string
     {
