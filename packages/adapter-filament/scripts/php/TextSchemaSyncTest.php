@@ -41,6 +41,25 @@ class TextSchemaSyncTest extends TestCase
         return $path;
     }
 
+    /** The model's bound on "summary" removed, as the generated migration would say it. */
+    private function declareSummaryUnbounded(): void
+    {
+        $file = glob(database_path('migrations/*_create_pages_table.php'))[0];
+        $this->migration = [$file, (string) file_get_contents($file)];
+        file_put_contents($file, str_replace("\$table->text('summary')", "\$table->longText('summary')", $this->migration[1]));
+    }
+
+    protected function tearDown(): void
+    {
+        if ($this->migration !== null) {
+            file_put_contents($this->migration[0], $this->migration[1]);
+        }
+        parent::tearDown();
+    }
+
+    /** @var array{0: string, 1: string}|null */
+    private ?array $migration = null;
+
     private function columnType(string $column): string
     {
         return strtolower(Schema::getColumnType('pages', $column));
@@ -58,6 +77,18 @@ class TextSchemaSyncTest extends TestCase
         // Not a change between text sizes: a string is sized by its length, a number is another group.
         $this->assertNull($change('mysql', 'string(255)', 'text'));
         $this->assertNull($change('mysql', 'text', 'integer'));
+    }
+
+    public function test_a_live_text_column_is_read_by_the_name_the_database_gives_its_type(): void
+    {
+        // information_schema's DATA_TYPE, as Schema::getColumnType answers it on MySQL and MariaDB.
+        $named = ColumnConversion::textSizeOf(...);
+        $this->assertSame('tinyText', $named('tinytext'));
+        $this->assertSame('text', $named('text'));
+        $this->assertSame('mediumText', $named('mediumtext'));
+        $this->assertSame('longText', $named('LONGTEXT'));
+        $this->assertNull($named('varchar'));
+        $this->assertNull($named('json'));
     }
 
     public function test_an_old_text_column_is_widened_on_mysql_and_left_alone_elsewhere(): void
@@ -106,11 +137,92 @@ class TextSchemaSyncTest extends TestCase
             $recorded = json_decode((string) file_get_contents($types), true);
             if ($this->mysql()) {
                 $this->assertSame('longtext', $this->columnType('summary'));
-                $this->assertStringContainsString('kept pages.summary as longText', $output);
+                // The guard's own words: a refusal by the database (the 280 KB row would not fit) says "cannot change it".
+                $this->assertStringContainsString('kept pages.summary as longText: narrowing it to text could cut its values', $output);
+                $this->assertStringNotContainsString('cannot change it', $output);
                 $this->assertSame('longText', $recorded['pages']['summary']);
             } else {
                 $this->assertSame('text', $recorded['pages']['summary']);
             }
+        } finally {
+            @unlink($types);
+        }
+    }
+
+    public function test_a_narrowing_that_would_succeed_is_still_not_made(): void
+    {
+        // No row holds more than a few characters, so MySQL would narrow the column without complaint.
+        Schema::table('pages', fn ($table) => $table->longText('summary')->nullable()->change());
+        Page::query()->create(['title' => 'Short', 'summary' => 'brief']);
+        $types = $this->recordColumnTypes(['pages' => ['summary' => 'longText']]);
+
+        try {
+            $this->assertSame(0, Artisan::call('camis:schema-sync', ['--force' => true]));
+
+            $this->assertStringNotContainsString('changed pages.summary', Artisan::output());
+            if ($this->mysql()) {
+                $this->assertSame('longtext', $this->columnType('summary'));
+            }
+            $this->assertSame('brief', Page::query()->where('title', 'Short')->value('summary'));
+        } finally {
+            @unlink($types);
+        }
+    }
+
+    /** What the sync reads of a column's text size is the live column, so a column the owner narrowed is widened again. */
+    public function test_the_sync_widens_a_column_the_owner_narrowed_by_hand_when_the_model_asks_for_more(): void
+    {
+        if (! $this->mysql()) {
+            $this->markTestSkipped('Only MySQL has several text sizes.');
+        }
+        // The model declares text for "summary" and the column is a longText: the sync keeps it.
+        Schema::table('pages', fn ($table) => $table->longText('summary')->nullable()->change());
+        $types = $this->recordColumnTypes(['pages' => ['summary' => 'longText']]);
+
+        try {
+            Artisan::call('camis:schema-sync', ['--force' => true]);
+            $this->assertStringContainsString('kept pages.summary as longText', Artisan::output());
+            $this->assertSame('longtext', $this->columnType('summary'));
+
+            // The owner narrows it by hand: what the sync keeps is no longer true of the column.
+            DB::statement('ALTER TABLE pages MODIFY summary TEXT NULL');
+            Artisan::call('camis:schema-sync', ['--force' => true]);
+            $this->assertStringNotContainsString('kept pages.summary', Artisan::output());
+            $recorded = json_decode((string) file_get_contents($types), true);
+            $this->assertSame('text', $recorded['pages']['summary']);
+
+            // The model now asks for a longText (its bound removed): the live TEXT column is widened.
+            $this->declareSummaryUnbounded();
+            Artisan::call('camis:schema-sync', ['--force' => true]);
+            $this->assertStringContainsString('changed pages.summary', Artisan::output());
+            $this->assertSame('longtext', $this->columnType('summary'));
+
+            $value = str_repeat("\u{1F600}", self::LARGE);
+            Page::query()->create(['title' => 'Large', 'summary' => $value]);
+            $this->assertSame($value, Page::query()->where('title', 'Large')->value('summary'));
+        } finally {
+            @unlink($types);
+        }
+    }
+
+    public function test_the_sync_widens_a_live_text_column_whatever_the_recorded_type_says(): void
+    {
+        if (! $this->mysql()) {
+            $this->markTestSkipped('Only MySQL has several text sizes.');
+        }
+        // Recorded as a longText, as a sync that kept it left it, but narrowed by hand since.
+        DB::statement('ALTER TABLE pages MODIFY summary TEXT NULL');
+        $types = $this->recordColumnTypes(['pages' => ['summary' => 'longText']]);
+        $this->declareSummaryUnbounded();
+
+        try {
+            Artisan::call('camis:schema-sync', ['--force' => true]);
+
+            $this->assertStringContainsString('changed pages.summary', Artisan::output());
+            $this->assertSame('longtext', $this->columnType('summary'));
+            $value = str_repeat("\u{1F600}", self::LARGE);
+            Page::query()->create(['title' => 'Large', 'summary' => $value]);
+            $this->assertSame($value, Page::query()->where('title', 'Large')->value('summary'));
         } finally {
             @unlink($types);
         }
