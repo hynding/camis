@@ -3833,7 +3833,7 @@ Not done:
   lets through (a json field, whose schema takes any value) now reaches its NOT NULL column and
   answers "Internal Server Error". Strapi refuses it on a type without drafts, its validator
   running, and stores it on a draft. Checking it needs the validator's rules, which live in each
-  REST controller (`RULES`), reachable from `resources/strapi/mcp.json`; not done here.
+  REST controller (`RULES`) and are not in `resources/strapi/mcp.json`; not done here.
 - On the Strapi storage layout, a component sent as an object whose every value is null
   (`{"seo": {"headline": null}}`) is deleted, as `StrapiComponents::write` takes an all-null
   component for none, and the entry answers `seo: null`. Strapi writes an id-less component afresh,
