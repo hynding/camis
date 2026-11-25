@@ -23,8 +23,8 @@ describe("textTier", () => {
     expect(textTier(text(maxLength))).toBe(tier);
   });
 
-  it("sizes a rich text like a text", () => {
-    expect(textTier({ type: "richText", name: "body", maxLength: 100 } as Field)).toBe("small");
+  it("makes rich text large whatever its bound", () => {
+    expect(textTier({ type: "richText", name: "body", maxLength: 100 } as Field)).toBe("large");
   });
 });
 

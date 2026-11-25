@@ -17,7 +17,9 @@ describe("Express target: text columns sized by their bound (issue #123)", () =>
     expect(column("mysql", text(16_383)).drizzle).toBe("text('body')");
     expect(column("mysql", text(524_288)).drizzle).toBe("mediumtext('body')");
     expect(column("mysql", text(4_194_304)).drizzle).toBe("longtext('body')");
+    // One rule, as the Filament target's: rich text is always the largest.
     expect(column("mysql", text(undefined, "richText")).drizzle).toBe("longtext('body')");
+    expect(column("mysql", text(100, "richText")).drizzle).toBe("longtext('body')");
   });
 
   it("keeps the unbounded text of SQLite and PostgreSQL", () => {

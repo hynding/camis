@@ -20,4 +20,14 @@ describe("text columns sized by their bound (issue #123)", () => {
       },
     ]);
   });
+
+  // Strapi's storage layout keeps Strapi's own columns: no migration of ours makes the column.
+  it("reports no gap where Strapi's storage layout makes the column", () => {
+    const strapi = filamentAdapter.generate(textSizesBundle, {
+      projectName: "docs",
+      apiStyle: "strapi",
+      storageLayout: "strapi",
+    });
+    expect(strapi.gaps.gaps.filter((g) => g.feature === "textLength")).toEqual([]);
+  });
 });
