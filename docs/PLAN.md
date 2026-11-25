@@ -3784,6 +3784,29 @@ analysed by the `runtime-phpstan` job (`scripts/runtime-phpstan.sh` copies `src/
 app), in CI only. MySQL, and with it the `CAST(? AS DECIMAL(p, s))` comparison, runs only in CI;
 SQLite and PostgreSQL also ran locally.
 
+## Phase 99 — an explicit null clears a field on the Strapi API style (`adapter-filament`)
+
+Issue #122: `fromWire` dropped every null column (`array_filter(..., $v !== null)`), which kept an
+update that names a field as null from clearing it, though Strapi clears it. The filter was there
+to tell a key the body leaves out (kept) from one it names; it did so by dropping both. The entry's
+columns are now set only for the keys the payload names (`given`), so a null clears a column and a
+missing key leaves it, and a null where a component sits clears every column of the component (as
+Strapi deletes it). A repeatable's and a zone's items are written afresh on every write, where a null
+is no value, so they keep the filter.
+
+Recorded from Strapi 5.48 on SQLite (a project with the same types), and followed where it differs
+from the issue: a null on create is stored as null, not the field's default (the database layer
+takes a default for a missing key only); a required field, a repeatable component and a dynamic
+zone refuse null with Strapi's "must be a `type` type" error, the zone being the one case strapi-php
+accepted (`StrapiValidator::zone`); a to-one or to-many link, a file and a set of files are unlinked
+by null, an embedded component cleared; unique, pattern and bounds do not run on null. A field a
+grant assigns stays the caller's: its relation is not read from the body.
+
+Exit: `serializer.test.ts` (goldens regenerated) and `NullClearsTest.php` (the null-clears fixture) in
+the `null-clears` job on SQLite, MySQL and PostgreSQL. SQLite and PostgreSQL ran locally; MySQL
+runs only in CI. Not done: Strapi replaces an embedded component that carries no id whole, so a
+missing key inside it becomes null there, where strapi-php keeps it.
+
 ---
 
 ## Sequencing rationale (quick reference)
