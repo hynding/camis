@@ -117,10 +117,10 @@ final class LandingSerializer
         }
     }
 
-    /** A component's fields, or null when none has a value (its id, the row's, is not one). */
+    /** A component's fields, or null when none has a value (its id, the row's, is not one, nor a repeatable or set of files with none). */
     private static function nested(array $a): ?array
     {
-        return array_filter(array_diff_key($a, ['id' => true]), fn ($v) => $v !== null) === [] ? null : $a;
+        return array_filter(array_diff_key($a, ['id' => true]), fn ($v) => $v !== null && $v !== []) === [] ? null : $a;
     }
 
     private static function dig(array $a, array $path): mixed

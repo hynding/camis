@@ -69,7 +69,7 @@ final class ConsumableSerializer
             $columns['facts_calories'] = self::dig($data, ['facts', 'calories']);
         }
         $children = [];
-        if (self::has($data, ['facts', 'additional'])) {
+        if (self::given($data, ['facts', 'additional'])) {
             $children['factsAdditional'] = array_map(fn (array $row) => array_filter([
                 'slug' => self::dig($row, ['slug']),
                 'amount' => self::dig($row, ['amount']),
@@ -87,10 +87,10 @@ final class ConsumableSerializer
         }
     }
 
-    /** A component's fields, or null when none has a value (its id, the row's, is not one). */
+    /** A component's fields, or null when none has a value (its id, the row's, is not one, nor a repeatable or set of files with none). */
     private static function nested(array $a): ?array
     {
-        return array_filter(array_diff_key($a, ['id' => true]), fn ($v) => $v !== null) === [] ? null : $a;
+        return array_filter(array_diff_key($a, ['id' => true]), fn ($v) => $v !== null && $v !== []) === [] ? null : $a;
     }
 
     private static function dig(array $a, array $path): mixed
@@ -113,19 +113,6 @@ final class ConsumableSerializer
             if ($cur === null) {
                 return true;
             }
-            if (! is_array($cur) || ! array_key_exists($seg, $cur)) {
-                return false;
-            }
-            $cur = $cur[$seg];
-        }
-
-        return true;
-    }
-
-    private static function has(array $a, array $path): bool
-    {
-        $cur = $a;
-        foreach ($path as $seg) {
             if (! is_array($cur) || ! array_key_exists($seg, $cur)) {
                 return false;
             }

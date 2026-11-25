@@ -218,16 +218,17 @@ const fromWireEntryColumns = (scalars: WireScalar[], indent: string): string =>
     )
     .join("\n");
 
-// Each child key is set only when the wire payload mentions it, mirroring `syncChildren`'s
+// Each child key is set only when the wire payload names it, mirroring `syncChildren`'s
 // `array_key_exists` guard: an absent key leaves existing rows untouched, an explicit `[]`
 // clears them. A single unconditional entry (falling back to `[]`) would collapse that
-// distinction and make every `fromWire` call wipe children the client never mentioned.
+// distinction and make every `fromWire` call wipe children the client never mentioned. A null
+// component names the repeatables inside it, whose items `self::dig` then reads as none.
 const fromWireChildStatements = (children: WireChild[], indent: string): string => {
   if (children.length === 0) return `${indent}$children = [];`;
   const blocks = children.map((c) => {
     const assignIndent = `${indent}${UNIT}`;
     const path = c.key.map((k) => `'${k}'`).join(", ");
-    return `${indent}if (self::has($data, [${path}])) {
+    return `${indent}if (self::given($data, [${path}])) {
 ${assignIndent}$children['${c.relation}'] = ${itemRows(c, `self::dig($data, [${path}])`, 1, assignIndent, `${path}, `)};
 ${indent}}`;
   });
@@ -396,8 +397,8 @@ ${indent}}`,
 /** Whether an item, or an item nested in it, links a file: its rows go one by one, links and all. */
 const linksFiles = (c: WireChild): boolean => c.media.length > 0 || c.children.some(linksFiles);
 
-// `self::has` is only ever called from `fromWireChildStatements`, so a childless shape
-// (no `self::has` call site) omits it rather than leave an unused private method.
+// Whether a zone's item holds a path. Unlike `given`, a null component holds nothing: a zone's
+// item kept by its id keeps the columns it sends as null, so it keeps the items below them too.
 const hasHelper = `
 
     private static function has(array $a, array $path): bool
@@ -581,8 +582,11 @@ export const emitSerializer = (shape: WireShape, layout: StorageLayout = "larave
   ]
     .map((body) => `\n${body}`)
     .join("");
-  const givenHelperBody = shape.scalars.length === 0 ? "" : givenHelper;
-  const hasHelperBody = shape.children.length === 0 ? "" : hasHelper;
+  const givenHelperBody =
+    shape.scalars.length === 0 && shape.children.length === 0 ? "" : givenHelper;
+  const hasHelperBody = zones.some((z) => z.members.some((m) => m.children.length > 0))
+    ? hasHelper
+    : "";
   const zoneHelperBody = zones.length === 0 ? "" : zoneHelper;
   const epochHelperBody = hasTimestamp(shape, zones) ? epochHelper : "";
   const decimalHelperBody = writesScalar(shape, zones, (s) => s.digits !== undefined)
@@ -628,10 +632,10 @@ ${fromWireChildStatements(shape.children, l2)}${zones.length === 0 ? "" : `\n${f
     {${syncChildrenBody}
     }
 
-    /** A component's fields, or null when none has a value (its id, the row's, is not one). */
+    /** A component's fields, or null when none has a value (its id, the row's, is not one, nor a repeatable or set of files with none). */
     private static function nested(array $a): ?array
     {
-        return array_filter(array_diff_key($a, ['id' => true]), fn ($v) => $v !== null) === [] ? null : $a;
+        return array_filter(array_diff_key($a, ['id' => true]), fn ($v) => $v !== null && $v !== []) === [] ? null : $a;
     }
 
     private static function dig(array $a, array $path): mixed
