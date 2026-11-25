@@ -3784,6 +3784,26 @@ analysed by the `runtime-phpstan` job (`scripts/runtime-phpstan.sh` copies `src/
 app), in CI only. MySQL, and with it the `CAST(? AS DECIMAL(p, s))` comparison, runs only in CI;
 SQLite and PostgreSQL also ran locally.
 
+## Phase 100 — text columns sized by their bound (`ir-core`, `adapter-filament`, `adapter-express`)
+
+Issue #123: the Filament adapter migrated every `text` field as `$table->text(...)`, and the Express
+target's MySQL schema used `text(...)`, whatever the field's `maxLength`; MySQL's TEXT holds 65,535
+bytes, so a longer value failed the insert in strict mode. `textColumnSize` (`ir-core`) picks the
+smallest of `text`, `mediumText` and `longText` that holds `maxLength` characters at four bytes each
+(utf8mb4's worst case: up to 16,383, 4,194,303 and 1,073,741,823 characters), and `longText` for a
+text with no bound, as Strapi's `longtext` is. The Filament migration uses it on every database
+(Laravel maps all three to `text` on SQLite and PostgreSQL); the Express target uses it on MySQL
+only, where Drizzle's `text`, `mediumtext` and `longtext` differ. A bound LONGTEXT cannot hold
+(`textLengthGaps`) is a `textLength` capability gap, the column staying LONGTEXT, which MySQL refuses
+a larger value in rather than truncates. Rich text was already `longText`. The Strapi storage
+layout keeps Strapi's own columns, and the Strapi API style's fixed runtime tables are unbounded
+by design, so neither changed.
+
+Exit: `text-size.test.ts`, `text-columns.test.ts` (golden `text-sizes/create_pages_table.php`) in
+each adapter, and `TextSizesTest.php` (the text-sizes fixture, values past 64 KiB) in the
+`text-columns` job on SQLite, MySQL and PostgreSQL. SQLite and PostgreSQL ran locally; MySQL runs
+only in CI.
+
 ---
 
 ## Sequencing rationale (quick reference)
