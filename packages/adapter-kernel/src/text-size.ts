@@ -27,7 +27,7 @@ const holds = (tier: TextTier, maxLength: number): boolean =>
  * even the large tier cannot hold is listed by `textsBeyondTiers`; its column is the large tier.
  */
 export const textTier = (field: AnyField): TextTier => {
-  const maxLength = isText(field) ? field.maxLength : undefined;
+  const maxLength = field.type === "text" ? field.maxLength : undefined;
   if (maxLength === undefined) return "large";
   return holds("small", maxLength) ? "small" : holds("medium", maxLength) ? "medium" : "large";
 };

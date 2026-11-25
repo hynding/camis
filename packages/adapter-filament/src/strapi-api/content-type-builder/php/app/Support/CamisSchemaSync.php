@@ -299,6 +299,17 @@ final class CamisSchemaSync
             if ($before === null || $before === $declared || ! in_array($name, $existing, true) || $column->get('autoIncrement') || $column->get('change')) {
                 continue;
             }
+            $size = ColumnConversion::sizeChange($this->connection->getDriverName(), $before, $declared);
+            if ($size === 'same') {
+                continue;
+            }
+            if ($size === 'narrow') {
+                // A narrower column would cut the values it holds: the database's owner narrows it.
+                $this->types[$table][$name] = $before;
+                $this->report[] = "kept {$table}.{$name} as {$before}: narrowing it to {$declared} could cut its values";
+
+                continue;
+            }
             try {
                 if (ColumnConversion::group($before) !== ColumnConversion::group($declared) && in_array('id', $existing, true)) {
                     $this->convertColumn($table, $definition, $column, $before, $declared);
