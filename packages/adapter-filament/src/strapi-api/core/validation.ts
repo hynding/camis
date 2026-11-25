@@ -180,6 +180,8 @@ const rules = (
       out[key] = {
         type: "component",
         repeatable: field.repeatable,
+        // Strapi requires a repeatable's list whether or not it says required (StrapiValidator).
+        ...(field.repeatable !== true && field.required === true ? { required: true } : {}),
         fields: rules(component?.fields ?? [], ctx, inner, [...path, key]),
       };
     } else if (field.type === "dynamicZone") {
