@@ -166,11 +166,19 @@ A migration that has already run is not run again, so a database made before thi
 Schema::table('articles', fn (Blueprint $table) => $table->longText('body')->nullable()->change());
 ```
 
-or `ALTER TABLE articles MODIFY body LONGTEXT NULL;` (Express: the same, or `drizzle-kit push`). The
-Content-Type Builder's `camis:schema-sync` widens a text column to the size the model now declares
-on MySQL, leaves the three sizes alone on SQLite and PostgreSQL (one type there), and never narrows
-a column on its own: where the model declares a smaller size than the column has, the sync reports
-`kept <table>.<column> as <type>` and leaves the column as it is.
+or `ALTER TABLE articles MODIFY body LONGTEXT NULL;` (Express too). On Express with MySQL, adding
+or lowering a `maxLength` makes the next `drizzle-kit push` narrow the column (`MODIFY ... TEXT`),
+which fails in strict mode or truncates what no longer fits: read the SQL it proposes before
+applying it. The Content-Type Builder's `camis:schema-sync` widens a text column to the size the
+model now declares on MySQL, leaves the three sizes alone on SQLite and PostgreSQL (one type
+there), and never narrows a text column on its own: where the model declares a smaller text size
+than the column has, the sync reports `kept <table>.<column> as <type>` and leaves the column as it
+is. This guards the text sizes only; a change of a text column to a string, or of a string's length,
+is made as before.
+
+The `textLength` gap covers the column type only. It does not cover the limits of the server or the
+request (MySQL's `max_allowed_packet`, PostgreSQL's and SQLite's own value limits, near 1 GB), nor
+targets that do not enforce `maxLength` at all (camis#126).
 
 ## camis.config.json
 

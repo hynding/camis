@@ -3812,12 +3812,16 @@ a reported `kept` when it would narrow, which the sync never does on its own.
 Limits, tracked in #126: string columns with a large `maxLength`, and targets that do not enforce
 `maxLength` at all, are not covered.
 
+The gap covers the column type only, not the server's or request's limits (MySQL's
+`max_allowed_packet`, PostgreSQL's and SQLite's value limits, near 1 GB), which stop a value
+before LONGTEXT's 4 GiB; #126 tracks those and targets that do not enforce `maxLength`.
+
 Exit: `text-size.test.ts` (kernel), `text-columns.test.ts` in each adapter (golden
-`text-sizes/create_pages_table.php`), the sync's `sizeChange` and its three
-`ContentTypeBuilderTest` cases, and `TextSizesTest.php` (the text-sizes fixture, values past
-64 KiB) in the `text-columns` job on SQLite, MySQL and PostgreSQL. SQLite and PostgreSQL ran
-locally; MySQL runs only in CI, so the widening and `kept` paths of the sync are exercised there
-and, for the decision itself, by `sizeChange`'s unit test.
+`text-sizes/create_pages_table.php`; the Express gap on MySQL only), and in the `text-columns` job
+on SQLite, MySQL and PostgreSQL, with the matrix database exported: `TextSizesTest.php` (the
+text-sizes fixture, values past 64 KiB) and `TextSchemaSyncTest.php` (a real TEXT column widened and
+a longText column kept past a refused narrowing, each with a value past 64 KiB read back, and
+`sizeChange`'s decision). SQLite and PostgreSQL ran locally; MySQL runs only in CI.
 
 ---
 
