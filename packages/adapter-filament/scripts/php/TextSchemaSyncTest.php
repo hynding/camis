@@ -91,6 +91,32 @@ class TextSchemaSyncTest extends TestCase
         $this->assertNull($named('json'));
     }
 
+    public function test_the_live_size_decides_only_where_the_record_is_missing_or_a_text_type(): void
+    {
+        $uses = ColumnConversion::readsLiveSize(...);
+        // MariaDB keeps JSON as a LONGTEXT: a recorded JSON column is another group, converted, not a text size.
+        $this->assertFalse($uses('mariadb', 'json', 'longText'));
+        $this->assertFalse($uses('mysql', 'json', 'text'));
+        $this->assertFalse($uses('mysql', 'integer', 'text'));
+        // A record of a text type, a string, or none, leaves the live column to say.
+        $this->assertTrue($uses('mysql', 'text', 'longText'));
+        $this->assertTrue($uses('mariadb', 'longText', 'text'));
+        $this->assertTrue($uses('mysql', 'string(255)', 'text'));
+        $this->assertTrue($uses('mysql', null, 'longText'));
+        // One text type elsewhere, and a declared type that is no text size.
+        $this->assertFalse($uses('sqlite', 'text', 'longText'));
+        $this->assertFalse($uses('pgsql', null, 'longText'));
+        $this->assertFalse($uses('mysql', 'text', 'string(255)'));
+    }
+
+    public function test_the_type_a_column_has_is_the_live_one_whenever_it_was_read(): void
+    {
+        $this->assertSame('text', ColumnConversion::currentType('text', 'longText'));
+        $this->assertSame('text', ColumnConversion::currentType('text', null));
+        $this->assertSame('longText', ColumnConversion::currentType(null, 'longText'));
+        $this->assertNull(ColumnConversion::currentType(null, null));
+    }
+
     public function test_an_old_text_column_is_widened_on_mysql_and_left_alone_elsewhere(): void
     {
         // As if "body", now an unbounded text, had been made as TEXT by the migration of before.
