@@ -3811,7 +3811,11 @@ a reported `kept` when it would narrow, which the sync never does on its own. On
 MariaDB the size compared is the live column's (`Schema::getColumnType`, information_schema's
 `DATA_TYPE`: `tinytext`, `text`, `mediumtext`, `longtext`), not the recorded one: a `kept` record
 would otherwise skip a later widening once the owner had narrowed the column by hand. What is
-recorded is what the column has.
+recorded is what the column has, and a failed widening reports and records the live type. The live size is
+read only where the record is missing or a text type (`ColumnConversion::readsLiveSize`): MariaDB keeps
+JSON as a LONGTEXT, so a recorded `json` column changed to text still goes through `convertColumn`. The
+remaining gap: a column with no record whose live MariaDB type is JSON reads as a longText and is left
+alone, as every unrecorded column is.
 
 Limits, tracked in #126: string columns with a large `maxLength`, and targets that do not enforce
 `maxLength` at all, are not covered.

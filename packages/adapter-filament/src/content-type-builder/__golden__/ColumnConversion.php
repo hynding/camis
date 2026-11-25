@@ -77,6 +77,25 @@ final class ColumnConversion
         return ['tinytext' => 'tinyText', 'text' => 'text', 'mediumtext' => 'mediumText', 'longtext' => 'longText'][strtolower($liveType)] ?? null;
     }
 
+    /**
+     * Whether the sync reads a text column's size from the live column: where a database has several
+     * text sizes, the declared type is a text size, and the record is missing or is a text (or
+     * string) type. A recorded change of group (MariaDB stores JSON as a LONGTEXT, which the live
+     * column would pass for a text size) is converted, not read as one.
+     */
+    public static function readsLiveSize(string $driver, ?string $before, string $declared): bool
+    {
+        return in_array($driver, ['mysql', 'mariadb'], true)
+            && self::sizeChange($driver, 'text', $declared) !== null
+            && ($before === null || self::group($before) === 'text');
+    }
+
+    /** The type a column has: the live one whenever it was read, else the recorded one. */
+    public static function currentType(?string $live, ?string $before): ?string
+    {
+        return $live ?? $before;
+    }
+
     /** The group a recorded column type belongs to: a change within one is the database's to make. */
     public static function group(string $type): string
     {

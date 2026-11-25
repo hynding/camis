@@ -304,7 +304,7 @@ final class CamisSchemaSync
             $driver = $this->connection->getDriverName();
             // Where a database has several text sizes the live column decides, not the record: a column
             // narrowed by hand since is what it is, and a record of it would skip a later widening.
-            $live = in_array($driver, ['mysql', 'mariadb'], true) && ColumnConversion::sizeChange($driver, 'text', $declared) !== null
+            $live = ColumnConversion::readsLiveSize($driver, $before, $declared)
                 ? ColumnConversion::textSizeOf($schema->getColumnType($table, $name))
                 : null;
             $size = $live !== null
@@ -323,7 +323,7 @@ final class CamisSchemaSync
             if ($size === null && ($before === null || $before === $declared)) {
                 continue;
             }
-            $was = $before ?? $live;
+            $was = ColumnConversion::currentType($live, $before);
             try {
                 if ($size === null && ColumnConversion::group($was) !== ColumnConversion::group($declared) && in_array('id', $existing, true)) {
                     $this->convertColumn($table, $definition, $column, $was, $declared);

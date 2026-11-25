@@ -176,7 +176,10 @@ than the column has, the sync reports `kept <table>.<column> as <type>` and leav
 is; narrow it yourself once you know no value is longer, for instance
 `ALTER TABLE articles MODIFY body TEXT NULL;`, and the next sync stops reporting it and records the
 size the column has (a later widening in the model is then made). SQLite and PostgreSQL keep one
-text type, so the sync leaves the three sizes alone there. This guards the text sizes only; a change
+text type, so the sync leaves the three sizes alone there. The live size is read only where the record is missing or a text type: MariaDB stores JSON as a
+LONGTEXT, so a column recorded as `json` that the model turns into text is converted as any change
+of type is, not taken for a text size. A column with no record whose live MariaDB type is really
+JSON reads as a longText and is left alone, as any unrecorded column is. This guards the text sizes only; a change
 of a text column to a string, or of a string's length, is made as before.
 
 The `textLength` gap covers the column type only. It does not cover the limits of the server or the
