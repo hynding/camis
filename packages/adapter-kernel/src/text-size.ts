@@ -22,8 +22,8 @@ const holds = (tier: TextTier, maxLength: number): boolean =>
   maxLength * WORST_CASE_BYTES_PER_CHARACTER <= TIER_BYTES[tier];
 
 /**
- * The smallest tier that holds a text field's bound at the worst case, and the large one for a
- * text with no bound (as Strapi's longtext is) A bound
+ * The smallest tier that holds a text field's bound at the worst case. A text with no bound, and
+ * rich text whatever its bound, takes the large tier, so no value is cut for want of room. A bound
  * even the large tier cannot hold is listed by `textsBeyondTiers`; its column is the large tier.
  */
 export const textTier = (field: AnyField): TextTier => {

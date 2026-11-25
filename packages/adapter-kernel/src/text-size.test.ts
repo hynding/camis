@@ -6,7 +6,7 @@ const text = (maxLength?: number): Field =>
   ({ type: "text", name: "body", ...(maxLength === undefined ? {} : { maxLength }) }) as Field;
 
 describe("textTier", () => {
-  it("is large for a text with no bound, as Strapi's is", () => {
+  it("is large for a text with no bound", () => {
     expect(textTier(text())).toBe("large");
   });
 
