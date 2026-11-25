@@ -74,7 +74,7 @@ class NullClearsTest extends TestCase
             ->assertJsonPath('error.details.errors.0.message', $message);
     }
 
-    public function test_null_clears_every_kind_of_optional_scalar_and_a_missing_key_keeps_its_value(): void
+    public function test_null_clears_an_optional_scalar_of_each_common_kind_and_a_missing_key_keeps_its_value(): void
     {
         $id = $this->make([
             'tagline' => 'Bold', 'notes' => 'Long', 'code' => 'ABC', 'rank' => 3, 'share' => '1.5', 'active' => true,
@@ -99,6 +99,29 @@ class NullClearsTest extends TestCase
             ->assertJsonPath('data.code', null)
             ->assertJsonPath('data.tone', null);
         $this->show($id)->assertJsonPath('data.title', 'Kit')->assertJsonPath('data.tagline', null);
+    }
+
+    public function test_null_clears_the_other_kinds_of_optional_scalar(): void
+    {
+        $values = [
+            'body' => '# Hi', 'contact' => 'a@b.co', 'mood' => 'calm', 'meta' => ['k' => 'v'],
+            'story' => [['type' => 'paragraph', 'children' => [['type' => 'text', 'text' => 'Once']]]],
+            'ratio' => 0.5, 'reach' => '9007199254740993', 'startsAt' => '2026-01-02T03:04:05.000Z', 'opensAt' => '09:30:00.000',
+        ];
+        $id = $this->make($values);
+        $made = $this->show($id);
+        foreach ($values as $key => $value) {
+            $this->assertNotNull($made->json("data.{$key}"), $key);
+        }
+
+        $cleared = $this->api('PUT', "brand-kits/{$id}", array_map(fn (mixed $value) => null, $values))->assertOk();
+        foreach (array_keys($values) as $key) {
+            $cleared->assertJsonPath("data.{$key}", null);
+        }
+        $shown = $this->show($id);
+        foreach (array_keys($values) as $key) {
+            $shown->assertJsonPath("data.{$key}", null);
+        }
     }
 
     public function test_a_key_the_body_leaves_out_keeps_its_value(): void
