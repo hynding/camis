@@ -57,15 +57,16 @@ final class ActivitySessionSerializer
     /** Inverse of toWire: ['columns' => [...], 'children' => [relation => list<row>]]. Unknown keys ignored. */
     public static function fromWire(array $data): array
     {
-        $columns = array_filter([
-            'record_id' => self::dig($data, ['recordId']),
-        ], fn ($v) => $v !== null);
+        $columns = [];
+        if (self::given($data, ['recordId'])) {
+            $columns['record_id'] = self::dig($data, ['recordId']);
+        }
         $children = [];
-        if (self::has($data, ['quantities'])) {
+        if (self::given($data, ['quantities'])) {
             $children['quantities'] = array_map(fn (array $row) => array_filter([
                 'amount' => self::dig($row, ['amount']),
                 'unit' => self::dig($row, ['unit']),
-            ], fn ($v) => $v !== null), is_array(self::dig($data, ['quantities'])) ? self::dig($data, ['quantities']) : []);
+            ], fn ($v) => $v !== null), array_filter(is_array(self::dig($data, ['quantities'])) ? self::dig($data, ['quantities']) : [], 'is_array'));
         }
 
         return ['columns' => $columns, 'children' => $children];
@@ -79,10 +80,19 @@ final class ActivitySessionSerializer
         }
     }
 
-    /** A component's fields, or null when none has a value (its id, the row's, is not one). */
-    private static function nested(array $a): ?array
+    /**
+     * A component's fields, or null when none has a value: its id (the row's) is not one, nor a
+     * repeatable or set of files ($lists) holding none; a link it holds ($linked) is one.
+     */
+    private static function nested(array $a, array $lists = [], ?\Closure $linked = null): ?array
     {
-        return array_filter(array_diff_key($a, ['id' => true]), fn ($v) => $v !== null) === [] ? null : $a;
+        foreach (array_diff_key($a, ['id' => true]) as $key => $value) {
+            if ($value !== null && ($value !== [] || ! in_array($key, $lists, true))) {
+                return $a;
+            }
+        }
+
+        return $linked !== null && $linked() ? $a : null;
     }
 
     private static function dig(array $a, array $path): mixed
@@ -98,10 +108,13 @@ final class ActivitySessionSerializer
         return $cur;
     }
 
-    private static function has(array $a, array $path): bool
+    private static function given(array $a, array $path): bool
     {
         $cur = $a;
         foreach ($path as $seg) {
+            if ($cur === null) {
+                return true;
+            }
             if (! is_array($cur) || ! array_key_exists($seg, $cur)) {
                 return false;
             }

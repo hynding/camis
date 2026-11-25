@@ -59,13 +59,22 @@ final class TransactionSerializer
     /** Inverse of toWire: ['columns' => [...], 'children' => [relation => list<row>]]. Unknown keys ignored. */
     public static function fromWire(array $data): array
     {
-        $columns = array_filter([
-            'record_id' => self::dig($data, ['recordId']),
-            'fee' => self::dig($data, ['fee']),
-            'occurred_on' => self::dig($data, ['occurredOn']),
-            'amount_minor' => self::dig($data, ['amount', 'minor']),
-            'amount_currency' => self::dig($data, ['amount', 'currency']),
-        ], fn ($v) => $v !== null);
+        $columns = [];
+        if (self::given($data, ['recordId'])) {
+            $columns['record_id'] = self::dig($data, ['recordId']);
+        }
+        if (self::given($data, ['fee'])) {
+            $columns['fee'] = self::dig($data, ['fee']);
+        }
+        if (self::given($data, ['occurredOn'])) {
+            $columns['occurred_on'] = self::dig($data, ['occurredOn']);
+        }
+        if (self::given($data, ['amount', 'minor'])) {
+            $columns['amount_minor'] = self::dig($data, ['amount', 'minor']);
+        }
+        if (self::given($data, ['amount', 'currency'])) {
+            $columns['amount_currency'] = self::dig($data, ['amount', 'currency']);
+        }
         $children = [];
 
         return ['columns' => $columns, 'children' => $children];
@@ -75,10 +84,19 @@ final class TransactionSerializer
     {
     }
 
-    /** A component's fields, or null when none has a value (its id, the row's, is not one). */
-    private static function nested(array $a): ?array
+    /**
+     * A component's fields, or null when none has a value: its id (the row's) is not one, nor a
+     * repeatable or set of files ($lists) holding none; a link it holds ($linked) is one.
+     */
+    private static function nested(array $a, array $lists = [], ?\Closure $linked = null): ?array
     {
-        return array_filter(array_diff_key($a, ['id' => true]), fn ($v) => $v !== null) === [] ? null : $a;
+        foreach (array_diff_key($a, ['id' => true]) as $key => $value) {
+            if ($value !== null && ($value !== [] || ! in_array($key, $lists, true))) {
+                return $a;
+            }
+        }
+
+        return $linked !== null && $linked() ? $a : null;
     }
 
     private static function dig(array $a, array $path): mixed
@@ -92,5 +110,21 @@ final class TransactionSerializer
         }
 
         return $cur;
+    }
+
+    private static function given(array $a, array $path): bool
+    {
+        $cur = $a;
+        foreach ($path as $seg) {
+            if ($cur === null) {
+                return true;
+            }
+            if (! is_array($cur) || ! array_key_exists($seg, $cur)) {
+                return false;
+            }
+            $cur = $cur[$seg];
+        }
+
+        return true;
     }
 }

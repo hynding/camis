@@ -46,7 +46,8 @@ final class StrapiZones
             if (! isset($members[$uid])) {
                 continue;
             }
-            $row = ['position' => $position] + array_filter($columns($uid, $item${positions ? ", $position" : ""}), fn ($v) => $v !== null);
+            // Only the columns the item names: a null clears one of an item kept by its id.
+            $row = ['position' => $position] + $columns($uid, $item${positions ? ", $position" : ""});
             if (isset($item['id'])) {
                 $row['id'] = $item['id'];
             }

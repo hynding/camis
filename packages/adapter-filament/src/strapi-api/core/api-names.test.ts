@@ -51,7 +51,7 @@ describe("API names", () => {
     expect(serializer).toContain("'hero_title' => $m->hero_title,");
     expect(serializer).toContain("'seo_meta' => self::nested([");
     expect(serializer).toContain("'meta_title' => $m->seo_meta_meta_title,");
-    expect(serializer).toContain("'hero_title' => self::dig($data, ['hero_title']),");
+    expect(serializer).toContain("$columns['hero_title'] = self::dig($data, ['hero_title']);");
     expect(serializer).toContain("'seo_meta.meta_title' => ['column' => 'seo_meta_meta_title'");
     expect(serializer).toContain("'main_author' => ['relation' => 'mainAuthor'");
     expect(serializer).toContain("public const COMPONENTS = ['seo_meta'];");
