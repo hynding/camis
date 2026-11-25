@@ -284,7 +284,8 @@ final class CamisSchemaSync
 
     /**
      * Change each existing column whose declared type is not the one the last sync recorded. A
-     * column the last sync did not record is left as it is: its type then is unknown.
+     * column the last sync did not record is left as it is: its type then is unknown, unless it is a
+     * text column on a database with several text sizes, whose live size is read.
      *
      * @param  array<string, string>  $previous
      */
@@ -296,24 +297,36 @@ final class CamisSchemaSync
             $name = (string) $column->get('name');
             $declared = self::columnType($column);
             $before = $previous[$name] ?? null;
-            if ($before === null || $before === $declared || ! in_array($name, $existing, true) || $column->get('autoIncrement') || $column->get('change')) {
+            if (! in_array($name, $existing, true) || $column->get('autoIncrement') || $column->get('change')) {
                 continue;
             }
-            $size = ColumnConversion::sizeChange($this->connection->getDriverName(), $before, $declared);
+            $driver = $this->connection->getDriverName();
+            // Where a database has several text sizes the live column decides, not the record: a column
+            // narrowed by hand since is what it is, and a record of it would skip a later widening.
+            $live = in_array($driver, ['mysql', 'mariadb'], true) && ColumnConversion::sizeChange($driver, 'text', $declared) !== null
+                ? ColumnConversion::textSizeOf($schema->getColumnType($table, $name))
+                : null;
+            $size = $live !== null
+                ? ColumnConversion::sizeChange($driver, $live, $declared)
+                : ($before === null ? null : ColumnConversion::sizeChange($driver, $before, $declared));
             if ($size === 'same') {
                 continue;
             }
             if ($size === 'narrow') {
                 // A narrower column would cut the values it holds: the database's owner narrows it.
-                $this->types[$table][$name] = $before;
-                $this->report[] = "kept {$table}.{$name} as {$before}: narrowing it to {$declared} could cut its values";
+                $this->types[$table][$name] = $live ?? $before;
+                $this->report[] = "kept {$table}.{$name} as {$this->types[$table][$name]}: narrowing it to {$declared} could cut its values";
 
                 continue;
             }
+            if ($size === null && ($before === null || $before === $declared)) {
+                continue;
+            }
+            $was = $before ?? $live;
             try {
-                if (ColumnConversion::group($before) !== ColumnConversion::group($declared) && in_array('id', $existing, true)) {
-                    $this->convertColumn($table, $definition, $column, $before, $declared);
-                    $this->report[] = "converted {$table}.{$name} from {$before} to {$declared}";
+                if ($size === null && ColumnConversion::group($was) !== ColumnConversion::group($declared) && in_array('id', $existing, true)) {
+                    $this->convertColumn($table, $definition, $column, $was, $declared);
+                    $this->report[] = "converted {$table}.{$name} from {$was} to {$declared}";
 
                     continue;
                 }
@@ -323,8 +336,8 @@ final class CamisSchemaSync
                 $this->report[] = "changed {$table}.{$name} to {$declared}";
             } catch (Throwable $exception) {
                 // Asked again next time: the recorded type stays the one the column still has.
-                $this->types[$table][$name] = $before;
-                $this->report[] = "kept {$table}.{$name} as {$before}: the database cannot change it to {$declared} ({$exception->getMessage()})";
+                $this->types[$table][$name] = $was;
+                $this->report[] = "kept {$table}.{$name} as {$was}: the database cannot change it to {$declared} ({$exception->getMessage()})";
             }
         }
     }

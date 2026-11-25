@@ -66,6 +66,16 @@ final class ColumnConversion
         return $to > $from ? 'widen' : 'narrow';
     }
 
+    /**
+     * A live column's text size by the name the database gives its type (information_schema's
+     * DATA_TYPE, which Schema::getColumnType answers on MySQL and MariaDB), as the sync records it;
+     * null for a column that is not a plain text.
+     */
+    public static function textSizeOf(string $liveType): ?string
+    {
+        return ['tinytext' => 'tinyText', 'text' => 'text', 'mediumtext' => 'mediumText', 'longtext' => 'longText'][strtolower($liveType)] ?? null;
+    }
+
     /** The group a recorded column type belongs to: a change within one is the database's to make. */
     public static function group(string $type): string
     {
