@@ -325,6 +325,28 @@ class NullClearsTest extends TestCase
         $this->show($id)->assertJsonCount(1, 'data.links')->assertJsonCount(1, 'data.blocks');
     }
 
+    public function test_an_item_that_is_not_an_object_is_refused_by_its_path_on_create_and_update(): void
+    {
+        $id = $this->make(['links' => [['label' => 'a']], 'seo' => ['keywords' => [['label' => 'k']]]]);
+        $cases = [
+            [['seo' => ['keywords' => [null]]], ['seo', 'keywords', '0']],
+            [['seo' => ['keywords' => ['x']]], ['seo', 'keywords', '0']],
+            [['links' => [null]], ['links', '0']],
+            [['links' => ['a' => 1]], ['links']],
+        ];
+        foreach ($cases as [$data, $path]) {
+            foreach ([['PUT', "brand-kits/{$id}", $data], ['POST', 'brand-kits', ['title' => 'Kit', ...self::IDENTITY, ...$data]]] as [$method, $uri, $body]) {
+                $this->api($method, $uri, $body)
+                    ->assertStatus(400)
+                    ->assertJsonPath('error.name', 'ValidationError')
+                    ->assertJsonPath('error.details.errors.0.path', $path);
+            }
+        }
+        $this->api('GET', "brand-kits/{$id}?populate[seo][populate]=*&populate[links]=true")->assertOk()
+            ->assertJsonCount(1, 'data.links')
+            ->assertJsonCount(1, 'data.seo.keywords');
+    }
+
     public function test_a_field_the_grant_assigns_cannot_be_cleared_or_changed_by_the_client(): void
     {
         $other = User::factory()->create(['username' => 'other']);

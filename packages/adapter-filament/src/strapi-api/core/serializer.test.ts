@@ -222,6 +222,14 @@ describe("emitSerializer", () => {
     expect(brandKit).toContain("'seoKeywords' => self::given($item, ['seo', 'keywords']) ?");
     expect(brandKit).not.toContain("self::has(");
   });
+  // An update reads the body before StrapiValidator refuses it: an item that is not an object is
+  // left for the validator to refuse by its path, not a TypeError.
+  it("reads only the items of a repeatable that are objects", () => {
+    const php = emitSerializer(wireShape(nestedDoc, nestedDoc.contentTypes[0]!, []));
+    expect(php).toContain(
+      "array_filter(is_array(self::dig($data, ['facts', 'additional'])) ? self::dig($data, ['facts', 'additional']) : [], 'is_array')",
+    );
+  });
   it("ConsumableNested serializer golden (repeatable nested under a non-repeatable branch, PSR-12 indentation)", async () => {
     await expect(
       emitSerializer(wireShape(nestedDoc, nestedDoc.contentTypes[0]!, [])),
