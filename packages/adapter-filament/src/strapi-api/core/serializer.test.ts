@@ -201,13 +201,13 @@ describe("emitSerializer", () => {
     const nested = emitSerializer(wireShape(nestedDoc, nestedDoc.contentTypes[0]!, []));
     expect(nested).toContain("], ['additional']),");
     expect(nested).toContain(
-      "private static function nested(array $a, array $lists = [], bool $linked = false): ?array",
+      "private static function nested(array $a, array $lists = [], ?\\Closure $linked = null): ?array",
     );
     const brandDoc = normalize(nullClearsBundle.document);
     const brandKit = emitSerializer(
       wireShape(brandDoc, brandDoc.contentTypes.find((c) => c.name === "BrandKit")!, []),
     );
-    expect(brandKit).toContain("], ['keywords'], $m->seo_sponsor_id !== null),");
+    expect(brandKit).toContain("], ['keywords'], fn (): bool => $m->seo_sponsor_id !== null),");
   });
   it("ConsumableNested serializer golden (repeatable nested under a non-repeatable branch, PSR-12 indentation)", async () => {
     await expect(

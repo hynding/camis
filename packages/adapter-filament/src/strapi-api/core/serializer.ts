@@ -53,33 +53,68 @@ const mediaWire = (r: WireRelation, src = "$c"): string =>
     ? `${src}->${r.relation}()->orderByPivot('order')->get()->map(fn ($f) => ${r.model}Serializer::toWire($f))->all()`
     : `${src}->${r.relation}->first() === null ? null : ${r.model}Serializer::toWire(${src}->${r.relation}->first())`;
 
-// Build a nested PHP array literal from scalars whose keys are paths.
+// Build a nested PHP array literal from scalars whose keys are paths. A branch (a component) also
+// knows its leaves that are lists (`lists`: a repeatable's items, a set of files), which hold no
+// value when empty, and the PHP conditions under which a link it holds is set (`links`).
 interface Node {
   leaves: Map<string, string>;
   branches: Map<string, Node>;
+  lists: Set<string>;
+  links: string[];
 }
-const node = (): Node => ({ leaves: new Map(), branches: new Map() });
-const insert = (root: Node, key: string[], expr: string): void => {
+const node = (): Node => ({ leaves: new Map(), branches: new Map(), lists: new Set(), links: [] });
+const branchAt = (root: Node, path: readonly string[]): Node => {
   let cur = root;
-  key.slice(0, -1).forEach((seg) => {
+  for (const seg of path) {
     let next = cur.branches.get(seg);
     if (!next) {
       next = node();
       cur.branches.set(seg, next);
     }
     cur = next;
-  });
-  cur.leaves.set(key[key.length - 1]!, expr);
+  }
+  return cur;
+};
+const insert = (root: Node, key: string[], expr: string): void => {
+  branchAt(root, key.slice(0, -1)).leaves.set(key[key.length - 1]!, expr);
+};
+const insertList = (root: Node, key: string[], expr: string): void => {
+  insert(root, key, expr);
+  branchAt(root, key.slice(0, -1)).lists.add(key[key.length - 1]!);
+};
+/** A link set inside a component is a value of it and of each component holding it. */
+const insertLink = (root: Node, key: readonly string[], condition: string): void => {
+  for (let depth = 1; depth < key.length; depth++)
+    branchAt(root, key.slice(0, depth)).links.push(condition);
 };
 // `self::nested(...)` for branches: a component stored as all-null columns has no value, so it is
 // null, as Strapi sends an unset component, not `[]` (a JSON array) or an object of nulls.
+const nestedArguments = (b: Node): string => {
+  const lists = [...b.lists].map((k) => `'${k}'`).join(", ");
+  if (b.links.length === 0) return lists === "" ? "" : `, [${lists}]`;
+  return `, [${lists}], fn (): bool => ${b.links.join(" || ")}`;
+};
 const render = (n: Node, indent: string): string => {
   const rows: string[] = [];
   for (const [k, v] of n.leaves) rows.push(`${indent}'${k}' => ${v},`);
   for (const [k, b] of n.branches)
-    rows.push(`${indent}'${k}' => self::nested([\n${render(b, `${indent}${UNIT}`)}\n${indent}]),`);
+    rows.push(
+      `${indent}'${k}' => self::nested([\n${render(b, `${indent}${UNIT}`)}\n${indent}]${nestedArguments(b)}),`,
+    );
   return rows.join("\n");
 };
+
+/**
+ * Whether a component's link is set on `row`: its foreign key, or a row of its link table (asked of
+ * the table, as populate may have loaded only the targets the reader sees). `nested` asks it only of
+ * a component with no other value.
+ */
+const linkSet = (r: WireRelation, row: string): string =>
+  r.foreignKey !== null ? `${row}->${r.foreignKey} !== null` : `${row}->${r.relation}()->exists()`;
+
+/** A component's files on the wire; a set of them is a list, which holds no value when empty. */
+const insertMedia = (n: Node, r: WireRelation, row: string): void =>
+  (r.kind === "mediaMany" ? insertList : insert)(n, r.key.split("."), mediaWire(r, row));
 
 /**
  * Strapi gives every component an id. An embedded one is columns of the row holding it (the entry,
@@ -109,17 +144,20 @@ const childWire = (
   const inner = node();
   insert(inner, ["id"], `${item}->id`);
   const nested = c.children.filter((n) => n.private !== true);
+  const links = c.relations.filter((r) => r.private !== true);
   insertComponentIds(
     inner,
     [
       ...answered(c.scalars).map((s) => s.key),
       ...c.media.map((r) => r.key.split(".")),
       ...nested.map((n) => n.key),
+      ...links.map((r) => r.key.split(".")),
     ],
     `${item}->id`,
   );
   for (const s of answered(c.scalars)) insert(inner, s.key, read(s, item, layout));
-  for (const r of c.media) insert(inner, r.key.split("."), mediaWire(r, item));
+  for (const r of c.media) insertMedia(inner, r, item);
+  for (const r of links) insertLink(inner, r.key.split("."), linkSet(r, item));
   // The child's own row is rendered by `render` one branch level per path segment above
   // it (depth = c.key.length - 1), matching how it indents a nested `self::nested([`
   // branch body — so the map's rows sit a further level in, and its closing
@@ -127,7 +165,8 @@ const childWire = (
   const depth = c.key.length;
   const rowIndent = `${indent}${UNIT.repeat(depth)}`;
   const closeIndent = `${indent}${UNIT.repeat(depth - 1)}`;
-  for (const n of nested) insert(inner, n.key, childWire(n, item, level + 1, rowIndent, layout));
+  for (const n of nested)
+    insertList(inner, n.key, childWire(n, item, level + 1, rowIndent, layout));
   return `${src}->${c.relation}->map(fn (${item}) => [\n${render(inner, rowIndent)}\n${closeIndent}])->all()`;
 };
 
@@ -138,18 +177,21 @@ const toWireBody = (shape: WireShape, indent: string, layout: StorageLayout): st
   const own = answered(shape.scalars);
   const children = shape.children.filter((c) => c.private !== true);
   const files = shape.embeddedMedia.filter((r) => r.private !== true);
+  const links = shape.embeddedRelations.filter((r) => r.private !== true);
   insertComponentIds(
     root,
     [
       ...own.map((s) => s.key),
       ...children.map((c) => c.key),
       ...files.map((r) => r.key.split(".")),
+      ...links.map((r) => r.key.split(".")),
     ],
     "$m->id",
   );
   for (const s of own) insert(root, s.key, read(s, "$m", layout));
-  for (const r of files) insert(root, r.key.split("."), mediaWire(r, "$m"));
-  for (const c of children) insert(root, c.key, childWire(c, "$m", 1, indent, layout));
+  for (const r of files) insertMedia(root, r, "$m");
+  for (const r of links) insertLink(root, r.key.split("."), linkSet(r, "$m"));
+  for (const c of children) insertList(root, c.key, childWire(c, "$m", 1, indent, layout));
   if (layout === "laravel")
     for (const z of shape.zones) insert(root, [z.key], zoneWire(z, `${indent}${UNIT}`));
   insert(root, ["createdAt"], `$m->created_at${ZULU_MS}`);
@@ -166,19 +208,22 @@ const zoneMemberWire = (member: WireZoneMember, indent: string): string => {
   const item = node();
   insert(item, ["__component"], `'${member.uid}'`);
   insert(item, ["id"], "$c->id");
+  const links = member.relations.filter((r) => r.private !== true);
   insertComponentIds(
     item,
     [
       ...answered(member.scalars).map((s) => s.key),
       ...member.media.map((r) => r.key.split(".")),
       ...member.children.map((n) => n.key),
+      ...links.map((r) => r.key.split(".")),
     ],
     "$c->id",
   );
   for (const s of answered(member.scalars)) insert(item, s.key, read(s, "$c", "laravel"));
-  for (const r of member.media) insert(item, r.key.split("."), mediaWire(r));
+  for (const r of member.media) insertMedia(item, r, "$c");
+  for (const r of links) insertLink(item, r.key.split("."), linkSet(r, "$c"));
   for (const n of member.children)
-    insert(item, n.key, childWire(n, "$c", 2, `${indent}${UNIT}`, "laravel"));
+    insertList(item, n.key, childWire(n, "$c", 2, `${indent}${UNIT}`, "laravel"));
   return `${indent}...$m->${member.relation}->map(fn ($c) => [$c->position, [
 ${render(item, `${indent}${UNIT}`)}
 ${indent}]])->all(),`;
@@ -632,10 +677,19 @@ ${fromWireChildStatements(shape.children, l2)}${zones.length === 0 ? "" : `\n${f
     {${syncChildrenBody}
     }
 
-    /** A component's fields, or null when none has a value (its id, the row's, is not one, nor a repeatable or set of files with none). */
-    private static function nested(array $a): ?array
+    /**
+     * A component's fields, or null when none has a value: its id (the row's) is not one, nor a
+     * repeatable or set of files ($lists) holding none; a link it holds ($linked) is one.
+     */
+    private static function nested(array $a, array $lists = [], ?\\Closure $linked = null): ?array
     {
-        return array_filter(array_diff_key($a, ['id' => true]), fn ($v) => $v !== null && $v !== []) === [] ? null : $a;
+        foreach (array_diff_key($a, ['id' => true]) as $key => $value) {
+            if ($value !== null && ($value !== [] || ! in_array($key, $lists, true))) {
+                return $a;
+            }
+        }
+
+        return $linked !== null && $linked() ? $a : null;
     }
 
     private static function dig(array $a, array $path): mixed

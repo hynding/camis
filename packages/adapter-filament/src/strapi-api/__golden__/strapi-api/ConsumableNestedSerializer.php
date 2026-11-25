@@ -54,7 +54,7 @@ final class ConsumableSerializer
                     'slug' => $c->slug,
                     'amount' => $c->amount === null ? null : (float) $c->amount,
                 ])->all(),
-            ]),
+            ], ['additional']),
         ];
     }
 
@@ -87,10 +87,19 @@ final class ConsumableSerializer
         }
     }
 
-    /** A component's fields, or null when none has a value (its id, the row's, is not one, nor a repeatable or set of files with none). */
-    private static function nested(array $a): ?array
+    /**
+     * A component's fields, or null when none has a value: its id (the row's) is not one, nor a
+     * repeatable or set of files ($lists) holding none; a link it holds ($linked) is one.
+     */
+    private static function nested(array $a, array $lists = [], ?\Closure $linked = null): ?array
     {
-        return array_filter(array_diff_key($a, ['id' => true]), fn ($v) => $v !== null && $v !== []) === [] ? null : $a;
+        foreach (array_diff_key($a, ['id' => true]) as $key => $value) {
+            if ($value !== null && ($value !== [] || ! in_array($key, $lists, true))) {
+                return $a;
+            }
+        }
+
+        return $linked !== null && $linked() ? $a : null;
     }
 
     private static function dig(array $a, array $path): mixed

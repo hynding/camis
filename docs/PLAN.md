@@ -3794,7 +3794,9 @@ missing key leaves it, and a null where a component sits clears every column of 
 Strapi deletes it). The entry's repeatables are read through the same `given`, so a null component
 also names the repeatables inside it, whose items are then deleted rather than reappearing when the
 component is next written. A component holding nothing but empty lists (a repeatable or a set of
-files with no items) reads as null, as one with no value does (`nested`). A repeatable's and a
+files with no items) reads as null, as one with no value does (`nested`); any other value, an empty
+json among them, and a link it holds (its foreign key, or a row of its link table) make it an
+object, which populate then fills. A repeatable's and a
 zone's items are written afresh on every write, where a null is no value, so they keep the filter;
 a zone's item kept by its id keeps what it sends as null, the repeatables below a null component in
 it too (`has`).
