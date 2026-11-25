@@ -118,7 +118,9 @@ final class LedgerSerializer
         if (array_key_exists('lines', $data)) {
             $children['lines'] = StrapiZones::items($data['lines'], 'lines', self::ZONES['lines'], fn (string $uid, array $item, int $position) => match ($uid) {
                 'shared.limit' => [
-                    'ceiling' => self::decimal(self::dig($item, ['ceiling']), 18, 2, ['lines', (string) $position, 'ceiling']),
+                    ...self::named($item, [
+                        'ceiling' => [['ceiling'], self::decimal(self::dig($item, ['ceiling']), 18, 2, ['lines', (string) $position, 'ceiling'])],
+                    ]),
                 ],
             });
         }
@@ -179,6 +181,19 @@ final class LedgerSerializer
         }
 
         return true;
+    }
+
+    /** The columns a zone's item names, each given as [its key path, its value]. */
+    private static function named(array $item, array $columns): array
+    {
+        $named = [];
+        foreach ($columns as $column => [$path, $value]) {
+            if (self::given($item, $path)) {
+                $named[$column] = $value;
+            }
+        }
+
+        return $named;
     }
 
     /** @param list<array{0: int, 1: array}> $items [position, item] pairs from every member */

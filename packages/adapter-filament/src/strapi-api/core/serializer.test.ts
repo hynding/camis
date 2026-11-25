@@ -217,7 +217,7 @@ describe("emitSerializer", () => {
       wireShape(brandDoc, brandDoc.contentTypes.find((c) => c.name === "BrandKit")!, []),
     );
     expect(brandKit).toContain(
-      "'shared.link' => [\n                ...self::named($item, [\n                    'label' => [['label'], self::dig($item, ['label'])],",
+      "'shared.link' => [\n                    ...self::named($item, [\n                        'label' => [['label'], self::dig($item, ['label'])],",
     );
     expect(brandKit).toContain("'seoKeywords' => self::given($item, ['seo', 'keywords']) ?");
     expect(brandKit).not.toContain("self::has(");

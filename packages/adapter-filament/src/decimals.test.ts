@@ -300,14 +300,14 @@ describe("decimals stating their digits (issue #104)", () => {
       );
       expect(serializer).toContain("['lines', (string) $position, 'ceiling']");
       expect(content("app/Support/StrapiZones.php")).toContain(
-        "array_filter($columns($uid, $item, $position), fn ($v) => $v !== null);",
+        "['position' => $position] + $columns($uid, $item, $position);",
       );
       const other = filamentAdapter.generate(strapiApiBundle, {
         projectName: "api",
         apiStyle: "strapi",
       });
       const zones = other.files.find((f) => f.path === "app/Support/StrapiZones.php")?.content;
-      expect(zones).toContain("array_filter($columns($uid, $item), fn ($v) => $v !== null);");
+      expect(zones).toContain("['position' => $position] + $columns($uid, $item);");
       expect(other.files.map((f) => f.content).join("\n")).not.toContain("int $position) => match");
     });
 

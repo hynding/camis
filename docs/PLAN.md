@@ -3796,18 +3796,18 @@ also names the repeatables inside it, whose items are then deleted rather than r
 component is next written. A component holding nothing but empty lists (a repeatable or a set of
 files with no items) reads as null, as one with no value does (`nested`); any other value, an empty
 json among them, and a link it holds (its foreign key, or a row of its link table) make it an
-object, which populate then fills. A repeatable's and a
-zone's items are written afresh on every write, where a null is no value, so they keep the filter;
-a zone's item kept by its id keeps what it sends as null, the repeatables below a null component in
-it too (`has`).
+object, which populate then fills. A repeatable's items are written afresh on every write, where a
+null is no value, so they keep the filter. A zone's item is read by the keys it names, as the entry
+is (`named`): one kept by its id is cleared by a null, the items of a repeatable below a null
+component in it with it, and keeps a key it leaves out; a new one stores a null as null.
 
 Recorded from Strapi 5.48 on SQLite (a project with the same types), and followed where it differs
 from the issue: a null on create is stored as null, not the field's default (the database layer
 takes a default for a missing key only); a required field, a repeatable component and a dynamic
 zone refuse null with Strapi's "must be a `type` type" error, the zone being the one case strapi-php
 accepted (`StrapiValidator::zone`); a to-one or to-many link, a file and a set of files are unlinked
-by null, an embedded component cleared with the items of the repeatables inside it; unique, pattern
-and bounds do not run on null. A field a grant assigns stays the caller's: its relation is not read
+by null, an embedded component cleared with the items of the repeatables inside it, and a zone's
+item kept by its id cleared by null as the entry is; unique, pattern and bounds do not run on null. A field a grant assigns stays the caller's: its relation is not read
 from the body. A required single component refuses null on a create or an update ("must be a
 `object` type"), and a create that leaves it out ("must be defined."), but on a draft write:
 Strapi's notNil and notNull on it, whose object type check comes first, which the component's rule

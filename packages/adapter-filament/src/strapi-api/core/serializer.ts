@@ -351,7 +351,7 @@ const fromWireZoneStatements = (zones: WireZone[], indent: string): string =>
         .map(
           (m) =>
             `${l2}'${m.uid}' => [\n${[
-              fromWireColumns(m.scalars, "$item", l3, at),
+              zoneItemColumns(m.scalars, l3, at),
               ...(m.media.length + m.relations.length === 0
                 ? []
                 : [zoneItemLinks([...m.media, ...m.relations], l3)]),
@@ -369,17 +369,32 @@ ${indent}}`;
     })
     .join("\n");
 
+/**
+ * A zone item's columns, each set only when the item names its key, as the entry's are: an item kept
+ * by its id is cleared by a null and keeps a key it leaves out; a new one is written afresh either way.
+ */
+const zoneItemColumns = (scalars: WireScalar[], indent: string, at: string): string =>
+  scalars.length === 0
+    ? ""
+    : `${indent}...self::named($item, [\n${scalars
+        .map(
+          (s) =>
+            `${indent}${UNIT}'${s.column}' => [[${quoted(s.key)}], ${takenValue(s, "$item", at)}],`,
+        )
+        .join("\n")}\n${indent}]),`;
+
 // An item's links as sent, null included: an item kept by its id keeps what it leaves out.
 // The controller resolves them to links before anything is written.
 const zoneItemLinks = (links: WireRelation[], indent: string): string =>
   `${indent}'__links' => array_intersect_key($item, [${[...new Set(links.map((r) => r.key.split(".")[0]))].map((k) => `'${k}' => true`).join(", ")}]),`;
 
-// The items of the repeatables inside a zone's item, replaced whole with the item.
+// The items of the repeatables inside a zone's item, replaced whole with the item; a null component
+// names the repeatables inside it, as the entry's does.
 const zoneItemChildren = (children: WireChild[], indent: string, at: string): string =>
   `${indent}'__children' => array_filter([\n${children
     .map(
       (n) =>
-        `${indent}${UNIT}'${n.relation}' => self::has($item, [${n.key.map((k) => `'${k}'`).join(", ")}]) ? ${itemRows(n, `self::dig($item, [${quoted(n.key)}])`, 2, `${indent}${UNIT}`, `${at}${quoted(n.key)}, `)} : null,`,
+        `${indent}${UNIT}'${n.relation}' => self::given($item, [${n.key.map((k) => `'${k}'`).join(", ")}]) ? ${itemRows(n, `self::dig($item, [${quoted(n.key)}])`, 2, `${indent}${UNIT}`, `${at}${quoted(n.key)}, `)} : null,`,
     )
     .join("\n")}\n${indent}], fn ($v) => $v !== null),`;
 
@@ -442,21 +457,20 @@ ${indent}}`,
 /** Whether an item, or an item nested in it, links a file: its rows go one by one, links and all. */
 const linksFiles = (c: WireChild): boolean => c.media.length > 0 || c.children.some(linksFiles);
 
-// Whether a zone's item holds a path. Unlike `given`, a null component holds nothing: a zone's
-// item kept by its id keeps the columns it sends as null, so it keeps the items below them too.
-const hasHelper = `
+// Emitted for a zone whose items have columns, which `zoneItemColumns` reads.
+const namedHelper = `
 
-    private static function has(array $a, array $path): bool
+    /** The columns a zone's item names, each given as [its key path, its value]. */
+    private static function named(array $item, array $columns): array
     {
-        $cur = $a;
-        foreach ($path as $seg) {
-            if (! is_array($cur) || ! array_key_exists($seg, $cur)) {
-                return false;
+        $named = [];
+        foreach ($columns as $column => [$path, $value]) {
+            if (self::given($item, $path)) {
+                $named[$column] = $value;
             }
-            $cur = $cur[$seg];
         }
 
-        return true;
+        return $named;
     }`;
 
 // Whether the payload names a path. A null where a component sits names every field inside it,
@@ -627,10 +641,13 @@ export const emitSerializer = (shape: WireShape, layout: StorageLayout = "larave
   ]
     .map((body) => `\n${body}`)
     .join("");
+  const zoneItemsRead = zones.some((z) =>
+    z.members.some((m) => m.scalars.length > 0 || m.children.length > 0),
+  );
   const givenHelperBody =
-    shape.scalars.length === 0 && shape.children.length === 0 ? "" : givenHelper;
-  const hasHelperBody = zones.some((z) => z.members.some((m) => m.children.length > 0))
-    ? hasHelper
+    shape.scalars.length === 0 && shape.children.length === 0 && !zoneItemsRead ? "" : givenHelper;
+  const namedHelperBody = zones.some((z) => z.members.some((m) => m.scalars.length > 0))
+    ? namedHelper
     : "";
   const zoneHelperBody = zones.length === 0 ? "" : zoneHelper;
   const epochHelperBody = hasTimestamp(shape, zones) ? epochHelper : "";
@@ -703,7 +720,7 @@ ${fromWireChildStatements(shape.children, l2)}${zones.length === 0 ? "" : `\n${f
         }
 
         return $cur;
-    }${givenHelperBody}${hasHelperBody}${zoneHelperBody}${epochHelperBody}${decimalHelperBody}
+    }${givenHelperBody}${namedHelperBody}${zoneHelperBody}${epochHelperBody}${decimalHelperBody}
 }
 `;
 };
