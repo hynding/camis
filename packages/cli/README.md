@@ -149,6 +149,29 @@ Drizzle's `decimal`/`numeric` on Express. With them:
   JSON body parser reads a JSON number as a double, so send an exact value as a string: a
   `decimalPrecision` downgrade gap, located, says both.
 
+### Text columns
+
+A `text` field's column is sized by its `maxLength` at four bytes a character (MySQL's worst case,
+utf8mb4): `text` up to 16,383 characters, `mediumText` up to 4,194,303, `longText` above that and for
+a text with no bound, as Strapi's longtext is; rich text is always `longText`. SQLite and PostgreSQL
+keep one text type, so only MySQL sees the difference. A bound above 1,073,741,823 characters is
+more than any MySQL text holds: the column stays `longText` and a `textLength` downgrade gap says
+so. `filament` (Laravel storage) and `express` on MySQL choose the column; Strapi's own columns are
+always longtext.
+
+A migration that has already run is not run again, so a database made before this keeps its old
+`text` columns (65,535 bytes on MySQL). Widen one by hand:
+
+```php
+Schema::table('articles', fn (Blueprint $table) => $table->longText('body')->nullable()->change());
+```
+
+or `ALTER TABLE articles MODIFY body LONGTEXT NULL;` (Express: the same, or `drizzle-kit push`). The
+Content-Type Builder's `camis:schema-sync` widens a text column to the size the model now declares
+on MySQL, leaves the three sizes alone on SQLite and PostgreSQL (one type there), and never narrows
+a column on its own: where the model declares a smaller size than the column has, the sync reports
+`kept <table>.<column> as <type>` and leaves the column as it is.
+
 ## camis.config.json
 
 ```json
