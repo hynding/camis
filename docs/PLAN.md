@@ -3807,9 +3807,9 @@ accepted (`StrapiValidator::zone`); a to-one or to-many link, a file and a set o
 by null, an embedded component cleared with the items of the repeatables inside it; unique, pattern
 and bounds do not run on null. A field a grant assigns stays the caller's: its relation is not read
 from the body. A required single component refuses null on a create or an update ("must be a
-`object` type"), but on a draft write: Strapi's notNil and notNull on it, whose object type check
-comes first, which the component's rule now carries (`required`). That last was read from Strapi's
-entity validator, not recorded from a running Strapi.
+`object` type"), and a create that leaves it out ("must be defined."), but on a draft write:
+Strapi's notNil and notNull on it, whose object type check comes first, which the component's rule
+now carries (`required`).
 
 Exit: `serializer.test.ts` and `validation.test.ts` (goldens regenerated) and `NullClearsTest.php`
 (the null-clears fixture, which holds an optional field of each scalar kind, a repeatable inside a
@@ -3824,9 +3824,6 @@ Not done:
   NOT NULL), where Strapi stores the null: the field's column is NOT NULL whether or not the type has
   drafts (`fields.ts`), and the validator lets a draft's null through. The gap was there before;
   clearing on update makes it reachable from an update too.
-- A required single component a create leaves out is not refused. Strapi's validator (yup 0.32)
-  casts a missing object to one built from its fields, which its notNil passes, so Strapi does not
-  refuse it either as far as its code reads; not recorded from a running Strapi.
 - On the Strapi storage layout, a component sent as an object whose every value is null
   (`{"seo": {"headline": null}}`) is deleted, as `StrapiComponents::write` takes an all-null
   component for none, and the entry answers `seo: null`. Strapi writes an id-less component afresh,

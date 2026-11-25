@@ -191,7 +191,8 @@ class NullClearsTest extends TestCase
         $this->assertSame(0, BrandKit::query()->count());
 
         $id = $this->make([]);
-        $this->api('PUT', "brand-kits/{$id}", ['tagline' => 'Kept'])->assertOk()->assertJsonPath('data.identity.mark', 'M');
+        $this->api('PUT', "brand-kits/{$id}", ['tagline' => 'Kept'])->assertOk();
+        $this->show($id)->assertJsonPath('data.identity.mark', 'M');
         $this->api('POST', 'campaigns?status=draft', ['title' => 'Draft'])->assertCreated();
     }
 

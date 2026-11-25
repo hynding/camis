@@ -68,9 +68,7 @@ final class StrapiValidator
             // A creation takes a field's default for a value it does not send.
             $sent = array_key_exists($key, $data) || ($context['creating'] && array_key_exists('default', $rule));
             if (! $sent) {
-                // Strapi's validator casts a missing component to one built from its fields, so its
-                // notNil passes: a required component a create leaves out is not refused.
-                if ($context['creating'] && ! $context['draft'] && ($rule['required'] ?? false) && $rule['type'] !== 'component') {
+                if ($context['creating'] && ! $context['draft'] && ($rule['required'] ?? false)) {
                     $errors[] = self::error($at, '{path} must be defined.');
                 }
                 continue;
