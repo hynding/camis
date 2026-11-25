@@ -73,7 +73,7 @@ final class ConsumableSerializer
             $children['factsAdditional'] = array_map(fn (array $row) => array_filter([
                 'slug' => self::dig($row, ['slug']),
                 'amount' => self::dig($row, ['amount']),
-            ], fn ($v) => $v !== null), is_array(self::dig($data, ['facts', 'additional'])) ? self::dig($data, ['facts', 'additional']) : []);
+            ], fn ($v) => $v !== null), array_filter(is_array(self::dig($data, ['facts', 'additional'])) ? self::dig($data, ['facts', 'additional']) : [], 'is_array'));
         }
 
         return ['columns' => $columns, 'children' => $children];

@@ -113,7 +113,7 @@ final class LedgerSerializer
             $children['entries'] = array_map(fn (array $row, int|string $i) => array_filter([
                 'memo' => self::dig($row, ['memo']),
                 'amount' => self::decimal(self::dig($row, ['amount']), 20, 6, ['entries', (string) $i, 'amount']),
-            ], fn ($v) => $v !== null), is_array(self::dig($data, ['entries'])) ? self::dig($data, ['entries']) : [], array_keys(is_array(self::dig($data, ['entries'])) ? self::dig($data, ['entries']) : []));
+            ], fn ($v) => $v !== null), array_filter(is_array(self::dig($data, ['entries'])) ? self::dig($data, ['entries']) : [], 'is_array'), array_keys(array_filter(is_array(self::dig($data, ['entries'])) ? self::dig($data, ['entries']) : [], 'is_array')));
         }
         if (array_key_exists('lines', $data)) {
             $children['lines'] = StrapiZones::items($data['lines'], 'lines', self::ZONES['lines'], fn (string $uid, array $item, int $position) => match ($uid) {

@@ -310,7 +310,8 @@ const itemRows = (
       ? []
       : [`${rowIndent}'__children' => [\n${nested.join("\n")}\n${rowIndent}],`]),
   ].filter((part) => part !== "");
-  const items = `is_array(${value}) ? ${value} : []`;
+  // An update reads the body before StrapiValidator refuses an item that is not an object.
+  const items = `array_filter(is_array(${value}) ? ${value} : [], 'is_array')`;
   return index === undefined
     ? `array_map(fn (array ${row}) => array_filter([
 ${parts.join("\n")}

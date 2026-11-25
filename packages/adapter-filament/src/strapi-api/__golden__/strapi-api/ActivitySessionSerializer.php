@@ -66,7 +66,7 @@ final class ActivitySessionSerializer
             $children['quantities'] = array_map(fn (array $row) => array_filter([
                 'amount' => self::dig($row, ['amount']),
                 'unit' => self::dig($row, ['unit']),
-            ], fn ($v) => $v !== null), is_array(self::dig($data, ['quantities'])) ? self::dig($data, ['quantities']) : []);
+            ], fn ($v) => $v !== null), array_filter(is_array(self::dig($data, ['quantities'])) ? self::dig($data, ['quantities']) : [], 'is_array'));
         }
 
         return ['columns' => $columns, 'children' => $children];
