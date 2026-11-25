@@ -141,7 +141,7 @@ describe("emitSerializer", () => {
   it("fromWire only sets a child key when the wire payload mentions it (partial-update safe)", () => {
     const php = emitSerializer(shape("ActivitySession"));
     expect(php).toContain("$children = [];");
-    expect(php).toContain("if (self::has($data, ['quantities'])) {");
+    expect(php).toContain("if (self::given($data, ['quantities'])) {");
     expect(php).toContain("$children['quantities'] = array_map(");
   });
   // Strapi clears a field the update names as null and leaves one it does not name (issue #122).
@@ -184,8 +184,22 @@ describe("emitSerializer", () => {
     expect(php).toContain("'additional' => $m->factsAdditional->map(");
     // Only the FIELDS map (the query runtime's lookup table) spells the path with a dot.
     expect(php.slice(php.indexOf("function toWire"))).not.toContain("'facts.additional'");
-    expect(php).toContain("if (self::has($data, ['facts', 'additional'])) {");
+    expect(php).toContain("if (self::given($data, ['facts', 'additional'])) {");
     expect(php).toContain("self::dig($data, ['facts', 'additional'])");
+  });
+  // A null component names its repeatables too: `self::dig` reads null there, which is no items,
+  // so they are deleted rather than reappearing when the component is next written.
+  it("empties a repeatable inside a component the payload sets to null", () => {
+    const php = emitSerializer(wireShape(nestedDoc, nestedDoc.contentTypes[0]!, []));
+    expect(php).not.toContain("self::has(");
+    expect(php).not.toContain("private static function has(");
+  });
+  // A component's repeatable with no items is no value, so a component holding nothing else is null.
+  it("counts an empty list in an embedded component as no value", () => {
+    const php = emitSerializer(wireShape(nestedDoc, nestedDoc.contentTypes[0]!, []));
+    expect(php).toContain(
+      "return array_filter(array_diff_key($a, ['id' => true]), fn ($v) => $v !== null && $v !== []) === [] ? null : $a;",
+    );
   });
   it("ConsumableNested serializer golden (repeatable nested under a non-repeatable branch, PSR-12 indentation)", async () => {
     await expect(

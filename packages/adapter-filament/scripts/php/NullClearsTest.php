@@ -190,6 +190,20 @@ class NullClearsTest extends TestCase
         $this->show($id)->assertJsonPath('data.seo.headline', 'Back')->assertJsonPath('data.seo.summary', null);
     }
 
+    public function test_a_component_cleared_by_null_takes_the_items_of_a_repeatable_inside_it(): void
+    {
+        $id = $this->make(['seo' => ['headline' => 'H', 'keywords' => [['label' => 'one'], ['label' => 'two']]]]);
+        $this->api('GET', "brand-kits/{$id}?populate[seo][populate]=*")->assertOk()->assertJsonCount(2, 'data.seo.keywords');
+
+        $this->api('PUT', "brand-kits/{$id}", ['seo' => null])->assertOk();
+        $this->show($id)->assertJsonPath('data.seo', null);
+        // Written again, the component holds none of the items it held before it was cleared.
+        $this->api('PUT', "brand-kits/{$id}", ['seo' => ['headline' => 'Back']])->assertOk();
+        $this->api('GET', "brand-kits/{$id}?populate[seo][populate]=*")->assertOk()
+            ->assertJsonPath('data.seo.headline', 'Back')
+            ->assertJsonCount(0, 'data.seo.keywords');
+    }
+
     public function test_a_repeatable_component_and_a_dynamic_zone_refuse_null(): void
     {
         $id = $this->make(['links' => [['label' => 'a']], 'blocks' => [['__component' => 'shared.link', 'label' => 'z']]]);
