@@ -6,6 +6,7 @@ import { bootBundle } from "../src/__fixtures__/boot";
 import { authorRoleBundle } from "../src/strapi-api/__fixtures__/author-role";
 import { strapiApiBundle } from "../src/strapi-api/__fixtures__/strapi-api";
 import { uniqueComponentsBundle } from "../src/strapi-api/__fixtures__/unique-components";
+import { textSizesBundle } from "../src/__fixtures__/text-sizes";
 import { morphRelationsBundle } from "../src/strapi-api/__fixtures__/morph-relations";
 import { storageBundle } from "../src/strapi-api/storage/__fixtures__/storage";
 import { decimalsBundle } from "../src/__fixtures__/decimals";
@@ -25,6 +26,7 @@ const BUNDLES = {
   "morph-relations": { bundle: morphRelationsBundle, projectName: "notes", graphql: true },
   // DecimalsTest round trips the decimals over GraphQL as well as REST.
   decimals: { bundle: decimalsBundle, projectName: "ledger", graphql: true },
+  "text-sizes": { bundle: textSizesBundle, projectName: "docs" },
 } as const;
 const bundle = flag("--bundle");
 const own = bundle === undefined ? undefined : BUNDLES[bundle as keyof typeof BUNDLES];
@@ -34,7 +36,7 @@ if (
   (bundle !== undefined && (own === undefined || style !== "strapi" || storage !== undefined))
 ) {
   console.error(
-    "usage: tsx scripts/overlay.ts <laravel-app-dir> [--style strapi [--storage strapi | --bundle author-role|unique-components|morph-relations|decimals]]",
+    "usage: tsx scripts/overlay.ts <laravel-app-dir> [--style strapi [--storage strapi | --bundle author-role|unique-components|morph-relations|decimals|text-sizes]]",
   );
   process.exit(1);
 }

@@ -147,6 +147,19 @@ describe("emitField", () => {
       emitField({ type: "decimal", name: "exact", precision: 14, scale: 2 } as Field).migration,
     ).toBe("$table->decimal('exact', 14, 2)->nullable()");
   });
+  // MySQL's TEXT holds 65,535 bytes: a longer value fails the insert in strict mode (issue #123).
+  it("sizes a text column by its bound at four bytes a character, longtext without one", () => {
+    const migration = (maxLength?: number) =>
+      emitField({
+        type: "text",
+        name: "body",
+        ...(maxLength === undefined ? {} : { maxLength }),
+      } as Field).migration;
+    expect(migration()).toBe("$table->longText('body')->nullable()");
+    expect(migration(16_383)).toBe("$table->text('body')->nullable()");
+    expect(migration(524_288)).toBe("$table->mediumText('body')->nullable()");
+    expect(migration(4_194_304)).toBe("$table->longText('body')->nullable()");
+  });
   // Strapi's richtext is Markdown: an HTML editor would rewrite it on the first save.
   it("edits richText as Markdown", () => {
     const f = emitField({ type: "richText", name: "body" } as Field);
