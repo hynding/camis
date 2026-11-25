@@ -144,6 +144,21 @@ describe("emitSerializer", () => {
     expect(php).toContain("if (self::has($data, ['quantities'])) {");
     expect(php).toContain("$children['quantities'] = array_map(");
   });
+  // Strapi clears a field the update names as null and leaves one it does not name (issue #122).
+  it("writes a column only when the payload names it, so null clears it and a missing key keeps it", () => {
+    const php = emitSerializer(wireShape(stampedDoc, stampedDoc.contentTypes[0]!, []));
+    expect(php).toContain(
+      "$columns = [];\n        if (self::given($data, ['seenAt'])) {\n            $columns['seen_at'] = self::epoch(self::dig($data, ['seenAt']));\n        }",
+    );
+    expect(php).toContain("private static function given(array $a, array $path): bool");
+    expect(php.slice(php.indexOf("function fromWire"))).not.toContain(
+      "array_filter([\n            'seen_at'",
+    );
+  });
+  it("counts a field of a component the payload sets to null as named, so the component is cleared", () => {
+    const php = emitSerializer(wireShape(nestedDoc, nestedDoc.contentTypes[0]!, []));
+    expect(php).toContain("if (self::given($data, ['facts', 'calories'])) {");
+  });
   // A component with no value is null; one with a value sends its own nulls.
   it("uses self::nested for an embedded component so an all-null one is null, not []", () => {
     const transaction = emitSerializer(shape("Transaction"));
