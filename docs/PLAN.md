@@ -3799,7 +3799,9 @@ json among them, and a link it holds (its foreign key, or a row of its link tabl
 object, which populate then fills. A repeatable's items are written afresh on every write, where a
 null is no value, so they keep the filter. A zone's item is read by the keys it names, as the entry
 is (`named`): one kept by its id is cleared by a null, the items of a repeatable below a null
-component in it with it, and keeps a key it leaves out; a new one stores a null as null.
+component in it with it, and keeps a key it leaves out; a new one stores a null as null. An update
+reads the body before StrapiValidator checks it, so `fromWire` reads only a repeatable's items that
+are objects, leaving the validator to refuse any other by its path (a 500 before).
 
 Recorded from Strapi 5.48 on SQLite (a project with the same types), and followed where it differs
 from the issue: a null on create is stored as null, not the field's default (the database layer
@@ -3826,6 +3828,12 @@ Not done:
   NOT NULL), where Strapi stores the null: the field's column is NOT NULL whether or not the type has
   drafts (`fields.ts`), and the validator lets a draft's null through. The gap was there before;
   clearing on update makes it reachable from an update too.
+- The admin's MCP tools (`StrapiMcpContentManager::create` and `change`) write through `fromWire`
+  without StrapiValidator, as before this phase. A null for a required field their input schema
+  lets through (a json field, whose schema takes any value) now reaches its NOT NULL column and
+  answers "Internal Server Error". Strapi refuses it on a type without drafts, its validator
+  running, and stores it on a draft. Checking it needs the validator's rules, which live in each
+  REST controller (`RULES`), reachable from `resources/strapi/mcp.json`; not done here.
 - On the Strapi storage layout, a component sent as an object whose every value is null
   (`{"seo": {"headline": null}}`) is deleted, as `StrapiComponents::write` takes an all-null
   component for none, and the entry answers `seo: null`. Strapi writes an id-less component afresh,
