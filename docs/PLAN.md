@@ -3791,21 +3791,51 @@ update that names a field as null from clearing it, though Strapi clears it. The
 to tell a key the body leaves out (kept) from one it names; it did so by dropping both. The entry's
 columns are now set only for the keys the payload names (`given`), so a null clears a column and a
 missing key leaves it, and a null where a component sits clears every column of the component (as
-Strapi deletes it). A repeatable's and a zone's items are written afresh on every write, where a null
-is no value, so they keep the filter.
+Strapi deletes it). The entry's repeatables are read through the same `given`, so a null component
+also names the repeatables inside it, whose items are then deleted rather than reappearing when the
+component is next written. A component holding nothing but empty lists (a repeatable or a set of
+files with no items) reads as null, as one with no value does (`nested`). A repeatable's and a
+zone's items are written afresh on every write, where a null is no value, so they keep the filter;
+a zone's item kept by its id keeps what it sends as null, the repeatables below a null component in
+it too (`has`).
 
 Recorded from Strapi 5.48 on SQLite (a project with the same types), and followed where it differs
 from the issue: a null on create is stored as null, not the field's default (the database layer
 takes a default for a missing key only); a required field, a repeatable component and a dynamic
 zone refuse null with Strapi's "must be a `type` type" error, the zone being the one case strapi-php
 accepted (`StrapiValidator::zone`); a to-one or to-many link, a file and a set of files are unlinked
-by null, an embedded component cleared; unique, pattern and bounds do not run on null. A field a
-grant assigns stays the caller's: its relation is not read from the body.
+by null, an embedded component cleared with the items of the repeatables inside it; unique, pattern
+and bounds do not run on null. A field a grant assigns stays the caller's: its relation is not read
+from the body. A required single component refuses null on a create or an update ("must be a
+`object` type"), but on a draft write: Strapi's notNil and notNull on it, whose object type check
+comes first, which the component's rule now carries (`required`). That last was read from Strapi's
+entity validator, not recorded from a running Strapi.
 
-Exit: `serializer.test.ts` (goldens regenerated) and `NullClearsTest.php` (the null-clears fixture) in
-the `null-clears` job on SQLite, MySQL and PostgreSQL. SQLite and PostgreSQL ran locally; MySQL
-runs only in CI. Not done: Strapi replaces an embedded component that carries no id whole, so a
-missing key inside it becomes null there, where strapi-php keeps it.
+Exit: `serializer.test.ts` and `validation.test.ts` (goldens regenerated) and `NullClearsTest.php`
+(the null-clears fixture, which holds an optional field of each scalar kind, a repeatable inside a
+component, a required component and a draft-and-publish type holding one) in the `null-clears` job
+on SQLite, MySQL and PostgreSQL. SQLite and PostgreSQL ran locally; MySQL runs only in CI.
+
+Not done:
+
+- Strapi replaces an embedded component that carries no id whole, so a missing key inside it
+  becomes null there, where the Laravel storage layout keeps it.
+- A draft write that sets a required field to null is answered with a generic 400 (the database's
+  NOT NULL), where Strapi stores the null: the field's column is NOT NULL whether or not the type has
+  drafts (`fields.ts`), and the validator lets a draft's null through. The gap was there before;
+  clearing on update makes it reachable from an update too.
+- A required single component a create leaves out is not refused. Strapi's validator (yup 0.32)
+  casts a missing object to one built from its fields, which its notNil passes, so Strapi does not
+  refuse it either as far as its code reads; not recorded from a running Strapi.
+- On the Strapi storage layout, a component sent as an object whose every value is null
+  (`{"seo": {"headline": null}}`) is deleted, as `StrapiComponents::write` takes an all-null
+  component for none, and the entry answers `seo: null`. Strapi writes an id-less component afresh,
+  so it too loses the `summary` the body leaves out, but keeps a component row of nulls, which a
+  Strapi reading the same database answers as an object of nulls. A component sent with its id is
+  updated in place by Strapi, keeping the fields the body leaves out; `StrapiComponents` ignores
+  the id and replaces it whole, for any write and not only one of nulls. Neither is fixed here:
+  keeping the fields a body leaves out would part from Strapi for an id-less component, and the
+  wire answers a component of nulls as null on both layouts (`nested`).
 
 ---
 
