@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { normalize } from "@camis/ir-core";
 import type { IrDocument } from "@camis/ir-schema";
+import { nullClearsBundle } from "../__fixtures__/null-clears";
 import { strapiApiBundle } from "../__fixtures__/strapi-api";
 import { emitSerializer } from "./serializer";
 import { wireShape } from "./wire-shape";
@@ -194,12 +195,19 @@ describe("emitSerializer", () => {
     expect(php).not.toContain("self::has(");
     expect(php).not.toContain("private static function has(");
   });
-  // A component's repeatable with no items is no value, so a component holding nothing else is null.
-  it("counts an empty list in an embedded component as no value", () => {
-    const php = emitSerializer(wireShape(nestedDoc, nestedDoc.contentTypes[0]!, []));
-    expect(php).toContain(
-      "return array_filter(array_diff_key($a, ['id' => true]), fn ($v) => $v !== null && $v !== []) === [] ? null : $a;",
+  // A component's repeatable with no items is no value, so a component holding nothing else is null;
+  // any other value counts, an empty json among them, and so does a link it holds.
+  it("counts only an empty repeatable or set of files in a component as no value, and a link as one", () => {
+    const nested = emitSerializer(wireShape(nestedDoc, nestedDoc.contentTypes[0]!, []));
+    expect(nested).toContain("], ['additional']),");
+    expect(nested).toContain(
+      "private static function nested(array $a, array $lists = [], bool $linked = false): ?array",
     );
+    const brandDoc = normalize(nullClearsBundle.document);
+    const brandKit = emitSerializer(
+      wireShape(brandDoc, brandDoc.contentTypes.find((c) => c.name === "BrandKit")!, []),
+    );
+    expect(brandKit).toContain("], ['keywords'], $m->seo_sponsor_id !== null),");
   });
   it("ConsumableNested serializer golden (repeatable nested under a non-repeatable branch, PSR-12 indentation)", async () => {
     await expect(

@@ -266,6 +266,20 @@ class NullClearsTest extends TestCase
             ->assertJsonCount(0, 'data.seo.keywords');
     }
 
+    public function test_a_component_whose_only_value_is_a_link_or_an_empty_json_is_a_component(): void
+    {
+        $partner = Partner::query()->create(['title' => 'Acme']);
+        $id = $this->make([]);
+
+        $this->api('PUT', "brand-kits/{$id}", ['seo' => ['sponsor' => $partner->getKey()]])->assertOk();
+        $this->api('GET', "brand-kits/{$id}?populate[seo][populate]=*")->assertOk()
+            ->assertJsonPath('data.seo.headline', null)
+            ->assertJsonPath('data.seo.sponsor.title', 'Acme');
+
+        $this->api('PUT', "brand-kits/{$id}", ['seo' => ['sponsor' => null, 'extra' => []]])->assertOk();
+        $this->show($id)->assertJsonPath('data.seo.extra', [])->assertJsonPath('data.seo.headline', null);
+    }
+
     public function test_a_repeatable_component_and_a_dynamic_zone_refuse_null(): void
     {
         $id = $this->make(['links' => [['label' => 'a']], 'blocks' => [['__component' => 'shared.link', 'label' => 'z']]]);

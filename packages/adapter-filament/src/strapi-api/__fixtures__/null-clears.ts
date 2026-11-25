@@ -119,6 +119,9 @@ export const nullClearsBundle: IrBundle = {
           { type: "string", name: "summary" },
           // Nested in a component, so a null for the component reaches its items through it.
           { type: "component", name: "keywords", component: "Link", repeatable: true },
+          // Each a value of the component even when it is its only one: a link, an empty json.
+          { type: "relation", name: "sponsor", relationKind: "manyToOne", target: "Partner" },
+          { type: "json", name: "extra" },
         ],
       },
       { name: "Link", fields: [{ type: "string", name: "label" }] },
