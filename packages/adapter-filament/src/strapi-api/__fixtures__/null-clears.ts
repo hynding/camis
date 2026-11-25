@@ -2,8 +2,9 @@ import type { IrBundle } from "@camis/permissions";
 
 /**
  * An explicit null in an update body, as Strapi takes it (issue #122): an optional field of every
- * kind is cleared, a required one refused, a link unlinked and a component cleared, while a key the
- * body leaves out keeps its value and a field the grant assigns stays the caller's. BrandKit's
+ * kind is cleared, a required one refused (a required component too, but on a draft), a link
+ * unlinked and a component cleared, its repeatables' items with it, while a key the body leaves
+ * out keeps its value and a field the grant assigns stays the caller's. BrandKit's
  * `code` is unique, patterned and measured, which a null must not run; `tone` has a default, which
  * a null on create does not take (Strapi's database layer takes it for a missing key only).
  * CI's null-clears job overlays it (scripts/overlay.ts --bundle null-clears) and runs
@@ -55,8 +56,32 @@ export const nullClearsBundle: IrBundle = {
           { type: "relation", name: "partner", relationKind: "manyToOne", target: "Partner" },
           { type: "relation", name: "allies", relationKind: "manyToMany", target: "Partner" },
           { type: "component", name: "seo", component: "Seo", repeatable: false },
+          {
+            type: "component",
+            name: "identity",
+            component: "Identity",
+            repeatable: false,
+            required: true,
+          },
           { type: "component", name: "links", component: "Link", repeatable: true },
           { type: "dynamicZone", name: "blocks", components: ["Link"] },
+        ],
+      },
+      // A draft takes a null for a required component, which a published write refuses.
+      {
+        name: "Campaign",
+        kind: "collection",
+        names: { plural: "Campaigns" },
+        options: { draftPublish: true },
+        fields: [
+          { type: "string", name: "title" },
+          {
+            type: "component",
+            name: "identity",
+            component: "Identity",
+            repeatable: false,
+            required: true,
+          },
         ],
       },
       // An account's own profile, whose owner the grant assigns (AuthorRoleTest's shape).
@@ -88,6 +113,7 @@ export const nullClearsBundle: IrBundle = {
         ],
       },
       { name: "Link", fields: [{ type: "string", name: "label" }] },
+      { name: "Identity", fields: [{ type: "string", name: "mark" }] },
     ],
   },
   roles: [
@@ -97,6 +123,7 @@ export const nullClearsBundle: IrBundle = {
         { contentType: "Partner", actions: ["read"] },
         { contentType: "File", actions: ["read"] },
         { contentType: "BrandKit", actions: ["create", "read", "update", "delete"] },
+        { contentType: "Campaign", actions: ["create", "read", "update", "publish"] },
         {
           contentType: "Profile",
           actions: ["create", "read", "update"],

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { filamentAdapter } from "../../generate";
 import { authorRoleBundle } from "../__fixtures__/author-role";
+import { nullClearsBundle } from "../__fixtures__/null-clears";
 import { strapiApiBundle } from "../__fixtures__/strapi-api";
 
 // Strapi's entity validator on REST and GraphQL writes. validation-vectors.json, recorded from
@@ -29,6 +30,22 @@ describe("entity validation", () => {
     expect(controller).toContain("'rating' => ['type' => 'integer', 'min' => 1, 'max' => 5],");
     expect(controller).toMatch(
       /'lines' => \[\n\s+'type' => 'component',\n\s+'repeatable' => true,\n\s+'fields' => \[\n\s+'label' => \['type' => 'string', 'required' => true\],/,
+    );
+  });
+
+  // Strapi's required single component is notNull on an update and notNil on a create, but on a
+  // draft, which StrapiValidator::component reads from the rule (NullClearsTest).
+  it("marks a required single component required, and an optional one not", () => {
+    const brandKit = filamentAdapter
+      .generate(nullClearsBundle, { projectName: "brand", apiStyle: "strapi" })
+      .files.find(
+        (f) => f.path === "app/Http/Controllers/Api/Generated/BrandKitApiController.php",
+      )?.content;
+    expect(brandKit).toMatch(
+      /'identity' => \[\n\s+'type' => 'component',\n\s+'repeatable' => false,\n\s+'required' => true,\n\s+'fields' => \[/,
+    );
+    expect(brandKit).toMatch(
+      /'seo' => \[\n\s+'type' => 'component',\n\s+'repeatable' => false,\n\s+'fields' => \[/,
     );
   });
 

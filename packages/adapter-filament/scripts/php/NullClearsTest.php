@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Models\BrandKit;
 use App\Models\File;
 use App\Models\Partner;
 use App\Models\Profile;
@@ -145,6 +146,32 @@ class NullClearsTest extends TestCase
             'title must be a `string` type, but the final value was: `null`.',
         );
         $this->show($id)->assertJsonPath('data.title', 'Kit');
+    }
+
+    public function test_a_required_component_refuses_null_on_create_and_update(): void
+    {
+        $refusal = 'identity must be a `object` type, but the final value was: `null`.';
+        $this->assertRefused($this->api('POST', 'brand-kits', ['title' => 'Kit', 'identity' => null]), ['identity'], $refusal);
+        $this->assertSame(0, BrandKit::query()->count());
+
+        $id = $this->make(['identity' => ['mark' => 'M']]);
+        $this->assertRefused($this->api('PUT', "brand-kits/{$id}", ['identity' => null]), ['identity'], $refusal);
+        $this->show($id)->assertJsonPath('data.identity.mark', 'M');
+        // Strapi's validator casts a missing component to one built from its fields, which is defined.
+        $this->api('POST', 'brand-kits', ['title' => 'Bare'])->assertCreated();
+    }
+
+    public function test_a_draft_takes_null_for_a_required_component_which_a_published_write_refuses(): void
+    {
+        $id = $this->api('POST', 'campaigns?status=draft', ['identity' => ['mark' => 'M']])->assertCreated()->json('data.documentId');
+
+        $this->api('PUT', "campaigns/{$id}?status=draft", ['identity' => null])->assertOk();
+        $this->api('GET', "campaigns/{$id}?status=draft&populate=*")->assertOk()->assertJsonPath('data.identity', null);
+        $this->assertRefused(
+            $this->api('PUT', "campaigns/{$id}", ['identity' => null]),
+            ['identity'],
+            'identity must be a `object` type, but the final value was: `null`.',
+        );
     }
 
     public function test_a_to_one_link_and_a_file_are_unlinked_by_null_and_a_missing_key_keeps_them(): void
