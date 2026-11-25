@@ -1,4 +1,4 @@
-import { decimalDigits, type DecimalDigits } from "@camis/ir-core";
+import { decimalDigits, textColumnSize, type DecimalDigits } from "@camis/ir-core";
 import type { Field } from "@camis/ir-schema";
 import { beyondPhpFloat } from "./decimals";
 import { snakeColumn } from "./names";
@@ -111,7 +111,7 @@ const base = (field: Field, c: string): Base => {
       };
     case "text":
       return {
-        migration: `$table->text('${c}')`,
+        migration: `$table->${textColumnSize(field)}('${c}')`,
         formComponent: `Textarea::make('${c}')`,
         tableColumn: `TextColumn::make('${c}')`,
         formImport: "Filament\\Forms\\Components\\Textarea",

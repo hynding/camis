@@ -20,3 +20,5 @@ export {
   digitsBeyond,
 } from "./decimal-digits";
 export type { DecimalDigits, LocatedDecimal } from "./decimal-digits";
+export { textColumnSize, textLengthGaps, textsBeyondColumn } from "./text-size";
+export type { LocatedText, TextColumnSize } from "./text-size";

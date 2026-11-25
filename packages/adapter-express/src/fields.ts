@@ -1,4 +1,4 @@
-import { beyondDouble, decimalDigits } from "@camis/ir-core";
+import { beyondDouble, decimalDigits, textColumnSize } from "@camis/ir-core";
 import type { Field } from "@camis/ir-schema";
 import type { Dialect } from "./dialect";
 import { snakeColumn } from "./names";
@@ -61,6 +61,12 @@ const decimalColumn = (
     : { expr: `numeric('${c}')`, import: "numeric" };
 };
 
+// MySQL's TEXT holds 65,535 bytes: a text takes the smallest of its text types that holds its bound.
+const mysqlText = (field: Field, c: string): { expr: string; import: string } => {
+  const size = textColumnSize(field).toLowerCase();
+  return { expr: `${size}('${c}')`, import: size };
+};
+
 // Per-dialect base column (expression WITHOUT modifiers) + the drizzle-core import it needs.
 const base = (dialect: Dialect, field: Field, c: string): { expr: string; import: string } => {
   switch (field.type) {
@@ -73,6 +79,7 @@ const base = (dialect: Dialect, field: Field, c: string): { expr: string; import
         : { expr: `varchar('${c}', { length: 255 })`, import: "varchar" };
     case "text":
     case "richText":
+      return dialect === "mysql" ? mysqlText(field, c) : { expr: `text('${c}')`, import: "text" };
     case "media":
     case "enumeration":
       return { expr: `text('${c}')`, import: "text" };

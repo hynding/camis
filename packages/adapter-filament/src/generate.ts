@@ -8,7 +8,7 @@ import {
   type GeneratedFile,
   type GenerationResult,
 } from "@camis/adapter-kernel";
-import { normalize } from "@camis/ir-core";
+import { normalize, textLengthGaps } from "@camis/ir-core";
 import { strapiNames } from "@camis/strapi-schema";
 import type { CapabilityGap } from "@camis/ir-schema";
 import { CUSTOM_FIELD_REGISTRATIONS_PATH, emitCustomFields } from "./custom-fields";
@@ -137,6 +137,7 @@ export const filamentAdapter: GenerateAdapter = {
       // The Strapi API style keeps private fields out of its answers; the Laravel one cannot.
       ...(apiStyle === "strapi" ? [] : privateFieldGaps(doc, "the Laravel API style")),
       ...filamentDecimalGaps(doc, apiStyle, storage),
+      ...textLengthGaps(doc, "the Laravel migration"),
     ];
     if (storage !== requestedStorage) {
       gaps.push({

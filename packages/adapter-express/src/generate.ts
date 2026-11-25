@@ -8,7 +8,7 @@ import {
   type GeneratedFile,
   type GenerationResult,
 } from "@camis/adapter-kernel";
-import { decimalsBeyondDouble, normalize } from "@camis/ir-core";
+import { decimalsBeyondDouble, normalize, textLengthGaps } from "@camis/ir-core";
 import type { CapabilityGap, IrDocument } from "@camis/ir-schema";
 import { adminResourceFiles } from "./admin-resources";
 import { adminStaticFiles } from "./admin-app";
@@ -85,6 +85,7 @@ export const expressAdapterFor = (dialect: Dialect): GenerateAdapter => ({
       ...apiActionGaps(doc),
       ...publicApiActionGaps(doc),
       ...expressDecimalGaps(doc),
+      ...(dialect === "mysql" ? textLengthGaps(doc, "the Drizzle schema") : []),
     ];
     const files: GeneratedFile[] = [
       ...skeletonFiles(doc, options.projectName, dialect, { secured }),
