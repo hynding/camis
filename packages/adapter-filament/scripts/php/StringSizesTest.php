@@ -179,4 +179,20 @@ class StringSizesTest extends TestCase
         $this->assertStringContainsString('<=673 characters', $unchanged['content'][0]['text']);
         $this->assertSame($this->distinct(673), Entry::query()->sole()->handle);
     }
+
+    public function test_the_mcp_tools_refuse_an_email_or_uid_past_its_bound(): void
+    {
+        // Each is bounded at 100 characters, as its string column is: MCP checks what REST checks.
+        $owner = $this->admin();
+        $email = fn (int $characters): string => str_repeat('a', $characters - 12).'@example.com';
+        $made = $this->mcp($owner, 'create_entry', ['data' => ['reply' => $email(100), 'key' => str_repeat('k', 100)]]);
+        $this->assertArrayNotHasKey('isError', $made);
+
+        foreach (['reply' => $email(101), 'key' => str_repeat('k', 101)] as $field => $value) {
+            $refused = $this->mcp($owner, 'create_entry', ['data' => [$field => $value]]);
+            $this->assertTrue($refused['isError'] ?? false, $field);
+            $this->assertStringContainsString('<=100 characters', $refused['content'][0]['text'], $field);
+        }
+        $this->assertSame(1, Entry::query()->count());
+    }
 }

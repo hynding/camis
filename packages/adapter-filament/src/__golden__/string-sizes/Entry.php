@@ -22,6 +22,8 @@ class Entry extends Model
         'label',
         'tagline',
         'summary',
+        'reply',
+        'key',
     ];
 
     protected $attributes = [

@@ -24,6 +24,8 @@ class EntryForm
             TextInput::make('label')->rule('max:100'),
             TextInput::make('tagline')->rule('max:500'),
             Textarea::make('summary'),
+            TextInput::make('reply')->email()->rule('max:100'),
+            TextInput::make('key')->rule('max:100'),
         ]);
     }
 }

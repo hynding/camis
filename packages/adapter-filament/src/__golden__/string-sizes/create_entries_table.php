@@ -23,6 +23,8 @@ return new class extends Migration
             $table->string('label', 100)->nullable()->default('hi');
             $table->text('tagline')->nullable();
             $table->longText('summary')->nullable();
+            $table->string('reply', 100)->nullable();
+            $table->string('key', 100)->nullable();
             $table->timestamps();
         });
     }

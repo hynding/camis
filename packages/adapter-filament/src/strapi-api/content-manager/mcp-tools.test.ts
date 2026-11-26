@@ -78,7 +78,8 @@ describe("the content-manager's MCP tools", () => {
 // The server checks a tool call's arguments against its input schema, so a string's maxLength there
 // is what a column holds: the length StrapiValidator checks (issue #126). A value a column cannot
 // hold is refused as invalid arguments rather than failing in the database. Strapi's own schema
-// states no maxLength for an email or a uid; one is stated only where the column is capped.
+// states no maxLength for an email or a uid; camis states the one REST checks for every bounded
+// string-like field, so MCP and REST agree.
 describe("the content-manager's MCP tools check the length a column holds", () => {
   const doc = {
     version: 1,
@@ -93,6 +94,9 @@ describe("the content-manager's MCP tools check the length a column holds", () =
           { type: "string", name: "handle", unique: true, maxLength: 1000 },
           { type: "uid", name: "key", unique: true, maxLength: 1000 },
           { type: "email", name: "contact", maxLength: 320 },
+          { type: "email", name: "reply", maxLength: 100 },
+          { type: "uid", name: "short", maxLength: 100 },
+          { type: "uid", name: "free" },
           { type: "email", name: "mail", unique: true, maxLength: 1000 },
           { type: "component", name: "byline", component: "Byline", repeatable: false },
         ],
@@ -120,7 +124,10 @@ describe("the content-manager's MCP tools check the length a column holds", () =
     expect(fields.headline!.maxLength).toBe(1000);
     expect(fields.handle!.maxLength).toBe(673);
     expect(fields.key!.maxLength).toBe(673);
-    expect(fields.contact!.maxLength).toBeUndefined();
+    expect(fields.contact!.maxLength).toBe(320);
+    expect(fields.reply!.maxLength).toBe(100);
+    expect(fields.short!.maxLength).toBe(100);
+    expect(fields.free!.maxLength).toBeUndefined();
     expect(fields.mail!.maxLength).toBe(673);
     const byline = fields.byline as { properties: Record<string, Record<string, unknown>> };
     expect(byline.properties.credit!.maxLength).toBe(673);

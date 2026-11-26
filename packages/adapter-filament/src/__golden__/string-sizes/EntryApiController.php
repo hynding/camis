@@ -14,10 +14,10 @@ class EntryApiController extends Controller
 {
     use AuthorizesRequests;
 
-    private const FIELDS = ['title', 'code', 'headline', 'abstract', 'contact', 'slug', 'handle', 'unbounded', 'label', 'tagline', 'summary'];
+    private const FIELDS = ['title', 'code', 'headline', 'abstract', 'contact', 'slug', 'handle', 'unbounded', 'label', 'tagline', 'summary', 'reply', 'key'];
 
     /** Each bounded field's rule: Laravel's max counts a string's characters, as mb_strlen does. */
-    private const RULES = ['code' => ['max:40'], 'headline' => ['max:1000'], 'abstract' => ['max:20000'], 'contact' => ['max:320'], 'slug' => ['max:300'], 'handle' => ['max:673'], 'unbounded' => ['max:1073741824'], 'label' => ['max:100'], 'tagline' => ['max:500']];
+    private const RULES = ['code' => ['max:40'], 'headline' => ['max:1000'], 'abstract' => ['max:20000'], 'contact' => ['max:320'], 'slug' => ['max:300'], 'handle' => ['max:673'], 'unbounded' => ['max:1073741824'], 'label' => ['max:100'], 'tagline' => ['max:500'], 'reply' => ['max:100'], 'key' => ['max:100']];
 
     public function index(): JsonResponse
     {

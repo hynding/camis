@@ -28,6 +28,8 @@ export const stringSizesBundle: IrBundle = {
           { type: "string", name: "label", maxLength: 100, default: "hi" },
           { type: "string", name: "tagline", maxLength: 500, default: "hello" },
           { type: "text", name: "summary", default: "none" },
+          { type: "email", name: "reply", maxLength: 100 },
+          { type: "uid", name: "key", maxLength: 100 },
         ],
       },
     ],
