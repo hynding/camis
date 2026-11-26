@@ -1,0 +1,116 @@
+import { describe, expect, it } from "vitest";
+import type { Field } from "@camis/ir-schema";
+import { expressAdapterFor } from "./generate";
+import { column } from "./fields";
+
+const string = (field: Partial<Field> = {}): Field =>
+  ({ type: "string", name: "code", ...field }) as Field;
+
+describe("Express target: string columns sized by their bound (issue #126)", () => {
+  // A VARCHAR's whole length counts toward MySQL's 65,535 bytes a row, and an index key holds
+  // 3,072 bytes: 768 characters of four bytes.
+  it("sizes a MySQL string by its bound: a varchar up to 255 characters, the text tier holding a longer one", () => {
+    const mysql = (field: Partial<Field>) => column("mysql", string(field));
+    expect(mysql({})).toEqual({
+      column: "code",
+      drizzle: "varchar('code', { length: 255 })",
+      import: "varchar",
+    });
+    expect(mysql({ maxLength: 40 }).drizzle).toBe("varchar('code', { length: 40 })");
+    expect(mysql({ maxLength: 1000 })).toEqual({
+      column: "code",
+      drizzle: "text('code')",
+      import: "text",
+    });
+    expect(mysql({ maxLength: 20_000 }).drizzle).toBe("mediumtext('code')");
+    expect(mysql({ maxLength: 4_194_304 }).drizzle).toBe("longtext('code')");
+    expect(column("mysql", { type: "email", name: "code", maxLength: 320 } as Field).drizzle).toBe(
+      "text('code')",
+    );
+  });
+
+  it("keeps a unique MySQL string a varchar no longer than an index key holds", () => {
+    expect(column("mysql", string({ maxLength: 300, unique: true })).drizzle).toBe(
+      "varchar('code', { length: 300 }).unique()",
+    );
+    expect(column("mysql", string({ maxLength: 1000, unique: true })).drizzle).toBe(
+      "varchar('code', { length: 768 }).unique()",
+    );
+  });
+
+  // PostgreSQL's text holds any length and takes a unique index.
+  it("sizes a PostgreSQL string by its bound: a varchar up to 255 characters, text past it", () => {
+    expect(column("pgsql", string()).drizzle).toBe("varchar('code', { length: 255 })");
+    expect(column("pgsql", string({ maxLength: 40 })).drizzle).toBe(
+      "varchar('code', { length: 40 })",
+    );
+    expect(column("pgsql", string({ maxLength: 1000 }))).toEqual({
+      column: "code",
+      drizzle: "text('code')",
+      import: "text",
+    });
+    expect(column("pgsql", string({ maxLength: 1000, unique: true })).drizzle).toBe(
+      "text('code').unique()",
+    );
+  });
+
+  it("keeps SQLite's text, which takes any length", () => {
+    expect(column("sqlite", string({ maxLength: 40 })).drizzle).toBe("text('code')");
+    expect(column("sqlite", string({ maxLength: 1000, unique: true })).drizzle).toBe(
+      "text('code').unique()",
+    );
+  });
+
+  describe("a bound no MySQL column holds", () => {
+    const gaps = (dialect: "sqlite" | "mysql" | "pgsql") =>
+      expressAdapterFor(dialect)
+        .generate(
+          {
+            document: {
+              version: 1,
+              contentTypes: [
+                {
+                  name: "Entry",
+                  kind: "collection",
+                  fields: [
+                    string({ name: "slug", maxLength: 768, unique: true }),
+                    string({ name: "handle", maxLength: 1000, unique: true }),
+                    string({ name: "body", maxLength: 1_073_741_824 }),
+                  ],
+                },
+              ],
+              components: [],
+            },
+            roles: [],
+          },
+          { projectName: "docs" },
+        )
+        .gaps.gaps.filter((g) => g.feature === "stringLength");
+
+    it("is reported, located, on MySQL", () => {
+      expect(gaps("mysql")).toEqual([
+        {
+          feature: "stringLength",
+          location: { contentType: "Entry", field: "handle" },
+          severity: "downgrade",
+          message:
+            '"handle" is unique and bounded at 1000 characters, more than a unique index holds on MySQL (3072 bytes, 768 characters at up to 4 bytes a character); the Drizzle schema makes it a varchar(768), which MySQL refuses a longer value in rather than truncating',
+        },
+        {
+          feature: "stringLength",
+          location: { contentType: "Entry", field: "body" },
+          severity: "downgrade",
+          message:
+            '"body" is bounded at 1073741824 characters, more than MySQL\'s largest text type (longtext, 4294967295 bytes at up to 4 bytes a character) holds; the Drizzle schema makes it a longtext, which MySQL refuses a larger value in rather than truncating',
+        },
+      ]);
+    });
+
+    it.each(["sqlite", "pgsql"] as const)(
+      "is no gap on %s, whose text holds any bound",
+      (dialect) => {
+        expect(gaps(dialect)).toEqual([]);
+      },
+    );
+  });
+});
