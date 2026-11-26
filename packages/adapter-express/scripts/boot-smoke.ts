@@ -13,6 +13,7 @@ import type { Dialect } from "../src/dialect";
 import { expressAdapterFor } from "../src/generate";
 import { aiFixture } from "../src/__fixtures__/ai";
 import { secured } from "../src/__fixtures__/secured";
+import { lengthSmoke } from "./length-smoke";
 import { morphSmoke } from "./morph-smoke";
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -207,6 +208,10 @@ try {
 
   // Polymorphic links: a third project, on the sqlite leg like the AI one.
   if (dialect === "sqlite") await morphSmoke();
+
+  // Bounded strings: a fourth project, on every leg, last, since on MySQL and PostgreSQL its schema
+  // push replaces the secured project's tables (issue #126).
+  await lengthSmoke(dialect);
 
   console.log(`EXPRESS SECURED BOOT SMOKE PASS (${dialect})`);
 } finally {

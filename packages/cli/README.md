@@ -183,8 +183,30 @@ JSON reads as a longText and is left alone, as any unrecorded column is. This gu
 of a text column to a string, or of a string's length, is made as before.
 
 The `textLength` gap covers the column type only. It does not cover the limits of the server or the
-request (MySQL's `max_allowed_packet`, PostgreSQL's and SQLite's own value limits, near 1 GB), nor
-targets that do not enforce `maxLength` at all (camis#126).
+request (MySQL's `max_allowed_packet`, PostgreSQL's and SQLite's own value limits, near 1 GB).
+
+### String columns and maxLength
+
+A `string`, `email` or `uid` without a `maxLength` keeps a 255-character string column. A bound up to
+255 characters is a string column of that length; a longer one is the text column that holds it, at
+four bytes a character, as a `text` field's is (`text`, `mediumText`, `longText`), because a VARCHAR's
+whole length counts toward the 65,535 bytes a MySQL row may take. A unique string stays a string
+column, which an index takes whole, capped at 768 characters (MySQL's 3,072-byte index key): a
+longer unique bound is a `stringLength` downgrade gap, as is a bound past LONGTEXT. `filament`
+migrates the same column on every database; `express` does on MySQL, makes a longer bound a `text`
+on PostgreSQL and keeps `text` on SQLite; `strapi` writes the column as the attribute's column
+settings (`"column": { "type": "text", "args": ["mediumtext"] }`), which Strapi lays over the
+varchar(255) it makes for every string. On Filament's Strapi storage layout the column is the one
+Strapi made: a bound past 255 is a `stringLength` gap there.
+
+Every write path checks a `maxLength` in characters (Unicode code points, as PHP's `mb_strlen`
+counts them): the Laravel API style answers 422 (Laravel's `max` rule), the Strapi API style 400 as
+Strapi does, the Filament admin form shows the field's error, and the Express API answers 400
+`{ "error": "<field> must be at most <n> characters" }`. Strapi itself counts UTF-16 code units, so
+it refuses a value of emoji at half its bound. A database made before this keeps its string columns
+until a migration changes them, for instance
+`Schema::table('entries', fn (Blueprint $table) => $table->text('headline')->nullable()->change());`.
+PostgreSQL refuses a unique value whose index entry passes about 2,700 bytes.
 
 ## camis.config.json
 
