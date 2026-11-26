@@ -3,6 +3,8 @@ import type { IrDocument } from "@camis/ir-schema";
 import {
   INDEXED_STRING_LENGTH,
   STRING_LENGTH,
+  enforcedLength,
+  holdsTextColumn,
   stringColumn,
   stringsBeyondColumns,
 } from "./string-size";
@@ -39,18 +41,44 @@ describe("stringColumn (issue #126)", () => {
     expect(stringColumn(string(maxLength))).toEqual({ kind: "text", tier });
   });
 
-  // A text column cannot be indexed whole, and an index key holds 3,072 bytes: 768 characters at
-  // up to four bytes each.
-  it("keeps a unique string a string column, no longer than an index key holds", () => {
-    expect(INDEXED_STRING_LENGTH).toBe(768);
+  // A text column cannot be indexed whole, and PostgreSQL's btree entry holds 2,704 bytes (MySQL's
+  // index key 3,072): 676 characters at up to four bytes each.
+  it("keeps a unique string a string column, no longer than an index entry holds", () => {
+    expect(INDEXED_STRING_LENGTH).toBe(676);
     expect(stringColumn(string(256, true))).toEqual({ kind: "string", length: 256 });
-    expect(stringColumn(string(768, true))).toEqual({ kind: "string", length: 768 });
-    expect(stringColumn(string(769, true))).toEqual({ kind: "string", length: 768 });
+    expect(stringColumn(string(676, true))).toEqual({ kind: "string", length: 676 });
+    expect(stringColumn(string(677, true))).toEqual({ kind: "string", length: 676 });
   });
 
   it("sizes an email and a uid as a string", () => {
     expect(stringColumn(string(1000, undefined, "email"))).toEqual({ kind: "text", tier: "small" });
-    expect(stringColumn(string(1000, true, "uid"))).toEqual({ kind: "string", length: 768 });
+    expect(stringColumn(string(1000, true, "uid"))).toEqual({ kind: "string", length: 676 });
+  });
+});
+
+// A write path checks what the column holds, so a value past a capped column is refused as invalid
+// rather than failing in the database.
+describe("enforcedLength", () => {
+  it("is the bound where the column holds it, the column's length where it is capped", () => {
+    expect(enforcedLength(string())).toBeUndefined();
+    expect(enforcedLength(string(40))).toBe(40);
+    expect(enforcedLength(string(20_000))).toBe(20_000);
+    expect(enforcedLength(string(676, true))).toBe(676);
+    expect(enforcedLength(string(1000, true))).toBe(676);
+  });
+});
+
+// MySQL takes no literal default on a TEXT column (ER_BLOB_CANT_HAVE_DEFAULT).
+describe("holdsTextColumn", () => {
+  it("is true for a text, a rich text and a string bounded past a string column", () => {
+    expect(holdsTextColumn({ type: "text", name: "a" } as never)).toBe(true);
+    expect(holdsTextColumn({ type: "richText", name: "a" } as never)).toBe(true);
+    expect(holdsTextColumn({ type: "string", name: "a", maxLength: 256 } as never)).toBe(true);
+    expect(holdsTextColumn({ type: "string", name: "a", maxLength: 255 } as never)).toBe(false);
+    expect(holdsTextColumn({ type: "uid", name: "a", maxLength: 900, unique: true } as never)).toBe(
+      false,
+    );
+    expect(holdsTextColumn({ type: "integer", name: "a" } as never)).toBe(false);
   });
 });
 
@@ -62,8 +90,8 @@ describe("stringsBeyondColumns", () => {
         name: "Note",
         kind: "collection",
         fields: [
-          { type: "string", name: "slug", unique: true, maxLength: 768 },
-          { type: "uid", name: "key", unique: true, maxLength: 769 },
+          { type: "string", name: "slug", unique: true, maxLength: 676 },
+          { type: "uid", name: "key", unique: true, maxLength: 677 },
           { type: "string", name: "body", maxLength: 1_073_741_823 },
           { type: "email", name: "huge", maxLength: 1_073_741_824 },
           { type: "text", name: "notes", maxLength: 2_000_000_000 },
@@ -79,8 +107,8 @@ describe("stringsBeyondColumns", () => {
     expect(stringsBeyondColumns(doc)).toEqual([
       {
         location: { contentType: "Note", field: "key" },
-        maxLength: 769,
-        column: { kind: "string", length: 768 },
+        maxLength: 677,
+        column: { kind: "string", length: 676 },
       },
       {
         location: { contentType: "Note", field: "huge" },
@@ -90,7 +118,7 @@ describe("stringsBeyondColumns", () => {
       {
         location: { component: "Part", field: "code" },
         maxLength: 1000,
-        column: { kind: "string", length: 768 },
+        column: { kind: "string", length: 676 },
       },
     ]);
   });
