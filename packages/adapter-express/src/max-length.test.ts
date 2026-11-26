@@ -62,6 +62,22 @@ describe("Express target: maxLength enforced in the API (issue #126)", () => {
     );
   });
 
+  // A value the column cannot hold is refused as invalid (400) rather than failing in the database.
+  it.each([
+    ["sqlite", 1000],
+    ["mysql", 673],
+    ["pgsql", 673],
+  ] as const)("checks the length a unique column holds on %s", (dialect, length) => {
+    const handle = {
+      name: "Entry",
+      kind: "collection",
+      fields: [{ type: "string", name: "handle", unique: true, maxLength: 1000 }],
+    } as ContentType;
+    expect(emitRoutes(handle, [], { dialect })).toContain(
+      `const MAX_LENGTHS: Record<string, number> = { handle: ${length} };`,
+    );
+  });
+
   it("emits the check and the routers that run it as golden files that parse", async () => {
     const files = expressAdapterFor("sqlite").generate(bundle, { projectName: "docs" }).files;
     const content = (path: string) => files.find((f) => f.path === path)!.content;

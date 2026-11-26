@@ -22,7 +22,7 @@
       "column": {
         "type": "text",
         "args": [
-          "text"
+          "longtext"
         ]
       }
     },
@@ -32,7 +32,7 @@
       "column": {
         "type": "text",
         "args": [
-          "mediumtext"
+          "longtext"
         ]
       }
     },
@@ -42,7 +42,7 @@
       "column": {
         "type": "text",
         "args": [
-          "text"
+          "longtext"
         ]
       }
     },
@@ -64,7 +64,7 @@
       "column": {
         "type": "string",
         "args": [
-          768
+          673
         ]
       }
     },

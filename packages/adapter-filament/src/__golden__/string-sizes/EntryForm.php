@@ -18,7 +18,7 @@ class EntryForm
             TextInput::make('abstract')->rule('max:20000'),
             TextInput::make('contact')->email()->rule('max:320'),
             TextInput::make('slug')->unique()->rule('max:300'),
-            TextInput::make('handle')->unique()->rule('max:1000'),
+            TextInput::make('handle')->unique()->rule('max:673'),
             TextInput::make('unbounded')->rule('max:1073741824'),
         ]);
     }

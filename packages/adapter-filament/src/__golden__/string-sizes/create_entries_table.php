@@ -18,7 +18,7 @@ return new class extends Migration
             $table->mediumText('abstract')->nullable();
             $table->text('contact')->nullable();
             $table->string('slug', 300)->nullable()->unique();
-            $table->string('handle', 768)->nullable()->unique();
+            $table->string('handle', 673)->nullable()->unique();
             $table->longText('unbounded')->nullable();
             $table->timestamps();
         });

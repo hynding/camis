@@ -65,6 +65,26 @@ describe("maxLength enforced on every Filament write path (issue #126)", () => {
     expect(php).not.toContain("RULES");
   });
 
+  // A value the column cannot hold is refused as invalid (400) rather than failing in the database.
+  it.each([
+    ["laravel", 673, 1000, 20000, 320],
+    ["strapi", 255, 255, 255, 255],
+  ] as const)(
+    "checks the length the column holds in the Strapi API style on the %s storage layout",
+    (storageLayout, handle, headline, abstract, contact) => {
+      const php = filamentAdapter
+        .generate(stringSizesBundle, { projectName: "docs", apiStyle: "strapi", storageLayout })
+        .files.find((f) => f.path.endsWith("Generated/EntryApiController.php"))!.content;
+      expect(php).toContain(`'code' => ['type' => 'string', 'maxLength' => 40],`);
+      expect(php).toContain(`'headline' => ['type' => 'string', 'maxLength' => ${headline}],`);
+      expect(php).toContain(`'abstract' => ['type' => 'string', 'maxLength' => ${abstract}],`);
+      expect(php).toContain(`'contact' => ['type' => 'email', 'maxLength' => ${contact}],`);
+      expect(php).toContain(
+        `'handle' => ['type' => 'string', 'maxLength' => ${handle}, 'unique' => ['column' => 'handle']],`,
+      );
+    },
+  );
+
   it("regenerates byte for byte", () => {
     expect(file("Api/EntryApiController.php")).toBe(file("Api/EntryApiController.php"));
   });

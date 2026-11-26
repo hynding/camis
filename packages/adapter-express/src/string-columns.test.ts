@@ -7,8 +7,9 @@ const string = (field: Partial<Field> = {}): Field =>
   ({ type: "string", name: "code", ...field }) as Field;
 
 describe("Express target: string columns sized by their bound (issue #126)", () => {
-  // A VARCHAR's whole length counts toward MySQL's 65,535 bytes a row, and an index key holds
-  // 3,072 bytes: 768 characters of four bytes.
+  // A VARCHAR's whole length counts toward MySQL's 65,535 bytes a row, and a PostgreSQL btree entry
+  // holds 2,704 bytes with its 12 bytes of headers (MySQL's index key 3,072): 673 characters of four
+  // bytes.
   it("sizes a MySQL string by its bound: a varchar up to 255 characters, the text tier holding a longer one", () => {
     const mysql = (field: Partial<Field>) => column("mysql", string(field));
     expect(mysql({})).toEqual({
@@ -29,16 +30,22 @@ describe("Express target: string columns sized by their bound (issue #126)", () 
     );
   });
 
-  it("keeps a unique MySQL string a varchar no longer than an index key holds", () => {
-    expect(column("mysql", string({ maxLength: 300, unique: true })).drizzle).toBe(
-      "varchar('code', { length: 300 }).unique()",
-    );
-    expect(column("mysql", string({ maxLength: 1000, unique: true })).drizzle).toBe(
-      "varchar('code', { length: 768 }).unique()",
-    );
-  });
+  it.each(["mysql", "pgsql"] as const)(
+    "keeps a unique %s string a varchar no longer than an index entry holds",
+    (dialect) => {
+      expect(column(dialect, string({ maxLength: 300, unique: true })).drizzle).toBe(
+        "varchar('code', { length: 300 }).unique()",
+      );
+      expect(column(dialect, string({ maxLength: 673, unique: true })).drizzle).toBe(
+        "varchar('code', { length: 673 }).unique()",
+      );
+      expect(column(dialect, string({ maxLength: 674, unique: true })).drizzle).toBe(
+        "varchar('code', { length: 673 }).unique()",
+      );
+    },
+  );
 
-  // PostgreSQL's text holds any length and takes a unique index.
+  // PostgreSQL's text holds any length; only a unique one is bounded, by its btree entry.
   it("sizes a PostgreSQL string by its bound: a varchar up to 255 characters, text past it", () => {
     expect(column("pgsql", string()).drizzle).toBe("varchar('code', { length: 255 })");
     expect(column("pgsql", string({ maxLength: 40 })).drizzle).toBe(
@@ -49,9 +56,6 @@ describe("Express target: string columns sized by their bound (issue #126)", () 
       drizzle: "text('code')",
       import: "text",
     });
-    expect(column("pgsql", string({ maxLength: 1000, unique: true })).drizzle).toBe(
-      "text('code').unique()",
-    );
   });
 
   it("keeps SQLite's text, which takes any length", () => {
@@ -61,7 +65,7 @@ describe("Express target: string columns sized by their bound (issue #126)", () 
     );
   });
 
-  describe("a bound no MySQL column holds", () => {
+  describe("a bound no column holds", () => {
     const gaps = (dialect: "sqlite" | "mysql" | "pgsql") =>
       expressAdapterFor(dialect)
         .generate(
@@ -73,7 +77,7 @@ describe("Express target: string columns sized by their bound (issue #126)", () 
                   name: "Entry",
                   kind: "collection",
                   fields: [
-                    string({ name: "slug", maxLength: 768, unique: true }),
+                    string({ name: "slug", maxLength: 673, unique: true }),
                     string({ name: "handle", maxLength: 1000, unique: true }),
                     string({ name: "body", maxLength: 1_073_741_824 }),
                   ],
@@ -94,7 +98,7 @@ describe("Express target: string columns sized by their bound (issue #126)", () 
           location: { contentType: "Entry", field: "handle" },
           severity: "downgrade",
           message:
-            '"handle" is unique and bounded at 1000 characters, more than a unique index holds on MySQL (3072 bytes, 768 characters at up to 4 bytes a character); the Drizzle schema makes it a varchar(768), which MySQL refuses a longer value in rather than truncating',
+            '"handle" is unique and bounded at 1000 characters, more than a unique index holds (a PostgreSQL btree entry holds 2704 bytes with 12 of headers, 673 characters at up to 4 bytes a character); the Drizzle schema makes it a varchar(673), and the API refuses a value longer than 673 characters',
         },
         {
           feature: "stringLength",
@@ -106,11 +110,20 @@ describe("Express target: string columns sized by their bound (issue #126)", () 
       ]);
     });
 
-    it.each(["sqlite", "pgsql"] as const)(
-      "is no gap on %s, whose text holds any bound",
-      (dialect) => {
-        expect(gaps(dialect)).toEqual([]);
-      },
-    );
+    it("is reported, located, on PostgreSQL for a unique string only, whose text holds any bound", () => {
+      expect(gaps("pgsql")).toEqual([
+        {
+          feature: "stringLength",
+          location: { contentType: "Entry", field: "handle" },
+          severity: "downgrade",
+          message:
+            '"handle" is unique and bounded at 1000 characters, more than a unique index holds (a PostgreSQL btree entry holds 2704 bytes with 12 of headers, 673 characters at up to 4 bytes a character); the Drizzle schema makes it a varchar(673), and the API refuses a value longer than 673 characters',
+        },
+      ]);
+    });
+
+    it("is no gap on SQLite, whose text holds any bound, indexed or not", () => {
+      expect(gaps("sqlite")).toEqual([]);
+    });
   });
 });

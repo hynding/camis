@@ -9,8 +9,9 @@ describe("string columns sized by their bound (issue #126)", () => {
   const migration = () =>
     generate().files.find((f) => f.path.endsWith("_create_entries_table.php"))!.content;
 
-  // A VARCHAR's whole length counts toward MySQL's 65,535 bytes a row, and an index key holds
-  // 3,072 bytes: 768 characters of four bytes.
+  // A VARCHAR's whole length counts toward MySQL's 65,535 bytes a row, and a PostgreSQL btree entry
+  // holds 2,704 bytes with its 12 bytes of headers (MySQL's index key 3,072): 673 characters of four
+  // bytes.
   it("migrates a bound past 255 characters as the text tier holding it, a unique one as a string an index holds", async () => {
     await expect(migration()).toMatchFileSnapshot(
       "./__golden__/string-sizes/create_entries_table.php",
@@ -28,8 +29,11 @@ describe("string columns sized by their bound (issue #126)", () => {
     expect(column({ maxLength: 255 })).toBe("$table->string('code', 255)->nullable()");
     expect(column({ maxLength: 256 })).toBe("$table->text('code')->nullable()");
     expect(column({ maxLength: 4_194_304 })).toBe("$table->longText('code')->nullable()");
-    expect(column({ maxLength: 769, unique: true })).toBe(
-      "$table->string('code', 768)->nullable()->unique()",
+    expect(column({ maxLength: 673, unique: true })).toBe(
+      "$table->string('code', 673)->nullable()->unique()",
+    );
+    expect(column({ maxLength: 674, unique: true })).toBe(
+      "$table->string('code', 673)->nullable()->unique()",
     );
   });
 
@@ -40,7 +44,7 @@ describe("string columns sized by their bound (issue #126)", () => {
         location: { contentType: "Entry", field: "handle" },
         severity: "downgrade",
         message:
-          '"handle" is unique and bounded at 1000 characters, more than a unique index holds on MySQL (3072 bytes, 768 characters at up to 4 bytes a character); the migration makes it a VARCHAR(768) on every database, which MySQL and PostgreSQL refuse a longer value in rather than truncating',
+          '"handle" is unique and bounded at 1000 characters, more than a unique index holds (a PostgreSQL btree entry holds 2704 bytes with 12 of headers, 673 characters at up to 4 bytes a character); the migration makes it a VARCHAR(673) on every database, and every write path refuses a value longer than 673 characters',
       },
       {
         feature: "stringLength",
@@ -74,7 +78,7 @@ describe("string columns sized by their bound (issue #126)", () => {
       location: { contentType: "Entry", field: "headline" },
       severity: "downgrade",
       message:
-        "\"headline\" is bounded at 1000 characters; on Strapi's storage layout its column is the one Strapi made, a varchar(255) unless the Strapi project gave it column settings (as camis's Strapi target does), which MySQL and PostgreSQL refuse a longer value in",
+        "\"headline\" is bounded at 1000 characters; on Strapi's storage layout its column is the one Strapi made, a varchar(255) unless the Strapi project gave it column settings (as camis's Strapi target does), which no migration of ours can know, so the API refuses a value longer than 255 characters",
     });
   });
 });

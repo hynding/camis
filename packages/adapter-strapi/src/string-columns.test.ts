@@ -11,7 +11,9 @@ const schema = () =>
 
 describe("Strapi target: string columns sized by their bound (issue #126)", () => {
   // Strapi 5.48's database layer makes a string a varchar(255) whatever its bound, and lays an
-  // attribute's `column` over it; its validator checks maxLength on every database.
+  // attribute's `column` over it; its validator checks maxLength on every database. A longtext for
+  // every longer bound that is not unique: Strapi's MySQL schema inspector reads back only a
+  // longtext as a text column, so a text or mediumtext one would be altered again on every start.
   it("carries each bound to Strapi and gives a bound past 255 characters a column that holds it", async () => {
     await expect(schema()).toMatchFileSnapshot("./__golden__/string-sizes/entry.schema.json");
   });
@@ -27,7 +29,7 @@ describe("Strapi target: string columns sized by their bound (issue #126)", () =
         location: { contentType: "Entry", field: "handle" },
         severity: "downgrade",
         message:
-          '"handle" is unique and bounded at 1000 characters, more than a unique index holds on MySQL (3072 bytes, 768 characters at up to 4 bytes a character); its column settings make it a varchar(768), which MySQL and PostgreSQL refuse a longer value in rather than truncating',
+          '"handle" is unique and bounded at 1000 characters, more than a unique index holds (a PostgreSQL btree entry holds 2704 bytes with 12 of headers, 673 characters at up to 4 bytes a character); its column settings make it a varchar(673), and Strapi\'s validator checks the bound of 1000, so the database refuses a value longer than 673 characters with an error rather than truncating',
       },
       {
         feature: "stringLength",

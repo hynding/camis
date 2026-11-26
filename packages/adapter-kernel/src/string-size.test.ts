@@ -41,18 +41,20 @@ describe("stringColumn (issue #126)", () => {
     expect(stringColumn(string(maxLength))).toEqual({ kind: "text", tier });
   });
 
-  // A text column cannot be indexed whole, and PostgreSQL's btree entry holds 2,704 bytes (MySQL's
-  // index key 3,072): 676 characters at up to four bytes each.
+  // A text column cannot be indexed whole, and PostgreSQL's btree entry holds 2,704 bytes, 12 of
+  // them its headers (MySQL's index key 3,072): 673 characters at up to four bytes each. PostgreSQL
+  // 16 refuses 674 distinct four-byte characters ("index row size 2712 exceeds btree version 4
+  // maximum 2704") and takes 673.
   it("keeps a unique string a string column, no longer than an index entry holds", () => {
-    expect(INDEXED_STRING_LENGTH).toBe(676);
+    expect(INDEXED_STRING_LENGTH).toBe(673);
     expect(stringColumn(string(256, true))).toEqual({ kind: "string", length: 256 });
-    expect(stringColumn(string(676, true))).toEqual({ kind: "string", length: 676 });
-    expect(stringColumn(string(677, true))).toEqual({ kind: "string", length: 676 });
+    expect(stringColumn(string(673, true))).toEqual({ kind: "string", length: 673 });
+    expect(stringColumn(string(674, true))).toEqual({ kind: "string", length: 673 });
   });
 
   it("sizes an email and a uid as a string", () => {
     expect(stringColumn(string(1000, undefined, "email"))).toEqual({ kind: "text", tier: "small" });
-    expect(stringColumn(string(1000, true, "uid"))).toEqual({ kind: "string", length: 676 });
+    expect(stringColumn(string(1000, true, "uid"))).toEqual({ kind: "string", length: 673 });
   });
 });
 
@@ -63,8 +65,8 @@ describe("enforcedLength", () => {
     expect(enforcedLength(string())).toBeUndefined();
     expect(enforcedLength(string(40))).toBe(40);
     expect(enforcedLength(string(20_000))).toBe(20_000);
-    expect(enforcedLength(string(676, true))).toBe(676);
-    expect(enforcedLength(string(1000, true))).toBe(676);
+    expect(enforcedLength(string(673, true))).toBe(673);
+    expect(enforcedLength(string(1000, true))).toBe(673);
   });
 });
 
@@ -90,8 +92,8 @@ describe("stringsBeyondColumns", () => {
         name: "Note",
         kind: "collection",
         fields: [
-          { type: "string", name: "slug", unique: true, maxLength: 676 },
-          { type: "uid", name: "key", unique: true, maxLength: 677 },
+          { type: "string", name: "slug", unique: true, maxLength: 673 },
+          { type: "uid", name: "key", unique: true, maxLength: 674 },
           { type: "string", name: "body", maxLength: 1_073_741_823 },
           { type: "email", name: "huge", maxLength: 1_073_741_824 },
           { type: "text", name: "notes", maxLength: 2_000_000_000 },
@@ -107,8 +109,8 @@ describe("stringsBeyondColumns", () => {
     expect(stringsBeyondColumns(doc)).toEqual([
       {
         location: { contentType: "Note", field: "key" },
-        maxLength: 677,
-        column: { kind: "string", length: 676 },
+        maxLength: 674,
+        column: { kind: "string", length: 673 },
       },
       {
         location: { contentType: "Note", field: "huge" },
@@ -118,7 +120,7 @@ describe("stringsBeyondColumns", () => {
       {
         location: { component: "Part", field: "code" },
         maxLength: 1000,
-        column: { kind: "string", length: 676 },
+        column: { kind: "string", length: 673 },
       },
     ]);
   });
