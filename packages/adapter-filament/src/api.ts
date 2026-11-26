@@ -12,8 +12,16 @@ export interface DecimalColumn extends DecimalDigits {
   column: string;
 }
 
+/** A text-like column's bound in characters. */
+export interface BoundedColumn {
+  column: string;
+  maxLength: number;
+}
+
 export interface ApiOptions {
   secured: boolean;
+  /** The columns of fields stating a maxLength, each checked on create and update. */
+  lengths?: BoundedColumn[];
   /** The columns of decimals stating their digits, each written as its column keeps it. */
   decimals?: DecimalColumn[];
   /** Content types whose routes run the IR's route policies and middlewares. */
@@ -39,6 +47,8 @@ export const emitApiController = (
       ? "$request->only(self::FIELDS)"
       : "self::withDecimals($request->only(self::FIELDS))";
   const auth = (line: string): string => (options.secured ? `        ${line}\n` : "");
+  const lengths = options.lengths ?? [];
+  const validate = lengths.length === 0 ? "" : "        $request->validate(self::RULES);\n";
 
   const storeBody = upsertBy
     ? (() => {
@@ -68,7 +78,7 @@ use Illuminate\\Http\\Request;${decimals.length === 0 ? "" : "\nuse Illuminate\\
 class ${model}ApiController extends Controller
 {
 ${options.secured ? "    use AuthorizesRequests;\n\n" : ""}    private const FIELDS = [${fields}];
-${decimalsConstant(decimals)}
+${rulesConstant(lengths)}${decimalsConstant(decimals)}
     public function index(): JsonResponse
     {
 ${auth(`$this->authorize('viewAny', ${model}::class);`)}        return response()->json(${model}::query()->paginate(50));
@@ -81,12 +91,12 @@ ${auth(`$this->authorize('view', $${param});`)}        return response()->json($
 
     public function store(Request $request): JsonResponse
     {
-${auth(`$this->authorize('create', ${model}::class);`)}${storeBody}
+${auth(`$this->authorize('create', ${model}::class);`)}${validate}${storeBody}
     }
 
     public function update(Request $request, ${model} $${param}): JsonResponse
     {
-${auth(`$this->authorize('update', $${param});`)}        $${param}->update(${payload});
+${auth(`$this->authorize('update', $${param});`)}${validate}        $${param}->update(${payload});
 
         return response()->json($${param});
     }
@@ -100,6 +110,13 @@ ${auth(`$this->authorize('delete', $${param});`)}        $${param}->delete();
 }
 `;
 };
+
+// Laravel's max rule counts a string's characters with mb_strlen, as the Strapi API style's
+// validator counts a maxLength; a value too long is refused as Laravel refuses an invalid field.
+const rulesConstant = (lengths: BoundedColumn[]): string =>
+  lengths.length === 0
+    ? ""
+    : `\n    /** Each bounded field's rule: Laravel's max counts a string's characters, as mb_strlen does. */\n    private const RULES = [${lengths.map((l) => `'${l.column}' => ['max:${l.maxLength}']`).join(", ")}];\n`;
 
 const decimalsConstant = (decimals: DecimalColumn[]): string =>
   decimals.length === 0

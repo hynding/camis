@@ -492,6 +492,9 @@ export const filamentAdapter: GenerateAdapter = {
               decimals: [...ownEmits, ...embeddedEmits].flatMap((e) =>
                 e.decimalDigits === undefined ? [] : [{ column: e.column, ...e.decimalDigits }],
               ),
+              lengths: [...ownEmits, ...embeddedEmits].flatMap((e) =>
+                e.maxLength === undefined ? [] : [{ column: e.column, maxLength: e.maxLength }],
+              ),
             },
           ),
         });

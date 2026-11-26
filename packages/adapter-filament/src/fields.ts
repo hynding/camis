@@ -17,6 +17,8 @@ export interface FieldEmit {
   decimalDigits?: DecimalDigits;
   /** A unique field's rule in `formComponent`, which a form whose rows share values leaves out. */
   uniqueRule?: string;
+  /** A text-like field's bound in characters, which every write path checks. */
+  maxLength?: number;
 }
 
 const TEXT_INPUT = "Filament\\Forms\\Components\\TextInput";
@@ -272,6 +274,23 @@ const uniqueRule = (field: Field, column: string): string => {
     : `->rule(fn (?string $model, ?\\Illuminate\\Database\\Eloquent\\Model $record) => new \\App\\Rules\\DecimalDigitsUniqueRule($model, '${column}', ${digits.precision}, ${digits.scale}, $record))`;
 };
 
+const TEXT_LIKE = new Set<string>(["string", "email", "uid", "text", "richText"]);
+
+/** A text-like field's bound in characters, if it states one. */
+const boundOf = (field: Field): number | undefined => {
+  const maxLength = (field as Field & { maxLength?: unknown }).maxLength;
+  return TEXT_LIKE.has(field.type) && typeof maxLength === "number" ? maxLength : undefined;
+};
+
+/**
+ * Laravel's max rule, which counts a string's characters with mb_strlen, as the Strapi API style's
+ * validator does. Filament's `maxLength()` would also set the input's maxlength attribute, which a
+ * browser counts in UTF-16 code units, refusing a bound's worth of characters past the Basic
+ * Multilingual Plane.
+ */
+const maxLengthRule = (maxLength: number | undefined): string =>
+  maxLength === undefined ? "" : `->rule('max:${maxLength}')`;
+
 export const emitField = (field: Field, columnOverride?: string): FieldEmit => {
   const f = field as Field & Record<string, unknown>;
   const column = columnOverride ?? snakeColumn(field.name);
@@ -292,7 +311,13 @@ export const emitField = (field: Field, columnOverride?: string): FieldEmit => {
       ? b.formComponent
       : `(\\App\\Support\\CustomFields::input(${phpSingleQuoted(field.editor.name)}, '${column}', ${phpValue(field.editor.options ?? [])}) ?? ${b.formComponent})`;
   const formUnique = unique ? uniqueRule(field, column) : undefined;
-  const formComponent = input + (required ? "->required()" : "") + (formUnique ?? "") + pattern;
+  const maxLength = boundOf(field);
+  const formComponent =
+    input +
+    (required ? "->required()" : "") +
+    (formUnique ?? "") +
+    pattern +
+    maxLengthRule(maxLength);
   return {
     column,
     migration,
@@ -303,5 +328,6 @@ export const emitField = (field: Field, columnOverride?: string): FieldEmit => {
     ...(b.cast ? { cast: b.cast } : {}),
     ...digitsOf(field),
     ...(formUnique === undefined ? {} : { uniqueRule: formUnique }),
+    ...(maxLength === undefined ? {} : { maxLength }),
   };
 };
