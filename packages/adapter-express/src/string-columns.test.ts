@@ -127,3 +127,71 @@ describe("Express target: string columns sized by their bound (issue #126)", () 
     });
   });
 });
+
+// MySQL takes no literal default on a TEXT column (ER_BLOB_CANT_HAVE_DEFAULT), so Drizzle applies
+// such a default when it inserts a row instead; PostgreSQL's and SQLite's text take one.
+describe("Express target: defaults on MySQL text columns (issue #126)", () => {
+  it("applies a text column's default in Drizzle on MySQL", () => {
+    const mysql = (field: Partial<Field>) => column("mysql", string(field)).drizzle;
+    expect(mysql({ maxLength: 40, default: "x" })).toBe(
+      "varchar('code', { length: 40 }).default('x')",
+    );
+    expect(mysql({ maxLength: 1000, default: "x" })).toBe("text('code').$defaultFn(() => 'x')");
+    expect(mysql({ type: "text", default: "x" } as Partial<Field>)).toBe(
+      "text('code').$defaultFn(() => 'x')",
+    );
+    expect(mysql({ type: "richText", default: "x" } as Partial<Field>)).toBe(
+      "longtext('code').$defaultFn(() => 'x')",
+    );
+    expect(mysql({ type: "enumeration", values: ["a", "b"], default: "a" } as Partial<Field>)).toBe(
+      "text('code').$defaultFn(() => 'a')",
+    );
+  });
+
+  it.each(["sqlite", "pgsql"] as const)("keeps the database default on %s", (dialect) => {
+    expect(column(dialect, string({ maxLength: 1000, default: "x" })).drizzle).toBe(
+      "text('code').default('x')",
+    );
+  });
+
+  const gaps = (dialect: "sqlite" | "mysql" | "pgsql") =>
+    expressAdapterFor(dialect)
+      .generate(
+        {
+          document: {
+            version: 1,
+            contentTypes: [
+              {
+                name: "Entry",
+                kind: "collection",
+                fields: [
+                  string({ name: "label", maxLength: 100, default: "hi" }),
+                  string({ name: "tagline", maxLength: 500, default: "hello" }),
+                  string({ name: "plain", maxLength: 500 }),
+                ],
+              },
+            ],
+            components: [],
+          },
+          roles: [],
+        },
+        { projectName: "docs" },
+      )
+      .gaps.gaps.filter((g) => g.feature === "textDefault");
+
+  it("reports, located, each default Drizzle applies rather than MySQL", () => {
+    expect(gaps("mysql")).toEqual([
+      {
+        feature: "textDefault",
+        location: { contentType: "Entry", field: "tagline" },
+        severity: "downgrade",
+        message:
+          '"tagline" has a default, and its MySQL column is a text, which takes no default; Drizzle applies the default when it inserts a row, not the database, so a row inserted without Drizzle gets none',
+      },
+    ]);
+  });
+
+  it.each(["sqlite", "pgsql"] as const)("reports nothing on %s", (dialect) => {
+    expect(gaps(dialect)).toEqual([]);
+  });
+});

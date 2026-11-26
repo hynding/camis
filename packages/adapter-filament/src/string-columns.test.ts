@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Field } from "@camis/ir-schema";
 import { filamentAdapter } from "./generate";
 import { emitField } from "./fields";
+import type { IrBundle } from "@camis/permissions";
 import { stringSizesBundle } from "./__fixtures__/string-sizes";
 
 describe("string columns sized by their bound (issue #126)", () => {
@@ -72,6 +73,7 @@ describe("string columns sized by their bound (issue #126)", () => {
       "slug",
       "handle",
       "unbounded",
+      "tagline",
     ]);
     expect(gaps[0]).toEqual({
       feature: "stringLength",
@@ -80,5 +82,101 @@ describe("string columns sized by their bound (issue #126)", () => {
       message:
         "\"headline\" is bounded at 1000 characters; on Strapi's storage layout its column is the one Strapi made, a varchar(255) unless the Strapi project gave it column settings (as camis's Strapi target does), which no migration of ours can know, so the API refuses a value longer than 255 characters",
     });
+  });
+});
+
+// MySQL takes no literal default on a TEXT column (ER_BLOB_CANT_HAVE_DEFAULT), and the migration
+// serves every database, so the model applies such a default on create instead.
+describe("defaults on text columns (issue #126)", () => {
+  const generate = () => filamentAdapter.generate(stringSizesBundle, { projectName: "docs" });
+  const file = (suffix: string) => generate().files.find((f) => f.path.endsWith(suffix))!.content;
+
+  it("migrates a text column without its default and keeps a string column's", () => {
+    const column = (field: Partial<Field>) =>
+      emitField({ type: "string", name: "code", ...field } as Field).migration;
+    expect(column({ maxLength: 255, default: "x" })).toBe(
+      "$table->string('code', 255)->nullable()->default('x')",
+    );
+    expect(column({ maxLength: 256, default: "x" })).toBe("$table->text('code')->nullable()");
+    expect(column({ type: "text", default: "x" })).toBe("$table->text('code')->nullable()");
+    expect(column({ type: "richText", default: "x" })).toBe("$table->longText('code')->nullable()");
+    expect(column({ maxLength: 1000, unique: true, default: "x" })).toBe(
+      "$table->string('code', 673)->nullable()->unique()->default('x')",
+    );
+  });
+
+  it("applies the default in the model's attributes", async () => {
+    await expect(file("Models/Entry.php")).toMatchFileSnapshot(
+      "./__golden__/string-sizes/Entry.php",
+    );
+  });
+
+  it("applies a component field's default in its child model", () => {
+    const bundle = {
+      document: {
+        version: 1,
+        contentTypes: [
+          {
+            name: "Entry",
+            kind: "collection",
+            names: { plural: "Entries" },
+            fields: [
+              { type: "component", name: "byline", component: "Byline", repeatable: false },
+              { type: "component", name: "credits", component: "Byline", repeatable: true },
+            ],
+          },
+        ],
+        components: [
+          {
+            name: "Byline",
+            fields: [{ type: "string", name: "credit", maxLength: 400, default: "staff" }],
+          },
+        ],
+      },
+      roles: [],
+    } as unknown as IrBundle;
+    const files = filamentAdapter.generate(bundle, {
+      projectName: "docs",
+      apiStyle: "strapi",
+    }).files;
+    // The single component's columns are its entry's own; the repeatable one's rows a child table's.
+    const model = (name: string) => files.find((f) => f.path === `app/Models/${name}.php`)!.content;
+    expect(model("Entry")).toContain(
+      "    protected $attributes = [\n        'byline_credit' => 'staff',\n    ];\n",
+    );
+    expect(model("EntryCredits")).toContain(
+      "    protected $attributes = [\n        'credit' => 'staff',\n    ];\n",
+    );
+    const migrations = files.filter((f) => f.path.startsWith("database/migrations/"));
+    expect(migrations.map((f) => f.content).join("")).not.toContain("default('staff')");
+  });
+
+  it("reports, located, each default the application applies rather than the database", () => {
+    expect(generate().gaps.gaps.filter((g) => g.feature === "textDefault")).toEqual([
+      {
+        feature: "textDefault",
+        location: { contentType: "Entry", field: "tagline" },
+        severity: "downgrade",
+        message:
+          '"tagline" has a default, and its column is a text column, which MySQL gives no default; the model applies the default when it creates a row, not the database, so a row inserted without the model gets none',
+      },
+      {
+        feature: "textDefault",
+        location: { contentType: "Entry", field: "summary" },
+        severity: "downgrade",
+        message:
+          '"summary" has a default, and its column is a text column, which MySQL gives no default; the model applies the default when it creates a row, not the database, so a row inserted without the model gets none',
+      },
+    ]);
+  });
+
+  // Strapi's storage layout has no migration of ours: Strapi made the columns and applies defaults.
+  it("reports nothing on Strapi's storage layout", () => {
+    const strapi = filamentAdapter.generate(stringSizesBundle, {
+      projectName: "docs",
+      apiStyle: "strapi",
+      storageLayout: "strapi",
+    });
+    expect(strapi.gaps.gaps.filter((g) => g.feature === "textDefault")).toEqual([]);
   });
 });

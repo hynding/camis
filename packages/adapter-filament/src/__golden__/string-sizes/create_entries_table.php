@@ -20,6 +20,9 @@ return new class extends Migration
             $table->string('slug', 300)->nullable()->unique();
             $table->string('handle', 673)->nullable()->unique();
             $table->longText('unbounded')->nullable();
+            $table->string('label', 100)->nullable()->default('hi');
+            $table->text('tagline')->nullable();
+            $table->longText('summary')->nullable();
             $table->timestamps();
         });
     }

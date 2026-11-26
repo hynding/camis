@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Resources\Entries\Schemas;
 
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Textarea;
 use Filament\Schemas\Schema;
 
 class EntryForm
@@ -20,6 +21,9 @@ class EntryForm
             TextInput::make('slug')->unique()->rule('max:300'),
             TextInput::make('handle')->unique()->rule('max:673'),
             TextInput::make('unbounded')->rule('max:1073741824'),
+            TextInput::make('label')->rule('max:100'),
+            TextInput::make('tagline')->rule('max:500'),
+            Textarea::make('summary'),
         ]);
     }
 }

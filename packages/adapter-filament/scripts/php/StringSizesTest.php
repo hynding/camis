@@ -70,6 +70,19 @@ class StringSizesTest extends TestCase
             ->assertJsonPath('error.details.errors.0.path', ['headline']);
     }
 
+    public function test_a_create_without_a_defaulted_field_stores_its_default(): void
+    {
+        // MySQL takes no default on the text columns of tagline and summary, so the model applies
+        // theirs; label's string column keeps its own.
+        $made = Entry::query()->create(['title' => 'model']);
+        $found = Entry::query()->findOrFail($made->getKey());
+        $this->assertSame(['hi', 'hello', 'none'], [$found->label, $found->tagline, $found->summary]);
+
+        $id = $this->postJson('/api/entries', ['data' => ['title' => 'api']])->assertStatus(201)->json('data.id');
+        $found = Entry::query()->findOrFail($id);
+        $this->assertSame(['hi', 'hello', 'none'], [$found->label, $found->tagline, $found->summary]);
+    }
+
     public function test_the_api_refuses_a_value_its_capped_column_cannot_hold(): void
     {
         // handle is bounded at 1000 characters, its unique column capped at 673.
