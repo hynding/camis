@@ -29,7 +29,7 @@ describe("Strapi target: string columns sized by their bound (issue #126)", () =
         location: { contentType: "Entry", field: "handle" },
         severity: "downgrade",
         message:
-          '"handle" is unique and bounded at 1000 characters, more than a unique index holds (a PostgreSQL btree entry holds 2704 bytes with 12 of headers, 673 characters at up to 4 bytes a character); its column settings make it a varchar(673), and Strapi\'s validator checks the bound of 1000, so the database refuses a value longer than 673 characters with an error rather than truncating',
+          '"handle" is declared unique and bounded at 1000 characters, more than a unique index holds (a PostgreSQL btree entry holds 2704 bytes with 12 of headers, 673 characters at up to 4 bytes a character); its column settings size it to what a unique index holds, a varchar(673), and Strapi\'s validator checks the bound of 1000, so the database refuses a value longer than 673 characters with an error rather than truncating',
       },
       {
         feature: "stringLength",

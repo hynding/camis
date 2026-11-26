@@ -45,7 +45,7 @@ describe("string columns sized by their bound (issue #126)", () => {
         location: { contentType: "Entry", field: "handle" },
         severity: "downgrade",
         message:
-          '"handle" is unique and bounded at 1000 characters, more than a unique index holds (a PostgreSQL btree entry holds 2704 bytes with 12 of headers, 673 characters at up to 4 bytes a character); the migration makes it a VARCHAR(673) on every database, and every write path refuses a value longer than 673 characters',
+          '"handle" is declared unique and bounded at 1000 characters, more than a unique index holds (a PostgreSQL btree entry holds 2704 bytes with 12 of headers, 673 characters at up to 4 bytes a character); the migration sizes it to what a unique index holds, a VARCHAR(673) on every database, whether or not the field keeps its index, and a value longer than 673 characters is refused as invalid',
       },
       {
         feature: "stringLength",
@@ -55,6 +55,30 @@ describe("string columns sized by their bound (issue #126)", () => {
           '"unbounded" is bounded at 1073741824 characters, more than MySQL\'s largest text column (LONGTEXT, 4294967295 bytes at up to 4 bytes a character) holds; the migration makes it a LONGTEXT, which MySQL refuses a larger value in rather than truncating',
       },
     ]);
+  });
+
+  // On the Strapi API style a draft-and-publish type's unique field loses its index (its uniqueness
+  // is the validator's) and keeps the column a unique index holds, as the gap says.
+  it("words the gap for a field declared unique, which may have lost its index", () => {
+    const drafted = filamentAdapter.generate(
+      {
+        ...stringSizesBundle,
+        document: {
+          ...stringSizesBundle.document,
+          contentTypes: stringSizesBundle.document.contentTypes.map((ct) => ({
+            ...ct,
+            options: { draftPublish: true },
+          })),
+        },
+      },
+      { projectName: "docs", apiStyle: "strapi" },
+    );
+    const migration = drafted.files.find((f) => f.path.endsWith("_create_entries_table.php"))!;
+    expect(migration.content).toContain("$table->string('handle', 673)->nullable();");
+    expect(
+      drafted.gaps.gaps.find((g) => g.feature === "stringLength" && g.location.field === "handle")!
+        .message,
+    ).toContain("is declared unique and bounded at 1000 characters");
   });
 
   // Strapi's storage layout keeps the columns Strapi made: a string is a varchar(255) there unless

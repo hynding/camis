@@ -98,7 +98,7 @@ describe("Express target: string columns sized by their bound (issue #126)", () 
           location: { contentType: "Entry", field: "handle" },
           severity: "downgrade",
           message:
-            '"handle" is unique and bounded at 1000 characters, more than a unique index holds (a PostgreSQL btree entry holds 2704 bytes with 12 of headers, 673 characters at up to 4 bytes a character); the Drizzle schema makes it a varchar(673), and the API refuses a value longer than 673 characters',
+            '"handle" is declared unique and bounded at 1000 characters, more than a unique index holds (a PostgreSQL btree entry holds 2704 bytes with 12 of headers, 673 characters at up to 4 bytes a character); the Drizzle schema sizes it to what a unique index holds, a varchar(673), and the API refuses a value longer than 673 characters',
         },
         {
           feature: "stringLength",
@@ -117,7 +117,7 @@ describe("Express target: string columns sized by their bound (issue #126)", () 
           location: { contentType: "Entry", field: "handle" },
           severity: "downgrade",
           message:
-            '"handle" is unique and bounded at 1000 characters, more than a unique index holds (a PostgreSQL btree entry holds 2704 bytes with 12 of headers, 673 characters at up to 4 bytes a character); the Drizzle schema makes it a varchar(673), and the API refuses a value longer than 673 characters',
+            '"handle" is declared unique and bounded at 1000 characters, more than a unique index holds (a PostgreSQL btree entry holds 2704 bytes with 12 of headers, 673 characters at up to 4 bytes a character); the Drizzle schema sizes it to what a unique index holds, a varchar(673), and the API refuses a value longer than 673 characters',
         },
       ]);
     });
