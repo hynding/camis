@@ -84,6 +84,24 @@ describe("Express target: maxLength enforced in the API (issue #126)", () => {
     );
   });
 
+  // A unique text keeps its text column, which no index caps (issue #126).
+  it.each(["sqlite", "mysql", "pgsql"] as const)(
+    "checks a unique text at its bound on %s",
+    (dialect) => {
+      const notes = {
+        name: "Entry",
+        kind: "collection",
+        fields: [
+          { type: "text", name: "body", unique: true, maxLength: 1000 },
+          { type: "richText", name: "notes", unique: true, maxLength: 2000 },
+        ],
+      } as ContentType;
+      expect(emitRoutes(notes, [], { dialect })).toContain(
+        "const MAX_LENGTHS: Record<string, number> = { body: 1000, notes: 2000 };",
+      );
+    },
+  );
+
   it("emits the check and the routers that run it as golden files that parse", async () => {
     const files = expressAdapterFor("sqlite").generate(bundle, { projectName: "docs" }).files;
     const content = (path: string) => files.find((f) => f.path === path)!.content;
