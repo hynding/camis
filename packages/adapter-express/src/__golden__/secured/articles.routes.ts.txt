@@ -82,7 +82,10 @@ articlesRouter.patch("/:id", (req, res) => {
     res.status(403).json({ error: "forbidden" });
     return;
   }
-  const row = db.update(articles).set(data).where(eq(articles.id, Number(req.params.id))).returning().get();
+  const row =
+    Object.keys(data).length > 0
+      ? db.update(articles).set(data).where(eq(articles.id, Number(req.params.id))).returning().get()
+      : existing;
   res.json(filterRead(req, "Article", row));
 });
 

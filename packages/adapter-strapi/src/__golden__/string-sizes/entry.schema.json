@@ -1,0 +1,82 @@
+{
+  "kind": "collectionType",
+  "collectionName": "entries",
+  "info": {
+    "singularName": "entry",
+    "pluralName": "entries",
+    "displayName": "Entry"
+  },
+  "options": {},
+  "pluginOptions": {},
+  "attributes": {
+    "title": {
+      "type": "string"
+    },
+    "code": {
+      "type": "string",
+      "maxLength": 40
+    },
+    "headline": {
+      "type": "string",
+      "maxLength": 1000,
+      "column": {
+        "type": "text",
+        "args": [
+          "longtext"
+        ]
+      }
+    },
+    "abstract": {
+      "type": "string",
+      "maxLength": 20000,
+      "column": {
+        "type": "text",
+        "args": [
+          "longtext"
+        ]
+      }
+    },
+    "contact": {
+      "type": "email",
+      "maxLength": 320,
+      "column": {
+        "type": "text",
+        "args": [
+          "longtext"
+        ]
+      }
+    },
+    "slug": {
+      "type": "string",
+      "unique": true,
+      "maxLength": 300,
+      "column": {
+        "type": "string",
+        "args": [
+          300
+        ]
+      }
+    },
+    "handle": {
+      "type": "string",
+      "unique": true,
+      "maxLength": 1000,
+      "column": {
+        "type": "string",
+        "args": [
+          673
+        ]
+      }
+    },
+    "unbounded": {
+      "type": "string",
+      "maxLength": 1073741824,
+      "column": {
+        "type": "text",
+        "args": [
+          "longtext"
+        ]
+      }
+    }
+  }
+}

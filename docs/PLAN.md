@@ -3878,11 +3878,11 @@ remaining gap: a column with no record whose live MariaDB type is JSON reads as 
 alone, as every unrecorded column is.
 
 Limits, tracked in #126: string columns with a large `maxLength`, and targets that do not enforce
-`maxLength` at all, are not covered.
+`maxLength` at all, are not covered (Phase 101 covers both).
 
 The gap covers the column type only, not the server's or request's limits (MySQL's
 `max_allowed_packet`, PostgreSQL's and SQLite's value limits, near 1 GB), which stop a value
-before LONGTEXT's 4 GiB; #126 tracks those and targets that do not enforce `maxLength`.
+before LONGTEXT's 4 GiB.
 
 Exit: `text-size.test.ts` (kernel), `text-columns.test.ts` in each adapter (golden
 `text-sizes/create_pages_table.php`; the Express gap on MySQL only), and in the `text-columns` job
@@ -3891,6 +3891,136 @@ text-sizes fixture, values past 64 KiB) and `TextSchemaSyncTest.php` (a real TEX
 a longText column kept past a refused narrowing (the guard's own message, also where narrowing would
 succeed), a column narrowed by hand widened again, each with a value past 64 KiB read back, and
 `sizeChange`'s decision). SQLite and PostgreSQL ran locally; MySQL runs only in CI.
+
+## Phase 101 — string columns and maxLength on the write paths (`adapter-kernel`, `strapi-schema`, `adapter-strapi`, `adapter-filament`, `adapter-express`)
+
+Issue #126, found reviewing Phase 100. Before it:
+
+| | no bound | `string` bound ≤ 255 | `string` bound > 255 | unique `string` bound > 673 | `maxLength` enforced |
+|---|---|---|---|---|---|
+| Filament (Laravel storage) | `string(c)`, VARCHAR(255) | VARCHAR(n) | VARCHAR(n): MySQL refuses the migration past 16,383 utf8mb4 characters, and a row past 65,535 bytes in all (one VARCHAR(16,383) with an id already is); PostgreSQL past 10,485,760 | the unique index refuses the migration on MySQL (3,072 bytes); PostgreSQL refuses a value past its btree entry (2,704 bytes) | Strapi API style only (StrapiValidator, `mb_strlen`); not the Laravel API style, not the admin form |
+| Filament (Strapi storage) | Strapi's varchar(255) | Strapi's varchar(255) | Strapi's varchar(255): MySQL and PostgreSQL refuse past 255 | as before | StrapiValidator |
+| Express | `text` (SQLite), varchar(255) | varchar(255) | varchar(255) whatever the bound on MySQL and PostgreSQL | varchar(255) | nowhere |
+| Strapi | varchar(255) | varchar(255) | varchar(255) whatever the bound | varchar(255) | Strapi's validator (yup, UTF-16 code units) |
+
+A `text` field was sized by Phase 100 everywhere camis makes the column; Strapi's text is always a
+longtext.
+
+- **The column (`stringColumn`, `adapter-kernel`).** A string, email or uid with no bound keeps the
+  target's own string column (255). A bound up to `STRING_LENGTH` (255) is a string column of that
+  length. Past it the column is the text tier holding the bound (`tierHolding`, Phase 100's tiers:
+  TEXT up to 16,383 characters, MEDIUMTEXT up to 4,194,303, LONGTEXT above), because a VARCHAR's
+  whole declared length counts toward MySQL's 65,535 bytes a row (TEXT counts a few bytes): a
+  bounded string's column that is not unique is never wider than an unbounded one's, so a table
+  holds as many. A unique string cannot be a TEXT, which an index does not take whole: it stays a
+  string column, capped at `INDEXED_STRING_LENGTH`, 673 characters: a PostgreSQL btree entry holds
+  2,704 bytes (a third of an 8 KiB page), 12 of them its headers, which leaves 673 four-byte
+  characters (PostgreSQL 16 takes 673 distinct ones and refuses 674 with "index row size 2712
+  exceeds btree version 4 maximum 2704"; MySQL InnoDB's index key holds 3,072 bytes). A unique
+  bound from 256 to 673 is therefore a VARCHAR wider than an unbounded string's, up to 2,692 of the
+  65,535 bytes a MySQL row may take. `stringsBeyondColumns` lists, located, each bound its column
+  cannot hold: a unique bound past 673, and one past LONGTEXT; each adapter words its own
+  `stringLength` downgrade gap. The write paths camis generates check a capped column's length
+  rather than the bound (`enforcedLength`; on the Strapi API style `checkedLength`, which also caps a
+  string at Strapi's varchar(255) on Strapi's storage layout), so a value between the cap and the
+  bound is refused as invalid (400 or 422), not a database error, and the gap states that length.
+  The rule follows the IR's `unique`, not whether the index survives: on the Strapi API style a
+  component's unique field and a draft-and-publish or localized type's lose their index (their
+  uniqueness is the validator's) and keep the capped string column, so the gap says the field is
+  declared unique and sized to what a unique index holds.
+- **Filament.** One migration serves every database: `$table->string(c, n)`, or `text`,
+  `mediumText`, `longText` (Laravel makes all three a `text` on SQLite and PostgreSQL). On Strapi's
+  storage layout the column is the one Strapi made: a bound past 255 is a `stringLength` gap there,
+  since the column is a varchar(255) unless the Strapi project gave it column settings, which no
+  migration of ours can know, so StrapiValidator checks such a string at 255 characters.
+- **Express.** SQLite keeps `text`, which takes any length, indexed or not. MySQL follows
+  `stringColumn` (`varchar`, `text`, `mediumtext`, `longtext`), with the gap. PostgreSQL makes a
+  bound up to 255 a `varchar(n)`, a unique one a `varchar` capped at 673 with the gap, and a longer
+  one otherwise a `text`, which takes any length. `MAX_LENGTHS` holds the capped length on MySQL and
+  PostgreSQL.
+- **Strapi.** Strapi 5.48's database layer makes a string, email or uid a varchar(255) whatever its
+  bound (`@strapi/database` schema.js, `type: 'string'` with no length) and lays an attribute's
+  `column` over it, as Phase 98 uses for decimals: a bound past 255 that is not unique gets
+  `"column": { "type": "text", "args": ["longtext"] }` whatever its tier, because Strapi's MySQL
+  schema inspector reads back only a longtext as a text column, so a text or mediumtext column would
+  differ from its settings and be altered again on every start; a unique one gets
+  `{ "type": "string", "args": [n] }` (knex's `string(name, n)`), with the same gap past 673 or
+  LONGTEXT. Strapi's validator checks the IR's bound, which camis does not replace, so a unique
+  value between 673 characters and its bound is a database error there, as the gap says. The
+  importer ignores a string's column settings, which camis derives from the bound, so a generated
+  schema round trips; the boot smoke boots such a schema.
+- **Defaults on text columns.** MySQL takes no literal default on a TEXT column
+  (ER_BLOB_CANT_HAVE_DEFAULT), so a default on a string bounded past 255, or on a `text` or
+  `richText`, is not the database's: Filament's migration leaves it out and the model applies it
+  (`$attributes`, on an entry's model and a component's child model, on every database, since one
+  migration serves them all), and Express on MySQL applies it with Drizzle's `$defaultFn` (also for
+  an enumeration, a text there). Each is a located `textDefault` downgrade gap: a row inserted
+  without the model or Drizzle gets none. Strapi applies defaults itself, as do the Strapi API
+  style's StrapiValidator and Strapi's storage layout.
+- **Enforcement, in characters.** A `maxLength` counts Unicode code points, as PHP's `mb_strlen`
+  does and as a VARCHAR's length does. `characterCountVectors` (`adapter-kernel`) are the canonical
+  vectors: ASCII, two-, three- and four-byte characters, characters past the Basic Multilingual Plane
+  and combining marks and modifiers. The Laravel API style validates `RULES` (`max:n` for each
+  bounded field, own and embedded) on create and update, after authorizing: Laravel's `max` rule
+  counts a string with `mb_strlen` (`Validator::getSize`) and answers 422. Each checks the length
+  `enforcedLength` gives, a capped column's where it is less than the bound. The Filament admin form
+  (TextInput, Textarea, MarkdownEditor) adds `->rule('max:n')`, not `->maxLength(n)`, whose HTML
+  `maxlength` a browser counts in UTF-16 code units and would stop a bound's worth of emoji at half.
+  The Strapi API style's StrapiValidator already counted `mb_strlen`; REST, GraphQL (dispatched to
+  the REST controllers), single types and a new locale's version all go through it. Its MCP tools'
+  input schemas state the same `checkedLength` as the `maxLength` of every bounded string, email
+  and uid (Strapi states none for an email or a uid; camis does, so MCP and REST agree), and the MCP
+  server checks a tool call's arguments against them, so `create_*`, `update_*` and a single type's
+  write refuse a value past the length REST checks with "Input validation error: Invalid arguments
+  for tool …"; the OpenAPI document states it too. Express generates
+  `src/lengths.ts` (`characterCount`: `Array.from(value).length`, code points) and each router with a
+  bounded field refuses a body whose value is longer, answering 400
+  `{ error: "<field> must be at most <n> characters" }`: on a secured API it checks what the caller
+  may write, after the record condition refuses a row the role could not have written (403) and the
+  field rules strip what it may not write, so a stripped field past its bound is no 400. The
+  generated routers call better-sqlite3's synchronous API, so the Express API serves writes on SQLite
+  only today: the 400 is exercised there, and on MySQL and PostgreSQL the length smoke checks the
+  column sizes through the driver. Real Strapi counts with yup's
+  `value.length`, UTF-16 code units, so it refuses a value of characters past the Basic Multilingual
+  Plane at half the bound: stricter than the IR's bound, never looser, so no column overflows; it is
+  Strapi's validator, which camis does not replace, and is not reported as a gap.
+
+Not covered: a dynamic zone item in an MCP tool call, which Strapi's input schema leaves
+unchecked (on PostgreSQL and on MySQL in strict mode an item past a capped column fails in the
+database and the call answers an execution error, nothing written; SQLite ignores a VARCHAR's
+length and stores the item as sent); a Strapi archive's import (data transfer), which writes rows as Strapi's
+does, without validation; an unbounded string is still checked nowhere but StrapiValidator (which bounds a
+string at 255) while its column is a varchar(255); `minLength` is still
+enforced only by StrapiValidator; a unique index over more than one column (none is generated for a
+string) would hold less than 673 characters; a JSON column's default, which MySQL also refuses as a
+literal; existing databases keep their columns until a migration changes them
+(the Content-Type Builder's schema sync changes a string to a text, within one group, as before).
+
+Exit: `string-size.test.ts` and `character-count.test.ts` (kernel); `string-columns.test.ts` in each
+adapter (goldens `string-sizes/create_entries_table.php` and `string-sizes/entry.schema.json`; the
+Express gap on MySQL, and for a unique string on PostgreSQL); `mcp-tools.test.ts` (golden
+`string-sizes/create_entry.input.json`) and `openapi.test.ts` for the checked length;
+`max-length.test.ts` in Filament (goldens `string-sizes/EntryForm.php`
+and `EntryApiController.php`, and `mb_strlen` counting the vectors where PHP is installed) and in
+Express (goldens `lengths/lengths.ts.txt` and `lengths/entries.routes.ts.txt`, the generated
+`lengths.ts` loaded and counting the vectors); in CI the `text-columns` job runs `StringSizesTest.php`
+(the string-sizes fixture on the Strapi API style: values of four-byte characters at each bound, a
+unique value of 673 distinct four-byte characters, the API and admin form refusing one more, the API
+refusing 674 characters for a unique field bounded at 1,000 with 400, the MCP `create_entry` and
+`update_entry` tools refusing them as invalid arguments, and a create without
+`tagline` (bounded at 500, a TEXT) or `summary` storing their defaults, whose MySQL leg migrates the
+defaulted text columns) and the `boot` job round trips a 1,000-character subtitle through the Laravel
+API style and refuses 1,001, on SQLite, MySQL and PostgreSQL; the `adapter-express-boot` workflow
+runs `length-smoke.ts` as a step of its own on all three, before the boot smoke: on SQLite over HTTP
+on a secured project (values at each bound kept, one character more refused on create and update, a
+create the record condition refuses a 403 even past a bound, a stripped field past its bound no 400,
+a text column's default stored); on MySQL and PostgreSQL, whose drivers the generated routers'
+synchronous better-sqlite3 calls do not serve, the push (a defaulted text column included) and the
+pushed columns keeping the values through the project's own driver, in a database of its own so
+drizzle-kit's push meets no other project's tables. That workflow is disabled for inactivity on
+GitHub and its last scheduled runs on master failed on every leg, so it does not run on pull
+requests until it is enabled. SQLite and PostgreSQL ran locally for the Filament tests and the
+Express length smoke; MySQL runs only in CI.
 
 ---
 

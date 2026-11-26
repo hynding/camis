@@ -1,4 +1,6 @@
 import { expressTextLengthGaps } from "./text-length-gaps";
+import { expressStringLengthGaps } from "./string-length-gaps";
+import { expressTextDefaultGaps } from "./text-defaults";
 import { apiActionGaps, customCodeGaps, publicApiActionGaps } from "./custom-code";
 import {
   buildManifest,
@@ -31,6 +33,7 @@ import {
 import { emitMorphsFile, morphLinks } from "./morphs";
 import { resolveRelations } from "./relations";
 import { emitRoutes } from "./routes";
+import { hasMaxLengths, lengthsFile } from "./lengths";
 import { emitSchemaFile } from "./schema";
 import { skeletonFiles } from "./skeleton";
 import { expressReservedNameGaps } from "./reserved-names";
@@ -87,6 +90,8 @@ export const expressAdapterFor = (dialect: Dialect): GenerateAdapter => ({
       ...publicApiActionGaps(doc),
       ...expressDecimalGaps(doc),
       ...(dialect === "mysql" ? expressTextLengthGaps(doc) : []),
+      ...expressStringLengthGaps(doc, dialect),
+      ...expressTextDefaultGaps(doc, dialect),
     ];
     const files: GeneratedFile[] = [
       ...skeletonFiles(doc, options.projectName, dialect, { secured }),
@@ -132,6 +137,7 @@ export const expressAdapterFor = (dialect: Dialect): GenerateAdapter => ({
           secured,
           aiColumns: aiColumnsOf(ct),
           links: links.own.has(ct.name) ? "own" : links.inverses.has(ct.name) ? "inverse" : "none",
+          dialect,
         }),
       });
     });
@@ -142,6 +148,7 @@ export const expressAdapterFor = (dialect: Dialect): GenerateAdapter => ({
     });
     if (links.own.size > 0)
       files.push({ path: "src/morphs.ts", content: emitMorphsFile(doc, links) });
+    if (hasMaxLengths(doc.contentTypes)) files.push(lengthsFile());
     files.push(camisSchemaFile(doc));
 
     if (hasAiField(doc)) files.push(...aiFiles(doc));

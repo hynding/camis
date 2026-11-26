@@ -28,9 +28,15 @@ const holds = (tier: TextTier, maxLength: number): boolean =>
  */
 export const textTier = (field: AnyField): TextTier => {
   const maxLength = field.type === "text" ? field.maxLength : undefined;
-  if (maxLength === undefined) return "large";
-  return holds("small", maxLength) ? "small" : holds("medium", maxLength) ? "medium" : "large";
+  return maxLength === undefined ? "large" : tierHolding(maxLength);
 };
+
+/** The smallest tier that holds a bound of `maxLength` characters, or the large tier if none does. */
+export const tierHolding = (maxLength: number): TextTier =>
+  holds("small", maxLength) ? "small" : holds("medium", maxLength) ? "medium" : "large";
+
+/** Whether the large tier holds a bound of `maxLength` characters at the worst case. */
+export const largeTierHolds = (maxLength: number): boolean => holds("large", maxLength);
 
 export interface LocatedText {
   location: IrErrorLocation;
@@ -41,7 +47,7 @@ export interface LocatedText {
 export const textsBeyondTiers = (doc: IrDocument): LocatedText[] => {
   const located = (holder: IrErrorLocation, fields: readonly AnyField[]): LocatedText[] =>
     fields.flatMap((field) =>
-      isText(field) && field.maxLength !== undefined && !holds("large", field.maxLength)
+      isText(field) && field.maxLength !== undefined && !largeTierHolds(field.maxLength)
         ? [{ location: { ...holder, field: field.name }, maxLength: field.maxLength }]
         : [],
     );

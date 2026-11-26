@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "lint": "eslint .",
-    "smoke": "tsx scripts/boot-smoke.ts"
+    "smoke": "tsx scripts/boot-smoke.ts",
+    "smoke:lengths": "tsx scripts/length-smoke.ts"
   },
   "dependencies": {
     "@camis/adapter-kernel": "workspace:*",

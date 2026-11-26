@@ -220,6 +220,16 @@ jobs:
             $seen = [$expanded->getStatusCode(), $kept, $tooLong->getStatusCode(), array_keys(json_decode((string) $tooLong->getContent(), true)["errors"] ?? [])];
             if ($seen !== [200, "12.000000", 422, ["balance"]]) { fwrite(STDERR, "DECIMAL WRITE MISMATCH ".json_encode($seen)."\n"); exit(1); }
             echo "DECIMAL WRITES OK\n";
+            // A string bounded at 1000 characters keeps 1000 four-byte characters (its column is a
+            // TEXT, as a VARCHAR(1000) of utf8mb4 would take 4,000 of the bytes of a MySQL row) and the
+            // API refuses 1001, counting characters as mb_strlen does (issue #126).
+            $subtitle = fn (int $characters) => $kernel->handle(\Illuminate\Http\Request::create("/api/articles/".$ledger->id, "PUT", server: ["HTTP_ACCEPT" => "application/json", "CONTENT_TYPE" => "application/json"], content: json_encode(["subtitle" => str_repeat("\u{1F600}", $characters)])));
+            $kept = $subtitle(1000);
+            $stored = (string) $ledger->fresh()->subtitle;
+            $refused = $subtitle(1001);
+            $seen = [$kept->getStatusCode(), mb_strlen($stored), $refused->getStatusCode(), array_keys(json_decode((string) $refused->getContent(), true)["errors"] ?? []), mb_strlen((string) $ledger->fresh()->subtitle)];
+            if ($seen !== [200, 1000, 422, ["subtitle"], 1000]) { fwrite(STDERR, "STRING LENGTH MISMATCH ".json_encode($seen)."\n"); exit(1); }
+            echo "STRING LENGTH OK\n";
           '
       - name: Schedules run through Laravel's scheduler
         run: |
@@ -634,6 +644,7 @@ jobs:
   text-columns:
     # Text columns sized by their bound (issue #123): MySQL stores a TEXT of 65,535 bytes at most and a
     # strict-mode insert past it fails, so a value past 64 KiB is round tripped on all three databases.
+    # String columns sized by their bound (issue #126) run here too, after the text ones.
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -708,6 +719,19 @@ jobs:
           esac
           cp ../packages/adapter-filament/scripts/php/TextSizesTest.php ../packages/adapter-filament/scripts/php/TextSchemaSyncTest.php tests/Feature/
           php artisan test tests/Feature/TextSizesTest.php tests/Feature/TextSchemaSyncTest.php
+      # The overlay replaces the text-sizes project's files, so its tests ran first.
+      - name: Overlay (apiStyle strapi, the string-sizes fixture)
+        run: pnpm --filter @camis/adapter-filament overlay "$GITHUB_WORKSPACE/app" --style strapi --bundle string-sizes
+      - name: A string migrates and keeps its bound in four-byte characters, and the API, its MCP tools and the admin form refuse one more (${{ matrix.db }})
+        run: |
+          cd app
+          case "${{ matrix.db }}" in
+            sqlite) export DB_CONNECTION=sqlite DB_DATABASE=:memory: ;;
+            mysql)  export DB_CONNECTION=mysql DB_HOST=127.0.0.1 DB_PORT=3306 DB_DATABASE=camis DB_USERNAME=root DB_PASSWORD=camis ;;
+            pgsql)  export DB_CONNECTION=pgsql DB_HOST=127.0.0.1 DB_PORT=5432 DB_DATABASE=camis DB_USERNAME=postgres DB_PASSWORD=camis ;;
+          esac
+          cp ../packages/adapter-filament/scripts/php/StringSizesTest.php tests/Feature/
+          php artisan test tests/Feature/StringSizesTest.php
   strapi-api:
     runs-on: ubuntu-latest
     # The REST and populate vectors build SQL per dialect (LIKE escapes, casts, relation

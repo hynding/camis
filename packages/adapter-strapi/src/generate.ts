@@ -23,6 +23,7 @@ import {
   contentTypeSchema,
   kebab,
   strapiDecimalGaps,
+  strapiStringLengthGaps,
   strapiNames,
   strapiReservedNameGaps,
   synthesizedInverses,
@@ -162,6 +163,7 @@ export const strapiAdapter: GenerateAdapter = {
         gaps: [
           ...strapiReservedNameGaps(doc),
           ...strapiDecimalGaps(doc),
+          ...strapiStringLengthGaps(doc),
           ...softDeleteGaps(doc),
           ...perm.gaps,
           ...aiGaps,

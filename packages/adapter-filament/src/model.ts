@@ -3,6 +3,16 @@ import { emitField, type FieldEmit } from "./fields";
 import { filamentNames } from "./names";
 import type { RelationMethod } from "./relations";
 
+/** The model's `$attributes`: each default it applies itself (`FieldEmit.modelDefault`). */
+export const attributesProperty = (emits: readonly FieldEmit[]): string => {
+  const defaults = emits
+    .filter((e) => e.modelDefault !== undefined)
+    .map((e) => `        '${e.column}' => ${e.modelDefault},`);
+  return defaults.length > 0
+    ? `\n    protected $attributes = [\n${defaults.join("\n")}\n    ];\n`
+    : "";
+};
+
 export const emitModel = (
   ct: ContentType,
   relations: RelationMethod[] = [],
@@ -64,6 +74,6 @@ ${traitUse}    protected $table = '${names.table}';
     protected $fillable = [
 ${fillable}
     ];
-${castsMethod}${relMethods}}
+${attributesProperty(emits)}${castsMethod}${relMethods}}
 `;
 };

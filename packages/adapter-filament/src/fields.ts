@@ -1,5 +1,12 @@
 import { decimalDigits, type DecimalDigits } from "@camis/ir-core";
-import { textTier } from "@camis/adapter-kernel";
+import {
+  enforcedLength,
+  holdsTextColumn,
+  isStringLike,
+  stringColumn,
+  textTier,
+  type StringColumn,
+} from "@camis/adapter-kernel";
 import type { Field } from "@camis/ir-schema";
 import { beyondPhpFloat } from "./decimals";
 import { snakeColumn } from "./names";
@@ -17,6 +24,16 @@ export interface FieldEmit {
   decimalDigits?: DecimalDigits;
   /** A unique field's rule in `formComponent`, which a form whose rows share values leaves out. */
   uniqueRule?: string;
+  /**
+   * The length in characters the write paths check a text-like field at: its bound, or its
+   * column's length where an index caps the column below it.
+   */
+  maxLength?: number;
+  /**
+   * The default the model applies, as a PHP literal, where the column is a text column: MySQL takes
+   * no default on one, and the migration serves every database.
+   */
+  modelDefault?: string;
 }
 
 const TEXT_INPUT = "Filament\\Forms\\Components\\TextInput";
@@ -90,6 +107,12 @@ const digitsOf = (field: Field): { decimalDigits?: DecimalDigits } => {
 /** Laravel's text column for each tier of text (MySQL's TEXT, MEDIUMTEXT and LONGTEXT). */
 const TEXT_COLUMN_BY_TIER = { small: "text", medium: "mediumText", large: "longText" } as const;
 
+/** A string's column: its own string column, or the text column of the tier holding its bound. */
+const stringMigration = (column: StringColumn, c: string): string =>
+  column.kind === "text"
+    ? `$table->${TEXT_COLUMN_BY_TIER[column.tier]}('${c}')`
+    : `$table->string('${c}'${column.length === undefined ? "" : `, ${column.length}`})`;
+
 interface Base {
   migration: string;
   formComponent: string;
@@ -101,13 +124,12 @@ interface Base {
 
 const base = (field: Field, c: string): Base => {
   const f = field as Field & Record<string, unknown>;
-  const maxLen = typeof f.maxLength === "number" ? `, ${f.maxLength}` : "";
   switch (field.type) {
     case "string":
     case "uid":
     case "email":
       return {
-        migration: `$table->string('${c}'${maxLen})`,
+        migration: stringMigration(stringColumn(field), c),
         formComponent: `TextInput::make('${c}')${field.type === "email" ? "->email()" : ""}`,
         tableColumn: `TextColumn::make('${c}')`,
         formImport: TEXT_INPUT,
@@ -267,17 +289,40 @@ const uniqueRule = (field: Field, column: string): string => {
     : `->rule(fn (?string $model, ?\\Illuminate\\Database\\Eloquent\\Model $record) => new \\App\\Rules\\DecimalDigitsUniqueRule($model, '${column}', ${digits.precision}, ${digits.scale}, $record))`;
 };
 
+const TEXT_LIKE = new Set<string>(["string", "email", "uid", "text", "richText"]);
+
+/**
+ * The length a text-like field is checked at, if it states a bound: a value its column cannot hold
+ * is refused as invalid rather than failing in the database.
+ */
+const boundOf = (field: Field): number | undefined => {
+  if (isStringLike(field)) return enforcedLength(field);
+  const maxLength = (field as Field & { maxLength?: unknown }).maxLength;
+  return TEXT_LIKE.has(field.type) && typeof maxLength === "number" ? maxLength : undefined;
+};
+
+/**
+ * Laravel's max rule, which counts a string's characters with mb_strlen, as the Strapi API style's
+ * validator does. Filament's `maxLength()` would also set the input's maxlength attribute, which a
+ * browser counts in UTF-16 code units, refusing a bound's worth of characters past the Basic
+ * Multilingual Plane.
+ */
+const maxLengthRule = (maxLength: number | undefined): string =>
+  maxLength === undefined ? "" : `->rule('max:${maxLength}')`;
+
 export const emitField = (field: Field, columnOverride?: string): FieldEmit => {
   const f = field as Field & Record<string, unknown>;
   const column = columnOverride ?? snakeColumn(field.name);
   const b = base(field, column);
   const required = f.required === true;
   const unique = f.unique === true;
+  const defaulted = f.default === undefined ? undefined : phpDefault(f.default);
+  const modelDefault = defaulted !== undefined && holdsTextColumn(field) ? defaulted : undefined;
   const migration =
     b.migration +
     (required ? "" : "->nullable()") +
     (unique ? "->unique()" : "") +
-    (f.default !== undefined ? `->default(${phpDefault(f.default)})` : "");
+    (defaulted !== undefined && modelDefault === undefined ? `->default(${defaulted})` : "");
   const pattern =
     typeof f.pattern === "string" ? `->regex(${phpSingleQuoted(pcre(f.pattern))})` : "";
   // A custom field's input when the project registers one under the editor's uid (see
@@ -287,7 +332,13 @@ export const emitField = (field: Field, columnOverride?: string): FieldEmit => {
       ? b.formComponent
       : `(\\App\\Support\\CustomFields::input(${phpSingleQuoted(field.editor.name)}, '${column}', ${phpValue(field.editor.options ?? [])}) ?? ${b.formComponent})`;
   const formUnique = unique ? uniqueRule(field, column) : undefined;
-  const formComponent = input + (required ? "->required()" : "") + (formUnique ?? "") + pattern;
+  const maxLength = boundOf(field);
+  const formComponent =
+    input +
+    (required ? "->required()" : "") +
+    (formUnique ?? "") +
+    pattern +
+    maxLengthRule(maxLength);
   return {
     column,
     migration,
@@ -298,5 +349,7 @@ export const emitField = (field: Field, columnOverride?: string): FieldEmit => {
     ...(b.cast ? { cast: b.cast } : {}),
     ...digitsOf(field),
     ...(formUnique === undefined ? {} : { uniqueRule: formUnique }),
+    ...(maxLength === undefined ? {} : { maxLength }),
+    ...(modelDefault === undefined ? {} : { modelDefault }),
   };
 };

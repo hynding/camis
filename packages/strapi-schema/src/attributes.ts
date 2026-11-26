@@ -1,4 +1,5 @@
 import { decimalDigits } from "@camis/ir-core";
+import { STRING_LENGTH, isStringLike, stringColumn } from "@camis/adapter-kernel";
 import { fieldApiName, inverseApiName, type Field } from "@camis/ir-schema";
 import { toStrapiMediaKinds } from "./media-kinds";
 import { kebab } from "./names";
@@ -20,6 +21,22 @@ const put = (attr: Attribute, key: string, value: unknown): void => {
 };
 
 const PLUGIN_USER_UID = "plugin::users-permissions.user";
+
+/**
+ * Strapi's database layer makes a string a varchar(255) whatever its bound; a longer bound gets
+ * column settings for the column `stringColumn` chooses, which Strapi lays over it.
+ */
+const stringColumnSettings = (field: Field): Attribute | undefined => {
+  if (!isStringLike(field) || field.maxLength === undefined || field.maxLength <= STRING_LENGTH)
+    return undefined;
+  const column = stringColumn(field);
+  // A longtext whatever the tier: Strapi's MySQL schema inspector reads back only a longtext as a
+  // text column, so a text or mediumtext one would differ from its settings and be altered again
+  // on every start.
+  return column.kind === "string"
+    ? { type: "string", args: [column.length] }
+    : { type: "text", args: ["longtext"] };
+};
 /** The custom field Strapi's color-picker plugin registers; it stores a string. */
 export const COLOR_PICKER_UID = "plugin::color-picker.color";
 
@@ -105,6 +122,7 @@ export const toAttribute = (
   const digits = decimalDigits(field);
   if (digits !== undefined)
     attr.column = { type: "decimal", args: [digits.precision, digits.scale] };
+  put(attr, "column", stringColumnSettings(field));
   if (field.type === "media" && field.allowedTypes !== undefined) {
     attr.allowedTypes = toStrapiMediaKinds(field.allowedTypes);
   }

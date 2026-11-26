@@ -42,5 +42,10 @@ jobs:
             mysql) echo "DATABASE_URL=mysql://root:camis@127.0.0.1:3306/camis" >> "$GITHUB_ENV" ;;
             pgsql) echo "DATABASE_URL=postgres://postgres:camis@127.0.0.1:5432/camis" >> "$GITHUB_ENV" ;;
           esac
+      # Before the boot smoke, which serves writes on SQLite only (the generated routers call
+      # better-sqlite3's synchronous API): on MySQL and PostgreSQL this pushes the bounded schema and
+      # round trips its values through the driver; on SQLite it also drives the API over HTTP.
+      - name: Length smoke (${{ matrix.dialect }})
+        run: pnpm --filter @camis/adapter-express smoke:lengths ${{ matrix.dialect }}
       - name: Boot smoke (${{ matrix.dialect }})
         run: pnpm --filter @camis/adapter-express smoke ${{ matrix.dialect }}

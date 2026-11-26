@@ -48,3 +48,18 @@ export {
   textsBeyondTiers,
 } from "./text-size";
 export type { LocatedText, TextTier } from "./text-size";
+export {
+  INDEX_ENTRY_HEADER_BYTES,
+  INDEX_KEY_BYTES,
+  INDEXED_STRING_LENGTH,
+  STRING_LENGTH,
+  UNIQUE_INDEX_LIMIT,
+  enforcedLength,
+  holdsTextColumn,
+  isStringLike,
+  stringColumn,
+  stringsBeyondColumns,
+} from "./string-size";
+export type { LocatedString, StringBound, StringColumn } from "./string-size";
+export { characterCountVectors } from "./character-count";
+export type { CharacterCountVector } from "./character-count";

@@ -1,5 +1,5 @@
 import { beyondDouble, decimalDigits } from "@camis/ir-core";
-import { textTier } from "@camis/adapter-kernel";
+import { STRING_LENGTH, stringColumn, textTier } from "@camis/adapter-kernel";
 import type { Field } from "@camis/ir-schema";
 import type { Dialect } from "./dialect";
 import { snakeColumn } from "./names";
@@ -70,12 +70,39 @@ const mysqlText = (field: Field, c: string): { expr: string; import: string } =>
   return { expr: `${type}('${c}')`, import: type };
 };
 
+const varchar = (c: string, length: number): { expr: string; import: string } => ({
+  expr: `varchar('${c}', { length: ${length} })`,
+  import: "varchar",
+});
+
+/**
+ * A string's column. SQLite's text takes any length, indexed or not. Elsewhere `stringColumn`
+ * decides: on MySQL a string column's whole length counts toward a row's bytes and a text column
+ * cannot be indexed whole; on PostgreSQL a unique string is capped at what a btree entry holds, and
+ * a longer bound otherwise is text, which takes any length.
+ */
+const stringBase = (
+  dialect: Dialect,
+  field: Field,
+  c: string,
+): { expr: string; import: string } => {
+  const f = field as Field & { maxLength?: number; unique?: boolean };
+  if (dialect === "sqlite") return { expr: `text('${c}')`, import: "text" };
+  const column = stringColumn(f);
+  if (dialect === "pgsql" && column.kind === "text")
+    return { expr: `text('${c}')`, import: "text" };
+  if (column.kind === "string") return varchar(c, column.length ?? STRING_LENGTH);
+  const type = MYSQL_TEXT_BY_TIER[column.tier];
+  return { expr: `${type}('${c}')`, import: type };
+};
+
 // Per-dialect base column (expression WITHOUT modifiers) + the drizzle-core import it needs.
 const base = (dialect: Dialect, field: Field, c: string): { expr: string; import: string } => {
   switch (field.type) {
     case "string":
     case "email":
     case "uid":
+      return stringBase(dialect, field, c);
     case "color":
       return dialect === "sqlite"
         ? { expr: `text('${c}')`, import: "text" }
@@ -130,6 +157,12 @@ const base = (dialect: Dialect, field: Field, c: string): { expr: string; import
   }
 };
 
+const MYSQL_TEXT_TYPES = new Set<string>(Object.values(MYSQL_TEXT_BY_TIER));
+
+/** Whether a field's MySQL column is a text type, which takes no literal default. */
+export const isMysqlText = (field: Field): boolean =>
+  MYSQL_TEXT_TYPES.has(base("mysql", field, snakeColumn(field.name)).import);
+
 export const column = (dialect: Dialect, field: Field): ColumnEmit => {
   const f = field as Field & Record<string, unknown>;
   const c = snakeColumn(field.name);
@@ -137,10 +170,17 @@ export const column = (dialect: Dialect, field: Field): ColumnEmit => {
   // A decimal kept as text (see decimalColumn) takes its default as text too.
   const defaultValue =
     b.import === "text" && typeof f.default === "number" ? String(f.default) : f.default;
+  // MySQL takes no literal default on a text type (ER_BLOB_CANT_HAVE_DEFAULT): Drizzle applies it.
+  const defaulted =
+    defaultValue === undefined
+      ? ""
+      : dialect === "mysql" && MYSQL_TEXT_TYPES.has(b.import)
+        ? `.$defaultFn(() => ${tsLiteral(defaultValue)})`
+        : `.default(${tsLiteral(defaultValue)})`;
   const drizzle =
     b.expr +
     (f.required === true ? ".notNull()" : "") +
     (f.unique === true ? ".unique()" : "") +
-    (defaultValue !== undefined ? `.default(${tsLiteral(defaultValue)})` : "");
+    defaulted;
   return { column: c, drizzle, import: b.import };
 };

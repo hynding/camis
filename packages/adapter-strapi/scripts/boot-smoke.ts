@@ -13,6 +13,7 @@ import type { IrBundle } from "@camis/permissions";
 import { strapiAdapter } from "../src/generate";
 import { blog } from "../src/__fixtures__/blog";
 import { publicReadBundle, someConditionsBundle } from "../src/__fixtures__/note-grants";
+import { stringSizes } from "../src/__fixtures__/string-sizes";
 import { stopProcessGroup } from "./stop-process-group";
 
 interface BootCase {
@@ -41,6 +42,13 @@ const CASES: BootCase[] = [
     bundle: someConditionsBundle,
     route: "/api/notes",
     accepted: [200],
+  },
+  {
+    // Strapi takes the column settings a string bounded past 255 characters gets (issue #126).
+    name: "entries, strings with column settings",
+    bundle: { document: stringSizes, roles: [] },
+    route: "/api/entries",
+    accepted: [200, 403],
   },
 ];
 

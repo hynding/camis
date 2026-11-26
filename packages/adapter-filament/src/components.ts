@@ -8,6 +8,7 @@ import {
   type ComponentRelation,
 } from "./component-relations";
 import { emitField, type FieldEmit } from "./fields";
+import { attributesProperty } from "./model";
 import { constrainedTo } from "./identifiers";
 import { withMilliseconds } from "./migration";
 import { filamentNames, snake, snakeColumn } from "./names";
@@ -251,7 +252,7 @@ class ${child.model} extends Model
     protected $fillable = [
 ${fillable}
     ];
-${mediaComponents}${castsMethod}${media.join("")}${links.join("")}}
+${attributesProperty(child.emits)}${mediaComponents}${castsMethod}${media.join("")}${links.join("")}}
 `;
 };
 
