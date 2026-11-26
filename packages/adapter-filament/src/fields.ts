@@ -25,7 +25,7 @@ export interface FieldEmit {
   /** A unique field's rule in `formComponent`, which a form whose rows share values leaves out. */
   uniqueRule?: string;
   /**
-   * The length in characters every write path checks a text-like field at: its bound, or its
+   * The length in characters the write paths check a text-like field at: its bound, or its
    * column's length where an index caps the column below it.
    */
   maxLength?: number;

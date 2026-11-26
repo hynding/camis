@@ -203,7 +203,9 @@ would be altered again on every start), which Strapi lays over the varchar(255) 
 string. On Filament's Strapi storage layout the column is the one Strapi made: a bound past 255 is a
 `stringLength` gap there, and the Strapi API style checks such a string at 255 characters.
 
-The Laravel API style, the Strapi API style, the Filament admin form and the Express API check a
+The Laravel API style, the Strapi API style (REST, GraphQL and its MCP tools, but not a dynamic
+zone item in an MCP call, which Strapi's tool schema leaves unchecked), the Filament admin form and
+the Express API check a
 `maxLength` in characters (Unicode code points, as PHP's `mb_strlen` counts them), at the length the
 column holds where an index caps it below the bound, so a value the column cannot hold is refused as
 invalid rather than failing in the database: the Laravel API style answers 422 (Laravel's `max`
