@@ -221,7 +221,7 @@ jobs:
             if ($seen !== [200, "12.000000", 422, ["balance"]]) { fwrite(STDERR, "DECIMAL WRITE MISMATCH ".json_encode($seen)."\n"); exit(1); }
             echo "DECIMAL WRITES OK\n";
             // A string bounded at 1000 characters keeps 1000 four-byte characters (its column is a
-            // TEXT, as a VARCHAR(1000) of utf8mb4 would take 4,000 of a MySQL row's bytes) and the
+            // TEXT, as a VARCHAR(1000) of utf8mb4 would take 4,000 of the bytes of a MySQL row) and the
             // API refuses 1001, counting characters as mb_strlen does (issue #126).
             $subtitle = fn (int $characters) => $kernel->handle(\Illuminate\Http\Request::create("/api/articles/".$ledger->id, "PUT", server: ["HTTP_ACCEPT" => "application/json", "CONTENT_TYPE" => "application/json"], content: json_encode(["subtitle" => str_repeat("\u{1F600}", $characters)])));
             $kept = $subtitle(1000);
