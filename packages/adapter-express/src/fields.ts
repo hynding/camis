@@ -1,5 +1,5 @@
 import { beyondDouble, decimalDigits } from "@camis/ir-core";
-import { textTier } from "@camis/adapter-kernel";
+import { STRING_LENGTH, stringColumn, textTier } from "@camis/adapter-kernel";
 import type { Field } from "@camis/ir-schema";
 import type { Dialect } from "./dialect";
 import { snakeColumn } from "./names";
@@ -70,12 +70,40 @@ const mysqlText = (field: Field, c: string): { expr: string; import: string } =>
   return { expr: `${type}('${c}')`, import: type };
 };
 
+const varchar = (c: string, length: number): { expr: string; import: string } => ({
+  expr: `varchar('${c}', { length: ${length} })`,
+  import: "varchar",
+});
+
+/**
+ * A string's column. SQLite's text takes any length. On MySQL a string column's whole length counts
+ * toward a row's bytes and a text column cannot be indexed whole, so `stringColumn` decides; on
+ * PostgreSQL a bound past `STRING_LENGTH` is text, which takes any length and a unique index.
+ */
+const stringBase = (
+  dialect: Dialect,
+  field: Field,
+  c: string,
+): { expr: string; import: string } => {
+  const f = field as Field & { maxLength?: number; unique?: boolean };
+  if (dialect === "sqlite") return { expr: `text('${c}')`, import: "text" };
+  if (dialect === "pgsql")
+    return f.maxLength !== undefined && f.maxLength > STRING_LENGTH
+      ? { expr: `text('${c}')`, import: "text" }
+      : varchar(c, f.maxLength ?? STRING_LENGTH);
+  const column = stringColumn(f);
+  if (column.kind === "string") return varchar(c, column.length ?? STRING_LENGTH);
+  const type = MYSQL_TEXT_BY_TIER[column.tier];
+  return { expr: `${type}('${c}')`, import: type };
+};
+
 // Per-dialect base column (expression WITHOUT modifiers) + the drizzle-core import it needs.
 const base = (dialect: Dialect, field: Field, c: string): { expr: string; import: string } => {
   switch (field.type) {
     case "string":
     case "email":
     case "uid":
+      return stringBase(dialect, field, c);
     case "color":
       return dialect === "sqlite"
         ? { expr: `text('${c}')`, import: "text" }
