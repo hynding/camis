@@ -9,7 +9,7 @@
 // driver instead, in a database of its own next to DATABASE_URL's, so drizzle-kit's push meets no
 // other project's tables (it would ask whether one was renamed); the push itself proves MySQL takes
 // the schema, a defaulted text column included. CI's adapter-express-boot workflow runs it as a
-// step of its own on every leg: `tsx scripts/length-smoke.ts <dialect>`.
+// step of its own on every leg: `pnpm --filter @camis/adapter-express smoke:lengths <dialect>`.
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -139,7 +139,7 @@ const ownDatabase = (url: string): string => {
   return parsed.toString();
 };
 
-export const lengthSmoke = async (dialect: Dialect, port = 3213): Promise<void> => {
+const lengthSmoke = async (dialect: Dialect, port = 3213): Promise<void> => {
   const dir = await mkdtemp(join(tmpdir(), "camis-express-lengths-"));
   const env = {
     ...process.env,
