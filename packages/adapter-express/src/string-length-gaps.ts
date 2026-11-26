@@ -10,7 +10,7 @@ import type { Dialect } from "./dialect";
 
 const message = ({ location, maxLength, column }: LocatedString): string =>
   column.kind === "string"
-    ? `"${location.field}" is unique and bounded at ${maxLength} characters, more than a unique index holds (${UNIQUE_INDEX_LIMIT}); the Drizzle schema makes it a varchar(${column.length}), and the API refuses a value longer than ${column.length} characters`
+    ? `"${location.field}" is declared unique and bounded at ${maxLength} characters, more than a unique index holds (${UNIQUE_INDEX_LIMIT}); the Drizzle schema sizes it to what a unique index holds, a varchar(${column.length}), and the API refuses a value longer than ${column.length} characters`
     : `"${location.field}" is bounded at ${maxLength} characters, more than MySQL's largest text type (longtext, ${TIER_BYTES.large} bytes at up to ${WORST_CASE_BYTES_PER_CHARACTER} bytes a character) holds; the Drizzle schema makes it a longtext, which MySQL refuses a larger value in rather than truncating`;
 
 /**

@@ -18,7 +18,7 @@ import type {
 
 const beyondColumn = ({ location, maxLength, column }: LocatedString): string =>
   column.kind === "string"
-    ? `"${location.field}" is unique and bounded at ${maxLength} characters, more than a unique index holds (${UNIQUE_INDEX_LIMIT}); the migration makes it a VARCHAR(${column.length}) on every database, and every write path refuses a value longer than ${column.length} characters`
+    ? `"${location.field}" is declared unique and bounded at ${maxLength} characters, more than a unique index holds (${UNIQUE_INDEX_LIMIT}); the migration sizes it to what a unique index holds, a VARCHAR(${column.length}) on every database, whether or not the field keeps its index, and a value longer than ${column.length} characters is refused as invalid`
     : `"${location.field}" is bounded at ${maxLength} characters, more than MySQL's largest text column (LONGTEXT, ${TIER_BYTES.large} bytes at up to ${WORST_CASE_BYTES_PER_CHARACTER} bytes a character) holds; the migration makes it a LONGTEXT, which MySQL refuses a larger value in rather than truncating`;
 
 /** Every string bounded past what Strapi's own string column (a varchar(255)) holds, located. */
