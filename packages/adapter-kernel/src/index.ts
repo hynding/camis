@@ -48,3 +48,12 @@ export {
   textsBeyondTiers,
 } from "./text-size";
 export type { LocatedText, TextTier } from "./text-size";
+export {
+  INDEX_KEY_BYTES,
+  INDEXED_STRING_LENGTH,
+  STRING_LENGTH,
+  isStringLike,
+  stringColumn,
+  stringsBeyondColumns,
+} from "./string-size";
+export type { LocatedString, StringColumn } from "./string-size";

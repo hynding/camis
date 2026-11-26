@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Field, IrDocument } from "@camis/ir-schema";
+import type { IrDocument } from "@camis/ir-schema";
 import {
   INDEXED_STRING_LENGTH,
   STRING_LENGTH,
@@ -7,13 +7,15 @@ import {
   stringsBeyondColumns,
 } from "./string-size";
 
-const string = (maxLength?: number, unique?: boolean, type = "string"): Field =>
+type StringLike = Parameters<typeof stringColumn>[0];
+
+const string = (maxLength?: number, unique?: boolean, type = "string"): StringLike =>
   ({
     type,
     name: "title",
     ...(maxLength === undefined ? {} : { maxLength }),
     ...(unique === undefined ? {} : { unique }),
-  }) as Field;
+  }) as StringLike;
 
 describe("stringColumn (issue #126)", () => {
   it("is a string column of the target's own length without a bound", () => {
