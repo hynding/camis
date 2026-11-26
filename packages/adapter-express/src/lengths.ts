@@ -1,4 +1,9 @@
-import { enforcedLength, withMarker, type GeneratedFile } from "@camis/adapter-kernel";
+import {
+  enforcedLength,
+  isStringLike,
+  withMarker,
+  type GeneratedFile,
+} from "@camis/adapter-kernel";
 import type { ContentType, Field } from "@camis/ir-schema";
 import type { Dialect } from "./dialect";
 import { isSupportedField } from "./fields";
@@ -18,7 +23,9 @@ export const maxLengths = (
 ): [string, number][] =>
   ct.fields.flatMap((field: Field): [string, number][] => {
     const bounded = field as Field & { maxLength?: number; unique?: boolean };
-    const maxLength = dialect === "sqlite" ? bounded.maxLength : enforcedLength(bounded);
+    // Only a string, an email or a uid is kept in a string column, which an index caps.
+    const maxLength =
+      dialect !== "sqlite" && isStringLike(bounded) ? enforcedLength(bounded) : bounded.maxLength;
     const column = snakeColumn(field.name);
     return TEXT_LIKE.has(field.type) &&
       isSupportedField(field.type) &&
