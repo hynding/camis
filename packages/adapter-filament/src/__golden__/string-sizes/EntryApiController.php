@@ -6,11 +6,14 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Entry;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class EntryApiController extends Controller
 {
+    use AuthorizesRequests;
+
     private const FIELDS = ['title', 'code', 'headline', 'abstract', 'contact', 'slug', 'handle', 'unbounded', 'label', 'tagline', 'summary'];
 
     /** Each bounded field's rule: Laravel's max counts a string's characters, as mb_strlen does. */
@@ -18,16 +21,19 @@ class EntryApiController extends Controller
 
     public function index(): JsonResponse
     {
+        $this->authorize('viewAny', Entry::class);
         return response()->json(Entry::query()->paginate(50));
     }
 
     public function show(Entry $entry): JsonResponse
     {
+        $this->authorize('view', $entry);
         return response()->json($entry);
     }
 
     public function store(Request $request): JsonResponse
     {
+        $this->authorize('create', Entry::class);
         $request->validate(self::RULES);
         $payload = $request->only(self::FIELDS);
 
@@ -36,6 +42,7 @@ class EntryApiController extends Controller
 
     public function update(Request $request, Entry $entry): JsonResponse
     {
+        $this->authorize('update', $entry);
         $request->validate(self::RULES);
         $entry->update($request->only(self::FIELDS));
 
@@ -44,6 +51,7 @@ class EntryApiController extends Controller
 
     public function destroy(Entry $entry): JsonResponse
     {
+        $this->authorize('delete', $entry);
         $entry->delete();
 
         return response()->json(null, 204);

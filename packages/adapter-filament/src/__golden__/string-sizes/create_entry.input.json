@@ -1,0 +1,63 @@
+{
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "data": {
+      "description": "Document field values to write.",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "headline": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "abstract": {
+          "type": "string",
+          "maxLength": 20000
+        },
+        "contact": {
+          "type": "string",
+          "format": "email",
+          "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+        },
+        "slug": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "handle": {
+          "type": "string",
+          "maxLength": 673
+        },
+        "unbounded": {
+          "type": "string",
+          "maxLength": 1073741824
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "tagline": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "summary": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "locale": {
+      "description": "This content type is not localized. Locale is ignored.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "data"
+  ]
+}

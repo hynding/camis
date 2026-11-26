@@ -33,5 +33,11 @@ export const stringSizesBundle: IrBundle = {
     ],
     components: [],
   },
-  roles: [],
+  // A role makes the project secured, which the Strapi API style serves its MCP tools on.
+  roles: [
+    {
+      name: "authenticated",
+      grants: [{ contentType: "Entry", actions: ["create", "read", "update", "delete"] }],
+    },
+  ],
 };

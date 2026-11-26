@@ -148,3 +148,54 @@ describe("OpenAPI document", () => {
     expect(paths).toContain("/i18n/locales");
   });
 });
+
+// A request body's maxLength is what a column holds, as StrapiValidator checks it (issue #126).
+// Strapi states a string's length bounds only where it has both.
+describe("the OpenAPI document's string lengths", () => {
+  it("are the length a capped column holds", () => {
+    const out = filamentAdapter.generate(
+      {
+        document: {
+          version: 1,
+          contentTypes: [
+            {
+              name: "Entry",
+              kind: "collection",
+              names: { plural: "Entries" },
+              fields: [
+                { type: "string", name: "code", minLength: 1, maxLength: 40 },
+                { type: "string", name: "handle", unique: true, minLength: 1, maxLength: 1000 },
+              ],
+            },
+          ],
+          components: [],
+        },
+        roles: [
+          {
+            name: "authenticated",
+            grants: [{ contentType: "Entry", actions: ["create", "read", "update"] }],
+          },
+        ],
+      },
+      { projectName: "docs", apiStyle: "strapi", documentation: true },
+    );
+    const document = JSON.parse(
+      out.files.find((f) => f.path === DOCUMENT_PATH)!.content,
+    ) as OpenApiDocument;
+    const body = (
+      document.paths["/entries"]!.post as {
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: {
+                properties: { data: { properties: Record<string, Record<string, unknown>> } };
+              };
+            };
+          };
+        };
+      }
+    ).requestBody.content["application/json"].schema.properties.data.properties;
+    expect(body.code).toMatchObject({ minLength: 1, maxLength: 40 });
+    expect(body.handle).toMatchObject({ minLength: 1, maxLength: 673 });
+  });
+});

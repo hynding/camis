@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
+import type { IrDocument } from "@camis/ir-schema";
+import { stringSizesBundle } from "../../__fixtures__/string-sizes";
 import { strapiApiBundle } from "../__fixtures__/strapi-api";
 import { contentManagerMcpTools, LOCALE_PLACEHOLDER, slugifyUidForMcpToolName } from "./mcp-tools";
 
@@ -70,5 +72,66 @@ describe("the content-manager's MCP tools", () => {
     expect(byName.get("discard_post_draft")!.policies).toEqual([
       { action: "plugin::content-manager.explorer.update", subject: "api::post.post" },
     ]);
+  });
+});
+
+// The server checks a tool call's arguments against its input schema, so a string's maxLength there
+// is what a column holds: the length StrapiValidator checks (issue #126). A value a column cannot
+// hold is refused as invalid arguments rather than failing in the database. Strapi's own schema
+// states no maxLength for an email or a uid; one is stated only where the column is capped.
+describe("the content-manager's MCP tools check the length a column holds", () => {
+  const doc = {
+    version: 1,
+    contentTypes: [
+      {
+        name: "Entry",
+        kind: "collection",
+        names: { plural: "Entries" },
+        fields: [
+          { type: "string", name: "code", maxLength: 40 },
+          { type: "string", name: "headline", maxLength: 1000 },
+          { type: "string", name: "handle", unique: true, maxLength: 1000 },
+          { type: "uid", name: "key", unique: true, maxLength: 1000 },
+          { type: "email", name: "contact", maxLength: 320 },
+          { type: "email", name: "mail", unique: true, maxLength: 1000 },
+          { type: "component", name: "byline", component: "Byline", repeatable: false },
+        ],
+      },
+    ],
+    components: [
+      {
+        name: "Byline",
+        fields: [{ type: "string", name: "credit", unique: true, maxLength: 900 }],
+      },
+    ],
+  } as unknown as IrDocument;
+  const data = (name: string) => {
+    const tool = contentManagerMcpTools(doc).find((t) => t.name === name)!;
+    return (
+      tool.inputSchema as {
+        properties: { data: { properties: Record<string, Record<string, unknown>> } };
+      }
+    ).properties.data.properties;
+  };
+
+  it.each(["create_entry", "update_entry"])("in %s", (name) => {
+    const fields = data(name);
+    expect(fields.code!.maxLength).toBe(40);
+    expect(fields.headline!.maxLength).toBe(1000);
+    expect(fields.handle!.maxLength).toBe(673);
+    expect(fields.key!.maxLength).toBe(673);
+    expect(fields.contact!.maxLength).toBeUndefined();
+    expect(fields.mail!.maxLength).toBe(673);
+    const byline = fields.byline as { properties: Record<string, Record<string, unknown>> };
+    expect(byline.properties.credit!.maxLength).toBe(673);
+  });
+
+  it("as the string-sizes fixture's create_entry states it", async () => {
+    const tool = contentManagerMcpTools(stringSizesBundle.document).find(
+      (t) => t.name === "create_entry",
+    )!;
+    await expect(`${JSON.stringify(tool.inputSchema, null, 2)}\n`).toMatchFileSnapshot(
+      "../../__golden__/string-sizes/create_entry.input.json",
+    );
   });
 });
