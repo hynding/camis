@@ -191,22 +191,33 @@ A `string`, `email` or `uid` without a `maxLength` keeps a 255-character string 
 255 characters is a string column of that length; a longer one is the text column that holds it, at
 four bytes a character, as a `text` field's is (`text`, `mediumText`, `longText`), because a VARCHAR's
 whole length counts toward the 65,535 bytes a MySQL row may take. A unique string stays a string
-column, which an index takes whole, capped at 768 characters (MySQL's 3,072-byte index key): a
-longer unique bound is a `stringLength` downgrade gap, as is a bound past LONGTEXT. `filament`
-migrates the same column on every database; `express` does on MySQL, makes a longer bound a `text`
-on PostgreSQL and keeps `text` on SQLite; `strapi` writes the column as the attribute's column
-settings (`"column": { "type": "text", "args": ["mediumtext"] }`), which Strapi lays over the
-varchar(255) it makes for every string. On Filament's Strapi storage layout the column is the one
-Strapi made: a bound past 255 is a `stringLength` gap there.
+column, which an index takes whole, capped at 673 characters (a PostgreSQL btree entry holds 2,704
+bytes, 12 of them its headers; MySQL's index key 3,072), so a unique bound from 256 to 673 is a
+VARCHAR wider than an unbounded string's. A longer unique bound is a `stringLength` downgrade gap,
+as is a bound past LONGTEXT. `filament` migrates the same column on every database; `express` does
+on MySQL and PostgreSQL (where a longer bound that is not unique is a `text`) and keeps `text` on
+SQLite; `strapi` writes the column as the attribute's column settings
+(`"column": { "type": "text", "args": ["longtext"] }` for every longer bound that is not unique,
+since Strapi's MySQL schema inspector reads back only a longtext, so a text or mediumtext column
+would be altered again on every start), which Strapi lays over the varchar(255) it makes for every
+string. On Filament's Strapi storage layout the column is the one Strapi made: a bound past 255 is a
+`stringLength` gap there, and the Strapi API style checks such a string at 255 characters.
 
-Every write path checks a `maxLength` in characters (Unicode code points, as PHP's `mb_strlen`
-counts them): the Laravel API style answers 422 (Laravel's `max` rule), the Strapi API style 400 as
-Strapi does, the Filament admin form shows the field's error, and the Express API answers 400
-`{ "error": "<field> must be at most <n> characters" }`. Strapi itself counts UTF-16 code units, so
-it refuses a value of emoji at half its bound. A database made before this keeps its string columns
-until a migration changes them, for instance
+The Laravel API style, the Strapi API style, the Filament admin form and the Express API check a
+`maxLength` in characters (Unicode code points, as PHP's `mb_strlen` counts them), at the length the
+column holds where an index caps it below the bound, so a value the column cannot hold is refused as
+invalid rather than failing in the database: the Laravel API style answers 422 (Laravel's `max`
+rule), the Strapi API style 400 as Strapi does, the Filament admin form shows the field's error, and
+the Express API answers 400 `{ "error": "<field> must be at most <n> characters" }`, on a secured
+API after the record condition and the field rules, on what the caller may write. The Express API
+serves writes on SQLite only today (its routers call better-sqlite3's synchronous API), so its check
+is exercised there; on MySQL and PostgreSQL camis's smoke verifies the column sizes through the
+driver. Strapi itself checks the bound, not a capped column's length, and counts UTF-16 code units,
+so it refuses a value of emoji at half its bound. A default on a column that is a text (a string
+bounded past 255, a `text`, a `richText`) is applied by the Filament model and, on MySQL, by
+Drizzle, not by the database: MySQL takes no default on a TEXT column (a `textDefault` gap). A
+database made before this keeps its string columns until a migration changes them, for instance
 `Schema::table('entries', fn (Blueprint $table) => $table->text('headline')->nullable()->change());`.
-PostgreSQL refuses a unique value whose index entry passes about 2,700 bytes.
 
 ## camis.config.json
 
