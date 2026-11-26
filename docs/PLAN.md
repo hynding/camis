@@ -3967,8 +3967,11 @@ Express (goldens `lengths/lengths.ts.txt` and `lengths/entries.routes.ts.txt`, t
 (the string-sizes fixture on the Strapi API style: values of four-byte characters at each bound, and
 the API and admin form refusing one more) and the `boot` job round trips a 1,000-character subtitle
 through the Laravel API style and refuses 1,001, on SQLite, MySQL and PostgreSQL; the Express boot
-smoke runs `length-smoke.ts` on all three. SQLite and PostgreSQL ran locally for the Filament tests;
-MySQL runs only in CI.
+smoke runs `length-smoke.ts` on all three: on SQLite over HTTP (values at each bound kept, one
+character more refused); on MySQL and PostgreSQL, whose drivers the generated routers' synchronous
+better-sqlite3 calls do not serve, the pushed columns keep the values through the project's own
+driver, in a database of its own so drizzle-kit's push meets no other project's tables. SQLite and PostgreSQL ran locally for the
+Filament tests and the Express length smoke; MySQL runs only in CI.
 
 ---
 

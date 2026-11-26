@@ -209,8 +209,7 @@ try {
   // Polymorphic links: a third project, on the sqlite leg like the AI one.
   if (dialect === "sqlite") await morphSmoke();
 
-  // Bounded strings: a fourth project, on every leg, last, since on MySQL and PostgreSQL its schema
-  // push replaces the secured project's tables (issue #126).
+  // Bounded strings: a fourth project, on every leg, in a database of its own (issue #126).
   await lengthSmoke(dialect);
 
   console.log(`EXPRESS SECURED BOOT SMOKE PASS (${dialect})`);
