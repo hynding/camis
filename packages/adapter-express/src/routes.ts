@@ -60,22 +60,27 @@ export const emitRoutes = (
         : ["readLinks", "type Allowed"];
   const linksImport =
     links === "none" ? "" : `\nimport { ${linkNames.join(", ")} } from "../morphs";`;
-  // A body with a value longer than its field's bound is refused whole, before anything is written.
+  // A body with a value longer than its field's bound is refused whole, before anything is written:
+  // on a secured API, what the caller may write (see `permittedLengthCheck`).
   const bounds = maxLengths(ct, options.aiColumns, options.dialect);
   const lengthsImport = bounds.length === 0 ? "" : `\nimport { tooLong } from "../lengths";`;
   const boundsConstant =
     bounds.length === 0
       ? ""
       : `\n/** Each bounded field's maxLength, in characters. */\nconst MAX_LENGTHS: Record<string, number> = { ${bounds.map(([c, n]) => `${c}: ${n}`).join(", ")} };\n`;
-  const lengthCheck =
+  const checkLengths = (body: string) =>
     bounds.length === 0
       ? ""
       : `
-  const longer = tooLong(req.body, MAX_LENGTHS);
+  const longer = tooLong(${body}, MAX_LENGTHS);
   if (longer !== null) {
     res.status(400).json({ error: longer });
     return;
   }`;
+  const lengthCheck = checkLengths("req.body");
+  // After the record condition refuses a row the role could not have written (403) and the field
+  // rules strip what it may not write, so a stripped field past its bound is no 400.
+  const permittedLengthCheck = checkLengths("data");
   // A body naming an entry the caller may not read (or that is not there) is refused whole.
   const refusal = (body: string, allowed: string) => `
   const refused = checkLinks("${typeName}", ${body}, ${allowed});
@@ -239,16 +244,16 @@ ${t}Router.post("/", ${asyncKw}(req, res) => {
   if (!authorizeAction(roleOf(req), "${typeName}", "create")) {
     res.status(403).json({ error: "forbidden" });
     return;
-  }${lengthCheck}
+  }
   const proposed = pick(req.body, [${writable}]);${
     own
       ? `
   const permitted = assignOwners(req, "${typeName}", stripWrites(req, "${typeName}", proposed, proposed));${refusal("permitted", "allowed(req)")}
-  ${dataDecl} data = linkColumns("${typeName}", permitted);${createRefusal}${createPop}
+  ${dataDecl} data = linkColumns("${typeName}", permitted);${createRefusal}${permittedLengthCheck}${createPop}
   const row = db.insert(${t}).values(data).returning().get();
   writeLinks("${typeName}", row.id, permitted);`
       : `
-  ${dataDecl} data = assignOwners(req, "${typeName}", stripWrites(req, "${typeName}", proposed, proposed));${createRefusal}${createPop}
+  ${dataDecl} data = assignOwners(req, "${typeName}", stripWrites(req, "${typeName}", proposed, proposed));${createRefusal}${permittedLengthCheck}${createPop}
   const row = db.insert(${t}).values(data).returning().get();`
   }
   res.status(201).json(${shown("row")});
@@ -258,7 +263,7 @@ ${t}Router.patch("/:id", ${asyncKw}(req, res) => {
   if (!authorizeAction(roleOf(req), "${typeName}", "update")) {
     res.status(403).json({ error: "forbidden" });
     return;
-  }${lengthCheck}
+  }
   const existing = db.select().from(${t}).where(eq(${t}.id, Number(req.params.id))).get();
   if (!existing || !recordAllowed(req, "${typeName}", "update", existing)) {
     res.status(404).json({ error: "not found" });
@@ -268,14 +273,14 @@ ${t}Router.patch("/:id", ${asyncKw}(req, res) => {
     own
       ? `
   const permitted = stripWrites(req, "${typeName}", { ...existing, ...incoming }, incoming);${refusal("permitted", "allowed(req)")}
-  ${dataDecl} data = linkColumns("${typeName}", permitted);${updateRefusal}${updatePop}
+  ${dataDecl} data = linkColumns("${typeName}", permitted);${updateRefusal}${permittedLengthCheck}${updatePop}
   const row =
     Object.keys(data).length > 0
       ? db.update(${t}).set(data).where(eq(${t}.id, Number(req.params.id))).returning().get()
       : existing;
   writeLinks("${typeName}", row.id, permitted);`
       : `
-  ${dataDecl} data = stripWrites(req, "${typeName}", { ...existing, ...incoming }, incoming);${updateRefusal}${updatePop}
+  ${dataDecl} data = stripWrites(req, "${typeName}", { ...existing, ...incoming }, incoming);${updateRefusal}${permittedLengthCheck}${updatePop}
   const row = db.update(${t}).set(data).where(eq(${t}.id, Number(req.params.id))).returning().get();`
   }
   res.json(${shown("row")});
