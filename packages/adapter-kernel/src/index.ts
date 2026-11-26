@@ -56,4 +56,4 @@ export {
   stringColumn,
   stringsBeyondColumns,
 } from "./string-size";
-export type { LocatedString, StringColumn } from "./string-size";
+export type { LocatedString, StringBound, StringColumn } from "./string-size";

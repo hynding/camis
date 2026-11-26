@@ -1,4 +1,5 @@
 import { filamentTextLengthGaps } from "./text-columns";
+import { filamentStringLengthGaps } from "./string-columns";
 import {
   buildManifest,
   columnField,
@@ -139,6 +140,7 @@ export const filamentAdapter: GenerateAdapter = {
       ...(apiStyle === "strapi" ? [] : privateFieldGaps(doc, "the Laravel API style")),
       ...filamentDecimalGaps(doc, apiStyle, storage),
       ...filamentTextLengthGaps(doc, storage),
+      ...filamentStringLengthGaps(doc, storage),
     ];
     if (storage !== requestedStorage) {
       gaps.push({

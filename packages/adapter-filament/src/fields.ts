@@ -1,5 +1,5 @@
 import { decimalDigits, type DecimalDigits } from "@camis/ir-core";
-import { textTier } from "@camis/adapter-kernel";
+import { stringColumn, textTier, type StringColumn } from "@camis/adapter-kernel";
 import type { Field } from "@camis/ir-schema";
 import { beyondPhpFloat } from "./decimals";
 import { snakeColumn } from "./names";
@@ -90,6 +90,12 @@ const digitsOf = (field: Field): { decimalDigits?: DecimalDigits } => {
 /** Laravel's text column for each tier of text (MySQL's TEXT, MEDIUMTEXT and LONGTEXT). */
 const TEXT_COLUMN_BY_TIER = { small: "text", medium: "mediumText", large: "longText" } as const;
 
+/** A string's column: its own string column, or the text column of the tier holding its bound. */
+const stringMigration = (column: StringColumn, c: string): string =>
+  column.kind === "text"
+    ? `$table->${TEXT_COLUMN_BY_TIER[column.tier]}('${c}')`
+    : `$table->string('${c}'${column.length === undefined ? "" : `, ${column.length}`})`;
+
 interface Base {
   migration: string;
   formComponent: string;
@@ -101,13 +107,12 @@ interface Base {
 
 const base = (field: Field, c: string): Base => {
   const f = field as Field & Record<string, unknown>;
-  const maxLen = typeof f.maxLength === "number" ? `, ${f.maxLength}` : "";
   switch (field.type) {
     case "string":
     case "uid":
     case "email":
       return {
-        migration: `$table->string('${c}'${maxLen})`,
+        migration: stringMigration(stringColumn(field), c),
         formComponent: `TextInput::make('${c}')${field.type === "email" ? "->email()" : ""}`,
         tableColumn: `TextColumn::make('${c}')`,
         formImport: TEXT_INPUT,

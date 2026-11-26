@@ -27,10 +27,14 @@ export const INDEXED_STRING_LENGTH = INDEX_KEY_BYTES / WORST_CASE_BYTES_PER_CHAR
  */
 export type StringColumn = { kind: "string"; length?: number } | { kind: "text"; tier: TextTier };
 
-type StringLike = AnyField & { type: "string" | "email" | "uid" };
+/** What sizes a string's column: its bound in characters, and whether an index keeps it unique. */
+export interface StringBound {
+  maxLength?: number | undefined;
+  unique?: boolean | undefined;
+}
 
-/** A field kept in a string column: a string, an email or a uid. */
-export const isStringLike = (field: AnyField): field is StringLike =>
+/** A field kept in a string column (a string, an email or a uid), with its bound. */
+export const isStringLike = (field: AnyField): field is AnyField & StringBound =>
   field.type === "string" || field.type === "email" || field.type === "uid";
 
 /**
@@ -38,7 +42,7 @@ export const isStringLike = (field: AnyField): field is StringLike =>
  * except for a unique string, which a text column cannot index whole: its column is a string column
  * no longer than an index key holds (`stringsBeyondColumns` lists a bound past that).
  */
-export const stringColumn = (field: StringLike): StringColumn => {
+export const stringColumn = (field: StringBound): StringColumn => {
   const { maxLength } = field;
   if (maxLength === undefined) return { kind: "string" };
   if (maxLength <= STRING_LENGTH) return { kind: "string", length: maxLength };
