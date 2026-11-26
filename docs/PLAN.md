@@ -3968,11 +3968,11 @@ longtext.
   `maxlength` a browser counts in UTF-16 code units and would stop a bound's worth of emoji at half.
   The Strapi API style's StrapiValidator already counted `mb_strlen`; REST, GraphQL (dispatched to
   the REST controllers), single types and a new locale's version all go through it. Its MCP tools'
-  input schemas state the same `checkedLength` as a string's `maxLength` (and as an email's or a
-  uid's where the column is capped, since Strapi states none for them), and the MCP server checks a
-  tool call's arguments against them, so `create_*`, `update_*` and a single type's write refuse a
-  value past a capped column with "Input validation error: Invalid arguments for tool …"; the OpenAPI
-  document states it too. Express generates
+  input schemas state the same `checkedLength` as the `maxLength` of every bounded string, email
+  and uid (Strapi states none for an email or a uid; camis does, so MCP and REST agree), and the MCP
+  server checks a tool call's arguments against them, so `create_*`, `update_*` and a single type's
+  write refuse a value past the length REST checks with "Input validation error: Invalid arguments
+  for tool …"; the OpenAPI document states it too. Express generates
   `src/lengths.ts` (`characterCount`: `Array.from(value).length`, code points) and each router with a
   bounded field refuses a body whose value is longer, answering 400
   `{ error: "<field> must be at most <n> characters" }`: on a secured API it checks what the caller
@@ -3986,8 +3986,9 @@ longtext.
   Strapi's validator, which camis does not replace, and is not reported as a gap.
 
 Not covered: a dynamic zone item in an MCP tool call, which Strapi's input schema leaves
-unchecked (an item past a capped column fails in the database and the call answers an execution
-error, nothing written); a Strapi archive's import (data transfer), which writes rows as Strapi's
+unchecked (on PostgreSQL and on MySQL in strict mode an item past a capped column fails in the
+database and the call answers an execution error, nothing written; SQLite ignores a VARCHAR's
+length and stores the item as sent); a Strapi archive's import (data transfer), which writes rows as Strapi's
 does, without validation; an unbounded string is still checked nowhere but StrapiValidator (which bounds a
 string at 255) while its column is a varchar(255); `minLength` is still
 enforced only by StrapiValidator; a unique index over more than one column (none is generated for a
