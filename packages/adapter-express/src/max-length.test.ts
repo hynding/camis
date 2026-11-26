@@ -63,7 +63,7 @@ describe("Express target: maxLength enforced in the API (issue #126)", () => {
       `  if (!recordAllowed(req, "Entry", "create", data)) {\n${forbidden}${checkData}\n  const row = db.insert(`,
     );
     expect(ts).toContain(
-      `  if (!recordAllowed(req, "Entry", "update", { ...existing, ...data })) {\n${forbidden}${checkData}\n  const row = db.update(`,
+      `  if (!recordAllowed(req, "Entry", "update", { ...existing, ...data })) {\n${forbidden}${checkData}\n  const row =\n`,
     );
     expect(ts).not.toContain(CHECK);
   });

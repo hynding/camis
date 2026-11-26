@@ -281,7 +281,10 @@ ${t}Router.patch("/:id", ${asyncKw}(req, res) => {
   writeLinks("${typeName}", row.id, permitted);`
       : `
   ${dataDecl} data = stripWrites(req, "${typeName}", { ...existing, ...incoming }, incoming);${updateRefusal}${permittedLengthCheck}${updatePop}
-  const row = db.update(${t}).set(data).where(eq(${t}.id, Number(req.params.id))).returning().get();`
+  const row =
+    Object.keys(data).length > 0
+      ? db.update(${t}).set(data).where(eq(${t}.id, Number(req.params.id))).returning().get()
+      : existing;`
   }
   res.json(${shown("row")});
 });
