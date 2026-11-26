@@ -52,14 +52,20 @@ describe("Express target: maxLength enforced in the API (issue #126)", () => {
     );
   });
 
-  it("checks each bound after authorizing, on a secured API", () => {
+  // On a secured API the check runs on what the caller may write: after the record condition
+  // refuses a row the role could not have written (403), and after the field rules strip what it
+  // may not write, so a stripped field past its bound is no 400.
+  it("checks each bound on the permitted body, after the record condition, on a secured API", () => {
     const ts = emitRoutes(entry, [], { secured: true });
+    const checkData = CHECK.replace("tooLong(req.body,", "tooLong(data,");
+    const forbidden = `    res.status(403).json({ error: "forbidden" });\n    return;\n  }\n`;
     expect(ts).toContain(
-      `authorizeAction(roleOf(req), "Entry", "create")) {\n    res.status(403).json({ error: "forbidden" });\n    return;\n  }\n${CHECK}`,
+      `  if (!recordAllowed(req, "Entry", "create", data)) {\n${forbidden}${checkData}\n  const row = db.insert(`,
     );
     expect(ts).toContain(
-      `authorizeAction(roleOf(req), "Entry", "update")) {\n    res.status(403).json({ error: "forbidden" });\n    return;\n  }\n${CHECK}`,
+      `  if (!recordAllowed(req, "Entry", "update", { ...existing, ...data })) {\n${forbidden}${checkData}\n  const row = db.update(`,
     );
+    expect(ts).not.toContain(CHECK);
   });
 
   // A value the column cannot hold is refused as invalid (400) rather than failing in the database.
