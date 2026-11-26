@@ -22,9 +22,6 @@ const put = (attr: Attribute, key: string, value: unknown): void => {
 
 const PLUGIN_USER_UID = "plugin::users-permissions.user";
 
-/** Knex's text type for each tier, which Strapi's database layer passes through on MySQL. */
-const KNEX_TEXT_BY_TIER = { small: "text", medium: "mediumtext", large: "longtext" } as const;
-
 /**
  * Strapi's database layer makes a string a varchar(255) whatever its bound; a longer bound gets
  * column settings for the column `stringColumn` chooses, which Strapi lays over it.
@@ -33,9 +30,12 @@ const stringColumnSettings = (field: Field): Attribute | undefined => {
   if (!isStringLike(field) || field.maxLength === undefined || field.maxLength <= STRING_LENGTH)
     return undefined;
   const column = stringColumn(field);
+  // A longtext whatever the tier: Strapi's MySQL schema inspector reads back only a longtext as a
+  // text column, so a text or mediumtext one would differ from its settings and be altered again
+  // on every start.
   return column.kind === "string"
     ? { type: "string", args: [column.length] }
-    : { type: "text", args: [KNEX_TEXT_BY_TIER[column.tier]] };
+    : { type: "text", args: ["longtext"] };
 };
 /** The custom field Strapi's color-picker plugin registers; it stores a string. */
 export const COLOR_PICKER_UID = "plugin::color-picker.color";

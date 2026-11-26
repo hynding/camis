@@ -76,9 +76,10 @@ const varchar = (c: string, length: number): { expr: string; import: string } =>
 });
 
 /**
- * A string's column. SQLite's text takes any length. On MySQL a string column's whole length counts
- * toward a row's bytes and a text column cannot be indexed whole, so `stringColumn` decides; on
- * PostgreSQL a bound past `STRING_LENGTH` is text, which takes any length and a unique index.
+ * A string's column. SQLite's text takes any length, indexed or not. Elsewhere `stringColumn`
+ * decides: on MySQL a string column's whole length counts toward a row's bytes and a text column
+ * cannot be indexed whole; on PostgreSQL a unique string is capped at what a btree entry holds, and
+ * a longer bound otherwise is text, which takes any length.
  */
 const stringBase = (
   dialect: Dialect,
@@ -87,11 +88,9 @@ const stringBase = (
 ): { expr: string; import: string } => {
   const f = field as Field & { maxLength?: number; unique?: boolean };
   if (dialect === "sqlite") return { expr: `text('${c}')`, import: "text" };
-  if (dialect === "pgsql")
-    return f.maxLength !== undefined && f.maxLength > STRING_LENGTH
-      ? { expr: `text('${c}')`, import: "text" }
-      : varchar(c, f.maxLength ?? STRING_LENGTH);
   const column = stringColumn(f);
+  if (dialect === "pgsql" && column.kind === "text")
+    return { expr: `text('${c}')`, import: "text" };
   if (column.kind === "string") return varchar(c, column.length ?? STRING_LENGTH);
   const type = MYSQL_TEXT_BY_TIER[column.tier];
   return { expr: `${type}('${c}')`, import: type };

@@ -21,8 +21,20 @@ export const STRING_LENGTH = 255;
  */
 export const INDEX_KEY_BYTES = 2704;
 
-/** The longest unique string column an index entry holds at the worst case. */
-export const INDEXED_STRING_LENGTH = INDEX_KEY_BYTES / WORST_CASE_BYTES_PER_CHARACTER;
+/** The bytes of a PostgreSQL btree entry its headers take: the index tuple's 8, the value's 4. */
+export const INDEX_ENTRY_HEADER_BYTES = 12;
+
+/**
+ * The longest unique string column an index entry holds at the worst case: PostgreSQL 16 takes 673
+ * distinct four-byte characters and refuses 674 ("index row size 2712 exceeds btree version 4
+ * maximum 2704").
+ */
+export const INDEXED_STRING_LENGTH = Math.floor(
+  (INDEX_KEY_BYTES - INDEX_ENTRY_HEADER_BYTES) / WORST_CASE_BYTES_PER_CHARACTER,
+);
+
+/** Why a unique string's column is capped, for a target's gap message. */
+export const UNIQUE_INDEX_LIMIT = `a PostgreSQL btree entry holds ${INDEX_KEY_BYTES} bytes with ${INDEX_ENTRY_HEADER_BYTES} of headers, ${INDEXED_STRING_LENGTH} characters at up to ${WORST_CASE_BYTES_PER_CHARACTER} bytes a character`;
 
 /**
  * The column a string-like field gets: its own string column, of the target's default length

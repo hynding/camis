@@ -1,5 +1,11 @@
 import { decimalDigits, type DecimalDigits } from "@camis/ir-core";
-import { stringColumn, textTier, type StringColumn } from "@camis/adapter-kernel";
+import {
+  enforcedLength,
+  isStringLike,
+  stringColumn,
+  textTier,
+  type StringColumn,
+} from "@camis/adapter-kernel";
 import type { Field } from "@camis/ir-schema";
 import { beyondPhpFloat } from "./decimals";
 import { snakeColumn } from "./names";
@@ -17,7 +23,10 @@ export interface FieldEmit {
   decimalDigits?: DecimalDigits;
   /** A unique field's rule in `formComponent`, which a form whose rows share values leaves out. */
   uniqueRule?: string;
-  /** A text-like field's bound in characters, which every write path checks. */
+  /**
+   * The length in characters every write path checks a text-like field at: its bound, or its
+   * column's length where an index caps the column below it.
+   */
   maxLength?: number;
 }
 
@@ -276,8 +285,12 @@ const uniqueRule = (field: Field, column: string): string => {
 
 const TEXT_LIKE = new Set<string>(["string", "email", "uid", "text", "richText"]);
 
-/** A text-like field's bound in characters, if it states one. */
+/**
+ * The length a text-like field is checked at, if it states a bound: a value its column cannot hold
+ * is refused as invalid rather than failing in the database.
+ */
 const boundOf = (field: Field): number | undefined => {
+  if (isStringLike(field)) return enforcedLength(field);
   const maxLength = (field as Field & { maxLength?: unknown }).maxLength;
   return TEXT_LIKE.has(field.type) && typeof maxLength === "number" ? maxLength : undefined;
 };

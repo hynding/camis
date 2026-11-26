@@ -49,9 +49,11 @@ export {
 } from "./text-size";
 export type { LocatedText, TextTier } from "./text-size";
 export {
+  INDEX_ENTRY_HEADER_BYTES,
   INDEX_KEY_BYTES,
   INDEXED_STRING_LENGTH,
   STRING_LENGTH,
+  UNIQUE_INDEX_LIMIT,
   enforcedLength,
   holdsTextColumn,
   isStringLike,

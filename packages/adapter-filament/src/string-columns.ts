@@ -1,8 +1,7 @@
 import {
-  INDEX_KEY_BYTES,
-  INDEXED_STRING_LENGTH,
   STRING_LENGTH,
   TIER_BYTES,
+  UNIQUE_INDEX_LIMIT,
   WORST_CASE_BYTES_PER_CHARACTER,
   isStringLike,
   stringsBeyondColumns,
@@ -19,7 +18,7 @@ import type {
 
 const beyondColumn = ({ location, maxLength, column }: LocatedString): string =>
   column.kind === "string"
-    ? `"${location.field}" is unique and bounded at ${maxLength} characters, more than a unique index holds on MySQL (${INDEX_KEY_BYTES} bytes, ${INDEXED_STRING_LENGTH} characters at up to ${WORST_CASE_BYTES_PER_CHARACTER} bytes a character); the migration makes it a VARCHAR(${column.length}) on every database, which MySQL and PostgreSQL refuse a longer value in rather than truncating`
+    ? `"${location.field}" is unique and bounded at ${maxLength} characters, more than a unique index holds (${UNIQUE_INDEX_LIMIT}); the migration makes it a VARCHAR(${column.length}) on every database, and every write path refuses a value longer than ${column.length} characters`
     : `"${location.field}" is bounded at ${maxLength} characters, more than MySQL's largest text column (LONGTEXT, ${TIER_BYTES.large} bytes at up to ${WORST_CASE_BYTES_PER_CHARACTER} bytes a character) holds; the migration makes it a LONGTEXT, which MySQL refuses a larger value in rather than truncating`;
 
 /** Every string bounded past what Strapi's own string column (a varchar(255)) holds, located. */
@@ -52,7 +51,7 @@ export const filamentStringLengthGaps = (
         feature: "stringLength",
         location,
         severity: "downgrade",
-        message: `"${location.field}" is bounded at ${maxLength} characters; on Strapi's storage layout its column is the one Strapi made, a varchar(${STRING_LENGTH}) unless the Strapi project gave it column settings (as camis's Strapi target does), which MySQL and PostgreSQL refuse a longer value in`,
+        message: `"${location.field}" is bounded at ${maxLength} characters; on Strapi's storage layout its column is the one Strapi made, a varchar(${STRING_LENGTH}) unless the Strapi project gave it column settings (as camis's Strapi target does), which no migration of ours can know, so the API refuses a value longer than ${STRING_LENGTH} characters`,
       }))
     : stringsBeyondColumns(doc).map((located) => ({
         feature: "stringLength",

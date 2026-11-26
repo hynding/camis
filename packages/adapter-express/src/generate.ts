@@ -89,7 +89,7 @@ export const expressAdapterFor = (dialect: Dialect): GenerateAdapter => ({
       ...publicApiActionGaps(doc),
       ...expressDecimalGaps(doc),
       ...(dialect === "mysql" ? expressTextLengthGaps(doc) : []),
-      ...(dialect === "mysql" ? expressStringLengthGaps(doc) : []),
+      ...expressStringLengthGaps(doc, dialect),
     ];
     const files: GeneratedFile[] = [
       ...skeletonFiles(doc, options.projectName, dialect, { secured }),
@@ -135,6 +135,7 @@ export const expressAdapterFor = (dialect: Dialect): GenerateAdapter => ({
           secured,
           aiColumns: aiColumnsOf(ct),
           links: links.own.has(ct.name) ? "own" : links.inverses.has(ct.name) ? "inverse" : "none",
+          dialect,
         }),
       });
     });

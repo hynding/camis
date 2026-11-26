@@ -1,4 +1,9 @@
-import type { StorageLayout } from "@camis/adapter-kernel";
+import {
+  STRING_LENGTH,
+  enforcedLength,
+  isStringLike,
+  type StorageLayout,
+} from "@camis/adapter-kernel";
 import { decimalDigits } from "@camis/ir-core";
 import {
   fieldApiName,
@@ -112,11 +117,24 @@ const memberAt =
       : { relation: member.relation, column };
   };
 
+/**
+ * The length a string is checked at: the length its column holds where that is less than its bound,
+ * so a value the column cannot hold is refused as invalid rather than failing in the database. On
+ * the laravel layout the migration capped the column (`stringColumn`); on the strapi layout it is
+ * Strapi's varchar(255), unless the Strapi project gave it column settings no migration can know.
+ */
+const checkedLength = (field: Field, layout: StorageLayout): number | undefined => {
+  if (!isStringLike(field) || field.maxLength === undefined) return undefined;
+  return layout === "laravel" ? enforcedLength(field) : Math.min(field.maxLength, STRING_LENGTH);
+};
+
 const constraints = (field: Field, locate: Locate, ctx: RuleContext, path: string[]): Rule => {
   const f = field as Field & Record<string, unknown>;
   const rule: Rule = { type: STRAPI_TYPE[field.type] ?? field.type };
   for (const key of ["required", "minLength", "maxLength", "min", "max", "default"] as const)
     if (f[key] !== undefined) rule[key] = f[key];
+  const checked = checkedLength(field, ctx.layout);
+  if (checked !== undefined) rule.maxLength = checked;
   if (f.pattern !== undefined) rule.regex = f.pattern;
   if (field.type === "enumeration") rule.enum = field.values;
   if (isUnique(field)) {

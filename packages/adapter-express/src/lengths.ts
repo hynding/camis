@@ -1,17 +1,24 @@
-import { withMarker, type GeneratedFile } from "@camis/adapter-kernel";
+import { enforcedLength, withMarker, type GeneratedFile } from "@camis/adapter-kernel";
 import type { ContentType, Field } from "@camis/ir-schema";
+import type { Dialect } from "./dialect";
 import { isSupportedField } from "./fields";
 import { snakeColumn } from "./names";
 
 const TEXT_LIKE = new Set<string>(["string", "email", "uid", "text", "richText"]);
 
-/** Each API-writable text-like field's bound in characters, by its column (its key on the wire). */
+/**
+ * Each API-writable text-like field's length in characters, by its column (its key on the wire):
+ * its bound, or on MySQL and PostgreSQL its column's length where an index caps the column below
+ * it, so a value the column cannot hold is refused as invalid. SQLite's text holds any bound.
+ */
 export const maxLengths = (
   ct: ContentType,
   aiColumns: readonly string[] = [],
+  dialect: Dialect = "sqlite",
 ): [string, number][] =>
   ct.fields.flatMap((field: Field): [string, number][] => {
-    const maxLength = (field as Field & { maxLength?: unknown }).maxLength;
+    const bounded = field as Field & { maxLength?: number; unique?: boolean };
+    const maxLength = dialect === "sqlite" ? bounded.maxLength : enforcedLength(bounded);
     const column = snakeColumn(field.name);
     return TEXT_LIKE.has(field.type) &&
       isSupportedField(field.type) &&

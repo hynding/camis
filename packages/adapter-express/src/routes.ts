@@ -1,5 +1,6 @@
 import { withMarker } from "@camis/adapter-kernel";
 import type { ContentType } from "@camis/ir-schema";
+import type { Dialect } from "./dialect";
 import { isSupportedField } from "./fields";
 import { maxLengths } from "./lengths";
 import { expressNames, snakeColumn } from "./names";
@@ -9,6 +10,8 @@ export interface RouteOptions {
   aiColumns?: string[];
   /** The type's polymorphic links (`src/morphs.ts`): its own, only inverses read, or none. */
   links?: "own" | "inverse" | "none";
+  /** The project's database, whose columns decide the length each bounded field is checked at. */
+  dialect?: Dialect;
 }
 
 export const emitRoutes = (
@@ -58,7 +61,7 @@ export const emitRoutes = (
   const linksImport =
     links === "none" ? "" : `\nimport { ${linkNames.join(", ")} } from "../morphs";`;
   // A body with a value longer than its field's bound is refused whole, before anything is written.
-  const bounds = maxLengths(ct, options.aiColumns);
+  const bounds = maxLengths(ct, options.aiColumns, options.dialect);
   const lengthsImport = bounds.length === 0 ? "" : `\nimport { tooLong } from "../lengths";`;
   const boundsConstant =
     bounds.length === 0
