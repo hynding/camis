@@ -52,6 +52,8 @@ export {
   INDEX_KEY_BYTES,
   INDEXED_STRING_LENGTH,
   STRING_LENGTH,
+  enforcedLength,
+  holdsTextColumn,
   isStringLike,
   stringColumn,
   stringsBeyondColumns,

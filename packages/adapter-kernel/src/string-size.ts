@@ -9,16 +9,19 @@ import {
 type AnyField = Field | ComponentFieldT;
 
 /**
- * The length every target gives a string column without a bound, and the longest a bounded
- * string's own column gets: a string column's whole length counts toward the bytes a row may take
- * (65,535 on MySQL), so a table holds as many bounded string columns as unbounded ones.
+ * The length every target gives a string column without a bound, and the longest a bounded,
+ * non-unique string's own column gets: a string column's whole declared length counts toward the
+ * bytes a MySQL row may take (65,535), so such a column is never wider than an unbounded one.
  */
 export const STRING_LENGTH = 255;
 
-/** The bytes an index key holds on the narrowest database (MySQL's InnoDB). */
-export const INDEX_KEY_BYTES = 3072;
+/**
+ * The bytes an index entry holds on the narrowest database: a PostgreSQL btree entry, 2,704 bytes
+ * (a third of an 8 KiB page); MySQL's InnoDB index key holds 3,072.
+ */
+export const INDEX_KEY_BYTES = 2704;
 
-/** The longest unique string column an index key holds at the worst case. */
+/** The longest unique string column an index entry holds at the worst case. */
 export const INDEXED_STRING_LENGTH = INDEX_KEY_BYTES / WORST_CASE_BYTES_PER_CHARACTER;
 
 /**
@@ -50,6 +53,25 @@ export const stringColumn = (field: StringBound): StringColumn => {
     return { kind: "string", length: Math.min(maxLength, INDEXED_STRING_LENGTH) };
   return { kind: "text", tier: tierHolding(maxLength) };
 };
+
+/**
+ * The length a write path checks: the field's bound, or its column's length where the column is
+ * capped below it, so a value the column cannot hold is refused as invalid rather than failing in
+ * the database.
+ */
+export const enforcedLength = (field: StringBound): number | undefined => {
+  if (field.maxLength === undefined) return undefined;
+  const column = stringColumn(field);
+  return column.kind === "string" && column.length !== undefined
+    ? Math.min(field.maxLength, column.length)
+    : field.maxLength;
+};
+
+/** Whether a field's column is a text column: a text, a rich text, or a string bounded past one. */
+export const holdsTextColumn = (field: AnyField): boolean =>
+  field.type === "text" ||
+  field.type === "richText" ||
+  (isStringLike(field) && stringColumn(field).kind === "text");
 
 const holdsBound = (column: StringColumn, maxLength: number): boolean =>
   column.kind === "string"
