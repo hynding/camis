@@ -722,7 +722,7 @@ jobs:
       # The overlay replaces the text-sizes project's files, so its tests ran first.
       - name: Overlay (apiStyle strapi, the string-sizes fixture)
         run: pnpm --filter @camis/adapter-filament overlay "$GITHUB_WORKSPACE/app" --style strapi --bundle string-sizes
-      - name: A string migrates and keeps its bound in four-byte characters, and the API refuses one more (${{ matrix.db }})
+      - name: A string migrates and keeps its bound in four-byte characters, and the API, its MCP tools and the admin form refuse one more (${{ matrix.db }})
         run: |
           cd app
           case "${{ matrix.db }}" in

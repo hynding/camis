@@ -2,6 +2,7 @@ import type { IrDocument } from "@camis/ir-schema";
 import { runtimeSchemas, type RuntimeSchema } from "@camis/strapi-schema";
 import { z } from "zod/v4";
 import { PHP_FLOAT_DIGITS } from "../../decimals";
+import { checkedLength } from "../core/validation";
 
 /**
  * The content-manager tools of Strapi 5's MCP server, as its `tools/list` describes them: per
@@ -425,6 +426,30 @@ const componentInput = (
   );
 };
 
+/**
+ * The length StrapiValidator checks a string attribute at (`checkedLength`), less than its bound
+ * where an index caps its column. The server checks a tool call's arguments against the input
+ * schema, so a value the column cannot hold is refused as invalid arguments. MCP is served on the
+ * Laravel storage layout only.
+ */
+const checkedMax = (attribute: Attribute): number | undefined =>
+  typeof attribute.maxLength === "number"
+    ? checkedLength(
+        {
+          type: String(attribute.type),
+          maxLength: attribute.maxLength,
+          unique: attribute.unique === true,
+        },
+        "laravel",
+      )
+    : undefined;
+
+/** Strapi states no length for an email or a uid: one is stated only where the column is capped. */
+const capped = (s: z.ZodString, attribute: Attribute): z.ZodString => {
+  const max = checkedMax(attribute);
+  return max !== undefined && max !== attribute.maxLength ? s.max(max) : s;
+};
+
 const attributeInput = (
   components: Components,
   attribute: Attribute,
@@ -444,12 +469,14 @@ const attributeInput = (
     case "password": {
       let s = z.string();
       if (typeof attribute.minLength === "number") s = s.min(attribute.minLength);
-      if (typeof attribute.maxLength === "number") s = s.max(attribute.maxLength);
+      if (typeof attribute.maxLength === "number")
+        s = s.max(checkedMax(attribute) ?? attribute.maxLength);
       return finish(s);
     }
     case "email":
-      return finish(z.string().email());
+      return finish(capped(z.string().email(), attribute));
     case "uid":
+      return finish(capped(z.string(), attribute));
     case "biginteger":
     case "date":
     case "datetime":

@@ -49,7 +49,7 @@ export interface StringBound {
 }
 
 /** A field kept in a string column (a string, an email or a uid), with its bound. */
-export const isStringLike = (field: AnyField): field is AnyField & StringBound =>
+export const isStringLike = <F extends { type: string }>(field: F): field is F & StringBound =>
   field.type === "string" || field.type === "email" || field.type === "uid";
 
 /**

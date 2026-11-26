@@ -11,6 +11,7 @@ import {
 } from "@camis/ir-schema";
 import { beyondPhpFloat } from "../../decimals";
 import { componentUid, kebab, routePath } from "../core/names";
+import { checkedLength } from "../core/validation";
 import plugins from "./openapi-plugins.json";
 
 /**
@@ -142,7 +143,10 @@ class DocumentBuilder {
         if ("min" in f && f.min !== undefined) a.min = f.min;
         if ("max" in f && f.max !== undefined) a.max = f.max;
         if ("minLength" in f && f.minLength !== undefined) a.minLength = f.minLength;
-        if ("maxLength" in f && f.maxLength !== undefined) a.maxLength = f.maxLength;
+        // What the column holds, as StrapiValidator checks it; the document is served on the
+        // Laravel storage layout only.
+        if ("maxLength" in f && f.maxLength !== undefined)
+          a.maxLength = checkedLength(f, "laravel") ?? f.maxLength;
         if (f.type === "enumeration") a.values = f.values;
         if (beyondPhpFloat(f)) a.exact = true;
         if (f.type === "media") {

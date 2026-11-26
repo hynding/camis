@@ -3,6 +3,7 @@ import {
   enforcedLength,
   isStringLike,
   type StorageLayout,
+  type StringBound,
 } from "@camis/adapter-kernel";
 import { decimalDigits } from "@camis/ir-core";
 import {
@@ -123,7 +124,10 @@ const memberAt =
  * the laravel layout the migration capped the column (`stringColumn`); on the strapi layout it is
  * Strapi's varchar(255), unless the Strapi project gave it column settings no migration can know.
  */
-const checkedLength = (field: Field, layout: StorageLayout): number | undefined => {
+export const checkedLength = (
+  field: { type: string } & StringBound,
+  layout: StorageLayout,
+): number | undefined => {
   if (!isStringLike(field) || field.maxLength === undefined) return undefined;
   return layout === "laravel" ? enforcedLength(field) : Math.min(field.maxLength, STRING_LENGTH);
 };
