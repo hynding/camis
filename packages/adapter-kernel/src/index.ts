@@ -57,3 +57,5 @@ export {
   stringsBeyondColumns,
 } from "./string-size";
 export type { LocatedString, StringBound, StringColumn } from "./string-size";
+export { characterCountVectors } from "./character-count";
+export type { CharacterCountVector } from "./character-count";

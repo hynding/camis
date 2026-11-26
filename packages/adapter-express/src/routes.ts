@@ -1,6 +1,7 @@
 import { withMarker } from "@camis/adapter-kernel";
 import type { ContentType } from "@camis/ir-schema";
 import { isSupportedField } from "./fields";
+import { maxLengths } from "./lengths";
 import { expressNames, snakeColumn } from "./names";
 
 export interface RouteOptions {
@@ -56,6 +57,22 @@ export const emitRoutes = (
         : ["readLinks", "type Allowed"];
   const linksImport =
     links === "none" ? "" : `\nimport { ${linkNames.join(", ")} } from "../morphs";`;
+  // A body with a value longer than its field's bound is refused whole, before anything is written.
+  const bounds = maxLengths(ct, options.aiColumns);
+  const lengthsImport = bounds.length === 0 ? "" : `\nimport { tooLong } from "../lengths";`;
+  const boundsConstant =
+    bounds.length === 0
+      ? ""
+      : `\n/** Each bounded field's maxLength, in characters. */\nconst MAX_LENGTHS: Record<string, number> = { ${bounds.map(([c, n]) => `${c}: ${n}`).join(", ")} };\n`;
+  const lengthCheck =
+    bounds.length === 0
+      ? ""
+      : `
+  const longer = tooLong(req.body, MAX_LENGTHS);
+  if (longer !== null) {
+    res.status(400).json({ error: longer });
+    return;
+  }`;
   // A body naming an entry the caller may not read (or that is not there) is refused whole.
   const refusal = (body: string, allowed: string) => `
   const refused = checkLinks("${typeName}", ${body}, ${allowed});
@@ -79,14 +96,14 @@ export const emitRoutes = (
     return withMarker(`import { Router } from "express";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client";
-import { ${t} } from "../db/schema";${aiImport}${linksImport}
+import { ${t} } from "../db/schema";${aiImport}${linksImport}${lengthsImport}
 
 function pick(obj: Record<string, unknown>, keys: string[]): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const k of keys) if (k in obj) out[k] = obj[k];
   return out;
 }
-${links === "none" ? "" : `\n// Without grants every caller reads every entry a link names.\nconst allowed: Allowed = () => true;\n`}
+${boundsConstant}${links === "none" ? "" : `\n// Without grants every caller reads every entry a link names.\nconst allowed: Allowed = () => true;\n`}
 export const ${t}Router = Router();
 
 ${t}Router.get("/", (_req, res) => {
@@ -102,7 +119,7 @@ ${t}Router.get("/:id", (req, res) => {
   res.json(${links === "none" ? "row" : `readLinks("${typeName}", row, allowed)`});
 });
 
-${t}Router.post("/", ${asyncKw}(req, res) => {${
+${t}Router.post("/", ${asyncKw}(req, res) => {${lengthCheck}${
       own
         ? `
   const body = pick(req.body, [${writable}]);${refusal("body", "allowed")}
@@ -117,7 +134,7 @@ ${t}Router.post("/", ${asyncKw}(req, res) => {${
     }
 });
 
-${t}Router.patch("/:id", ${asyncKw}(req, res) => {${
+${t}Router.patch("/:id", ${asyncKw}(req, res) => {${lengthCheck}${
       own
         ? `
   const body = pick(req.body, [${writable}]);${refusal("body", "allowed")}
@@ -163,17 +180,17 @@ import {
   roleOf,
   sortColumn,
   stripWrites,
-} from "../permissions/enforce";${aiImport}${linksImport}
+} from "../permissions/enforce";${aiImport}${linksImport}${lengthsImport}
 
 function pick(obj: Record<string, unknown>, keys: string[]): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const k of keys) if (k in obj) out[k] = obj[k];
   return out;
 }
-${
-  links === "none"
-    ? ""
-    : `
+${boundsConstant}${
+    links === "none"
+      ? ""
+      : `
 // A link names an entry the caller may read: its type's read grant, and its record condition.
 const allowed =
   (req: Request): Allowed =>
@@ -183,7 +200,7 @@ const allowed =
 const view = (req: Request, row: Record<string, unknown>) =>
   filterRead(req, "${typeName}", readLinks("${typeName}", row, allowed(req)));
 `
-}
+  }
 export const ${t}Router = Router();
 
 ${t}Router.get("/", (req, res) => {
@@ -219,7 +236,7 @@ ${t}Router.post("/", ${asyncKw}(req, res) => {
   if (!authorizeAction(roleOf(req), "${typeName}", "create")) {
     res.status(403).json({ error: "forbidden" });
     return;
-  }
+  }${lengthCheck}
   const proposed = pick(req.body, [${writable}]);${
     own
       ? `
@@ -238,7 +255,7 @@ ${t}Router.patch("/:id", ${asyncKw}(req, res) => {
   if (!authorizeAction(roleOf(req), "${typeName}", "update")) {
     res.status(403).json({ error: "forbidden" });
     return;
-  }
+  }${lengthCheck}
   const existing = db.select().from(${t}).where(eq(${t}.id, Number(req.params.id))).get();
   if (!existing || !recordAllowed(req, "${typeName}", "update", existing)) {
     res.status(404).json({ error: "not found" });

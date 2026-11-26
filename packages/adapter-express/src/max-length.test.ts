@@ -2,9 +2,11 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import ts from "typescript";
 import { afterAll, describe, expect, it } from "vitest";
 import { characterCountVectors } from "@camis/adapter-kernel";
-import type { ContentType, IrBundle } from "@camis/ir-schema";
+import type { ContentType } from "@camis/ir-schema";
+import type { IrBundle } from "@camis/permissions";
 import { expressAdapterFor } from "./generate";
 import { emitRoutes } from "./routes";
 
@@ -58,6 +60,21 @@ describe("Express target: maxLength enforced in the API (issue #126)", () => {
     expect(ts).toContain(
       `authorizeAction(roleOf(req), "Entry", "update")) {\n    res.status(403).json({ error: "forbidden" });\n    return;\n  }\n${CHECK}`,
     );
+  });
+
+  it("emits the check and the routers that run it as golden files that parse", async () => {
+    const files = expressAdapterFor("sqlite").generate(bundle, { projectName: "docs" }).files;
+    const content = (path: string) => files.find((f) => f.path === path)!.content;
+    await expect(content("src/lengths.ts")).toMatchFileSnapshot(
+      "./__golden__/lengths/lengths.ts.txt",
+    );
+    await expect(content("src/routes/entries.ts")).toMatchFileSnapshot(
+      "./__golden__/lengths/entries.routes.ts.txt",
+    );
+    for (const path of ["src/lengths.ts", "src/routes/entries.ts"]) {
+      const out = ts.transpileModule(content(path), { fileName: path, reportDiagnostics: true });
+      expect(out.diagnostics ?? []).toEqual([]);
+    }
   });
 
   it("checks nothing where no field is bounded", () => {

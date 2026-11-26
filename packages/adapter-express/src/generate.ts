@@ -32,6 +32,7 @@ import {
 import { emitMorphsFile, morphLinks } from "./morphs";
 import { resolveRelations } from "./relations";
 import { emitRoutes } from "./routes";
+import { hasMaxLengths, lengthsFile } from "./lengths";
 import { emitSchemaFile } from "./schema";
 import { skeletonFiles } from "./skeleton";
 import { expressReservedNameGaps } from "./reserved-names";
@@ -144,6 +145,7 @@ export const expressAdapterFor = (dialect: Dialect): GenerateAdapter => ({
     });
     if (links.own.size > 0)
       files.push({ path: "src/morphs.ts", content: emitMorphsFile(doc, links) });
+    if (hasMaxLengths(doc.contentTypes)) files.push(lengthsFile());
     files.push(camisSchemaFile(doc));
 
     if (hasAiField(doc)) files.push(...aiFiles(doc));
