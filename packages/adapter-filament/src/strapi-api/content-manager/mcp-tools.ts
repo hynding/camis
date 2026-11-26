@@ -444,10 +444,13 @@ const checkedMax = (attribute: Attribute): number | undefined =>
       )
     : undefined;
 
-/** Strapi states no length for an email or a uid: one is stated only where the column is capped. */
-const capped = (s: z.ZodString, attribute: Attribute): z.ZodString => {
+/**
+ * Strapi states no length for an email or a uid; camis states the one REST checks wherever the
+ * field has a bound, so MCP and REST agree.
+ */
+const checked = (s: z.ZodString, attribute: Attribute): z.ZodString => {
   const max = checkedMax(attribute);
-  return max !== undefined && max !== attribute.maxLength ? s.max(max) : s;
+  return max === undefined ? s : s.max(max);
 };
 
 const attributeInput = (
@@ -474,9 +477,9 @@ const attributeInput = (
       return finish(s);
     }
     case "email":
-      return finish(capped(z.string().email(), attribute));
+      return finish(checked(z.string().email(), attribute));
     case "uid":
-      return finish(capped(z.string(), attribute));
+      return finish(checked(z.string(), attribute));
     case "biginteger":
     case "date":
     case "datetime":
