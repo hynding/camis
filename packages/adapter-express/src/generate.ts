@@ -1,5 +1,6 @@
 import { expressTextLengthGaps } from "./text-length-gaps";
 import { expressStringLengthGaps } from "./string-length-gaps";
+import { expressTextDefaultGaps } from "./text-defaults";
 import { apiActionGaps, customCodeGaps, publicApiActionGaps } from "./custom-code";
 import {
   buildManifest,
@@ -90,6 +91,7 @@ export const expressAdapterFor = (dialect: Dialect): GenerateAdapter => ({
       ...expressDecimalGaps(doc),
       ...(dialect === "mysql" ? expressTextLengthGaps(doc) : []),
       ...expressStringLengthGaps(doc, dialect),
+      ...expressTextDefaultGaps(doc, dialect),
     ];
     const files: GeneratedFile[] = [
       ...skeletonFiles(doc, options.projectName, dialect, { secured }),

@@ -1,5 +1,6 @@
 import { filamentTextLengthGaps } from "./text-columns";
 import { filamentStringLengthGaps } from "./string-columns";
+import { filamentTextDefaultGaps } from "./text-defaults";
 import {
   buildManifest,
   columnField,
@@ -141,6 +142,7 @@ export const filamentAdapter: GenerateAdapter = {
       ...filamentDecimalGaps(doc, apiStyle, storage),
       ...filamentTextLengthGaps(doc, storage),
       ...filamentStringLengthGaps(doc, storage),
+      ...filamentTextDefaultGaps(doc, storage),
     ];
     if (storage !== requestedStorage) {
       gaps.push({

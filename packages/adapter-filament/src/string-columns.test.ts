@@ -98,7 +98,9 @@ describe("defaults on text columns (issue #126)", () => {
       "$table->string('code', 255)->nullable()->default('x')",
     );
     expect(column({ maxLength: 256, default: "x" })).toBe("$table->text('code')->nullable()");
-    expect(column({ type: "text", default: "x" })).toBe("$table->text('code')->nullable()");
+    expect(column({ type: "text", maxLength: 1000, default: "x" })).toBe(
+      "$table->text('code')->nullable()",
+    );
     expect(column({ type: "richText", default: "x" })).toBe("$table->longText('code')->nullable()");
     expect(column({ maxLength: 1000, unique: true, default: "x" })).toBe(
       "$table->string('code', 673)->nullable()->unique()->default('x')",

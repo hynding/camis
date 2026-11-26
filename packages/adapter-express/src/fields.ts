@@ -157,6 +157,12 @@ const base = (dialect: Dialect, field: Field, c: string): { expr: string; import
   }
 };
 
+const MYSQL_TEXT_TYPES = new Set<string>(Object.values(MYSQL_TEXT_BY_TIER));
+
+/** Whether a field's MySQL column is a text type, which takes no literal default. */
+export const isMysqlText = (field: Field): boolean =>
+  MYSQL_TEXT_TYPES.has(base("mysql", field, snakeColumn(field.name)).import);
+
 export const column = (dialect: Dialect, field: Field): ColumnEmit => {
   const f = field as Field & Record<string, unknown>;
   const c = snakeColumn(field.name);
@@ -164,10 +170,17 @@ export const column = (dialect: Dialect, field: Field): ColumnEmit => {
   // A decimal kept as text (see decimalColumn) takes its default as text too.
   const defaultValue =
     b.import === "text" && typeof f.default === "number" ? String(f.default) : f.default;
+  // MySQL takes no literal default on a text type (ER_BLOB_CANT_HAVE_DEFAULT): Drizzle applies it.
+  const defaulted =
+    defaultValue === undefined
+      ? ""
+      : dialect === "mysql" && MYSQL_TEXT_TYPES.has(b.import)
+        ? `.$defaultFn(() => ${tsLiteral(defaultValue)})`
+        : `.default(${tsLiteral(defaultValue)})`;
   const drizzle =
     b.expr +
     (f.required === true ? ".notNull()" : "") +
     (f.unique === true ? ".unique()" : "") +
-    (defaultValue !== undefined ? `.default(${tsLiteral(defaultValue)})` : "");
+    defaulted;
   return { column: c, drizzle, import: b.import };
 };

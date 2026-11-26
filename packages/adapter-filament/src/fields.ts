@@ -1,6 +1,7 @@
 import { decimalDigits, type DecimalDigits } from "@camis/ir-core";
 import {
   enforcedLength,
+  holdsTextColumn,
   isStringLike,
   stringColumn,
   textTier,
@@ -28,6 +29,11 @@ export interface FieldEmit {
    * column's length where an index caps the column below it.
    */
   maxLength?: number;
+  /**
+   * The default the model applies, as a PHP literal, where the column is a text column: MySQL takes
+   * no default on one, and the migration serves every database.
+   */
+  modelDefault?: string;
 }
 
 const TEXT_INPUT = "Filament\\Forms\\Components\\TextInput";
@@ -310,11 +316,13 @@ export const emitField = (field: Field, columnOverride?: string): FieldEmit => {
   const b = base(field, column);
   const required = f.required === true;
   const unique = f.unique === true;
+  const defaulted = f.default === undefined ? undefined : phpDefault(f.default);
+  const modelDefault = defaulted !== undefined && holdsTextColumn(field) ? defaulted : undefined;
   const migration =
     b.migration +
     (required ? "" : "->nullable()") +
     (unique ? "->unique()" : "") +
-    (f.default !== undefined ? `->default(${phpDefault(f.default)})` : "");
+    (defaulted !== undefined && modelDefault === undefined ? `->default(${defaulted})` : "");
   const pattern =
     typeof f.pattern === "string" ? `->regex(${phpSingleQuoted(pcre(f.pattern))})` : "";
   // A custom field's input when the project registers one under the editor's uid (see
@@ -342,5 +350,6 @@ export const emitField = (field: Field, columnOverride?: string): FieldEmit => {
     ...digitsOf(field),
     ...(formUnique === undefined ? {} : { uniqueRule: formUnique }),
     ...(maxLength === undefined ? {} : { maxLength }),
+    ...(modelDefault === undefined ? {} : { modelDefault }),
   };
 };

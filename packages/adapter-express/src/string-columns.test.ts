@@ -137,7 +137,7 @@ describe("Express target: defaults on MySQL text columns (issue #126)", () => {
       "varchar('code', { length: 40 }).default('x')",
     );
     expect(mysql({ maxLength: 1000, default: "x" })).toBe("text('code').$defaultFn(() => 'x')");
-    expect(mysql({ type: "text", default: "x" } as Partial<Field>)).toBe(
+    expect(mysql({ type: "text", maxLength: 1000, default: "x" } as Partial<Field>)).toBe(
       "text('code').$defaultFn(() => 'x')",
     );
     expect(mysql({ type: "richText", default: "x" } as Partial<Field>)).toBe(
