@@ -1,4 +1,6 @@
+import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
+import { characterCountVectors } from "@camis/adapter-kernel";
 import type { ContentType, Field } from "@camis/ir-schema";
 import { emitApiController } from "./api";
 import { emitField } from "./fields";
@@ -65,5 +67,30 @@ describe("maxLength enforced on every Filament write path (issue #126)", () => {
 
   it("regenerates byte for byte", () => {
     expect(file("Api/EntryApiController.php")).toBe(file("Api/EntryApiController.php"));
+  });
+});
+
+const hasPhp = (): boolean => {
+  try {
+    execFileSync("php", ["--version"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+// Laravel's max rule (Validator::getSize) and StrapiValidator both count with mb_strlen; the
+// Express target counts the same vectors (adapter-express max-length.test.ts).
+describe.skipIf(!hasPhp())("mb_strlen counts the conformance vectors' characters", () => {
+  it("as each vector states", () => {
+    const counted = execFileSync(
+      "php",
+      [
+        "-r",
+        "echo json_encode(array_map('mb_strlen', json_decode(stream_get_contents(STDIN), true)));",
+      ],
+      { input: JSON.stringify(characterCountVectors.map((v) => v.value)) },
+    ).toString();
+    expect(JSON.parse(counted)).toEqual(characterCountVectors.map((v) => v.characters));
   });
 });
