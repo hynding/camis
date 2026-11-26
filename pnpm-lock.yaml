@@ -248,6 +248,9 @@ importers:
 
   packages/strapi-schema:
     dependencies:
+      '@camis/adapter-kernel':
+        specifier: workspace:*
+        version: link:../adapter-kernel
       '@camis/ir-core':
         specifier: workspace:*
         version: link:../ir-core
