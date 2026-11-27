@@ -1,58 +1,32 @@
-// Boots the polymorphic-links fixture (secured) on sqlite and drives its links over HTTP: a note
-// links a book and a film and is pinned to a book, both read back as { type, id }; a book and a
-// film read the notes linking them; a link to an entry the caller may not read, or that is not
-// there, is refused on write and left out on read. boot-smoke.ts runs it on its sqlite leg; run
-// alone with `tsx scripts/morph-smoke.ts`.
-import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+// Boots the polymorphic-links fixture (secured) and drives its links over HTTP: a note links a book
+// and a film and is pinned to a book, both read back as { type, id }; a book and a film read the
+// notes linking them; a link to an entry the caller may not read, or that is not there, is refused
+// on write and left out on read. boot-smoke.ts runs it on every leg; run alone with
+// `tsx scripts/morph-smoke.ts [dialect]`.
 import { pathToFileURL } from "node:url";
-import { materialize } from "@camis/adapter-kernel";
-import { expressAdapterFor } from "../src/generate";
+import type { Dialect } from "../src/dialect";
 import { morphs } from "../src/__fixtures__/morphs";
-
-const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
-
-const fail = (msg: string): never => {
-  throw new Error(msg);
-};
+import { fail, smokeProject, waitForServer } from "./smoke-project";
 
 const same = (actual: unknown, expected: unknown, what: string): void => {
   if (JSON.stringify(actual) !== JSON.stringify(expected))
     fail(`${what}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
 };
 
-export const morphSmoke = async (port = 3212): Promise<void> => {
-  const dir = await mkdtemp(join(tmpdir(), "camis-express-morphs-"));
-  const env = { ...process.env, DB_FILE_NAME: join(dir, "data.db"), PORT: String(port) };
-  let proc: ChildProcess | undefined;
+export const morphSmoke = async (dialect: Dialect = "sqlite", port = 3212): Promise<void> => {
+  const project = await smokeProject(morphs, dialect, "morphs", port);
   try {
-    await materialize(expressAdapterFor("sqlite").generate(morphs, { projectName: "notes" }), dir);
-    for (const args of [
-      ["install", "--no-audit", "--no-fund"],
-      ["run", "db:push", "--", "--force"],
-    ]) {
-      if (spawnSync("npm", args, { cwd: dir, stdio: "inherit", env }).status !== 0)
-        fail(`npm ${args[0]} failed`);
-    }
-    proc = spawn("npm", ["start"], { cwd: dir, stdio: "inherit", env });
+    project.start();
     const base = `http://127.0.0.1:${port}`;
+    await waitForServer(`${base}/api/books`);
     const login = async (email: string): Promise<string> => {
-      for (let i = 0; i < 60; i++) {
-        try {
-          const res = await fetch(`${base}/auth/login`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ email, password: "dev" }),
-          });
-          if (res.status === 200) return ((await res.json()) as { token: string }).token;
-        } catch {
-          /* not up yet */
-        }
-        await sleep(500);
-      }
-      return fail(`login ${email} failed`);
+      const res = await fetch(`${base}/auth/login`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, password: "dev" }),
+      });
+      if (res.status !== 200) fail(`login ${email} → ${res.status}`);
+      return ((await res.json()) as { token: string }).token;
     };
     const planner = await login("planner@example.com");
     const keeper = await login("keeper@example.com");
@@ -104,6 +78,7 @@ export const morphSmoke = async (port = 3212): Promise<void> => {
     for (const body of [
       { subjects: [{ type: "Secret", id: vault }] },
       { subjects: [{ type: "Book", id: 999 }] },
+      { subjects: [{ type: "Book", id: 99_999_999_999 }] },
       { pinned_to: { type: "Nope", id: dune } },
       { subjects: { type: "Book", id: dune } },
     ]) {
@@ -138,6 +113,49 @@ export const morphSmoke = async (port = 3212): Promise<void> => {
     const seen = await call(planner, "GET", `notes/${kept.body.id as number}`);
     same(seen.body.subjects, [{ type: "Book", id: dune }], "the planner's view of them");
 
+    // More concurrent link writes than a database pool holds (10): creates, updates of distinct
+    // notes and updates of one note, each a transaction. Every one answers, none with a 500, and
+    // the API answers afterwards.
+    const timed = async (method: string, path: string, body: unknown) => {
+      const res = await fetch(`${base}/api/${path}`, {
+        method,
+        headers: { "content-type": "application/json", authorization: `Bearer ${planner}` },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(30_000),
+      });
+      return { status: res.status, body: (await res.json()) as Record<string, unknown> };
+    };
+    const links = [
+      { type: "Book", id: dune },
+      { type: "Film", id: heat },
+    ];
+    const created = await Promise.all(
+      Array.from({ length: 16 }, (_, i) =>
+        timed("POST", "notes", { title: `c${i}`, subjects: links.slice(i % 2) }),
+      ),
+    );
+    same(
+      created.map((r) => r.status),
+      Array<number>(16).fill(201),
+      "concurrent creates",
+    );
+    const ids = created.map((r) => r.body.id as number);
+    const updated = await Promise.all([
+      ...ids.map((each, i) =>
+        timed("PATCH", `notes/${each}`, { subjects: links.slice((i + 1) % 2) }),
+      ),
+      ...Array.from({ length: 8 }, (_, i) =>
+        timed("PATCH", `notes/${ids[0]}`, { subjects: links.slice(i % 2) }),
+      ),
+    ]);
+    same(
+      updated.map((r) => r.status),
+      Array<number>(24).fill(200),
+      "concurrent updates",
+    );
+    same((await call(planner, "GET", `notes/${ids[1]}`)).status, 200, "a read after them");
+    console.log(`CONCURRENT LINK WRITES OK (${dialect})`);
+
     // Deleting a note takes its links with it.
     same((await call(planner, "DELETE", `notes/${id}`)).status, 200, "note delete");
     same(
@@ -145,11 +163,72 @@ export const morphSmoke = async (port = 3212): Promise<void> => {
       null,
       "the film's pin after delete",
     );
-    console.log("EXPRESS MORPH LINKS OK");
+    console.log(`EXPRESS MORPH LINKS OK (${dialect})`);
   } finally {
-    proc?.kill("SIGTERM");
-    await rm(dir, { recursive: true, force: true });
+    await project.stop();
   }
 };
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) await morphSmoke();
+// The same fixture without roles: every caller reads and writes every entry. Concurrent updates of
+// one note each replace its links, so the note ends with exactly one update's links, never a merge
+// of several; updates racing the note's delete answer 200 or 404, never 500. Five rounds of each.
+export const unsecuredMorphSmoke = async (
+  dialect: Dialect = "sqlite",
+  port = 3214,
+): Promise<void> => {
+  const project = await smokeProject({ ...morphs, roles: [] }, dialect, "links", port);
+  try {
+    project.start();
+    const base = `http://127.0.0.1:${port}/api`;
+    await waitForServer(`${base}/books`);
+    const call = async (method: string, path: string, body?: unknown) => {
+      const res = await fetch(`${base}/${path}`, {
+        method,
+        headers: { "content-type": "application/json" },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      const text = await res.text();
+      return {
+        status: res.status,
+        body: (text === "" ? {} : JSON.parse(text)) as Record<string, unknown>,
+      };
+    };
+    const books: number[] = [];
+    for (let i = 0; i < 8; i++)
+      books.push((await call("POST", "books", { title: `b${i}` })).body.id as number);
+    const sets = books.map((book, i) => [
+      { type: "Book", id: book },
+      { type: "Book", id: books[(i + 1) % books.length] },
+    ]);
+    for (let round = 0; round < 5; round++) {
+      const note = (await call("POST", "notes", { title: `r${round}` })).body.id as number;
+      const updates = await Promise.all(
+        sets.map((subjects) => call("PATCH", `notes/${note}`, { subjects })),
+      );
+      same(
+        updates.map((r) => r.status),
+        Array<number>(sets.length).fill(200),
+        "concurrent updates",
+      );
+      const kept = (await call("GET", `notes/${note}`)).body.subjects;
+      if (!sets.some((set) => JSON.stringify(set) === JSON.stringify(kept)))
+        fail(`round ${round}: the note's links are no one update's: ${JSON.stringify(kept)}`);
+
+      const racing = await Promise.all([
+        ...sets.slice(0, 5).map((subjects) => call("PATCH", `notes/${note}`, { subjects })),
+        call("DELETE", `notes/${note}`),
+      ]);
+      const statuses = racing.map((r) => r.status);
+      if (statuses.at(-1) !== 204 || statuses.slice(0, -1).some((st) => st !== 200 && st !== 404))
+        fail(`round ${round}: updates racing a delete → ${JSON.stringify(statuses)}`);
+      same((await call("GET", `notes/${note}`)).status, 404, "the deleted note");
+    }
+    console.log(`UNSECURED LINK WRITES OK (${dialect})`);
+  } finally {
+    await project.stop();
+  }
+};
+
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href)
+  await morphSmoke((process.argv[2] ?? "sqlite") as Dialect);

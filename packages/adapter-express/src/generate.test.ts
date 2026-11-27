@@ -471,7 +471,7 @@ describe("polymorphic relations", () => {
     expect(result.gaps.gaps).toEqual([]);
     const content = (path: string) => result.files.find((f) => f.path === path)!.content;
     expect(content("src/routes/notes.ts")).toContain("const allowed: Allowed = () => true;");
-    expect(content("src/routes/notes.ts")).toContain('writeLinks("Note", row.id, body);');
-    expect(content("src/routes/books.ts")).toContain('readLinks("Book", row, allowed)');
+    expect(content("src/routes/notes.ts")).toContain('await writeLinks(tx, "Note", id, body);');
+    expect(content("src/routes/books.ts")).toContain('readLinks(db, "Book", row, allowed)');
   });
 });

@@ -48,3 +48,6 @@ generated/
 
 # superpowers SDD scratch (ledger, briefs, review packages)
 .superpowers/
+
+# Generated helpers a test loads, removed after it
+packages/adapter-express/.generated-*/
