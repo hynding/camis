@@ -83,6 +83,18 @@ describe("filament endpoint guards", () => {
     );
   });
 
+  it("lists each guarded endpoint's guards and its throttle's variable in DEPLOY.md", () => {
+    const deploy = file("DEPLOY.md")!.content;
+    expect(deploy).toContain("## Endpoint guards");
+    expect(deploy).toContain(
+      "| `MemoIngest` | `POST /api/memos/ingest` | 5 (`CAMIS_ENDPOINT_MEMO_INGEST_THROTTLE_PER_MINUTE`) | 64 | `application/json`, `text/plain` | `Content-Type`, `X-Memo-Key` |",
+    );
+    expect(deploy).toContain("StrapiEndpointCors::answers(...)");
+    expect(
+      generate("strapi", unguarded).files.find((f) => f.path === "DEPLOY.md")!.content,
+    ).not.toContain("## Endpoint guards");
+  });
+
   it("emits neither the middlewares nor their config for a project whose endpoints have no guard", () => {
     const plain = generate("strapi", unguarded);
     for (const path of [GUARD, CORS, CONFIG])
