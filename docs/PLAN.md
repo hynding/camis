@@ -4032,48 +4032,88 @@ postgres-js or a mysql2 pool), and the connection comes from the environment.
 
 - **Awaited queries.** Every drizzle query builder is a promise on all three clients (on
   better-sqlite3 it runs when awaited), so the routers await each query and are the same text on
-  every database but for one call: an insert takes its id from `RETURNING` (`.returning({ id })`)
-  on SQLite and PostgreSQL and from MySQL's insert id (`$returningId()`) there. No MySQL write
-  returns its row, so on every database a create and an update read the row back by id (`find`:
-  `limit(1)`, its first element), keeping the answers the same; a list is ordered by id, which no
-  database guarantees without an `ORDER BY`. A route serves only a numeric id (`/:id(\d+)`), as
-  PostgreSQL refuses an integer parameter that is not a number (`Number("abc")` is NaN); any other
-  id is the app's 404. The secured list still filters, sorts and counts in JavaScript, so its `Content-Range`
-  total is a length, never a database's bigint count.
+  every database but for two calls: an insert takes its id from `RETURNING` (`.returning({ id })`)
+  on SQLite and PostgreSQL and from MySQL's insert id (`$returningId()`) there, and a secured
+  router's `lockRow` adds `.for("update")` on PostgreSQL and MySQL. No MySQL write returns its row,
+  so on every database a create and an update read the row back by id (`find`: `limit(1)`, its first
+  element), keeping the answers the same; a create whose row is not there to read back throws, so it
+  answers 500 (the write succeeded; a 404 would misdescribe it), while an update's answers 404. A
+  list is ordered by id, which no database guarantees without an `ORDER BY`. The secured list still
+  filters, sorts and counts in JavaScript, so its `Content-Range` total is a length, never a
+  database's bigint count, and it reads each row's links concurrently through the pool, unbounded.
+- **Ids.** Each router's `param("id", routeId)` (`src/ids.ts`) serves only a decimal id from 1 to
+  2,147,483,647, what an integer id column holds on PostgreSQL and MySQL; any other id answers the
+  JSON 404 before a query, on every database. PostgreSQL refuses to compare an integer column with
+  NaN or with a number past its range, which answered 500 before. A link naming such an id is
+  refused (400) as naming no entry.
 - **Errors.** The project uses Express 4, which does not catch a rejected promise: each route is
-  wrapped in `asyncRoute` (`src/async-route.ts`), which hands the error to Express's error handler
-  (500), and no rejection is left unhandled.
-- **Transactions.** A row and its to-many links (`src/morphs.ts`) are written and deleted in one
-  transaction, `atomic` in `src/db/atomic.ts`, generated per dialect: on PostgreSQL and MySQL
-  drizzle's `db.transaction` on a connection of its own (READ COMMITTED and InnoDB's REPEATABLE READ
-  by default); on SQLite, whose drizzle transaction takes no async work, `BEGIN IMMEDIATE` and
-  `COMMIT` (or `ROLLBACK`) around it by hand: the work awaits only better-sqlite3 queries, which
-  settle before any other request's callback runs, so no other statement falls inside. On all three
-  the row and its links are written all or nothing. The checks before a write (the record
-  condition, the links' targets) and the read back after it are outside the transaction, as before.
-  A write without to-many links is one statement.
+  wrapped in `asyncRoute` (`src/async-route.ts`), which hands the error on, and no rejection is left
+  unhandled. The last middleware, `errorHandler` (`src/error-handler.ts`), answers a 500 with
+  `{"error":"internal error"}` and nothing of the error (no stack, query or path), logging it to the
+  server's stderr; a client error a middleware hands on (`express.json()`'s 400 for a body that does
+  not parse) answers `{ "error": <its message> }`. Express's own handler answered an HTML page with
+  the stack, which can hold a failed query's text. The routes' own 4xx answers are unchanged.
+- **Transactions.** `atomic` (`src/db/atomic.ts`, generated for a secured project or one with
+  to-many links) is drizzle's `db.transaction` on a connection of its own on PostgreSQL and MySQL
+  (READ COMMITTED and InnoDB's REPEATABLE READ by default). On SQLite, whose drizzle transaction
+  takes no async work, it is `BEGIN IMMEDIATE` … `COMMIT` by hand, one at a time: a second call
+  waits for the first (a promise chain), a call inside a transaction's work is refused with an
+  error naming it, and a rollback that fails is logged without hiding the work's error. The work
+  awaits only better-sqlite3 queries, which settle before any other request's callback runs, so no
+  other statement falls inside; and BEGIN IMMEDIATE holds the whole database for writing. What is
+  atomic, per write:
+  - *A secured update* reads its row (`lockRow`: `SELECT … FOR UPDATE` on PostgreSQL and MySQL,
+    which waits for any other write holding the row and then reads its committed version), checks
+    the record condition, the field rules, the links' targets and the bounds on that row
+    (`permittedUpdate`), writes it and its to-many links, and commits, in one transaction: a write
+    that takes the row out of the caller's condition first makes the update a 404, never a write.
+    With an AI field, the fields are generated first (the provider is awaited outside any
+    transaction) from the row as read then; inside the transaction the row is read locked and
+    checked again, and if what the caller may write has changed the update answers 409 and writes
+    nothing.
+  - *A secured delete* reads its row locked, checks the record condition, deletes its to-many links
+    and the row, and commits, in one transaction.
+  - *A create* (secured or not) is one statement, or the row and its to-many links in one
+    transaction; its record condition is on the body, which no other write changes.
+  - *An unsecured update or delete* has no condition to keep: one statement, or with to-many links
+    the existence check, then the row and its links in one transaction.
+  - Outside every transaction: the read back after a write (another write may land between the
+    commit and it, and show in the answer); on PostgreSQL and MySQL the links' targets, which are
+    read through the pool unlocked, so an entry hidden or deleted after its check may still be
+    linked (on SQLite the transaction holds the database, so it cannot).
 - **An unsecured update with nothing to write** answers the row unchanged, as the secured router
   does, where it sent an empty `set({})` and answered 500.
 - **The smokes.** `boot-smoke.ts` (the secured project, now also its list, update, an update with
-  nothing to write and delete; the AI project, which also checks an update with nothing to write and
-  an update of no row; and `morph-smoke.ts`) and `length-smoke.ts` drive the API over HTTP, writes
-  included, on SQLite, MySQL and PostgreSQL, each project in a database of its own next to
-  DATABASE_URL's (`scripts/smoke-project.ts`); the boot smoke builds the dialect-agnostic admin on
-  SQLite only. Every smoke starts its server in a process group of its own and stops the group, so
-  no `tsx` server outlives it (the boot smoke left its servers running before).
+  nothing to write, delete, ids 2,147,483,648 and 99,999,999,999 and one that is not a number as
+  the JSON 404, and a body that does not parse as a JSON 400; the AI project, which also checks an
+  update with nothing to write and an update of no row; and `morph-smoke.ts`, which also refuses a
+  link to an id past the range) and `length-smoke.ts` drive the API over HTTP, writes included, on
+  SQLite, MySQL and PostgreSQL. On MySQL and PostgreSQL the length smoke races a secured update
+  against a second connection that holds the row locked for 1.5s and then closes it: the update
+  waits for the lock and answers 404, and the row keeps its value. Each project has a database of
+  its own next to DATABASE_URL's (`scripts/smoke-project.ts`), dropped when the smoke ends, on
+  failure too; the boot smoke builds the dialect-agnostic admin on SQLite only. Every smoke starts
+  its server in a process group of its own and stops the group, so no `tsx` server outlives it (the
+  boot smoke left its servers running before).
 
-Not covered: a JSON column on MariaDB, where JSON is a LONGTEXT that mysql2 answers as a string
-(MySQL 8, which CI runs, answers it parsed); a date sent as a string, which drizzle's timestamp
-columns do not take on any database (unchanged); a numeric id past a 32-bit integer, which
-PostgreSQL refuses to compare (500), SQLite and MySQL answer 404.
+Not covered: a date sent as a string, which drizzle's timestamp columns do not take on any database
+(unchanged); a foreign key or other column value a database refuses (out of range, of the wrong
+type), which answers the JSON 500, not a 400; a link's target changed concurrently on PostgreSQL
+and MySQL (above).
 
 Exit: `async-queries.test.ts` (no synchronous call on any dialect or router variant, every route
-wrapped, the routers differing across dialects only in the insert's id, goldens
-`async-route.ts.txt`, `atomic/atomic.<dialect>.ts.txt` and `morphs/notes.routes.mysql.ts.txt`,
-idempotent regeneration on every dialect); the router goldens regenerated; `syntax.test.ts` parses
-the morphs project on every dialect; the `adapter-express-boot` workflow's `smoke:lengths` and
-`smoke` steps on SQLite, MySQL and PostgreSQL. Both smokes ran locally on SQLite, PostgreSQL 16 and
-MariaDB 10.11; MySQL 8 runs in CI.
+wrapped, the `:id` guard on every router, the routers differing across dialects only in the
+insert's id and the row lock, a secured update and delete reading, checking and writing in one
+transaction, the AI fields generated outside it and checked again inside, a create that cannot read
+its row back throwing, the error handler mounted last, goldens `async-route.ts.txt`,
+`error-handler.ts.txt`, `ids.ts.txt`, `atomic/atomic.<dialect>.ts.txt` and
+`morphs/notes.routes.mysql.ts.txt`, idempotent regeneration on every dialect);
+`generated-runtime.test.ts` (the generated SQLite `atomic` run on better-sqlite3: a second
+transaction waits, a nested one is refused and the outer rolled back, a failed rollback keeps the
+work's error; the id guard; the error handler leaking nothing of a 500); the router goldens
+regenerated; `syntax.test.ts` parses the morphs project on every dialect; the
+`adapter-express-boot` workflow's `smoke:lengths` and `smoke` steps on SQLite, MySQL and
+PostgreSQL. Both smokes ran locally on SQLite, PostgreSQL 16 and MariaDB 10.11; MySQL 8 runs in CI.
 
 ---
 
