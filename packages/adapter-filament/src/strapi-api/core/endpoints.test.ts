@@ -13,9 +13,9 @@ describe("filament endpoints", () => {
   it("routes an endpoint ahead of its type's routes, a public one with the open routes", () => {
     const routes = file("routes/api.php")!.content;
     const pin =
-      "Route::post('/memos/{id}/pin', CamisEndpoints::class)->defaults('endpoint', 'MemoPin');";
+      "Route::post('/memos/{id}/pin', CamisEndpoints::class)->defaults('camis.endpoint', 'MemoPin');";
     const count =
-      "Route::get('/memos/count', CamisEndpoints::class)->defaults('endpoint', 'MemoCount');";
+      "Route::get('/memos/count', CamisEndpoints::class)->defaults('camis.endpoint', 'MemoCount');";
     expect(routes).toContain(pin);
     expect(routes.indexOf(pin)).toBeLessThan(routes.indexOf("[MemoApiController::class, 'store']"));
     const open = routes.indexOf("Route::middleware(StrapiPublicRoute::class)->group(");
@@ -52,7 +52,9 @@ describe("filament endpoints", () => {
   });
 
   it("laravel: reports each endpoint, as only the Strapi API style serves them", () => {
-    expect(generate("laravel").gaps.gaps.filter((g) => g.feature === "endpoint")).toEqual([
+    const gaps = generate("laravel").gaps.gaps.filter((g) => g.feature === "endpoint");
+    const guarded = new Set(["MemoIngest", "MemoRestate", "MemoTally"]);
+    expect(gaps.filter((g) => !guarded.has(g.location.rule ?? ""))).toEqual([
       {
         feature: "endpoint",
         location: { contentType: "Memo", rule: "MemoPin" },

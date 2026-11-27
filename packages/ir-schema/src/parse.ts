@@ -37,6 +37,7 @@ const locationFromPath = (input: unknown, path: (string | number)[]): IrErrorLoc
         if (prevKey === "contentTypes") loc.contentType = named.name;
         else if (prevKey === "components") loc.component = named.name;
         else if (prevKey === "fields") loc.field = named.name;
+        else if (prevKey === "endpoints") loc.rule = named.name;
       }
     }
     prevKey = key;

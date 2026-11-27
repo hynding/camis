@@ -71,6 +71,40 @@ describe("express custom code", () => {
   });
 });
 
+describe("express endpoint guards", () => {
+  it("names a guarded endpoint's guards in its gap, which it does not wire either", () => {
+    const guarded: IrBundle = {
+      ...bundle,
+      document: {
+        ...bundle.document,
+        endpoints: [
+          {
+            name: "ArticleIngest",
+            contentType: "Article",
+            method: "POST",
+            path: "/articles/ingest",
+            public: true,
+            throttle: { perMinute: 60 },
+            maxBodyBytes: 4096,
+            accepts: ["text/plain"],
+            crossOrigin: { headers: ["X-Write-Key"] },
+          },
+        ],
+      },
+    };
+    const gaps = expressAdapter.generate(guarded, { projectName: "blog" }).gaps.gaps;
+    expect(gaps.filter((g) => g.feature === "endpoint")).toEqual([
+      {
+        feature: "endpoint",
+        location: { contentType: "Article", rule: "ArticleIngest" },
+        severity: "downgrade",
+        message:
+          'the Express target runs no endpoints; "ArticleIngest" (POST /articles/ingest) and its guards (throttle, maxBodyBytes, accepts, crossOrigin) are not wired',
+      },
+    ]);
+  });
+});
+
 describe("express content API actions", () => {
   it("reports a type serving only some actions, since it routes every one", () => {
     const restricted: IrBundle = {

@@ -1,10 +1,11 @@
 import type { GeneratedFile } from "@camis/adapter-kernel";
+import type { EndpointGuardMiddlewares } from "./hooks/endpoint-guards";
 import {
   ADMIN_TS,
   API_TS,
   DATABASE_TS,
   ENV,
-  MIDDLEWARES_TS,
+  middlewaresTs,
   serverTs,
   SRC_INDEX_TS,
   TSCONFIG_JSON,
@@ -13,14 +14,23 @@ import {
 
 export const skeletonFiles = (
   projectName: string,
-  { cron = false, plugins = [] }: { cron?: boolean; plugins?: readonly string[] } = {},
+  {
+    cron = false,
+    plugins = [],
+    endpointGuards = {},
+  }: {
+    cron?: boolean;
+    plugins?: readonly string[];
+    /** The endpoint guards' global middlewares, those the project has. */
+    endpointGuards?: EndpointGuardMiddlewares;
+  } = {},
 ): GeneratedFile[] => [
   { path: "package.json", content: packageJson(projectName, plugins) },
   { path: "tsconfig.json", content: TSCONFIG_JSON },
   { path: "config/server.ts", content: serverTs(cron) },
   { path: "config/admin.ts", content: ADMIN_TS },
   { path: "config/api.ts", content: API_TS },
-  { path: "config/middlewares.ts", content: MIDDLEWARES_TS },
+  { path: "config/middlewares.ts", content: middlewaresTs(endpointGuards) },
   { path: "config/database.ts", content: DATABASE_TS },
   { path: "src/index.ts", content: SRC_INDEX_TS },
   { path: ".env", content: ENV, mode: "seed" },

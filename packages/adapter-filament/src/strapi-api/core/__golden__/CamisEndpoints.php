@@ -21,12 +21,15 @@ final class CamisEndpoints extends Controller
     /** @var array<string, array{class-string, list<string>|null}> */
     private const ENDPOINTS = [
         'MemoCount' => [\App\Hooks\MemoCount::class, null],
+        'MemoIngest' => [\App\Hooks\MemoIngest::class, null],
         'MemoPin' => [\App\Hooks\MemoPin::class, ['authenticated']],
+        'MemoRestate' => [\App\Hooks\MemoRestate::class, null],
+        'MemoTally' => [\App\Hooks\MemoTally::class, null],
     ];
 
     public function __invoke(Request $request): mixed
     {
-        [$handler, $roles] = self::ENDPOINTS[(string) $request->route('endpoint')];
+        [$handler, $roles] = self::ENDPOINTS[(string) $request->route('camis.endpoint')];
         if ($roles !== null && ! StrapiApiTokens::active() && ! self::holds($request->user(), $roles)) {
             throw new StrapiError(403, 'ForbiddenError', 'Forbidden');
         }

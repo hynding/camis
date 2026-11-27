@@ -176,6 +176,49 @@ export const patchBootstrapMiddleware = (source: string): string => {
   return source.replace(STOCK_WITH_MIDDLEWARE, STRAPI_ERRORS_FIRST);
 };
 
+// The end of the StrapiErrors block patchBootstrapMiddleware writes, in every form it has had.
+const STRAPI_MIDDLEWARE_END =
+  "            $middleware->convertEmptyStringsToNull(except: [$strapiRoutes]);\n        }\n";
+export const ENDPOINT_CORS_SKIP = `        // camis: an endpoint that answers browsers on any origin itself (crossOrigin) is left alone by the app's CORS.
+        if (class_exists(\\App\\Http\\Middleware\\StrapiEndpointCors::class)) {
+            \\Illuminate\\Http\\Middleware\\HandleCors::skipWhen(\\App\\Http\\Middleware\\StrapiEndpointCors::answers(...));
+        }
+`;
+
+/**
+ * Leave Laravel's global HandleCors off the requests an IR endpoint answers browsers for itself
+ * (StrapiEndpointCors): HandleCors runs before routing, so it would answer that endpoint's preflight
+ * with the app's settings and add its own headers to its answers. Its skip callbacks are static, so
+ * they are registered from bootstrap/app.php, which runs on every request, cached or not; the
+ * class_exists guard keeps an app without such an endpoint as it was. Idempotent. A source without
+ * camis's middleware block is returned unchanged; the caller treats that as a failure.
+ */
+export const patchBootstrapEndpointCors = (source: string): string =>
+  source.includes("StrapiEndpointCors")
+    ? source
+    : source.replace(STRAPI_MIDDLEWARE_END, () => `${STRAPI_MIDDLEWARE_END}${ENDPOINT_CORS_SKIP}`);
+
+const ENDPOINT_CORS_PATH = "app/Http/Middleware/StrapiEndpointCors.php";
+
+/**
+ * Warn when a build emits StrapiEndpointCors but the app's bootstrap/app.php, scaffolded before it
+ * existed, does not leave Laravel's CORS off its routes: their preflights are then answered with the
+ * app's CORS settings. Quiet before the app is scaffolded.
+ */
+export const warnUnpatchedEndpointCors = async (
+  io: Io,
+  result: GenerationResult,
+  appDir: string,
+): Promise<void> => {
+  if (!result.files.some((f) => f.path === ENDPOINT_CORS_PATH)) return;
+  const bootstrapPath = join(appDir, "bootstrap/app.php");
+  const bootstrap = await io.readFile(bootstrapPath).catch(() => undefined);
+  if (bootstrap === undefined || bootstrap.includes("StrapiEndpointCors")) return;
+  io.out(
+    `⚠ filament: ${bootstrapPath} does not leave Laravel's CORS off the endpoints that answer browsers themselves (crossOrigin), so their preflights get the app's CORS answer. Add these lines inside ->withMiddleware(...):\n${ENDPOINT_CORS_SKIP}`,
+  );
+};
+
 /**
  * The .env with APP_NAME set to `name`: Filament's panel brand, the page title and mail's sender
  * name all read it, and the skeleton's is "Laravel". Double quotes, with what phpdotenv would
@@ -315,6 +358,13 @@ const patchBootstrap = async (
       );
       return false;
     }
+    patched = patchBootstrapEndpointCors(patched);
+    if (!patched.includes("StrapiEndpointCors")) {
+      io.out(
+        "✗ could not patch bootstrap/app.php: camis's middleware block is not the form it wrote",
+      );
+      return false;
+    }
     patched = patchBootstrapExceptions(patched);
     if (!patched.includes("Integration::handles(")) {
       io.out(
@@ -339,6 +389,9 @@ const patchBootstrap = async (
     if (graphql) io.out("✓ patched bootstrap/app.php to route routes/graphql.php");
     io.out("✓ patched bootstrap/app.php to route routes/transfer.php");
     io.out("✓ patched bootstrap/app.php to run StrapiErrors first on API routes");
+    io.out(
+      "✓ patched bootstrap/app.php to leave Laravel's CORS off endpoints that answer browsers themselves",
+    );
     io.out("✓ patched bootstrap/app.php to report errors to Sentry once its SDK is installed");
     return true;
   } catch (e) {

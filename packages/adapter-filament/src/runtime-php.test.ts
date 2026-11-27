@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { filamentAdapter } from "./generate";
 import { PHP_MARKER } from "./hooks/names";
 import { runtimePhp } from "./runtime-php";
+import { authorRoleBundle } from "./strapi-api/__fixtures__/author-role";
 import { strapiApiBundle } from "./strapi-api/__fixtures__/strapi-api";
 import { GRAPHQL_SCHEMA_PATH, emitStrapiGraphql } from "./strapi-api/graphql/graphql-runtime";
 
@@ -53,6 +54,8 @@ describe("runtimePhp", () => {
         apiStyle: "strapi",
         storageLayout: "strapi",
       }),
+      // An endpoint's guards are emitted only for a project that declares one.
+      filamentAdapter.generate(authorRoleBundle, { projectName: "press", apiStyle: "strapi" }),
     ].flatMap((result) => result.files.map((file) => file.content));
     // A seeded file (hand-written once it is copied) goes without the generated marker.
     const unused = phpSources(strapiDir).filter(

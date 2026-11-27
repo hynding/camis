@@ -11,6 +11,33 @@ const doc = (overrides: Record<string, unknown>) => ({
 });
 
 describe("parseDocument", () => {
+  it("locates an endpoint's error by the endpoint's name", () => {
+    const r = parseDocument(
+      doc({
+        endpoints: [
+          {
+            name: "ArticleIngest",
+            contentType: "Article",
+            method: "POST",
+            path: "/articles/ingest",
+            crossOrigin: { headers: [] },
+          },
+        ],
+      }),
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.errors).toEqual([
+      {
+        code: "cross_origin_not_public",
+        message:
+          'endpoint "ArticleIngest" answers browsers from any origin (crossOrigin), so it must be public',
+        location: { rule: "ArticleIngest" },
+        path: ["endpoints", 0, "crossOrigin"],
+      },
+    ]);
+  });
+
   it("returns ok for a valid document", () => {
     const r = parseDocument(doc({}));
     expect(r.ok).toBe(true);

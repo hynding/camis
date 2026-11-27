@@ -1,4 +1,10 @@
-import type { GeneratedFile, StorageLayout } from "@camis/adapter-kernel";
+import {
+  endpointGuardsTable,
+  isGuardedEndpoint,
+  type GeneratedFile,
+  type StorageLayout,
+} from "@camis/adapter-kernel";
+import type { Endpoint } from "@camis/ir-schema";
 
 /**
  * The paragraphs that differ per storage layout: what the overlay contains, who owns the database
@@ -481,7 +487,65 @@ export interface DeployExtras {
   cors?: boolean;
   /** users-permissions' sessions and credential routes: the Strapi API style over Laravel storage. */
   sessions?: boolean;
+  /** The served endpoints, whose declared guards their routes check (config/camis-endpoints.php). */
+  endpoints?: Endpoint[];
 }
+
+// Where Laravel serves routes/api.php, which camis writes the endpoints into.
+const LARAVEL_API_PREFIX = "/api";
+
+/** The IR endpoints' declared guards, checked at their routes before their handlers run. */
+const endpointGuardsSection = (guarded: Endpoint[]): string => `
+
+## Endpoint guards
+
+These endpoints' routes check the guards the IR declares before the hand-written handler runs, in
+this order: a cross-origin preflight is answered; a caller over the throttle answers 429
+\`RateLimitError\` with \`Retry-After\` (refused requests count too); a body whose \`Content-Type\`,
+without its parameters, is not listed answers 415 \`UnsupportedMediaTypeError\`, as does a body
+sent with no \`Content-Type\`; a body larger than the limit, by its \`Content-Length\` or by the
+bytes actually sent, answers 413 \`PayloadTooLargeError\`. Laravel decodes a JSON body when it
+receives the request, before any route runs, so for JSON the size limit keeps the body from the
+handler, not from that decoding; PHP's \`post_max_size\` bounds it there.
+
+${endpointGuardsTable(guarded, LARAVEL_API_PREFIX)}
+
+A throttle's variable overrides its rate when it is a whole number in ASCII digits, floored at 1;
+any other value keeps the declared rate (an empty one, \`1e3\`, a sign or words); re-run
+\`php artisan config:cache\` after changing it. It counts per client address in Laravel's cache, an
+IPv6 caller by its /64 (the block one subscriber is given), keyed by an HMAC of the address under
+\`APP_KEY\`, so the cache holds no address; the cache store applies to it as well. Its windows
+are fixed minutes, so a caller can make up to twice its rate across the turn of a window. Grouping
+IPv6 by /64 puts callers who share one in a single count: those behind one NAT64, Teredo clients
+of one relay, every host of a shared /64. The key is an HMAC under \`APP_KEY\`, so changing \`APP_KEY\`
+starts every count afresh; with no \`APP_KEY\` the throttled routes answer 500.
+
+The client address is the one Laravel reads from the request: behind a reverse proxy or load
+balancer Laravel does not trust, every caller shares the proxy's address, and so one count, and
+the throttle refuses them all together. Trust the proxy as Sign-in sessions says, with
+\`$middleware->trustProxies(at: [...])\` in \`bootstrap/app.php\` naming the proxy's addresses;
+trusting \`'*'\` while clients can reach the app directly lets each one name its own address in
+\`X-Forwarded-For\`, and so pass the throttle.
+
+A public endpoint asks no credentials and no role: its route runs the guards, then the handler,
+which is its only authorization. On an endpoint that is not public, the route checks the caller's
+credentials first, before any guard, then the guards, then the roles the IR lists (403), then the
+handler. Every public endpoint's contract in \`app/Hooks/Contracts\`, guarded or not, now says
+that its handler is its only authorization, so regenerating changes that generated file in an
+existing project; the hand-written handler is not touched.
+
+An endpoint with a cross-origin column (\`none\`: no request header beyond those always allowed)
+answers browsers on any origin itself, without
+credentials, refusals included, whatever \`CAMIS_CORS_ORIGIN\` says; its preflight allows its
+method and exactly the listed headers. Laravel's CORS answers every other route as before, and must
+be left off these routes, which \`camis scaffold\` does in \`bootstrap/app.php\`; on an app scaffolded
+before, add inside \`->withMiddleware(...)\`:
+
+\`\`\`php
+if (class_exists(\\App\\Http\\Middleware\\StrapiEndpointCors::class)) {
+    \\Illuminate\\Http\\Middleware\\HandleCors::skipWhen(\\App\\Http\\Middleware\\StrapiEndpointCors::answers(...));
+}
+\`\`\``;
 
 const mcpSection = `
 
@@ -510,6 +574,11 @@ them, and \`php artisan schedule:test\` runs one now. \`camis scaffold\` loads t
 \`routes/console.php\`; on an app scaffolded before it did, add
 \`if (is_file(__DIR__.'/schedule.php')) { require __DIR__.'/schedule.php'; }\` there.`;
 
+const guardSection = (endpoints: Endpoint[]): string => {
+  const guarded = endpoints.filter(isGuardedEndpoint).sort((a, b) => a.name.localeCompare(b.name));
+  return guarded.length === 0 ? "" : endpointGuardsSection(guarded).slice(2) + "\n\n";
+};
+
 // Generator-owned deployment guide for the overlaid Laravel app. Regenerated on every run.
 export const deployFile = (
   layout: StorageLayout = "laravel",
@@ -521,6 +590,7 @@ export const deployFile = (
     mcp = false,
     cors = false,
     sessions = false,
+    endpoints = [],
   }: DeployExtras = {},
 ): GeneratedFile => ({
   path: "DEPLOY.md",
@@ -560,7 +630,7 @@ DB_PASSWORD=secret
 
 ${firstDeploy(layout)}
 
-${layout === "strapi" ? "" : adminSection}${cors ? corsSection.slice(2) + "\n\n" : ""}${sessions ? sessionsSection.slice(2) + "\n\n" : ""}${graphql ? graphqlSection.slice(2) + "\n\n" : ""}${documentation ? documentationSection.slice(2) + "\n\n" : ""}${transfer ? transferSection.slice(2) + "\n\n" : ""}${schedules ? schedulesSection.slice(2) + "\n\n" : ""}${mcp ? mcpSection.slice(2) + "\n\n" : ""}## Shared hosting (no shell)
+${layout === "strapi" ? "" : adminSection}${cors ? corsSection.slice(2) + "\n\n" : ""}${sessions ? sessionsSection.slice(2) + "\n\n" : ""}${graphql ? graphqlSection.slice(2) + "\n\n" : ""}${documentation ? documentationSection.slice(2) + "\n\n" : ""}${transfer ? transferSection.slice(2) + "\n\n" : ""}${schedules ? schedulesSection.slice(2) + "\n\n" : ""}${mcp ? mcpSection.slice(2) + "\n\n" : ""}${guardSection(endpoints)}## Shared hosting (no shell)
 
 Build locally (scaffold + \`camis build\` + \`composer install\`), upload the whole app
 directory, and point the document root at \`public/\`. Laravel's \`.htaccess\` ships in

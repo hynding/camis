@@ -27,7 +27,8 @@ const sharesRole: Expression = {
  * one (Memo): the Editor may do everything, the Author only to entries it created, a Reviewer reads
  * and changes the memos an account of its role created. Memo's list and read are open to anyone,
  * as Strapi's route auth: false opens them. CI's author-role job overlays it (scripts/overlay.ts
- * --bundle author-role) and runs AuthorRoleTest, PublicActionsTest and EndpointsTest.
+ * --bundle author-role) and runs AuthorRoleTest, PublicActionsTest, EndpointsTest and
+ * EndpointGuardsTest.
  */
 export const authorRoleBundle: IrBundle = {
   document: {
@@ -80,10 +81,39 @@ export const authorRoleBundle: IrBundle = {
       },
     ],
     components: [],
-    // Strapi custom routes beside Memo: one its users may call, one anyone may (EndpointsTest).
+    // Strapi custom routes beside Memo: one its users may call, one anyone may (EndpointsTest),
+    // two browsers on any origin call on one path, one behind every declared guard and one with
+    // other request headers, and one whose path parameter is named endpoint (EndpointGuardsTest).
     endpoints: [
       { name: "MemoPin", contentType: "Memo", method: "POST", path: "/memos/:id/pin" },
       { name: "MemoCount", contentType: "Memo", method: "GET", path: "/memos/count", public: true },
+      {
+        name: "MemoIngest",
+        contentType: "Memo",
+        method: "POST",
+        path: "/memos/ingest",
+        public: true,
+        throttle: { perMinute: 5 },
+        maxBodyBytes: 64,
+        accepts: ["application/json", "text/plain"],
+        crossOrigin: { headers: ["Content-Type", "X-Memo-Key"] },
+      },
+      {
+        name: "MemoRestate",
+        contentType: "Memo",
+        method: "PUT",
+        path: "/memos/ingest",
+        public: true,
+        crossOrigin: { headers: ["Content-Type", "X-Memo-Version"] },
+      },
+      {
+        name: "MemoTally",
+        contentType: "Memo",
+        method: "GET",
+        path: "/memos/:endpoint/tally",
+        public: true,
+        throttle: { perMinute: 2 },
+      },
     ],
   },
   roles: [
