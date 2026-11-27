@@ -491,10 +491,10 @@ export interface DeployExtras {
   endpoints?: Endpoint[];
 }
 
-/** The IR endpoints' declared guards, checked at their routes before their handlers run. */
 // Where Laravel serves routes/api.php, which camis writes the endpoints into.
 const LARAVEL_API_PREFIX = "/api";
 
+/** The IR endpoints' declared guards, checked at their routes before their handlers run. */
 const endpointGuardsSection = (guarded: Endpoint[]): string => `
 
 ## Endpoint guards

@@ -199,7 +199,7 @@ const hasBody = (ctx: Context): boolean => {
  * unread the kernel then resets the connection, and a reset can drop the answer before the client
  * reads it. So this reads and discards the body still coming from the refusal on, counting it as
  * it comes (read here, so Node does not discard it uncounted once the answer is sent), and stops
- * reading past LINGER_BYTES rather than drop the connection: on a fast link that many bytes come
+ * reading once past LINGER_BYTES (by at most the piece that takes it past) rather than drop the connection: on a fast link that many bytes come
  * within a millisecond, and a reset then can still beat the answer to a client busy sending. Once
  * the answer is sent it takes Node's close back and shuts only the sending side (the client reads
  * the answer, then the end), and drops the connection when the client ends or LINGER_MS have
@@ -344,11 +344,17 @@ interface Count {
  * caller's count lives in the fixed window it began in, by the monotonic clock (a step of the wall
  * clock changes nothing); at a window's turn the one before it is dropped whole, every count in it
  * having expired, so forgetting costs nothing per request. At most \`cap\` callers are tracked
- * (some 200 bytes each, so about 20 MB at the default cap). While that many are, every caller not
- * tracked shares one count, limited to the endpoint's rate a window: a new caller, and one whose
- * own count has expired, until a window's turn frees room. So memory stays bounded, the callers not
- * tracked together make no more than the rate, and a caller already tracked keeps its own count
- * until it expires; each endpoint has its own counter, so a flood on one leaves the others alone.
+ * (about 205 bytes each, so about 20 MB at the default cap). A count stops taking room once it has
+ * expired: each map holds its counts in the order they began, which is the order they expire (a
+ * count in \`current\` never expires before the turn, so none is ever replaced there), so when the
+ * cap is full the oldest count, first in \`previous\`, is dropped if it has expired, and the caller
+ * takes its room. The cap thus binds only on callers active within the last window. While it does,
+ * every caller not tracked shares one count, limited to the endpoint's rate a window. So memory
+ * stays bounded, the callers not tracked together make no more than the rate, and a caller already
+ * tracked keeps its own count until it expires; each endpoint has its own counter, so a flood on
+ * one leaves the others alone. The residual: whoever keeps \`cap\` distinct callers (an IPv6 caller
+ * by its /64) active every window keeps the cap full, and every caller not already tracked then
+ * shares the endpoint's rate in total.
  */
 const counter = (cap: number) => {
   let current = new Map<string, Count>();
@@ -357,6 +363,12 @@ const counter = (cap: number) => {
   let shared: Count = { hits: 0, resetAt: -Infinity };
   const fresh = (now: number): Count => ({ hits: 0, resetAt: now + MINUTE });
   const seconds = (at: number, now: number): number => Math.max(1, Math.ceil((at - now) / 1000));
+  const full = (): boolean => current.size + previous.size >= cap;
+  const dropOldestIfExpired = (now: number): void => {
+    const oldest = previous.keys().next();
+    if (oldest.done === true) return;
+    if ((previous.get(oldest.value)?.resetAt ?? now) <= now) previous.delete(oldest.value);
+  };
   return (key: string, max: number): number | null => {
     const now = performance.now();
     if (now >= turnAt) {
@@ -366,7 +378,8 @@ const counter = (cap: number) => {
     }
     let count = current.get(key) ?? previous.get(key);
     if (count === undefined || count.resetAt <= now) {
-      if (current.size + previous.size >= cap) {
+      if (full()) dropOldestIfExpired(now);
+      if (full()) {
         if (shared.resetAt <= now) shared = fresh(now);
         count = shared;
       } else {
@@ -556,13 +569,18 @@ The counts are kept in the process's memory, as users-permissions' own throttle 
 default: each Strapi process counts apart, so behind several processes a caller gets the rate from
 each, and a restart forgets every count. Each endpoint tracks at most
 \`CAMIS_ENDPOINT_MAX_TRACKED_CALLERS\` callers (a whole number in ASCII digits, floored at 1;
-100000 by default), some 200 bytes each: about 20 MB of memory per throttled endpoint at the
-default. While that many are tracked, every caller not tracked shares one count for the endpoint,
-limited to the endpoint's rate a window: a new caller, or one whose own count has expired, falls
-into that shared count until a window's turn frees room. So memory stays bounded, all the callers
-not tracked together make no more than the endpoint's rate, a flood of addresses on one endpoint
-leaves every other endpoint's counts as they were, and a caller already tracked keeps its own count
-until it expires.
+100000 by default), about 205 bytes each: about 20 MB of memory per throttled endpoint at the
+default. A caller's count stops taking room once it has expired, so the cap binds only on callers
+active within the last minute. While that many are tracked, every caller not tracked shares one
+count for the endpoint, limited to the endpoint's rate a window, and a new caller, or one whose own
+count has expired, is tracked again as soon as the oldest count expires and makes room. So memory
+stays bounded, all the callers not tracked together make no more than the endpoint's rate, a flood
+of addresses on one endpoint leaves every other endpoint's counts as they were, and a caller
+already tracked keeps its own count until it expires. What remains: an attacker who keeps the cap's
+worth of distinct callers active every minute (an IPv6 caller counted by its /64) holds it full,
+and every caller not already tracked then shares the endpoint's rate in total. Against that, put a
+limit at the reverse proxy or the network, or raise \`CAMIS_ENDPOINT_MAX_TRACKED_CALLERS\`, at
+about 205 bytes a caller.
 
 The caller address is Koa's \`ctx.request.ip\`. With \`server.proxy\` off it is the address the
 connection comes from, so behind a reverse proxy every caller shares the proxy's address and one
@@ -570,11 +588,13 @@ count. With \`server.proxy\` on it is taken from \`X-Forwarded-For\`, which a cl
 the proxy in front replaces it, so the throttle is only as good as that proxy's configuration.
 
 A refused request that still has a body coming is answered with \`Connection: close\`; the
-connection is then shut on the server's side, at most 1 MiB more of its body is read and discarded,
+connection is then shut on the server's side, about 1 MiB more of its body is read and discarded,
 and the connection is dropped when the client ends it or at most 2 seconds after the answer, so the
-client reads the answer before the connection is dropped. A request sent after the refused
-one on the same connection is not processed: it is dropped unanswered, before any camis middleware
-or route runs.
+client reads the answer before the connection is dropped. A client that reads nothing until its
+whole body is sent can lose the refusal of a body more than about 1 MiB over the limit, as behind
+nginx. A request sent after the refused one on the same connection is not processed, while the
+middlewares listed ahead of the camis ones keep requests in order (those \`config/middlewares.ts\`
+lists as generated do): it is dropped unanswered, before any camis middleware or route runs.
 `;
 
 /** The global middlewares, and DEPLOY.md, a project's guarded endpoints need; none without. */

@@ -4100,8 +4100,8 @@ with the app's settings, which do not allow a custom header.
   error body without calling the rest. A refusal that leaves a body unread sends
   `Connection: close` and closes as nginx lingers: from the refusal on it reads and discards the
   body still coming, counting it in a `data` listener (read there, since Node would otherwise
-  discard it uncounted once the answer is sent), and past 1 MiB stops reading rather than drop the
-  connection, since on a fast link 1 MiB comes within a millisecond and a reset then can still beat
+  discard it uncounted once the answer is sent), and once past 1 MiB (by at most the piece that
+  takes it past, so about 1 MiB) stops reading rather than drop the connection, since on a fast link 1 MiB comes within a millisecond and a reset then can still beat
   the answer to a client busy sending; once the answer is sent it takes back Node's own close
   (which, with request bytes unread, would make the kernel reset the connection and could drop the
   answer), shuts only its sending side, and drops the connection when the client ends or 2 seconds
@@ -4127,13 +4127,21 @@ with the app's settings, which do not allow a custom header.
   the wall clock changes nothing), and at a window's turn the one before it is dropped whole, so no
   request walks the callers. Each endpoint tracks at most `CAMIS_ENDPOINT_MAX_TRACKED_CALLERS`
   callers (read as a rate override is, 100000 by default; the middleware's config is not used,
-  since camis regenerates `config/middlewares.ts`), some 200 bytes each, about 20 MB per throttled
-  endpoint at the default (measured on Node 22). While that many are tracked, every caller not
-  tracked shares one overflow count for the endpoint, limited to the endpoint's `perMinute` a
-  window: a new caller, and a caller whose own count has expired, falls into it until a window's
-  turn frees room. So memory stays bounded, the callers not tracked together make no more than the
-  endpoint's rate, one endpoint's flood of addresses leaves every other endpoint's counts as they
-  were, and a caller already tracked keeps its own count until it expires. A project with a guarded endpoint also gets a
+  since camis regenerates `config/middlewares.ts`), about 205 bytes each, about 20 MB per
+  throttled endpoint at the default (measured on Node 22). A count stops taking room once it has
+  expired: each window's map holds its counts in the order they began, which is the order they
+  expire (a count in the current window's map never expires before the turn, so none is replaced
+  there), so when the cap is full the oldest count, the first key of the previous window's map, is
+  dropped if it has expired and the caller takes its room, in O(1). The cap therefore binds only on
+  callers active within the last window. While it does, every caller not tracked shares one
+  overflow count for the endpoint, limited to the endpoint's `perMinute` a window. So memory stays
+  bounded, the callers not tracked together make no more than the endpoint's rate, one endpoint's
+  flood of addresses leaves every other endpoint's counts as they were, and a caller already
+  tracked keeps its own count until it expires. What remains: an attacker keeping the cap's worth
+  of distinct callers (IPv6 counted per /64) active every minute keeps the cap full, and every
+  caller not already tracked then shares the endpoint's `perMinute` in total; DEPLOY.md says so,
+  with the mitigation (a limit at the reverse proxy or network, or a larger
+  `CAMIS_ENDPOINT_MAX_TRACKED_CALLERS` at about 205 bytes a caller). A project with a guarded endpoint also gets a
   generated `DEPLOY.md` saying all this to its operator, with the guards' table (shared with
   Filament's DEPLOY.md through the kernel's `endpointGuardsTable`, which takes the route prefix
   from each adapter: `/api`, where Laravel serves `routes/api.php` and where Strapi serves the
@@ -4188,10 +4196,11 @@ scaffolded before this phase answers a cross-origin endpoint's preflight with it
 when its config entry is missing carries no CORS headers, so a browser on another origin cannot read
 it; a plain `OPTIONS` (no `Access-Control-Request-Method`, so no preflight) on a path shared by
 cross-origin endpoints is answered with all their methods and no request headers. On Strapi, while
-an endpoint's tracked-caller cap is full, a new caller there, or a returning one whose count has
-expired, shares the one overflow count with every other caller not tracked, so it can be refused
-for requests others made until a window's turn frees room. A client that reads nothing until it
-has sent the whole body loses a Strapi refusal of a body more than 1 MiB past it to the reset 2
+an endpoint's tracked-caller cap is full of callers active within the last window, a new caller
+there, or a returning one whose count has expired, shares the one overflow count with every other
+caller not tracked, so it can be refused for requests others made until the oldest count expires.
+A client that reads nothing until it has sent the whole body loses a Strapi refusal of a body more
+than about 1 MiB past it to the reset 2
 seconds on, as it would behind nginx once the lingering time is up; and a request pipelined
 behind a refused one is dropped only if Node reads it after the refusal is decided, which the
 middlewares Strapi runs ahead of them (all synchronous up to `next()`) ensure for a body read in
@@ -4225,8 +4234,11 @@ as its IPv4 address, the HMAC under the app's keys, the variable read only in di
 windows by a monotonic clock however the wall clock steps, each endpoint's own cap on callers
 tracked from `CAMIS_ENDPOINT_MAX_TRACKED_CALLERS` (read only in digits), while full the callers
 not tracked sharing one count at the endpoint's rate however many addresses they come from,
-a caller whose count has expired among them, tracked callers keeping their own counts, another
-endpoint untouched, no more callers kept than the cap, no `Map` walked once more than
+tracked callers keeping their own counts, another endpoint untouched, an expired count's room
+freed for the next caller, the oldest first, new callers served once a flood's counts expire
+though the flood returns every two minutes (at least 530 of 600, against 30 when expired counts
+kept their room until the turn), only the oldest count looked at, no more callers kept than the
+cap, no `Map` walked once more than
 10000 callers have expired, 415 with and without a type, 413 by length, a chunked body counted,
 refused or passed on whole, `Connection: close` after a refusal that leaves a body unread, a
 request on a refused connection dropped unanswered by either middleware with nothing destroyed,

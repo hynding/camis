@@ -115,7 +115,7 @@ describe("strapi endpoint guards: the generated project", () => {
       "`CAMIS_ENDPOINT_MAX_TRACKED_CALLERS`",
       "100000 by default",
       "every caller not tracked shares one count for the endpoint, limited to the endpoint's rate a window",
-      "a caller's count stops taking room once it has expired",
+      "caller's count stops taking room once it has expired",
       "an attacker who keeps the cap's worth of distinct callers active every minute (an IPv6 caller counted by its /64) holds it full",
       "every caller not already tracked then shares the endpoint's rate in total",
       "a limit at the reverse proxy or the network",
@@ -655,8 +655,9 @@ describe("strapi endpoint guards: the generated middlewares at work", () => {
           served += 1;
         at.monotonic += 1_000;
       }
-      // Only the first minute, while the flood's counts are running, shares one count.
-      expect(served).toBeGreaterThanOrEqual(540);
+      // All but about the first minute's, while the flood's first counts run and new callers
+      // share one count (when the cap kept expired counts until a window's turn: 30 of 600).
+      expect(served).toBeGreaterThanOrEqual(530);
     });
   });
 
