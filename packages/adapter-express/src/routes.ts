@@ -62,11 +62,8 @@ export const emitRoutes = (
     links === "none" ? "" : `\nimport { ${linkNames.join(", ")} } from "../morphs";`;
   // A row and its to-many links are written together or not at all, and a secured update or delete
   // checks the row it writes inside the same transaction (see `src/db/atomic.ts`).
-  const atomicImport = secured
-    ? `\nimport { atomic, type Executor } from "../db/atomic";`
-    : own
-      ? `\nimport { atomic } from "../db/atomic";`
-      : "";
+  const atomicImport =
+    secured || own ? `\nimport { atomic, type Executor } from "../db/atomic";` : "";
   // A body with a value longer than its field's bound is refused whole, before anything is written:
   // on a secured API, what the caller may write (see `permittedLengthCheck`).
   const bounds = maxLengths(ct, options.aiColumns, options.dialect);
@@ -135,18 +132,35 @@ export const emitRoutes = (
   });`
       : `
   ${insertedId("db")}`;
+  // On PostgreSQL and MySQL the row is locked until the transaction ends, so no other write changes
+  // it between the checks and the write; SQLite's BEGIN IMMEDIATE holds the whole database already.
+  const lock =
+    options.dialect === undefined || options.dialect === "sqlite" ? "" : `.for("update")`;
+  const lockRow = `
+/** The row, read inside a transaction, so that the checks on it and the write see the same row. */
+const lockRow = async (tx: Executor, id: number) =>
+  (await tx.select().from(${t}).where(eq(${t}.id, id)).limit(1)${lock})[0];
+`;
+  // Without links an update or a delete is one statement, which a concurrent delete leaves with no
+  // row to write: the read back answers 404. With to-many links the row is read locked inside the
+  // transaction that writes its links, so concurrent writes of one row take turns (each replacing
+  // the links the one before it left) and a write after a delete finds no row.
   const write = (body: string) =>
     own
       ? `
-  await atomic(async (tx) => {
+  const written = await atomic(async (tx) => {
+    const existing = await lockRow(tx, id);
+    if (!existing) return false;
     ${update("tx", "data", "    ")}
     await writeLinks(tx, "${typeName}", id, ${body});
-  });`
+    return true;
+  });${notFound("!written")}`
       : `
   ${update("db", "data", "  ")}`;
   const remove = own
     ? `
   await atomic(async (tx) => {
+    if (!(await lockRow(tx, id))) return;
     await dropLinks(tx, "${typeName}", id);
     await tx.delete(${t}).where(eq(${t}.id, id));
   });`
@@ -197,7 +211,7 @@ ${t}Router.param("id", routeId);`;
   ${dataDecl} data = pick(req.body, [${cols}]);${createPop}${insert("")}`;
     const patch = own
       ? `
-  const id = Number(req.params.id);${notFound("!(await find(id))")}
+  const id = Number(req.params.id);
   const body = pick(req.body, [${writable}]);${refusal("body", "allowed")}
   ${dataDecl} data = linkColumns("${typeName}", body);${updatePop}${write("body")}`
       : `
@@ -206,7 +220,7 @@ ${t}Router.param("id", routeId);`;
     return withMarker(`import { Router } from "express";
 ${header}${aiImport}${linksImport}${lengthsImport}
 
-${helpers}${boundsConstant}${links === "none" ? "" : `\n// Without grants every caller reads every entry a link names.\nconst allowed: Allowed = () => true;\n`}
+${helpers}${own ? lockRow : ""}${boundsConstant}${links === "none" ? "" : `\n// Without grants every caller reads every entry a link names.\nconst allowed: Allowed = () => true;\n`}
 ${routerDeclaration}
 
 ${route("get", `"/"`, "_req", list)}
@@ -259,15 +273,6 @@ ${route(
     : `
   ${dataDecl} data = assignOwners(req, "${typeName}", stripWrites(req, "${typeName}", proposed, proposed));${createRefusal}${permittedLengthCheck}${createPop}${insert("")}`;
 
-  // On PostgreSQL and MySQL the row is locked until the transaction ends, so no other write changes
-  // it between the checks and the write; SQLite's BEGIN IMMEDIATE holds the whole database already.
-  const lock =
-    options.dialect === undefined || options.dialect === "sqlite" ? "" : `.for("update")`;
-  const lockRow = `
-/** The row, read inside a transaction, so that the checks on it and the write see the same row. */
-const lockRow = async (tx: Executor, id: number) =>
-  (await tx.select().from(${t}).where(eq(${t}.id, id)).limit(1)${lock})[0];
-`;
   const refusalOf = (condition: string, status: number, error: string) =>
     `  if (${condition}) return { status: ${status}, error: ${error} };`;
   const permittedUpdate = `

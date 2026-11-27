@@ -9,6 +9,8 @@ const PACKAGE_JSON = (projectName: string, spec: DialectSpec, secured: boolean):
       name: projectName,
       private: true,
       type: "module",
+      // better-sqlite3 12 has prebuilt binaries for Node 20 and later only.
+      engines: { node: ">=20" },
       scripts: {
         dev: "tsx watch src/index.ts",
         start: "tsx src/index.ts",

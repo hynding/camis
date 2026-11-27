@@ -9,6 +9,9 @@ export type Executor = Pick<Transaction, "select" | "insert" | "update" | "delet
 const RETRIED = new Set(["40001", "40P01"]);
 const ATTEMPTS = 3;
 
+/** A pause of 10 to 50ms, a different one for each, so that the transactions that met do not meet again at once. */
+const pause = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 10 + Math.random() * 40));
+
 const retried = (error: unknown): boolean =>
   typeof error === "object" &&
   error !== null &&
@@ -27,6 +30,7 @@ export const atomic = async <T>(work: (tx: Executor) => Promise<T>): Promise<T> 
       return await db.transaction(work);
     } catch (error) {
       if (attempt >= ATTEMPTS || !retried(error)) throw error;
+      await pause();
     }
   }
 };

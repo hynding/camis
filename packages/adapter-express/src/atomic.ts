@@ -71,6 +71,15 @@ const CONFIG = { isolationLevel: "read committed" } as const;
 /** The failures on which the database rolled the transaction back so that it may run again. */
 const RETRIED = new Set(${mysql ? "[1213]" : `["40001", "40P01"]`});
 const ATTEMPTS = 3;
+${
+  mysql
+    ? `// Not a lock wait timeout (1205): the work already waited innodb_lock_wait_timeout for its lock,
+// and would wait as long again.
+`
+    : ""
+}
+/** A pause of 10 to 50ms, a different one for each, so that the transactions that met do not meet again at once. */
+const pause = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 10 + Math.random() * 40));
 
 const retried = (error: unknown): boolean =>
   typeof error === "object" &&
@@ -90,6 +99,7 @@ export const atomic = async <T>(work: (tx: Executor) => Promise<T>): Promise<T> 
       return await db.transaction(work${mysql ? ", CONFIG" : ""});
     } catch (error) {
       if (attempt >= ATTEMPTS || !retried(error)) throw error;
+      await pause();
     }
   }
 };
