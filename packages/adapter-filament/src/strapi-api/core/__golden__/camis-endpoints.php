@@ -23,4 +23,8 @@ return [
         'method' => 'PUT',
         'cross_origin_headers' => ['Content-Type', 'X-Memo-Version'],
     ],
+    'MemoTally' => [
+        'method' => 'GET',
+        'throttle_per_minute' => (static fn (mixed $value): int => is_string($value) && ctype_digit($value) ? max(1, (int) $value) : 2)(env('CAMIS_ENDPOINT_MEMO_TALLY_THROTTLE_PER_MINUTE')),
+    ],
 ];

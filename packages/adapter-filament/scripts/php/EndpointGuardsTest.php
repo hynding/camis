@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Hooks\Contracts\MemoIngestEndpoint;
+use App\Hooks\Contracts\MemoTallyEndpoint;
 use App\Hooks\MemoIngest;
+use App\Hooks\MemoTally;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Testing\TestResponse;
@@ -18,7 +20,8 @@ use Tests\TestCase;
  * preflight route answers each by the method asked, then MemoIngest's route refuses a caller over
  * the throttle, a body of another type and a body too large, each before the handler runs and each
  * answer carrying its CORS headers, while every other route keeps the app's CORS. A guarded route
- * whose config entry is missing refuses every request. Needs bootstrap/app.php patched as camis
+ * whose config entry is missing refuses every request, and MemoTally's path parameter, named
+ * endpoint, chooses neither its handler nor its guards. Needs bootstrap/app.php patched as camis
  * scaffold patches it. CI's author-role job copies this into tests/Feature.
  */
 class EndpointGuardsTest extends TestCase
@@ -162,6 +165,25 @@ class EndpointGuardsTest extends TestCase
         $this->fromBrowser('PUT', '/api/memos/ingest', ['CONTENT_TYPE' => 'application/json'], '{}')->assertStatus(500);
         $this->fromBrowser('OPTIONS', '/api/memos/ingest', ['HTTP_ACCESS_CONTROL_REQUEST_METHOD' => 'POST'])->assertStatus(500);
         $this->assertSame([], self::$handled);
+    }
+
+    public function test_a_path_parameter_named_endpoint_chooses_neither_the_handler_nor_the_guards(): void
+    {
+        $this->app->bind(MemoTally::class, fn () => new class implements MemoTallyEndpoint {
+            public function handle(Request $request): mixed
+            {
+                EndpointGuardsTest::$handled[] = 'tally:'.$request->route('endpoint');
+
+                return ['data' => ['endpoint' => $request->route('endpoint')]];
+            }
+        });
+
+        // Another endpoint's name in the path reaches MemoTally's handler, MemoPin's roles not asked.
+        $this->getJson('/api/memos/MemoIngest/tally')->assertOk()->assertJsonPath('data.endpoint', 'MemoIngest');
+        $this->getJson('/api/memos/MemoPin/tally')->assertOk()->assertJsonPath('data.endpoint', 'MemoPin');
+        // Its own throttle, 2 a minute, whatever the path names.
+        $this->getJson('/api/memos/MemoRestate/tally')->assertStatus(429)->assertJsonPath('error.name', 'RateLimitError');
+        $this->assertSame(['tally:MemoIngest', 'tally:MemoPin'], self::$handled);
     }
 
     public function test_refused_requests_count_toward_the_throttle(): void

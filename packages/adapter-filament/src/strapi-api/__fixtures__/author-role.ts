@@ -82,8 +82,8 @@ export const authorRoleBundle: IrBundle = {
     ],
     components: [],
     // Strapi custom routes beside Memo: one its users may call, one anyone may (EndpointsTest),
-    // and two browsers on any origin call on one path, one behind every declared guard and one
-    // with other request headers (EndpointGuardsTest).
+    // two browsers on any origin call on one path, one behind every declared guard and one with
+    // other request headers, and one whose path parameter is named endpoint (EndpointGuardsTest).
     endpoints: [
       { name: "MemoPin", contentType: "Memo", method: "POST", path: "/memos/:id/pin" },
       { name: "MemoCount", contentType: "Memo", method: "GET", path: "/memos/count", public: true },
@@ -105,6 +105,14 @@ export const authorRoleBundle: IrBundle = {
         path: "/memos/ingest",
         public: true,
         crossOrigin: { headers: ["Content-Type", "X-Memo-Version"] },
+      },
+      {
+        name: "MemoTally",
+        contentType: "Memo",
+        method: "GET",
+        path: "/memos/:endpoint/tally",
+        public: true,
+        throttle: { perMinute: 2 },
       },
     ],
   },

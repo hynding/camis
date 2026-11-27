@@ -19,7 +19,7 @@ const unguarded: IrBundle = {
   document: {
     ...authorRoleBundle.document,
     endpoints: (authorRoleBundle.document.endpoints ?? []).filter(
-      (e) => e.name !== "MemoIngest" && e.name !== "MemoRestate",
+      (e) => !["MemoIngest", "MemoRestate", "MemoTally"].includes(e.name),
     ),
   },
 };
@@ -41,13 +41,13 @@ describe("filament endpoint guards", () => {
   it("guards the route and answers its preflight, among the open routes", () => {
     const routes = file("routes/api.php")!.content;
     const route =
-      "Route::post('/memos/ingest', CamisEndpoints::class)->defaults('endpoint', 'MemoIngest')->middleware([StrapiEndpointCors::class, StrapiEndpointGuard::class]);";
+      "Route::post('/memos/ingest', CamisEndpoints::class)->defaults('camis.endpoint', 'MemoIngest')->middleware([StrapiEndpointCors::class, StrapiEndpointGuard::class]);";
     const preflight =
-      "Route::options('/memos/ingest', CamisEndpoints::class)->defaults('endpoint', ['MemoIngest', 'MemoRestate'])->middleware(StrapiEndpointCors::class);";
+      "Route::options('/memos/ingest', CamisEndpoints::class)->defaults('camis.endpoint', ['MemoIngest', 'MemoRestate'])->middleware(StrapiEndpointCors::class);";
     expect(routes).toContain(route);
     expect(routes).toContain(preflight);
     expect(routes).toContain(
-      "Route::put('/memos/ingest', CamisEndpoints::class)->defaults('endpoint', 'MemoRestate')->middleware(StrapiEndpointCors::class);",
+      "Route::put('/memos/ingest', CamisEndpoints::class)->defaults('camis.endpoint', 'MemoRestate')->middleware(StrapiEndpointCors::class);",
     );
     // Laravel keeps only the last route of a method and path: one preflight answers every endpoint
     // on the path, by the method it asks for.
@@ -59,13 +59,27 @@ describe("filament endpoint guards", () => {
     expect(routes).toContain("use App\\Http\\Middleware\\StrapiEndpointGuard;");
   });
 
+  // Laravel lets a path parameter replace a route default of the same name, and an IR path parameter
+  // is letters, digits, _ and -, so the default naming the endpoint has a dot no parameter has.
+  it("names the endpoint in a route default no path parameter can replace, and reads it there", () => {
+    const routes = file("routes/api.php")!.content;
+    expect(routes).toContain(
+      "Route::get('/memos/{endpoint}/tally', CamisEndpoints::class)->defaults('camis.endpoint', 'MemoTally')->middleware(StrapiEndpointGuard::class);",
+    );
+    expect(routes).not.toContain("->defaults('endpoint'");
+    for (const path of [GUARD, CORS, "app/Http/Controllers/Api/CamisEndpoints.php"]) {
+      expect(file(path)!.content).toContain("'camis.endpoint'");
+      expect(file(path)!.content).not.toMatch(/route\('endpoint'\)|defaults\['endpoint'\]/);
+    }
+  });
+
   it("leaves the routes of an endpoint with no guard as they were", () => {
     const routes = file("routes/api.php")!.content;
     expect(routes).toContain(
-      "Route::post('/memos/{id}/pin', CamisEndpoints::class)->defaults('endpoint', 'MemoPin');",
+      "Route::post('/memos/{id}/pin', CamisEndpoints::class)->defaults('camis.endpoint', 'MemoPin');",
     );
     expect(routes).toContain(
-      "Route::get('/memos/count', CamisEndpoints::class)->defaults('endpoint', 'MemoCount');",
+      "Route::get('/memos/count', CamisEndpoints::class)->defaults('camis.endpoint', 'MemoCount');",
     );
     expect(routes).not.toContain("Route::options('/memos/count'");
   });
@@ -173,7 +187,7 @@ describe("filament endpoint guards", () => {
     expect(result.files.some((f) => f.path === CORS)).toBe(false);
     const routes = result.files.find((f) => f.path === "routes/api.php")!.content;
     expect(routes).toContain(
-      "Route::put('/memos/import', CamisEndpoints::class)->defaults('endpoint', 'MemoImport')->middleware(StrapiEndpointGuard::class);",
+      "Route::put('/memos/import', CamisEndpoints::class)->defaults('camis.endpoint', 'MemoImport')->middleware(StrapiEndpointGuard::class);",
     );
     expect(routes).not.toContain("StrapiEndpointCors");
   });
@@ -246,6 +260,7 @@ echo json_encode(require __DIR__.'/camis-endpoints.php');
         method: "PUT",
         cross_origin_headers: ["Content-Type", "X-Memo-Version"],
       },
+      MemoTally: { method: "GET", throttle_per_minute: 2 },
     });
   });
 });
