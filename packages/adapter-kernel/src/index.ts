@@ -19,7 +19,12 @@ export type {
   ExpandedZone,
   ExpandedZoneMember,
 } from "./expand";
-export { endpointGuardNames, endpointThrottleEnv, isGuardedEndpoint } from "./endpoint-guards";
+export {
+  endpointGuardNames,
+  endpointGuardsTable,
+  endpointThrottleEnv,
+  isGuardedEndpoint,
+} from "./endpoint-guards";
 export { fieldEditorGaps } from "./field-editors";
 export { privateFieldGaps } from "./private-fields";
 export { stableJson } from "./stable-json";

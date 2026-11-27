@@ -19,3 +19,30 @@ export const endpointGuardNames = (e: Endpoint): string[] =>
 
 /** Whether the endpoint declares a guard its route checks before the handler runs. */
 export const isGuardedEndpoint = (e: Endpoint): boolean => endpointGuardNames(e).length > 0;
+
+/**
+ * Text as code in a Markdown table cell: a pipe would end the cell, so it is escaped (GitHub's
+ * tables read `\|` as a pipe even in code), and a backtick takes a code span of two.
+ */
+const tableCode = (text: string): string => {
+  const escaped = text.replace(/\|/g, "\\|");
+  return text.includes("`") ? `\`\` ${escaped} \`\`` : `\`${escaped}\``;
+};
+
+const cell = (items: readonly string[] | undefined): string =>
+  items === undefined ? "" : items.map(tableCode).join(", ");
+
+const guardRow = (e: Endpoint): string =>
+  `| \`${e.name}\` | \`${e.method} /api${e.path}\` | ${
+    e.throttle === undefined ? "" : `${e.throttle.perMinute} (\`${endpointThrottleEnv(e.name)}\`)`
+  } | ${e.maxBodyBytes ?? ""} | ${cell(e.accepts?.map((t) => t.toLowerCase()))} | ${
+    e.crossOrigin?.headers.length === 0 ? "none" : cell(e.crossOrigin?.headers)
+  } |`;
+
+/** The guarded endpoints' declared guards as a Markdown table, for a target's DEPLOY.md. */
+export const endpointGuardsTable = (guarded: Endpoint[]): string =>
+  [
+    "| Endpoint | Route | Requests a minute per address | Largest body (bytes) | Media types | Cross-origin request headers |",
+    "| --- | --- | --- | --- | --- | --- |",
+    ...guarded.map(guardRow),
+  ].join("\n");

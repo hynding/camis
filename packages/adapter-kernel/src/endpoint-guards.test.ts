@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { Endpoint } from "@camis/ir-schema";
-import { endpointGuardNames, endpointThrottleEnv, isGuardedEndpoint } from "./endpoint-guards";
+import {
+  endpointGuardNames,
+  endpointGuardsTable,
+  endpointThrottleEnv,
+  isGuardedEndpoint,
+} from "./endpoint-guards";
 
 const plain: Endpoint = {
   name: "MemoPin",
@@ -41,5 +46,21 @@ describe("endpoint guards", () => {
         throttle: { perMinute: 1 },
       }),
     ).toEqual(["throttle", "accepts", "crossOrigin"]);
+  });
+
+  it("tables each endpoint's guards for DEPLOY.md, a pipe and a backtick in a header escaped", () => {
+    expect(
+      endpointGuardsTable([
+        { ...plain, throttle: { perMinute: 5 }, maxBodyBytes: 64, accepts: ["Text/Plain"] },
+        { ...plain, name: "Odd", public: true, crossOrigin: { headers: ["X|Key", "X`Key"] } },
+        { ...plain, name: "Bare", public: true, crossOrigin: { headers: [] } },
+      ]).split("\n"),
+    ).toEqual([
+      "| Endpoint | Route | Requests a minute per address | Largest body (bytes) | Media types | Cross-origin request headers |",
+      "| --- | --- | --- | --- | --- | --- |",
+      `| \`${plain.name}\` | \`${plain.method} /api${plain.path}\` | 5 (\`${endpointThrottleEnv(plain.name)}\`) | 64 | \`text/plain\` |  |`,
+      `| \`Odd\` | \`${plain.method} /api${plain.path}\` |  |  |  | \`X\\|Key\`, \`\` X\`Key \`\` |`,
+      `| \`Bare\` | \`${plain.method} /api${plain.path}\` |  |  |  | none |`,
+    ]);
   });
 });

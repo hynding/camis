@@ -4066,7 +4066,8 @@ with the app's settings, which do not allow a custom header.
   through Laravel's `RateLimiter` in a bucket per endpoint, an IPv6 caller by its /64 and an
   IPv4-mapped one as its IPv4 address, keyed by a 32-character prefix of an HMAC-SHA256 of that
   address under `APP_KEY` (the cache holds no address, and no list of addresses reverses it without
-  the key), the count `hit()` returns deciding; it reads at most one
+  the key; an empty `APP_KEY` answers 500 rather than key it with nothing), the count `hit()`
+  returns deciding; it reads at most one
   byte past the limit from the body's stream, besides the declared `Content-Length`; its refusals
   are thrown, so `StrapiErrors` answers `RateLimitError`, `UnsupportedMediaTypeError` and
   `PayloadTooLargeError` in Strapi's error body. Cross-origin endpoints route one `OPTIONS` per path
@@ -4096,18 +4097,28 @@ with the app's settings, which do not allow a custom header.
   `src/middlewares/camis_endpoint_guards.ts`, listed after `strapi::cors` (so a refusal on an
   endpoint without `crossOrigin` carries the app's CORS headers, and an allowed origin can read the
   429 and its `Retry-After`) and ahead of `strapi::body`, checks the guards and refuses in Strapi's
-  error body without calling the rest; a refusal that leaves a body unread sends
-  `Connection: close` and destroys the request once the answer is sent, so a client cannot hold
-  the connection open by streaming the rest. The size is checked from `Content-Length` (Node reads
+  error body without calling the rest. A refusal that leaves a body unread sends
+  `Connection: close` and closes as nginx lingers: once the answer is sent it takes back Node's own
+  close (which, with request bytes unread, would make the kernel reset the connection and could
+  drop the answer), shuts only its sending side, and reads and discards what still comes until the
+  client ends, 1 MiB more has come, or 2 seconds have passed, then drops the connection, so a
+  client can neither hold it open by streaming the rest nor lose the answer to a reset. The size is checked from `Content-Length` (Node reads
   no more than a declared length), and a body sent without one (chunked) is read up to one byte
   past the limit before `strapi::body`, refused, or handed on as the same request with that body
   and its length. The throttle counts in the process's memory, as users-permissions'
   `koa2-ratelimit` does by default, per endpoint and caller (an IPv6 caller by its /64), keyed by
   an HMAC-SHA256 of the address under the app's keys (`server.app.keys`, `APP_KEYS`; the
-  middleware refuses to start without them). A count lives in the minute window it began in, and
-  at a window's turn the one before it is dropped whole, so no request walks the callers; at most
-  `maxTrackedCallers` (the middleware's config, 100000 by default) are tracked, and a new caller
-  beyond them is refused with 429 until a window is dropped, rather than the counter growing. No
+  middleware refuses to start without them). Each endpoint has its own counters. A count lives in
+  the fixed minute window it began in, by the monotonic clock (`performance.now()`, so a step of
+  the wall clock changes nothing), and at a window's turn the one before it is dropped whole, so no
+  request walks the callers. Each endpoint tracks at most `CAMIS_ENDPOINT_MAX_TRACKED_CALLERS`
+  callers (read as a rate override is, 100000 by default; the middleware's config is not used,
+  since camis regenerates `config/middlewares.ts`); while that many are tracked a new caller is let
+  through uncounted, so memory stays bounded and one endpoint's flood of addresses (which defeats a
+  per-address throttle anyway) locks no one out of it or another endpoint, while callers already
+  tracked are counted and refused as before. A project with a guarded endpoint also gets a
+  generated `DEPLOY.md` saying all this to its operator, with the guards' table (shared with
+  Filament's DEPLOY.md through the kernel's `endpointGuardsTable`). No
   dependency is added: the middlewares import only Node's modules and `@strapi/strapi`'s types. `strapi::body` parses a JSON
   body up to 1mb and a text or form body up to 56kb (koa-body 6's defaults, which camis's
   `config/middlewares.ts` keeps), so a `maxBodyBytes` above that for an accepted type, or for any
@@ -4124,6 +4135,12 @@ every caller shares the proxy's address and one count, and trusting `'*'` where 
 app directly lets each name its own address. Strapi with `server.proxy` on takes the address from
 `X-Forwarded-For`, which a client writes unless the proxy in front replaces it, so there the
 throttle is only as good as that proxy's configuration.
+
+On both targets the windows are fixed minutes, so a caller can make up to twice its rate across a
+window's turn; grouping IPv6 by /64 puts callers who share one in a single count (those behind one
+NAT64, Teredo clients of one relay, every host of a shared /64); and since the key is an HMAC under
+the app's key (`APP_KEY`, `APP_KEYS`), changing that key starts every count afresh. All three are
+in each target's DEPLOY.md.
 
 The guards beside authentication: on Filament, a public endpoint's route runs the guards and then
 the handler; a non-public one's route group checks the caller's credentials first, then the
@@ -4152,8 +4169,8 @@ scaffolded before this phase answers a cross-origin endpoint's preflight with it
 when its config entry is missing carries no CORS headers, so a browser on another origin cannot read
 it; a plain `OPTIONS` (no `Access-Control-Request-Method`, so no preflight) on a path shared by
 cross-origin endpoints is answered with all their methods and no request headers. On Strapi, while
-the tracked-caller cap is full, a returning caller whose count expired in the previous window counts
-as new and is refused with 429 until that window is dropped.
+an endpoint's tracked-caller cap is full, a new caller there, or a returning one whose count has
+expired, is let through uncounted until a window is dropped.
 
 Exit: `custom-code.test.ts` and `parse.test.ts` (ir-schema: the four settings, `crossOrigin` without
 `public`, bad header names and media types, wildcards, rates and sizes below 1 or above
@@ -4179,9 +4196,14 @@ and text bodies passed on with the CORS headers replaced, the headers kept on a 
 with `Retry-After` counting refused requests per address and per endpoint, the app's CORS headers
 on a refusal of an endpoint without `crossOrigin`, an IPv6 caller by its /64 and an IPv4-mapped one
 as its IPv4 address, the HMAC under the app's keys, the variable read only in digits and its floor,
-the cap on callers tracked, no `Map` walked once more than 10000 callers have expired, 415 with
-and without a type, 413 by length, a chunked body counted, refused or passed on whole, and the
-connection closed after a refusal that leaves a body unread); `custom-code.test.ts`
+windows by a monotonic clock however the wall clock steps, each endpoint's own cap on callers
+tracked from `CAMIS_ENDPOINT_MAX_TRACKED_CALLERS` (read only in digits) with a new caller let
+through uncounted while full and tracked callers still refused, no `Map` walked once more than
+10000 callers have expired, 415 with and without a type, 413 by length, a chunked body counted,
+refused or passed on whole, `Connection: close` after a refusal that leaves a body unread, and
+DEPLOY.md; then, behind a real `node:http` server, a client refused mid-body seeing the server's
+side shut and the connection dropped after the 2-second linger rather than reset, and a client
+streaming a 50 MB body, declared and chunked, reading the 413 in each of 20 runs); `custom-code.test.ts`
 in Express. In CI the author-role job patches `bootstrap/app.php` as `camis scaffold` does and runs
 `EndpointGuardsTest.php` (the preflight's headers, JSON and `text/plain;charset=UTF-8` bodies
 reaching the handler, 429 with `Retry-After` and the handler not run, refused requests counted, 415,
@@ -4191,7 +4213,7 @@ the browser's origin, still answers another route, its preflight, and another me
 the endpoint's path; MemoRestate's PUT preflight answered on the same route with its own headers
 and `Vary`; MemoTally reached with its own handler and throttle whatever endpoint's name the path
 holds; IPv6 callers counted by /64 under an HMAC keyed by `APP_KEY`; and 500 for every request
-on a guarded route whose config entry is missing); `runtime-phpstan.sh` copies the two middlewares into the first app, whose
+on a guarded route whose config entry is missing, or when `APP_KEY` is empty); `runtime-phpstan.sh` copies the two middlewares into the first app, whose
 fixture has no guarded endpoint. Locally, `EndpointGuardsTest`, `EndpointsTest`, `AuthorRoleTest`
 and `PublicActionsTest` ran on SQLite in a copy of a scaffolded strapi-php app, and the Strapi
 middleware ran in front of Strapi 5.48's own `strapi::errors`, `strapi::cors` and `strapi::body`

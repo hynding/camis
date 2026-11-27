@@ -1,4 +1,5 @@
 import {
+  endpointGuardsTable,
   endpointThrottleEnv,
   isGuardedEndpoint,
   withMarker,
@@ -472,12 +473,59 @@ ${endpoints.map(guardEntry).join("\n")}
 ];
 ${GUARDS_RUNTIME}`);
 
-/** The global middlewares a project's guarded endpoints need; none without. */
+/** What an operator deploying the project needs to know of its guarded endpoints. */
+const deploy = (guarded: Endpoint[]): string => `<!-- @camis:generated — do not edit -->
+# Deploying this camis-generated Strapi project
+
+## Endpoint guards
+
+These endpoints' declared guards are checked by two global middlewares in
+\`config/middlewares.ts\`: \`global::${ENDPOINT_CORS_MIDDLEWARE}\` (ahead of \`strapi::cors\`)
+answers browsers on any origin for an endpoint with cross-origin request headers, without
+credentials, and \`global::${ENDPOINT_GUARDS_MIDDLEWARE}\` (after \`strapi::cors\`, ahead of
+\`strapi::body\`) refuses, in this order, a caller over the throttle (429 \`RateLimitError\` with
+\`Retry-After\`, refused requests counted too), a body of a media type not listed (415
+\`UnsupportedMediaTypeError\`) and a body larger than the limit, declared or sent (413
+\`PayloadTooLargeError\`). Both run before Strapi authenticates the caller and asks its role, on
+every endpoint; a public endpoint asks neither, so its handler is its only authorization.
+
+${endpointGuardsTable(guarded)}
+
+A throttle's variable overrides its rate when it is a whole number in ASCII digits, floored at 1;
+any other value keeps the declared rate. Each endpoint counts per caller address, an IPv6 caller by
+its /64 (the block one subscriber is given), keyed by an HMAC of the address under \`APP_KEYS\`
+(\`server.app.keys\`), so no address is kept; the middleware does not start without them, and
+changing \`APP_KEYS\` starts every count afresh. Grouping IPv6 by /64 puts callers who share one in
+a single count: those behind one NAT64, Teredo clients of one relay, every host of a shared /64. The
+windows are fixed minutes, so a caller can make up to twice its rate across the turn of a window.
+
+The counts are kept in the process's memory, as users-permissions' own throttle keeps them by
+default: each Strapi process counts apart, so behind several processes a caller gets the rate from
+each, and a restart forgets every count. Each endpoint tracks at most
+\`CAMIS_ENDPOINT_MAX_TRACKED_CALLERS\` callers (a whole number in ASCII digits, floored at 1;
+100000 by default): while that many are tracked, a new caller is let through uncounted, so memory
+stays bounded and one endpoint's flood of addresses locks no one out of it or any other endpoint,
+while callers already tracked are counted and refused as before. A flood of that many distinct
+addresses defeats a per-address throttle anyway.
+
+The caller address is Koa's \`ctx.request.ip\`. With \`server.proxy\` off it is the address the
+connection comes from, so behind a reverse proxy every caller shares the proxy's address and one
+count. With \`server.proxy\` on it is taken from \`X-Forwarded-For\`, which a client writes unless
+the proxy in front replaces it, so the throttle is only as good as that proxy's configuration.
+
+A refused request that still has a body coming is answered with \`Connection: close\`; the
+connection is then shut on the server's side and drained for at most 2 seconds or 1 MiB, so the
+client reads the answer before the connection is dropped.
+`;
+
+/** The global middlewares, and DEPLOY.md, a project's guarded endpoints need; none without. */
 export const emitEndpointGuardFiles = (doc: IrDocument): GeneratedFile[] => {
   const guarded = guardedEndpoints(doc);
   const crossOrigin = guarded.filter(answersOtherOrigins);
   const checks = guarded.filter(checked);
+  if (guarded.length === 0) return [];
   return [
+    { path: "DEPLOY.md", content: deploy(guarded) },
     ...(crossOrigin.length === 0
       ? []
       : [
