@@ -232,4 +232,38 @@ describe("endpoint guards", () => {
       expect(endpoint.safeParse({ ...ingest, maxBodyBytes: bad }).success).toBe(false);
     }
   });
+
+  // A target writes the number as a literal: past 2^31 - 1 some write it in exponent form.
+  it("rejects a rate or a size above 2147483647", () => {
+    const largest = 2_147_483_647;
+    expect(endpoint.safeParse({ ...ingest, throttle: { perMinute: largest } }).success).toBe(true);
+    expect(endpoint.safeParse({ ...ingest, maxBodyBytes: largest }).success).toBe(true);
+    for (const bad of [largest + 1, 1e21]) {
+      expect(endpoint.safeParse({ ...ingest, throttle: { perMinute: bad } }).success).toBe(false);
+      expect(endpoint.safeParse({ ...ingest, maxBodyBytes: bad }).success).toBe(false);
+    }
+  });
+
+  it("rejects a wildcard media type, which names no type a body has", () => {
+    expect(
+      issues({
+        ...base,
+        endpoints: [{ ...ingest, accepts: ["*/*", "text/*", "application/json"] }],
+      }),
+    ).toEqual([
+      { code: "invalid_media_type", path: ["endpoints", 0, "accepts", 0] },
+      { code: "invalid_media_type", path: ["endpoints", 0, "accepts", 1] },
+    ]);
+  });
+
+  // A target tells its endpoints apart by a route value named "endpoint", which a path parameter of
+  // that name would replace.
+  it("rejects a path parameter named endpoint, located at the endpoint's path", () => {
+    expect(
+      issues({ ...base, endpoints: [{ ...ingest, path: "/articles/:endpoint/ingest" }] }),
+    ).toEqual([{ code: "reserved_path_parameter", path: ["endpoints", 0, "path"] }]);
+    expect(
+      issues({ ...base, endpoints: [{ ...ingest, path: "/articles/:endpointId/ingest" }] }),
+    ).toEqual([]);
+  });
 });
