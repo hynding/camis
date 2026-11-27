@@ -13,6 +13,12 @@ import { usersPermissionsExtensionFile } from "./extensions";
 import { emitHookFiles } from "./hooks/emit";
 import { emitRouteHookFiles, routerConfig } from "./hooks/route-hooks";
 import { emitEndpointFiles } from "./hooks/endpoints";
+import {
+  ENDPOINT_GUARDS_MIDDLEWARE,
+  emitEndpointGuardFiles,
+  endpointGuardGaps,
+  hasEndpointGuards,
+} from "./hooks/endpoint-guards";
 import { emitScheduleFiles } from "./hooks/schedules";
 import { emitPermissions } from "./permissions/emit";
 import { skeletonFiles } from "./skeleton";
@@ -93,6 +99,7 @@ export const strapiAdapter: GenerateAdapter = {
       ...skeletonFiles(options.projectName, {
         cron: (doc.schedules ?? []).length > 0,
         plugins: fieldPlugins(doc),
+        ...(hasEndpointGuards(doc) ? { endpointGuards: ENDPOINT_GUARDS_MIDDLEWARE } : {}),
       }),
       ...doc.contentTypes
         .filter((ct) => ct.builtin === undefined)
@@ -152,6 +159,7 @@ export const strapiAdapter: GenerateAdapter = {
       ...emitHookFiles(doc),
       ...emitRouteHookFiles(doc),
       ...emitEndpointFiles(doc),
+      ...emitEndpointGuardFiles(doc),
       ...emitScheduleFiles(doc),
       ...aiGenFiles,
     ];
@@ -165,6 +173,7 @@ export const strapiAdapter: GenerateAdapter = {
           ...strapiDecimalGaps(doc),
           ...strapiStringLengthGaps(doc),
           ...softDeleteGaps(doc),
+          ...endpointGuardGaps(doc),
           ...perm.gaps,
           ...aiGaps,
         ],

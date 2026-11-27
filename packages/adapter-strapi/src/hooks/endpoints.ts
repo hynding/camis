@@ -25,13 +25,18 @@ const routesFile = (ct: ContentType, endpoints: Endpoint[]): GeneratedFile => ({
   ),
 });
 
+// Strapi asks no role on an auth: false route, so nothing but the handler stands between it and anyone.
+const PUBLIC_NOTE = `
+// auth: false: no caller is authenticated and no role is asked, so this handler is the only
+// authorization.`;
+
 const controllerStub = (
   endpoint: Endpoint,
   ct: ContentType,
 ): string => `import type { Core } from "@strapi/strapi";
 
 // Ring 2 endpoint — hand-written. camis seeds this once and never overwrites it.
-// Strapi answers ${endpoint.method} /api${endpoint.path} with it (${endpointHandler(endpoint, ct)}).
+// Strapi answers ${endpoint.method} /api${endpoint.path} with it (${endpointHandler(endpoint, ct)}).${endpoint.public === true ? PUBLIC_NOTE : ""}
 export default ({ strapi }: { strapi: Core.Strapi }) => ({
   async ${ACTION}(ctx) {
     // TODO: answer the request; ctx.params holds the path's :params.

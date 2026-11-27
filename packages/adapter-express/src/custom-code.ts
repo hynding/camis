@@ -1,4 +1,10 @@
-import { ROUTE_ACTIONS, type CapabilityGap, type IrDocument } from "@camis/ir-schema";
+import { isGuardedEndpoint } from "@camis/adapter-kernel";
+import {
+  ROUTE_ACTIONS,
+  type CapabilityGap,
+  type Endpoint,
+  type IrDocument,
+} from "@camis/ir-schema";
 
 const gap = (
   feature: string,
@@ -6,12 +12,21 @@ const gap = (
   name: string,
   contentType?: string,
   detail = "",
+  wired = " is not wired",
 ): CapabilityGap => ({
   feature,
   location: contentType === undefined ? { rule: name } : { contentType, rule: name },
   severity: "downgrade",
-  message: `the Express target runs no ${what}; "${name}"${detail} is not wired`,
+  message: `the Express target runs no ${what}; "${name}"${detail}${wired}`,
 });
+
+const GUARD_NAMES = ["throttle", "maxBodyBytes", "accepts", "crossOrigin"] as const;
+
+/** " and its guards (…) are not wired", naming those the endpoint declares; " is not wired" without. */
+const endpointWired = (e: Endpoint): string =>
+  isGuardedEndpoint(e)
+    ? ` and its guards (${GUARD_NAMES.filter((g) => e[g] !== undefined).join(", ")}) are not wired`
+    : " is not wired";
 
 /** The Express target has no Ring 2 seams yet, so each piece of hand-written code is a gap. */
 export const customCodeGaps = (doc: IrDocument): CapabilityGap[] => [
@@ -22,7 +37,14 @@ export const customCodeGaps = (doc: IrDocument): CapabilityGap[] => [
   ),
   ...(doc.schedules ?? []).map((s) => gap("schedule", "schedules", s.name)),
   ...(doc.endpoints ?? []).map((e) =>
-    gap("endpoint", "endpoints", e.name, e.contentType, ` (${e.method} ${e.path})`),
+    gap(
+      "endpoint",
+      "endpoints",
+      e.name,
+      e.contentType,
+      ` (${e.method} ${e.path})`,
+      endpointWired(e),
+    ),
   ),
 ];
 

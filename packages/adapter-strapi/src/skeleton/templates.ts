@@ -112,10 +112,15 @@ export const API_TS = `export default {
 };
 `;
 
-export const MIDDLEWARES_TS = `export default [
+/**
+ * Strapi's middlewares as a new project lists them; with endpoint guards, their global middleware
+ * after strapi::errors (so an error is answered in Strapi's body) and ahead of strapi::cors and
+ * strapi::body (so a preflight and a refused body never reach them).
+ */
+export const middlewaresTs = (endpointGuards: string | undefined): string => `export default [
   'strapi::logger',
   'strapi::errors',
-  'strapi::security',
+  'strapi::security',${endpointGuards === undefined ? "" : `\n  'global::${endpointGuards}',`}
   'strapi::cors',
   'strapi::poweredBy',
   'strapi::query',

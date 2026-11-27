@@ -7,6 +7,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { TS_MARKER } from "@camis/adapter-kernel";
 import type { Endpoint, IrDocument } from "@camis/ir-schema";
 import { strapiAdapter } from "../generate";
+import { importEndpoints } from "../import/endpoints";
+import { importDocument } from "../import/import-document";
 import { customCodeDoc } from "../__fixtures__/custom-code";
 
 // An endpoint's declared guards, checked by a generated global middleware ahead of strapi::cors
@@ -71,6 +73,26 @@ describe("strapi endpoint guards: the generated project", () => {
     );
   });
 
+  it("is read back as the endpoint without its guards, which an import does not carry, and passes over the generated middleware", () => {
+    const routes = guarded.files
+      .filter((f) => f.path.endsWith("/routes/01-endpoints.ts"))
+      .map((f) => ({ path: f.path, content: f.content.replace(TS_MARKER, "") }));
+    const route = {
+      name: ingest.name,
+      contentType: ingest.contentType,
+      method: ingest.method,
+      path: ingest.path,
+      public: true,
+    };
+    expect(importEndpoints(routes, guardedDoc(ingest)).endpoints).toEqual([
+      ...(customCodeDoc.endpoints ?? []),
+      route,
+    ]);
+    const imported = importDocument(guarded.files);
+    expect(imported.document.ok).toBe(true);
+    expect(imported.gaps.gaps.filter((g) => g.location.file?.includes("middlewares"))).toEqual([]);
+  });
+
   it("reports a body limit above what strapi::body parses for an accepted media type, located at the endpoint", () => {
     const large = { ...ingest, maxBodyBytes: 100_000 };
     expect(generate(guardedDoc(large)).gaps.gaps).toEqual([
@@ -79,16 +101,16 @@ describe("strapi endpoint guards: the generated project", () => {
         location: { contentType: "Article", rule: "ArticleIngest" },
         severity: "downgrade",
         message:
-          'endpoint "ArticleIngest" allows a body of 100000 bytes, but strapi::body refuses a text/plain body over 57344 bytes (its textLimit, 56kb) with 413 first; raise strapi::body\'s limit in config/middlewares to take more',
+          'endpoint "ArticleIngest" allows a body of 100000 bytes, but strapi::body refuses a text/plain body over 57344 bytes (its textLimit, 56kb) with 413 first, as camis generates config/middlewares with strapi::body\'s defaults',
       },
     ]);
     const json = { ...ingest, accepts: ["application/json"], maxBodyBytes: 2_000_000 };
     expect(generate(guardedDoc(json)).gaps.gaps.map((g) => g.message)).toEqual([
-      'endpoint "ArticleIngest" allows a body of 2000000 bytes, but strapi::body refuses an application/json body over 1048576 bytes (its jsonLimit, 1mb) with 413 first; raise strapi::body\'s limit in config/middlewares to take more',
+      'endpoint "ArticleIngest" allows a body of 2000000 bytes, but strapi::body refuses an application/json body over 1048576 bytes (its jsonLimit, 1mb) with 413 first, as camis generates config/middlewares with strapi::body\'s defaults',
     ]);
     const any = { ...ingest, accepts: undefined, maxBodyBytes: 60_000 };
     expect(generate(guardedDoc(any)).gaps.gaps.map((g) => g.message)).toEqual([
-      'endpoint "ArticleIngest" allows a body of 60000 bytes, but strapi::body refuses an application/x-www-form-urlencoded body over 57344 bytes (its formLimit, 56kb) and a text/* body over 57344 bytes (its textLimit, 56kb) with 413 first; raise strapi::body\'s limit in config/middlewares to take more',
+      'endpoint "ArticleIngest" allows a body of 60000 bytes, but strapi::body refuses an application/x-www-form-urlencoded body over 57344 bytes (its formLimit, 56kb) and a text/* body over 57344 bytes (its textLimit, 56kb) with 413 first, as camis generates config/middlewares with strapi::body\'s defaults',
     ]);
     expect(generate(guardedDoc({ ...ingest, maxBodyBytes: 57_344 })).gaps.gaps).toEqual([]);
   });
@@ -111,7 +133,8 @@ interface FakeContext {
 type Middleware = (ctx: FakeContext, next: () => Promise<void>) => Promise<void>;
 type Factory = (config: unknown, deps: { strapi: unknown }) => Middleware;
 
-const strapi = { config: { get: (key: string, fallback: unknown) => fallback } };
+// Strapi's config as a new project has it: every key at its default.
+const strapi = { config: { get: (_key: string, fallback: unknown) => fallback } };
 
 const context = (
   method: string,
