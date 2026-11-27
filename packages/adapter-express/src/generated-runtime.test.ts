@@ -12,8 +12,12 @@ import { expressAdapterFor } from "./generate";
 // better-sqlite3 they import, and removed afterwards.
 const PACKAGE = fileURLToPath(new URL("..", import.meta.url));
 
-const generatedFile = (bundle: typeof blog, path: string): string => {
-  const file = expressAdapterFor("sqlite")
+const generatedFile = (
+  bundle: typeof blog,
+  path: string,
+  dialect: "sqlite" | "pgsql" | "mysql" = "sqlite",
+): string => {
+  const file = expressAdapterFor(dialect)
     .generate(bundle, { projectName: "runtime" })
     .files.find((f) => f.path === path);
   if (file === undefined) throw new Error(`${path} is not generated`);
@@ -126,6 +130,67 @@ describe("the generated SQLite transaction", () => {
   });
 });
 
+interface PooledModule {
+  atomic: <T>(work: (tx: string) => Promise<T>) => Promise<T>;
+}
+interface FakeClient {
+  configs: unknown[];
+  failures: unknown[];
+}
+
+// The pooled atomic against a client whose transaction fails with each of `failures` in turn.
+const pooledAtomic = async (
+  dialect: "pgsql" | "mysql",
+): Promise<{ atomic: PooledModule["atomic"]; client: FakeClient }> => {
+  const own = await mkdtemp(join(dir, `${dialect}-`));
+  await writeFile(
+    join(own, "client.ts"),
+    `export const client = { configs: [] as unknown[], failures: [] as unknown[] };
+export const db = {
+  transaction: async <T>(work: (tx: string) => Promise<T>, config?: unknown): Promise<T> => {
+    client.configs.push(config);
+    const failure = client.failures.shift();
+    if (failure !== undefined) throw failure;
+    return work("tx");
+  },
+};
+`,
+  );
+  await writeFile(join(own, "atomic.ts"), generatedFile(secured, "src/db/atomic.ts", dialect));
+  const { atomic: pooled } = (await import(join(own, "atomic.ts"))) as PooledModule;
+  const { client } = (await import(join(own, "client.ts"))) as { client: FakeClient };
+  return { atomic: pooled, client };
+};
+
+describe("the generated PostgreSQL and MySQL transaction", () => {
+  const deadlock = { pgsql: { code: "40P01" }, mysql: { errno: 1213, code: "ER_LOCK_DEADLOCK" } };
+  for (const dialect of ["pgsql", "mysql"] as const) {
+    it(`runs the work again when the database gave up on it, up to three times (${dialect})`, async () => {
+      const { atomic: pooled, client } = await pooledAtomic(dialect);
+      client.failures.push(deadlock[dialect], deadlock[dialect]);
+      await expect(pooled(async (tx) => `done in ${tx}`)).resolves.toBe("done in tx");
+      expect(client.configs).toHaveLength(3);
+      client.failures.push(deadlock[dialect], deadlock[dialect], deadlock[dialect]);
+      await expect(pooled(async () => "never")).rejects.toBe(deadlock[dialect]);
+    });
+    it(`does not run the work again after any other failure (${dialect})`, async () => {
+      const { atomic: pooled, client } = await pooledAtomic(dialect);
+      const other = { code: "23505" };
+      client.failures.push(other);
+      await expect(pooled(async () => "never")).rejects.toBe(other);
+      expect(client.configs).toHaveLength(1);
+    });
+  }
+  it("asks MySQL for READ COMMITTED and PostgreSQL for its default", async () => {
+    const mysql = await pooledAtomic("mysql");
+    await mysql.atomic(async () => undefined);
+    expect(mysql.client.configs).toEqual([{ isolationLevel: "read committed" }]);
+    const pgsql = await pooledAtomic("pgsql");
+    await pgsql.atomic(async () => undefined);
+    expect(pgsql.client.configs).toEqual([undefined]);
+  });
+});
+
 describe("the generated id guard", () => {
   for (const [id, served] of [
     ["1", true],
@@ -135,6 +200,8 @@ describe("the generated id guard", () => {
     ["0", false],
     ["abc", false],
     ["1e3", false],
+    ["0001", false],
+    [`${"0".repeat(40)}1`, false],
     ["-1", false],
   ] as const) {
     it(`${served ? "serves" : "answers 404 for"} the id ${id}`, () => {
@@ -160,8 +227,58 @@ describe("the generated error handler", () => {
     errorHandler(failure, {}, res, vi.fn());
     expect(res.statusCode).toBe(500);
     expect(JSON.stringify(res.body)).toBe('{"error":"internal error"}');
-    expect(logged).toHaveBeenCalledWith(failure);
+    expect(logged).toHaveBeenCalled();
     logged.mockRestore();
+  });
+
+  // A driver's error carries the statement and its values (mysql2's `sql`, postgres-js's
+  // `parameters` and `detail`), and its message can quote a value too.
+  for (const [driver, failure] of [
+    [
+      "mysql2",
+      Object.assign(new Error("Duplicate entry 'secret-value' for key 'entries.slug'"), {
+        code: "ER_DUP_ENTRY",
+        errno: 1062,
+        sqlState: "23000",
+        sqlMessage: "Duplicate entry 'secret-value' for key 'entries.slug'",
+        sql: "insert into `entries` (`slug`) values ('secret-value')",
+      }),
+    ],
+    [
+      "postgres-js",
+      Object.assign(new Error('invalid input syntax for type integer: "secret-value"'), {
+        name: "PostgresError",
+        code: "22P02",
+        detail: "Key (slug)=(secret-value) already exists.",
+        query: 'insert into "entries" ("slug") values ($1)',
+        parameters: ["secret-value"],
+      }),
+    ],
+  ] as const) {
+    it(`logs a ${driver} error's name, code and stack frames, never a value it carries`, () => {
+      const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      errorHandler(failure, {}, response(), vi.fn());
+      const line = logged.mock.calls.map((call) => call.map(String).join(" ")).join("\n");
+      logged.mockRestore();
+      expect(line).not.toContain("secret-value");
+      expect(line).toContain(failure.code);
+      expect(line).toContain("generated-runtime.test.ts");
+    });
+  }
+
+  it("logs any other error's name, message and stack", () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    errorHandler(
+      new TypeError("articles 7 was written but could not be read back"),
+      {},
+      response(),
+      vi.fn(),
+    );
+    const line = logged.mock.calls.map((call) => call.map(String).join(" ")).join("\n");
+    logged.mockRestore();
+    expect(line).toContain("TypeError");
+    expect(line).toContain("articles 7 was written but could not be read back");
+    expect(line).toContain("generated-runtime.test.ts");
   });
 
   it("answers a client error, such as a body that does not parse, with its message as JSON", () => {

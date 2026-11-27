@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import type { ContentType } from "@camis/ir-schema";
 import { describe, expect, it } from "vitest";
 import { blog } from "./__fixtures__/blog";
@@ -187,6 +188,48 @@ describe("the generated routers on every database", () => {
   });
 });
 
+/** The body of each `atomic(async (tx) => { … })` callback in emitted code. */
+const atomicBodies = (ts: string): string[] =>
+  [...ts.matchAll(/atomic\(async \(tx\) => \{\n([\s\S]*?)\n {2}\}\);/g)].map((m) => m[1] ?? "");
+
+// A transaction holds a pooled connection on PostgreSQL and MySQL: a query inside it through the
+// pool waits for a second one, and as many concurrent transactions as the pool holds wait forever.
+describe("a transaction's queries", () => {
+  for (const dialect of DIALECTS) {
+    for (const [name, options] of variants) {
+      it(`go through its tx, never the pool (${name}, ${dialect})`, () => {
+        const ts = emitRoutes(article, ["author_id"], { ...options, dialect });
+        for (const body of atomicBodies(ts)) {
+          expect(body).not.toMatch(/\bdb\./);
+          expect(body).not.toMatch(/\bfind\(/);
+          expect(body).not.toMatch(
+            /\b(checkLinks|permittedUpdate|readLinks)\(req|\b(checkLinks|readLinks)\("/,
+          );
+        }
+      });
+    }
+    it(`are found in every router that writes in one (${dialect})`, () => {
+      expect(
+        atomicBodies(emitRoutes(article, [], { secured: true, links: "own", dialect })),
+      ).toHaveLength(3);
+    });
+  }
+
+  it("pass the link checks their executor, the transaction's inside it", () => {
+    const ts = emitRoutes(article, [], { secured: true, links: "own", dialect: "pgsql" });
+    expect(ts).toContain("    const write = await permittedUpdate(tx, req, existing, incoming);");
+    expect(ts).toContain(
+      '  const refused = await checkLinks(executor, "Article", permitted, allowed(req));',
+    );
+    expect(ts).toContain(
+      'const refused = await checkLinks(db, "Article", permitted, allowed(req));',
+    );
+    expect(ts).toContain(
+      'filterRead(req, "Article", await readLinks(db, "Article", row, allowed(req)));',
+    );
+  });
+});
+
 describe("the generated project on every database", () => {
   const generate = (dialect: Dialect, bundle = morphs) =>
     expressAdapterFor(dialect).generate(bundle, { projectName: "notes" });
@@ -235,6 +278,45 @@ describe("the generated project on every database", () => {
     );
     await expect(content("pgsql", "src/ids.ts", blog)).toMatchFileSnapshot(
       "./__golden__/ids.ts.txt",
+    );
+  });
+
+  it("query links only through the executor they are given", () => {
+    const morphsFile = content("pgsql", "src/morphs.ts");
+    expect(morphsFile).not.toContain('import { db } from "./db/client";');
+    expect(morphsFile).not.toMatch(/\bdb\./);
+    expect(morphsFile).toContain(
+      "export const checkLinks = async (\n  executor: Executor,\n  type: string,",
+    );
+    expect(morphsFile).toContain(
+      "  Book: async (executor, id) =>\n    (await executor.select().from(books)",
+    );
+  });
+
+  it("run MySQL's transactions at READ COMMITTED, where InnoDB takes no gap locks", () => {
+    expect(content("mysql", "src/db/atomic.ts")).toContain('{ isolationLevel: "read committed" }');
+    expect(content("pgsql", "src/db/atomic.ts")).not.toContain("isolationLevel");
+  });
+
+  it("retries a transaction a database gave up on, a bounded number of times", () => {
+    expect(content("mysql", "src/db/atomic.ts")).toContain("const RETRIED = new Set([1213]);");
+    expect(content("pgsql", "src/db/atomic.ts")).toContain(
+      'const RETRIED = new Set(["40001", "40P01"]);',
+    );
+    for (const dialect of ["mysql", "pgsql"] as const)
+      expect(content(dialect, "src/db/atomic.ts")).toContain("const ATTEMPTS = 3;");
+  });
+
+  it("installs the better-sqlite3 major its runtime test runs", async () => {
+    const own = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")) as {
+      devDependencies: Record<string, string>;
+    };
+    const generated = JSON.parse(content("sqlite", "package.json", blog)) as {
+      dependencies: Record<string, string>;
+    };
+    const major = (range: string | undefined) => /\d+/.exec(range ?? "")?.[0];
+    expect(major(generated.dependencies["better-sqlite3"])).toBe(
+      major(own.devDependencies["better-sqlite3"]),
     );
   });
 
