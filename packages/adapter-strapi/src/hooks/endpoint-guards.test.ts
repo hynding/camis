@@ -123,7 +123,8 @@ describe("strapi endpoint guards: the generated project", () => {
       "about 20 MB of memory per throttled endpoint",
       "a caller already tracked keeps its own count until it expires",
       "about 1 MiB more of its body is read and discarded",
-      "can lose the refusal of a body more than about 1 MiB over the limit, as behind nginx",
+      "can lose the refusal when more than about 1 MiB of its body is still to come once it is refused, as behind nginx",
+      "a whole number in ASCII digits no larger than 9007199254740991",
       "dropped when the client ends it or at most 2 seconds after the answer",
       "request sent after the refused one on the same connection is not processed",
       "while the middlewares listed ahead of the camis ones keep requests in order",
@@ -525,7 +526,8 @@ describe("strapi endpoint guards: the generated middlewares at work", () => {
     const allowed = async (): Promise<number> => {
       const middleware = stack();
       let n = 0;
-      while ((await run(post("{}"), middleware)).reached) n += 1;
+      // Bounded, so a rate read as no limit fails rather than runs on.
+      while (n < 10 && (await run(post("{}"), middleware)).reached) n += 1;
       return n;
     };
     try {
@@ -534,7 +536,19 @@ describe("strapi endpoint guards: the generated middlewares at work", () => {
       process.env[variable] = "0";
       expect(await allowed()).toBe(1);
       // Anything but ASCII digits keeps the declared rate, as the Filament target reads it.
-      for (const other of ["", "1e3", "-3", "+2", " 2", "abc", "2abc", "٢"]) {
+      // So does a number too large to count exactly, which would otherwise read as no limit.
+      for (const other of [
+        "",
+        "1e3",
+        "-3",
+        "+2",
+        " 2",
+        "abc",
+        "2abc",
+        "٢",
+        "9007199254740992",
+        "9".repeat(400),
+      ]) {
         process.env[variable] = other;
         expect(await allowed()).toBe(3);
       }
@@ -715,6 +729,26 @@ describe("strapi endpoint guards: the generated middlewares at work", () => {
       });
     }
   });
+
+  it("keeps the default cap for a CAMIS_ENDPOINT_MAX_TRACKED_CALLERS too large to count exactly", async () => {
+    clocks();
+    await withMaxTracked("9".repeat(400), async () => {
+      const guards = guardsFactory({}, { strapi });
+      const pinged = async (ip: string): Promise<boolean> => {
+        let reached = false;
+        await guards(ping(ip), () => {
+          reached = true;
+          return Promise.resolve();
+        });
+        return reached;
+      };
+      for (let i = 0; i < 100_000; i += 1)
+        await pinged(`10.${i >> 16}.${(i >> 8) & 255}.${i & 255}`);
+      // 100000 tracked: the next caller takes the shared count, at the endpoint's rate of one.
+      expect(await pinged("192.0.2.1")).toBe(true);
+      expect(await pinged("192.0.2.2")).toBe(false);
+    });
+  }, 60_000);
 
   it("forgets expired callers without walking every caller tracked", async () => {
     const at = clocks();
