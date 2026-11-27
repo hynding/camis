@@ -168,7 +168,11 @@ describe("the generated PostgreSQL and MySQL transaction", () => {
     it(`runs the work again when the database gave up on it, up to three times (${dialect})`, async () => {
       const { atomic: pooled, client } = await pooledAtomic(dialect);
       client.failures.push(deadlock[dialect], deadlock[dialect]);
+      const started = Date.now();
       await expect(pooled(async (tx) => `done in ${tx}`)).resolves.toBe("done in tx");
+      // A pause of at least 10ms before each attempt again, so that the transactions that
+      // deadlocked do not meet again at once.
+      expect(Date.now() - started).toBeGreaterThanOrEqual(20);
       expect(client.configs).toHaveLength(3);
       client.failures.push(deadlock[dialect], deadlock[dialect], deadlock[dialect]);
       await expect(pooled(async () => "never")).rejects.toBe(deadlock[dialect]);

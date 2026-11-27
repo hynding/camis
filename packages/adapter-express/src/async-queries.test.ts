@@ -31,7 +31,24 @@ const variants: [string, RouteOptions][] = [
   ["unsecured, owning links", { links: "own" }],
   ["secured, owning links", { secured: true, links: "own" }],
   ["secured, reading inverses", { secured: true, links: "inverse" }],
+  ["secured, with an AI field", { secured: true, aiColumns: ["summary"] }],
+  [
+    "secured, with an AI field, owning links",
+    { secured: true, aiColumns: ["summary"], links: "own" },
+  ],
 ];
+
+/** How many transactions each variant's router opens: a create, an update and a delete at most. */
+const TRANSACTIONS: Record<string, number> = {
+  unsecured: 0,
+  secured: 2,
+  "unsecured, with an AI field": 0,
+  "unsecured, owning links": 3,
+  "secured, owning links": 3,
+  "secured, reading inverses": 2,
+  "secured, with an AI field": 2,
+  "secured, with an AI field, owning links": 3,
+};
 
 describe("the generated routers on every database", () => {
   for (const dialect of DIALECTS) {
@@ -99,7 +116,8 @@ describe("the generated routers on every database", () => {
       );
     for (const [name, options] of variants) {
       const sqlite = emitRoutes(article, [], { ...options, dialect: "sqlite" });
-      const lockedOrNot = options.secured === true ? locked : (ts: string) => ts;
+      const lockedOrNot =
+        options.secured === true || options.links === "own" ? locked : (ts: string) => ts;
       expect(emitRoutes(article, [], { ...options, dialect: "pgsql" }), name).toBe(
         lockedOrNot(sqlite),
       );
@@ -176,14 +194,26 @@ describe("the generated routers on every database", () => {
     });
   });
 
+  describe("an unsecured update or delete of a row with to-many links", () => {
+    for (const dialect of DIALECTS) {
+      const ts = emitRoutes(article, [], { links: "own", dialect });
+      it(`reads its row locked inside the transaction that writes it, answering 404 when it is gone (${dialect})`, () => {
+        expect(ts).toContain(
+          '  const written = await atomic(async (tx) => {\n    const existing = await lockRow(tx, id);\n    if (!existing) return false;\n    if (Object.keys(data).length > 0)\n      await tx.update(articles).set(data).where(eq(articles.id, id));\n    await writeLinks(tx, "Article", id, body);\n    return true;\n  });\n  if (!written) {\n    res.status(404).json({ error: "not found" });\n    return;\n  }',
+        );
+        expect(ts).toContain(
+          '  await atomic(async (tx) => {\n    if (!(await lockRow(tx, id))) return;\n    await dropLinks(tx, "Article", id);\n    await tx.delete(articles).where(eq(articles.id, id));\n  });\n  res.status(204).end();',
+        );
+        expect(ts).not.toContain("await find(id)))");
+      });
+    }
+  });
+
   it("write a row and its to-many links in one transaction", () => {
     const ts = emitRoutes(article, [], { links: "own", dialect: "pgsql" });
-    expect(ts).toContain('import { atomic } from "../db/atomic";');
+    expect(ts).toContain('import { atomic, type Executor } from "../db/atomic";');
     expect(ts).toContain(
       '  const id = await atomic(async (tx) => {\n    const [{ id }] = await tx.insert(articles).values(data).returning({ id: articles.id });\n    await writeLinks(tx, "Article", id, body);\n    return id;\n  });',
-    );
-    expect(ts).toContain(
-      '  await atomic(async (tx) => {\n    await dropLinks(tx, "Article", id);\n    await tx.delete(articles).where(eq(articles.id, id));\n  });',
     );
   });
 });
@@ -199,20 +229,17 @@ describe("a transaction's queries", () => {
     for (const [name, options] of variants) {
       it(`go through its tx, never the pool (${name}, ${dialect})`, () => {
         const ts = emitRoutes(article, ["author_id"], { ...options, dialect });
-        for (const body of atomicBodies(ts)) {
-          expect(body).not.toMatch(/\bdb\./);
-          expect(body).not.toMatch(/\bfind\(/);
+        const bodies = atomicBodies(ts);
+        expect(bodies).toHaveLength(TRANSACTIONS[name] ?? -1);
+        for (const body of bodies) {
+          expect(body).not.toMatch(/\bdb\b/);
+          expect(body).not.toMatch(/\b(find|view)\(/);
           expect(body).not.toMatch(
             /\b(checkLinks|permittedUpdate|readLinks)\(req|\b(checkLinks|readLinks)\("/,
           );
         }
       });
     }
-    it(`are found in every router that writes in one (${dialect})`, () => {
-      expect(
-        atomicBodies(emitRoutes(article, [], { secured: true, links: "own", dialect })),
-      ).toHaveLength(3);
-    });
   }
 
   it("pass the link checks their executor, the transaction's inside it", () => {
@@ -305,6 +332,13 @@ describe("the generated project on every database", () => {
     );
     for (const dialect of ["mysql", "pgsql"] as const)
       expect(content(dialect, "src/db/atomic.ts")).toContain("const ATTEMPTS = 3;");
+  });
+
+  it("states the Node versions better-sqlite3 12 has prebuilt binaries for", () => {
+    const generated = JSON.parse(content("sqlite", "package.json", blog)) as {
+      engines?: Record<string, string>;
+    };
+    expect(generated.engines).toEqual({ node: ">=20" });
   });
 
   it("installs the better-sqlite3 major its runtime test runs", async () => {
