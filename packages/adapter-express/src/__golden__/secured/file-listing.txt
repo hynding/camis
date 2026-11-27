@@ -11,6 +11,7 @@ overwrite admin/vite.config.ts
 overwrite camis.schema.json
 overwrite drizzle.config.ts
 overwrite package.json
+overwrite src/async-route.ts
 overwrite src/auth/login.ts
 overwrite src/auth/verify.ts
 overwrite src/db/client.ts

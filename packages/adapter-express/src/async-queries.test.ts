@@ -80,7 +80,7 @@ describe("the generated routers on every database", () => {
       "const [{ id }] = await db.insert(articles).values(data).$returningId();",
     );
     expect(emitRoutes(article, [], { dialect: "pgsql" })).toContain(
-      "  const row = await find(id);\n  res.status(201).json(row);",
+      '  const row = await find(id);\n  if (!row) {\n    res.status(404).json({ error: "not found" });\n    return;\n  }\n  res.status(201).json(row);',
     );
   });
 

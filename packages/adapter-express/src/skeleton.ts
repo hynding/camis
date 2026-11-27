@@ -76,6 +76,19 @@ const port = Number(process.env.PORT ?? 3000);
 app.listen(port, () => console.log(\`listening on \${port}\`));
 `);
 
+// Express 4 leaves a rejected promise unhandled: each async route hands its error to Express's
+// error handler instead.
+const ASYNC_ROUTE =
+  withMarker(`import type { NextFunction, Request, RequestHandler, Response } from "express";
+
+/** An async route whose error reaches Express's error handler, which answers 500. */
+export const asyncRoute =
+  (route: (req: Request, res: Response) => Promise<void>): RequestHandler =>
+  (req: Request, res: Response, next: NextFunction) => {
+    route(req, res).catch(next);
+  };
+`);
+
 const ENV = (spec: DialectSpec): string =>
   spec.dialect === "sqlite" ? `DB_FILE_NAME=./data.db\nPORT=3000\n` : `DATABASE_URL=\nPORT=3000\n`;
 
@@ -121,6 +134,7 @@ export const skeletonFiles = (
     { path: "src/db/client.ts", content: CLIENT(spec) },
     { path: "src/server.ts", content: emitServer(doc, secured) },
     { path: "src/index.ts", content: INDEX },
+    { path: "src/async-route.ts", content: ASYNC_ROUTE },
     { path: ".env", content: ENV(spec), mode: "seed" },
   ];
 };

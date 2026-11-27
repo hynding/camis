@@ -45,10 +45,16 @@ describe("Express target: maxLength enforced in the API (issue #126)", () => {
     expect(ts).toContain('import { tooLong } from "../lengths";');
     expect(ts).toContain(BOUNDS);
     expect(ts).toContain(
-      `router.post("/", (req, res) => {\n${CHECK}`.replace("router", "entriesRouter"),
+      `router.post("/", asyncRoute(async (req, res) => {\n${CHECK}`.replace(
+        "router",
+        "entriesRouter",
+      ),
     );
     expect(ts).toContain(
-      `router.patch("/:id", (req, res) => {\n${CHECK}`.replace("router", "entriesRouter"),
+      `router.patch("/:id(\\\\d+)", asyncRoute(async (req, res) => {\n${CHECK}`.replace(
+        "router",
+        "entriesRouter",
+      ),
     );
   });
 
@@ -60,10 +66,10 @@ describe("Express target: maxLength enforced in the API (issue #126)", () => {
     const checkData = CHECK.replace("tooLong(req.body,", "tooLong(data,");
     const forbidden = `    res.status(403).json({ error: "forbidden" });\n    return;\n  }\n`;
     expect(ts).toContain(
-      `  if (!recordAllowed(req, "Entry", "create", data)) {\n${forbidden}${checkData}\n  const row = db.insert(`,
+      `  if (!recordAllowed(req, "Entry", "create", data)) {\n${forbidden}${checkData}\n  const [{ id }] = await db.insert(`,
     );
     expect(ts).toContain(
-      `  if (!recordAllowed(req, "Entry", "update", { ...existing, ...data })) {\n${forbidden}${checkData}\n  const row =\n`,
+      `  if (!recordAllowed(req, "Entry", "update", { ...existing, ...data })) {\n${forbidden}${checkData}\n  if (Object.keys(data).length > 0)\n`,
     );
     expect(ts).not.toContain(CHECK);
   });
