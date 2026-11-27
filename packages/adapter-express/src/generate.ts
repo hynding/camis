@@ -16,6 +16,7 @@ import type { CapabilityGap, IrDocument } from "@camis/ir-schema";
 import { adminResourceFiles } from "./admin-resources";
 import { adminStaticFiles } from "./admin-app";
 import { aiColumnsOf, aiFiles, hasAiField } from "./ai";
+import { atomicFile } from "./atomic";
 import { authFiles } from "./auth";
 import { type Dialect } from "./dialect";
 import { isSupportedField } from "./fields";
@@ -148,6 +149,7 @@ export const expressAdapterFor = (dialect: Dialect): GenerateAdapter => ({
     });
     if (links.own.size > 0)
       files.push({ path: "src/morphs.ts", content: emitMorphsFile(doc, links) });
+    if (secured || links.own.size > 0) files.push(atomicFile(dialect));
     if (hasMaxLengths(doc.contentTypes)) files.push(lengthsFile());
     files.push(camisSchemaFile(doc));
 

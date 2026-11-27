@@ -22,6 +22,8 @@
     "@camis/permissions": "workspace:*"
   },
   "devDependencies": {
+    "better-sqlite3": "12.11.1",
+    "drizzle-orm": "0.38.4",
     "tsx": "^4.22.4",
     "typescript": "^5.9.3"
   }

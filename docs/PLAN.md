@@ -3978,9 +3978,9 @@ longtext.
   `{ error: "<field> must be at most <n> characters" }`: on a secured API it checks what the caller
   may write, after the record condition refuses a row the role could not have written (403) and the
   field rules strip what it may not write, so a stripped field past its bound is no 400. The
-  generated routers call better-sqlite3's synchronous API, so the Express API serves writes on SQLite
-  only today: the 400 is exercised there, and on MySQL and PostgreSQL the length smoke checks the
-  column sizes through the driver. Real Strapi counts with yup's
+  length smoke exercises the 400 over HTTP on SQLite, MySQL and PostgreSQL (until Phase 103 the
+  generated routers called better-sqlite3's synchronous API and served writes on SQLite only, and
+  the smoke checked MySQL's and PostgreSQL's columns through the driver). Real Strapi counts with yup's
   `value.length`, UTF-16 code units, so it refuses a value of characters past the Basic Multilingual
   Plane at half the bound: stricter than the IR's bound, never looser, so no column overflows; it is
   Strapi's validator, which camis does not replace, and is not reported as a gap.
@@ -4014,13 +4014,157 @@ API style and refuses 1,001, on SQLite, MySQL and PostgreSQL; the `adapter-expre
 runs `length-smoke.ts` as a step of its own on all three, before the boot smoke: on SQLite over HTTP
 on a secured project (values at each bound kept, one character more refused on create and update, a
 create the record condition refuses a 403 even past a bound, a stripped field past its bound no 400,
-a text column's default stored); on MySQL and PostgreSQL, whose drivers the generated routers'
-synchronous better-sqlite3 calls do not serve, the push (a defaulted text column included) and the
-pushed columns keeping the values through the project's own driver, in a database of its own so
-drizzle-kit's push meets no other project's tables. That workflow is disabled for inactivity on
+a text column's default stored), and since Phase 103 the same over HTTP on MySQL and PostgreSQL,
+in a database of its own so drizzle-kit's push meets no other project's tables. That workflow is disabled for inactivity on
 GitHub and its last scheduled runs on master failed on every leg, so it does not run on pull
 requests until it is enabled. SQLite and PostgreSQL ran locally for the Filament tests and the
 Express length smoke; MySQL runs only in CI.
+
+
+## Phase 103 — the Express API on every database (`adapter-express`)
+
+Issue #128, item 1. The generated routers and `src/morphs.ts` called drizzle's better-sqlite3 API
+synchronously (`.all()`, `.get()`, `.run()`, `.returning().get()`), which the postgres-js and mysql2
+clients do not have: on MySQL and PostgreSQL every route answered 500
+(`db.select(...).from(...).all is not a function`), and the boot smoke's server never came up. The
+project builds its `db` from the dialect it is generated for (`src/db/client.ts`: better-sqlite3,
+postgres-js or a mysql2 pool), and the connection comes from the environment.
+
+- **Awaited queries.** Every drizzle query builder is a promise on all three clients (on
+  better-sqlite3 it runs when awaited), so the routers await each query and are the same text on
+  every database but for two calls: an insert takes its id from `RETURNING` (`.returning({ id })`)
+  on SQLite and PostgreSQL and from MySQL's insert id (`$returningId()`) there, and a secured
+  router's `lockRow` adds `.for("update")` on PostgreSQL and MySQL. No MySQL write returns its row,
+  so on every database a create and an update read the row back by id (`find`: `limit(1)`, its first
+  element), keeping the answers the same; a create whose row is not there to read back throws, so it
+  answers 500 (the write succeeded; a 404 would misdescribe it), while an update's answers 404. A
+  list is ordered by id, which no database guarantees without an `ORDER BY`. The secured list still
+  filters, sorts and counts in JavaScript, so its `Content-Range` total is a length, never a
+  database's bigint count, and it reads each row's links concurrently through the pool, unbounded.
+- **Ids.** Each router's `param("id", routeId)` (`src/ids.ts`) serves only an id written as one
+  (`/^[1-9]\d*$/`, so no `0001`) from 1 to 2,147,483,647, what an integer id column holds on PostgreSQL and MySQL; any other id answers the
+  JSON 404 before a query, on every database. PostgreSQL refuses to compare an integer column with
+  NaN or with a number past its range, which answered 500 before. A link naming such an id is
+  refused (400) as naming no entry.
+- **Errors.** The project uses Express 4, which does not catch a rejected promise: each route is
+  wrapped in `asyncRoute` (`src/async-route.ts`), which hands the error on, and no rejection is left
+  unhandled. The last middleware, `errorHandler` (`src/error-handler.ts`), answers a 500 with
+  `{"error":"internal error"}` and nothing of the error (no stack, query or path), logging to the
+  server's stderr only the error's name, its message and its stack frames, or for an error with a
+  code (a driver's, whose `sql`, `parameters` or `detail` carry the values and whose message can
+  quote one) its name, its code and its frames; a client error a middleware hands on (`express.json()`'s 400 for a body that does
+  not parse) answers `{ "error": <its message> }`. Express's own handler answered an HTML page with
+  the stack, which can hold a failed query's text. The routes' own 4xx answers are unchanged.
+- **Transactions.** `atomic` (`src/db/atomic.ts`, generated for a secured project or one with
+  to-many links) is drizzle's `db.transaction` on a connection of its own on PostgreSQL (READ
+  COMMITTED) and MySQL (READ COMMITTED, asked for: at InnoDB's default REPEATABLE READ, gap locks
+  deadlocked concurrent link writes, which delete an owner's link rows and insert them again). Every
+  query the work makes goes through its `tx` (`lockRow`, `permittedUpdate`, `checkLinks` and the
+  link reads and writes of `src/morphs.ts` take an executor), never the pool: a transaction holds a
+  pooled connection, and a query through the pool inside it waits for a second one, so as many
+  concurrent transactions as the pool holds (10) waited forever. When the database rolls a
+  transaction back to break a deadlock or a serialization conflict (MySQL 1213, PostgreSQL 40001
+  and 40P01), `atomic` runs the work again after a pause of 10 to 50ms, three attempts in all; the
+  work only queries through its `tx` and returns what it found (the answer is sent after `atomic`
+  returns), so running it again is safe. MySQL's lock wait timeout (1205) is not retried: the work
+  already waited `innodb_lock_wait_timeout` (50s by default) for its lock and would wait as long
+  again, so it answers 500. A MySQL server logging with `binlog_format=STATEMENT` refuses a write at
+  READ COMMITTED (error 1665); the generated project needs ROW or MIXED, MySQL 8's default being
+  ROW. On SQLite, whose drizzle transaction
+  takes no async work, it is `BEGIN IMMEDIATE` … `COMMIT` by hand, one at a time: a second call
+  waits for the first (a promise chain), a call inside a transaction's work is refused with an
+  error naming it, and a rollback that fails is logged without hiding the work's error. The work
+  awaits only better-sqlite3 queries, which settle before any other request's callback runs, so no
+  other statement falls inside; and BEGIN IMMEDIATE holds the whole database for writing. What is
+  atomic, per write:
+  - *A secured update* reads its row (`lockRow`: `SELECT … FOR UPDATE` on PostgreSQL and MySQL,
+    which waits for any other write holding the row and then reads its committed version), checks
+    the record condition, the field rules, the links' targets and the bounds on that row
+    (`permittedUpdate`), writes it and its to-many links, and commits, in one transaction: a write
+    that takes the row out of the caller's condition first makes the update a 404, never a write.
+    With an AI field, the fields are generated first (the provider is awaited outside any
+    transaction) from the row as read then; inside the transaction the row is read locked and
+    checked again, and if what the caller may write has changed the update answers 409 and writes
+    nothing.
+  - *A secured delete* reads its row locked, checks the record condition, deletes its to-many links
+    and the row, and commits, in one transaction.
+  - *A create* (secured or not) is one statement, or the row and its to-many links in one
+    transaction; its record condition is on the body, which no other write changes.
+  - *An unsecured update or delete* has no condition to keep. Without to-many links it is one
+    statement: a concurrent delete leaves an update no row to write, and its read back answers
+    404, not 500. That holds of the race only: a value the database refuses on a foreign key
+    still answers 500 (unchanged by this phase), so an update setting a manyToOne column to an id
+    no row has, or a delete of a row another type's rows reference, answers 500. With to-many links an update
+    first looks the row up through the pool and answers a missing one with 404 before it checks
+    the links or generates AI fields; that look-up only answers early, and decides nothing. It
+    then reads the row locked inside the transaction that writes the row and its links
+    (`lockRow`, as a secured one does): concurrent updates of one row take
+    turns, each replacing the links the one before it left, so the row ends with exactly one
+    update's links; an update after a delete finds no row and answers 404, and a delete after
+    nothing answers 204 as before. (Before, the row was looked up through the pool before the
+    transaction: at PostgreSQL's READ COMMITTED a second update's delete of the link rows skipped
+    the first one's new rows, so both sets survived, and an update inserting link rows after a
+    delete's made the delete fail on the foreign key, a 500.)
+  - Outside every transaction: the read back after a write (another write may land between the
+    commit and it, and show in the answer); a create's link targets, and an unsecured update's,
+    checked through the pool (`checkLinks(db, …)`) before its transaction, so a target deleted
+    between the check and the write is linked to nothing and is left out when the links are read;
+    a create's and an unsecured update's AI fields, generated before the transaction. A secured
+    update reads its link targets inside its transaction but unlocked, so on PostgreSQL and MySQL
+    an entry hidden or deleted by a concurrent write after its check may still be linked (on SQLite
+    the transaction holds the database, so it cannot).
+- **An unsecured update with nothing to write** answers the row unchanged, as the secured router
+  does, where it sent an empty `set({})` and answered 500.
+- **The smokes.** `boot-smoke.ts` (the secured project, now also its list, update, an update with
+  nothing to write, delete, ids 2,147,483,648, 99,999,999,999, `0001`, forty zeros and a one, and
+  one that is not a number as
+  the JSON 404, and a body that does not parse as a JSON 400; the AI project, which also checks an
+  update with nothing to write and an update of no row; and `morph-smoke.ts`, which also refuses a
+  link to an id past the range, and sends 16 concurrent creates with to-many links and then 24
+  concurrent link-writing updates, 8 of them of one note, more than the pool holds: every one
+  answers within 30s, none with a 500, and a read afterwards answers; and on the same fixture
+  without roles, five rounds of 8 concurrent updates of one note, which must leave exactly one
+  update's links, then 5 updates racing its delete, which answer 200 or 404 and the delete 204,
+  never 500) and `length-smoke.ts` drive the API over HTTP, writes included, on
+  SQLite, MySQL and PostgreSQL. On MySQL and PostgreSQL the length smoke races a secured update
+  against a second connection that holds the row locked for 1.5s and then closes it: the update
+  waits for the lock and answers 404, and the row keeps its value. Each project has a database of
+  its own next to DATABASE_URL's (`scripts/smoke-project.ts`), dropped when the smoke ends, on
+  failure too (a failing drop is logged and fails the run without replacing the smoke's own
+  error; the server's process group gets SIGTERM, then SIGKILL after 5s); the boot smoke builds the dialect-agnostic admin on SQLite only. Every smoke starts
+  its server in a process group of its own and stops the group, so no `tsx` server outlives it (the
+  boot smoke left its servers running before).
+
+Not covered: a date sent as a string, which drizzle's timestamp columns do not take on any database
+(unchanged); a foreign key or other column value a database refuses (out of range, of the wrong
+type), which answers the JSON 500, not a 400; a link's target changed concurrently on PostgreSQL
+and MySQL (above).
+
+Exit: `async-queries.test.ts` (no synchronous call on any dialect or router variant, every route
+wrapped, the `:id` guard on every router, the routers differing across dialects only in the
+insert's id and the row lock, a secured update and delete reading, checking and writing in one
+transaction, the AI fields generated outside it and checked again inside, a create that cannot read
+its row back throwing, the error handler mounted last, goldens `async-route.ts.txt`,
+`error-handler.ts.txt`, `ids.ts.txt`, `atomic/atomic.<dialect>.ts.txt` and
+`morphs/notes.routes.mysql.ts.txt`, idempotent regeneration on every dialect);
+`generated-runtime.test.ts` (the generated SQLite `atomic` run on better-sqlite3, the major
+generated projects install (12): a second transaction waits, a nested one is refused and the outer
+rolled back, a failed rollback keeps the work's error; the PostgreSQL and MySQL `atomic` against a
+stand-in client: retried on a deadlock up to three attempts, not on another failure, MySQL at READ
+COMMITTED; the id guard; the error handler leaking nothing of a 500 and logging no value a forged
+mysql2 or postgres-js error carries, a retried transaction pausing first, for 10ms plus up to
+40ms at random); a test that each router
+variant (the secured ones with an AI field, with and without links, the unsecured one with an AI
+field and links, and the unsecured one reading inverses, included) has the number of
+`atomic` callbacks it should, none of which names `db`, calls `find` or `view`, calls a link
+check without an executor, or awaits anything but a query through its `tx` or a helper handed
+the `tx` (so never the AI provider); an unsecured update and delete of a row with to-many links
+reading it locked inside the transaction, the update answering a missing row with 404 before
+checking its links; the generated `package.json` stating Node 20 or later, for which
+better-sqlite3 12 has prebuilt binaries; the router goldens
+regenerated; `syntax.test.ts` parses the morphs project on every dialect; the
+`adapter-express-boot` workflow's `smoke:lengths` and `smoke` steps on SQLite, MySQL and
+PostgreSQL. Both smokes ran locally on SQLite, PostgreSQL 16 and MariaDB 10.11; MySQL 8 runs in CI.
 
 ---
 

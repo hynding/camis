@@ -213,9 +213,8 @@ invalid rather than failing in the database: the Laravel API style answers 422 (
 rule), the Strapi API style 400 as Strapi does, the Filament admin form shows the field's error, and
 the Express API answers 400 `{ "error": "<field> must be at most <n> characters" }`, on a secured
 API after the record condition and the field rules, on what the caller may write. The Express API
-serves writes on SQLite only today (its routers call better-sqlite3's synchronous API), so its check
-is exercised there; on MySQL and PostgreSQL camis's smoke verifies the column sizes through the
-driver. Strapi itself checks the bound, not a capped column's length, and counts UTF-16 code units,
+serves every route on SQLite, MySQL and PostgreSQL alike (its routers await each query), and camis's
+smoke exercises its check over HTTP on all three. Strapi itself checks the bound, not a capped column's length, and counts UTF-16 code units,
 so it refuses a value of emoji at half its bound. A default on a column that is a text (a string
 bounded past 255, a `text`, a `richText`) is applied by the Filament model and, on MySQL, by
 Drizzle, not by the database: MySQL takes no default on a TEXT column (a `textDefault` gap). A
