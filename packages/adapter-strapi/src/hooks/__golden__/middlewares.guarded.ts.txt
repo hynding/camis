@@ -1,0 +1,13 @@
+export default [
+  'strapi::logger',
+  'strapi::errors',
+  'strapi::security',
+  'global::camis_endpoint_guards',
+  'strapi::cors',
+  'strapi::poweredBy',
+  'strapi::query',
+  'strapi::body',
+  'strapi::session',
+  'strapi::favicon',
+  'strapi::public',
+];
