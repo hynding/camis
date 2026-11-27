@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
@@ -5,7 +6,8 @@ import { connect, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { TS_MARKER } from "@camis/adapter-kernel";
 import type { Endpoint, IrDocument } from "@camis/ir-schema";
@@ -56,6 +58,7 @@ const restate: Endpoint = {
 const guarded = generate(guardedDoc(ingest, ping, restate));
 const file = (result: ReturnType<typeof generate>, path: string) =>
   result.files.find((f) => f.path === path);
+const execFileAsync = promisify(execFile);
 const MIDDLEWARE = "src/middlewares/camis_endpoint_guards.ts";
 const CORS_MIDDLEWARE = "src/middlewares/camis_endpoint_cors.ts";
 
@@ -111,7 +114,13 @@ describe("strapi endpoint guards: the generated project", () => {
     for (const statement of [
       "`CAMIS_ENDPOINT_MAX_TRACKED_CALLERS`",
       "100000 by default",
-      "while that many are tracked, a new caller is let through uncounted",
+      "every caller not tracked shares one count for the endpoint, limited to the endpoint's rate a window",
+      "a new caller, or one whose own count has expired, falls into that shared count",
+      "about 20 MB of memory per throttled endpoint",
+      "a caller already tracked keeps its own count until it expires",
+      "at most 1 MiB more of its body is read and discarded",
+      "dropped when the client ends it or at most 2 seconds after the answer",
+      "request sent after the refused one on the same connection is not processed",
       "up to twice its rate across the turn of a window",
       "an IPv6 caller by its /64",
       "NAT64, Teredo",
@@ -223,6 +232,8 @@ interface FakeContext {
   res: EventEmitter;
   status: number;
   body: unknown;
+  /** Koa's: false once a middleware has told Koa not to answer. */
+  respond?: boolean;
   response: Record<string, string>;
   get(name: string): string;
   set(name: string, value: string): void;
@@ -560,25 +571,72 @@ describe("strapi endpoint guards: the generated middlewares at work", () => {
     }
   };
 
-  it("tracks at most CAMIS_ENDPOINT_MAX_TRACKED_CALLERS callers per endpoint, admitting a new one untracked when full", async () => {
+  it("tracks at most CAMIS_ENDPOINT_MAX_TRACKED_CALLERS callers per endpoint; while full, the callers not tracked share one count, limited to the endpoint's rate", async () => {
+    const at = clocks();
+    await withMaxTracked("2", async () => {
+      const middleware = stack();
+      const from = (ip: string) => run(post("{}", {}, ip), middleware);
+      for (let i = 0; i < 3; i += 1) expect((await from("192.0.2.1")).reached).toBe(true);
+      expect((await from("192.0.2.1")).ctx.status).toBe(429);
+      expect((await from("192.0.2.2")).reached).toBe(true);
+      // Full: the callers not tracked make three requests a window between them, from however
+      // many addresses they come.
+      for (const ip of ["192.0.2.3", "192.0.2.4", "192.0.2.5"])
+        expect((await from(ip)).reached).toBe(true);
+      for (const ip of ["192.0.2.3", "192.0.2.6", "2001:db8:9::1"]) {
+        const over = await from(ip);
+        refused(over.ctx, 429, "RateLimitError");
+        expect(Number(over.ctx.response["retry-after"])).toBeGreaterThan(0);
+      }
+      // A caller already tracked keeps its own count, the shared one spent.
+      for (let i = 0; i < 2; i += 1) expect((await from("192.0.2.2")).reached).toBe(true);
+      expect((await from("192.0.2.2")).ctx.status).toBe(429);
+      // Another endpoint's counts are its own, so this endpoint's flood leaves them as they were.
+      expect((await run(ping("192.0.2.7"), middleware)).reached).toBe(true);
+      expect((await run(ping("192.0.2.7"), middleware)).ctx.status).toBe(429);
+      expect((await run(ping("192.0.2.8"), middleware)).reached).toBe(true);
+      // The shared count's minute passes, the cap still full of expired counts: three more.
+      at.monotonic += 61_000;
+      for (const ip of ["192.0.2.9", "192.0.2.10", "192.0.2.11"])
+        expect((await from(ip)).reached).toBe(true);
+      expect((await from("192.0.2.12")).ctx.status).toBe(429);
+    });
+  });
+
+  it("counts a caller whose own count has expired in the shared count while the cap is full", async () => {
+    const at = clocks();
+    await withMaxTracked("2", async () => {
+      const middleware = stack();
+      const from = (ip: string) => run(post("{}", {}, ip), middleware);
+      expect((await from("192.0.2.1")).reached).toBe(true);
+      at.monotonic += 50_000;
+      expect((await from("192.0.2.2")).reached).toBe(true);
+      // The first caller's count expires; the second's still holds, so the cap is full.
+      at.monotonic += 11_000;
+      for (let i = 0; i < 3; i += 1) expect((await from("192.0.2.1")).reached).toBe(true);
+      expect((await from("192.0.2.1")).ctx.status).toBe(429);
+      expect((await from("192.0.2.3")).ctx.status).toBe(429);
+      for (let i = 0; i < 2; i += 1) expect((await from("192.0.2.2")).reached).toBe(true);
+      expect((await from("192.0.2.2")).ctx.status).toBe(429);
+      // A window's turn frees room, and the first caller is tracked again, by its own count.
+      at.monotonic += 60_000;
+      for (let i = 0; i < 3; i += 1) expect((await from("192.0.2.1")).reached).toBe(true);
+      expect((await from("192.0.2.1")).ctx.status).toBe(429);
+      expect((await from("192.0.2.3")).reached).toBe(true);
+    });
+  });
+
+  it("keeps no more than the cap of callers however many addresses come", async () => {
     clocks();
     await withMaxTracked("2", async () => {
       const middleware = stack();
-      for (let i = 0; i < 3; i += 1)
-        expect((await run(post("{}", {}, "192.0.2.1"), middleware)).reached).toBe(true);
-      expect((await run(post("{}", {}, "192.0.2.1"), middleware)).ctx.status).toBe(429);
-      expect((await run(post("{}", {}, "192.0.2.2"), middleware)).reached).toBe(true);
-      // Full: a new caller is let through, uncounted, however often it comes.
-      for (let i = 0; i < 6; i += 1)
-        expect((await run(post("{}", {}, "192.0.2.3"), middleware)).reached).toBe(true);
-      // A caller already tracked is still counted and refused.
-      expect((await run(post("{}", {}, "192.0.2.1"), middleware)).ctx.status).toBe(429);
-      for (let i = 0; i < 2; i += 1)
-        expect((await run(post("{}", {}, "192.0.2.2"), middleware)).reached).toBe(true);
-      expect((await run(post("{}", {}, "192.0.2.2"), middleware)).ctx.status).toBe(429);
-      // Another endpoint tracks its own callers, so one endpoint's flood leaves it its room.
-      expect((await run(ping("192.0.2.3"), middleware)).reached).toBe(true);
-      expect((await run(ping("192.0.2.3"), middleware)).ctx.status).toBe(429);
+      const set = vi.spyOn(Map.prototype, "set");
+      for (let i = 0; i < 500; i += 1)
+        await run(post("{}", {}, `10.0.${i >> 8}.${i & 255}`), middleware);
+      const callers = set.mock.calls.filter(
+        ([key]) => typeof key === "string" && /^[0-9a-f]{32}$/.test(key),
+      );
+      expect(callers).toHaveLength(2);
     });
   });
 
@@ -588,8 +646,9 @@ describe("strapi endpoint guards: the generated middlewares at work", () => {
       const middleware = stack();
       expect((await run(ping("192.0.2.1"), middleware)).reached).toBe(true);
       expect((await run(ping("192.0.2.1"), middleware)).ctx.status).toBe(429);
+      // Full at one: the next caller is in the shared count, at the endpoint's rate of one.
       expect((await run(ping("192.0.2.2"), middleware)).reached).toBe(true);
-      expect((await run(ping("192.0.2.2"), middleware)).reached).toBe(true);
+      expect((await run(ping("192.0.2.3"), middleware)).ctx.status).toBe(429);
     });
     for (const other of ["", "1e3", "-1", " 1", "abc"]) {
       await withMaxTracked(other, async () => {
@@ -645,6 +704,98 @@ describe("strapi endpoint guards: the generated middlewares at work", () => {
     expect(bodiless.ctx.response.connection).toBeUndefined();
   });
 
+  it("drops a request read after a refusal on the same connection, unanswered and unprocessed, in both middlewares", async () => {
+    const middleware = stack();
+    const first = (await run(post("{}", { "Content-Length": "100000" }), middleware)).ctx;
+    expect(first.status).toBe(413);
+    const socket = first.req.socket;
+    const behind = (ctx: FakeContext): FakeContext => {
+      ctx.req.socket = socket;
+      return ctx;
+    };
+    const other = await run(behind(context("GET", "/api/articles")), middleware);
+    expect(other.reached).toBe(false);
+    expect(other.ctx.respond).toBe(false);
+    expect(other.ctx.status).toBe(404);
+    expect(other.ctx.response).toEqual({});
+    // A preflight the cross-origin middleware would answer itself.
+    const preflight = await run(
+      behind(
+        context("OPTIONS", "/api/articles/7/ingest", {
+          Origin: "https://site.example",
+          "Access-Control-Request-Method": "POST",
+        }),
+      ),
+      middleware,
+    );
+    expect(preflight.ctx.respond).toBe(false);
+    expect(preflight.ctx.status).toBe(404);
+    expect(preflight.ctx.response).toEqual({});
+    // The guards' middleware alone, the first of the two in a project with no cross-origin endpoint.
+    const alone = await run(behind(context("GET", "/api/articles")), guardsFactory({}, { strapi }));
+    expect(alone.reached).toBe(false);
+    expect(alone.ctx.respond).toBe(false);
+    // Nothing is destroyed early, which would reset the connection under the refusal.
+    expect(socket.destroyed).toBe(false);
+    expect(socket.ended).toBe(false);
+    const fresh = await run(context("GET", "/api/articles"), middleware);
+    expect(fresh.reached).toBe(true);
+    expect(fresh.ctx.respond).toBeUndefined();
+  });
+
+  /** Waits until the refused request's body stops flowing: paused, or all of it read. */
+  const settled = (ctx: FakeContext): Promise<void> =>
+    new Promise((resolve) => {
+      const check = (): void => {
+        if (ctx.req.readableFlowing === false || ctx.req.readableEnded) resolve();
+        else setImmediate(check);
+      };
+      setImmediate(check);
+    });
+  const declared = (pieces: number): FakeContext => {
+    const piece = Buffer.alloc(64 * 1024, 120);
+    return context(
+      "POST",
+      "/api/articles/7/ingest",
+      { "Content-Type": "application/json", "Content-Length": String(pieces * piece.length) },
+      new Array<Buffer>(pieces).fill(piece),
+    );
+  };
+
+  it("stops reading the refused body once more than 1 MiB of it has been drained, as it is read, and drops the connection after 2 seconds", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const request = declared(40);
+      const emit = vi.spyOn(request.req, "emit");
+      const large = (await run(request)).ctx;
+      expect(large.status).toBe(413);
+      large.res.emit("finish");
+      await settled(large);
+      const drained = emit.mock.calls
+        .filter(([event]) => event === "data")
+        .reduce((sum, [, chunk]) => sum + (chunk as Buffer).length, 0);
+      // Stopped on the 64 KiB piece that takes it past 1 MiB, not after the whole 2.5 MiB, and
+      // the connection kept, so no reset can beat the answer to the client.
+      expect(drained).toBe(17 * 64 * 1024);
+      expect(large.req.readableEnded).toBe(false);
+      expect(large.req.socket.destroyed).toBe(false);
+      vi.advanceTimersByTime(1_999);
+      expect(large.req.socket.destroyed).toBe(false);
+      vi.advanceTimersByTime(1);
+      expect(large.req.socket.destroyed).toBe(true);
+      // Less than that is drained whole, and the connection waits for the client's end.
+      const small = (await run(declared(8))).ctx;
+      small.res.emit("finish");
+      await settled(small);
+      expect(small.req.readableEnded).toBe(true);
+      expect(small.req.socket.destroyed).toBe(false);
+      small.req.socket.emit("end");
+      expect(small.req.socket.destroyed).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("refuses another media type with 415, and a body with none", async () => {
     refused(
       (await run(post("a=1", { "Content-Type": "application/x-www-form-urlencoded" }))).ctx,
@@ -685,24 +836,31 @@ describe("strapi endpoint guards: the generated middlewares at work", () => {
   });
 });
 
-// The guards' middleware behind a real HTTP server, as Koa drives it, and a client that goes on
-// streaming a large body after it is refused: the refusal must reach it every time, not be lost to
-// a reset that discards the answer still queued.
+// Both middlewares behind a real HTTP server, as Koa drives them, and clients that go on sending
+// after they are refused: the refusal must reach them every time, not be lost to a reset that
+// discards the answer still queued, and nothing they send after it on that connection may be
+// processed.
 describe("strapi endpoint guards: a refusal over a real connection", () => {
   let dir = "";
   let server: Server;
   let port = 0;
+  /** The requests the handler behind both middlewares ran for. */
+  const handled: string[] = [];
   beforeAll(async () => {
     dir = mkdtempSync(join(tmpdir(), "camis-endpoint-socket-"));
-    const target = join(dir, "camis_endpoint_guards.ts");
-    writeFileSync(target, file(guarded, MIDDLEWARE)!.content);
-    const factory = ((await import(pathToFileURL(target).href)) as { default: Factory }).default;
+    const load = async (path: string, name: string) => {
+      const target = join(dir, name);
+      writeFileSync(target, file(guarded, path)!.content);
+      const factory = ((await import(pathToFileURL(target).href)) as { default: Factory }).default;
+      return factory({}, { strapi }) as unknown as (
+        ctx: Record<string, unknown>,
+        next: () => Promise<void>,
+      ) => Promise<void>;
+    };
     // A rate no run reaches, the size alone refusing.
     process.env.CAMIS_ENDPOINT_ARTICLE_INGEST_THROTTLE_PER_MINUTE = "100000";
-    const middleware = factory({}, { strapi }) as unknown as (
-      ctx: Record<string, unknown>,
-      next: () => Promise<void>,
-    ) => Promise<void>;
+    const guards = await load(MIDDLEWARE, "camis_endpoint_guards.ts");
+    const cors = await load(CORS_MIDDLEWARE, "camis_endpoint_cors.ts");
     server = createServer((req, res) => {
       const ctx: Record<string, unknown> = {
         method: req.method,
@@ -719,11 +877,16 @@ describe("strapi endpoint guards: a refusal over a real connection", () => {
         set: (name: string, value: string) => res.setHeader(name, value),
         remove: (name: string) => res.removeHeader(name),
       };
-      void middleware(ctx, () => {
-        ctx.status = 200;
-        ctx.body = { data: "reached" };
-        return Promise.resolve();
-      }).then(() => {
+      void cors(ctx, () =>
+        guards(ctx, () => {
+          handled.push(`${req.method ?? ""} ${req.url ?? ""}`);
+          ctx.status = 200;
+          ctx.body = { data: "reached" };
+          return Promise.resolve();
+        }),
+      ).then(() => {
+        // As Koa does: a middleware that set respond to false answers itself, or not at all.
+        if (ctx.respond === false) return;
         res.statusCode = ctx.status as number;
         res.setHeader("Content-Type", "application/json");
         res.end(JSON.stringify(ctx.body));
@@ -739,53 +902,15 @@ describe("strapi endpoint guards: a refusal over a real connection", () => {
   });
 
   const BODY = 50 * 1024 * 1024;
-  /** What a client streaming a 50 MB body reads back before the connection ends. */
-  const stream = (chunked: boolean): Promise<string> =>
-    new Promise((resolve) => {
-      const socket = connect(port, "127.0.0.1");
-      const piece = Buffer.alloc(64 * 1024, 120);
-      const framed = chunked
-        ? Buffer.concat([
-            Buffer.from(`${piece.length.toString(16)}\r\n`),
-            piece,
-            Buffer.from("\r\n"),
-          ])
-        : piece;
-      let received = "";
-      let sent = 0;
-      let open = true;
-      const pump = (): void => {
-        while (open && sent < BODY) {
-          sent += piece.length;
-          if (!socket.write(framed)) {
-            socket.once("drain", pump);
-            return;
-          }
-        }
-        if (open) socket.end(chunked ? "0\r\n\r\n" : "");
-      };
-      const timer = setTimeout(() => socket.destroy(), 15_000);
-      socket.on("data", (data: Buffer) => (received += data.toString("latin1")));
-      socket.on("error", () => undefined);
-      socket.on("close", () => {
-        open = false;
-        clearTimeout(timer);
-        resolve(received);
-      });
-      socket.on("connect", () => {
-        socket.write(
-          [
-            "POST /api/articles/7/ingest HTTP/1.1",
-            "Host: localhost",
-            "Content-Type: application/json",
-            chunked ? "Transfer-Encoding: chunked" : `Content-Length: ${BODY}`,
-            "",
-            "",
-          ].join("\r\n"),
-        );
-        pump();
-      });
-    });
+  const head = (chunked: boolean, length = BODY): string =>
+    [
+      "POST /api/articles/7/ingest HTTP/1.1",
+      "Host: localhost",
+      "Content-Type: application/json",
+      chunked ? "Transfer-Encoding: chunked" : `Content-Length: ${length}`,
+      "",
+      "",
+    ].join("\r\n");
 
   // What a client sees of the connection after it is refused mid-body: whether the server shut its
   // side cleanly (end) or reset it (error), and when the connection closed, the client going on
@@ -818,16 +943,7 @@ describe("strapi endpoint guards: a refusal over a real connection", () => {
         });
         socket.on("connect", () => {
           const piece = Buffer.alloc(256 * 1024, 120);
-          socket.write(
-            [
-              "POST /api/articles/7/ingest HTTP/1.1",
-              "Host: localhost",
-              "Content-Type: application/json",
-              chunked ? "Transfer-Encoding: chunked" : `Content-Length: ${BODY}`,
-              "",
-              chunked ? `${piece.length.toString(16)}\r\n` : "",
-            ].join("\r\n"),
-          );
+          socket.write(head(chunked) + (chunked ? `${piece.length.toString(16)}\r\n` : ""));
           socket.write(piece);
           const byte = chunked ? Buffer.from("\r\n1\r\nx") : Buffer.from("x");
           trickle = setInterval(() => {
@@ -853,16 +969,79 @@ describe("strapi endpoint guards: a refusal over a real connection", () => {
     20_000,
   );
 
+  // A client pipelining requests behind one refused with its body unread: a GET elsewhere, a
+  // preflight the cross-origin middleware would answer, and a POST the guards would let through.
+  const pipelined = (chunked: boolean) =>
+    new Promise<{ received: string; ended: boolean; reset: boolean }>((resolve) => {
+      const socket = connect({ port, host: "127.0.0.1", allowHalfOpen: true });
+      let received = "";
+      let ended = false;
+      let reset = false;
+      socket.on("data", (data: Buffer) => (received += data.toString("latin1")));
+      socket.on("end", () => {
+        ended = true;
+        socket.end();
+      });
+      socket.on("error", () => (reset = true));
+      const timer = setTimeout(() => socket.destroy(), 8_000);
+      socket.on("close", () => {
+        clearTimeout(timer);
+        resolve({ received, ended, reset: reset && !ended });
+      });
+      socket.on("connect", () => {
+        const refused = chunked
+          ? `${head(true)}41\r\n${"x".repeat(65)}\r\n0\r\n\r\n`
+          : `${head(false, 100)}${"x".repeat(100)}`;
+        socket.write(
+          refused +
+            "GET /api/articles HTTP/1.1\r\nHost: localhost\r\n\r\n" +
+            "OPTIONS /api/articles/7/ingest HTTP/1.1\r\nHost: localhost\r\nOrigin: https://site.example\r\nAccess-Control-Request-Method: POST\r\n\r\n" +
+            `${head(false, 2)}{}`,
+        );
+      });
+    });
+
   it.each([
     ["declared", false],
     ["chunked", true],
   ])(
-    "answers a %s body over its size with 413 every time",
+    "processes nothing pipelined behind a refused %s body, and still answers the refusal and closes cleanly",
     async (_kind, chunked) => {
-      const answers: string[] = [];
-      for (let run = 0; run < 20; run += 1)
-        answers.push((await stream(chunked)).split("\r\n")[0] ?? "");
-      expect(answers).toEqual(new Array<string>(20).fill("HTTP/1.1 413 Payload Too Large"));
+      handled.length = 0;
+      const seen = await pipelined(chunked);
+      // Time for a request still being handled to finish, were one handled at all.
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      expect(seen.received.split("\r\n")[0]).toBe("HTTP/1.1 413 Payload Too Large");
+      expect(seen.received.match(/HTTP\/1\.1 /g)).toHaveLength(1);
+      expect(seen.ended).toBe(true);
+      expect(seen.reset).toBe(false);
+      expect(handled).toEqual([]);
+    },
+    20_000,
+  );
+
+  // A client streaming a 50 MB body in a process of its own (scripts/streaming-client.mjs), as a
+  // real client is: the server's reset reaches it while the answer may still be unread.
+  const CLIENT = fileURLToPath(new URL("../../scripts/streaming-client.mjs", import.meta.url));
+  const RUNS = 10;
+  const streamed = async (chunked: boolean): Promise<string[]> => {
+    const { stdout } = await execFileAsync(
+      process.execPath,
+      [CLIENT, String(port), chunked ? "chunked" : "declared", String(RUNS)],
+      { timeout: 100_000 },
+    );
+    return stdout.trim().split("\n");
+  };
+
+  it.each([
+    ["declared", false],
+    ["chunked", true],
+  ])(
+    "answers a %s body over its size with 413 every time, to a client in another process",
+    async (_kind, chunked) => {
+      expect(await streamed(chunked)).toEqual(
+        new Array<string>(RUNS).fill("HTTP/1.1 413 Payload Too Large"),
+      );
     },
     120_000,
   );

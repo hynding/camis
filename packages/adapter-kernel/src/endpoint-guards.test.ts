@@ -48,19 +48,22 @@ describe("endpoint guards", () => {
     ).toEqual(["throttle", "accepts", "crossOrigin"]);
   });
 
-  it("tables each endpoint's guards for DEPLOY.md, a pipe and a backtick in a header escaped", () => {
+  it("tables each endpoint's guards for DEPLOY.md under the target's route prefix, a pipe and a backtick in a header escaped", () => {
     expect(
-      endpointGuardsTable([
-        { ...plain, throttle: { perMinute: 5 }, maxBodyBytes: 64, accepts: ["Text/Plain"] },
-        { ...plain, name: "Odd", public: true, crossOrigin: { headers: ["X|Key", "X`Key"] } },
-        { ...plain, name: "Bare", public: true, crossOrigin: { headers: [] } },
-      ]).split("\n"),
+      endpointGuardsTable(
+        [
+          { ...plain, throttle: { perMinute: 5 }, maxBodyBytes: 64, accepts: ["Text/Plain"] },
+          { ...plain, name: "Odd", public: true, crossOrigin: { headers: ["X|Key", "X`Key"] } },
+          { ...plain, name: "Bare", public: true, crossOrigin: { headers: [] } },
+        ],
+        "/rest/v1",
+      ).split("\n"),
     ).toEqual([
       "| Endpoint | Route | Requests a minute per address | Largest body (bytes) | Media types | Cross-origin request headers |",
       "| --- | --- | --- | --- | --- | --- |",
-      `| \`${plain.name}\` | \`${plain.method} /api${plain.path}\` | 5 (\`${endpointThrottleEnv(plain.name)}\`) | 64 | \`text/plain\` |  |`,
-      `| \`Odd\` | \`${plain.method} /api${plain.path}\` |  |  |  | \`X\\|Key\`, \`\` X\`Key \`\` |`,
-      `| \`Bare\` | \`${plain.method} /api${plain.path}\` |  |  |  | none |`,
+      `| \`${plain.name}\` | \`${plain.method} /rest/v1${plain.path}\` | 5 (\`${endpointThrottleEnv(plain.name)}\`) | 64 | \`text/plain\` |  |`,
+      `| \`Odd\` | \`${plain.method} /rest/v1${plain.path}\` |  |  |  | \`X\\|Key\`, \`\` X\`Key \`\` |`,
+      `| \`Bare\` | \`${plain.method} /rest/v1${plain.path}\` |  |  |  | none |`,
     ]);
   });
 });
