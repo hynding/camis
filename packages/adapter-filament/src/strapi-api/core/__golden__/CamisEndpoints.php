@@ -23,6 +23,7 @@ final class CamisEndpoints extends Controller
         'MemoCount' => [\App\Hooks\MemoCount::class, null],
         'MemoIngest' => [\App\Hooks\MemoIngest::class, null],
         'MemoPin' => [\App\Hooks\MemoPin::class, ['authenticated']],
+        'MemoRestate' => [\App\Hooks\MemoRestate::class, null],
     ];
 
     public function __invoke(Request $request): mixed

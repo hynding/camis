@@ -6,16 +6,21 @@ declare(strict_types=1);
 /*
  * Each guarded IR endpoint's guards, by endpoint name, read per request on its route by
  * StrapiEndpointGuard (throttle, media types, body size) and StrapiEndpointCors (answers to browsers
- * on any origin). A throttle counts per client address, refused requests included; its rate is
- * deployment-specific, so a variable of its own overrides it, floored at 1, since (int) reads an
- * empty or non-numeric value as 0.
+ * on any origin). A throttle counts per client address, refused requests included. Its rate is
+ * deployment-specific, so a variable of its own overrides it: a whole number written in ASCII digits,
+ * floored at 1; any other value (empty, signed, 1e3, words) keeps the declared rate, as the Strapi
+ * target reads it.
  */
 return [
     'MemoIngest' => [
         'method' => 'POST',
-        'throttle_per_minute' => max(1, (int) env('CAMIS_ENDPOINT_MEMO_INGEST_THROTTLE_PER_MINUTE', 5)),
+        'throttle_per_minute' => (static fn (mixed $value): int => is_string($value) && ctype_digit($value) ? max(1, (int) $value) : 5)(env('CAMIS_ENDPOINT_MEMO_INGEST_THROTTLE_PER_MINUTE')),
         'max_body_bytes' => 64,
         'accepts' => ['application/json', 'text/plain'],
         'cross_origin_headers' => ['Content-Type', 'X-Memo-Key'],
+    ],
+    'MemoRestate' => [
+        'method' => 'PUT',
+        'cross_origin_headers' => ['Content-Type', 'X-Memo-Version'],
     ],
 ];

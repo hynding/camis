@@ -18,7 +18,9 @@ const unguarded: IrBundle = {
   ...authorRoleBundle,
   document: {
     ...authorRoleBundle.document,
-    endpoints: (authorRoleBundle.document.endpoints ?? []).filter((e) => e.name !== "MemoIngest"),
+    endpoints: (authorRoleBundle.document.endpoints ?? []).filter(
+      (e) => e.name !== "MemoIngest" && e.name !== "MemoRestate",
+    ),
   },
 };
 
@@ -41,9 +43,15 @@ describe("filament endpoint guards", () => {
     const route =
       "Route::post('/memos/ingest', CamisEndpoints::class)->defaults('endpoint', 'MemoIngest')->middleware([StrapiEndpointCors::class, StrapiEndpointGuard::class]);";
     const preflight =
-      "Route::options('/memos/ingest', CamisEndpoints::class)->defaults('endpoint', 'MemoIngest')->middleware(StrapiEndpointCors::class);";
+      "Route::options('/memos/ingest', CamisEndpoints::class)->defaults('endpoint', ['MemoIngest', 'MemoRestate'])->middleware(StrapiEndpointCors::class);";
     expect(routes).toContain(route);
     expect(routes).toContain(preflight);
+    expect(routes).toContain(
+      "Route::put('/memos/ingest', CamisEndpoints::class)->defaults('endpoint', 'MemoRestate')->middleware(StrapiEndpointCors::class);",
+    );
+    // Laravel keeps only the last route of a method and path: one preflight answers every endpoint
+    // on the path, by the method it asks for.
+    expect(routes.split("Route::options('/memos/ingest'").length - 1).toBe(1);
     const open = routes.indexOf("Route::middleware(StrapiPublicRoute::class)->group(");
     expect(routes.indexOf(route)).toBeGreaterThan(open);
     expect(routes.indexOf(preflight)).toBeGreaterThan(open);
@@ -171,14 +179,19 @@ echo json_encode(require __DIR__.'/camis-endpoints.php');
       }).toString(),
     );
 
-  it("takes the IR's rate, a deployment's own, and never less than one a minute", () => {
-    const rate = (env: Record<string, string>) =>
-      (evaluate(env) as Record<string, { throttle_per_minute: number }>).MemoIngest!
-        .throttle_per_minute;
-    expect(rate({})).toBe(5);
-    expect(rate({ CAMIS_ENDPOINT_MEMO_INGEST_THROTTLE_PER_MINUTE: "120" })).toBe(120);
-    expect(rate({ CAMIS_ENDPOINT_MEMO_INGEST_THROTTLE_PER_MINUTE: "" })).toBe(1);
-    expect(rate({ CAMIS_ENDPOINT_MEMO_INGEST_THROTTLE_PER_MINUTE: "0" })).toBe(1);
+  it("takes the IR's rate, or a deployment's own written in digits, and never less than one a minute", () => {
+    const rate = (value?: string) =>
+      (
+        evaluate(
+          value === undefined ? {} : { CAMIS_ENDPOINT_MEMO_INGEST_THROTTLE_PER_MINUTE: value },
+        ) as Record<string, { throttle_per_minute: number }>
+      ).MemoIngest!.throttle_per_minute;
+    expect(rate()).toBe(5);
+    expect(rate("120")).toBe(120);
+    expect(rate("0")).toBe(1);
+    // Anything but ASCII digits keeps the declared rate, as the Strapi target reads it.
+    for (const other of ["", "1e3", "-3", "+7", " 7", "7 ", "abc", "12abc", "٣"])
+      expect(rate(other)).toBe(5);
   });
 
   it("states the endpoint's method, size, media types and request headers", () => {
@@ -189,6 +202,10 @@ echo json_encode(require __DIR__.'/camis-endpoints.php');
         max_body_bytes: 64,
         accepts: ["application/json", "text/plain"],
         cross_origin_headers: ["Content-Type", "X-Memo-Key"],
+      },
+      MemoRestate: {
+        method: "PUT",
+        cross_origin_headers: ["Content-Type", "X-Memo-Version"],
       },
     });
   });

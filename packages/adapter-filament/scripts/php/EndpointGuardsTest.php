@@ -7,16 +7,19 @@ namespace Tests\Feature;
 use App\Hooks\Contracts\MemoIngestEndpoint;
 use App\Hooks\MemoIngest;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
 /**
  * An endpoint's declared guards (the author-role fixture's MemoIngest: public, 5 requests a minute,
- * 64 bytes, JSON or text, answering browsers on any origin with Content-Type and X-Memo-Key): its
- * route answers the preflight, then refuses a caller over the throttle, a body of another type and
- * a body too large, each before the handler runs and each answer carrying its CORS headers, while
- * every other route keeps the app's CORS. Needs bootstrap/app.php patched as camis scaffold
- * patches it. CI's author-role job copies this into tests/Feature.
+ * 64 bytes, JSON or text, answering browsers on any origin with Content-Type and X-Memo-Key; and
+ * MemoRestate, a PUT on the same path answering them with Content-Type and X-Memo-Version): one
+ * preflight route answers each by the method asked, then MemoIngest's route refuses a caller over
+ * the throttle, a body of another type and a body too large, each before the handler runs and each
+ * answer carrying its CORS headers, while every other route keeps the app's CORS. A guarded route
+ * whose config entry is missing refuses every request. Needs bootstrap/app.php patched as camis
+ * scaffold patches it. CI's author-role job copies this into tests/Feature.
  */
 class EndpointGuardsTest extends TestCase
 {
@@ -80,7 +83,30 @@ class EndpointGuardsTest extends TestCase
         $this->assertSame('POST', $response->headers->get('Access-Control-Allow-Methods'));
         $this->assertSame('Content-Type, X-Memo-Key', $response->headers->get('Access-Control-Allow-Headers'));
         $this->assertFalse($response->headers->has('Access-Control-Allow-Credentials'));
+        // The answer differs by the method and headers asked, so a cache keeps one per request.
+        $this->assertSame('Access-Control-Request-Method, Access-Control-Request-Headers', $response->headers->get('Vary'));
         $this->assertSame([], self::$handled);
+    }
+
+    public function test_the_preflight_answers_each_endpoint_on_the_path_by_the_method_asked(): void
+    {
+        $put = $this->fromBrowser('OPTIONS', '/api/memos/ingest', [
+            'HTTP_ACCESS_CONTROL_REQUEST_METHOD' => 'PUT',
+            'HTTP_ACCESS_CONTROL_REQUEST_HEADERS' => 'content-type,x-memo-version',
+        ]);
+
+        $put->assertNoContent();
+        $this->assertSame(['*'], $put->headers->all('access-control-allow-origin'));
+        $this->assertSame('PUT', $put->headers->get('Access-Control-Allow-Methods'));
+        $this->assertSame('Content-Type, X-Memo-Version', $put->headers->get('Access-Control-Allow-Headers'));
+        $this->assertFalse($put->headers->has('Access-Control-Allow-Credentials'));
+
+        $post = $this->fromBrowser('OPTIONS', '/api/memos/ingest', ['HTTP_ACCESS_CONTROL_REQUEST_METHOD' => 'POST']);
+        $this->assertSame('POST', $post->headers->get('Access-Control-Allow-Methods'));
+        $this->assertSame('Content-Type, X-Memo-Key', $post->headers->get('Access-Control-Allow-Headers'));
+
+        // The PUT itself answers any origin without credentials, whatever its handler answers.
+        $this->assertOpenToAnyOrigin($this->fromBrowser('PUT', '/api/memos/ingest', ['CONTENT_TYPE' => 'application/json'], '{}'));
     }
 
     public function test_a_json_body_and_a_text_body_reach_the_handler_with_their_cors_headers(): void
@@ -104,6 +130,38 @@ class EndpointGuardsTest extends TestCase
         $this->assertRefused($refused, 429, 'RateLimitError');
         $this->assertGreaterThan(0, (int) $refused->headers->get('Retry-After'));
         $this->assertCount(2, self::$handled);
+    }
+
+    public function test_ipv6_callers_count_by_their_64_block_keyed_under_the_app_s_secret(): void
+    {
+        config(['camis-endpoints.MemoIngest.throttle_per_minute' => 2]);
+        $this->ingest('{}', 'application/json', ['REMOTE_ADDR' => '2001:db8:0:1::1'])->assertOk();
+        $this->ingest('{}', 'application/json', ['REMOTE_ADDR' => '2001:db8:0:1:ffff::2'])->assertOk();
+        $this->assertRefused($this->ingest('{}', 'application/json', ['REMOTE_ADDR' => '2001:db8:0:1::3']), 429, 'RateLimitError');
+        // Another /64, and an IPv4 caller, count apart.
+        $this->ingest('{}', 'application/json', ['REMOTE_ADDR' => '2001:db8:0:2::1'])->assertOk();
+        $this->ingest('{}', 'application/json', ['REMOTE_ADDR' => '198.51.100.4'])->assertOk();
+
+        // The key holds no address, only its HMAC under APP_KEY.
+        $block = substr(hash_hmac('sha256', '2001:db8:0:1::/64', (string) config('app.key')), 0, 32);
+        $this->assertSame(3, RateLimiter::attempts('camis-endpoint|MemoIngest|'.$block));
+        $this->assertSame(0, RateLimiter::attempts('camis-endpoint|MemoIngest|'.substr(hash('sha256', '2001:db8:0:1::1'), 0, 32)));
+        // An IPv4 address an IPv6 socket reports, mapped, is the IPv4 caller.
+        $this->ingest('{}', 'application/json', ['REMOTE_ADDR' => '::ffff:198.51.100.4'])->assertOk();
+        $v4 = substr(hash_hmac('sha256', '198.51.100.4', (string) config('app.key')), 0, 32);
+        $this->assertSame(2, RateLimiter::attempts('camis-endpoint|MemoIngest|'.$v4));
+    }
+
+    public function test_a_guarded_route_whose_config_entry_is_missing_answers_500_and_checks_nothing_through(): void
+    {
+        // A config cache from before the endpoint had guards.
+        config(['camis-endpoints.MemoIngest' => null, 'camis-endpoints.MemoRestate' => null]);
+
+        $ingest = $this->ingest('{}');
+        $ingest->assertStatus(500)->assertJsonPath('data', null)->assertJsonPath('error.name', 'InternalServerError');
+        $this->fromBrowser('PUT', '/api/memos/ingest', ['CONTENT_TYPE' => 'application/json'], '{}')->assertStatus(500);
+        $this->fromBrowser('OPTIONS', '/api/memos/ingest', ['HTTP_ACCESS_CONTROL_REQUEST_METHOD' => 'POST'])->assertStatus(500);
+        $this->assertSame([], self::$handled);
     }
 
     public function test_refused_requests_count_toward_the_throttle(): void
@@ -151,8 +209,8 @@ class EndpointGuardsTest extends TestCase
         $this->assertSame([self::ORIGIN], $preflight->headers->all('access-control-allow-origin'));
         $this->assertSame('true', $preflight->headers->get('Access-Control-Allow-Credentials'));
 
-        // Another method's preflight on the endpoint's path is the app's to answer.
-        $other = $this->fromBrowser('OPTIONS', '/api/memos/ingest', ['HTTP_ACCESS_CONTROL_REQUEST_METHOD' => 'PUT']);
+        // Another method's preflight on the endpoints' path is the app's to answer.
+        $other = $this->fromBrowser('OPTIONS', '/api/memos/ingest', ['HTTP_ACCESS_CONTROL_REQUEST_METHOD' => 'DELETE']);
         $this->assertSame([self::ORIGIN], $other->headers->all('access-control-allow-origin'));
         $this->assertSame('true', $other->headers->get('Access-Control-Allow-Credentials'));
 

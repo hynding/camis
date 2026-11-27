@@ -53,7 +53,8 @@ describe("filament endpoints", () => {
 
   it("laravel: reports each endpoint, as only the Strapi API style serves them", () => {
     const gaps = generate("laravel").gaps.gaps.filter((g) => g.feature === "endpoint");
-    expect(gaps.filter((g) => g.location.rule !== "MemoIngest")).toEqual([
+    const guarded = new Set(["MemoIngest", "MemoRestate"]);
+    expect(gaps.filter((g) => !guarded.has(g.location.rule ?? ""))).toEqual([
       {
         feature: "endpoint",
         location: { contentType: "Memo", rule: "MemoPin" },
