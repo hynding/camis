@@ -4064,9 +4064,13 @@ postgres-js or a mysql2 pool), and the connection comes from the environment.
   pooled connection, and a query through the pool inside it waits for a second one, so as many
   concurrent transactions as the pool holds (10) waited forever. When the database rolls a
   transaction back to break a deadlock or a serialization conflict (MySQL 1213, PostgreSQL 40001
-  and 40P01), `atomic` runs the work again, three attempts in all; the work only queries through
-  its `tx` and returns what it found (the answer is sent after `atomic` returns), so running it
-  again is safe. On SQLite, whose drizzle transaction
+  and 40P01), `atomic` runs the work again after a pause of 10 to 50ms, three attempts in all; the
+  work only queries through its `tx` and returns what it found (the answer is sent after `atomic`
+  returns), so running it again is safe. MySQL's lock wait timeout (1205) is not retried: the work
+  already waited `innodb_lock_wait_timeout` (50s by default) for its lock and would wait as long
+  again, so it answers 500. A MySQL server logging with `binlog_format=STATEMENT` refuses a write at
+  READ COMMITTED (error 1665); the generated project needs ROW or MIXED, MySQL 8's default being
+  ROW. On SQLite, whose drizzle transaction
   takes no async work, it is `BEGIN IMMEDIATE` … `COMMIT` by hand, one at a time: a second call
   waits for the first (a promise chain), a call inside a transaction's work is refused with an
   error naming it, and a rollback that fails is logged without hiding the work's error. The work
@@ -4086,8 +4090,16 @@ postgres-js or a mysql2 pool), and the connection comes from the environment.
     and the row, and commits, in one transaction.
   - *A create* (secured or not) is one statement, or the row and its to-many links in one
     transaction; its record condition is on the body, which no other write changes.
-  - *An unsecured update or delete* has no condition to keep: one statement, or with to-many links
-    the existence check, then the row and its links in one transaction.
+  - *An unsecured update or delete* has no condition to keep. Without to-many links it is one
+    statement: a concurrent delete leaves an update no row to write, and its read back answers
+    404, never 500. With to-many links it reads the row locked inside the transaction that writes
+    the row and its links (`lockRow`, as a secured one does): concurrent updates of one row take
+    turns, each replacing the links the one before it left, so the row ends with exactly one
+    update's links; an update after a delete finds no row and answers 404, and a delete after
+    nothing answers 204 as before. (Before, the row was looked up through the pool before the
+    transaction: at PostgreSQL's READ COMMITTED a second update's delete of the link rows skipped
+    the first one's new rows, so both sets survived, and an update inserting link rows after a
+    delete's made the delete fail on the foreign key, a 500.)
   - Outside every transaction: the read back after a write (another write may land between the
     commit and it, and show in the answer); a create's link targets, checked before its
     transaction. A secured update reads its link targets inside its transaction but unlocked, so on
@@ -4102,7 +4114,10 @@ postgres-js or a mysql2 pool), and the connection comes from the environment.
   update with nothing to write and an update of no row; and `morph-smoke.ts`, which also refuses a
   link to an id past the range, and sends 16 concurrent creates with to-many links and then 24
   concurrent link-writing updates, 8 of them of one note, more than the pool holds: every one
-  answers within 30s, none with a 500, and a read afterwards answers) and `length-smoke.ts` drive the API over HTTP, writes included, on
+  answers within 30s, none with a 500, and a read afterwards answers; and on the same fixture
+  without roles, five rounds of 8 concurrent updates of one note, which must leave exactly one
+  update's links, then 5 updates racing its delete, which answer 200 or 404 and the delete 204,
+  never 500) and `length-smoke.ts` drive the API over HTTP, writes included, on
   SQLite, MySQL and PostgreSQL. On MySQL and PostgreSQL the length smoke races a secured update
   against a second connection that holds the row locked for 1.5s and then closes it: the update
   waits for the lock and answers 404, and the row keeps its value. Each project has a database of
@@ -4129,8 +4144,12 @@ generated projects install (12): a second transaction waits, a nested one is ref
 rolled back, a failed rollback keeps the work's error; the PostgreSQL and MySQL `atomic` against a
 stand-in client: retried on a deadlock up to three attempts, not on another failure, MySQL at READ
 COMMITTED; the id guard; the error handler leaking nothing of a 500 and logging no value a forged
-mysql2 or postgres-js error carries); a test that no `atomic` callback in any router variant
-queries through `db` or `find`; the router goldens
+mysql2 or postgres-js error carries, a retried transaction pausing first); a test that each router
+variant (the secured ones with an AI field, with and without links, included) has the number of
+`atomic` callbacks it should, none of which names `db`, calls `find` or `view`, or calls a link
+check without an executor; an unsecured update and delete of a row with to-many links reading it
+locked inside the transaction; the generated `package.json` stating Node 20 or later, for which
+better-sqlite3 12 has prebuilt binaries; the router goldens
 regenerated; `syntax.test.ts` parses the morphs project on every dialect; the
 `adapter-express-boot` workflow's `smoke:lengths` and `smoke` steps on SQLite, MySQL and
 PostgreSQL. Both smokes ran locally on SQLite, PostgreSQL 16 and MariaDB 10.11; MySQL 8 runs in CI.
