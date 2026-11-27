@@ -3978,9 +3978,9 @@ longtext.
   `{ error: "<field> must be at most <n> characters" }`: on a secured API it checks what the caller
   may write, after the record condition refuses a row the role could not have written (403) and the
   field rules strip what it may not write, so a stripped field past its bound is no 400. The
-  generated routers call better-sqlite3's synchronous API, so the Express API serves writes on SQLite
-  only today: the 400 is exercised there, and on MySQL and PostgreSQL the length smoke checks the
-  column sizes through the driver. Real Strapi counts with yup's
+  length smoke exercises the 400 over HTTP on SQLite, MySQL and PostgreSQL (until Phase 103 the
+  generated routers called better-sqlite3's synchronous API and served writes on SQLite only, and
+  the smoke checked MySQL's and PostgreSQL's columns through the driver). Real Strapi counts with yup's
   `value.length`, UTF-16 code units, so it refuses a value of characters past the Basic Multilingual
   Plane at half the bound: stricter than the IR's bound, never looser, so no column overflows; it is
   Strapi's validator, which camis does not replace, and is not reported as a gap.
@@ -4014,13 +4014,66 @@ API style and refuses 1,001, on SQLite, MySQL and PostgreSQL; the `adapter-expre
 runs `length-smoke.ts` as a step of its own on all three, before the boot smoke: on SQLite over HTTP
 on a secured project (values at each bound kept, one character more refused on create and update, a
 create the record condition refuses a 403 even past a bound, a stripped field past its bound no 400,
-a text column's default stored); on MySQL and PostgreSQL, whose drivers the generated routers'
-synchronous better-sqlite3 calls do not serve, the push (a defaulted text column included) and the
-pushed columns keeping the values through the project's own driver, in a database of its own so
-drizzle-kit's push meets no other project's tables. That workflow is disabled for inactivity on
+a text column's default stored), and since Phase 103 the same over HTTP on MySQL and PostgreSQL,
+in a database of its own so drizzle-kit's push meets no other project's tables. That workflow is disabled for inactivity on
 GitHub and its last scheduled runs on master failed on every leg, so it does not run on pull
 requests until it is enabled. SQLite and PostgreSQL ran locally for the Filament tests and the
 Express length smoke; MySQL runs only in CI.
+
+
+## Phase 103 — the Express API on every database (`adapter-express`)
+
+Issue #128, item 1. The generated routers and `src/morphs.ts` called drizzle's better-sqlite3 API
+synchronously (`.all()`, `.get()`, `.run()`, `.returning().get()`), which the postgres-js and mysql2
+clients do not have: on MySQL and PostgreSQL every route answered 500
+(`db.select(...).from(...).all is not a function`), and the boot smoke's server never came up. The
+project builds its `db` from the dialect it is generated for (`src/db/client.ts`: better-sqlite3,
+postgres-js or a mysql2 pool), and the connection comes from the environment.
+
+- **Awaited queries.** Every drizzle query builder is a promise on all three clients (on
+  better-sqlite3 it runs when awaited), so the routers await each query and are the same text on
+  every database but for one call: an insert takes its id from `RETURNING` (`.returning({ id })`)
+  on SQLite and PostgreSQL and from MySQL's insert id (`$returningId()`) there. No MySQL write
+  returns its row, so on every database a create and an update read the row back by id (`find`:
+  `limit(1)`, its first element), keeping the answers the same; a list is ordered by id, which no
+  database guarantees without an `ORDER BY`. A route serves only a numeric id (`/:id(\d+)`), as
+  PostgreSQL refuses an integer parameter that is not a number (`Number("abc")` is NaN); any other
+  id is the app's 404. The secured list still filters, sorts and counts in JavaScript, so its `Content-Range`
+  total is a length, never a database's bigint count.
+- **Errors.** The project uses Express 4, which does not catch a rejected promise: each route is
+  wrapped in `asyncRoute` (`src/async-route.ts`), which hands the error to Express's error handler
+  (500), and no rejection is left unhandled.
+- **Transactions.** A row and its to-many links (`src/morphs.ts`) are written and deleted in one
+  transaction, `atomic` in `src/db/atomic.ts`, generated per dialect: on PostgreSQL and MySQL
+  drizzle's `db.transaction` on a connection of its own (READ COMMITTED and InnoDB's REPEATABLE READ
+  by default); on SQLite, whose drizzle transaction takes no async work, `BEGIN IMMEDIATE` and
+  `COMMIT` (or `ROLLBACK`) around it by hand: the work awaits only better-sqlite3 queries, which
+  settle before any other request's callback runs, so no other statement falls inside. On all three
+  the row and its links are written all or nothing. The checks before a write (the record
+  condition, the links' targets) and the read back after it are outside the transaction, as before.
+  A write without to-many links is one statement.
+- **An unsecured update with nothing to write** answers the row unchanged, as the secured router
+  does, where it sent an empty `set({})` and answered 500.
+- **The smokes.** `boot-smoke.ts` (the secured project, now also its list, update, an update with
+  nothing to write and delete; the AI project, which also checks an update with nothing to write and
+  an update of no row; and `morph-smoke.ts`) and `length-smoke.ts` drive the API over HTTP, writes
+  included, on SQLite, MySQL and PostgreSQL, each project in a database of its own next to
+  DATABASE_URL's (`scripts/smoke-project.ts`); the boot smoke builds the dialect-agnostic admin on
+  SQLite only. Every smoke starts its server in a process group of its own and stops the group, so
+  no `tsx` server outlives it (the boot smoke left its servers running before).
+
+Not covered: a JSON column on MariaDB, where JSON is a LONGTEXT that mysql2 answers as a string
+(MySQL 8, which CI runs, answers it parsed); a date sent as a string, which drizzle's timestamp
+columns do not take on any database (unchanged); a numeric id past a 32-bit integer, which
+PostgreSQL refuses to compare (500), SQLite and MySQL answer 404.
+
+Exit: `async-queries.test.ts` (no synchronous call on any dialect or router variant, every route
+wrapped, the routers differing across dialects only in the insert's id, goldens
+`async-route.ts.txt`, `atomic/atomic.<dialect>.ts.txt` and `morphs/notes.routes.mysql.ts.txt`,
+idempotent regeneration on every dialect); the router goldens regenerated; `syntax.test.ts` parses
+the morphs project on every dialect; the `adapter-express-boot` workflow's `smoke:lengths` and
+`smoke` steps on SQLite, MySQL and PostgreSQL. Both smokes ran locally on SQLite, PostgreSQL 16 and
+MariaDB 10.11; MySQL 8 runs in CI.
 
 ---
 
