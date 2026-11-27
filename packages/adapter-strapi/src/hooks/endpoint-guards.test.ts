@@ -512,6 +512,27 @@ describe("strapi endpoint guards: the generated middlewares at work", () => {
     for (const spy of [iterate, forEach, keys, values, entries]) expect(spy).not.toHaveBeenCalled();
   });
 
+  /** A refusal leaving a body unread closes the connection once sent, so no rest is waited for. */
+  const closes = (ctx: FakeContext): void => {
+    expect(ctx.response.connection).toBe("close");
+    const req = ctx.req;
+    expect(req.destroyed).toBe(false);
+    ctx.res.emit("finish");
+    expect(req.destroyed).toBe(true);
+  };
+
+  it("closes the connection after any refusal that leaves a body unread, and keeps it after one with no body", async () => {
+    const middleware = stack();
+    for (let i = 0; i < 3; i += 1) await run(post("{}"), middleware);
+    closes((await run(post("{}"), middleware)).ctx);
+    closes((await run(post("<a/>", { "Content-Type": "application/xml" }))).ctx);
+    const pings = stack();
+    await run(context("GET", "/api/articles/ping"), pings);
+    const bodiless = await run(context("GET", "/api/articles/ping"), pings);
+    expect(bodiless.ctx.status).toBe(429);
+    expect(bodiless.ctx.response.connection).toBeUndefined();
+  });
+
   it("refuses another media type with 415, and a body with none", async () => {
     refused(
       (await run(post("a=1", { "Content-Type": "application/x-www-form-urlencoded" }))).ctx,
@@ -522,15 +543,6 @@ describe("strapi endpoint guards: the generated middlewares at work", () => {
     delete untyped.req.headers["content-type"];
     refused((await run(untyped)).ctx, 415, "UnsupportedMediaTypeError");
   });
-
-  /** A 413 closes the connection once it is answered, so no unread body is waited for. */
-  const closes = (ctx: FakeContext): void => {
-    expect(ctx.response.connection).toBe("close");
-    const req = ctx.req;
-    expect(req.destroyed).toBe(false);
-    ctx.res.emit("finish");
-    expect(req.destroyed).toBe(true);
-  };
 
   it("refuses with 413 a body declared too large, unread, and closes the connection", async () => {
     const { ctx, reached } = await run(post("{}", { "Content-Length": "100000" }));
