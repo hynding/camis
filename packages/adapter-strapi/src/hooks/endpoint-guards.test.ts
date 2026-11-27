@@ -30,7 +30,16 @@ const guardedDoc = (...endpoints: Endpoint[]): IrDocument => ({
 });
 const generate = (doc: IrDocument) =>
   strapiAdapter.generate({ document: doc, roles: [] }, { projectName: "blog" });
-const guarded = generate(guardedDoc(ingest));
+// A second guarded endpoint, which takes turns of a bucket of its own.
+const ping: Endpoint = {
+  name: "ArticlePing",
+  contentType: "Article",
+  method: "GET",
+  path: "/articles/ping",
+  public: true,
+  throttle: { perMinute: 1 },
+};
+const guarded = generate(guardedDoc(ingest, ping));
 const file = (result: ReturnType<typeof generate>, path: string) =>
   result.files.find((f) => f.path === path);
 const MIDDLEWARE = "src/middlewares/camis_endpoint_guards.ts";
@@ -84,9 +93,16 @@ describe("strapi endpoint guards: the generated project", () => {
       path: ingest.path,
       public: true,
     };
-    expect(importEndpoints(routes, guardedDoc(ingest)).endpoints).toEqual([
+    expect(importEndpoints(routes, guardedDoc(ingest, ping)).endpoints).toEqual([
       ...(customCodeDoc.endpoints ?? []),
       route,
+      {
+        name: ping.name,
+        contentType: ping.contentType,
+        method: "GET",
+        path: ping.path,
+        public: true,
+      },
     ]);
     const imported = importDocument(guarded.files);
     expect(imported.document.ok).toBe(true);
@@ -314,6 +330,16 @@ describe("strapi endpoint guards: the generated middleware at work", () => {
     const another = post("{}");
     another.request.ip = "198.51.100.1";
     expect((await run(another, middleware)).reached).toBe(true);
+  });
+
+  it("counts each endpoint in a bucket of its own, a GET's HEAD in the GET's", async () => {
+    const middleware = factory({}, { strapi });
+    for (let i = 0; i < 3; i += 1) expect((await run(post("{}"), middleware)).reached).toBe(true);
+    const pinged = await run(context("GET", "/api/articles/ping"), middleware);
+    expect(pinged.reached).toBe(true);
+    const head = await run(context("HEAD", "/api/articles/ping"), middleware);
+    expect(head.reached).toBe(false);
+    expect(head.ctx.status).toBe(429);
   });
 
   it("takes a deployment's own rate from the endpoint's variable, never less than one", async () => {
