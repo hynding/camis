@@ -113,6 +113,49 @@ export const morphSmoke = async (dialect: Dialect = "sqlite", port = 3212): Prom
     const seen = await call(planner, "GET", `notes/${kept.body.id as number}`);
     same(seen.body.subjects, [{ type: "Book", id: dune }], "the planner's view of them");
 
+    // More concurrent link writes than a database pool holds (10): creates, updates of distinct
+    // notes and updates of one note, each a transaction. Every one answers, none with a 500, and
+    // the API answers afterwards.
+    const timed = async (method: string, path: string, body: unknown) => {
+      const res = await fetch(`${base}/api/${path}`, {
+        method,
+        headers: { "content-type": "application/json", authorization: `Bearer ${planner}` },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(30_000),
+      });
+      return { status: res.status, body: (await res.json()) as Record<string, unknown> };
+    };
+    const links = [
+      { type: "Book", id: dune },
+      { type: "Film", id: heat },
+    ];
+    const created = await Promise.all(
+      Array.from({ length: 16 }, (_, i) =>
+        timed("POST", "notes", { title: `c${i}`, subjects: links.slice(i % 2) }),
+      ),
+    );
+    same(
+      created.map((r) => r.status),
+      Array<number>(16).fill(201),
+      "concurrent creates",
+    );
+    const ids = created.map((r) => r.body.id as number);
+    const updated = await Promise.all([
+      ...ids.map((each, i) =>
+        timed("PATCH", `notes/${each}`, { subjects: links.slice((i + 1) % 2) }),
+      ),
+      ...Array.from({ length: 8 }, (_, i) =>
+        timed("PATCH", `notes/${ids[0]}`, { subjects: links.slice(i % 2) }),
+      ),
+    ]);
+    same(
+      updated.map((r) => r.status),
+      Array<number>(24).fill(200),
+      "concurrent updates",
+    );
+    same((await call(planner, "GET", `notes/${ids[1]}`)).status, 200, "a read after them");
+    console.log(`CONCURRENT LINK WRITES OK (${dialect})`);
+
     // Deleting a note takes its links with it.
     same((await call(planner, "DELETE", `notes/${id}`)).status, 200, "note delete");
     same(

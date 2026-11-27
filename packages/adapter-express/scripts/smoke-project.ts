@@ -87,18 +87,29 @@ export const smokeProject = async (
   let proc: ChildProcess | undefined;
   let exited: Promise<unknown> = Promise.resolve();
   let created: string | undefined;
-  const stop = async () => {
+  const signal = (name: NodeJS.Signals) => {
     try {
-      if (proc?.pid !== undefined) process.kill(-proc.pid, "SIGTERM");
+      if (proc?.pid !== undefined) process.kill(-proc.pid, name);
     } catch {
       // The group has exited already.
     }
-    await exited;
+  };
+  // Never throws: called in a smoke's `finally`, it must not replace the smoke's own error. A drop
+  // that fails is logged and fails the run through the exit code.
+  const stop = async () => {
+    signal("SIGTERM");
+    if ((await Promise.race([exited.then(() => true), sleep(5_000).then(() => false)])) === false) {
+      signal("SIGKILL");
+      await Promise.race([exited, sleep(5_000)]);
+    }
     try {
       if (created !== undefined && dialect !== "sqlite") {
         await writeFile(join(dir, "drop-database.mjs"), DROP_DATABASE[dialect](created));
         run("node", ["drop-database.mjs"], dir, adminEnv);
       }
+    } catch (error) {
+      console.error(`dropping ${created ?? "the database"} failed:`, error);
+      process.exitCode = 1;
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

@@ -119,7 +119,7 @@ const securedSmoke = async (port = 3210): Promise<void> => {
     if (gone.status !== 404) fail(`a deleted article → ${gone.status}`);
     // An id no row can have is the JSON 404 on every database, PostgreSQL refusing to compare one
     // past its integer column's range; a body that does not parse is a JSON 400.
-    for (const id of ["not-a-number", "2147483648", "99999999999"]) {
+    for (const id of ["not-a-number", "2147483648", "99999999999", "0001", `${"0".repeat(40)}1`]) {
       const missing = await fetch(`${root}/articles/${id}`, { headers: bearer(editor) });
       const body = await missing.text();
       if (missing.status !== 404 || body !== '{"error":"not found"}')
