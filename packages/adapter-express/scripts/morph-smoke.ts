@@ -169,5 +169,66 @@ export const morphSmoke = async (dialect: Dialect = "sqlite", port = 3212): Prom
   }
 };
 
+// The same fixture without roles: every caller reads and writes every entry. Concurrent updates of
+// one note each replace its links, so the note ends with exactly one update's links, never a merge
+// of several; updates racing the note's delete answer 200 or 404, never 500. Five rounds of each.
+export const unsecuredMorphSmoke = async (
+  dialect: Dialect = "sqlite",
+  port = 3214,
+): Promise<void> => {
+  const project = await smokeProject({ ...morphs, roles: [] }, dialect, "links", port);
+  try {
+    project.start();
+    const base = `http://127.0.0.1:${port}/api`;
+    await waitForServer(`${base}/books`);
+    const call = async (method: string, path: string, body?: unknown) => {
+      const res = await fetch(`${base}/${path}`, {
+        method,
+        headers: { "content-type": "application/json" },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      const text = await res.text();
+      return {
+        status: res.status,
+        body: (text === "" ? {} : JSON.parse(text)) as Record<string, unknown>,
+      };
+    };
+    const books: number[] = [];
+    for (let i = 0; i < 8; i++)
+      books.push((await call("POST", "books", { title: `b${i}` })).body.id as number);
+    const sets = books.map((book, i) => [
+      { type: "Book", id: book },
+      { type: "Book", id: books[(i + 1) % books.length] },
+    ]);
+    for (let round = 0; round < 5; round++) {
+      const note = (await call("POST", "notes", { title: `r${round}` })).body.id as number;
+      const updates = await Promise.all(
+        sets.map((subjects) => call("PATCH", `notes/${note}`, { subjects })),
+      );
+      same(
+        updates.map((r) => r.status),
+        Array<number>(sets.length).fill(200),
+        "concurrent updates",
+      );
+      const kept = (await call("GET", `notes/${note}`)).body.subjects;
+      if (!sets.some((set) => JSON.stringify(set) === JSON.stringify(kept)))
+        fail(`round ${round}: the note's links are no one update's: ${JSON.stringify(kept)}`);
+
+      const racing = await Promise.all([
+        ...sets.slice(0, 5).map((subjects) => call("PATCH", `notes/${note}`, { subjects })),
+        call("DELETE", `notes/${note}`),
+      ]);
+      const statuses = racing.map((r) => r.status);
+      if (statuses.at(-1) !== 204 || statuses.slice(0, -1).some((st) => st !== 200 && st !== 404))
+        fail(`round ${round}: updates racing a delete → ${JSON.stringify(statuses)}`);
+      same((await call("GET", `notes/${note}`)).status, 404, "the deleted note");
+    }
+    console.log(`UNSECURED LINK WRITES OK (${dialect})`);
+  } finally {
+    await project.stop();
+  }
+};
+
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href)
   await morphSmoke((process.argv[2] ?? "sqlite") as Dialect);

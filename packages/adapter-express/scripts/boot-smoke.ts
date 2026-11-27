@@ -2,7 +2,7 @@
 // permission enforcement on denied paths: anonymous mutate → 403, a role's record condition hides a
 // row → 404, and a read field rule strips a field for one role but not another. Then it boots an
 // unsecured project with an AI field (populate and change detection, over HTTP writes) and the
-// polymorphic links project (morph-smoke.ts), on every dialect.
+// polymorphic links project, secured and unsecured (morph-smoke.ts), on every dialect.
 // Runs ONLY in the gated CI job (needs npm + a running server + the target DB). The dialect is the
 // first CLI arg (default sqlite); the DB connection comes from the environment (DATABASE_URL for
 // mysql/pgsql, each project getting a database of its own next to it; see smoke-project.ts).
@@ -11,7 +11,7 @@ import { join } from "node:path";
 import type { Dialect } from "../src/dialect";
 import { aiFixture } from "../src/__fixtures__/ai";
 import { secured } from "../src/__fixtures__/secured";
-import { morphSmoke } from "./morph-smoke";
+import { morphSmoke, unsecuredMorphSmoke } from "./morph-smoke";
 import { fail, smokeProject, waitForServer } from "./smoke-project";
 
 const dialect = (process.argv[2] ?? "sqlite") as Dialect;
@@ -209,4 +209,5 @@ const aiSmoke = async (port = 3211): Promise<void> => {
 await securedSmoke();
 await aiSmoke();
 await morphSmoke(dialect);
+await unsecuredMorphSmoke(dialect);
 console.log(`EXPRESS SECURED BOOT SMOKE PASS (${dialect})`);
