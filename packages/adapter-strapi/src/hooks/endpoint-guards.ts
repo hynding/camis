@@ -132,8 +132,12 @@ export default (_config: unknown, { strapi }: { strapi: Core.Strapi }) => {
 // The guards' middleware's code, the same in every project; only GUARDS above it differs.
 const GUARDS_RUNTIME = `
 const MINUTE = 60_000;
-/** How many callers the throttle tracks at most, unless the middleware's config sets maxTrackedCallers. */
+/** How many callers each endpoint's throttle tracks at most, unless the deployment sets its own. */
 const MAX_TRACKED_CALLERS = 100_000;
+const MAX_TRACKED_CALLERS_ENV = "CAMIS_ENDPOINT_MAX_TRACKED_CALLERS";
+/** How long, and how many bytes, a refused request's connection is drained before it is dropped. */
+const LINGER_MS = 2_000;
+const LINGER_BYTES = 1_048_576;
 
 interface Refusal {
   status: number;
@@ -147,12 +151,14 @@ const TOO_MANY: Refusal = {
 };
 const TOO_LARGE: Refusal = { status: 413, name: "PayloadTooLargeError", message: "Entity too large" };
 ${MATCHING}
-// A deployment's own rate, read as the Filament target reads it: a whole number in ASCII digits,
-// never less than one a minute; any other value (empty, signed, 1e3, words) keeps the IR's rate.
-const rate = (throttle: Throttle): number => {
-  const raw = process.env[throttle.env];
-  return raw !== undefined && /^[0-9]+$/.test(raw) ? Math.max(1, Number(raw)) : throttle.perMinute;
+// A deployment's own number, read as the Filament target reads a rate: a whole number in ASCII
+// digits, never less than one; any other value (empty, signed, 1e3, words) keeps the default.
+const fromEnv = (name: string, fallback: number): number => {
+  const raw = process.env[name];
+  return raw !== undefined && /^[0-9]+$/.test(raw) ? Math.max(1, Number(raw)) : fallback;
 };
+
+const rate = (throttle: Throttle): number => fromEnv(throttle.env, throttle.perMinute);
 
 const mediaType = (header: string): string => (header.split(";")[0] ?? "").trim().toLowerCase();
 
@@ -162,21 +168,49 @@ const hasBody = (ctx: Context): boolean => {
 };
 
 /**
- * A refusal in Strapi's error body, as strapi::errors writes it. It leaves the body unread, so the
- * connection is closed once the refusal is sent: Node would otherwise read and discard the rest, for
- * as long as the client goes on sending it.
+ * A lingering close, as nginx does it, for a refusal that leaves the body unread. Node closes a
+ * Connection: close socket as soon as the answer is written (destroySoon); with request bytes still
+ * unread the kernel then resets the connection, and a reset can drop the answer before the client
+ * reads it. So once the answer is sent this takes that close back, shuts only the sending side (the
+ * client reads the answer, then the end), and reads and discards what still comes, until the client
+ * ends, or LINGER_BYTES more have come, or LINGER_MS have passed; then it drops the connection.
  */
+const linger = (ctx: Context): void => {
+  ctx.set("Connection", "close");
+  const req = ctx.req;
+  const socket = req.socket;
+  ctx.res.once("finish", () => {
+    socket.removeListener("finish", socket.destroy);
+    const start = socket.bytesRead;
+    const stop = (): void => {
+      clearTimeout(timer);
+      clearInterval(watch);
+    };
+    const drop = (): void => {
+      stop();
+      socket.destroy();
+    };
+    const timer = setTimeout(drop, LINGER_MS);
+    const watch = setInterval(() => {
+      if (socket.bytesRead - start > LINGER_BYTES) drop();
+    }, 50);
+    timer.unref();
+    watch.unref();
+    socket.once("end", drop);
+    socket.once("close", stop);
+    req.resume();
+    if (socket.writable) socket.end();
+  });
+};
+
+/** A refusal in Strapi's error body, as strapi::errors writes it. */
 const refuse = (ctx: Context, refusal: Refusal): void => {
   ctx.status = refusal.status;
   ctx.body = {
     data: null,
     error: { status: refusal.status, name: refusal.name, message: refusal.message, details: {} },
   };
-  if (hasBody(ctx)) {
-    ctx.set("Connection", "close");
-    const req = ctx.req;
-    ctx.res.once("finish", () => req.destroy());
-  }
+  if (hasBody(ctx)) linger(ctx);
 };
 
 /** The body read up to one byte past the limit: null once it passes it. */
@@ -266,20 +300,22 @@ interface Count {
 }
 
 /**
- * Strapi's own throttles (users-permissions' koa2-ratelimit) count in the process's memory, and so
- * does this: with more than one Strapi process each counts apart. A caller's count lives in the
- * window it began in; at a window's turn the one before it is dropped whole, every count in it
- * having expired, so forgetting costs nothing per request. At most \`cap\` callers are tracked: a new
- * caller beyond them is refused, as one over the throttle is, until a window is dropped, rather than
- * the counter growing without bound.
+ * One endpoint's throttle. Strapi's own throttles (users-permissions' koa2-ratelimit) count in the
+ * process's memory, and so does this: with more than one Strapi process each counts apart. A
+ * caller's count lives in the fixed window it began in, by the monotonic clock (a step of the wall
+ * clock changes nothing); at a window's turn the one before it is dropped whole, every count in it
+ * having expired, so forgetting costs nothing per request. At most \`cap\` callers are tracked:
+ * while that many are, a new caller is let through uncounted, so memory stays bounded and one
+ * endpoint's flood of addresses (which defeats a per-address throttle anyway) locks no one out;
+ * callers already tracked are counted and refused as before.
  */
 const counter = (cap: number) => {
   let current = new Map<string, Count>();
   let previous = new Map<string, Count>();
-  let turnAt = 0;
+  let turnAt = -Infinity;
   const seconds = (at: number, now: number): number => Math.max(1, Math.ceil((at - now) / 1000));
   return (key: string, max: number): number | null => {
-    const now = Date.now();
+    const now = performance.now();
     if (now >= turnAt) {
       previous = now >= turnAt + MINUTE ? new Map() : current;
       current = new Map();
@@ -287,9 +323,7 @@ const counter = (cap: number) => {
     }
     let count = current.get(key) ?? previous.get(key);
     if (count === undefined || count.resetAt <= now) {
-      if (current.size + previous.size >= cap) {
-        return seconds(previous.size > 0 ? turnAt : turnAt + MINUTE, now);
-      }
+      if (current.size + previous.size >= cap) return null;
       count = { hits: 0, resetAt: now + MINUTE };
       current.set(key, count);
     }
@@ -307,24 +341,28 @@ const counter = (cap: number) => {
  * are refused, each in Strapi's error body. The throttle counts per caller, keyed by an HMAC of the
  * caller under the app's keys (server.app.keys), so no address is kept.
  */
-export default (config: { maxTrackedCallers?: unknown } | undefined, { strapi }: { strapi: Core.Strapi }) => {
+export default (_config: unknown, { strapi }: { strapi: Core.Strapi }) => {
   const prefix = String(strapi.config.get("api.rest.prefix", "/api"));
   const keys: unknown = strapi.config.get("server.app.keys", []);
   const secret = Array.isArray(keys) ? keys.map(String).join(",") : "";
   if (secret === "") throw new Error("server.app.keys (APP_KEYS) is empty, and the endpoint throttle keys its counter with it");
-  const tracked = config?.maxTrackedCallers;
-  const cap = typeof tracked === "number" && Number.isInteger(tracked) && tracked > 0 ? tracked : MAX_TRACKED_CALLERS;
-  const routes = GUARDS.map((guard) => ({ guard, pattern: matcher(prefix, guard.path), methods: methods(guard.method) }));
-  const take = counter(cap);
+  const cap = fromEnv(MAX_TRACKED_CALLERS_ENV, MAX_TRACKED_CALLERS);
+  const routes = GUARDS.map((guard) => ({
+    guard,
+    pattern: matcher(prefix, guard.path),
+    methods: methods(guard.method),
+    take: counter(cap),
+  }));
   const keyed = (address: string): string =>
     createHmac("sha256", secret).update(caller(address)).digest("hex").slice(0, 32);
 
   return async (ctx: Context, next: () => Promise<void>): Promise<void> => {
-    const guard = routes.find((route) => route.methods.includes(ctx.method) && route.pattern.test(ctx.path))?.guard;
-    if (guard === undefined) return next();
+    const route = routes.find((r) => r.methods.includes(ctx.method) && r.pattern.test(ctx.path));
+    if (route === undefined) return next();
+    const { guard, take } = route;
 
     if (guard.throttle !== undefined) {
-      const wait = take(\`\${guard.name}|\${keyed(String(ctx.request.ip))}\`, rate(guard.throttle));
+      const wait = take(keyed(String(ctx.request.ip)), rate(guard.throttle));
       if (wait !== null) {
         ctx.set("Retry-After", String(wait));
         return refuse(ctx, TOO_MANY);

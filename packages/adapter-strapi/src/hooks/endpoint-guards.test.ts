@@ -735,7 +735,7 @@ describe("strapi endpoint guards: a refusal over a real connection", () => {
             return;
           }
         }
-        if (open) socket.end(chunked ? "0\r\n\r\n" : undefined);
+        if (open) socket.end(chunked ? "0\r\n\r\n" : "");
       };
       const timer = setTimeout(() => socket.destroy(), 15_000);
       socket.on("data", (data: Buffer) => (received += data.toString("latin1")));

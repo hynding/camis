@@ -21,7 +21,8 @@ use Symfony\Component\HttpFoundation\Response;
  * The throttle counts every request that reaches it, refused ones included, per client address: an
  * IPv6 caller by its /64, the block one subscriber is given, so a caller cannot take a fresh address
  * per request. The cache key holds only an HMAC of the address under APP_KEY, which no list of
- * addresses reverses without the key. The count hit() returns decides, so parallel requests cannot
+ * addresses reverses without the key; with no APP_KEY the throttle answers 500 rather than key it
+ * with nothing. The count hit() returns decides, so parallel requests cannot
  * all pass one check. Behind a proxy Laravel does not trust every client shares the proxy's address
  * (DEPLOY.md says how to trust it).
  *
@@ -56,7 +57,11 @@ final class StrapiEndpointGuard
 
     private static function throttle(Request $request, string $endpoint, int $perMinute): void
     {
-        $caller = hash_hmac('sha256', self::caller((string) $request->ip()), (string) config('app.key'));
+        $secret = (string) config('app.key');
+        if ($secret === '') {
+            throw new RuntimeException('APP_KEY is empty, and the endpoint throttle keys its counter with it; set it (php artisan key:generate).');
+        }
+        $caller = hash_hmac('sha256', self::caller((string) $request->ip()), $secret);
         $key = 'camis-endpoint|'.$endpoint.'|'.substr($caller, 0, 32);
         if (RateLimiter::hit($key, 60) > $perMinute) {
             throw new ThrottleRequestsException('Too Many Attempts.', null, [
