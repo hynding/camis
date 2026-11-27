@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Endpoint } from "@camis/ir-schema";
-import { endpointThrottleEnv, isGuardedEndpoint } from "./endpoint-guards";
+import { endpointGuardNames, endpointThrottleEnv, isGuardedEndpoint } from "./endpoint-guards";
 
 const plain: Endpoint = {
   name: "MemoPin",
@@ -28,5 +28,18 @@ describe("endpoint guards", () => {
     expect(isGuardedEndpoint({ ...plain, maxBodyBytes: 10 })).toBe(true);
     expect(isGuardedEndpoint({ ...plain, accepts: ["text/plain"] })).toBe(true);
     expect(isGuardedEndpoint({ ...plain, public: true, crossOrigin: { headers: [] } })).toBe(true);
+  });
+
+  it("names the guards an endpoint declares, in the order its route checks them", () => {
+    expect(endpointGuardNames(plain)).toEqual([]);
+    expect(
+      endpointGuardNames({
+        ...plain,
+        public: true,
+        crossOrigin: { headers: [] },
+        accepts: ["text/plain"],
+        throttle: { perMinute: 1 },
+      }),
+    ).toEqual(["throttle", "accepts", "crossOrigin"]);
   });
 });

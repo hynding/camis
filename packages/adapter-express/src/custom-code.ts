@@ -1,4 +1,4 @@
-import { isGuardedEndpoint } from "@camis/adapter-kernel";
+import { endpointGuardNames, isGuardedEndpoint } from "@camis/adapter-kernel";
 import {
   ROUTE_ACTIONS,
   type CapabilityGap,
@@ -20,12 +20,10 @@ const gap = (
   message: `the Express target runs no ${what}; "${name}"${detail}${wired}`,
 });
 
-const GUARD_NAMES = ["throttle", "maxBodyBytes", "accepts", "crossOrigin"] as const;
-
 /** " and its guards (…) are not wired", naming those the endpoint declares; " is not wired" without. */
 const endpointWired = (e: Endpoint): string =>
   isGuardedEndpoint(e)
-    ? ` and its guards (${GUARD_NAMES.filter((g) => e[g] !== undefined).join(", ")}) are not wired`
+    ? ` and its guards (${endpointGuardNames(e).join(", ")}) are not wired`
     : " is not wired";
 
 /** The Express target has no Ring 2 seams yet, so each piece of hand-written code is a gap. */

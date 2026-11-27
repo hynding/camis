@@ -1,4 +1,5 @@
 import {
+  endpointGuardNames,
   isGuardedEndpoint,
   type ApiStyle,
   type GeneratedFile,
@@ -18,13 +19,9 @@ export interface EndpointsPlan {
   gaps: CapabilityGap[];
 }
 
-const GUARD_NAMES = ["throttle", "maxBodyBytes", "accepts", "crossOrigin"] as const;
-
 /** " and its guards (…) are", naming those the endpoint declares, or " is" for one with none. */
 const guardsNamed = (e: Endpoint): string =>
-  isGuardedEndpoint(e)
-    ? ` and its guards (${GUARD_NAMES.filter((g) => e[g] !== undefined).join(", ")}) are`
-    : " is";
+  isGuardedEndpoint(e) ? ` and its guards (${endpointGuardNames(e).join(", ")}) are` : " is";
 
 /** Only the Strapi API style on the laravel storage layout routes endpoints, beside Strapi's routes. */
 export const endpointsPlan = (

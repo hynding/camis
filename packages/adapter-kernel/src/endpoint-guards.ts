@@ -11,9 +11,11 @@ export const endpointThrottleEnv = (name: string): string =>
     .replace(/([A-Z])([A-Z][a-z])/g, "$1_$2")
     .toUpperCase()}_THROTTLE_PER_MINUTE`;
 
+const GUARDS = ["throttle", "maxBodyBytes", "accepts", "crossOrigin"] as const;
+
+/** The guards the endpoint declares, by their IR names, in the order its route checks them. */
+export const endpointGuardNames = (e: Endpoint): string[] =>
+  GUARDS.filter((guard) => e[guard] !== undefined);
+
 /** Whether the endpoint declares a guard its route checks before the handler runs. */
-export const isGuardedEndpoint = (e: Endpoint): boolean =>
-  e.throttle !== undefined ||
-  e.maxBodyBytes !== undefined ||
-  e.accepts !== undefined ||
-  e.crossOrigin !== undefined;
+export const isGuardedEndpoint = (e: Endpoint): boolean => endpointGuardNames(e).length > 0;
