@@ -1,58 +1,32 @@
-// Boots the polymorphic-links fixture (secured) on sqlite and drives its links over HTTP: a note
-// links a book and a film and is pinned to a book, both read back as { type, id }; a book and a
-// film read the notes linking them; a link to an entry the caller may not read, or that is not
-// there, is refused on write and left out on read. boot-smoke.ts runs it on its sqlite leg; run
-// alone with `tsx scripts/morph-smoke.ts`.
-import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+// Boots the polymorphic-links fixture (secured) and drives its links over HTTP: a note links a book
+// and a film and is pinned to a book, both read back as { type, id }; a book and a film read the
+// notes linking them; a link to an entry the caller may not read, or that is not there, is refused
+// on write and left out on read. boot-smoke.ts runs it on every leg; run alone with
+// `tsx scripts/morph-smoke.ts [dialect]`.
 import { pathToFileURL } from "node:url";
-import { materialize } from "@camis/adapter-kernel";
-import { expressAdapterFor } from "../src/generate";
+import type { Dialect } from "../src/dialect";
 import { morphs } from "../src/__fixtures__/morphs";
-
-const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
-
-const fail = (msg: string): never => {
-  throw new Error(msg);
-};
+import { fail, smokeProject, waitForServer } from "./smoke-project";
 
 const same = (actual: unknown, expected: unknown, what: string): void => {
   if (JSON.stringify(actual) !== JSON.stringify(expected))
     fail(`${what}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
 };
 
-export const morphSmoke = async (port = 3212): Promise<void> => {
-  const dir = await mkdtemp(join(tmpdir(), "camis-express-morphs-"));
-  const env = { ...process.env, DB_FILE_NAME: join(dir, "data.db"), PORT: String(port) };
-  let proc: ChildProcess | undefined;
+export const morphSmoke = async (dialect: Dialect = "sqlite", port = 3212): Promise<void> => {
+  const project = await smokeProject(morphs, dialect, "morphs", port);
   try {
-    await materialize(expressAdapterFor("sqlite").generate(morphs, { projectName: "notes" }), dir);
-    for (const args of [
-      ["install", "--no-audit", "--no-fund"],
-      ["run", "db:push", "--", "--force"],
-    ]) {
-      if (spawnSync("npm", args, { cwd: dir, stdio: "inherit", env }).status !== 0)
-        fail(`npm ${args[0]} failed`);
-    }
-    proc = spawn("npm", ["start"], { cwd: dir, stdio: "inherit", env });
+    project.start();
     const base = `http://127.0.0.1:${port}`;
+    await waitForServer(`${base}/api/books`);
     const login = async (email: string): Promise<string> => {
-      for (let i = 0; i < 60; i++) {
-        try {
-          const res = await fetch(`${base}/auth/login`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ email, password: "dev" }),
-          });
-          if (res.status === 200) return ((await res.json()) as { token: string }).token;
-        } catch {
-          /* not up yet */
-        }
-        await sleep(500);
-      }
-      return fail(`login ${email} failed`);
+      const res = await fetch(`${base}/auth/login`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, password: "dev" }),
+      });
+      if (res.status !== 200) fail(`login ${email} → ${res.status}`);
+      return ((await res.json()) as { token: string }).token;
     };
     const planner = await login("planner@example.com");
     const keeper = await login("keeper@example.com");
@@ -145,11 +119,11 @@ export const morphSmoke = async (port = 3212): Promise<void> => {
       null,
       "the film's pin after delete",
     );
-    console.log("EXPRESS MORPH LINKS OK");
+    console.log(`EXPRESS MORPH LINKS OK (${dialect})`);
   } finally {
-    proc?.kill("SIGTERM");
-    await rm(dir, { recursive: true, force: true });
+    await project.stop();
   }
 };
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) await morphSmoke();
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href)
+  await morphSmoke((process.argv[2] ?? "sqlite") as Dialect);
