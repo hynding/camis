@@ -1,9 +1,10 @@
+import { EventEmitter } from "node:events";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import { pathToFileURL } from "node:url";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { TS_MARKER } from "@camis/adapter-kernel";
 import type { Endpoint, IrDocument } from "@camis/ir-schema";
 import { strapiAdapter } from "../generate";
@@ -11,8 +12,10 @@ import { importEndpoints } from "../import/endpoints";
 import { importDocument } from "../import/import-document";
 import { customCodeDoc } from "../__fixtures__/custom-code";
 
-// An endpoint's declared guards, checked by a generated global middleware ahead of strapi::cors
-// and strapi::body, so a refused body is never parsed and the app's CORS never answers for it.
+// An endpoint's declared guards, checked by a generated global middleware after strapi::cors (so a
+// refusal carries the app's CORS headers) and ahead of strapi::body (so a refused body is never
+// parsed); an endpoint answering browsers on any origin is answered by another, ahead of
+// strapi::cors, so the app's CORS never answers for it.
 const ingest: Endpoint = {
   name: "ArticleIngest",
   contentType: "Article",
@@ -39,36 +42,60 @@ const ping: Endpoint = {
   public: true,
   throttle: { perMinute: 1 },
 };
-const guarded = generate(guardedDoc(ingest, ping));
+// A PUT on the ingest path answering browsers with other request headers, and no guard checked.
+const restate: Endpoint = {
+  name: "ArticleRestate",
+  contentType: "Article",
+  method: "PUT",
+  path: "/articles/:id/ingest",
+  public: true,
+  crossOrigin: { headers: ["Content-Type", "X-Version"] },
+};
+const guarded = generate(guardedDoc(ingest, ping, restate));
 const file = (result: ReturnType<typeof generate>, path: string) =>
   result.files.find((f) => f.path === path);
 const MIDDLEWARE = "src/middlewares/camis_endpoint_guards.ts";
+const CORS_MIDDLEWARE = "src/middlewares/camis_endpoint_cors.ts";
 
 describe("strapi endpoint guards: the generated project", () => {
-  it("runs the guards as a global middleware after strapi::errors and ahead of strapi::cors and strapi::body", async () => {
+  it("answers other origins ahead of strapi::cors, and checks the guards after it and ahead of strapi::body", async () => {
     const config = file(guarded, "config/middlewares.ts")!.content;
     await expect(config).toMatchFileSnapshot("./__golden__/middlewares.guarded.ts.txt");
-    expect(config.indexOf("'global::camis_endpoint_guards'")).toBeGreaterThan(
-      config.indexOf("'strapi::errors'"),
-    );
-    expect(config.indexOf("'global::camis_endpoint_guards'")).toBeLessThan(
-      config.indexOf("'strapi::cors'"),
-    );
+    const at = (name: string) => config.indexOf(`'${name}'`);
+    expect(at("global::camis_endpoint_cors")).toBeGreaterThan(at("strapi::errors"));
+    expect(at("global::camis_endpoint_cors")).toBeLessThan(at("strapi::cors"));
+    expect(at("global::camis_endpoint_guards")).toBeGreaterThan(at("strapi::cors"));
+    expect(at("global::camis_endpoint_guards")).toBeLessThan(at("strapi::body"));
   });
 
-  it("generates the middleware, marked as generated", async () => {
+  it("generates the middlewares, marked as generated", async () => {
     const middleware = file(guarded, MIDDLEWARE)!;
     expect(middleware.mode).toBeUndefined();
     expect(middleware.content.startsWith(TS_MARKER)).toBe(true);
     await expect(middleware.content).toMatchFileSnapshot(
       "./__golden__/camis_endpoint_guards.ts.txt",
     );
+    const cors = file(guarded, CORS_MIDDLEWARE)!;
+    expect(cors.content.startsWith(TS_MARKER)).toBe(true);
+    await expect(cors.content).toMatchFileSnapshot("./__golden__/camis_endpoint_cors.ts.txt");
+  });
+
+  it("generates only the middleware an endpoint's guards need", () => {
+    const checksOnly = generate(guardedDoc(ping));
+    expect(file(checksOnly, MIDDLEWARE)).toBeDefined();
+    expect(file(checksOnly, CORS_MIDDLEWARE)).toBeUndefined();
+    expect(file(checksOnly, "config/middlewares.ts")!.content).not.toContain("camis_endpoint_cors");
+    const corsOnly = generate(guardedDoc(restate));
+    expect(file(corsOnly, MIDDLEWARE)).toBeUndefined();
+    expect(file(corsOnly, CORS_MIDDLEWARE)).toBeDefined();
+    expect(file(corsOnly, "config/middlewares.ts")!.content).not.toContain("camis_endpoint_guards");
   });
 
   it("leaves a project whose endpoints have no guard as it was", () => {
     const plain = generate(customCodeDoc);
     expect(file(plain, MIDDLEWARE)).toBeUndefined();
-    expect(file(plain, "config/middlewares.ts")!.content).not.toContain("camis_endpoint_guards");
+    expect(file(plain, CORS_MIDDLEWARE)).toBeUndefined();
+    expect(file(plain, "config/middlewares.ts")!.content).not.toContain("camis_endpoint");
     expect(plain.gaps.gaps).toEqual([]);
   });
 
@@ -93,7 +120,7 @@ describe("strapi endpoint guards: the generated project", () => {
       path: ingest.path,
       public: true,
     };
-    expect(importEndpoints(routes, guardedDoc(ingest, ping)).endpoints).toEqual([
+    expect(importEndpoints(routes, guardedDoc(ingest, ping, restate)).endpoints).toEqual([
       ...(customCodeDoc.endpoints ?? []),
       route,
       {
@@ -101,6 +128,13 @@ describe("strapi endpoint guards: the generated project", () => {
         contentType: ping.contentType,
         method: "GET",
         path: ping.path,
+        public: true,
+      },
+      {
+        name: restate.name,
+        contentType: restate.contentType,
+        method: "PUT",
+        path: restate.path,
         public: true,
       },
     ]);
@@ -132,12 +166,13 @@ describe("strapi endpoint guards: the generated project", () => {
   });
 });
 
-/** A Koa context as the middleware reads and writes it. */
+/** A Koa context as the middlewares read and write it. */
 interface FakeContext {
   method: string;
   path: string;
   req: Readable & { headers: Record<string, string>; socket: object; method: string; url: string };
   request: { ip: string; req?: unknown };
+  res: EventEmitter;
   status: number;
   body: unknown;
   response: Record<string, string>;
@@ -149,8 +184,13 @@ interface FakeContext {
 type Middleware = (ctx: FakeContext, next: () => Promise<void>) => Promise<void>;
 type Factory = (config: unknown, deps: { strapi: unknown }) => Middleware;
 
-// Strapi's config as a new project has it: every key at its default.
-const strapi = { config: { get: (_key: string, fallback: unknown) => fallback } };
+// Strapi's config as a new project has it: every key at its default, and the app's keys set.
+const APP_KEYS = ["first-key", "second-key"];
+const strapi = {
+  config: {
+    get: (key: string, fallback: unknown) => (key === "server.app.keys" ? APP_KEYS : fallback),
+  },
+};
 
 const context = (
   method: string,
@@ -173,6 +213,7 @@ const context = (
     path,
     req,
     request: { ip, req },
+    res: new EventEmitter(),
     status: 404,
     body: undefined,
     response,
@@ -192,36 +233,60 @@ const readAll = async (stream: Readable): Promise<string> => {
   return Buffer.concat(chunks).toString();
 };
 
-describe("strapi endpoint guards: the generated middleware at work", () => {
+// strapi::cors as the app's CORS answers a listed origin: it allows that origin with credentials
+// before the rest runs, and answers a preflight itself.
+const appCors: Middleware = async (ctx, next) => {
+  if (ctx.get("Origin") !== "") {
+    ctx.set("Access-Control-Allow-Origin", ctx.get("Origin"));
+    ctx.set("Access-Control-Allow-Credentials", "true");
+  }
+  if (ctx.method === "OPTIONS" && ctx.get("Access-Control-Request-Method") !== "") {
+    ctx.status = 204;
+    return;
+  }
+  await next();
+};
+
+describe("strapi endpoint guards: the generated middlewares at work", () => {
   let dir = "";
-  let factory: Factory;
+  let guardsFactory: Factory;
+  let corsFactory: Factory;
   beforeAll(async () => {
     dir = mkdtempSync(join(tmpdir(), "camis-endpoint-guards-"));
-    const path = join(dir, "camis_endpoint_guards.ts");
-    writeFileSync(path, file(guarded, MIDDLEWARE)!.content);
-    factory = ((await import(pathToFileURL(path).href)) as { default: Factory }).default;
+    const load = async (path: string, name: string): Promise<Factory> => {
+      const target = join(dir, name);
+      writeFileSync(target, file(guarded, path)!.content);
+      return ((await import(pathToFileURL(target).href)) as { default: Factory }).default;
+    };
+    guardsFactory = await load(MIDDLEWARE, "camis_endpoint_guards.ts");
+    corsFactory = await load(CORS_MIDDLEWARE, "camis_endpoint_cors.ts");
   });
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
+  afterEach(() => vi.restoreAllMocks());
 
-  /** Runs one request through a fresh middleware; next() stands for the rest of Strapi. */
+  /** The middlewares as config/middlewares runs them, around strapi::cors; fresh counters. */
+  const stack = (config: unknown = {}): Middleware => {
+    const cors = corsFactory({}, { strapi });
+    const guards = guardsFactory(config, { strapi });
+    return (ctx, next) => cors(ctx, () => appCors(ctx, () => guards(ctx, next)));
+  };
+
+  /** Runs one request through the middlewares; next() stands for the route's handler. */
   const run = async (
     ctx: FakeContext,
-    middleware: Middleware = factory({}, { strapi }),
+    middleware: Middleware = stack(),
   ): Promise<{ ctx: FakeContext; reached: boolean; seen: string | undefined }> => {
     let reached = false;
     let seen: string | undefined;
     await middleware(ctx, async () => {
       reached = true;
       seen = await readAll(ctx.req);
-      // strapi::cors answering as the app's CORS does for a listed origin.
-      ctx.set("Access-Control-Allow-Origin", ctx.get("Origin"));
-      ctx.set("Access-Control-Allow-Credentials", "true");
       ctx.status = 200;
       ctx.body = { data: seen };
     });
     return { ctx, reached, seen };
   };
-  const post = (body: string, headers: Record<string, string> = {}) =>
+  const post = (body: string, headers: Record<string, string> = {}, ip?: string) =>
     context(
       "POST",
       "/api/articles/7/ingest",
@@ -232,18 +297,22 @@ describe("strapi endpoint guards: the generated middleware at work", () => {
         ...headers,
       },
       Buffer.from(body),
+      ip,
     );
   const openToAnyOrigin = (ctx: FakeContext): void => {
     expect(ctx.response["access-control-allow-origin"]).toBe("*");
     expect(ctx.response["access-control-allow-credentials"]).toBeUndefined();
     expect(ctx.response["access-control-expose-headers"]).toBe("Retry-After");
   };
-  const refused = (ctx: FakeContext, status: number, name: string): void => {
+  const refusedBody = (ctx: FakeContext, status: number, name: string): void => {
     expect(ctx.status).toBe(status);
     expect(ctx.body).toEqual({
       data: null,
       error: { status, name, message: expect.any(String) as string, details: {} },
     });
+  };
+  const refused = (ctx: FakeContext, status: number, name: string): void => {
+    refusedBody(ctx, status, name);
     openToAnyOrigin(ctx);
   };
 
@@ -263,14 +332,30 @@ describe("strapi endpoint guards: the generated middleware at work", () => {
       "access-control-allow-headers": "Content-Type, X-Write-Key",
       "access-control-expose-headers": "Retry-After",
       "access-control-max-age": "7200",
+      vary: "Access-Control-Request-Method, Access-Control-Request-Headers",
     });
+  });
+
+  it("answers each endpoint on a path by the method its preflight asks for", async () => {
+    const { ctx } = await run(
+      context("OPTIONS", "/api/articles/7/ingest", {
+        Origin: "https://site.example",
+        "Access-Control-Request-Method": "PUT",
+      }),
+    );
+    expect(ctx.response["access-control-allow-methods"]).toBe("PUT");
+    expect(ctx.response["access-control-allow-headers"]).toBe("Content-Type, X-Version");
+    expect(ctx.response["access-control-allow-credentials"]).toBeUndefined();
   });
 
   it("leaves another method's preflight, and every other path, to the app's CORS", async () => {
     const other = await run(
-      context("OPTIONS", "/api/articles/7/ingest", { "Access-Control-Request-Method": "PUT" }),
+      context("OPTIONS", "/api/articles/7/ingest", {
+        Origin: "https://site.example",
+        "Access-Control-Request-Method": "DELETE",
+      }),
     );
-    expect(other.reached).toBe(true);
+    expect(other.ctx.response["access-control-allow-credentials"]).toBe("true");
     const elsewhere = await run(
       context("GET", "/api/articles", { Origin: "https://site.example" }),
     );
@@ -279,7 +364,7 @@ describe("strapi endpoint guards: the generated middleware at work", () => {
   });
 
   it("matches the path as Strapi's router does: any case, a trailing slash, a param as one segment", async () => {
-    const middleware = factory({}, { strapi });
+    const middleware = stack();
     for (const path of ["/API/Articles/7/Ingest", "/api/articles/7/ingest/"]) {
       const ctx = post("{}");
       ctx.path = path;
@@ -293,7 +378,7 @@ describe("strapi endpoint guards: the generated middleware at work", () => {
   });
 
   it("passes a JSON and a text body on, its CORS headers replacing the app's", async () => {
-    const middleware = factory({}, { strapi });
+    const middleware = stack();
     const json = await run(post('{"a":1}'), middleware);
     expect(json.seen).toBe('{"a":1}');
     openToAnyOrigin(json.ctx);
@@ -308,7 +393,7 @@ describe("strapi endpoint guards: the generated middleware at work", () => {
   it("keeps its CORS headers on an error the rest of Strapi throws", async () => {
     const ctx = post("{}");
     await expect(
-      factory({}, { strapi })(ctx, () => {
+      stack()(ctx, () => {
         ctx.set("Access-Control-Allow-Credentials", "true");
         return Promise.reject(new Error("handler failed"));
       }),
@@ -317,7 +402,7 @@ describe("strapi endpoint guards: the generated middleware at work", () => {
   });
 
   it("refuses a caller over the throttle with 429 and Retry-After, counting refused requests, per address", async () => {
-    const middleware = factory({}, { strapi });
+    const middleware = stack();
     expect(
       (await run(post("<a/>", { "Content-Type": "application/xml" }), middleware)).ctx.status,
     ).toBe(415);
@@ -327,13 +412,23 @@ describe("strapi endpoint guards: the generated middleware at work", () => {
     expect(over.reached).toBe(false);
     refused(over.ctx, 429, "RateLimitError");
     expect(Number(over.ctx.response["retry-after"])).toBeGreaterThan(0);
-    const another = post("{}");
-    another.request.ip = "198.51.100.1";
-    expect((await run(another, middleware)).reached).toBe(true);
+    expect((await run(post("{}", {}, "198.51.100.1"), middleware)).reached).toBe(true);
+  });
+
+  it("carries the app's CORS headers on a refusal of an endpoint that does not answer other origins itself", async () => {
+    const middleware = stack();
+    const ping = () => context("GET", "/api/articles/ping", { Origin: "https://site.example" });
+    expect((await run(ping(), middleware)).reached).toBe(true);
+    const over = await run(ping(), middleware);
+    expect(over.reached).toBe(false);
+    refusedBody(over.ctx, 429, "RateLimitError");
+    expect(over.ctx.response["access-control-allow-origin"]).toBe("https://site.example");
+    expect(over.ctx.response["access-control-allow-credentials"]).toBe("true");
+    expect(Number(over.ctx.response["retry-after"])).toBeGreaterThan(0);
   });
 
   it("counts each endpoint in a bucket of its own, a GET's HEAD in the GET's", async () => {
-    const middleware = factory({}, { strapi });
+    const middleware = stack();
     for (let i = 0; i < 3; i += 1) expect((await run(post("{}"), middleware)).reached).toBe(true);
     const pinged = await run(context("GET", "/api/articles/ping"), middleware);
     expect(pinged.reached).toBe(true);
@@ -342,19 +437,79 @@ describe("strapi endpoint guards: the generated middleware at work", () => {
     expect(head.ctx.status).toBe(429);
   });
 
-  it("takes a deployment's own rate from the endpoint's variable, never less than one", async () => {
-    process.env.CAMIS_ENDPOINT_ARTICLE_INGEST_THROTTLE_PER_MINUTE = "1";
+  it("counts an IPv6 caller by its /64, and an IPv4 address mapped into IPv6 as that address", async () => {
+    const middleware = stack();
+    for (const ip of ["2001:db8:0:1::1", "2001:db8:0:1:ffff::2", "2001:DB8:0:1:0:0:0:3"])
+      expect((await run(post("{}", {}, ip), middleware)).reached).toBe(true);
+    expect((await run(post("{}", {}, "2001:db8:0:1::4"), middleware)).ctx.status).toBe(429);
+    expect((await run(post("{}", {}, "2001:db8:0:2::1"), middleware)).reached).toBe(true);
+    for (const ip of ["198.51.100.9", "::ffff:198.51.100.9", "::ffff:c633:6409"])
+      expect((await run(post("{}", {}, ip), middleware)).reached).toBe(true);
+    expect((await run(post("{}", {}, "198.51.100.9"), middleware)).ctx.status).toBe(429);
+  });
+
+  it("keys the counter with an HMAC of the address under the app's keys, never the address or its plain hash", async () => {
+    const source = file(guarded, MIDDLEWARE)!.content;
+    expect(source).toContain('createHmac("sha256"');
+    expect(source).not.toContain("createHash(");
+    expect(source).toContain('"server.app.keys"');
+  });
+
+  it("takes a deployment's own rate from the endpoint's variable only when it is digits, never less than one", async () => {
+    const variable = "CAMIS_ENDPOINT_ARTICLE_INGEST_THROTTLE_PER_MINUTE";
+    const allowed = async (): Promise<number> => {
+      const middleware = stack();
+      let n = 0;
+      while ((await run(post("{}"), middleware)).reached) n += 1;
+      return n;
+    };
     try {
-      const middleware = factory({}, { strapi });
-      expect((await run(post("{}"), middleware)).reached).toBe(true);
-      expect((await run(post("{}"), middleware)).ctx.status).toBe(429);
-      process.env.CAMIS_ENDPOINT_ARTICLE_INGEST_THROTTLE_PER_MINUTE = "0";
-      const floored = factory({}, { strapi });
-      expect((await run(post("{}"), floored)).reached).toBe(true);
-      expect((await run(post("{}"), floored)).ctx.status).toBe(429);
+      process.env[variable] = "1";
+      expect(await allowed()).toBe(1);
+      process.env[variable] = "0";
+      expect(await allowed()).toBe(1);
+      // Anything but ASCII digits keeps the declared rate, as the Filament target reads it.
+      for (const other of ["", "1e3", "-3", "+2", " 2", "abc", "2abc", "٢"]) {
+        process.env[variable] = other;
+        expect(await allowed()).toBe(3);
+      }
     } finally {
-      delete process.env.CAMIS_ENDPOINT_ARTICLE_INGEST_THROTTLE_PER_MINUTE;
+      delete process.env[variable];
     }
+  });
+
+  it("tracks at most maxTrackedCallers callers, refusing a new one with 429 rather than growing", async () => {
+    let now = 1_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const middleware = stack({ maxTrackedCallers: 2 });
+    expect((await run(post("{}", {}, "192.0.2.1"), middleware)).reached).toBe(true);
+    expect((await run(post("{}", {}, "192.0.2.2"), middleware)).reached).toBe(true);
+    const full = await run(post("{}", {}, "192.0.2.3"), middleware);
+    expect(full.reached).toBe(false);
+    refused(full.ctx, 429, "RateLimitError");
+    expect(Number(full.ctx.response["retry-after"])).toBeGreaterThan(0);
+    // A caller already tracked is counted as before.
+    expect((await run(post("{}", {}, "192.0.2.1"), middleware)).reached).toBe(true);
+    // Once the window that tracked them has passed and the next too, room is made in one step.
+    now += 121_000;
+    expect((await run(post("{}", {}, "192.0.2.3"), middleware)).reached).toBe(true);
+  });
+
+  it("forgets expired callers without walking every caller tracked", async () => {
+    let now = 1_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const middleware = stack();
+    for (let i = 0; i < 10_050; i += 1) {
+      await run(post("{}", {}, `10.${(i >> 16) & 255}.${(i >> 8) & 255}.${i & 255}`), middleware);
+    }
+    now += 61_000;
+    const iterate = vi.spyOn(Map.prototype, Symbol.iterator);
+    const forEach = vi.spyOn(Map.prototype, "forEach");
+    const keys = vi.spyOn(Map.prototype, "keys");
+    const values = vi.spyOn(Map.prototype, "values");
+    const entries = vi.spyOn(Map.prototype, "entries");
+    for (let i = 0; i < 5; i += 1) await run(post("{}", {}, `172.16.0.${i}`), middleware);
+    for (const spy of [iterate, forEach, keys, values, entries]) expect(spy).not.toHaveBeenCalled();
   });
 
   it("refuses another media type with 415, and a body with none", async () => {
@@ -368,13 +523,23 @@ describe("strapi endpoint guards: the generated middleware at work", () => {
     refused((await run(untyped)).ctx, 415, "UnsupportedMediaTypeError");
   });
 
-  it("refuses with 413 a body declared too large, unread", async () => {
+  /** A 413 closes the connection once it is answered, so no unread body is waited for. */
+  const closes = (ctx: FakeContext): void => {
+    expect(ctx.response.connection).toBe("close");
+    const req = ctx.req;
+    expect(req.destroyed).toBe(false);
+    ctx.res.emit("finish");
+    expect(req.destroyed).toBe(true);
+  };
+
+  it("refuses with 413 a body declared too large, unread, and closes the connection", async () => {
     const { ctx, reached } = await run(post("{}", { "Content-Length": "100000" }));
     expect(reached).toBe(false);
     refused(ctx, 413, "PayloadTooLargeError");
+    closes(ctx);
   });
 
-  it("counts the bytes of a body sent without a length, refusing one too large and passing the rest on whole", async () => {
+  it("counts the bytes of a body sent without a length, refusing one too large and closing the connection, and passing the rest on whole", async () => {
     const chunked = (body: string) => {
       const ctx = post(body, { "Transfer-Encoding": "chunked" });
       delete ctx.req.headers["content-length"];
@@ -383,10 +548,12 @@ describe("strapi endpoint guards: the generated middleware at work", () => {
     const large = await run(chunked("x".repeat(65)));
     expect(large.reached).toBe(false);
     refused(large.ctx, 413, "PayloadTooLargeError");
+    closes(large.ctx);
     const small = await run(chunked("x".repeat(64)));
     expect(small.seen).toBe("x".repeat(64));
     expect(small.ctx.req.headers["content-length"]).toBe("64");
     expect(small.ctx.req.headers["transfer-encoding"]).toBeUndefined();
     expect(small.ctx.request.req).toBe(small.ctx.req);
+    expect(small.ctx.response.connection).toBeUndefined();
   });
 });
