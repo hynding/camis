@@ -21,6 +21,7 @@ final class CamisEndpoints extends Controller
     /** @var array<string, array{class-string, list<string>|null}> */
     private const ENDPOINTS = [
         'MemoCount' => [\App\Hooks\MemoCount::class, null],
+        'MemoIngest' => [\App\Hooks\MemoIngest::class, null],
         'MemoPin' => [\App\Hooks\MemoPin::class, ['authenticated']],
     ];
 

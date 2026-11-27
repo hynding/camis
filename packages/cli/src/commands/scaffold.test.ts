@@ -4,6 +4,7 @@ import {
   patchBootstrapApp,
   patchBootstrapGraphql,
   patchBootstrapExceptions,
+  patchBootstrapEndpointCors,
   patchBootstrapMiddleware,
   patchBootstrapTransfer,
   patchConsoleRoutes,
@@ -13,6 +14,7 @@ import {
   patchUserModel,
   scaffoldCommand,
   setAppName,
+  warnUnpatchedEndpointCors,
 } from "./scaffold";
 
 interface ExecCall {
@@ -384,6 +386,61 @@ describe("patchBootstrapMiddleware", () => {
   });
 });
 
+// Laravel's HandleCors is global and runs before routing, so it would answer an endpoint's preflight
+// with the app's CORS settings and add its own headers to that endpoint's answers: an endpoint that
+// answers browsers itself (crossOrigin) is skipped, from bootstrap/app.php, which runs on every request.
+describe("patchBootstrapEndpointCors", () => {
+  const SKIP =
+    "\\Illuminate\\Http\\Middleware\\HandleCors::skipWhen(\\App\\Http\\Middleware\\StrapiEndpointCors::answers(...));";
+  it("leaves the app's CORS off the routes that answer browsers themselves, once the middleware exists", () => {
+    const patched = patchBootstrapEndpointCors(patchBootstrapMiddleware(STOCK_BOOTSTRAP));
+    expect(patched).toContain(
+      "if (class_exists(\\App\\Http\\Middleware\\StrapiEndpointCors::class)) {",
+    );
+    expect(patched).toContain(SKIP);
+    expect(patched.indexOf(SKIP)).toBeGreaterThan(patched.indexOf("convertEmptyStringsToNull"));
+    expect(patched.indexOf(SKIP)).toBeLessThan(patched.indexOf("->withExceptions"));
+  });
+  it("is idempotent", () => {
+    const once = patchBootstrapEndpointCors(patchBootstrapMiddleware(STOCK_BOOTSTRAP));
+    expect(patchBootstrapEndpointCors(once)).toBe(once);
+  });
+  it("leaves a bootstrap without camis's middleware block unchanged so the caller can fail loudly", () => {
+    expect(patchBootstrapEndpointCors(STOCK_BOOTSTRAP)).toBe(STOCK_BOOTSTRAP);
+  });
+});
+
+describe("warnUnpatchedEndpointCors", () => {
+  const result = (paths: string[]) => ({
+    files: paths.map((path) => ({ path, content: "" })),
+    manifest: { generator: "camis", files: [] },
+    gaps: { target: "filament", gaps: [] },
+  });
+  const CORS = "app/Http/Middleware/StrapiEndpointCors.php";
+  const unpatched = patchBootstrapMiddleware(STOCK_BOOTSTRAP);
+
+  it("warns, with the lines to add, when an endpoint answers browsers and bootstrap/app.php does not skip the app's CORS for it", async () => {
+    const { io, lines } = fakeIo({ files: { "/proj/app/bootstrap/app.php": unpatched } });
+    await warnUnpatchedEndpointCors(io, result([CORS]), "/proj/app");
+    const output = lines.join("\n");
+    expect(output).toContain(
+      "⚠ filament: /proj/app/bootstrap/app.php does not leave Laravel's CORS off the endpoints that answer browsers themselves (crossOrigin)",
+    );
+    expect(output).toContain("StrapiEndpointCors::answers(...)");
+  });
+  it("is quiet once patched, before the app is scaffolded, and without such an endpoint", async () => {
+    for (const [files, paths] of [
+      [{ "/proj/app/bootstrap/app.php": patchBootstrapEndpointCors(unpatched) }, [CORS]],
+      [{}, [CORS]],
+      [{ "/proj/app/bootstrap/app.php": unpatched }, []],
+    ] as const) {
+      const { io, lines } = fakeIo({ files });
+      await warnUnpatchedEndpointCors(io, result([...paths]), "/proj/app");
+      expect(lines).toEqual([]);
+    }
+  });
+});
+
 // Strapi serves GraphQL at /graphql, beside /api, so its route file is loaded on its own, inside
 // withRouting so that route:cache keeps it; a project generated without GraphQL has no such file.
 describe("patchBootstrapGraphql", () => {
@@ -584,6 +641,7 @@ describe("scaffoldCommand", () => {
     expect(code).toBe(0);
     expect(written["/proj/app/bootstrap/app.php"]).toContain("prependToGroup('api'");
     expect(written["/proj/app/bootstrap/app.php"]).toContain("Integration::handles($exceptions);");
+    expect(written["/proj/app/bootstrap/app.php"]).toContain("StrapiEndpointCors::answers(...)");
     expect(calls.map((c) => `${c.cmd} ${c.args[0] ?? ""}`.trim())).toEqual([
       "composer create-project",
       "composer require",
