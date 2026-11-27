@@ -4041,21 +4041,32 @@ postgres-js or a mysql2 pool), and the connection comes from the environment.
   list is ordered by id, which no database guarantees without an `ORDER BY`. The secured list still
   filters, sorts and counts in JavaScript, so its `Content-Range` total is a length, never a
   database's bigint count, and it reads each row's links concurrently through the pool, unbounded.
-- **Ids.** Each router's `param("id", routeId)` (`src/ids.ts`) serves only a decimal id from 1 to
-  2,147,483,647, what an integer id column holds on PostgreSQL and MySQL; any other id answers the
+- **Ids.** Each router's `param("id", routeId)` (`src/ids.ts`) serves only an id written as one
+  (`/^[1-9]\d*$/`, so no `0001`) from 1 to 2,147,483,647, what an integer id column holds on PostgreSQL and MySQL; any other id answers the
   JSON 404 before a query, on every database. PostgreSQL refuses to compare an integer column with
   NaN or with a number past its range, which answered 500 before. A link naming such an id is
   refused (400) as naming no entry.
 - **Errors.** The project uses Express 4, which does not catch a rejected promise: each route is
   wrapped in `asyncRoute` (`src/async-route.ts`), which hands the error on, and no rejection is left
   unhandled. The last middleware, `errorHandler` (`src/error-handler.ts`), answers a 500 with
-  `{"error":"internal error"}` and nothing of the error (no stack, query or path), logging it to the
-  server's stderr; a client error a middleware hands on (`express.json()`'s 400 for a body that does
+  `{"error":"internal error"}` and nothing of the error (no stack, query or path), logging to the
+  server's stderr only the error's name, its message and its stack frames, or for an error with a
+  code (a driver's, whose `sql`, `parameters` or `detail` carry the values and whose message can
+  quote one) its name, its code and its frames; a client error a middleware hands on (`express.json()`'s 400 for a body that does
   not parse) answers `{ "error": <its message> }`. Express's own handler answered an HTML page with
   the stack, which can hold a failed query's text. The routes' own 4xx answers are unchanged.
 - **Transactions.** `atomic` (`src/db/atomic.ts`, generated for a secured project or one with
-  to-many links) is drizzle's `db.transaction` on a connection of its own on PostgreSQL and MySQL
-  (READ COMMITTED and InnoDB's REPEATABLE READ by default). On SQLite, whose drizzle transaction
+  to-many links) is drizzle's `db.transaction` on a connection of its own on PostgreSQL (READ
+  COMMITTED) and MySQL (READ COMMITTED, asked for: at InnoDB's default REPEATABLE READ, gap locks
+  deadlocked concurrent link writes, which delete an owner's link rows and insert them again). Every
+  query the work makes goes through its `tx` (`lockRow`, `permittedUpdate`, `checkLinks` and the
+  link reads and writes of `src/morphs.ts` take an executor), never the pool: a transaction holds a
+  pooled connection, and a query through the pool inside it waits for a second one, so as many
+  concurrent transactions as the pool holds (10) waited forever. When the database rolls a
+  transaction back to break a deadlock or a serialization conflict (MySQL 1213, PostgreSQL 40001
+  and 40P01), `atomic` runs the work again, three attempts in all; the work only queries through
+  its `tx` and returns what it found (the answer is sent after `atomic` returns), so running it
+  again is safe. On SQLite, whose drizzle transaction
   takes no async work, it is `BEGIN IMMEDIATE` … `COMMIT` by hand, one at a time: a second call
   waits for the first (a promise chain), a call inside a transaction's work is refused with an
   error naming it, and a rollback that fails is logged without hiding the work's error. The work
@@ -4078,21 +4089,26 @@ postgres-js or a mysql2 pool), and the connection comes from the environment.
   - *An unsecured update or delete* has no condition to keep: one statement, or with to-many links
     the existence check, then the row and its links in one transaction.
   - Outside every transaction: the read back after a write (another write may land between the
-    commit and it, and show in the answer); on PostgreSQL and MySQL the links' targets, which are
-    read through the pool unlocked, so an entry hidden or deleted after its check may still be
-    linked (on SQLite the transaction holds the database, so it cannot).
+    commit and it, and show in the answer); a create's link targets, checked before its
+    transaction. A secured update reads its link targets inside its transaction but unlocked, so on
+    PostgreSQL and MySQL an entry hidden or deleted by a concurrent write after its check may still
+    be linked (on SQLite the transaction holds the database, so it cannot).
 - **An unsecured update with nothing to write** answers the row unchanged, as the secured router
   does, where it sent an empty `set({})` and answered 500.
 - **The smokes.** `boot-smoke.ts` (the secured project, now also its list, update, an update with
-  nothing to write, delete, ids 2,147,483,648 and 99,999,999,999 and one that is not a number as
+  nothing to write, delete, ids 2,147,483,648, 99,999,999,999, `0001`, forty zeros and a one, and
+  one that is not a number as
   the JSON 404, and a body that does not parse as a JSON 400; the AI project, which also checks an
   update with nothing to write and an update of no row; and `morph-smoke.ts`, which also refuses a
-  link to an id past the range) and `length-smoke.ts` drive the API over HTTP, writes included, on
+  link to an id past the range, and sends 16 concurrent creates with to-many links and then 24
+  concurrent link-writing updates, 8 of them of one note, more than the pool holds: every one
+  answers within 30s, none with a 500, and a read afterwards answers) and `length-smoke.ts` drive the API over HTTP, writes included, on
   SQLite, MySQL and PostgreSQL. On MySQL and PostgreSQL the length smoke races a secured update
   against a second connection that holds the row locked for 1.5s and then closes it: the update
   waits for the lock and answers 404, and the row keeps its value. Each project has a database of
   its own next to DATABASE_URL's (`scripts/smoke-project.ts`), dropped when the smoke ends, on
-  failure too; the boot smoke builds the dialect-agnostic admin on SQLite only. Every smoke starts
+  failure too (a failing drop is logged and fails the run without replacing the smoke's own
+  error; the server's process group gets SIGTERM, then SIGKILL after 5s); the boot smoke builds the dialect-agnostic admin on SQLite only. Every smoke starts
   its server in a process group of its own and stops the group, so no `tsx` server outlives it (the
   boot smoke left its servers running before).
 
@@ -4108,9 +4124,13 @@ transaction, the AI fields generated outside it and checked again inside, a crea
 its row back throwing, the error handler mounted last, goldens `async-route.ts.txt`,
 `error-handler.ts.txt`, `ids.ts.txt`, `atomic/atomic.<dialect>.ts.txt` and
 `morphs/notes.routes.mysql.ts.txt`, idempotent regeneration on every dialect);
-`generated-runtime.test.ts` (the generated SQLite `atomic` run on better-sqlite3: a second
-transaction waits, a nested one is refused and the outer rolled back, a failed rollback keeps the
-work's error; the id guard; the error handler leaking nothing of a 500); the router goldens
+`generated-runtime.test.ts` (the generated SQLite `atomic` run on better-sqlite3, the major
+generated projects install (12): a second transaction waits, a nested one is refused and the outer
+rolled back, a failed rollback keeps the work's error; the PostgreSQL and MySQL `atomic` against a
+stand-in client: retried on a deadlock up to three attempts, not on another failure, MySQL at READ
+COMMITTED; the id guard; the error handler leaking nothing of a 500 and logging no value a forged
+mysql2 or postgres-js error carries); a test that no `atomic` callback in any router variant
+queries through `db` or `find`; the router goldens
 regenerated; `syntax.test.ts` parses the morphs project on every dialect; the
 `adapter-express-boot` workflow's `smoke:lengths` and `smoke` steps on SQLite, MySQL and
 PostgreSQL. Both smokes ran locally on SQLite, PostgreSQL 16 and MariaDB 10.11; MySQL 8 runs in CI.
