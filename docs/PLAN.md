@@ -4092,8 +4092,13 @@ postgres-js or a mysql2 pool), and the connection comes from the environment.
     transaction; its record condition is on the body, which no other write changes.
   - *An unsecured update or delete* has no condition to keep. Without to-many links it is one
     statement: a concurrent delete leaves an update no row to write, and its read back answers
-    404, never 500. With to-many links it reads the row locked inside the transaction that writes
-    the row and its links (`lockRow`, as a secured one does): concurrent updates of one row take
+    404, not 500. That holds of the race only: a value the database refuses on a foreign key
+    still answers 500 (unchanged by this phase), so an update setting a manyToOne column to an id
+    no row has, or a delete of a row another type's rows reference, answers 500. With to-many links an update
+    first looks the row up through the pool and answers a missing one with 404 before it checks
+    the links or generates AI fields; that look-up only answers early, and decides nothing. It
+    then reads the row locked inside the transaction that writes the row and its links
+    (`lockRow`, as a secured one does): concurrent updates of one row take
     turns, each replacing the links the one before it left, so the row ends with exactly one
     update's links; an update after a delete finds no row and answers 404, and a delete after
     nothing answers 204 as before. (Before, the row was looked up through the pool before the
@@ -4101,10 +4106,13 @@ postgres-js or a mysql2 pool), and the connection comes from the environment.
     the first one's new rows, so both sets survived, and an update inserting link rows after a
     delete's made the delete fail on the foreign key, a 500.)
   - Outside every transaction: the read back after a write (another write may land between the
-    commit and it, and show in the answer); a create's link targets, checked before its
-    transaction. A secured update reads its link targets inside its transaction but unlocked, so on
-    PostgreSQL and MySQL an entry hidden or deleted by a concurrent write after its check may still
-    be linked (on SQLite the transaction holds the database, so it cannot).
+    commit and it, and show in the answer); a create's link targets, and an unsecured update's,
+    checked through the pool (`checkLinks(db, …)`) before its transaction, so a target deleted
+    between the check and the write is linked to nothing and is left out when the links are read;
+    a create's and an unsecured update's AI fields, generated before the transaction. A secured
+    update reads its link targets inside its transaction but unlocked, so on PostgreSQL and MySQL
+    an entry hidden or deleted by a concurrent write after its check may still be linked (on SQLite
+    the transaction holds the database, so it cannot).
 - **An unsecured update with nothing to write** answers the row unchanged, as the secured router
   does, where it sent an empty `set({})` and answered 500.
 - **The smokes.** `boot-smoke.ts` (the secured project, now also its list, update, an update with
@@ -4144,11 +4152,15 @@ generated projects install (12): a second transaction waits, a nested one is ref
 rolled back, a failed rollback keeps the work's error; the PostgreSQL and MySQL `atomic` against a
 stand-in client: retried on a deadlock up to three attempts, not on another failure, MySQL at READ
 COMMITTED; the id guard; the error handler leaking nothing of a 500 and logging no value a forged
-mysql2 or postgres-js error carries, a retried transaction pausing first); a test that each router
-variant (the secured ones with an AI field, with and without links, included) has the number of
-`atomic` callbacks it should, none of which names `db`, calls `find` or `view`, or calls a link
-check without an executor; an unsecured update and delete of a row with to-many links reading it
-locked inside the transaction; the generated `package.json` stating Node 20 or later, for which
+mysql2 or postgres-js error carries, a retried transaction pausing first, for 10ms plus up to
+40ms at random); a test that each router
+variant (the secured ones with an AI field, with and without links, the unsecured one with an AI
+field and links, and the unsecured one reading inverses, included) has the number of
+`atomic` callbacks it should, none of which names `db`, calls `find` or `view`, calls a link
+check without an executor, or awaits anything but a query through its `tx` or a helper handed
+the `tx` (so never the AI provider); an unsecured update and delete of a row with to-many links
+reading it locked inside the transaction, the update answering a missing row with 404 before
+checking its links; the generated `package.json` stating Node 20 or later, for which
 better-sqlite3 12 has prebuilt binaries; the router goldens
 regenerated; `syntax.test.ts` parses the morphs project on every dialect; the
 `adapter-express-boot` workflow's `smoke:lengths` and `smoke` steps on SQLite, MySQL and
