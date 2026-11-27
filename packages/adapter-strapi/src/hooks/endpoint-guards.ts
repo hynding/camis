@@ -156,8 +156,8 @@ const replay = (ctx: Context, body: Buffer): void => {
 
 /**
  * Strapi's own throttles (users-permissions' koa2-ratelimit) count in the process's memory, and so
- * does this: with more than one Strapi process each counts apart. The caller's address is kept only
- * as the counter's key, hashed.
+ * does this: with more than one Strapi process each counts apart. Each endpoint counts apart, and the
+ * caller's address is kept only in the counter's key, hashed.
  */
 const counter = () => {
   const counts = new Map<string, { count: number; resetAt: number }>();
@@ -212,7 +212,7 @@ export default (_config: unknown, { strapi }: { strapi: Core.Strapi }) => {
 
     if (guard.throttle !== undefined) {
       const address = createHash("sha256").update(String(ctx.request.ip)).digest("hex").slice(0, 32);
-      const wait = take(address, rate(guard.throttle));
+      const wait = take(\`\${guard.name}|\${address}\`, rate(guard.throttle));
       if (wait !== null) {
         ctx.set("Retry-After", String(wait));
         return refuse(ctx, TOO_MANY);
