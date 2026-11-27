@@ -168,3 +168,68 @@ describe("endpoints", () => {
     ]);
   });
 });
+
+describe("endpoint guards", () => {
+  const ingest = {
+    name: "ArticleIngest",
+    contentType: "Article",
+    method: "POST",
+    path: "/articles/ingest",
+    public: true,
+    throttle: { perMinute: 60 },
+    maxBodyBytes: 65536,
+    accepts: ["application/json", "text/plain"],
+    crossOrigin: { headers: ["Content-Type", "X-Idg-Write-Key"] },
+  };
+
+  it("keeps a throttle, a body size limit, the media types taken and the browsers answered", () => {
+    expect(issues({ ...base, endpoints: [ingest] })).toEqual([]);
+    expect(endpoint.parse(ingest)).toEqual(ingest);
+  });
+
+  it("answers browsers from any origin only on a public endpoint", () => {
+    const closed: Record<string, unknown> = { ...ingest };
+    delete closed.public;
+    expect(issues({ ...base, endpoints: [closed] })).toEqual([
+      { code: "cross_origin_not_public", path: ["endpoints", 0, "crossOrigin"] },
+    ]);
+    expect(issues({ ...base, endpoints: [{ ...ingest, public: false }] })).toEqual([
+      { code: "cross_origin_not_public", path: ["endpoints", 0, "crossOrigin"] },
+    ]);
+  });
+
+  it("rejects a request header name that is not an HTTP token", () => {
+    expect(
+      issues({
+        ...base,
+        endpoints: [{ ...ingest, crossOrigin: { headers: ["X-Key", "Bad Header", "", "X:Key"] } }],
+      }),
+    ).toEqual([
+      { code: "invalid_header_name", path: ["endpoints", 0, "crossOrigin", "headers", 1] },
+      { code: "invalid_header_name", path: ["endpoints", 0, "crossOrigin", "headers", 2] },
+      { code: "invalid_header_name", path: ["endpoints", 0, "crossOrigin", "headers", 3] },
+    ]);
+  });
+
+  it("rejects a media type that is not type/subtype, or carries parameters", () => {
+    expect(
+      issues({
+        ...base,
+        endpoints: [
+          { ...ingest, accepts: ["json", "text/plain; charset=utf-8", "application/vnd.api+json"] },
+        ],
+      }),
+    ).toEqual([
+      { code: "invalid_media_type", path: ["endpoints", 0, "accepts", 0] },
+      { code: "invalid_media_type", path: ["endpoints", 0, "accepts", 1] },
+    ]);
+    expect(endpoint.safeParse({ ...ingest, accepts: [] }).success).toBe(false);
+  });
+
+  it("rejects a rate or a size that is not a whole number of at least one", () => {
+    for (const bad of [0, -1, 1.5]) {
+      expect(endpoint.safeParse({ ...ingest, throttle: { perMinute: bad } }).success).toBe(false);
+      expect(endpoint.safeParse({ ...ingest, maxBodyBytes: bad }).success).toBe(false);
+    }
+  });
+});
