@@ -1,7 +1,13 @@
-import type { ApiStyle, GeneratedFile, StorageLayout } from "@camis/adapter-kernel";
+import {
+  isGuardedEndpoint,
+  type ApiStyle,
+  type GeneratedFile,
+  type StorageLayout,
+} from "@camis/adapter-kernel";
 import type { CapabilityGap, Endpoint, IrDocument } from "@camis/ir-schema";
 import { PUBLIC_ROLE, type Role } from "@camis/permissions";
 import { phpSingleQuoted } from "../php-literal";
+import { endpointGuardsDoc } from "../strapi-api/core/endpoint-guards";
 import { PHP_MARKER } from "./names";
 
 export const ENDPOINTS_CONTROLLER = "CamisEndpoints";
@@ -11,6 +17,14 @@ export interface EndpointsPlan {
   served: Endpoint[];
   gaps: CapabilityGap[];
 }
+
+const GUARD_NAMES = ["throttle", "maxBodyBytes", "accepts", "crossOrigin"] as const;
+
+/** " and its guards (…) are", naming those the endpoint declares, or " is" for one with none. */
+const guardsNamed = (e: Endpoint): string =>
+  isGuardedEndpoint(e)
+    ? ` and its guards (${GUARD_NAMES.filter((g) => e[g] !== undefined).join(", ")}) are`
+    : " is";
 
 /** Only the Strapi API style on the laravel storage layout routes endpoints, beside Strapi's routes. */
 export const endpointsPlan = (
@@ -27,17 +41,32 @@ export const endpointsPlan = (
         feature: "endpoint",
         location: { contentType: e.contentType, rule: e.name },
         severity: "downgrade",
-        message: `endpoint "${e.name}" (${e.method} ${e.path}) is served only by apiStyle "strapi" on the laravel storage layout; its route is not generated`,
+        message: `endpoint "${e.name}" (${e.method} ${e.path}) is served only by apiStyle "strapi" on the laravel storage layout; its route${guardsNamed(e)} not generated`,
       }),
     ),
   };
 };
 
-/** The endpoint's route, under the API's prefix: Strapi's `:param` is Laravel's `{param}`. */
-export const endpointRoute = (e: Endpoint): string =>
-  `Route::${e.method.toLowerCase()}(${phpSingleQuoted(e.path.replace(/:([^/]+)/g, "{$1}"))}, ${ENDPOINTS_CONTROLLER}::class)->defaults('endpoint', ${phpSingleQuoted(e.name)})`;
+/**
+ * The endpoint's route, under the API's prefix: Strapi's `:param` is Laravel's `{param}`. Another
+ * method routes the same path to the same endpoint (its preflight's OPTIONS).
+ */
+export const endpointRoute = (e: Endpoint, method: string = e.method): string =>
+  `Route::${method.toLowerCase()}(${phpSingleQuoted(e.path.replace(/:([^/]+)/g, "{$1}"))}, ${ENDPOINTS_CONTROLLER}::class)->defaults('endpoint', ${phpSingleQuoted(e.name)})`;
 
 const describe = (e: Endpoint): string => `${e.method} /api${e.path}`;
+
+// Strapi asks no role on a public route, so nothing but the handler stands between it and anyone.
+const PUBLIC_DOC = [
+  "",
+  "Public: no caller is authenticated and no role is asked, so this handler is the only",
+  "authorization.",
+];
+
+const docLines = (e: Endpoint): string =>
+  [...(e.public === true ? PUBLIC_DOC : []), ...endpointGuardsDoc(e)]
+    .map((line) => (line === "" ? "\n     *" : `\n     * ${line}`))
+    .join("");
 
 const contract = (e: Endpoint): string => `<?php
 ${PHP_MARKER}
@@ -52,7 +81,7 @@ interface ${e.name}Endpoint
 {
     /**
      * Answers ${describe(e)}; $request->route('<param>') holds each of the path's :params. An array
-     * or JsonSerializable is sent as JSON, a Response as it is; a StrapiError answers with its status.
+     * or JsonSerializable is sent as JSON, a Response as it is; a StrapiError answers with its status.${docLines(e)}
      */
     public function handle(Request $request): mixed;
 }

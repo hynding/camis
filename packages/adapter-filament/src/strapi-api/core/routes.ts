@@ -7,6 +7,13 @@ import {
   type RouteAction,
 } from "@camis/ir-schema";
 import { ENDPOINTS_CONTROLLER, endpointRoute } from "../../hooks/endpoints";
+import {
+  ENDPOINT_CORS,
+  ENDPOINT_GUARD,
+  endpointGuardsCall,
+  endpointMiddlewares,
+  preflightCall,
+} from "./endpoint-guards";
 import { filamentNames } from "../../names";
 import { routePath } from "./names";
 import { adminAuthConfigKeys } from "../admin/admin-api";
@@ -191,11 +198,18 @@ export const emitStrapiRoutes = (
       .join("\n\n");
   // A public endpoint is open as a public action is; ahead of the type's routes, so a fixed path
   // is not taken for an entry's key.
+  // An endpoint that answers browsers itself routes its preflight too, as StrapiEndpointCors answers it.
   const endpointRoutes = (keep: (e: Endpoint) => boolean): string =>
     endpoints
       .filter(keep)
-      .map((e) => `        ${endpointRoute(e)};`)
+      .flatMap((e) => [
+        `        ${endpointRoute(e)}${endpointGuardsCall(e)};`,
+        ...(e.crossOrigin === undefined
+          ? []
+          : [`        ${endpointRoute(e, "OPTIONS")}${preflightCall()};`]),
+      ])
       .join("\n");
+  const guardMiddlewares = new Set(endpoints.flatMap(endpointMiddlewares));
   const joined = (...blocks: string[]): string => blocks.filter((b) => b !== "").join("\n\n");
   const isOpenEndpoint = (e: Endpoint): boolean => secured && open && e.public === true;
   const resources = joined(
@@ -224,6 +238,9 @@ export const emitStrapiRoutes = (
       : []),
     ...sorted.map((ct) => `App\\Http\\Controllers\\Api\\${filamentNames(ct).model}ApiController`),
     ...(endpoints.length > 0 ? [`App\\Http\\Controllers\\Api\\${ENDPOINTS_CONTROLLER}`] : []),
+    ...[ENDPOINT_CORS, ENDPOINT_GUARD]
+      .filter((m) => guardMiddlewares.has(m))
+      .map((m) => `App\\Http\\Middleware\\${m}`),
     "App\\Http\\Middleware\\StrapiErrors",
     "App\\Http\\Middleware\\StrapiJsonBody",
     ...(hooked.size > 0 ? ["App\\Http\\Middleware\\CamisRouteHooks"] : []),

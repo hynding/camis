@@ -87,6 +87,7 @@ import { emitAdminScopeMethod } from "./core/admin-scope";
 import { emitApiScopeMethod } from "./core/api-scope";
 import { emitStrapiPublicRoute } from "./core/public-actions";
 import { emitEndpointFiles } from "../hooks/endpoints";
+import { emitEndpointGuardFiles } from "./core/endpoint-guards";
 import {
   emitConnectController,
   emitPasswordlessMigration,
@@ -376,6 +377,7 @@ export const emitStrapiApi = (input: StrapiApiInput): StrapiApiEmission => {
   if (linkOrder.length > 0)
     files.push({ path: LINK_ORDER_MIGRATION_PATH, content: emitLinkOrderMigration(linkOrder) });
   files.push(...emitEndpointFiles(endpoints, bundle.roles, secured));
+  files.push(...emitEndpointGuardFiles(endpoints));
   files.push({
     path: "routes/api.php",
     content: emitStrapiRoutes(

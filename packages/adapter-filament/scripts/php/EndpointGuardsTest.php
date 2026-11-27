@@ -29,6 +29,9 @@ class EndpointGuardsTest extends TestCase
     {
         parent::setUp();
         self::$handled = [];
+        // The app's CORS (config/cors.php) allows credentials to the browser's origin, as a
+        // deployment listing it in CAMIS_CORS_ORIGIN does: the endpoint must answer it otherwise.
+        config(['cors.allowed_origins' => [self::ORIGIN], 'cors.supports_credentials' => true]);
         // The handler a project writes in place of the seeded one.
         $this->app->bind(MemoIngest::class, fn () => new class implements MemoIngestEndpoint {
             public function handle(Request $request): mixed
@@ -41,14 +44,14 @@ class EndpointGuardsTest extends TestCase
     }
 
     /** A request as a browser on another origin sends it, with the server variables given. */
-    private function send(string $method, string $uri, array $server = [], ?string $body = null): TestResponse
+    private function fromBrowser(string $method, string $uri, array $server = [], ?string $body = null): TestResponse
     {
         return $this->call($method, $uri, [], [], [], ['HTTP_ORIGIN' => self::ORIGIN, ...$server], $body);
     }
 
-    private function post(string $body, string $type = 'application/json', array $server = []): TestResponse
+    private function ingest(string $body, string $type = 'application/json', array $server = []): TestResponse
     {
-        return $this->send('POST', '/api/memos/ingest', ['CONTENT_TYPE' => $type, 'CONTENT_LENGTH' => (string) strlen($body), ...$server], $body);
+        return $this->fromBrowser('POST', '/api/memos/ingest', ['CONTENT_TYPE' => $type, 'CONTENT_LENGTH' => (string) strlen($body), ...$server], $body);
     }
 
     /** Any origin may read it, never with credentials, and may read Retry-After. */
@@ -67,7 +70,7 @@ class EndpointGuardsTest extends TestCase
 
     public function test_the_preflight_allows_the_endpoint_s_method_and_exactly_its_request_headers(): void
     {
-        $response = $this->send('OPTIONS', '/api/memos/ingest', [
+        $response = $this->fromBrowser('OPTIONS', '/api/memos/ingest', [
             'HTTP_ACCESS_CONTROL_REQUEST_METHOD' => 'POST',
             'HTTP_ACCESS_CONTROL_REQUEST_HEADERS' => 'content-type,x-memo-key',
         ]);
@@ -82,10 +85,10 @@ class EndpointGuardsTest extends TestCase
 
     public function test_a_json_body_and_a_text_body_reach_the_handler_with_their_cors_headers(): void
     {
-        $json = $this->post('{"event":"view"}')->assertOk()->assertJsonPath('data.body', '{"event":"view"}');
+        $json = $this->ingest('{"event":"view"}')->assertOk()->assertJsonPath('data.body', '{"event":"view"}');
         $this->assertOpenToAnyOrigin($json);
         // navigator.sendBeacon sends a string as text/plain;charset=UTF-8: parameters are not compared.
-        $text = $this->post('{"event":"leave"}', 'text/plain;charset=UTF-8')->assertOk()
+        $text = $this->ingest('{"event":"leave"}', 'text/plain;charset=UTF-8')->assertOk()
             ->assertJsonPath('data.body', '{"event":"leave"}')->assertJsonPath('data.type', 'text/plain;charset=UTF-8');
         $this->assertOpenToAnyOrigin($text);
         $this->assertSame(['{"event":"view"}', '{"event":"leave"}'], self::$handled);
@@ -94,9 +97,9 @@ class EndpointGuardsTest extends TestCase
     public function test_a_caller_over_the_throttle_gets_429_with_retry_after_and_the_handler_does_not_run(): void
     {
         config(['camis-endpoints.MemoIngest.throttle_per_minute' => 2]);
-        $this->post('{}')->assertOk();
-        $this->post('{}')->assertOk();
-        $refused = $this->post('{}');
+        $this->ingest('{}')->assertOk();
+        $this->ingest('{}')->assertOk();
+        $refused = $this->ingest('{}');
 
         $this->assertRefused($refused, 429, 'RateLimitError');
         $this->assertGreaterThan(0, (int) $refused->headers->get('Retry-After'));
@@ -106,57 +109,54 @@ class EndpointGuardsTest extends TestCase
     public function test_refused_requests_count_toward_the_throttle(): void
     {
         config(['camis-endpoints.MemoIngest.throttle_per_minute' => 2]);
-        $this->post('<a/>', 'application/xml')->assertStatus(415);
-        $this->post(str_repeat('x', 65))->assertStatus(413);
+        $this->ingest('<a/>', 'application/xml')->assertStatus(415);
+        $this->ingest(str_repeat('x', 65))->assertStatus(413);
 
-        $this->assertRefused($this->post('{}'), 429, 'RateLimitError');
+        $this->assertRefused($this->ingest('{}'), 429, 'RateLimitError');
         $this->assertSame([], self::$handled);
     }
 
     public function test_a_body_of_another_media_type_is_refused_with_415(): void
     {
-        $this->assertRefused($this->post('a=1', 'application/x-www-form-urlencoded'), 415, 'UnsupportedMediaTypeError');
-        $this->assertRefused($this->post('<a/>', 'application/xml'), 415, 'UnsupportedMediaTypeError');
+        $this->assertRefused($this->ingest('a=1', 'application/x-www-form-urlencoded'), 415, 'UnsupportedMediaTypeError');
+        $this->assertRefused($this->ingest('<a/>', 'application/xml'), 415, 'UnsupportedMediaTypeError');
         $this->assertSame([], self::$handled);
     }
 
     public function test_a_body_declared_larger_than_the_limit_is_refused_with_413(): void
     {
-        $this->assertRefused($this->post('{}', 'application/json', ['CONTENT_LENGTH' => '100000']), 413, 'PayloadTooLargeError');
+        $this->assertRefused($this->ingest('{}', 'application/json', ['CONTENT_LENGTH' => '100000']), 413, 'PayloadTooLargeError');
         $this->assertSame([], self::$handled);
     }
 
     public function test_a_body_larger_than_the_limit_is_refused_with_413_whatever_its_content_length_says(): void
     {
         $large = '"'.str_repeat('x', 70).'"';
-        $this->assertRefused($this->post($large, 'text/plain', ['CONTENT_LENGTH' => '10']), 413, 'PayloadTooLargeError');
-        $absent = $this->send('POST', '/api/memos/ingest', ['CONTENT_TYPE' => 'text/plain'], $large);
+        $this->assertRefused($this->ingest($large, 'text/plain', ['CONTENT_LENGTH' => '10']), 413, 'PayloadTooLargeError');
+        $absent = $this->fromBrowser('POST', '/api/memos/ingest', ['CONTENT_TYPE' => 'text/plain'], $large);
         $this->assertRefused($absent, 413, 'PayloadTooLargeError');
         // A body of exactly the limit is taken.
-        $this->post(str_repeat('x', 64), 'text/plain')->assertOk();
+        $this->ingest(str_repeat('x', 64), 'text/plain')->assertOk();
         $this->assertSame([str_repeat('x', 64)], self::$handled);
     }
 
     public function test_every_other_route_keeps_the_app_s_cors(): void
     {
-        // A listed origin is allowed credentials by the app's CORS (config/cors.php).
-        config(['cors.allowed_origins' => [self::ORIGIN], 'cors.supports_credentials' => true]);
-
-        $count = $this->send('GET', '/api/memos/count')->assertOk();
+        $count = $this->fromBrowser('GET', '/api/memos/count')->assertOk();
         $this->assertSame([self::ORIGIN], $count->headers->all('access-control-allow-origin'));
         $this->assertSame('true', $count->headers->get('Access-Control-Allow-Credentials'));
 
-        $preflight = $this->send('OPTIONS', '/api/memos', ['HTTP_ACCESS_CONTROL_REQUEST_METHOD' => 'POST']);
+        $preflight = $this->fromBrowser('OPTIONS', '/api/memos', ['HTTP_ACCESS_CONTROL_REQUEST_METHOD' => 'POST']);
         $preflight->assertNoContent();
         $this->assertSame([self::ORIGIN], $preflight->headers->all('access-control-allow-origin'));
         $this->assertSame('true', $preflight->headers->get('Access-Control-Allow-Credentials'));
 
         // Another method's preflight on the endpoint's path is the app's to answer.
-        $other = $this->send('OPTIONS', '/api/memos/ingest', ['HTTP_ACCESS_CONTROL_REQUEST_METHOD' => 'PUT']);
+        $other = $this->fromBrowser('OPTIONS', '/api/memos/ingest', ['HTTP_ACCESS_CONTROL_REQUEST_METHOD' => 'PUT']);
         $this->assertSame([self::ORIGIN], $other->headers->all('access-control-allow-origin'));
         $this->assertSame('true', $other->headers->get('Access-Control-Allow-Credentials'));
 
         // The endpoint itself still answers any origin without credentials.
-        $this->assertOpenToAnyOrigin($this->post('{}')->assertOk());
+        $this->assertOpenToAnyOrigin($this->ingest('{}')->assertOk());
     }
 }

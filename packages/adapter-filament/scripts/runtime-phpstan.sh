@@ -4,7 +4,8 @@
 # generated classes it calls resolve. The Strapi storage layout's runtime (storage/php) is checked
 # in a second app overlaid with that layout. The static PHP both API styles share (src/php/<path>,
 # which needs only brick/math and Laravel) is emitted only for a project that uses it, so it is
-# copied into the first app and checked with the Strapi API style's runtime.
+# copied into the first app and checked with the Strapi API style's runtime, as are an endpoint's
+# guards, emitted only for a project that declares one.
 # Usage: runtime-phpstan.sh <app overlaid --style strapi> <app overlaid --style strapi --storage strapi>
 set -euo pipefail
 package="$(cd "$(dirname "$0")/.." && pwd)"
@@ -43,6 +44,11 @@ while IFS= read -r path; do
   mkdir -p "$app/$(dirname "$path")"
   cp "$shared/$path" "$app/$path"
 done < <(shared_paths)
+# An endpoint's guards are emitted only for a project that declares one, which the first app's
+# fixture does not, so they are copied in as the shared PHP is.
+for path in app/Http/Middleware/StrapiEndpointGuard.php app/Http/Middleware/StrapiEndpointCors.php; do
+  [ -f "$app/$path" ] || cp "$sources/core/php/$path" "$app/$path"
+done
 
 st=0
 {

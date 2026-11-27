@@ -76,7 +76,7 @@ describe("filament endpoint guards", () => {
       "./__golden__/MemoIngestEndpoint.php",
     );
     expect(file("app/Hooks/Contracts/MemoCountEndpoint.php")!.content).toContain(
-      "this handler is the only authorization",
+      "so this handler is the only\n     * authorization.",
     );
     expect(file("app/Hooks/Contracts/MemoPinEndpoint.php")!.content).not.toContain(
       "only authorization",
