@@ -1,5 +1,6 @@
 import type { ContentType } from "@camis/ir-schema";
 import { describe, expect, it } from "vitest";
+import { blog } from "./__fixtures__/blog";
 import { morphs } from "./__fixtures__/morphs";
 import { secured } from "./__fixtures__/secured";
 import type { Dialect } from "./dialect";
@@ -65,10 +66,15 @@ describe("the generated routers on every database", () => {
     );
   });
 
-  it("serves only a numeric id, so no database is handed one it cannot compare", () => {
-    expect(emitRoutes(article, [], { dialect: "pgsql" })).toContain(
-      'articlesRouter.get("/:id(\\\\d+)", asyncRoute(async (req, res) => {',
-    );
+  it("serves only an id every database can compare, a 32-bit one, answering 404 for any other", () => {
+    for (const [, options] of variants) {
+      const ts = emitRoutes(article, [], { ...options, dialect: "pgsql" });
+      expect(ts).toContain('import { routeId } from "../ids";');
+      expect(ts).toContain(
+        'export const articlesRouter = Router();\narticlesRouter.param("id", routeId);',
+      );
+      expect(ts).toContain('articlesRouter.get("/:id", asyncRoute(async (req, res) => {');
+    }
   });
 
   it("takes an insert's id from RETURNING, or from MySQL's insert id, and reads the row back", () => {
@@ -80,16 +86,24 @@ describe("the generated routers on every database", () => {
       "const [{ id }] = await db.insert(articles).values(data).$returningId();",
     );
     expect(emitRoutes(article, [], { dialect: "pgsql" })).toContain(
-      '  const row = await find(id);\n  if (!row) {\n    res.status(404).json({ error: "not found" });\n    return;\n  }\n  res.status(201).json(row);',
+      "  const row = await find(id);\n  if (!row) throw new Error(`articles ${id} was written but could not be read back`);\n  res.status(201).json(row);",
     );
   });
 
-  it("differ across databases only in how an insert answers its id", () => {
-    for (const [, options] of variants) {
+  it("differ across databases only in how an insert answers its id and in the row lock", () => {
+    const locked = (ts: string) =>
+      ts.replace(
+        "(await tx.select().from(articles).where(eq(articles.id, id)).limit(1))[0];",
+        '(await tx.select().from(articles).where(eq(articles.id, id)).limit(1).for("update"))[0];',
+      );
+    for (const [name, options] of variants) {
       const sqlite = emitRoutes(article, [], { ...options, dialect: "sqlite" });
-      expect(emitRoutes(article, [], { ...options, dialect: "pgsql" })).toBe(sqlite);
-      expect(emitRoutes(article, [], { ...options, dialect: "mysql" })).toBe(
-        sqlite.replaceAll(".returning({ id: articles.id })", ".$returningId()"),
+      const lockedOrNot = options.secured === true ? locked : (ts: string) => ts;
+      expect(emitRoutes(article, [], { ...options, dialect: "pgsql" }), name).toBe(
+        lockedOrNot(sqlite),
+      );
+      expect(emitRoutes(article, [], { ...options, dialect: "mysql" }), name).toBe(
+        lockedOrNot(sqlite).replaceAll(".returning({ id: articles.id })", ".$returningId()"),
       );
     }
   });
@@ -106,6 +120,59 @@ describe("the generated routers on every database", () => {
     expect(ts).toContain(
       "  if (Object.keys(data).length > 0)\n    await db.update(articles).set(data).where(eq(articles.id, id));",
     );
+  });
+
+  it("answer a create whose row cannot be read back with a 500, on every router", () => {
+    for (const [name, options] of variants)
+      expect(emitRoutes(article, [], { ...options, dialect: "mysql" }), name).toContain(
+        "if (!row) throw new Error(`articles ${id} was written but could not be read back`);",
+      );
+  });
+
+  describe("a secured update or delete", () => {
+    const lock = {
+      sqlite: "(await tx.select().from(articles).where(eq(articles.id, id)).limit(1))[0];",
+      pgsql:
+        '(await tx.select().from(articles).where(eq(articles.id, id)).limit(1).for("update"))[0];',
+      mysql:
+        '(await tx.select().from(articles).where(eq(articles.id, id)).limit(1).for("update"))[0];',
+    };
+    for (const dialect of DIALECTS) {
+      it(`reads its row, checks it and writes it in one transaction, the row locked (${dialect})`, () => {
+        const ts = emitRoutes(article, [], { secured: true, dialect });
+        expect(ts).toContain(
+          `const lockRow = async (tx: Executor, id: number) =>\n  ${lock[dialect]}`,
+        );
+        expect(ts).toContain(
+          '  const outcome = await atomic(async (tx) => {\n    const existing = await lockRow(tx, id);\n    if (!existing) return { status: 404, error: "not found" };\n    const write = await permittedUpdate(req, existing, incoming);\n    if ("error" in write) return write;\n    if (Object.keys(write.data).length > 0)\n      await tx.update(articles).set(write.data).where(eq(articles.id, id));',
+        );
+        expect(ts).toContain(
+          '  const deleted = await atomic(async (tx) => {\n    const existing = await lockRow(tx, id);\n    if (!existing || !recordAllowed(req, "Article", "delete", existing)) return false;\n    await tx.delete(articles).where(eq(articles.id, id));\n    return true;\n  });',
+        );
+      });
+    }
+    it("checks the record condition, the field rules and the bounds of what it writes", () => {
+      const ts = emitRoutes(article, [], { secured: true, dialect: "pgsql" });
+      expect(ts).toContain(
+        '  if (!recordAllowed(req, "Article", "update", existing)) return { status: 404, error: "not found" };\n  const permitted = stripWrites(req, "Article", { ...existing, ...incoming }, incoming);\n  const data = permitted;\n  if (!recordAllowed(req, "Article", "update", { ...existing, ...data })) return { status: 403, error: "forbidden" };\n  const longer = tooLong(data, MAX_LENGTHS);\n  if (longer !== null) return { status: 400, error: longer };',
+      );
+    });
+    it("generates AI fields outside the transaction, writing them only if the locked row permits the same write", () => {
+      const ts = emitRoutes(article, [], {
+        secured: true,
+        aiColumns: ["summary"],
+        dialect: "pgsql",
+      });
+      const patch = ts.slice(ts.indexOf("articlesRouter.patch("));
+      const populate = patch.indexOf(
+        'await populateAiFields("Article", { ...before.data }, "update")',
+      );
+      expect(populate).toBeGreaterThan(0);
+      expect(patch.indexOf("await atomic(")).toBeGreaterThan(populate);
+      expect(patch).toContain(
+        '    if (JSON.stringify(write.data) !== JSON.stringify(before.data))\n      return { status: 409, error: "the entry changed while it was being updated; send the update again" };',
+      );
+    });
   });
 
   it("write a row and its to-many links in one transaction", () => {
@@ -152,8 +219,27 @@ describe("the generated project on every database", () => {
     });
   }
 
-  it("keeps the transaction helper to projects with to-many links", () => {
-    expect(content("sqlite", "src/db/atomic.ts", secured)).toBe("");
+  it("keeps the transaction helper to secured projects and projects with to-many links", () => {
+    expect(content("sqlite", "src/db/atomic.ts", secured)).not.toBe("");
+    expect(content("sqlite", "src/db/atomic.ts", blog)).toBe("");
+  });
+
+  it("answers an error any route hands on as JSON, from the last middleware", async () => {
+    for (const bundle of [secured, blog]) {
+      const server = content("pgsql", "src/server.ts", bundle);
+      expect(server).toContain('import { errorHandler } from "./error-handler";');
+      expect(server.trimEnd().endsWith("app.use(errorHandler);")).toBe(true);
+    }
+    await expect(content("pgsql", "src/error-handler.ts", blog)).toMatchFileSnapshot(
+      "./__golden__/error-handler.ts.txt",
+    );
+    await expect(content("pgsql", "src/ids.ts", blog)).toMatchFileSnapshot(
+      "./__golden__/ids.ts.txt",
+    );
+  });
+
+  it("refuses a link to an id no database row can have", () => {
+    expect(content("pgsql", "src/morphs.ts")).toContain("  if (!isId(link.id)) return false;");
   });
 
   it("states MySQL's routes in a golden file of their own", async () => {
