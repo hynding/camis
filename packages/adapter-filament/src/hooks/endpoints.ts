@@ -44,12 +44,12 @@ export const endpointsPlan = (
   };
 };
 
-/**
- * The endpoint's route, under the API's prefix: Strapi's `:param` is Laravel's `{param}`. Another
- * method routes the same path to the same endpoint (its preflight's OPTIONS).
- */
-export const endpointRoute = (e: Endpoint, method: string = e.method): string =>
-  `Route::${method.toLowerCase()}(${phpSingleQuoted(e.path.replace(/:([^/]+)/g, "{$1}"))}, ${ENDPOINTS_CONTROLLER}::class)->defaults('endpoint', ${phpSingleQuoted(e.name)})`;
+/** The endpoint's path as Laravel routes it: Strapi's `:param` is Laravel's `{param}`. */
+export const laravelPath = (e: Endpoint): string => e.path.replace(/:([^/]+)/g, "{$1}");
+
+/** The endpoint's route, under the API's prefix, naming the endpoint CamisEndpoints dispatches to. */
+export const endpointRoute = (e: Endpoint): string =>
+  `Route::${e.method.toLowerCase()}(${phpSingleQuoted(laravelPath(e))}, ${ENDPOINTS_CONTROLLER}::class)->defaults('endpoint', ${phpSingleQuoted(e.name)})`;
 
 const describe = (e: Endpoint): string => `${e.method} /api${e.path}`;
 

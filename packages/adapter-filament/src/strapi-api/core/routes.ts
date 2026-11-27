@@ -12,7 +12,7 @@ import {
   ENDPOINT_GUARD,
   endpointGuardsCall,
   endpointMiddlewares,
-  preflightCall,
+  preflightRoutes,
 } from "./endpoint-guards";
 import { filamentNames } from "../../names";
 import { routePath } from "./names";
@@ -199,16 +199,16 @@ export const emitStrapiRoutes = (
   // A public endpoint is open as a public action is; ahead of the type's routes, so a fixed path
   // is not taken for an entry's key.
   // An endpoint that answers browsers itself routes its preflight too, as StrapiEndpointCors answers it.
-  const endpointRoutes = (keep: (e: Endpoint) => boolean): string =>
-    endpoints
-      .filter(keep)
+  const endpointRoutes = (keep: (e: Endpoint) => boolean): string => {
+    const kept = endpoints.filter(keep);
+    const preflights = preflightRoutes(kept);
+    return kept
       .flatMap((e) => [
         `        ${endpointRoute(e)}${endpointGuardsCall(e)};`,
-        ...(e.crossOrigin === undefined
-          ? []
-          : [`        ${endpointRoute(e, "OPTIONS")}${preflightCall()};`]),
+        ...(preflights.has(e) ? [`        ${preflights.get(e)!};`] : []),
       ])
       .join("\n");
+  };
   const guardMiddlewares = new Set(endpoints.flatMap(endpointMiddlewares));
   const joined = (...blocks: string[]): string => blocks.filter((b) => b !== "").join("\n\n");
   const isOpenEndpoint = (e: Endpoint): boolean => secured && open && e.public === true;

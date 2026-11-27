@@ -9,17 +9,21 @@ use Closure;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
+use RuntimeException;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
  * An IR endpoint's declared guards (config/camis-endpoints.php, by the route's endpoint name), in
  * this order, before its handler runs: the throttle, the body's media type, the body's size. Each
- * refusal is thrown, so StrapiErrors answers it in Strapi's error shape.
+ * refusal is thrown, so StrapiErrors answers it in Strapi's error shape. A route naming an endpoint
+ * the config lacks (a config cache older than the routes) answers 500 rather than check nothing.
  *
- * The throttle counts every request that reaches it, refused ones included, per client address. The
- * address is kept only inside the counter's key, and hashed there, so the cache holds no address.
- * The count hit() returns decides, so parallel requests cannot all pass one check. Behind an
- * untrusted proxy every client shares the proxy's address (DEPLOY.md says how to trust it).
+ * The throttle counts every request that reaches it, refused ones included, per client address: an
+ * IPv6 caller by its /64, the block one subscriber is given, so a caller cannot take a fresh address
+ * per request. The cache key holds only an HMAC of the address under APP_KEY, which no list of
+ * addresses reverses without the key. The count hit() returns decides, so parallel requests cannot
+ * all pass one check. Behind a proxy Laravel does not trust every client shares the proxy's address
+ * (DEPLOY.md says how to trust it).
  *
  * The body's size is checked against the declared Content-Length and against the bytes actually
  * read, up to one past the limit, since the header is the client's to state. Laravel decodes a JSON
@@ -31,7 +35,10 @@ final class StrapiEndpointGuard
     public function handle(Request $request, Closure $next): Response
     {
         $endpoint = (string) $request->route('endpoint');
-        $guards = (array) config('camis-endpoints.'.$endpoint, []);
+        $guards = config('camis-endpoints.'.$endpoint);
+        if (! is_array($guards)) {
+            throw new RuntimeException('config/camis-endpoints.php has no entry for endpoint "'.$endpoint.'"; clear a stale config cache (php artisan config:clear).');
+        }
 
         if (isset($guards['throttle_per_minute'])) {
             self::throttle($request, $endpoint, max(1, (int) $guards['throttle_per_minute']));
@@ -48,7 +55,8 @@ final class StrapiEndpointGuard
 
     private static function throttle(Request $request, string $endpoint, int $perMinute): void
     {
-        $key = 'camis-endpoint|'.$endpoint.'|'.substr(hash('sha256', (string) $request->ip()), 0, 32);
+        $caller = hash_hmac('sha256', self::caller((string) $request->ip()), (string) config('app.key'));
+        $key = 'camis-endpoint|'.$endpoint.'|'.substr($caller, 0, 32);
         if (RateLimiter::hit($key, 60) > $perMinute) {
             throw new ThrottleRequestsException('Too Many Attempts.', null, [
                 'Retry-After' => max(1, RateLimiter::availableIn($key)),
@@ -56,6 +64,23 @@ final class StrapiEndpointGuard
                 'X-RateLimit-Remaining' => 0,
             ]);
         }
+    }
+
+    /** The caller an address counts as: an IPv6 address by its /64, an IPv4 one mapped into IPv6 as itself. */
+    private static function caller(string $ip): string
+    {
+        $packed = filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) === false ? false : inet_pton($ip);
+        if ($packed === false || strlen($packed) !== 16) {
+            return $ip;
+        }
+        if (str_starts_with($packed, str_repeat("\0", 10)."\xff\xff")) {
+            $address = inet_ntop(substr($packed, 12));
+
+            return $address === false ? $ip : $address;
+        }
+        $block = inet_ntop(substr($packed, 0, 8).str_repeat("\0", 8));
+
+        return $block === false ? $ip : $block.'/64';
     }
 
     /**

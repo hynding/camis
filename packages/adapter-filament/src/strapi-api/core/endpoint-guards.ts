@@ -1,5 +1,6 @@
 import { endpointThrottleEnv, isGuardedEndpoint, type GeneratedFile } from "@camis/adapter-kernel";
 import type { Endpoint } from "@camis/ir-schema";
+import { ENDPOINTS_CONTROLLER, laravelPath } from "../../hooks/endpoints";
 import { PHP_MARKER } from "../../hooks/names";
 import { phpSingleQuoted } from "../../php-literal";
 import { runtimePhp } from "../../runtime-php";
@@ -20,6 +21,8 @@ export const endpointMiddlewares = (e: Endpoint): string[] => [
   ...(checked(e) ? [ENDPOINT_GUARD] : []),
 ];
 
+const phpList = (items: string[]): string => `[${items.map(phpSingleQuoted).join(", ")}]`;
+
 const middlewareCall = (classes: string[]): string =>
   classes.length === 0
     ? ""
@@ -30,13 +33,31 @@ const middlewareCall = (classes: string[]): string =>
 /** What follows an endpoint's route to run its guards; nothing for an endpoint with none. */
 export const endpointGuardsCall = (e: Endpoint): string => middlewareCall(endpointMiddlewares(e));
 
-/** What follows the endpoint's preflight route, which StrapiEndpointCors answers alone. */
-export const preflightCall = (): string => middlewareCall([ENDPOINT_CORS]);
+/**
+ * The preflight routes of the endpoints that answer browsers themselves, one per path, after the
+ * first such endpoint on it: Laravel keeps only the last route of a method and path, so one route
+ * names every endpoint on the path and StrapiEndpointCors answers for the one whose method is asked.
+ * Paths that differ only in their parameters' names are one path to the router.
+ */
+export const preflightRoutes = (endpoints: Endpoint[]): Map<Endpoint, string> => {
+  const byPath = new Map<string, Endpoint[]>();
+  for (const e of endpoints.filter((x) => x.crossOrigin !== undefined)) {
+    const shape = laravelPath(e).replace(/\{[^}]+\}/g, "{}");
+    byPath.set(shape, [...(byPath.get(shape) ?? []), e]);
+  }
+  return new Map(
+    [...byPath.values()].map((onPath): [Endpoint, string] => {
+      const first = onPath[0]!;
+      return [
+        first,
+        `Route::options(${phpSingleQuoted(laravelPath(first))}, ${ENDPOINTS_CONTROLLER}::class)->defaults('endpoint', ${phpList(onPath.map((e) => e.name))})${middlewareCall([ENDPOINT_CORS])}`,
+      ];
+    }),
+  );
+};
 
 /** Media types compare in lower case, as a request's Content-Type is folded before comparing. */
 const mediaTypes = (e: Endpoint): string[] => (e.accepts ?? []).map((t) => t.toLowerCase());
-
-const phpList = (items: string[]): string => `[${items.map(phpSingleQuoted).join(", ")}]`;
 
 const configEntry = (e: Endpoint): string => {
   const keys = [
@@ -44,7 +65,7 @@ const configEntry = (e: Endpoint): string => {
     ...(e.throttle === undefined
       ? []
       : [
-          `'throttle_per_minute' => max(1, (int) env(${phpSingleQuoted(endpointThrottleEnv(e.name))}, ${e.throttle.perMinute}))`,
+          `'throttle_per_minute' => (static fn (mixed $value): int => is_string($value) && ctype_digit($value) ? max(1, (int) $value) : ${e.throttle.perMinute})(env(${phpSingleQuoted(endpointThrottleEnv(e.name))}))`,
         ]),
     ...(e.maxBodyBytes === undefined ? [] : [`'max_body_bytes' => ${e.maxBodyBytes}`]),
     ...(e.accepts === undefined ? [] : [`'accepts' => ${phpList(mediaTypes(e))}`]),
@@ -63,9 +84,10 @@ declare(strict_types=1);
 /*
  * Each guarded IR endpoint's guards, by endpoint name, read per request on its route by
  * StrapiEndpointGuard (throttle, media types, body size) and StrapiEndpointCors (answers to browsers
- * on any origin). A throttle counts per client address, refused requests included; its rate is
- * deployment-specific, so a variable of its own overrides it, floored at 1, since (int) reads an
- * empty or non-numeric value as 0.
+ * on any origin). A throttle counts per client address, refused requests included. Its rate is
+ * deployment-specific, so a variable of its own overrides it: a whole number written in ASCII digits,
+ * floored at 1; any other value (empty, signed, 1e3, words) keeps the declared rate, as the Strapi
+ * target reads it.
  */
 return [
 ${guarded.map(configEntry).join("\n")}
