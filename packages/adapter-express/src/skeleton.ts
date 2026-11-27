@@ -81,12 +81,76 @@ app.listen(port, () => console.log(\`listening on \${port}\`));
 const ASYNC_ROUTE =
   withMarker(`import type { NextFunction, Request, RequestHandler, Response } from "express";
 
-/** An async route whose error reaches Express's error handler, which answers 500. */
+/** An async route whose error reaches Express's error handler (\`src/error-handler.ts\`). */
 export const asyncRoute =
   (route: (req: Request, res: Response) => Promise<void>): RequestHandler =>
   (req: Request, res: Response, next: NextFunction) => {
     route(req, res).catch(next);
   };
+`);
+
+// PostgreSQL refuses to compare an integer column with NaN or with a number past its range, and
+// MySQL's int holds no more either: such an id is no row's on any database.
+const IDS = withMarker(`import type { NextFunction, Request, Response } from "express";
+
+/** The largest id an integer id column holds on every database (PostgreSQL's and MySQL's int). */
+export const MAX_ID = 2147483647;
+
+/** Whether a value is an id a row may have: a whole number from 1 to MAX_ID. */
+export const isId = (value: unknown): value is number =>
+  typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= MAX_ID;
+
+/** A route's \`:id\`: a decimal id a row may have, or the route answers 404 before any query. */
+export const routeId = (_req: Request, res: Response, next: NextFunction, value: string): void => {
+  if (/^\\d+$/.test(value) && isId(Number(value))) {
+    next();
+    return;
+  }
+  res.status(404).json({ error: "not found" });
+};
+`);
+
+// Express's own error handler answers an HTML page with the error's stack, which can hold a failed
+// query's text, outside production.
+const ERROR_HANDLER = withMarker(`import type { NextFunction, Request, Response } from "express";
+
+interface HttpError {
+  status?: unknown;
+  statusCode?: unknown;
+  expose?: unknown;
+  message?: unknown;
+}
+
+const clientStatus = (error: HttpError): number | undefined => {
+  const status = error.status ?? error.statusCode;
+  return typeof status === "number" && status >= 400 && status < 500 ? status : undefined;
+};
+
+/**
+ * The last middleware, for an error a route or middleware hands on. A client error (express.json()'s
+ * 400 for a body that does not parse, 413 for one too large) answers its message as JSON; any other
+ * answers 500 with nothing of the error in it (no stack, query or path) and is logged on the server.
+ */
+export const errorHandler = (
+  error: unknown,
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): void => {
+  if (res.headersSent) {
+    next(error);
+    return;
+  }
+  const details: HttpError = typeof error === "object" && error !== null ? error : {};
+  const status = clientStatus(details);
+  if (status !== undefined) {
+    const exposed = details.expose === true && typeof details.message === "string";
+    res.status(status).json({ error: exposed ? details.message : "bad request" });
+    return;
+  }
+  console.error(error);
+  res.status(500).json({ error: "internal error" });
+};
 `);
 
 const ENV = (spec: DialectSpec): string =>
@@ -108,6 +172,7 @@ const emitServer = (doc: IrDocument, secured: boolean): string => {
     : "";
   const authWiring = secured ? `app.use(verify);\napp.use("/auth", authRouter);\n` : "";
   return withMarker(`import express from "express";
+import { errorHandler } from "./error-handler";
 ${imports}${authImports}
 
 export const app = express();
@@ -116,6 +181,7 @@ ${authWiring}${mounts}
 app.use((_req, res) => {
   res.status(404).json({ error: "not found" });
 });
+app.use(errorHandler);
 `);
 };
 
@@ -135,6 +201,8 @@ export const skeletonFiles = (
     { path: "src/server.ts", content: emitServer(doc, secured) },
     { path: "src/index.ts", content: INDEX },
     { path: "src/async-route.ts", content: ASYNC_ROUTE },
+    { path: "src/error-handler.ts", content: ERROR_HANDLER },
+    { path: "src/ids.ts", content: IDS },
     { path: ".env", content: ENV(spec), mode: "seed" },
   ];
 };

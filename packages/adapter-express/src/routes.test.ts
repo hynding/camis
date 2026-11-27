@@ -75,7 +75,7 @@ describe("emitRoutes", () => {
         'const incoming = keepOwners(req, "Article", pick(req.body, ["title", "published", "owner_id"]));',
       );
       expect(ts).toContain(
-        'if (!recordAllowed(req, "Article", "update", { ...existing, ...data })) {',
+        'if (!recordAllowed(req, "Article", "update", { ...existing, ...data })) return { status: 403, error: "forbidden" };',
       );
     });
     it("sorts only by a column the caller may read", () => {

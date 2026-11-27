@@ -148,10 +148,8 @@ export const expressAdapterFor = (dialect: Dialect): GenerateAdapter => ({
       content: emitSchemaFile(doc.contentTypes, dialect, rel, expansions, links),
     });
     if (links.own.size > 0)
-      files.push(
-        { path: "src/morphs.ts", content: emitMorphsFile(doc, links) },
-        atomicFile(dialect),
-      );
+      files.push({ path: "src/morphs.ts", content: emitMorphsFile(doc, links) });
+    if (secured || links.own.size > 0) files.push(atomicFile(dialect));
     if (hasMaxLengths(doc.contentTypes)) files.push(lengthsFile());
     files.push(camisSchemaFile(doc));
 

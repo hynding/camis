@@ -197,6 +197,7 @@ export const emitMorphsFile = (doc: IrDocument, links: MorphLinks): string => {
 import type { Executor } from "./db/atomic";
 import { db } from "./db/client";
 import { ${imports.join(", ")} } from "./db/schema";
+import { isId } from "./ids";
 
 /** An entry a polymorphic link names: its content type and its id. */
 export interface Link {
@@ -244,6 +245,7 @@ const isLink = (value: unknown): value is Link =>
 
 /** Whether a link names an entry that is there and that the caller may read. */
 const reachable = async (link: Link, allowed: Allowed): Promise<boolean> => {
+  if (!isId(link.id)) return false;
   const row = await FIND[link.type]?.(link.id);
   return row !== undefined && allowed(link.type, row);
 };

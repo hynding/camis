@@ -4,6 +4,7 @@ import { asc, eq } from "drizzle-orm";
 import { asyncRoute } from "../async-route";
 import { db } from "../db/client";
 import { entries } from "../db/schema";
+import { routeId } from "../ids";
 import { tooLong } from "../lengths";
 
 function pick(obj: Record<string, unknown>, keys: string[]): Record<string, unknown> {
@@ -19,12 +20,13 @@ const find = async (id: number) =>
 const MAX_LENGTHS: Record<string, number> = { code: 40, body: 1000, notes: 2000, contact: 320, slug: 300 };
 
 export const entriesRouter = Router();
+entriesRouter.param("id", routeId);
 
 entriesRouter.get("/", asyncRoute(async (_req, res) => {
   res.json(await db.select().from(entries).orderBy(asc(entries.id)));
 }));
 
-entriesRouter.get("/:id(\\d+)", asyncRoute(async (req, res) => {
+entriesRouter.get("/:id", asyncRoute(async (req, res) => {
   const row = await find(Number(req.params.id));
   if (!row) {
     res.status(404).json({ error: "not found" });
@@ -42,14 +44,11 @@ entriesRouter.post("/", asyncRoute(async (req, res) => {
   const data = pick(req.body, ["title", "code", "body", "notes", "contact", "slug"]);
   const [{ id }] = await db.insert(entries).values(data).returning({ id: entries.id });
   const row = await find(id);
-  if (!row) {
-    res.status(404).json({ error: "not found" });
-    return;
-  }
+  if (!row) throw new Error(`entries ${id} was written but could not be read back`);
   res.status(201).json(row);
 }));
 
-entriesRouter.patch("/:id(\\d+)", asyncRoute(async (req, res) => {
+entriesRouter.patch("/:id", asyncRoute(async (req, res) => {
   const longer = tooLong(req.body, MAX_LENGTHS);
   if (longer !== null) {
     res.status(400).json({ error: longer });
@@ -67,7 +66,7 @@ entriesRouter.patch("/:id(\\d+)", asyncRoute(async (req, res) => {
   res.json(row);
 }));
 
-entriesRouter.delete("/:id(\\d+)", asyncRoute(async (req, res) => {
+entriesRouter.delete("/:id", asyncRoute(async (req, res) => {
   const id = Number(req.params.id);
   await db.delete(entries).where(eq(entries.id, id));
   res.status(204).end();

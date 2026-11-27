@@ -3,8 +3,9 @@ import { Router, type Request } from "express";
 import { asc, eq } from "drizzle-orm";
 import { asyncRoute } from "../async-route";
 import { db } from "../db/client";
-import { atomic } from "../db/atomic";
+import { atomic, type Executor } from "../db/atomic";
 import { notes } from "../db/schema";
+import { routeId } from "../ids";
 import {
   assignOwners,
   authorizeAction,
@@ -26,6 +27,10 @@ function pick(obj: Record<string, unknown>, keys: string[]): Record<string, unkn
 const find = async (id: number) =>
   (await db.select().from(notes).where(eq(notes.id, id)).limit(1))[0];
 
+/** The row, read inside a transaction, so that the checks on it and the write see the same row. */
+const lockRow = async (tx: Executor, id: number) =>
+  (await tx.select().from(notes).where(eq(notes.id, id)).limit(1))[0];
+
 // A link names an entry the caller may read: its type's read grant, and its record condition.
 const allowed =
   (req: Request): Allowed =>
@@ -35,7 +40,26 @@ const allowed =
 const view = async (req: Request, row: Record<string, unknown>) =>
   filterRead(req, "Note", await readLinks("Note", row, allowed(req)));
 
+type Refusal = { status: number; error: string };
+type Row = Record<string, unknown>;
+
+/** What an update may write to this row, or why it may not: its record condition and field rules. */
+const permittedUpdate = async (
+  req: Request,
+  existing: Row,
+  incoming: Row,
+): Promise<Refusal | { data: Row; permitted: Row }> => {
+  if (!recordAllowed(req, "Note", "update", existing)) return { status: 404, error: "not found" };
+  const permitted = stripWrites(req, "Note", { ...existing, ...incoming }, incoming);
+  const refused = await checkLinks("Note", permitted, allowed(req));
+  if (refused !== null) return { status: 400, error: refused };
+  const data = linkColumns("Note", permitted);
+  if (!recordAllowed(req, "Note", "update", { ...existing, ...data })) return { status: 403, error: "forbidden" };
+  return { data, permitted };
+};
+
 export const notesRouter = Router();
+notesRouter.param("id", routeId);
 
 notesRouter.get("/", asyncRoute(async (req, res) => {
   if (!authorizeAction(roleOf(req), "Note", "read")) {
@@ -54,7 +78,7 @@ notesRouter.get("/", asyncRoute(async (req, res) => {
   res.json(page);
 }));
 
-notesRouter.get("/:id(\\d+)", asyncRoute(async (req, res) => {
+notesRouter.get("/:id", asyncRoute(async (req, res) => {
   if (!authorizeAction(roleOf(req), "Note", "read")) {
     res.status(403).json({ error: "forbidden" });
     return;
@@ -90,41 +114,31 @@ notesRouter.post("/", asyncRoute(async (req, res) => {
     return id;
   });
   const row = await find(id);
-  if (!row) {
-    res.status(404).json({ error: "not found" });
-    return;
-  }
+  if (!row) throw new Error(`notes ${id} was written but could not be read back`);
   res.status(201).json(await view(req, row));
 }));
 
-notesRouter.patch("/:id(\\d+)", asyncRoute(async (req, res) => {
+notesRouter.patch("/:id", asyncRoute(async (req, res) => {
   if (!authorizeAction(roleOf(req), "Note", "update")) {
     res.status(403).json({ error: "forbidden" });
     return;
   }
   const id = Number(req.params.id);
-  const existing = await find(id);
-  if (!existing || !recordAllowed(req, "Note", "update", existing)) {
-    res.status(404).json({ error: "not found" });
-    return;
-  }
   const incoming = keepOwners(req, "Note", pick(req.body, ["title", "subjects", "pinned_to"]));
-  const permitted = stripWrites(req, "Note", { ...existing, ...incoming }, incoming);
-  const refused = await checkLinks("Note", permitted, allowed(req));
-  if (refused !== null) {
-    res.status(400).json({ error: refused });
-    return;
-  }
-  const data = linkColumns("Note", permitted);
-  if (!recordAllowed(req, "Note", "update", { ...existing, ...data })) {
-    res.status(403).json({ error: "forbidden" });
-    return;
-  }
-  await atomic(async (tx) => {
-    if (Object.keys(data).length > 0)
-      await tx.update(notes).set(data).where(eq(notes.id, id));
-    await writeLinks(tx, "Note", id, permitted);
+  const outcome = await atomic(async (tx) => {
+    const existing = await lockRow(tx, id);
+    if (!existing) return { status: 404, error: "not found" };
+    const write = await permittedUpdate(req, existing, incoming);
+    if ("error" in write) return write;
+    if (Object.keys(write.data).length > 0)
+      await tx.update(notes).set(write.data).where(eq(notes.id, id));
+    await writeLinks(tx, "Note", id, write.permitted);
+    return write;
   });
+  if ("error" in outcome) {
+    res.status(outcome.status).json({ error: outcome.error });
+    return;
+  }
   const row = await find(id);
   if (!row) {
     res.status(404).json({ error: "not found" });
@@ -133,20 +147,22 @@ notesRouter.patch("/:id(\\d+)", asyncRoute(async (req, res) => {
   res.json(await view(req, row));
 }));
 
-notesRouter.delete("/:id(\\d+)", asyncRoute(async (req, res) => {
+notesRouter.delete("/:id", asyncRoute(async (req, res) => {
   if (!authorizeAction(roleOf(req), "Note", "delete")) {
     res.status(403).json({ error: "forbidden" });
     return;
   }
   const id = Number(req.params.id);
-  const existing = await find(id);
-  if (!existing || !recordAllowed(req, "Note", "delete", existing)) {
+  const deleted = await atomic(async (tx) => {
+    const existing = await lockRow(tx, id);
+    if (!existing || !recordAllowed(req, "Note", "delete", existing)) return false;
+    await dropLinks(tx, "Note", id);
+    await tx.delete(notes).where(eq(notes.id, id));
+    return true;
+  });
+  if (!deleted) {
     res.status(404).json({ error: "not found" });
     return;
   }
-  await atomic(async (tx) => {
-    await dropLinks(tx, "Note", id);
-    await tx.delete(notes).where(eq(notes.id, id));
-  });
   res.json({ id });
 }));

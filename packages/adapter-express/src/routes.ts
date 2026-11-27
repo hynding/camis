@@ -42,6 +42,7 @@ export const emitRoutes = (
   const writable = own ? `${cols}${linkKeys}` : cols;
 
   const hasAi = aiSet.size > 0;
+  const secured = options.secured === true;
   const dataDecl = hasAi ? "let" : "const";
   const aiImport = hasAi ? `\nimport { populateAiFields } from "../ai/populate";` : "";
   const createPop = hasAi
@@ -59,8 +60,13 @@ export const emitRoutes = (
         : ["readLinks", "type Allowed"];
   const linksImport =
     links === "none" ? "" : `\nimport { ${linkNames.join(", ")} } from "../morphs";`;
-  // A row and its to-many links are written together or not at all (see `src/db/atomic.ts`).
-  const atomicImport = own ? `\nimport { atomic } from "../db/atomic";` : "";
+  // A row and its to-many links are written together or not at all, and a secured update or delete
+  // checks the row it writes inside the same transaction (see `src/db/atomic.ts`).
+  const atomicImport = secured
+    ? `\nimport { atomic, type Executor } from "../db/atomic";`
+    : own
+      ? `\nimport { atomic } from "../db/atomic";`
+      : "";
   // A body with a value longer than its field's bound is refused whole, before anything is written:
   // on a secured API, what the caller may write (see `permittedLengthCheck`).
   const bounds = maxLengths(ct, options.aiColumns, options.dialect);
@@ -91,13 +97,11 @@ export const emitRoutes = (
   }`;
   // A write must leave a row the role's condition for it holds on: a create may not make, and an
   // update may not turn its row into, one the role could not have written.
-  const forbidden = (action: string, row: string) => `
-  if (!recordAllowed(req, "${typeName}", "${action}", ${row})) {
+  const createRefusal = `
+  if (!recordAllowed(req, "${typeName}", "create", data)) {
     res.status(403).json({ error: "forbidden" });
     return;
   }`;
-  const createRefusal = forbidden("create", "data");
-  const updateRefusal = forbidden("update", "{ ...existing, ...data }");
   const shown = (row: string) =>
     links === "none" ? `filterRead(req, "${typeName}", ${row})` : `await view(req, ${row})`;
   const shownAll = (rows: string) =>
@@ -114,8 +118,8 @@ export const emitRoutes = (
     `const [{ id }] = await ${executor}.insert(${t}).values(data)${
       options.dialect === "mysql" ? ".$returningId()" : `.returning({ id: ${t}.id })`
     };`;
-  const update = (executor: string, indent: string) =>
-    `if (Object.keys(data).length > 0)\n${indent}  await ${executor}.update(${t}).set(data).where(eq(${t}.id, id));`;
+  const update = (executor: string, data: string, indent: string) =>
+    `if (Object.keys(${data}).length > 0)\n${indent}  await ${executor}.update(${t}).set(${data}).where(eq(${t}.id, id));`;
   const notFound = (condition: string) => `
   if (${condition}) {
     res.status(404).json({ error: "not found" });
@@ -135,11 +139,11 @@ export const emitRoutes = (
     own
       ? `
   await atomic(async (tx) => {
-    ${update("tx", "    ")}
+    ${update("tx", "data", "    ")}
     await writeLinks(tx, "${typeName}", id, ${body});
   });`
       : `
-  ${update("db", "  ")}`;
+  ${update("db", "data", "  ")}`;
   const remove = own
     ? `
   await atomic(async (tx) => {
@@ -150,11 +154,16 @@ export const emitRoutes = (
   await db.delete(${t}).where(eq(${t}.id, id));`;
   const readBack = `
   const row = await find(id);${notFound("!row")}`;
+  // The write succeeded, so a row that is not there to read back is the server's failure, not a 404.
+  const createdReadBack = `
+  const row = await find(id);
+  if (!row) throw new Error(\`${t} \${id} was written but could not be read back\`);`;
 
   const header = `import { asc, eq } from "drizzle-orm";
 import { asyncRoute } from "../async-route";
 import { db } from "../db/client";${atomicImport}
-import { ${t} } from "../db/schema";`;
+import { ${t} } from "../db/schema";
+import { routeId } from "../ids";`;
   const helpers = `function pick(obj: Record<string, unknown>, keys: string[]): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const k of keys) if (k in obj) out[k] = obj[k];
@@ -165,13 +174,14 @@ const find = async (id: number) =>
   (await db.select().from(${t}).where(eq(${t}.id, id)).limit(1))[0];
 `;
   const listAll = `await db.select().from(${t}).orderBy(asc(${t}.id))`;
-  // Only a numeric id reaches a route: PostgreSQL refuses to compare an integer with "abc".
-  const byId = `"/:id(\\\\d+)"`;
   const route = (method: string, path: string, req: string, body: string) =>
     `${t}Router.${method}(${path}, asyncRoute(async (${req}, res) => {${body}
 }));`;
+  // An id past what an integer column holds is a 404 before any query (`src/ids.ts`).
+  const routerDeclaration = `export const ${t}Router = Router();
+${t}Router.param("id", routeId);`;
 
-  if (!options.secured) {
+  if (!secured) {
     const list =
       links === "none"
         ? `
@@ -197,13 +207,13 @@ const find = async (id: number) =>
 ${header}${aiImport}${linksImport}${lengthsImport}
 
 ${helpers}${boundsConstant}${links === "none" ? "" : `\n// Without grants every caller reads every entry a link names.\nconst allowed: Allowed = () => true;\n`}
-export const ${t}Router = Router();
+${routerDeclaration}
 
 ${route("get", `"/"`, "_req", list)}
 
 ${route(
   "get",
-  byId,
+  `"/:id"`,
   "req",
   `
   const row = await find(Number(req.params.id));${notFound("!row")}
@@ -214,13 +224,13 @@ ${route(
   "post",
   `"/"`,
   "req",
-  `${lengthCheck}${create}${readBack}
+  `${lengthCheck}${create}${createdReadBack}
   res.status(201).json(${readLinked("row")});`,
 )}
 
 ${route(
   "patch",
-  byId,
+  `"/:id"`,
   "req",
   `${lengthCheck}${patch}${readBack}
   res.json(${readLinked("row")});`,
@@ -228,7 +238,7 @@ ${route(
 
 ${route(
   "delete",
-  byId,
+  `"/:id"`,
   "req",
   `
   const id = Number(req.params.id);${remove}
@@ -242,23 +252,95 @@ ${route(
     res.status(403).json({ error: "forbidden" });
     return;
   }`;
-  const existing = (action: string) => `
-  const id = Number(req.params.id);
-  const existing = await find(id);${notFound(`!existing || !recordAllowed(req, "${typeName}", "${action}", existing)`)}`;
   const securedCreate = own
     ? `
   const permitted = assignOwners(req, "${typeName}", stripWrites(req, "${typeName}", proposed, proposed));${refusal("permitted", "allowed(req)")}
   ${dataDecl} data = linkColumns("${typeName}", permitted);${createRefusal}${permittedLengthCheck}${createPop}${insert("permitted")}`
     : `
   ${dataDecl} data = assignOwners(req, "${typeName}", stripWrites(req, "${typeName}", proposed, proposed));${createRefusal}${permittedLengthCheck}${createPop}${insert("")}`;
-  const securedPatch = own
-    ? `
-  const permitted = stripWrites(req, "${typeName}", { ...existing, ...incoming }, incoming);${refusal("permitted", "allowed(req)")}
-  ${dataDecl} data = linkColumns("${typeName}", permitted);${updateRefusal}${permittedLengthCheck}${updatePop}${write("permitted")}`
-    : `
-  ${dataDecl} data = stripWrites(req, "${typeName}", { ...existing, ...incoming }, incoming);${updateRefusal}${permittedLengthCheck}${updatePop}${write("")}`;
 
-  return withMarker(`import { Router${links === "none" ? "" : ", type Request"} } from "express";
+  // On PostgreSQL and MySQL the row is locked until the transaction ends, so no other write changes
+  // it between the checks and the write; SQLite's BEGIN IMMEDIATE holds the whole database already.
+  const lock =
+    options.dialect === undefined || options.dialect === "sqlite" ? "" : `.for("update")`;
+  const lockRow = `
+/** The row, read inside a transaction, so that the checks on it and the write see the same row. */
+const lockRow = async (tx: Executor, id: number) =>
+  (await tx.select().from(${t}).where(eq(${t}.id, id)).limit(1)${lock})[0];
+`;
+  const refusalOf = (condition: string, status: number, error: string) =>
+    `  if (${condition}) return { status: ${status}, error: ${error} };`;
+  const permittedUpdate = `
+type Refusal = { status: number; error: string };
+type Row = Record<string, unknown>;
+
+/** What an update may write to this row, or why it may not: its record condition and field rules. */
+const permittedUpdate = async (
+  req: Request,
+  existing: Row,
+  incoming: Row,
+): Promise<Refusal | { data: Row; permitted: Row }> => {
+${refusalOf(`!recordAllowed(req, "${typeName}", "update", existing)`, 404, `"not found"`)}
+  const permitted = stripWrites(req, "${typeName}", { ...existing, ...incoming }, incoming);${
+    own
+      ? `
+  const refused = await checkLinks("${typeName}", permitted, allowed(req));
+  if (refused !== null) return { status: 400, error: refused };`
+      : ""
+  }
+  const data = ${own ? `linkColumns("${typeName}", permitted)` : "permitted"};
+${refusalOf(`!recordAllowed(req, "${typeName}", "update", { ...existing, ...data })`, 403, `"forbidden"`)}${
+    bounds.length === 0
+      ? ""
+      : `
+  const longer = tooLong(data, MAX_LENGTHS);
+  if (longer !== null) return { status: 400, error: longer };`
+  }
+  return { data, permitted };
+};
+`;
+  const writeLinksOf = own
+    ? `
+    await writeLinks(tx, "${typeName}", id, write.permitted);`
+    : "";
+  const answerRefusal = `
+  if ("error" in outcome) {
+    res.status(outcome.status).json({ error: outcome.error });
+    return;
+  }`;
+  // The AI fields are generated before the transaction, which would otherwise hold its row (and on
+  // SQLite every other write) while it waits on the provider; they are written only if the row,
+  // read again inside it, permits the same write.
+  const securedPatch = hasAi
+    ? `
+  const existing = await find(id);${notFound("!existing")}
+  const before = await permittedUpdate(req, existing, incoming);
+  if ("error" in before) {
+    res.status(before.status).json({ error: before.error });
+    return;
+  }
+  const generated = await populateAiFields("${typeName}", { ...before.data }, "update");
+  const outcome = await atomic(async (tx) => {
+    const locked = await lockRow(tx, id);
+    if (!locked) return { status: 404, error: "not found" };
+    const write = await permittedUpdate(req, locked, incoming);
+    if ("error" in write) return write;
+    if (JSON.stringify(write.data) !== JSON.stringify(before.data))
+      return { status: 409, error: "the entry changed while it was being updated; send the update again" };
+    ${update("tx", "generated", "    ")}${writeLinksOf}
+    return write;
+  });${answerRefusal}`
+    : `
+  const outcome = await atomic(async (tx) => {
+    const existing = await lockRow(tx, id);
+    if (!existing) return { status: 404, error: "not found" };
+    const write = await permittedUpdate(req, existing, incoming);
+    if ("error" in write) return write;
+    ${update("tx", "write.data", "    ")}${writeLinksOf}
+    return write;
+  });${answerRefusal}`;
+
+  return withMarker(`import { Router, type Request } from "express";
 ${header}
 import {
   assignOwners,
@@ -271,7 +353,7 @@ import {
   stripWrites,
 } from "../permissions/enforce";${aiImport}${linksImport}${lengthsImport}
 
-${helpers}${boundsConstant}${
+${helpers}${lockRow}${boundsConstant}${
     links === "none"
       ? ""
       : `
@@ -284,8 +366,8 @@ const allowed =
 const view = async (req: Request, row: Record<string, unknown>) =>
   filterRead(req, "${typeName}", await readLinks("${typeName}", row, allowed(req)));
 `
-  }
-export const ${t}Router = Router();
+  }${permittedUpdate}
+${routerDeclaration}
 
 ${route(
   "get",
@@ -306,7 +388,7 @@ ${route(
 
 ${route(
   "get",
-  byId,
+  `"/:id"`,
   "req",
   `${denied("read")}
   const row = await find(Number(req.params.id));${notFound(`!row || !recordAllowed(req, "${typeName}", "read", row)`)}
@@ -318,24 +400,37 @@ ${route(
   `"/"`,
   "req",
   `${denied("create")}
-  const proposed = pick(req.body, [${writable}]);${securedCreate}${readBack}
+  const proposed = pick(req.body, [${writable}]);${securedCreate}${createdReadBack}
   res.status(201).json(${shown("row")});`,
 )}
 
 ${route(
   "patch",
-  byId,
+  `"/:id"`,
   "req",
-  `${denied("update")}${existing("update")}
+  `${denied("update")}
+  const id = Number(req.params.id);
   const incoming = keepOwners(req, "${typeName}", pick(req.body, [${writable}]));${securedPatch}${readBack}
   res.json(${shown("row")});`,
 )}
 
 ${route(
   "delete",
-  byId,
+  `"/:id"`,
   "req",
-  `${denied("delete")}${existing("delete")}${remove}
+  `${denied("delete")}
+  const id = Number(req.params.id);
+  const deleted = await atomic(async (tx) => {
+    const existing = await lockRow(tx, id);
+    if (!existing || !recordAllowed(req, "${typeName}", "delete", existing)) return false;${
+      own
+        ? `
+    await dropLinks(tx, "${typeName}", id);`
+        : ""
+    }
+    await tx.delete(${t}).where(eq(${t}.id, id));
+    return true;
+  });${notFound("!deleted")}
   res.json({ id });`,
 )}
 `);

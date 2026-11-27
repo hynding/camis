@@ -4,6 +4,8 @@ overwrite package.json
 overwrite src/async-route.ts
 overwrite src/db/client.ts
 overwrite src/db/schema.ts
+overwrite src/error-handler.ts
+overwrite src/ids.ts
 overwrite src/index.ts
 overwrite src/routes/articles.ts
 overwrite src/routes/authors.ts
