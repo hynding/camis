@@ -33,7 +33,6 @@ export type IrErrorCode =
   | "cross_origin_not_public"
   | "invalid_header_name"
   | "invalid_media_type"
-  | "reserved_path_parameter"
   | "hook_output_not_written"
   | "unknown_ai_source"
   | "ai_computed_conflict"

@@ -86,12 +86,6 @@ const LARGEST = 2_147_483_647;
 const atLeastOne = z.number().int().min(1).max(LARGEST);
 
 /**
- * A target tells its endpoints apart by a route value of this name, which
- * a path parameter of the same name would replace.
- */
-const RESERVED_PATH_PARAMETER = "endpoint";
-
-/**
  * Hand-written code behind an API route of its own, beside a content type's (Strapi's custom route
  * and controller action). Only the public endpoints and those a role lists are reached. Its guards
  * are declared, so the route refuses what they refuse before the handler runs.
@@ -121,14 +115,6 @@ export const endpoint = z
     crossOrigin: z.object({ headers: z.array(headerName) }).optional(),
   })
   .superRefine((e, ctx) => {
-    if (e.path.split("/").includes(`:${RESERVED_PATH_PARAMETER}`)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: `endpoint "${e.name}" names a path parameter "${RESERVED_PATH_PARAMETER}", which a target routes the endpoint by; name it otherwise`,
-        params: { irCode: "reserved_path_parameter" },
-        path: ["path"],
-      });
-    }
     if (e.crossOrigin !== undefined && e.public !== true) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
