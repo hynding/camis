@@ -161,24 +161,22 @@ const hasBody = (ctx: Context): boolean => {
   return (length !== "" && length !== "0") || ctx.get("Transfer-Encoding") !== "";
 };
 
+/**
+ * A refusal in Strapi's error body, as strapi::errors writes it. It leaves the body unread, so the
+ * connection is closed once the refusal is sent: Node would otherwise read and discard the rest, for
+ * as long as the client goes on sending it.
+ */
 const refuse = (ctx: Context, refusal: Refusal): void => {
   ctx.status = refusal.status;
-  // Strapi's error body, as strapi::errors writes it.
   ctx.body = {
     data: null,
     error: { status: refusal.status, name: refusal.name, message: refusal.message, details: {} },
   };
-};
-
-/**
- * A body over its size is left unread, so the connection is closed once the refusal is sent: Node
- * would otherwise read and discard the rest, as long as the client goes on sending it.
- */
-const tooLarge = (ctx: Context): void => {
-  refuse(ctx, TOO_LARGE);
-  ctx.set("Connection", "close");
-  const req = ctx.req;
-  ctx.res.once("finish", () => req.destroy());
+  if (hasBody(ctx)) {
+    ctx.set("Connection", "close");
+    const req = ctx.req;
+    ctx.res.once("finish", () => req.destroy());
+  }
 };
 
 /** The body read up to one byte past the limit: null once it passes it. */
@@ -346,10 +344,10 @@ export default (config: { maxTrackedCallers?: unknown } | undefined, { strapi }:
     if (guard.maxBodyBytes !== undefined) {
       const declared = ctx.get("Content-Length");
       if (/^\\d+$/.test(declared)) {
-        if (declared.replace(/^0+/, "").length > 15 || Number(declared) > guard.maxBodyBytes) return tooLarge(ctx);
+        if (declared.replace(/^0+/, "").length > 15 || Number(declared) > guard.maxBodyBytes) return refuse(ctx, TOO_LARGE);
       } else if (ctx.get("Transfer-Encoding") !== "") {
         const body = await readAtMost(ctx.req, guard.maxBodyBytes);
-        if (body === null) return tooLarge(ctx);
+        if (body === null) return refuse(ctx, TOO_LARGE);
         replay(ctx, body);
       }
     }
