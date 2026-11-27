@@ -105,14 +105,15 @@ describe("filament endpoint guards", () => {
 
   it("says in DEPLOY.md how the throttle reads the caller's address and counts it, and where the guards stand beside authentication", () => {
     const deploy = file("DEPLOY.md")!.content;
-    const section = deploy.slice(deploy.indexOf("## Endpoint guards"));
+    // Read as prose, whatever the line breaks.
+    const section = deploy.slice(deploy.indexOf("## Endpoint guards")).replace(/\s+/g, " ");
     for (const statement of [
       "an IPv6 caller by its /64",
       "an HMAC of the address under `APP_KEY`",
       "a whole number in ASCII digits, floored at 1; any other value keeps the declared rate",
       "`$middleware->trustProxies(at: [...])`",
       "every caller shares the proxy's address, and so one count",
-      "On an endpoint that is not public, the route checks the caller's credentials first (401 before any guard), then the guards, then the roles the IR lists (403), then the handler.",
+      "On an endpoint that is not public, the route checks the caller's credentials first, before any guard, then the guards, then the roles the IR lists (403), then the handler.",
     ])
       expect(section).toContain(statement);
   });

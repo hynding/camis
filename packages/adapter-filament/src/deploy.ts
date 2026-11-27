@@ -491,8 +491,17 @@ export interface DeployExtras {
   endpoints?: Endpoint[];
 }
 
+/**
+ * Text as code in a table cell: a pipe would end the cell, so it is escaped (GitHub's tables read
+ * `\|` as a pipe even in code), and a backtick takes a code span of two.
+ */
+const code = (text: string): string => {
+  const escaped = text.replace(/\|/g, "\\|");
+  return text.includes("`") ? `\`\` ${escaped} \`\`` : `\`${escaped}\``;
+};
+
 const cell = (items: readonly string[] | undefined): string =>
-  items === undefined ? "" : items.map((item) => `\`${item}\``).join(", ");
+  items === undefined ? "" : items.map(code).join(", ");
 
 const guardRow = (e: Endpoint): string =>
   `| \`${e.name}\` | \`${e.method} /api${e.path}\` | ${
@@ -519,10 +528,25 @@ handler, not from that decoding; PHP's \`post_max_size\` bounds it there.
 | --- | --- | --- | --- | --- | --- |
 ${guarded.map(guardRow).join("\n")}
 
-A throttle's variable overrides its rate (floored at 1); re-run \`php artisan config:cache\` after
-changing it. It counts per client address in Laravel's cache, keyed by a hash of the address, so
-the cache store and the proxy setting in Sign-in sessions apply to it as well: behind a proxy
-Laravel does not trust, every client shares one count.
+A throttle's variable overrides its rate when it is a whole number in ASCII digits, floored at 1;
+any other value keeps the declared rate (an empty one, \`1e3\`, a sign or words); re-run
+\`php artisan config:cache\` after changing it. It counts per client address in Laravel's cache, an
+IPv6 caller by its /64 (the block one subscriber is given), keyed by an HMAC of the address under
+\`APP_KEY\`, so the cache holds no address; the cache store applies to it as well.
+
+The client address is the one Laravel reads from the request: behind a reverse proxy or load
+balancer Laravel does not trust, every caller shares the proxy's address, and so one count, and
+the throttle refuses them all together. Trust the proxy as Sign-in sessions says, with
+\`$middleware->trustProxies(at: [...])\` in \`bootstrap/app.php\` naming the proxy's addresses;
+trusting \`'*'\` while clients can reach the app directly lets each one name its own address in
+\`X-Forwarded-For\`, and so pass the throttle.
+
+A public endpoint asks no credentials and no role: its route runs the guards, then the handler,
+which is its only authorization. On an endpoint that is not public, the route checks the caller's
+credentials first, before any guard, then the guards, then the roles the IR lists (403), then the
+handler. Every public endpoint's contract in \`app/Hooks/Contracts\`, guarded or not, now says
+that its handler is its only authorization, so regenerating changes that generated file in an
+existing project; the hand-written handler is not touched.
 
 An endpoint with a cross-origin column (\`none\`: no request header beyond those always allowed)
 answers browsers on any origin itself, without
@@ -535,9 +559,7 @@ before, add inside \`->withMiddleware(...)\`:
 if (class_exists(\\App\\Http\\Middleware\\StrapiEndpointCors::class)) {
     \\Illuminate\\Http\\Middleware\\HandleCors::skipWhen(\\App\\Http\\Middleware\\StrapiEndpointCors::answers(...));
 }
-\`\`\`
-
-A public endpoint asks no role: its handler is its only authorization.`;
+\`\`\``;
 
 const mcpSection = `
 

@@ -435,7 +435,9 @@ database made before this keeps its string columns until a migration changes the
   checked at its route before its handler runs, as `config/camis-endpoints.php` states them (429,
   415, 413; a cross-origin endpoint answers any origin without credentials); each throttle is
   overridable with `CAMIS_ENDPOINT_<NAME>_THROTTLE_PER_MINUTE` (the endpoint's name in upper snake
-  case), and `camis scaffold` leaves Laravel's CORS off a cross-origin endpoint in
+  case; a whole number in digits, floored at 1, anything else keeps the declared rate) and counts
+  per client address as Laravel reads it, so behind a proxy it needs `trustProxies` (DEPLOY.md),
+  and `camis scaffold` leaves Laravel's CORS off a cross-origin endpoint in
   `bootstrap/app.php` (`camis build` warns, with the lines, on an app scaffolded before).
   Each controller is a generated base under
   `app/Http/Controllers/Api/Generated/` plus a seed-mode subclass you may override. The Strapi

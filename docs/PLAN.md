@@ -4033,10 +4033,11 @@ so the handler decides the origin; before this phase the handler was also the on
 floods, large bodies and other content types, and the project's global CORS answered its preflight
 with the app's settings, which do not allow a custom header.
 
-- **IR.** An `endpoint` takes four optional settings: `throttle: { perMinute }` (a whole number of
-  at least 1; requests a minute per caller address, refused requests included, then 429 with
-  `Retry-After`), `maxBodyBytes` (at least 1; a larger body, declared or sent, is 413),
-  `accepts` (media types, `type/subtype` without parameters, `invalid_media_type` otherwise;
+- **IR.** An `endpoint` takes four optional settings: `throttle: { perMinute }` (a whole number from
+  1 to 2147483647, so no target writes it in exponent form; requests a minute per caller address,
+  refused requests included, then 429 with `Retry-After`), `maxBodyBytes` (1 to 2147483647; a
+  larger body, declared or sent, is 413), `accepts` (media types, `type/subtype` without parameters
+  or a wildcard such as `text/*`, `invalid_media_type` otherwise;
   another `Content-Type` is 415, a request's parameters such as `;charset=UTF-8` ignored, and a
   body sent with no `Content-Type` refused) and `crossOrigin: { headers }` (header names as HTTP
   tokens, `invalid_header_name` otherwise): the endpoint answers browsers on any origin without
@@ -4045,46 +4046,67 @@ with the app's settings, which do not allow a custom header.
   `Access-Control-Allow-Credentials` is never sent. `crossOrigin` without `public: true` is
   `cross_origin_not_public`, since a page on any origin must reach nothing a credential guards. The
   route checks them in this order: preflight, throttle, media type, body size, then the handler. An
-  endpoint's error is now located by its name (`location.rule`).
+  endpoint's error is now located by its name (`location.rule`). A path parameter named `endpoint`
+  is `reserved_path_parameter`, at the endpoint's `path`: the Filament target routes an endpoint by
+  a route default of that name, which Laravel lets a path parameter replace (no other route default
+  is read).
 - **Kernel.** `endpointThrottleEnv` names each endpoint's override in one scheme for every target,
   `CAMIS_ENDPOINT_<NAME>_THROTTLE_PER_MINUTE` with the name in upper snake case (`IngestEvents` is
-  `CAMIS_ENDPOINT_INGEST_EVENTS_THROTTLE_PER_MINUTE`), read like `CAMIS_AUTH_THROTTLE_PER_MINUTE`:
-  unset is the IR's rate, anything else its leading digits, floored at 1. `isGuardedEndpoint` and
+  `CAMIS_ENDPOINT_INGEST_EVENTS_THROTTLE_PER_MINUTE`), read alike by both targets: a whole number in
+  ASCII digits overrides the IR's rate, floored at 1; anything else (unset, empty, `1e3`, a sign,
+  words) keeps the IR's rate. `isGuardedEndpoint` and
   `endpointGuardNames` tell the adapters which guards an endpoint has.
 - **Filament (Strapi API style, laravel storage).** A guarded endpoint's route names the runtime
   `StrapiEndpointCors` (outermost) and `StrapiEndpointGuard`, which read
   `config/camis-endpoints.php` (generated only with a guarded endpoint) by the route's endpoint
-  name, per request, so `config:cache` keeps working. The guard counts through Laravel's
-  `RateLimiter` in a bucket per endpoint, keyed by a 32-character SHA-256 prefix of the client
-  address (the cache holds no address), the count `hit()` returns deciding; it reads at most one
+  name, per request, so `config:cache` keeps working; a route naming an endpoint the config lacks
+  (a config cache older than the routes) answers 500 rather than check nothing. The guard counts
+  through Laravel's `RateLimiter` in a bucket per endpoint, an IPv6 caller by its /64 and an
+  IPv4-mapped one as its IPv4 address, keyed by a 32-character prefix of an HMAC-SHA256 of that
+  address under `APP_KEY` (the cache holds no address, and no list of addresses reverses it without
+  the key), the count `hit()` returns deciding; it reads at most one
   byte past the limit from the body's stream, besides the declared `Content-Length`; its refusals
   are thrown, so `StrapiErrors` answers `RateLimitError`, `UnsupportedMediaTypeError` and
-  `PayloadTooLargeError` in Strapi's error body. A cross-origin endpoint also routes `OPTIONS` on
-  its path, which `StrapiEndpointCors` answers; it sets the CORS headers on whatever the route
+  `PayloadTooLargeError` in Strapi's error body. Cross-origin endpoints route one `OPTIONS` per path
+  (Laravel keeps only the last route of a method and path), whose `endpoint` default lists every
+  such endpoint on it; `StrapiEndpointCors` answers it for the one whose method the preflight asks,
+  with `Vary: Access-Control-Request-Method, Access-Control-Request-Headers` (never `Origin`, since
+  every answer allows `*`); it sets the CORS headers on whatever the route
   answers, the guard's refusals and the handler's errors included. Laravel's `HandleCors` is global
   and runs before routing, so `camis scaffold` adds to `bootstrap/app.php`, beside the
   `StrapiErrors` block, `HandleCors::skipWhen(StrapiEndpointCors::answers(...))`, guarded by the
   class existing: `answers()` matches the request against the routes and skips the app's CORS only
-  for a route that runs `StrapiEndpointCors` (a preflight only when it asks for the endpoint's
-  method), so every other route, and another method's preflight on the same path, keep
+  for a route that runs `StrapiEndpointCors` (a preflight only when it asks for the method of an
+  endpoint on the path), so every other route, and another method's preflight on the same path, keep
   `config/cors.php` unchanged. `camis build` warns, with the lines to add, while an app scaffolded
   before lacks them. The contract's docblock says what the route checked, and a public endpoint's
   that its handler is the only authorization; DEPLOY.md lists each guarded endpoint's guards and
-  variable. Elsewhere the endpoint gap names the guards that are not generated either.
-- **Strapi.** A generated global middleware, `src/middlewares/camis_endpoint_guards.ts` (an
-  underscore no IR middleware's file name has), listed in `config/middlewares.ts` after
-  `strapi::errors` and `strapi::security` and ahead of `strapi::cors` and `strapi::body`, only with a
-  guarded endpoint. It matches each endpoint's path under `api.rest.prefix` as `@koa/router` does
-  (any case, an optional trailing slash, a `:param` as one segment; a GET's HEAD too). It answers
-  the preflight itself, so `strapi::cors` never sees it; on an actual request it sets its CORS
-  headers, refuses in Strapi's error body without calling the rest (so `strapi::cors` and
-  `strapi::body` never run for a refusal), and otherwise replaces the headers `strapi::cors` set on
-  the way out, an error thrown below included. The size is checked from `Content-Length` (Node
-  reads no more than a declared length), and a body sent without one (chunked) is read up to one
-  byte past the limit before `strapi::body`, refused, or handed on as the same request with that
-  body and its length. The throttle counts in the process's memory, as users-permissions'
-  `koa2-ratelimit` does by default, per endpoint and hashed address. No dependency is added: the
-  middleware imports only Node's modules and `@strapi/strapi`'s types. `strapi::body` parses a JSON
+  variable (a `|` or backtick in a header name escaped in its table), how the throttle reads the
+  caller's address behind a proxy, and where the guards stand beside authentication. Elsewhere the endpoint gap names the guards that are not generated either.
+- **Strapi.** Two generated global middlewares (an underscore no IR middleware's file name has),
+  each only when an endpoint needs it, both matching an endpoint's path under `api.rest.prefix` as
+  `@koa/router` does (any case, an optional trailing slash, a `:param` as one segment; a GET's HEAD
+  too). `src/middlewares/camis_endpoint_cors.ts`, listed after `strapi::errors` and
+  `strapi::security` and ahead of `strapi::cors`, answers a preflight asking for the method of a
+  cross-origin endpoint on the path itself (with the `Vary` above), so `strapi::cors` never sees
+  it, and on that endpoint's actual request sets its CORS headers and replaces those `strapi::cors`
+  set on the way out, a refusal and an error thrown below included.
+  `src/middlewares/camis_endpoint_guards.ts`, listed after `strapi::cors` (so a refusal on an
+  endpoint without `crossOrigin` carries the app's CORS headers, and an allowed origin can read the
+  429 and its `Retry-After`) and ahead of `strapi::body`, checks the guards and refuses in Strapi's
+  error body without calling the rest; a refusal that leaves a body unread sends
+  `Connection: close` and destroys the request once the answer is sent, so a client cannot hold
+  the connection open by streaming the rest. The size is checked from `Content-Length` (Node reads
+  no more than a declared length), and a body sent without one (chunked) is read up to one byte
+  past the limit before `strapi::body`, refused, or handed on as the same request with that body
+  and its length. The throttle counts in the process's memory, as users-permissions'
+  `koa2-ratelimit` does by default, per endpoint and caller (an IPv6 caller by its /64), keyed by
+  an HMAC-SHA256 of the address under the app's keys (`server.app.keys`, `APP_KEYS`; the
+  middleware refuses to start without them). A count lives in the minute window it began in, and
+  at a window's turn the one before it is dropped whole, so no request walks the callers; at most
+  `maxTrackedCallers` (the middleware's config, 100000 by default) are tracked, and a new caller
+  beyond them is refused with 429 until a window is dropped, rather than the counter growing. No
+  dependency is added: the middlewares import only Node's modules and `@strapi/strapi`'s types. `strapi::body` parses a JSON
   body up to 1mb and a text or form body up to 56kb (koa-body 6's defaults, which camis's
   `config/middlewares.ts` keeps), so a `maxBodyBytes` above that for an accepted type, or for any
   type when `accepts` lists none, is a located `endpointBodyLimit` downgrade gap. A public
@@ -4094,46 +4116,75 @@ with the app's settings, which do not allow a custom header.
   and is passed over, so a generated project still imports with no gap.
 - **Express** reports each endpoint as before; a guarded one's gap names its guards.
 
+The caller's address is only as good as the deployment's proxy setting. Laravel reads it from the
+request; behind a proxy it does not trust (`trustProxies`, as DEPLOY.md's Sign-in sessions says)
+every caller shares the proxy's address and one count, and trusting `'*'` where clients reach the
+app directly lets each name its own address. Strapi with `server.proxy` on takes the address from
+`X-Forwarded-For`, which a client writes unless the proxy in front replaces it, so there the
+throttle is only as good as that proxy's configuration.
+
+The guards beside authentication: on Filament, a public endpoint's route runs the guards and then
+the handler; a non-public one's route group checks the caller's credentials first, then the
+guards, then `CamisEndpoints` the roles the IR lists, then the handler. On Strapi both middlewares
+are global, so they run before the router authenticates the caller and asks its role, on every
+endpoint.
+
+Recorded exception to "unguarded output unchanged": every public endpoint's generated contract
+(Filament, `app/Hooks/Contracts`) now says its handler is its only authorization, guarded or not,
+so regenerating an existing project changes that generated file; the Strapi target's seeded
+controller says it too, but a seeded file is written only once, so only a newly seeded endpoint
+carries it. No hand-written handler is touched.
+
 Not covered: Laravel decodes a JSON body when it captures the request (`Request::createFromBase`),
 before any middleware, so for JSON the 413 keeps the body from the handler but not from that
 decoding, which PHP's `post_max_size` bounds; a multipart body PHP has already parsed is checked by
-its declared length only. On an endpoint that is not public the route group's credentials are
-checked before the guards. The Strapi target's throttle counts per process (several Strapi processes
-count apart), and `strapi::cors` still runs on a cross-origin endpoint's actual request before its
+its declared length only. The Strapi target's throttle counts per process (several Strapi processes count apart),
+and `strapi::cors` still runs on a cross-origin endpoint's actual request before its
 headers are replaced (it adds `Vary: Origin`). A body's size counts the bytes as sent, before any
 `Content-Encoding` is undone. Which origins an endpoint serves stays the handler's to decide. An app
 scaffolded before this phase answers a cross-origin endpoint's preflight with its own CORS until
 `bootstrap/app.php` has the lines `camis build` prints.
 
 Exit: `custom-code.test.ts` and `parse.test.ts` (ir-schema: the four settings, `crossOrigin` without
-`public`, bad header names and media types, rates and sizes below 1, the error located by the
-endpoint's name); `endpoint-guards.test.ts` in the kernel (the variable's name, the guards named);
-in Filament, `endpoint-guards.test.ts` (the author-role fixture gains MemoIngest with all four; the
-routes and preflight route, goldens `camis-endpoints.php` and `MemoIngestEndpoint.php`, the
+`public`, bad header names and media types, wildcards, rates and sizes below 1 or above
+2147483647, a path parameter named `endpoint`, the error located by the endpoint's name); `endpoint-guards.test.ts` in the kernel (the variable's name, the guards named);
+in Filament, `endpoint-guards.test.ts` (the author-role fixture gains MemoIngest with all four, and
+MemoRestate, a cross-origin PUT on its path; the routes and the one preflight route naming both, goldens `camis-endpoints.php` and `MemoIngestEndpoint.php`, the
 runtime middlewares copied as they are, nothing emitted and the routes unchanged for endpoints with
 no guard, DEPLOY.md, the Laravel API style's gap, and the config evaluated under PHP: the IR's rate,
-the variable's, and 1 for an empty or 0 one), `endpoints.test.ts` (golden `CamisEndpoints.php` gains
-MemoIngest's row; MemoPin's contract golden is unchanged); `scaffold.test.ts` in cli (the
+the variable's in digits, 1 for 0, and the IR's rate for an empty, signed, exponent or worded
+one; DEPLOY.md's proxy, authentication order and table escaping), `endpoints.test.ts` (golden `CamisEndpoints.php` gains
+MemoIngest's and MemoRestate's rows; MemoPin's contract golden is unchanged); `scaffold.test.ts` in cli (the
 `bootstrap/app.php` patch, idempotent, and the build warning); in Strapi, `endpoint-guards.test.ts`
-(goldens `middlewares.guarded.ts.txt` and `camis_endpoint_guards.ts.txt`, a project without guards
+(goldens `middlewares.guarded.ts.txt`, `camis_endpoint_cors.ts.txt` and
+`camis_endpoint_guards.ts.txt`, each middleware only when needed, a project without guards
 unchanged, the body limit gap, the seeded controller, the routes read back without guards, and the
-generated middleware loaded and run against Koa-shaped requests: the preflight, another method's
-preflight and other paths left alone, the router's path spellings, JSON and text bodies passed on
-with the CORS headers replaced, the headers kept on a thrown error, 429 with `Retry-After` counting
-refused requests per address and per endpoint, the variable and its floor, 415 with and without a
-type, 413 by length, and a chunked body counted, refused or passed on whole); `custom-code.test.ts`
+generated middlewares loaded and run around a stand-in for `strapi::cors` against Koa-shaped
+requests: the preflight with `Vary`, a PUT and a POST on one path each answered by the method
+asked, another method's preflight and other paths left alone, the router's path spellings, JSON
+and text bodies passed on with the CORS headers replaced, the headers kept on a thrown error, 429
+with `Retry-After` counting refused requests per address and per endpoint, the app's CORS headers
+on a refusal of an endpoint without `crossOrigin`, an IPv6 caller by its /64 and an IPv4-mapped one
+as its IPv4 address, the HMAC under the app's keys, the variable read only in digits and its floor,
+the cap on callers tracked, no `Map` walked once more than 10000 callers have expired, 415 with
+and without a type, 413 by length, a chunked body counted, refused or passed on whole, and the
+connection closed after a refusal that leaves a body unread); `custom-code.test.ts`
 in Express. In CI the author-role job patches `bootstrap/app.php` as `camis scaffold` does and runs
 `EndpointGuardsTest.php` (the preflight's headers, JSON and `text/plain;charset=UTF-8` bodies
 reaching the handler, 429 with `Retry-After` and the handler not run, refused requests counted, 415,
 413 by `Content-Length` and by the body with a lying or absent `Content-Length`, the CORS headers on
 every refusal and success and never credentials, while the app's CORS, set to allow credentials to
 the browser's origin, still answers another route, its preflight, and another method's preflight on
-the endpoint's path); `runtime-phpstan.sh` copies the two middlewares into the first app, whose
+the endpoint's path; MemoRestate's PUT preflight answered on the same route with its own headers
+and `Vary`; IPv6 callers counted by /64 under an HMAC keyed by `APP_KEY`; and 500 for every request
+on a guarded route whose config entry is missing); `runtime-phpstan.sh` copies the two middlewares into the first app, whose
 fixture has no guarded endpoint. Locally, `EndpointGuardsTest`, `EndpointsTest`, `AuthorRoleTest`
 and `PublicActionsTest` ran on SQLite in a copy of a scaffolded strapi-php app, and the Strapi
 middleware ran in front of Strapi 5.48's own `strapi::errors`, `strapi::cors` and `strapi::body`
-and `@koa/router` (preflight, JSON, text, chunked bodies under and over the limit, the throttle,
-and another route's CORS unchanged); no real Strapi project was booted, and Larastan did not run
+and `@koa/router` (preflights for a POST and a PUT on one path, JSON, text, chunked bodies under
+and over the limit, the throttle, a 429 on an endpoint without `crossOrigin` carrying the app's
+CORS headers for an allowed origin, a client still streaming a chunked body after its refusal hung
+up on within milliseconds over a keep-alive agent, and another route's CORS unchanged); no real Strapi project was booted, and Larastan did not run
 locally.
 
 ---
