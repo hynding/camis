@@ -127,6 +127,9 @@ describe("filament endpoint guards", () => {
       "a whole number in ASCII digits, floored at 1; any other value keeps the declared rate",
       "`$middleware->trustProxies(at: [...])`",
       "every caller shares the proxy's address, and so one count",
+      "up to twice its rate across the turn of a window",
+      "NAT64, Teredo",
+      "changing `APP_KEY` starts every count afresh",
       "On an endpoint that is not public, the route checks the caller's credentials first, before any guard, then the guards, then the roles the IR lists (403), then the handler.",
     ])
       expect(section).toContain(statement);

@@ -101,6 +101,33 @@ describe("strapi endpoint guards: the generated project", () => {
     expect(plain.gaps.gaps).toEqual([]);
   });
 
+  it("writes DEPLOY.md for an operator: each guarded endpoint, its variables, and what the throttle can and cannot do", () => {
+    const deploy = file(guarded, "DEPLOY.md")!.content;
+    expect(deploy.startsWith("<!-- @camis:generated — do not edit -->")).toBe(true);
+    expect(deploy).toContain(
+      "| `ArticleIngest` | `POST /api/articles/:id/ingest` | 3 (`CAMIS_ENDPOINT_ARTICLE_INGEST_THROTTLE_PER_MINUTE`) | 64 | `application/json`, `text/plain` | `Content-Type`, `X-Write-Key` |",
+    );
+    const prose = deploy.replace(/\s+/g, " ");
+    for (const statement of [
+      "`CAMIS_ENDPOINT_MAX_TRACKED_CALLERS`",
+      "100000 by default",
+      "while that many are tracked, a new caller is let through uncounted",
+      "up to twice its rate across the turn of a window",
+      "an IPv6 caller by its /64",
+      "NAT64, Teredo",
+      "changing `APP_KEYS` starts every count afresh",
+      "`server.proxy`",
+      "`X-Forwarded-For`",
+      "each Strapi process counts apart",
+      "before Strapi authenticates the caller and asks its role",
+    ])
+      expect(prose).toContain(statement);
+    expect(file(generate(customCodeDoc), "DEPLOY.md")).toBeUndefined();
+    expect(
+      importDocument(guarded.files).gaps.gaps.filter((g) => g.location.file === "DEPLOY.md"),
+    ).toEqual([]);
+  });
+
   it("says in a public endpoint's seeded controller that its handler is the only authorization", () => {
     const controller = file(guarded, "src/api/article/controllers/article-ingest.ts")!.content;
     expect(controller).toContain(
