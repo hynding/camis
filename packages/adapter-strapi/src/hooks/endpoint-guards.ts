@@ -76,13 +76,37 @@ const matcher = (prefix: string, path: string): RegExp =>
 const methods = (method: string): string[] => (method === "GET" ? ["GET", "HEAD"] : [method]);
 `;
 
+// How both middlewares tell a connection a refusal is closing, the same in every project.
+const CLOSING = `
+// The connections a refusal is closing. A request read from one after the refusal (pipelined
+// behind it) must not be processed (RFC 9112 §9.6), so the first of the two middlewares drops it.
+// Each middleware is a module of its own, so they share one set under a registry symbol.
+const CLOSING: unique symbol = Symbol.for("camis.endpointGuards.closing");
+const registry = globalThis as { [CLOSING]?: WeakSet<object> };
+const closing = (registry[CLOSING] ??= new WeakSet<object>());
+
+/**
+ * Drops a request read after a refusal on its connection, before anything else of camis's runs:
+ * unanswered, Koa told not to answer (the answer could only queue behind the side already shut),
+ * and nothing destroyed, which would reset the connection under the refusal. The refusal's
+ * lingering close ends the connection, and the request with it. Only strapi::logger,
+ * strapi::errors and strapi::security run before it (and strapi::cors, when no endpoint answers
+ * other origins): none processes a request, and an answer one writes is never sent.
+ */
+const dropped = (ctx: Context): boolean => {
+  if (!closing.has(ctx.req.socket)) return false;
+  ctx.respond = false;
+  return true;
+};
+`;
+
 // The cross-origin middleware's code, the same in every project; only CROSS_ORIGIN above it differs.
 const CORS_RUNTIME = `
 const MAX_AGE = "7200";
 // A preflight's answer differs by the method and headers asked (never by origin, which every answer
 // allows), so a cache keeps one per request.
 const VARY = "Access-Control-Request-Method, Access-Control-Request-Headers";
-${MATCHING}
+${MATCHING}${CLOSING}
 const openToAnyOrigin = (ctx: Context): void => {
   ctx.set("Access-Control-Allow-Origin", "*");
   ctx.set("Access-Control-Expose-Headers", "Retry-After");
@@ -105,6 +129,7 @@ export default (_config: unknown, { strapi }: { strapi: Core.Strapi }) => {
   }));
 
   return async (ctx: Context, next: () => Promise<void>): Promise<void> => {
+    if (dropped(ctx)) return;
     const onPath = routes.filter((route) => route.pattern.test(ctx.path));
     if (onPath.length === 0) return next();
     const asked = ctx.get("Access-Control-Request-Method").toUpperCase();
@@ -136,7 +161,7 @@ const MINUTE = 60_000;
 /** How many callers each endpoint's throttle tracks at most, unless the deployment sets its own. */
 const MAX_TRACKED_CALLERS = 100_000;
 const MAX_TRACKED_CALLERS_ENV = "CAMIS_ENDPOINT_MAX_TRACKED_CALLERS";
-/** How long, and how many bytes, a refused request's connection is drained before it is dropped. */
+/** How long a refused request's connection is kept, and how much of its body is drained meanwhile. */
 const LINGER_MS = 2_000;
 const LINGER_BYTES = 1_048_576;
 
@@ -151,7 +176,7 @@ const TOO_MANY: Refusal = {
   message: "Too many requests, please try again later.",
 };
 const TOO_LARGE: Refusal = { status: 413, name: "PayloadTooLargeError", message: "Entity too large" };
-${MATCHING}
+${MATCHING}${CLOSING}
 // A deployment's own number, read as the Filament target reads a rate: a whole number in ASCII
 // digits, never less than one; any other value (empty, signed, 1e3, words) keeps the default.
 const fromEnv = (name: string, fallback: number): number => {
@@ -172,34 +197,44 @@ const hasBody = (ctx: Context): boolean => {
  * A lingering close, as nginx does it, for a refusal that leaves the body unread. Node closes a
  * Connection: close socket as soon as the answer is written (destroySoon); with request bytes still
  * unread the kernel then resets the connection, and a reset can drop the answer before the client
- * reads it. So once the answer is sent this takes that close back, shuts only the sending side (the
- * client reads the answer, then the end), and reads and discards what still comes, until the client
- * ends, or LINGER_BYTES more have come, or LINGER_MS have passed; then it drops the connection.
+ * reads it. So this reads and discards the body still coming from the refusal on, counting it as
+ * it comes (read here, so Node does not discard it uncounted once the answer is sent), and stops
+ * reading past LINGER_BYTES rather than drop the connection: on a fast link that many bytes come
+ * within a millisecond, and a reset then can still beat the answer to a client busy sending. Once
+ * the answer is sent it takes Node's close back and shuts only the sending side (the client reads
+ * the answer, then the end), and drops the connection when the client ends or LINGER_MS have
+ * passed. The connection is marked closing at once, so a request pipelined behind this one is
+ * dropped however soon Node reads it.
  */
 const linger = (ctx: Context): void => {
   ctx.set("Connection", "close");
   const req = ctx.req;
   const socket = req.socket;
+  closing.add(socket);
+  let drained = 0;
+  const count = (chunk: Buffer): void => {
+    drained += chunk.length;
+    if (drained <= LINGER_BYTES) return;
+    req.off("data", count);
+    req.pause();
+  };
+  req.on("data", count);
+  req.resume();
   ctx.res.once("finish", () => {
     socket.removeListener("finish", socket.destroy);
-    const start = socket.bytesRead;
     const stop = (): void => {
       clearTimeout(timer);
-      clearInterval(watch);
+      req.off("data", count);
+      socket.off("end", drop);
     };
     const drop = (): void => {
       stop();
       socket.destroy();
     };
     const timer = setTimeout(drop, LINGER_MS);
-    const watch = setInterval(() => {
-      if (socket.bytesRead - start > LINGER_BYTES) drop();
-    }, 50);
     timer.unref();
-    watch.unref();
     socket.once("end", drop);
     socket.once("close", stop);
-    req.resume();
     if (socket.writable) socket.end();
   });
 };
@@ -227,6 +262,9 @@ const readAtMost = (req: Context["req"], max: number): Promise<Buffer | null> =>
     const onData = (chunk: Buffer): void => {
       size += chunk.length;
       if (size > max) {
+        // Refused from here on: marked now, as Node may read a request pipelined behind this one
+        // before the refusal is written.
+        closing.add(req.socket);
         done();
         req.pause();
         resolve(null);
@@ -305,15 +343,19 @@ interface Count {
  * process's memory, and so does this: with more than one Strapi process each counts apart. A
  * caller's count lives in the fixed window it began in, by the monotonic clock (a step of the wall
  * clock changes nothing); at a window's turn the one before it is dropped whole, every count in it
- * having expired, so forgetting costs nothing per request. At most \`cap\` callers are tracked:
- * while that many are, a new caller is let through uncounted, so memory stays bounded and one
- * endpoint's flood of addresses (which defeats a per-address throttle anyway) locks no one out;
- * callers already tracked are counted and refused as before.
+ * having expired, so forgetting costs nothing per request. At most \`cap\` callers are tracked
+ * (some 200 bytes each, so about 20 MB at the default cap). While that many are, every caller not
+ * tracked shares one count, limited to the endpoint's rate a window: a new caller, and one whose
+ * own count has expired, until a window's turn frees room. So memory stays bounded, the callers not
+ * tracked together make no more than the rate, and a caller already tracked keeps its own count
+ * until it expires; each endpoint has its own counter, so a flood on one leaves the others alone.
  */
 const counter = (cap: number) => {
   let current = new Map<string, Count>();
   let previous = new Map<string, Count>();
   let turnAt = -Infinity;
+  let shared: Count = { hits: 0, resetAt: -Infinity };
+  const fresh = (now: number): Count => ({ hits: 0, resetAt: now + MINUTE });
   const seconds = (at: number, now: number): number => Math.max(1, Math.ceil((at - now) / 1000));
   return (key: string, max: number): number | null => {
     const now = performance.now();
@@ -324,9 +366,13 @@ const counter = (cap: number) => {
     }
     let count = current.get(key) ?? previous.get(key);
     if (count === undefined || count.resetAt <= now) {
-      if (current.size + previous.size >= cap) return null;
-      count = { hits: 0, resetAt: now + MINUTE };
-      current.set(key, count);
+      if (current.size + previous.size >= cap) {
+        if (shared.resetAt <= now) shared = fresh(now);
+        count = shared;
+      } else {
+        count = fresh(now);
+        current.set(key, count);
+      }
     }
     count.hits += 1;
     return count.hits > max ? seconds(count.resetAt, now) : null;
@@ -358,6 +404,7 @@ export default (_config: unknown, { strapi }: { strapi: Core.Strapi }) => {
     createHmac("sha256", secret).update(caller(address)).digest("hex").slice(0, 32);
 
   return async (ctx: Context, next: () => Promise<void>): Promise<void> => {
+    if (dropped(ctx)) return;
     const route = routes.find((r) => r.methods.includes(ctx.method) && r.pattern.test(ctx.path));
     if (route === undefined) return next();
     const { guard, take } = route;
@@ -415,7 +462,9 @@ interface CrossOrigin extends Route {
 interface Context {
   method: string;
   path: string;
+  req: { socket: object };
   status: number;
+  respond?: boolean;
   get(field: string): string;
   set(field: string, value: string): void;
   remove(field: string): void;
@@ -451,6 +500,7 @@ interface Context {
   request: { ip: string; req: IncomingMessage };
   status: number;
   body: unknown;
+  respond?: boolean;
   get(field: string): string;
   set(field: string, value: string): void;
   remove(field: string): void;
@@ -473,6 +523,9 @@ ${endpoints.map(guardEntry).join("\n")}
 ];
 ${GUARDS_RUNTIME}`);
 
+// Where Strapi serves the content API: config/api.ts as camis writes it sets no rest.prefix.
+const REST_PREFIX = "/api";
+
 /** What an operator deploying the project needs to know of its guarded endpoints. */
 const deploy = (guarded: Endpoint[]): string => `<!-- @camis:generated — do not edit -->
 # Deploying this camis-generated Strapi project
@@ -489,7 +542,7 @@ credentials, and \`global::${ENDPOINT_GUARDS_MIDDLEWARE}\` (after \`strapi::cors
 \`PayloadTooLargeError\`). Both run before Strapi authenticates the caller and asks its role, on
 every endpoint; a public endpoint asks neither, so its handler is its only authorization.
 
-${endpointGuardsTable(guarded)}
+${endpointGuardsTable(guarded, REST_PREFIX)}
 
 A throttle's variable overrides its rate when it is a whole number in ASCII digits, floored at 1;
 any other value keeps the declared rate. Each endpoint counts per caller address, an IPv6 caller by
@@ -503,10 +556,13 @@ The counts are kept in the process's memory, as users-permissions' own throttle 
 default: each Strapi process counts apart, so behind several processes a caller gets the rate from
 each, and a restart forgets every count. Each endpoint tracks at most
 \`CAMIS_ENDPOINT_MAX_TRACKED_CALLERS\` callers (a whole number in ASCII digits, floored at 1;
-100000 by default): while that many are tracked, a new caller is let through uncounted, so memory
-stays bounded and one endpoint's flood of addresses locks no one out of it or any other endpoint,
-while callers already tracked are counted and refused as before. A flood of that many distinct
-addresses defeats a per-address throttle anyway.
+100000 by default), some 200 bytes each: about 20 MB of memory per throttled endpoint at the
+default. While that many are tracked, every caller not tracked shares one count for the endpoint,
+limited to the endpoint's rate a window: a new caller, or one whose own count has expired, falls
+into that shared count until a window's turn frees room. So memory stays bounded, all the callers
+not tracked together make no more than the endpoint's rate, a flood of addresses on one endpoint
+leaves every other endpoint's counts as they were, and a caller already tracked keeps its own count
+until it expires.
 
 The caller address is Koa's \`ctx.request.ip\`. With \`server.proxy\` off it is the address the
 connection comes from, so behind a reverse proxy every caller shares the proxy's address and one
@@ -514,8 +570,11 @@ count. With \`server.proxy\` on it is taken from \`X-Forwarded-For\`, which a cl
 the proxy in front replaces it, so the throttle is only as good as that proxy's configuration.
 
 A refused request that still has a body coming is answered with \`Connection: close\`; the
-connection is then shut on the server's side and drained for at most 2 seconds or 1 MiB, so the
-client reads the answer before the connection is dropped.
+connection is then shut on the server's side, at most 1 MiB more of its body is read and discarded,
+and the connection is dropped when the client ends it or at most 2 seconds after the answer, so the
+client reads the answer before the connection is dropped. A request sent after the refused
+one on the same connection is not processed: it is dropped unanswered, before any camis middleware
+or route runs.
 `;
 
 /** The global middlewares, and DEPLOY.md, a project's guarded endpoints need; none without. */

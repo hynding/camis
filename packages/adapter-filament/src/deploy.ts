@@ -492,6 +492,9 @@ export interface DeployExtras {
 }
 
 /** The IR endpoints' declared guards, checked at their routes before their handlers run. */
+// Where Laravel serves routes/api.php, which camis writes the endpoints into.
+const LARAVEL_API_PREFIX = "/api";
+
 const endpointGuardsSection = (guarded: Endpoint[]): string => `
 
 ## Endpoint guards
@@ -505,7 +508,7 @@ bytes actually sent, answers 413 \`PayloadTooLargeError\`. Laravel decodes a JSO
 receives the request, before any route runs, so for JSON the size limit keeps the body from the
 handler, not from that decoding; PHP's \`post_max_size\` bounds it there.
 
-${endpointGuardsTable(guarded)}
+${endpointGuardsTable(guarded, LARAVEL_API_PREFIX)}
 
 A throttle's variable overrides its rate when it is a whole number in ASCII digits, floored at 1;
 any other value keeps the declared rate (an empty one, \`1e3\`, a sign or words); re-run

@@ -4098,11 +4098,25 @@ with the app's settings, which do not allow a custom header.
   endpoint without `crossOrigin` carries the app's CORS headers, and an allowed origin can read the
   429 and its `Retry-After`) and ahead of `strapi::body`, checks the guards and refuses in Strapi's
   error body without calling the rest. A refusal that leaves a body unread sends
-  `Connection: close` and closes as nginx lingers: once the answer is sent it takes back Node's own
-  close (which, with request bytes unread, would make the kernel reset the connection and could
-  drop the answer), shuts only its sending side, and reads and discards what still comes until the
-  client ends, 1 MiB more has come, or 2 seconds have passed, then drops the connection, so a
-  client can neither hold it open by streaming the rest nor lose the answer to a reset. The size is checked from `Content-Length` (Node reads
+  `Connection: close` and closes as nginx lingers: from the refusal on it reads and discards the
+  body still coming, counting it in a `data` listener (read there, since Node would otherwise
+  discard it uncounted once the answer is sent), and past 1 MiB stops reading rather than drop the
+  connection, since on a fast link 1 MiB comes within a millisecond and a reset then can still beat
+  the answer to a client busy sending; once the answer is sent it takes back Node's own close
+  (which, with request bytes unread, would make the kernel reset the connection and could drop the
+  answer), shuts only its sending side, and drops the connection when the client ends or 2 seconds
+  have passed, so a client can neither hold it open by streaming the rest nor lose the answer to a
+  reset. A request pipelined behind the refused one must not be processed (RFC 9112 §9.6): the
+  refusal marks the connection in a `WeakSet` the two middlewares share under a `Symbol.for`
+  registry key (each is a module of its own), as soon as the refusal is decided (for a chunked body,
+  when the limit is passed, since Node may read the next request before the refusal is written),
+  and the mark is checked first thing in the first camis middleware on the chain (either one): a
+  request on a marked connection is dropped with Koa's `ctx.respond = false`, unanswered, with no
+  `next()` and nothing destroyed, which would reset the connection under the refusal; the lingering
+  close then ends it. Only `strapi::logger`, `strapi::errors` and `strapi::security` run before
+  that check (and `strapi::cors`, in a project with no cross-origin endpoint): they log, catch and
+  set headers, process nothing, and an answer `strapi::cors` writes to a preflight is never sent,
+  the sending side being shut. The size is checked from `Content-Length` (Node reads
   no more than a declared length), and a body sent without one (chunked) is read up to one byte
   past the limit before `strapi::body`, refused, or handed on as the same request with that body
   and its length. The throttle counts in the process's memory, as users-permissions'
@@ -4113,12 +4127,17 @@ with the app's settings, which do not allow a custom header.
   the wall clock changes nothing), and at a window's turn the one before it is dropped whole, so no
   request walks the callers. Each endpoint tracks at most `CAMIS_ENDPOINT_MAX_TRACKED_CALLERS`
   callers (read as a rate override is, 100000 by default; the middleware's config is not used,
-  since camis regenerates `config/middlewares.ts`); while that many are tracked a new caller is let
-  through uncounted, so memory stays bounded and one endpoint's flood of addresses (which defeats a
-  per-address throttle anyway) locks no one out of it or another endpoint, while callers already
-  tracked are counted and refused as before. A project with a guarded endpoint also gets a
+  since camis regenerates `config/middlewares.ts`), some 200 bytes each, about 20 MB per throttled
+  endpoint at the default (measured on Node 22). While that many are tracked, every caller not
+  tracked shares one overflow count for the endpoint, limited to the endpoint's `perMinute` a
+  window: a new caller, and a caller whose own count has expired, falls into it until a window's
+  turn frees room. So memory stays bounded, the callers not tracked together make no more than the
+  endpoint's rate, one endpoint's flood of addresses leaves every other endpoint's counts as they
+  were, and a caller already tracked keeps its own count until it expires. A project with a guarded endpoint also gets a
   generated `DEPLOY.md` saying all this to its operator, with the guards' table (shared with
-  Filament's DEPLOY.md through the kernel's `endpointGuardsTable`). No
+  Filament's DEPLOY.md through the kernel's `endpointGuardsTable`, which takes the route prefix
+  from each adapter: `/api`, where Laravel serves `routes/api.php` and where Strapi serves the
+  content API, `config/api.ts` as camis writes it setting no `rest.prefix`). No
   dependency is added: the middlewares import only Node's modules and `@strapi/strapi`'s types. `strapi::body` parses a JSON
   body up to 1mb and a text or form body up to 56kb (koa-body 6's defaults, which camis's
   `config/middlewares.ts` keeps), so a `maxBodyBytes` above that for an accepted type, or for any
@@ -4170,12 +4189,19 @@ when its config entry is missing carries no CORS headers, so a browser on anothe
 it; a plain `OPTIONS` (no `Access-Control-Request-Method`, so no preflight) on a path shared by
 cross-origin endpoints is answered with all their methods and no request headers. On Strapi, while
 an endpoint's tracked-caller cap is full, a new caller there, or a returning one whose count has
-expired, is let through uncounted until a window is dropped.
+expired, shares the one overflow count with every other caller not tracked, so it can be refused
+for requests others made until a window's turn frees room. A client that reads nothing until it
+has sent the whole body loses a Strapi refusal of a body more than 1 MiB past it to the reset 2
+seconds on, as it would behind nginx once the lingering time is up; and a request pipelined
+behind a refused one is dropped only if Node reads it after the refusal is decided, which the
+middlewares Strapi runs ahead of them (all synchronous up to `next()`) ensure for a body read in
+one go, but which a project's own asynchronous middleware listed ahead of them would not.
 
 Exit: `custom-code.test.ts` and `parse.test.ts` (ir-schema: the four settings, `crossOrigin` without
 `public`, bad header names and media types, wildcards, rates and sizes below 1 or above
 2147483647, any path parameter name taken, `endpoint` included, the error located by the endpoint's
-name); `endpoint-guards.test.ts` in the kernel (the variable's name, the guards named);
+name); `endpoint-guards.test.ts` in the kernel (the variable's name, the guards named, the guards'
+table under the route prefix each target passes, `/api` on both);
 in Filament, `endpoint-guards.test.ts` (the author-role fixture gains MemoIngest with all four, and
 MemoRestate, a cross-origin PUT on its path, and MemoTally, `GET /memos/:endpoint/tally` with a
 throttle; the routes and the one preflight route naming both, every route's `camis.endpoint`
@@ -4197,13 +4223,21 @@ with `Retry-After` counting refused requests per address and per endpoint, the a
 on a refusal of an endpoint without `crossOrigin`, an IPv6 caller by its /64 and an IPv4-mapped one
 as its IPv4 address, the HMAC under the app's keys, the variable read only in digits and its floor,
 windows by a monotonic clock however the wall clock steps, each endpoint's own cap on callers
-tracked from `CAMIS_ENDPOINT_MAX_TRACKED_CALLERS` (read only in digits) with a new caller let
-through uncounted while full and tracked callers still refused, no `Map` walked once more than
+tracked from `CAMIS_ENDPOINT_MAX_TRACKED_CALLERS` (read only in digits), while full the callers
+not tracked sharing one count at the endpoint's rate however many addresses they come from,
+a caller whose count has expired among them, tracked callers keeping their own counts, another
+endpoint untouched, no more callers kept than the cap, no `Map` walked once more than
 10000 callers have expired, 415 with and without a type, 413 by length, a chunked body counted,
-refused or passed on whole, `Connection: close` after a refusal that leaves a body unread, and
-DEPLOY.md; then, behind a real `node:http` server, a client refused mid-body seeing the server's
-side shut and the connection dropped after the 2-second linger rather than reset, and a client
-streaming a 50 MB body, declared and chunked, reading the 413 in each of 20 runs); `custom-code.test.ts`
+refused or passed on whole, `Connection: close` after a refusal that leaves a body unread, a
+request on a refused connection dropped unanswered by either middleware with nothing destroyed,
+reading stopped on the piece that takes the drained body past 1 MiB and the connection dropped 2
+seconds after the answer, and DEPLOY.md; then, behind a real `node:http` server running both
+middlewares, a client refused mid-body seeing the server's side shut and the connection dropped
+after the 2-second linger rather than reset, a GET, a preflight and an allowed POST pipelined
+behind a refused declared or chunked body never reaching the handler while the client reads the
+one 413 and a clean close, and a client in a child process (`scripts/streaming-client.mjs`)
+streaming a 50 MB body, declared and chunked, reading the 413 in each of 10 runs, which the code
+before the lingering close fails); `custom-code.test.ts`
 in Express. In CI the author-role job patches `bootstrap/app.php` as `camis scaffold` does and runs
 `EndpointGuardsTest.php` (the preflight's headers, JSON and `text/plain;charset=UTF-8` bodies
 reaching the handler, 429 with `Retry-After` and the handler not run, refused requests counted, 415,

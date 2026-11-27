@@ -17,7 +17,9 @@ interface CrossOrigin extends Route {
 interface Context {
   method: string;
   path: string;
+  req: { socket: object };
   status: number;
+  respond?: boolean;
   get(field: string): string;
   set(field: string, value: string): void;
   remove(field: string): void;
@@ -54,6 +56,27 @@ const matcher = (prefix: string, path: string): RegExp =>
 
 const methods = (method: string): string[] => (method === "GET" ? ["GET", "HEAD"] : [method]);
 
+// The connections a refusal is closing. A request read from one after the refusal (pipelined
+// behind it) must not be processed (RFC 9112 §9.6), so the first of the two middlewares drops it.
+// Each middleware is a module of its own, so they share one set under a registry symbol.
+const CLOSING: unique symbol = Symbol.for("camis.endpointGuards.closing");
+const registry = globalThis as { [CLOSING]?: WeakSet<object> };
+const closing = (registry[CLOSING] ??= new WeakSet<object>());
+
+/**
+ * Drops a request read after a refusal on its connection, before anything else of camis's runs:
+ * unanswered, Koa told not to answer (the answer could only queue behind the side already shut),
+ * and nothing destroyed, which would reset the connection under the refusal. The refusal's
+ * lingering close ends the connection, and the request with it. Only strapi::logger,
+ * strapi::errors and strapi::security run before it (and strapi::cors, when no endpoint answers
+ * other origins): none processes a request, and an answer one writes is never sent.
+ */
+const dropped = (ctx: Context): boolean => {
+  if (!closing.has(ctx.req.socket)) return false;
+  ctx.respond = false;
+  return true;
+};
+
 const openToAnyOrigin = (ctx: Context): void => {
   ctx.set("Access-Control-Allow-Origin", "*");
   ctx.set("Access-Control-Expose-Headers", "Retry-After");
@@ -76,6 +99,7 @@ export default (_config: unknown, { strapi }: { strapi: Core.Strapi }) => {
   }));
 
   return async (ctx: Context, next: () => Promise<void>): Promise<void> => {
+    if (dropped(ctx)) return;
     const onPath = routes.filter((route) => route.pattern.test(ctx.path));
     if (onPath.length === 0) return next();
     const asked = ctx.get("Access-Control-Request-Method").toUpperCase();

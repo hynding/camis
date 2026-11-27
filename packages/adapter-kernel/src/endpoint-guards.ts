@@ -32,17 +32,22 @@ const tableCode = (text: string): string => {
 const cell = (items: readonly string[] | undefined): string =>
   items === undefined ? "" : items.map(tableCode).join(", ");
 
-const guardRow = (e: Endpoint): string =>
-  `| \`${e.name}\` | \`${e.method} /api${e.path}\` | ${
-    e.throttle === undefined ? "" : `${e.throttle.perMinute} (\`${endpointThrottleEnv(e.name)}\`)`
-  } | ${e.maxBodyBytes ?? ""} | ${cell(e.accepts?.map((t) => t.toLowerCase()))} | ${
-    e.crossOrigin?.headers.length === 0 ? "none" : cell(e.crossOrigin?.headers)
-  } |`;
+const guardRow =
+  (prefix: string) =>
+  (e: Endpoint): string =>
+    `| \`${e.name}\` | \`${e.method} ${prefix}${e.path}\` | ${
+      e.throttle === undefined ? "" : `${e.throttle.perMinute} (\`${endpointThrottleEnv(e.name)}\`)`
+    } | ${e.maxBodyBytes ?? ""} | ${cell(e.accepts?.map((t) => t.toLowerCase()))} | ${
+      e.crossOrigin?.headers.length === 0 ? "none" : cell(e.crossOrigin?.headers)
+    } |`;
 
-/** The guarded endpoints' declared guards as a Markdown table, for a target's DEPLOY.md. */
-export const endpointGuardsTable = (guarded: Endpoint[]): string =>
+/**
+ * The guarded endpoints' declared guards as a Markdown table, for a target's DEPLOY.md, each route
+ * under the prefix the target serves its API at.
+ */
+export const endpointGuardsTable = (guarded: Endpoint[], prefix: string): string =>
   [
     "| Endpoint | Route | Requests a minute per address | Largest body (bytes) | Media types | Cross-origin request headers |",
     "| --- | --- | --- | --- | --- | --- |",
-    ...guarded.map(guardRow),
+    ...guarded.map(guardRow(prefix)),
   ].join("\n");
