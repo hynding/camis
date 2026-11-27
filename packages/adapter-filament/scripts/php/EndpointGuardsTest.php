@@ -155,6 +155,14 @@ class EndpointGuardsTest extends TestCase
         $this->assertSame(2, RateLimiter::attempts('camis-endpoint|MemoIngest|'.$v4));
     }
 
+    public function test_an_empty_app_key_answers_500_rather_than_key_the_throttle_with_nothing(): void
+    {
+        config(['app.key' => '']);
+
+        $this->ingest('{}')->assertStatus(500)->assertJsonPath('data', null)->assertJsonPath('error.name', 'InternalServerError');
+        $this->assertSame([], self::$handled);
+    }
+
     public function test_a_guarded_route_whose_config_entry_is_missing_answers_500_and_checks_nothing_through(): void
     {
         // A config cache from before the endpoint had guards.

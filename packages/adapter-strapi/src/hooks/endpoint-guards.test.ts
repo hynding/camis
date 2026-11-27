@@ -1,5 +1,7 @@
 import { EventEmitter } from "node:events";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createServer, type Server } from "node:http";
+import { connect, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
@@ -166,11 +168,30 @@ describe("strapi endpoint guards: the generated project", () => {
   });
 });
 
+/** The connection under a request, as a refusal's lingering close uses it. */
+class FakeSocket extends EventEmitter {
+  bytesRead = 0;
+  writable = true;
+  ended = false;
+  destroyed = false;
+  end(): void {
+    this.ended = true;
+  }
+  destroy(): void {
+    this.destroyed = true;
+  }
+}
+
 /** A Koa context as the middlewares read and write it. */
 interface FakeContext {
   method: string;
   path: string;
-  req: Readable & { headers: Record<string, string>; socket: object; method: string; url: string };
+  req: Readable & {
+    headers: Record<string, string>;
+    socket: FakeSocket;
+    method: string;
+    url: string;
+  };
   request: { ip: string; req?: unknown };
   res: EventEmitter;
   status: number;
@@ -200,7 +221,7 @@ const context = (
   ip = "203.0.113.7",
 ): FakeContext => {
   const lower = Object.fromEntries(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v]));
-  const socket = {};
+  const socket = new FakeSocket();
   const req = Object.assign(Readable.from(body === undefined ? [] : [body].flat()), {
     headers: lower,
     socket,
@@ -478,31 +499,89 @@ describe("strapi endpoint guards: the generated middlewares at work", () => {
     }
   });
 
-  it("tracks at most maxTrackedCallers callers, refusing a new one with 429 rather than growing", async () => {
-    let now = 1_000_000;
-    vi.spyOn(Date, "now").mockImplementation(() => now);
-    const middleware = stack({ maxTrackedCallers: 2 });
-    expect((await run(post("{}", {}, "192.0.2.1"), middleware)).reached).toBe(true);
-    expect((await run(post("{}", {}, "192.0.2.2"), middleware)).reached).toBe(true);
-    const full = await run(post("{}", {}, "192.0.2.3"), middleware);
-    expect(full.reached).toBe(false);
-    refused(full.ctx, 429, "RateLimitError");
-    expect(Number(full.ctx.response["retry-after"])).toBeGreaterThan(0);
-    // A caller already tracked is counted as before.
-    expect((await run(post("{}", {}, "192.0.2.1"), middleware)).reached).toBe(true);
-    // Once the window that tracked them has passed and the next too, room is made in one step.
-    now += 121_000;
-    expect((await run(post("{}", {}, "192.0.2.3"), middleware)).reached).toBe(true);
+  /** The clocks the middleware may read: a monotonic one, and the wall clock, set apart. */
+  const clocks = () => {
+    const at = { monotonic: 5_000, wall: 1_700_000_000_000 };
+    vi.spyOn(performance, "now").mockImplementation(() => at.monotonic);
+    vi.spyOn(Date, "now").mockImplementation(() => at.wall);
+    return at;
+  };
+  const ping = (ip: string) => context("GET", "/api/articles/ping", {}, undefined, ip);
+
+  it("counts windows by a monotonic clock, so a step of the wall clock changes nothing", async () => {
+    const at = clocks();
+    const middleware = stack();
+    expect((await run(ping("192.0.2.1"), middleware)).reached).toBe(true);
+    expect((await run(ping("192.0.2.1"), middleware)).ctx.status).toBe(429);
+    // The wall clock jumps two minutes ahead: the count stands.
+    at.wall += 120_000;
+    at.monotonic += 1_000;
+    expect((await run(ping("192.0.2.1"), middleware)).ctx.status).toBe(429);
+    // A minute passes while the wall clock steps an hour back: the count is over.
+    at.wall -= 3_600_000;
+    at.monotonic += 61_000;
+    expect((await run(ping("192.0.2.1"), middleware)).reached).toBe(true);
+  });
+
+  const MAX_TRACKED = "CAMIS_ENDPOINT_MAX_TRACKED_CALLERS";
+  const withMaxTracked = async (value: string, body: () => Promise<void>): Promise<void> => {
+    process.env[MAX_TRACKED] = value;
+    try {
+      await body();
+    } finally {
+      delete process.env[MAX_TRACKED];
+    }
+  };
+
+  it("tracks at most CAMIS_ENDPOINT_MAX_TRACKED_CALLERS callers per endpoint, admitting a new one untracked when full", async () => {
+    clocks();
+    await withMaxTracked("2", async () => {
+      const middleware = stack();
+      for (let i = 0; i < 3; i += 1)
+        expect((await run(post("{}", {}, "192.0.2.1"), middleware)).reached).toBe(true);
+      expect((await run(post("{}", {}, "192.0.2.1"), middleware)).ctx.status).toBe(429);
+      expect((await run(post("{}", {}, "192.0.2.2"), middleware)).reached).toBe(true);
+      // Full: a new caller is let through, uncounted, however often it comes.
+      for (let i = 0; i < 6; i += 1)
+        expect((await run(post("{}", {}, "192.0.2.3"), middleware)).reached).toBe(true);
+      // A caller already tracked is still counted and refused.
+      expect((await run(post("{}", {}, "192.0.2.1"), middleware)).ctx.status).toBe(429);
+      for (let i = 0; i < 2; i += 1)
+        expect((await run(post("{}", {}, "192.0.2.2"), middleware)).reached).toBe(true);
+      expect((await run(post("{}", {}, "192.0.2.2"), middleware)).ctx.status).toBe(429);
+      // Another endpoint tracks its own callers, so one endpoint's flood leaves it its room.
+      expect((await run(ping("192.0.2.3"), middleware)).reached).toBe(true);
+      expect((await run(ping("192.0.2.3"), middleware)).ctx.status).toBe(429);
+    });
+  });
+
+  it("reads CAMIS_ENDPOINT_MAX_TRACKED_CALLERS only in digits, never less than one", async () => {
+    clocks();
+    await withMaxTracked("0", async () => {
+      const middleware = stack();
+      expect((await run(ping("192.0.2.1"), middleware)).reached).toBe(true);
+      expect((await run(ping("192.0.2.1"), middleware)).ctx.status).toBe(429);
+      expect((await run(ping("192.0.2.2"), middleware)).reached).toBe(true);
+      expect((await run(ping("192.0.2.2"), middleware)).reached).toBe(true);
+    });
+    for (const other of ["", "1e3", "-1", " 1", "abc"]) {
+      await withMaxTracked(other, async () => {
+        const middleware = stack();
+        for (const ip of ["192.0.2.1", "192.0.2.2"]) {
+          expect((await run(ping(ip), middleware)).reached).toBe(true);
+          expect((await run(ping(ip), middleware)).ctx.status).toBe(429);
+        }
+      });
+    }
   });
 
   it("forgets expired callers without walking every caller tracked", async () => {
-    let now = 1_000_000;
-    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const at = clocks();
     const middleware = stack();
     for (let i = 0; i < 10_050; i += 1) {
       await run(post("{}", {}, `10.${(i >> 16) & 255}.${(i >> 8) & 255}.${i & 255}`), middleware);
     }
-    now += 61_000;
+    at.monotonic += 61_000;
     const iterate = vi.spyOn(Map.prototype, Symbol.iterator);
     const forEach = vi.spyOn(Map.prototype, "forEach");
     const keys = vi.spyOn(Map.prototype, "keys");
@@ -512,13 +591,19 @@ describe("strapi endpoint guards: the generated middlewares at work", () => {
     for (const spy of [iterate, forEach, keys, values, entries]) expect(spy).not.toHaveBeenCalled();
   });
 
-  /** A refusal leaving a body unread closes the connection once sent, so no rest is waited for. */
+  /**
+   * A refusal leaving a body unread says Connection: close and, once sent, half-closes the
+   * connection and drains what still comes, rather than destroy it under the answer.
+   */
   const closes = (ctx: FakeContext): void => {
     expect(ctx.response.connection).toBe("close");
     const req = ctx.req;
-    expect(req.destroyed).toBe(false);
     ctx.res.emit("finish");
-    expect(req.destroyed).toBe(true);
+    expect(req.socket.ended).toBe(true);
+    expect(req.socket.destroyed).toBe(false);
+    expect(req.destroyed).toBe(false);
+    req.socket.emit("end");
+    expect(req.socket.destroyed).toBe(true);
   };
 
   it("closes the connection after any refusal that leaves a body unread, and keeps it after one with no body", async () => {
@@ -571,4 +656,187 @@ describe("strapi endpoint guards: the generated middlewares at work", () => {
     expect(small.ctx.request.req).toBe(small.ctx.req);
     expect(small.ctx.response.connection).toBeUndefined();
   });
+});
+
+// The guards' middleware behind a real HTTP server, as Koa drives it, and a client that goes on
+// streaming a large body after it is refused: the refusal must reach it every time, not be lost to
+// a reset that discards the answer still queued.
+describe("strapi endpoint guards: a refusal over a real connection", () => {
+  let dir = "";
+  let server: Server;
+  let port = 0;
+  beforeAll(async () => {
+    dir = mkdtempSync(join(tmpdir(), "camis-endpoint-socket-"));
+    const target = join(dir, "camis_endpoint_guards.ts");
+    writeFileSync(target, file(guarded, MIDDLEWARE)!.content);
+    const factory = ((await import(pathToFileURL(target).href)) as { default: Factory }).default;
+    // A rate no run reaches, the size alone refusing.
+    process.env.CAMIS_ENDPOINT_ARTICLE_INGEST_THROTTLE_PER_MINUTE = "100000";
+    const middleware = factory({}, { strapi }) as unknown as (
+      ctx: Record<string, unknown>,
+      next: () => Promise<void>,
+    ) => Promise<void>;
+    server = createServer((req, res) => {
+      const ctx: Record<string, unknown> = {
+        method: req.method,
+        path: new URL(req.url ?? "/", "http://localhost").pathname,
+        req,
+        res,
+        request: { ip: req.socket.remoteAddress ?? "", req },
+        status: 404,
+        body: undefined,
+        get: (name: string) => {
+          const value = req.headers[name.toLowerCase()];
+          return Array.isArray(value) ? value.join(", ") : (value ?? "");
+        },
+        set: (name: string, value: string) => res.setHeader(name, value),
+        remove: (name: string) => res.removeHeader(name),
+      };
+      void middleware(ctx, () => {
+        ctx.status = 200;
+        ctx.body = { data: "reached" };
+        return Promise.resolve();
+      }).then(() => {
+        res.statusCode = ctx.status as number;
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify(ctx.body));
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    port = (server.address() as AddressInfo).port;
+  });
+  afterAll(async () => {
+    delete process.env.CAMIS_ENDPOINT_ARTICLE_INGEST_THROTTLE_PER_MINUTE;
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  const BODY = 50 * 1024 * 1024;
+  /** What a client streaming a 50 MB body reads back before the connection ends. */
+  const stream = (chunked: boolean): Promise<string> =>
+    new Promise((resolve) => {
+      const socket = connect(port, "127.0.0.1");
+      const piece = Buffer.alloc(64 * 1024, 120);
+      const framed = chunked
+        ? Buffer.concat([
+            Buffer.from(`${piece.length.toString(16)}\r\n`),
+            piece,
+            Buffer.from("\r\n"),
+          ])
+        : piece;
+      let received = "";
+      let sent = 0;
+      let open = true;
+      const pump = (): void => {
+        while (open && sent < BODY) {
+          sent += piece.length;
+          if (!socket.write(framed)) {
+            socket.once("drain", pump);
+            return;
+          }
+        }
+        if (open) socket.end(chunked ? "0\r\n\r\n" : undefined);
+      };
+      const timer = setTimeout(() => socket.destroy(), 15_000);
+      socket.on("data", (data: Buffer) => (received += data.toString("latin1")));
+      socket.on("error", () => undefined);
+      socket.on("close", () => {
+        open = false;
+        clearTimeout(timer);
+        resolve(received);
+      });
+      socket.on("connect", () => {
+        socket.write(
+          [
+            "POST /api/articles/7/ingest HTTP/1.1",
+            "Host: localhost",
+            "Content-Type: application/json",
+            chunked ? "Transfer-Encoding: chunked" : `Content-Length: ${BODY}`,
+            "",
+            "",
+          ].join("\r\n"),
+        );
+        pump();
+      });
+    });
+
+  // What a client sees of the connection after it is refused mid-body: whether the server shut its
+  // side cleanly (end) or reset it (error), and when the connection closed, the client going on
+  // sending a little at a time and never ending.
+  const lingered = (chunked: boolean) =>
+    new Promise<{ status: string; ended: boolean; reset: boolean; closedAfter: number }>(
+      (resolve) => {
+        const socket = connect({ port, host: "127.0.0.1", allowHalfOpen: true });
+        let received = "";
+        let ended = false;
+        let reset = false;
+        let answeredAt = 0;
+        let trickle: NodeJS.Timeout | undefined;
+        socket.on("data", (data: Buffer) => {
+          received += data.toString("latin1");
+          if (answeredAt === 0) answeredAt = Date.now();
+        });
+        socket.on("end", () => (ended = true));
+        socket.on("error", () => (reset = true));
+        const timer = setTimeout(() => socket.destroy(), 8_000);
+        socket.on("close", () => {
+          clearInterval(trickle);
+          clearTimeout(timer);
+          resolve({
+            status: received.split("\r\n")[0] ?? "",
+            ended,
+            reset: reset && !ended,
+            closedAfter: Date.now() - answeredAt,
+          });
+        });
+        socket.on("connect", () => {
+          const piece = Buffer.alloc(256 * 1024, 120);
+          socket.write(
+            [
+              "POST /api/articles/7/ingest HTTP/1.1",
+              "Host: localhost",
+              "Content-Type: application/json",
+              chunked ? "Transfer-Encoding: chunked" : `Content-Length: ${BODY}`,
+              "",
+              chunked ? `${piece.length.toString(16)}\r\n` : "",
+            ].join("\r\n"),
+          );
+          socket.write(piece);
+          const byte = chunked ? Buffer.from("\r\n1\r\nx") : Buffer.from("x");
+          trickle = setInterval(() => {
+            if (!socket.destroyed) socket.write(byte);
+          }, 100);
+        });
+      },
+    );
+
+  it.each([
+    ["declared", false],
+    ["chunked", true],
+  ])(
+    "after refusing a %s body, shuts its side and drains what comes for a bounded time, never resetting under the answer",
+    async (_kind, chunked) => {
+      const seen = await lingered(chunked);
+      expect(seen.status).toBe("HTTP/1.1 413 Payload Too Large");
+      expect(seen.ended).toBe(true);
+      expect(seen.reset).toBe(false);
+      expect(seen.closedAfter).toBeGreaterThan(1_500);
+      expect(seen.closedAfter).toBeLessThan(6_000);
+    },
+    20_000,
+  );
+
+  it.each([
+    ["declared", false],
+    ["chunked", true],
+  ])(
+    "answers a %s body over its size with 413 every time",
+    async (_kind, chunked) => {
+      const answers: string[] = [];
+      for (let run = 0; run < 20; run += 1)
+        answers.push((await stream(chunked)).split("\r\n")[0] ?? "");
+      expect(answers).toEqual(new Array<string>(20).fill("HTTP/1.1 413 Payload Too Large"));
+    },
+    120_000,
+  );
 });
