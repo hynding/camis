@@ -616,6 +616,7 @@ export const filamentAdapter: GenerateAdapter = {
         mcp: apiStyle === "strapi" && storage !== "strapi" && ir.roles.length > 0,
         cors: apiStyle === "strapi",
         sessions: apiStyle === "strapi" && storage !== "strapi",
+        endpoints: endpoints.served,
       }),
     ];
     return {
