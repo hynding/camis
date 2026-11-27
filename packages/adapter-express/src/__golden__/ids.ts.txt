@@ -8,9 +8,12 @@ export const MAX_ID = 2147483647;
 export const isId = (value: unknown): value is number =>
   typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= MAX_ID;
 
-/** A route's `:id`: a decimal id a row may have, or the route answers 404 before any query. */
+/**
+ * A route's `:id`: an id a row may have, written as one (no leading zero), or the route answers 404
+ * before any query.
+ */
 export const routeId = (_req: Request, res: Response, next: NextFunction, value: string): void => {
-  if (/^\d+$/.test(value) && isId(Number(value))) {
+  if (/^[1-9]\d*$/.test(value) && isId(Number(value))) {
     next();
     return;
   }

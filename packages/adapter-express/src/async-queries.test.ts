@@ -145,7 +145,7 @@ describe("the generated routers on every database", () => {
           `const lockRow = async (tx: Executor, id: number) =>\n  ${lock[dialect]}`,
         );
         expect(ts).toContain(
-          '  const outcome = await atomic(async (tx) => {\n    const existing = await lockRow(tx, id);\n    if (!existing) return { status: 404, error: "not found" };\n    const write = await permittedUpdate(req, existing, incoming);\n    if ("error" in write) return write;\n    if (Object.keys(write.data).length > 0)\n      await tx.update(articles).set(write.data).where(eq(articles.id, id));',
+          '  const outcome = await atomic(async (tx) => {\n    const existing = await lockRow(tx, id);\n    if (!existing) return { status: 404, error: "not found" };\n    const write = await permittedUpdate(tx, req, existing, incoming);\n    if ("error" in write) return write;\n    if (Object.keys(write.data).length > 0)\n      await tx.update(articles).set(write.data).where(eq(articles.id, id));',
         );
         expect(ts).toContain(
           '  const deleted = await atomic(async (tx) => {\n    const existing = await lockRow(tx, id);\n    if (!existing || !recordAllowed(req, "Article", "delete", existing)) return false;\n    await tx.delete(articles).where(eq(articles.id, id));\n    return true;\n  });',

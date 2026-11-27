@@ -49,17 +49,55 @@ export const atomic = <T>(work: (tx: Executor) => Promise<T>): Promise<T> => {
 };
 `;
 
-const POOLED = `import { db } from "./client";
+// On PostgreSQL and MySQL a transaction holds a pooled connection: every query its work makes goes
+// through its tx, or as many concurrent transactions as the pool holds would each wait for a second
+// connection forever.
+const pooled = (dialect: "pgsql" | "mysql"): string => {
+  const mysql = dialect === "mysql";
+  return `import { db } from "./client";
 
-/** What a transaction's work writes through: a connection of its own, held until it ends. */
-export type Executor = Parameters<Parameters<typeof db.transaction>[0]>[0];
+type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+/** What a query goes through: the pool's \`db\`, or a transaction's own connection. */
+export type Executor = Pick<Transaction, "select" | "insert" | "update" | "delete">;
+${
+  mysql
+    ? `
+// At REPEATABLE READ, InnoDB's gap locks deadlock link rows deleted by their owner and written again
+// by concurrent transactions; READ COMMITTED takes none.
+const CONFIG = { isolationLevel: "read committed" } as const;
+`
+    : ""
+}
+/** The failures on which the database rolled the transaction back so that it may run again. */
+const RETRIED = new Set(${mysql ? "[1213]" : `["40001", "40P01"]`});
+const ATTEMPTS = 3;
 
-/** Runs the work in a transaction: committed when it settles, rolled back when it throws. */
-export const atomic = <T>(work: (tx: Executor) => Promise<T>): Promise<T> => db.transaction(work);
+const retried = (error: unknown): boolean =>
+  typeof error === "object" &&
+  error !== null &&
+  RETRIED.has((error as { ${mysql ? "errno?: number" : "code?: string"} }).${mysql ? "errno" : "code"} ?? ${mysql ? "0" : `""`});
+
+/**
+ * Runs the work in a transaction: committed when it settles, rolled back when it throws. When the
+ * database rolls it back to break ${mysql ? "a deadlock" : "a deadlock or a serialization conflict"},
+ * the work runs again, up to ATTEMPTS times in all. So the work may run more than once: it does
+ * nothing but query through its tx and return what it found, and sends no answer and changes nothing
+ * outside the transaction.
+ */
+export const atomic = async <T>(work: (tx: Executor) => Promise<T>): Promise<T> => {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await db.transaction(work${mysql ? ", CONFIG" : ""});
+    } catch (error) {
+      if (attempt >= ATTEMPTS || !retried(error)) throw error;
+    }
+  }
+};
 `;
+};
 
 /** `src/db/atomic.ts`: the transaction a row and its to-many links are written in. */
 export const atomicFile = (dialect: Dialect): GeneratedFile => ({
   path: "src/db/atomic.ts",
-  content: withMarker(dialect === "sqlite" ? SQLITE : POOLED),
+  content: withMarker(dialect === "sqlite" ? SQLITE : pooled(dialect)),
 });

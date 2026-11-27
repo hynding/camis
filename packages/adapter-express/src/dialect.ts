@@ -23,7 +23,7 @@ export const DIALECTS: Record<Dialect, DialectSpec> = {
     configDialect: "sqlite",
     idColumn: `id: integer("id").primaryKey({ autoIncrement: true })`,
     idImports: ["integer"],
-    driverDep: { "better-sqlite3": "^11.8.0" },
+    driverDep: { "better-sqlite3": "^12.11.1" },
     devDriverDep: { "@types/better-sqlite3": "^7.6.0" },
     clientImports: `import Database from "better-sqlite3";\nimport { drizzle } from "drizzle-orm/better-sqlite3";`,
     clientDb: `drizzle(new Database(process.env.DB_FILE_NAME ?? "./data.db"), { schema })`,

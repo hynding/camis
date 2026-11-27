@@ -33,8 +33,12 @@ const lockRow = async (tx: Executor, id: number) =>
 type Refusal = { status: number; error: string };
 type Row = Record<string, unknown>;
 
-/** What an update may write to this row, or why it may not: its record condition and field rules. */
+/**
+ * What an update may write to this row, or why it may not: its record condition and field rules.
+ * Inside a transaction its queries go through the transaction's executor.
+ */
 const permittedUpdate = async (
+  executor: Executor,
   req: Request,
   existing: Row,
   incoming: Row,
@@ -106,7 +110,7 @@ articlesRouter.patch("/:id", asyncRoute(async (req, res) => {
   const outcome = await atomic(async (tx) => {
     const existing = await lockRow(tx, id);
     if (!existing) return { status: 404, error: "not found" };
-    const write = await permittedUpdate(req, existing, incoming);
+    const write = await permittedUpdate(tx, req, existing, incoming);
     if ("error" in write) return write;
     if (Object.keys(write.data).length > 0)
       await tx.update(articles).set(write.data).where(eq(articles.id, id));

@@ -130,7 +130,7 @@ export const emitMorphsFile = (doc: IrDocument, links: MorphLinks): string => {
   const find = types
     .map(
       (ct) =>
-        `  ${ct.name}: async (id) =>\n    (await db.select().from(${table(ct)}).where(eq(${table(ct)}.id, id)).limit(1))[0],`,
+        `  ${ct.name}: async (executor, id) =>\n    (await executor.select().from(${table(ct)}).where(eq(${table(ct)}.id, id)).limit(1))[0],`,
     )
     .join("\n");
   const own = [...links.own]
@@ -145,8 +145,8 @@ export const emitMorphsFile = (doc: IrDocument, links: MorphLinks): string => {
         .filter((l) => l.many)
         .map(
           (l) => `  "${type}.${l.key}": {
-    read: (owner) =>
-      db
+    read: (executor, owner) =>
+      executor
         .select({ type: ${l.table}.target_type, id: ${l.table}.target_id })
         .from(${l.table})
         .where(eq(${l.table}.${l.ownerColumn}, owner))
@@ -167,17 +167,17 @@ export const emitMorphsFile = (doc: IrDocument, links: MorphLinks): string => {
       const reads = list.map((inverse) => {
         const owner = table(inverse.owner);
         const read = inverse.via.many
-          ? `async (id) =>
+          ? `async (executor, id) =>
         (
-          await db
+          await executor
             .select({ row: ${owner} })
             .from(${inverse.via.table})
             .innerJoin(${owner}, eq(${inverse.via.table}.${inverse.via.ownerColumn}, ${owner}.id))
             .where(and(eq(${inverse.via.table}.target_type, "${type}"), eq(${inverse.via.table}.target_id, id)))
             .orderBy(asc(${owner}.id))
         ).map((r) => r.row)`
-          : `(id) =>
-        db
+          : `(executor, id) =>
+        executor
           .select()
           .from(${owner})
           .where(and(eq(${owner}.${inverse.via.key}_type, "${type}"), eq(${owner}.${inverse.via.key}_id, id)))
@@ -195,7 +195,6 @@ export const emitMorphsFile = (doc: IrDocument, links: MorphLinks): string => {
 
   return withMarker(`import { and, asc, eq } from "drizzle-orm";
 import type { Executor } from "./db/atomic";
-import { db } from "./db/client";
 import { ${imports.join(", ")} } from "./db/schema";
 import { isId } from "./ids";
 
@@ -209,7 +208,7 @@ type Row = Record<string, unknown>;
 export type Allowed = (type: string, row: Row) => boolean;
 
 /** Each content type a link may name → its entry with that id, if there is one. */
-const FIND: Record<string, (id: number) => Promise<Row | undefined>> = {
+const FIND: Record<string, (executor: Executor, id: number) => Promise<Row | undefined>> = {
 ${find}
 };
 
@@ -222,7 +221,7 @@ ${own}
 const LINK_TABLES: Record<
   string,
   {
-    read: (owner: number) => Promise<Link[]>;
+    read: (executor: Executor, owner: number) => Promise<Link[]>;
     replace: (tx: Executor, owner: number, entries: Link[]) => Promise<void>;
   }
 > = {
@@ -232,7 +231,7 @@ ${tables}
 /** Each content type's inverses: the entries of another type whose link names an entry of it. */
 const INVERSES: Record<
   string,
-  { key: string; many: boolean; owner: string; read: (id: number) => Promise<Row[]> }[]
+  { key: string; many: boolean; owner: string; read: (executor: Executor, id: number) => Promise<Row[]> }[]
 > = {
 ${inverses}
 };
@@ -244,16 +243,16 @@ const isLink = (value: unknown): value is Link =>
   Number.isInteger((value as Partial<Link>).id);
 
 /** Whether a link names an entry that is there and that the caller may read. */
-const reachable = async (link: Link, allowed: Allowed): Promise<boolean> => {
+const reachable = async (executor: Executor, link: Link, allowed: Allowed): Promise<boolean> => {
   if (!isId(link.id)) return false;
-  const row = await FIND[link.type]?.(link.id);
+  const row = await FIND[link.type]?.(executor, link.id);
   return row !== undefined && allowed(link.type, row);
 };
 
 /** The links, in order, that name an entry that is there and that the caller may read. */
-const reachableOnly = async (entries: Link[], allowed: Allowed): Promise<Link[]> => {
+const reachableOnly = async (executor: Executor, entries: Link[], allowed: Allowed): Promise<Link[]> => {
   const out: Link[] = [];
-  for (const entry of entries) if (await reachable(entry, allowed)) out.push(entry);
+  for (const entry of entries) if (await reachable(executor, entry, allowed)) out.push(entry);
   return out;
 };
 
@@ -261,7 +260,12 @@ const unique = (entries: Link[]): Link[] =>
   entries.filter((e, i) => entries.findIndex((o) => o.type === e.type && o.id === e.id) === i);
 
 /** Why a body's links are refused, naming the key; null when every link names a readable entry. */
-export const checkLinks = async (type: string, body: Row, allowed: Allowed): Promise<string | null> => {
+export const checkLinks = async (
+  executor: Executor,
+  type: string,
+  body: Row,
+  allowed: Allowed,
+): Promise<string | null> => {
   for (const { key, many } of OWN[type] ?? []) {
     if (!(key in body)) continue;
     const value = body[key];
@@ -269,7 +273,7 @@ export const checkLinks = async (type: string, body: Row, allowed: Allowed): Pro
     if (!Array.isArray(entries) || !entries.every(isLink))
       return \`"\${key}" takes \${many ? "a list of " : ""}{ type, id }\`;
     for (const entry of entries)
-      if (!(await reachable(entry, allowed)))
+      if (!(await reachable(executor, entry, allowed)))
         return \`"\${key}" names no \${entry.type} \${entry.id} that can be read\`;
   }
   return null;
@@ -303,21 +307,27 @@ export const dropLinks = async (tx: Executor, type: string, id: number): Promise
 };
 
 /** A row with its links as { type, id } and its inverses as the ids of the entries linking it. */
-export const readLinks = async (type: string, row: Row, allowed: Allowed): Promise<Row> => {
+export const readLinks = async (
+  executor: Executor,
+  type: string,
+  row: Row,
+  allowed: Allowed,
+): Promise<Row> => {
   const out = { ...row };
   const id = Number(row.id);
   for (const { key, many } of OWN[type] ?? []) {
     if (many) {
-      out[key] = await reachableOnly((await LINK_TABLES[\`\${type}.\${key}\`]?.read(id)) ?? [], allowed);
+      const linked = (await LINK_TABLES[\`\${type}.\${key}\`]?.read(executor, id)) ?? [];
+      out[key] = await reachableOnly(executor, linked, allowed);
       continue;
     }
     const link = { type: row[\`\${key}_type\`], id: row[\`\${key}_id\`] };
     delete out[\`\${key}_type\`];
     delete out[\`\${key}_id\`];
-    out[key] = isLink(link) && (await reachable(link, allowed)) ? link : null;
+    out[key] = isLink(link) && (await reachable(executor, link, allowed)) ? link : null;
   }
   for (const inverse of INVERSES[type] ?? []) {
-    const ids = (await inverse.read(id)).filter((r) => allowed(inverse.owner, r)).map((r) => r.id);
+    const ids = (await inverse.read(executor, id)).filter((r) => allowed(inverse.owner, r)).map((r) => r.id);
     out[inverse.key] = inverse.many ? ids : (ids[0] ?? null);
   }
   return out;

@@ -8,6 +8,27 @@ interface HttpError {
   message?: unknown;
 }
 
+/** A stack's frames: its first line repeats the message. */
+const frames = (stack: unknown): string =>
+  typeof stack === "string"
+    ? stack
+        .split("\n")
+        .filter((line) => line.trimStart().startsWith("at "))
+        .join("\n")
+    : "";
+
+/**
+ * What is logged of a failure. A database driver's error carries the statement and its values
+ * (mysql2's `sql`, postgres-js's `parameters` and `detail`) and its message can quote a value it
+ * refused, so of an error with a code only its name, its code and its frames are logged.
+ */
+const logged = (error: unknown): string => {
+  if (!(error instanceof Error)) return "a value that is not an Error was thrown";
+  const code = (error as { code?: unknown }).code;
+  const what = code === undefined ? `${error.name}: ${error.message}` : `${error.name} (code ${String(code)})`;
+  return `${what}\n${frames(error.stack)}`;
+};
+
 const clientStatus = (error: HttpError): number | undefined => {
   const status = error.status ?? error.statusCode;
   return typeof status === "number" && status >= 400 && status < 500 ? status : undefined;
@@ -16,7 +37,8 @@ const clientStatus = (error: HttpError): number | undefined => {
 /**
  * The last middleware, for an error a route or middleware hands on. A client error (express.json()'s
  * 400 for a body that does not parse, 413 for one too large) answers its message as JSON; any other
- * answers 500 with nothing of the error in it (no stack, query or path) and is logged on the server.
+ * answers 500 with nothing of the error in it (no stack, query or path) and is logged on the server
+ * without the values it carries.
  */
 export const errorHandler = (
   error: unknown,
@@ -35,6 +57,6 @@ export const errorHandler = (
     res.status(status).json({ error: exposed ? details.message : "bad request" });
     return;
   }
-  console.error(error);
+  console.error("request failed:", logged(error));
   res.status(500).json({ error: "internal error" });
 };

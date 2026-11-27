@@ -38,20 +38,24 @@ const allowed =
     authorizeAction(roleOf(req), type, "read") && recordAllowed(req, type, "read", row);
 
 const view = async (req: Request, row: Record<string, unknown>) =>
-  filterRead(req, "Note", await readLinks("Note", row, allowed(req)));
+  filterRead(req, "Note", await readLinks(db, "Note", row, allowed(req)));
 
 type Refusal = { status: number; error: string };
 type Row = Record<string, unknown>;
 
-/** What an update may write to this row, or why it may not: its record condition and field rules. */
+/**
+ * What an update may write to this row, or why it may not: its record condition and field rules.
+ * Inside a transaction its queries go through the transaction's executor.
+ */
 const permittedUpdate = async (
+  executor: Executor,
   req: Request,
   existing: Row,
   incoming: Row,
 ): Promise<Refusal | { data: Row; permitted: Row }> => {
   if (!recordAllowed(req, "Note", "update", existing)) return { status: 404, error: "not found" };
   const permitted = stripWrites(req, "Note", { ...existing, ...incoming }, incoming);
-  const refused = await checkLinks("Note", permitted, allowed(req));
+  const refused = await checkLinks(executor, "Note", permitted, allowed(req));
   if (refused !== null) return { status: 400, error: refused };
   const data = linkColumns("Note", permitted);
   if (!recordAllowed(req, "Note", "update", { ...existing, ...data })) return { status: 403, error: "forbidden" };
@@ -98,7 +102,7 @@ notesRouter.post("/", asyncRoute(async (req, res) => {
   }
   const proposed = pick(req.body, ["title", "subjects", "pinned_to"]);
   const permitted = assignOwners(req, "Note", stripWrites(req, "Note", proposed, proposed));
-  const refused = await checkLinks("Note", permitted, allowed(req));
+  const refused = await checkLinks(db, "Note", permitted, allowed(req));
   if (refused !== null) {
     res.status(400).json({ error: refused });
     return;
@@ -128,7 +132,7 @@ notesRouter.patch("/:id", asyncRoute(async (req, res) => {
   const outcome = await atomic(async (tx) => {
     const existing = await lockRow(tx, id);
     if (!existing) return { status: 404, error: "not found" };
-    const write = await permittedUpdate(req, existing, incoming);
+    const write = await permittedUpdate(tx, req, existing, incoming);
     if ("error" in write) return write;
     if (Object.keys(write.data).length > 0)
       await tx.update(notes).set(write.data).where(eq(notes.id, id));

@@ -90,7 +90,7 @@ export const emitRoutes = (
   const permittedLengthCheck = checkLengths("data");
   // A body naming an entry the caller may not read (or that is not there) is refused whole.
   const refusal = (body: string, allowed: string) => `
-  const refused = await checkLinks("${typeName}", ${body}, ${allowed});
+  const refused = await checkLinks(db, "${typeName}", ${body}, ${allowed});
   if (refused !== null) {
     res.status(400).json({ error: refused });
     return;
@@ -109,7 +109,7 @@ export const emitRoutes = (
       ? `${rows}.map((row) => filterRead(req, "${typeName}", row))`
       : `await Promise.all(${rows}.map((row) => view(req, row)))`;
   const readLinked = (row: string) =>
-    links === "none" ? row : `await readLinks("${typeName}", ${row}, allowed)`;
+    links === "none" ? row : `await readLinks(db, "${typeName}", ${row}, allowed)`;
 
   // Every database's client awaits a query; only an insert's id is dialect's own: MySQL has no
   // RETURNING, so drizzle answers the id from the insert's result there. No write returns its row on
@@ -188,7 +188,7 @@ ${t}Router.param("id", routeId);`;
   res.json(${listAll});`
         : `
   const rows = ${listAll};
-  res.json(await Promise.all(rows.map((row) => readLinks("${typeName}", row, allowed))));`;
+  res.json(await Promise.all(rows.map((row) => readLinks(db, "${typeName}", row, allowed))));`;
     const create = own
       ? `
   const body = pick(req.body, [${writable}]);${refusal("body", "allowed")}
@@ -274,8 +274,12 @@ const lockRow = async (tx: Executor, id: number) =>
 type Refusal = { status: number; error: string };
 type Row = Record<string, unknown>;
 
-/** What an update may write to this row, or why it may not: its record condition and field rules. */
+/**
+ * What an update may write to this row, or why it may not: its record condition and field rules.
+ * Inside a transaction its queries go through the transaction's executor.
+ */
 const permittedUpdate = async (
+  executor: Executor,
   req: Request,
   existing: Row,
   incoming: Row,
@@ -284,7 +288,7 @@ ${refusalOf(`!recordAllowed(req, "${typeName}", "update", existing)`, 404, `"not
   const permitted = stripWrites(req, "${typeName}", { ...existing, ...incoming }, incoming);${
     own
       ? `
-  const refused = await checkLinks("${typeName}", permitted, allowed(req));
+  const refused = await checkLinks(executor, "${typeName}", permitted, allowed(req));
   if (refused !== null) return { status: 400, error: refused };`
       : ""
   }
@@ -314,7 +318,7 @@ ${refusalOf(`!recordAllowed(req, "${typeName}", "update", { ...existing, ...data
   const securedPatch = hasAi
     ? `
   const existing = await find(id);${notFound("!existing")}
-  const before = await permittedUpdate(req, existing, incoming);
+  const before = await permittedUpdate(db, req, existing, incoming);
   if ("error" in before) {
     res.status(before.status).json({ error: before.error });
     return;
@@ -323,7 +327,7 @@ ${refusalOf(`!recordAllowed(req, "${typeName}", "update", { ...existing, ...data
   const outcome = await atomic(async (tx) => {
     const locked = await lockRow(tx, id);
     if (!locked) return { status: 404, error: "not found" };
-    const write = await permittedUpdate(req, locked, incoming);
+    const write = await permittedUpdate(tx, req, locked, incoming);
     if ("error" in write) return write;
     if (JSON.stringify(write.data) !== JSON.stringify(before.data))
       return { status: 409, error: "the entry changed while it was being updated; send the update again" };
@@ -334,7 +338,7 @@ ${refusalOf(`!recordAllowed(req, "${typeName}", "update", { ...existing, ...data
   const outcome = await atomic(async (tx) => {
     const existing = await lockRow(tx, id);
     if (!existing) return { status: 404, error: "not found" };
-    const write = await permittedUpdate(req, existing, incoming);
+    const write = await permittedUpdate(tx, req, existing, incoming);
     if ("error" in write) return write;
     ${update("tx", "write.data", "    ")}${writeLinksOf}
     return write;
@@ -364,7 +368,7 @@ const allowed =
     authorizeAction(roleOf(req), type, "read") && recordAllowed(req, type, "read", row);
 
 const view = async (req: Request, row: Record<string, unknown>) =>
-  filterRead(req, "${typeName}", await readLinks("${typeName}", row, allowed(req)));
+  filterRead(req, "${typeName}", await readLinks(db, "${typeName}", row, allowed(req)));
 `
   }${permittedUpdate}
 ${routerDeclaration}
