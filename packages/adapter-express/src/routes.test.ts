@@ -13,15 +13,15 @@ const article: ContentType = {
 
 describe("emitRoutes", () => {
   const ts = emitRoutes(article, []);
-  it("emits a marked CRUD router using sync better-sqlite3 calls", () => {
+  it("emits a marked CRUD router awaiting each query", () => {
     expect(ts).toContain("@camis:generated");
     expect(ts).toContain("export const articlesRouter = Router();");
-    expect(ts).toContain("db.select().from(articles).all()");
-    expect(ts).toContain("db.insert(articles).values(data).returning().get()");
-    expect(ts).toContain('const data = pick(req.body, ["title", "published"]);');
+    expect(ts).toContain("await db.select().from(articles).orderBy(asc(articles.id))");
     expect(ts).toContain(
-      "db.delete(articles).where(eq(articles.id, Number(req.params.id))).run();",
+      "const [{ id }] = await db.insert(articles).values(data).returning({ id: articles.id });",
     );
+    expect(ts).toContain('const data = pick(req.body, ["title", "published"]);');
+    expect(ts).toContain("await db.delete(articles).where(eq(articles.id, id));");
   });
 
   it("includes FK columns in the insertable pick-list", () => {
@@ -41,7 +41,7 @@ describe("emitRoutes", () => {
     );
     expect(ts).toContain('authorizeAction(roleOf(req), "Article", "read")');
     expect(ts).toContain("filterRead(req,");
-    expect(ts).toContain("res.json({ id: Number(req.params.id) });");
+    expect(ts).toContain("res.json({ id });");
     expect(ts).toContain('res.setHeader("Content-Range"');
   });
 
@@ -51,7 +51,7 @@ describe("emitRoutes", () => {
   it("with aiColumns, excludes them from the pick-list and weaves async populate", () => {
     const ts = emitRoutes(article, [], { aiColumns: ["summary"] });
     expect(ts).toContain('import { populateAiFields } from "../ai/populate";');
-    expect(ts).toContain('Router.post("/", async (req, res) =>');
+    expect(ts).toContain('Router.post("/", asyncRoute(async (req, res) =>');
     expect(ts).toContain('data = await populateAiFields("Article", data, "create");');
     expect(ts).toContain('data = await populateAiFields("Article", data, "update");');
     expect(ts).not.toContain('"summary"');
