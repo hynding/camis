@@ -14,10 +14,9 @@ import { emitHookFiles } from "./hooks/emit";
 import { emitRouteHookFiles, routerConfig } from "./hooks/route-hooks";
 import { emitEndpointFiles } from "./hooks/endpoints";
 import {
-  ENDPOINT_GUARDS_MIDDLEWARE,
   emitEndpointGuardFiles,
   endpointGuardGaps,
-  hasEndpointGuards,
+  endpointGuardMiddlewares,
 } from "./hooks/endpoint-guards";
 import { emitScheduleFiles } from "./hooks/schedules";
 import { emitPermissions } from "./permissions/emit";
@@ -99,7 +98,7 @@ export const strapiAdapter: GenerateAdapter = {
       ...skeletonFiles(options.projectName, {
         cron: (doc.schedules ?? []).length > 0,
         plugins: fieldPlugins(doc),
-        ...(hasEndpointGuards(doc) ? { endpointGuards: ENDPOINT_GUARDS_MIDDLEWARE } : {}),
+        endpointGuards: endpointGuardMiddlewares(doc),
       }),
       ...doc.contentTypes
         .filter((ct) => ct.builtin === undefined)

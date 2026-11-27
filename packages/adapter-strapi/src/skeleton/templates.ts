@@ -113,15 +113,23 @@ export const API_TS = `export default {
 `;
 
 /**
- * Strapi's middlewares as a new project lists them; with endpoint guards, their global middleware
- * after strapi::errors (so an error is answered in Strapi's body) and ahead of strapi::cors and
- * strapi::body (so a preflight and a refused body never reach them).
+ * Strapi's middlewares as a new project lists them; with endpoint guards, their global middlewares
+ * after strapi::errors (so an error is answered in Strapi's body): the one answering other origins
+ * ahead of strapi::cors (so the app's CORS never answers for such an endpoint), the checks after it
+ * (so a refusal carries the app's CORS headers) and ahead of strapi::body (so a refused body is
+ * never parsed).
  */
-export const middlewaresTs = (endpointGuards: string | undefined): string => `export default [
+export const middlewaresTs = ({
+  cors,
+  guards,
+}: {
+  cors?: string;
+  guards?: string;
+}): string => `export default [
   'strapi::logger',
   'strapi::errors',
-  'strapi::security',${endpointGuards === undefined ? "" : `\n  'global::${endpointGuards}',`}
-  'strapi::cors',
+  'strapi::security',${cors === undefined ? "" : `\n  'global::${cors}',`}
+  'strapi::cors',${guards === undefined ? "" : `\n  'global::${guards}',`}
   'strapi::poweredBy',
   'strapi::query',
   'strapi::body',

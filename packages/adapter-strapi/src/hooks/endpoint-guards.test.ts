@@ -196,12 +196,12 @@ const context = (
   method: string,
   path: string,
   headers: Record<string, string> = {},
-  body: Buffer | undefined = undefined,
+  body: Buffer | Buffer[] | undefined = undefined,
   ip = "203.0.113.7",
 ): FakeContext => {
   const lower = Object.fromEntries(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v]));
   const socket = {};
-  const req = Object.assign(Readable.from(body === undefined ? [] : [body]), {
+  const req = Object.assign(Readable.from(body === undefined ? [] : [body].flat()), {
     headers: lower,
     socket,
     method,
@@ -540,16 +540,19 @@ describe("strapi endpoint guards: the generated middlewares at work", () => {
   });
 
   it("counts the bytes of a body sent without a length, refusing one too large and closing the connection, and passing the rest on whole", async () => {
-    const chunked = (body: string) => {
-      const ctx = post(body, { "Transfer-Encoding": "chunked" });
-      delete ctx.req.headers["content-length"];
-      return ctx;
-    };
-    const large = await run(chunked("x".repeat(65)));
+    // Sent in chunks, the rest still to come when the limit is passed.
+    const chunked = (...chunks: string[]) =>
+      context(
+        "POST",
+        "/api/articles/7/ingest",
+        { "Content-Type": "application/json", "Transfer-Encoding": "chunked" },
+        chunks.map((c) => Buffer.from(c)),
+      );
+    const large = await run(chunked("x".repeat(65), "y".repeat(1000)));
     expect(large.reached).toBe(false);
     refused(large.ctx, 413, "PayloadTooLargeError");
     closes(large.ctx);
-    const small = await run(chunked("x".repeat(64)));
+    const small = await run(chunked("x".repeat(30), "x".repeat(34)));
     expect(small.seen).toBe("x".repeat(64));
     expect(small.ctx.req.headers["content-length"]).toBe("64");
     expect(small.ctx.req.headers["transfer-encoding"]).toBeUndefined();

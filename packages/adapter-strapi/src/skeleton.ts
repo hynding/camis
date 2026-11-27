@@ -1,4 +1,5 @@
 import type { GeneratedFile } from "@camis/adapter-kernel";
+import type { EndpointGuardMiddlewares } from "./hooks/endpoint-guards";
 import {
   ADMIN_TS,
   API_TS,
@@ -16,12 +17,12 @@ export const skeletonFiles = (
   {
     cron = false,
     plugins = [],
-    endpointGuards,
+    endpointGuards = {},
   }: {
     cron?: boolean;
     plugins?: readonly string[];
-    /** The endpoint guards' global middleware, when the project has one. */
-    endpointGuards?: string;
+    /** The endpoint guards' global middlewares, those the project has. */
+    endpointGuards?: EndpointGuardMiddlewares;
   } = {},
 ): GeneratedFile[] => [
   { path: "package.json", content: packageJson(projectName, plugins) },
