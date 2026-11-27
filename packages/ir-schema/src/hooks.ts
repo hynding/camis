@@ -74,12 +74,22 @@ const headerName = z.string().refine((name) => HTTP_TOKEN.test(name), {
   params: { irCode: "invalid_header_name" },
 });
 
-const mediaType = z.string().refine((type) => MEDIA_TYPE.test(type), {
-  message: "a media type is type/subtype, without parameters (application/json, text/plain)",
+// A wildcard (*/*, text/*) is an Accept header's range: no body is of that type.
+const mediaType = z.string().refine((type) => MEDIA_TYPE.test(type) && !type.includes("*"), {
+  message:
+    "a media type is type/subtype, without parameters or a wildcard (application/json, text/plain)",
   params: { irCode: "invalid_media_type" },
 });
 
-const atLeastOne = z.number().int().min(1);
+// Targets write the number as a literal, and past 2^31 - 1 some would write it in exponent form.
+const LARGEST = 2_147_483_647;
+const atLeastOne = z.number().int().min(1).max(LARGEST);
+
+/**
+ * A target tells its endpoints apart by a route value of this name, which
+ * a path parameter of the same name would replace.
+ */
+const RESERVED_PATH_PARAMETER = "endpoint";
 
 /**
  * Hand-written code behind an API route of its own, beside a content type's (Strapi's custom route
@@ -111,6 +121,14 @@ export const endpoint = z
     crossOrigin: z.object({ headers: z.array(headerName) }).optional(),
   })
   .superRefine((e, ctx) => {
+    if (e.path.split("/").includes(`:${RESERVED_PATH_PARAMETER}`)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `endpoint "${e.name}" names a path parameter "${RESERVED_PATH_PARAMETER}", which a target routes the endpoint by; name it otherwise`,
+        params: { irCode: "reserved_path_parameter" },
+        path: ["path"],
+      });
+    }
     if (e.crossOrigin !== undefined && e.public !== true) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
