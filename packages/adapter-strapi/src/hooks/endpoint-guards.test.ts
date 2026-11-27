@@ -115,12 +115,18 @@ describe("strapi endpoint guards: the generated project", () => {
       "`CAMIS_ENDPOINT_MAX_TRACKED_CALLERS`",
       "100000 by default",
       "every caller not tracked shares one count for the endpoint, limited to the endpoint's rate a window",
-      "a new caller, or one whose own count has expired, falls into that shared count",
+      "a caller's count stops taking room once it has expired",
+      "an attacker who keeps the cap's worth of distinct callers active every minute (an IPv6 caller counted by its /64) holds it full",
+      "every caller not already tracked then shares the endpoint's rate in total",
+      "a limit at the reverse proxy or the network",
+      "about 205 bytes a caller",
       "about 20 MB of memory per throttled endpoint",
       "a caller already tracked keeps its own count until it expires",
-      "at most 1 MiB more of its body is read and discarded",
+      "about 1 MiB more of its body is read and discarded",
+      "can lose the refusal of a body more than about 1 MiB over the limit, as behind nginx",
       "dropped when the client ends it or at most 2 seconds after the answer",
       "request sent after the refused one on the same connection is not processed",
+      "while the middlewares listed ahead of the camis ones keep requests in order",
       "up to twice its rate across the turn of a window",
       "an IPv6 caller by its /64",
       "NAT64, Teredo",
@@ -595,34 +601,82 @@ describe("strapi endpoint guards: the generated middlewares at work", () => {
       expect((await run(ping("192.0.2.7"), middleware)).reached).toBe(true);
       expect((await run(ping("192.0.2.7"), middleware)).ctx.status).toBe(429);
       expect((await run(ping("192.0.2.8"), middleware)).reached).toBe(true);
-      // The shared count's minute passes, the cap still full of expired counts: three more.
+      // A minute on, the two counts have expired and make room for two new callers, each
+      // counted apart; the next shares a fresh count.
       at.monotonic += 61_000;
-      for (const ip of ["192.0.2.9", "192.0.2.10", "192.0.2.11"])
+      for (const ip of ["192.0.2.9", "192.0.2.10"]) {
+        for (let i = 0; i < 3; i += 1) expect((await from(ip)).reached).toBe(true);
+        expect((await from(ip)).ctx.status).toBe(429);
+      }
+      for (const ip of ["192.0.2.11", "192.0.2.12", "192.0.2.13"])
         expect((await from(ip)).reached).toBe(true);
-      expect((await from("192.0.2.12")).ctx.status).toBe(429);
+      expect((await from("192.0.2.14")).ctx.status).toBe(429);
     });
   });
 
-  it("counts a caller whose own count has expired in the shared count while the cap is full", async () => {
+  it("frees an expired count's room for the next caller as it expires, the oldest first, while the cap is full", async () => {
     const at = clocks();
     await withMaxTracked("2", async () => {
       const middleware = stack();
       const from = (ip: string) => run(post("{}", {}, ip), middleware);
-      expect((await from("192.0.2.1")).reached).toBe(true);
-      at.monotonic += 50_000;
+      const tracked = async (ip: string): Promise<void> => {
+        for (let i = 0; i < 3; i += 1) expect((await from(ip)).reached).toBe(true);
+        expect((await from(ip)).ctx.status).toBe(429);
+      };
+      await tracked("192.0.2.1");
+      at.monotonic += 30_000;
       expect((await from("192.0.2.2")).reached).toBe(true);
-      // The first caller's count expires; the second's still holds, so the cap is full.
-      at.monotonic += 11_000;
-      for (let i = 0; i < 3; i += 1) expect((await from("192.0.2.1")).reached).toBe(true);
-      expect((await from("192.0.2.1")).ctx.status).toBe(429);
-      expect((await from("192.0.2.3")).ctx.status).toBe(429);
-      for (let i = 0; i < 2; i += 1) expect((await from("192.0.2.2")).reached).toBe(true);
-      expect((await from("192.0.2.2")).ctx.status).toBe(429);
-      // A window's turn frees room, and the first caller is tracked again, by its own count.
-      at.monotonic += 60_000;
-      for (let i = 0; i < 3; i += 1) expect((await from("192.0.2.1")).reached).toBe(true);
-      expect((await from("192.0.2.1")).ctx.status).toBe(429);
-      expect((await from("192.0.2.3")).reached).toBe(true);
+      // The window turns and the first caller's count expires: it makes room at once.
+      at.monotonic += 31_000;
+      await tracked("192.0.2.3");
+      // Full again, the second caller's count still running: the next caller shares.
+      at.monotonic += 1_000;
+      for (let i = 0; i < 3; i += 1) expect((await from("192.0.2.4")).reached).toBe(true);
+      expect((await from("192.0.2.5")).ctx.status).toBe(429);
+      // The second caller's count expires in its turn, and the first caller returning takes
+      // its room, counted on its own again.
+      at.monotonic += 29_000;
+      await tracked("192.0.2.1");
+      expect((await from("192.0.2.6")).ctx.status).toBe(429);
+    });
+  });
+
+  it("serves new callers once a flood's counts expire, though the flood comes back every two minutes", async () => {
+    const at = clocks();
+    await withMaxTracked("100", async () => {
+      const middleware = stack();
+      let served = 0;
+      for (let second = 0; second < 600; second += 1) {
+        if (second % 120 === 0) {
+          for (let i = 0; i < 100; i += 1)
+            await run(post("{}", {}, `198.18.${second >> 2}.${i}`), middleware);
+        }
+        if ((await run(post("{}", {}, `10.1.${second >> 8}.${second & 255}`), middleware)).reached)
+          served += 1;
+        at.monotonic += 1_000;
+      }
+      // Only the first minute, while the flood's counts are running, shares one count.
+      expect(served).toBeGreaterThanOrEqual(540);
+    });
+  });
+
+  it("looks only at the oldest count to make room, never walking the callers", async () => {
+    const at = clocks();
+    await withMaxTracked("1000", async () => {
+      const middleware = stack();
+      for (let i = 0; i < 1_000; i += 1)
+        await run(post("{}", {}, `10.2.${i >> 8}.${i & 255}`), middleware);
+      at.monotonic += 61_000;
+      const keys = vi.spyOn(Map.prototype, "keys");
+      const iterate = vi.spyOn(Map.prototype, Symbol.iterator);
+      const forEach = vi.spyOn(Map.prototype, "forEach");
+      const values = vi.spyOn(Map.prototype, "values");
+      const entries = vi.spyOn(Map.prototype, "entries");
+      const remove = vi.spyOn(Map.prototype, "delete");
+      for (let i = 0; i < 5; i += 1) await run(post("{}", {}, `172.16.1.${i}`), middleware);
+      expect(keys.mock.calls.length).toBeLessThanOrEqual(5);
+      expect(remove.mock.calls.length).toBeLessThanOrEqual(5);
+      for (const spy of [iterate, forEach, values, entries]) expect(spy).not.toHaveBeenCalled();
     });
   });
 
