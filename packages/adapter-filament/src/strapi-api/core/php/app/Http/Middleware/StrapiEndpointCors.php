@@ -32,9 +32,12 @@ final class StrapiEndpointCors
     /** How long a browser may keep a preflight's answer, in seconds (Chromium keeps two hours at most). */
     private const MAX_AGE = '7200';
 
+    /** The route default naming the endpoints: a dot no path parameter's name has, so none replaces it. */
+    private const ENDPOINT = 'camis.endpoint';
+
     public function handle(Request $request, Closure $next): Response
     {
-        $named = self::named($request->route('endpoint'));
+        $named = self::named($request->route(self::ENDPOINT));
         if ($request->isMethod('OPTIONS')) {
             return self::openToAnyOrigin(self::preflight($named, $request->headers->get('Access-Control-Request-Method')));
         }
@@ -64,7 +67,7 @@ final class StrapiEndpointCors
         if (! $request->isMethod('OPTIONS') || $asked === null) {
             return true;
         }
-        foreach (self::named($route->defaults['endpoint'] ?? null) as $endpoint) {
+        foreach (self::named($route->defaults[self::ENDPOINT] ?? null) as $endpoint) {
             $guards = config('camis-endpoints.'.$endpoint);
             if (! is_array($guards) || self::allows($guards, $asked)) {
                 return true;

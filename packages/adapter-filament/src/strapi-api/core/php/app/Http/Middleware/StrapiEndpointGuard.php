@@ -34,7 +34,8 @@ final class StrapiEndpointGuard
 {
     public function handle(Request $request, Closure $next): Response
     {
-        $endpoint = (string) $request->route('endpoint');
+        // camis.endpoint: a dot no path parameter's name has, so none can replace it.
+        $endpoint = (string) $request->route('camis.endpoint');
         $guards = config('camis-endpoints.'.$endpoint);
         if (! is_array($guards)) {
             throw new RuntimeException('config/camis-endpoints.php has no entry for endpoint "'.$endpoint.'"; clear a stale config cache (php artisan config:clear).');

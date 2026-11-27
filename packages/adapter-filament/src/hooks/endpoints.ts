@@ -47,9 +47,16 @@ export const endpointsPlan = (
 /** The endpoint's path as Laravel routes it: Strapi's `:param` is Laravel's `{param}`. */
 export const laravelPath = (e: Endpoint): string => e.path.replace(/:([^/]+)/g, "{$1}");
 
+/**
+ * The route default naming the endpoint a route reaches, which CamisEndpoints and the guards read.
+ * Laravel lets a path parameter replace a default of the same name, and an IR path parameter is
+ * letters, digits, _ and -, so the dot keeps any parameter from choosing another endpoint.
+ */
+export const ENDPOINT_ROUTE_DEFAULT = "camis.endpoint";
+
 /** The endpoint's route, under the API's prefix, naming the endpoint CamisEndpoints dispatches to. */
 export const endpointRoute = (e: Endpoint): string =>
-  `Route::${e.method.toLowerCase()}(${phpSingleQuoted(laravelPath(e))}, ${ENDPOINTS_CONTROLLER}::class)->defaults('endpoint', ${phpSingleQuoted(e.name)})`;
+  `Route::${e.method.toLowerCase()}(${phpSingleQuoted(laravelPath(e))}, ${ENDPOINTS_CONTROLLER}::class)->defaults(${phpSingleQuoted(ENDPOINT_ROUTE_DEFAULT)}, ${phpSingleQuoted(e.name)})`;
 
 const describe = (e: Endpoint): string => `${e.method} /api${e.path}`;
 
@@ -167,7 +174,7 @@ ${rows}
 
     public function __invoke(Request $request): mixed
     {
-        [$handler${secured ? ", $roles" : ""}] = self::ENDPOINTS[(string) $request->route('endpoint')];${check}
+        [$handler${secured ? ", $roles" : ""}] = self::ENDPOINTS[(string) $request->route(${phpSingleQuoted(ENDPOINT_ROUTE_DEFAULT)})];${check}
         return app($handler)->handle($request);
     }${holds}
 }

@@ -1,6 +1,6 @@
 import { endpointThrottleEnv, isGuardedEndpoint, type GeneratedFile } from "@camis/adapter-kernel";
 import type { Endpoint } from "@camis/ir-schema";
-import { ENDPOINTS_CONTROLLER, laravelPath } from "../../hooks/endpoints";
+import { ENDPOINT_ROUTE_DEFAULT, ENDPOINTS_CONTROLLER, laravelPath } from "../../hooks/endpoints";
 import { PHP_MARKER } from "../../hooks/names";
 import { phpSingleQuoted } from "../../php-literal";
 import { runtimePhp } from "../../runtime-php";
@@ -50,7 +50,7 @@ export const preflightRoutes = (endpoints: Endpoint[]): Map<Endpoint, string> =>
       const first = onPath[0]!;
       return [
         first,
-        `Route::options(${phpSingleQuoted(laravelPath(first))}, ${ENDPOINTS_CONTROLLER}::class)->defaults('endpoint', ${phpList(onPath.map((e) => e.name))})${middlewareCall([ENDPOINT_CORS])}`,
+        `Route::options(${phpSingleQuoted(laravelPath(first))}, ${ENDPOINTS_CONTROLLER}::class)->defaults(${phpSingleQuoted(ENDPOINT_ROUTE_DEFAULT)}, ${phpList(onPath.map((e) => e.name))})${middlewareCall([ENDPOINT_CORS])}`,
       ];
     }),
   );
