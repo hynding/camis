@@ -4052,7 +4052,11 @@ with the app's settings, which do not allow a custom header.
   `CAMIS_ENDPOINT_<NAME>_THROTTLE_PER_MINUTE` with the name in upper snake case (`IngestEvents` is
   `CAMIS_ENDPOINT_INGEST_EVENTS_THROTTLE_PER_MINUTE`), read alike by both targets: a whole number in
   ASCII digits overrides the IR's rate, floored at 1; anything else (unset, empty, `1e3`, a sign,
-  words) keeps the IR's rate. `isGuardedEndpoint` and
+  words) keeps the IR's rate. Past any real rate the two part: Strapi keeps the IR's rate for a
+  number beyond 9007199254740991, while PHP's `(int)` saturates at `PHP_INT_MAX` (no limit in
+  practice, which is what such a number asks for) up to 308 digits and reads 309 or more as 0,
+  floored to 1 (stricter, never open). Only Strapi has a tracked-caller cap; Laravel's cache holds
+  Filament's counts. `isGuardedEndpoint` and
   `endpointGuardNames` tell the adapters which guards an endpoint has.
 - **Filament (Strapi API style, laravel storage).** A guarded endpoint's route names the runtime
   `StrapiEndpointCors` (outermost) and `StrapiEndpointGuard`, which read
@@ -4101,8 +4105,9 @@ with the app's settings, which do not allow a custom header.
   `Connection: close` and closes as nginx lingers: from the refusal on it reads and discards the
   body still coming, counting it in a `data` listener (read there, since Node would otherwise
   discard it uncounted once the answer is sent), and once past 1 MiB (by at most the piece that
-  takes it past, so about 1 MiB) stops reading rather than drop the connection, since on a fast link 1 MiB comes within a millisecond and a reset then can still beat
-  the answer to a client busy sending; once the answer is sent it takes back Node's own close
+  takes it past, so about 1 MiB) stops reading rather than drop the connection, since on a fast
+  link 1 MiB comes within a millisecond and a reset then can still beat the answer to a client busy
+  sending; once the answer is sent it takes back Node's own close
   (which, with request bytes unread, would make the kernel reset the connection and could drop the
   answer), shuts only its sending side, and drops the connection when the client ends or 2 seconds
   have passed, so a client can neither hold it open by streaming the rest nor lose the answer to a
@@ -4126,8 +4131,10 @@ with the app's settings, which do not allow a custom header.
   the fixed minute window it began in, by the monotonic clock (`performance.now()`, so a step of
   the wall clock changes nothing), and at a window's turn the one before it is dropped whole, so no
   request walks the callers. Each endpoint tracks at most `CAMIS_ENDPOINT_MAX_TRACKED_CALLERS`
-  callers (read as a rate override is, 100000 by default; the middleware's config is not used,
-  since camis regenerates `config/middlewares.ts`), about 205 bytes each, about 20 MB per
+  callers (read as a rate override is, 100000 by default; a number in digits too large to count
+  exactly, past 9007199254740991, keeps the default, as it keeps the IR's rate for a throttle's
+  variable, rather than read as Infinity and lift the cap or the limit; the middleware's config is
+  not used, since camis regenerates `config/middlewares.ts`), about 205 bytes each, about 20 MB per
   throttled endpoint at the default (measured on Node 22). A count stops taking room once it has
   expired: each window's map holds its counts in the order they began, which is the order they
   expire (a count in the current window's map never expires before the turn, so none is replaced
@@ -4199,9 +4206,10 @@ cross-origin endpoints is answered with all their methods and no request headers
 an endpoint's tracked-caller cap is full of callers active within the last window, a new caller
 there, or a returning one whose count has expired, shares the one overflow count with every other
 caller not tracked, so it can be refused for requests others made until the oldest count expires.
-A client that reads nothing until it has sent the whole body loses a Strapi refusal of a body more
-than about 1 MiB past it to the reset 2
-seconds on, as it would behind nginx once the lingering time is up; and a request pipelined
+A client that reads nothing until it has sent the whole body loses a Strapi refusal to the reset 2
+seconds on when more than about 1 MiB of its body is still to come once it is refused (counted from
+the refusal, not the limit: for a 429, a 415 or a 413 by `Content-Length` that is the whole body),
+as it would behind nginx once the lingering time is up; and a request pipelined
 behind a refused one is dropped only if Node reads it after the refusal is decided, which the
 middlewares Strapi runs ahead of them (all synchronous up to `next()`) ensure for a body read in
 one go, but which a project's own asynchronous middleware listed ahead of them would not.

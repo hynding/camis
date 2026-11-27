@@ -178,10 +178,13 @@ const TOO_MANY: Refusal = {
 const TOO_LARGE: Refusal = { status: 413, name: "PayloadTooLargeError", message: "Entity too large" };
 ${MATCHING}${CLOSING}
 // A deployment's own number, read as the Filament target reads a rate: a whole number in ASCII
-// digits, never less than one; any other value (empty, signed, 1e3, words) keeps the default.
+// digits, never less than one; any other value (empty, signed, 1e3, words) keeps the default, and
+// so does one too large to count exactly, which would otherwise read as Infinity: no limit at all.
 const fromEnv = (name: string, fallback: number): number => {
   const raw = process.env[name];
-  return raw !== undefined && /^[0-9]+$/.test(raw) ? Math.max(1, Number(raw)) : fallback;
+  if (raw === undefined || !/^[0-9]+$/.test(raw)) return fallback;
+  const value = Number(raw);
+  return Number.isSafeInteger(value) ? Math.max(1, value) : fallback;
 };
 
 const rate = (throttle: Throttle): number => fromEnv(throttle.env, throttle.perMinute);
@@ -199,12 +202,14 @@ const hasBody = (ctx: Context): boolean => {
  * unread the kernel then resets the connection, and a reset can drop the answer before the client
  * reads it. So this reads and discards the body still coming from the refusal on, counting it as
  * it comes (read here, so Node does not discard it uncounted once the answer is sent), and stops
- * reading once past LINGER_BYTES (by at most the piece that takes it past) rather than drop the connection: on a fast link that many bytes come
- * within a millisecond, and a reset then can still beat the answer to a client busy sending. Once
- * the answer is sent it takes Node's close back and shuts only the sending side (the client reads
- * the answer, then the end), and drops the connection when the client ends or LINGER_MS have
- * passed. The connection is marked closing at once, so a request pipelined behind this one is
- * dropped however soon Node reads it.
+ * reading once past LINGER_BYTES (by at most the piece that takes it past) rather than drop the
+ * connection: on a fast link that many bytes come within a millisecond, and a reset then can still
+ * beat the answer to a client busy sending. A client that reads nothing until its whole body is
+ * sent can therefore lose the answer when more than about LINGER_BYTES of the body is still to come
+ * once it is refused. Once the answer is sent it takes Node's close back and shuts only the sending
+ * side (the client reads the answer, then the end), and drops the connection when the client ends
+ * or LINGER_MS have passed. The connection is marked closing at once, so a request pipelined behind
+ * this one is dropped however soon Node reads it.
  */
 const linger = (ctx: Context): void => {
   ctx.set("Connection", "close");
@@ -557,8 +562,8 @@ every endpoint; a public endpoint asks neither, so its handler is its only autho
 
 ${endpointGuardsTable(guarded, REST_PREFIX)}
 
-A throttle's variable overrides its rate when it is a whole number in ASCII digits, floored at 1;
-any other value keeps the declared rate. Each endpoint counts per caller address, an IPv6 caller by
+A throttle's variable overrides its rate when it is a whole number in ASCII digits no larger than
+9007199254740991, floored at 1; any other value keeps the declared rate. Each endpoint counts per caller address, an IPv6 caller by
 its /64 (the block one subscriber is given), keyed by an HMAC of the address under \`APP_KEYS\`
 (\`server.app.keys\`), so no address is kept; the middleware does not start without them, and
 changing \`APP_KEYS\` starts every count afresh. Grouping IPv6 by /64 puts callers who share one in
@@ -568,8 +573,8 @@ windows are fixed minutes, so a caller can make up to twice its rate across the 
 The counts are kept in the process's memory, as users-permissions' own throttle keeps them by
 default: each Strapi process counts apart, so behind several processes a caller gets the rate from
 each, and a restart forgets every count. Each endpoint tracks at most
-\`CAMIS_ENDPOINT_MAX_TRACKED_CALLERS\` callers (a whole number in ASCII digits, floored at 1;
-100000 by default), about 205 bytes each: about 20 MB of memory per throttled endpoint at the
+\`CAMIS_ENDPOINT_MAX_TRACKED_CALLERS\` callers (read as a throttle's variable is; 100000 by
+default), about 205 bytes each: about 20 MB of memory per throttled endpoint at the
 default. A caller's count stops taking room once it has expired, so the cap binds only on callers
 active within the last minute. While that many are tracked, every caller not tracked shares one
 count for the endpoint, limited to the endpoint's rate a window, and a new caller, or one whose own
@@ -591,8 +596,9 @@ A refused request that still has a body coming is answered with \`Connection: cl
 connection is then shut on the server's side, about 1 MiB more of its body is read and discarded,
 and the connection is dropped when the client ends it or at most 2 seconds after the answer, so the
 client reads the answer before the connection is dropped. A client that reads nothing until its
-whole body is sent can lose the refusal of a body more than about 1 MiB over the limit, as behind
-nginx. A request sent after the refused one on the same connection is not processed, while the
+whole body is sent can lose the refusal when more than about 1 MiB of its body is still to come once
+it is refused, as behind nginx: for a 429, a 415 or a 413 by \`Content-Length\` that is the whole
+body, whatever the limit. A request sent after the refused one on the same connection is not processed, while the
 middlewares listed ahead of the camis ones keep requests in order (those \`config/middlewares.ts\`
 lists as generated do): it is dropped unanswered, before any camis middleware or route runs.
 `;

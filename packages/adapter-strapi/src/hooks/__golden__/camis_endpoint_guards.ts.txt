@@ -109,10 +109,13 @@ const dropped = (ctx: Context): boolean => {
 };
 
 // A deployment's own number, read as the Filament target reads a rate: a whole number in ASCII
-// digits, never less than one; any other value (empty, signed, 1e3, words) keeps the default.
+// digits, never less than one; any other value (empty, signed, 1e3, words) keeps the default, and
+// so does one too large to count exactly, which would otherwise read as Infinity: no limit at all.
 const fromEnv = (name: string, fallback: number): number => {
   const raw = process.env[name];
-  return raw !== undefined && /^[0-9]+$/.test(raw) ? Math.max(1, Number(raw)) : fallback;
+  if (raw === undefined || !/^[0-9]+$/.test(raw)) return fallback;
+  const value = Number(raw);
+  return Number.isSafeInteger(value) ? Math.max(1, value) : fallback;
 };
 
 const rate = (throttle: Throttle): number => fromEnv(throttle.env, throttle.perMinute);
@@ -130,12 +133,14 @@ const hasBody = (ctx: Context): boolean => {
  * unread the kernel then resets the connection, and a reset can drop the answer before the client
  * reads it. So this reads and discards the body still coming from the refusal on, counting it as
  * it comes (read here, so Node does not discard it uncounted once the answer is sent), and stops
- * reading once past LINGER_BYTES (by at most the piece that takes it past) rather than drop the connection: on a fast link that many bytes come
- * within a millisecond, and a reset then can still beat the answer to a client busy sending. Once
- * the answer is sent it takes Node's close back and shuts only the sending side (the client reads
- * the answer, then the end), and drops the connection when the client ends or LINGER_MS have
- * passed. The connection is marked closing at once, so a request pipelined behind this one is
- * dropped however soon Node reads it.
+ * reading once past LINGER_BYTES (by at most the piece that takes it past) rather than drop the
+ * connection: on a fast link that many bytes come within a millisecond, and a reset then can still
+ * beat the answer to a client busy sending. A client that reads nothing until its whole body is
+ * sent can therefore lose the answer when more than about LINGER_BYTES of the body is still to come
+ * once it is refused. Once the answer is sent it takes Node's close back and shuts only the sending
+ * side (the client reads the answer, then the end), and drops the connection when the client ends
+ * or LINGER_MS have passed. The connection is marked closing at once, so a request pipelined behind
+ * this one is dropped however soon Node reads it.
  */
 const linger = (ctx: Context): void => {
   ctx.set("Connection", "close");
