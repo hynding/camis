@@ -431,6 +431,12 @@ database made before this keeps its string columns until a migration changes the
   `CAMIS_AUTH_HIDE_ACCOUNT_EXISTENCE` (on by default) keeps registration, the confirmation resend
   and sign-in from telling whether an account exists (fully with email confirmation on), auth
   writes take only JSON bodies (415 otherwise), and refresh-mode token answers add `expiresIn`.
+  An IR endpoint's declared guards (`throttle`, `maxBodyBytes`, `accepts`, `crossOrigin`) are
+  checked at its route before its handler runs, as `config/camis-endpoints.php` states them (429,
+  415, 413; a cross-origin endpoint answers any origin without credentials); each throttle is
+  overridable with `CAMIS_ENDPOINT_<NAME>_THROTTLE_PER_MINUTE` (the endpoint's name in upper snake
+  case), and `camis scaffold` leaves Laravel's CORS off a cross-origin endpoint in
+  `bootstrap/app.php` (`camis build` warns, with the lines, on an app scaffolded before).
   Each controller is a generated base under
   `app/Http/Controllers/Api/Generated/` plus a seed-mode subclass you may override. The Strapi
   API style adds a NOT NULL unique `username` column to `users`; run its migration against an
