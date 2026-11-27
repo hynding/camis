@@ -19,6 +19,7 @@ export type {
   ExpandedZone,
   ExpandedZoneMember,
 } from "./expand";
+export { endpointThrottleEnv, isGuardedEndpoint } from "./endpoint-guards";
 export { fieldEditorGaps } from "./field-editors";
 export { privateFieldGaps } from "./private-fields";
 export { stableJson } from "./stable-json";
