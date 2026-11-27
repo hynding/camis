@@ -8,10 +8,13 @@
 // and PostgreSQL the project has a database of its own next to DATABASE_URL's (smoke-project.ts).
 // CI's adapter-express-boot workflow runs it as a step of its own on every leg:
 // `pnpm --filter @camis/adapter-express smoke:lengths <dialect>`.
+import { spawn, spawnSync } from "node:child_process";
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { IrBundle } from "@camis/permissions";
 import type { Dialect } from "../src/dialect";
-import { fail, smokeProject, waitForServer } from "./smoke-project";
+import { fail, smokeProject, waitForServer, type SmokeProject } from "./smoke-project";
 
 const BOUNDED: IrBundle = {
   document: {
@@ -80,6 +83,84 @@ const VALUES = {
   summary: wide(1000),
 };
 
+// Run with the project's own driver: holds the entry's row locked for 1.5s on a connection of its
+// own, then closes it (status "closed", which the Writer's record condition refuses) and commits.
+const CLOSE_LOCKED: Record<"mysql" | "pgsql", string> = {
+  mysql: `import mysql from "mysql2/promise";
+const id = Number(process.env.ID);
+const connection = await mysql.createConnection(process.env.DATABASE_URL);
+await connection.beginTransaction();
+await connection.execute("SELECT id FROM entries WHERE id = ? FOR UPDATE", [id]);
+console.log("locked");
+await new Promise((r) => setTimeout(r, 1500));
+await connection.execute("UPDATE entries SET status = 'closed' WHERE id = ?", [id]);
+await connection.commit();
+await connection.end();
+`,
+  pgsql: `import postgres from "postgres";
+const id = Number(process.env.ID);
+const sql = postgres(process.env.DATABASE_URL, { onnotice: () => {} });
+await sql.begin(async (tx) => {
+  await tx\`SELECT id FROM entries WHERE id = \${id} FOR UPDATE\`;
+  console.log("locked");
+  await new Promise((r) => setTimeout(r, 1500));
+  await tx\`UPDATE entries SET status = 'closed' WHERE id = \${id}\`;
+});
+await sql.end();
+`,
+};
+
+// Prints the entry's code and status as JSON.
+const READ_ENTRY: Record<"mysql" | "pgsql", string> = {
+  mysql: `import mysql from "mysql2/promise";
+const connection = await mysql.createConnection(process.env.DATABASE_URL);
+const [rows] = await connection.execute("SELECT code, status FROM entries WHERE id = ?", [Number(process.env.ID)]);
+console.log(JSON.stringify(rows[0]));
+await connection.end();
+`,
+  pgsql: `import postgres from "postgres";
+const sql = postgres(process.env.DATABASE_URL, { onnotice: () => {} });
+const [row] = await sql\`SELECT code, status FROM entries WHERE id = \${Number(process.env.ID)}\`;
+console.log(JSON.stringify(row));
+await sql.end();
+`,
+};
+
+/**
+ * A secured update racing a write that takes its row out of the caller's record condition: the
+ * update reads the row locked, so it waits for the other write to commit and then refuses (404)
+ * rather than writing a row the Writer may no longer update.
+ */
+const raceSmoke = async (
+  dialect: "mysql" | "pgsql",
+  project: SmokeProject,
+  patch: (id: number, body: Record<string, unknown>) => Promise<{ status: number }>,
+  id: number,
+): Promise<void> => {
+  const env = { ...project.env, ID: String(id) };
+  await writeFile(join(project.dir, "close-locked.mjs"), CLOSE_LOCKED[dialect]);
+  await writeFile(join(project.dir, "read-entry.mjs"), READ_ENTRY[dialect]);
+  const closer = spawn("node", ["close-locked.mjs"], { cwd: project.dir, env });
+  const closed = new Promise<number | null>((resolve) => closer.once("exit", resolve));
+  await new Promise<void>((resolve, reject) => {
+    closer.stdout.on("data", (chunk: Buffer) => {
+      if (chunk.toString().includes("locked")) resolve();
+    });
+    closer.once("exit", () => reject(new Error("the locking connection ended before it locked")));
+  });
+  const started = Date.now();
+  const raced = await patch(id, { code: "after" });
+  const waited = Date.now() - started;
+  if ((await closed) !== 0) fail("the locking connection failed");
+  if (raced.status !== 404) fail(`an update racing a close → ${raced.status}, not 404`);
+  if (waited < 1000) fail(`the update did not wait for the row lock (${waited}ms)`);
+  const read = spawnSync("node", ["read-entry.mjs"], { cwd: project.dir, env, encoding: "utf8" });
+  const row = JSON.parse(read.stdout) as { code: string; status: string };
+  if (row.code !== "before" || row.status !== "closed")
+    fail(`the raced row was written: ${JSON.stringify(row)}`);
+  console.log(`ROW LOCK OK (${dialect})`);
+};
+
 const lengthSmoke = async (dialect: Dialect, port = 3213): Promise<void> => {
   const project = await smokeProject(BOUNDED, dialect, "lengths", port);
   try {
@@ -141,6 +222,16 @@ const lengthSmoke = async (dialect: Dialect, port = 3213): Promise<void> => {
     const strippedUpdate = await send("PATCH", `/${made.body.id as number}`, { notes: wide(11) });
     if (strippedUpdate.status !== 200)
       fail(`a stripped field past its bound on update → ${strippedUpdate.status}`);
+
+    if (dialect !== "sqlite") {
+      const racing = await send("POST", "", { status: "open", code: "before" });
+      await raceSmoke(
+        dialect,
+        project,
+        (id, body) => send("PATCH", `/${id}`, body),
+        racing.body.id as number,
+      );
+    }
     console.log(`LENGTHS OK (${dialect})`);
   } finally {
     await project.stop();

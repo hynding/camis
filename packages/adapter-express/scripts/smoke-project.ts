@@ -17,7 +17,8 @@ export const fail = (msg: string): never => {
   throw new Error(msg);
 };
 
-// Run with the generated project's own driver, from its directory, once it is installed.
+// Run with the generated project's own driver, from its directory, once it is installed, connected
+// to DATABASE_URL's database.
 const CREATE_DATABASE: Record<"mysql" | "pgsql", (database: string) => string> = {
   mysql: (database) => `import mysql from "mysql2/promise";
 const connection = await mysql.createConnection(process.env.DATABASE_URL);
@@ -29,6 +30,20 @@ await connection.end();
 const sql = postgres(process.env.DATABASE_URL, { onnotice: () => {} });
 await sql.unsafe("DROP DATABASE IF EXISTS ${database}");
 await sql.unsafe("CREATE DATABASE ${database}");
+await sql.end();
+`,
+};
+
+// FORCE: a connection the stopped server left open does not keep PostgreSQL from dropping it.
+const DROP_DATABASE: Record<"mysql" | "pgsql", (database: string) => string> = {
+  mysql: (database) => `import mysql from "mysql2/promise";
+const connection = await mysql.createConnection(process.env.DATABASE_URL);
+await connection.query("DROP DATABASE IF EXISTS ${database}");
+await connection.end();
+`,
+  pgsql: (database) => `import postgres from "postgres";
+const sql = postgres(process.env.DATABASE_URL, { onnotice: () => {} });
+await sql.unsafe("DROP DATABASE IF EXISTS ${database} WITH (FORCE)");
 await sql.end();
 `,
 };
@@ -46,7 +61,7 @@ export interface SmokeProject {
   env: NodeJS.ProcessEnv;
   /** Starts the server, in a process group of its own so that `stop` stops tsx under npm too. */
   start: () => void;
-  /** Stops the server, if it runs, and removes the project. */
+  /** Stops the server, if it runs, drops the project's database and removes the project. */
   stop: () => Promise<void>;
 }
 
@@ -68,14 +83,25 @@ export const smokeProject = async (
     PORT: String(port),
     ...(dialect === "sqlite" ? { DB_FILE_NAME: join(dir, "data.db") } : {}),
   };
+  const adminEnv = { ...env };
   let proc: ChildProcess | undefined;
+  let exited: Promise<unknown> = Promise.resolve();
+  let created: string | undefined;
   const stop = async () => {
     try {
       if (proc?.pid !== undefined) process.kill(-proc.pid, "SIGTERM");
     } catch {
       // The group has exited already.
     }
-    await rm(dir, { recursive: true, force: true });
+    await exited;
+    try {
+      if (created !== undefined && dialect !== "sqlite") {
+        await writeFile(join(dir, "drop-database.mjs"), DROP_DATABASE[dialect](created));
+        run("node", ["drop-database.mjs"], dir, adminEnv);
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   };
   try {
     await materialize(expressAdapterFor(dialect).generate(bundle, { projectName: name }), dir);
@@ -83,6 +109,7 @@ export const smokeProject = async (
     if (dialect !== "sqlite") {
       const own = ownDatabase(env.DATABASE_URL ?? fail("DATABASE_URL is not set"), name);
       await writeFile(join(dir, "create-database.mjs"), CREATE_DATABASE[dialect](own.database));
+      created = own.database;
       run("node", ["create-database.mjs"], dir, env);
       env.DATABASE_URL = own.url;
     }
@@ -95,7 +122,9 @@ export const smokeProject = async (
     dir,
     env,
     start: () => {
-      proc = spawn("npm", ["start"], { cwd: dir, stdio: "inherit", env, detached: true });
+      const started = spawn("npm", ["start"], { cwd: dir, stdio: "inherit", env, detached: true });
+      exited = new Promise((resolve) => started.once("exit", resolve));
+      proc = started;
     },
     stop,
   };

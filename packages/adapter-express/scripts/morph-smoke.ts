@@ -78,6 +78,7 @@ export const morphSmoke = async (dialect: Dialect = "sqlite", port = 3212): Prom
     for (const body of [
       { subjects: [{ type: "Secret", id: vault }] },
       { subjects: [{ type: "Book", id: 999 }] },
+      { subjects: [{ type: "Book", id: 99_999_999_999 }] },
       { pinned_to: { type: "Nope", id: dune } },
       { subjects: { type: "Book", id: dune } },
     ]) {

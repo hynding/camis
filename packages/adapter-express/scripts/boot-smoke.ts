@@ -117,8 +117,22 @@ const securedSmoke = async (port = 3210): Promise<void> => {
     if (deleted.status !== 200) fail(`editor delete → ${deleted.status}`);
     const gone = await fetch(`${root}/articles/${draftId}`, { headers: bearer(editor) });
     if (gone.status !== 404) fail(`a deleted article → ${gone.status}`);
-    const missing = await fetch(`${root}/articles/not-a-number`, { headers: bearer(editor) });
-    if (missing.status !== 404) fail(`an id that is not a number → ${missing.status}`);
+    // An id no row can have is the JSON 404 on every database, PostgreSQL refusing to compare one
+    // past its integer column's range; a body that does not parse is a JSON 400.
+    for (const id of ["not-a-number", "2147483648", "99999999999"]) {
+      const missing = await fetch(`${root}/articles/${id}`, { headers: bearer(editor) });
+      const body = await missing.text();
+      if (missing.status !== 404 || body !== '{"error":"not found"}')
+        fail(`the id ${id} → ${missing.status} ${body}`);
+    }
+    const unparsed = await fetch(`${root}/articles`, {
+      method: "POST",
+      headers: bearer(editor),
+      body: "{ not json",
+    });
+    const unparsedBody = (await unparsed.json()) as { error?: unknown };
+    if (unparsed.status !== 400 || typeof unparsedBody.error !== "string")
+      fail(`a body that does not parse → ${unparsed.status} ${JSON.stringify(unparsedBody)}`);
 
     // The admin SPA is dialect-agnostic — build it once (sqlite leg) to prove the generated
     // react-admin TSX type-checks (tsc) and bundles (vite build).
