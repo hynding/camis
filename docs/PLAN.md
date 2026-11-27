@@ -4046,10 +4046,8 @@ with the app's settings, which do not allow a custom header.
   `Access-Control-Allow-Credentials` is never sent. `crossOrigin` without `public: true` is
   `cross_origin_not_public`, since a page on any origin must reach nothing a credential guards. The
   route checks them in this order: preflight, throttle, media type, body size, then the handler. An
-  endpoint's error is now located by its name (`location.rule`). A path parameter named `endpoint`
-  is `reserved_path_parameter`, at the endpoint's `path`: the Filament target routes an endpoint by
-  a route default of that name, which Laravel lets a path parameter replace (no other route default
-  is read).
+  endpoint's error is now located by its name (`location.rule`). The IR reserves no path parameter
+  name: how a target tells its endpoints apart is the target's own.
 - **Kernel.** `endpointThrottleEnv` names each endpoint's override in one scheme for every target,
   `CAMIS_ENDPOINT_<NAME>_THROTTLE_PER_MINUTE` with the name in upper snake case (`IngestEvents` is
   `CAMIS_ENDPOINT_INGEST_EVENTS_THROTTLE_PER_MINUTE`), read alike by both targets: a whole number in
@@ -4059,7 +4057,11 @@ with the app's settings, which do not allow a custom header.
 - **Filament (Strapi API style, laravel storage).** A guarded endpoint's route names the runtime
   `StrapiEndpointCors` (outermost) and `StrapiEndpointGuard`, which read
   `config/camis-endpoints.php` (generated only with a guarded endpoint) by the route's endpoint
-  name, per request, so `config:cache` keeps working; a route naming an endpoint the config lacks
+  name, per request, so `config:cache` keeps working. Every endpoint route names its endpoint in the
+  route default `camis.endpoint` (it was `endpoint`), which `CamisEndpoints` and both middlewares
+  read: Laravel lets a path parameter replace a default of the same name, and an IR path parameter
+  is letters, digits, `_` and `-`, so the dot keeps a parameter (`/memos/:endpoint/tally`) from
+  choosing another endpoint's handler, roles or guards; `route:cache` keeps it; a route naming an endpoint the config lacks
   (a config cache older than the routes) answers 500 rather than check nothing. The guard counts
   through Laravel's `RateLimiter` in a bucket per endpoint, an IPv6 caller by its /64 and an
   IPv4-mapped one as its IPv4 address, keyed by a 32-character prefix of an HMAC-SHA256 of that
@@ -4068,7 +4070,7 @@ with the app's settings, which do not allow a custom header.
   byte past the limit from the body's stream, besides the declared `Content-Length`; its refusals
   are thrown, so `StrapiErrors` answers `RateLimitError`, `UnsupportedMediaTypeError` and
   `PayloadTooLargeError` in Strapi's error body. Cross-origin endpoints route one `OPTIONS` per path
-  (Laravel keeps only the last route of a method and path), whose `endpoint` default lists every
+  (Laravel keeps only the last route of a method and path), whose `camis.endpoint` default lists every
   such endpoint on it; `StrapiEndpointCors` answers it for the one whose method the preflight asks,
   with `Vary: Access-Control-Request-Method, Access-Control-Request-Headers` (never `Origin`, since
   every answer allows `*`); it sets the CORS headers on whatever the route
@@ -4133,7 +4135,10 @@ Recorded exception to "unguarded output unchanged": every public endpoint's gene
 (Filament, `app/Hooks/Contracts`) now says its handler is its only authorization, guarded or not,
 so regenerating an existing project changes that generated file; the Strapi target's seeded
 controller says it too, but a seeded file is written only once, so only a newly seeded endpoint
-carries it. No hand-written handler is touched.
+carries it. No hand-written handler is touched. Likewise every endpoint's route in
+`routes/api.php`, guarded or not, now names its endpoint in `->defaults('camis.endpoint', ...)`
+instead of `->defaults('endpoint', ...)`, and `CamisEndpoints` reads that name, so regenerating
+changes both generated files in an existing project (the routes golden changes for every endpoint).
 
 Not covered: Laravel decodes a JSON body when it captures the request (`Request::createFromBase`),
 before any middleware, so for JSON the 413 keeps the body from the handler but not from that
@@ -4143,13 +4148,21 @@ and `strapi::cors` still runs on a cross-origin endpoint's actual request before
 headers are replaced (it adds `Vary: Origin`). A body's size counts the bytes as sent, before any
 `Content-Encoding` is undone. Which origins an endpoint serves stays the handler's to decide. An app
 scaffolded before this phase answers a cross-origin endpoint's preflight with its own CORS until
-`bootstrap/app.php` has the lines `camis build` prints.
+`bootstrap/app.php` has the lines `camis build` prints. On Filament, the 500 a guarded route answers
+when its config entry is missing carries no CORS headers, so a browser on another origin cannot read
+it; a plain `OPTIONS` (no `Access-Control-Request-Method`, so no preflight) on a path shared by
+cross-origin endpoints is answered with all their methods and no request headers. On Strapi, while
+the tracked-caller cap is full, a returning caller whose count expired in the previous window counts
+as new and is refused with 429 until that window is dropped.
 
 Exit: `custom-code.test.ts` and `parse.test.ts` (ir-schema: the four settings, `crossOrigin` without
 `public`, bad header names and media types, wildcards, rates and sizes below 1 or above
-2147483647, a path parameter named `endpoint`, the error located by the endpoint's name); `endpoint-guards.test.ts` in the kernel (the variable's name, the guards named);
+2147483647, any path parameter name taken, `endpoint` included, the error located by the endpoint's
+name); `endpoint-guards.test.ts` in the kernel (the variable's name, the guards named);
 in Filament, `endpoint-guards.test.ts` (the author-role fixture gains MemoIngest with all four, and
-MemoRestate, a cross-origin PUT on its path; the routes and the one preflight route naming both, goldens `camis-endpoints.php` and `MemoIngestEndpoint.php`, the
+MemoRestate, a cross-origin PUT on its path, and MemoTally, `GET /memos/:endpoint/tally` with a
+throttle; the routes and the one preflight route naming both, every route's `camis.endpoint`
+default and the files reading it, goldens `camis-endpoints.php` and `MemoIngestEndpoint.php`, the
 runtime middlewares copied as they are, nothing emitted and the routes unchanged for endpoints with
 no guard, DEPLOY.md, the Laravel API style's gap, and the config evaluated under PHP: the IR's rate,
 the variable's in digits, 1 for 0, and the IR's rate for an empty, signed, exponent or worded
@@ -4176,7 +4189,8 @@ reaching the handler, 429 with `Retry-After` and the handler not run, refused re
 every refusal and success and never credentials, while the app's CORS, set to allow credentials to
 the browser's origin, still answers another route, its preflight, and another method's preflight on
 the endpoint's path; MemoRestate's PUT preflight answered on the same route with its own headers
-and `Vary`; IPv6 callers counted by /64 under an HMAC keyed by `APP_KEY`; and 500 for every request
+and `Vary`; MemoTally reached with its own handler and throttle whatever endpoint's name the path
+holds; IPv6 callers counted by /64 under an HMAC keyed by `APP_KEY`; and 500 for every request
 on a guarded route whose config entry is missing); `runtime-phpstan.sh` copies the two middlewares into the first app, whose
 fixture has no guarded endpoint. Locally, `EndpointGuardsTest`, `EndpointsTest`, `AuthorRoleTest`
 and `PublicActionsTest` ran on SQLite in a copy of a scaffolded strapi-php app, and the Strapi
