@@ -36,6 +36,8 @@ const variants: [string, RouteOptions][] = [
     "secured, with an AI field, owning links",
     { secured: true, aiColumns: ["summary"], links: "own" },
   ],
+  ["unsecured, with an AI field, owning links", { aiColumns: ["summary"], links: "own" }],
+  ["unsecured, reading inverses", { links: "inverse" }],
 ];
 
 /** How many transactions each variant's router opens: a create, an update and a delete at most. */
@@ -48,6 +50,8 @@ const TRANSACTIONS: Record<string, number> = {
   "secured, reading inverses": 2,
   "secured, with an AI field": 2,
   "secured, with an AI field, owning links": 3,
+  "unsecured, with an AI field, owning links": 3,
+  "unsecured, reading inverses": 0,
 };
 
 describe("the generated routers on every database", () => {
@@ -204,7 +208,11 @@ describe("the generated routers on every database", () => {
         expect(ts).toContain(
           '  await atomic(async (tx) => {\n    if (!(await lockRow(tx, id))) return;\n    await dropLinks(tx, "Article", id);\n    await tx.delete(articles).where(eq(articles.id, id));\n  });\n  res.status(204).end();',
         );
-        expect(ts).not.toContain("await find(id)))");
+      });
+      it(`answers 404 for a missing row before checking its links or generating anything (${dialect})`, () => {
+        expect(ts).toContain(
+          '  const id = Number(req.params.id);\n  if (!(await find(id))) {\n    res.status(404).json({ error: "not found" });\n    return;\n  }\n  const body = pick(',
+        );
       });
     }
   });
@@ -217,6 +225,13 @@ describe("the generated routers on every database", () => {
     );
   });
 });
+
+/** What each `await` in a body awaits, up to the end of its line. */
+const awaited = (body: string): string[] =>
+  [...body.matchAll(/\bawait\s+([^\n]*)/g)].map((m) => m[1] ?? "");
+
+/** A query through the transaction, or a helper handed the transaction as its first argument. */
+const THROUGH_TX = /^\(?(tx\.|[A-Za-z]\w*\(tx[,)])/;
 
 /** The body of each `atomic(async (tx) => { … })` callback in emitted code. */
 const atomicBodies = (ts: string): string[] =>
@@ -237,6 +252,10 @@ describe("a transaction's queries", () => {
           expect(body).not.toMatch(
             /\b(checkLinks|permittedUpdate|readLinks)\(req|\b(checkLinks|readLinks)\("/,
           );
+          // A transaction holds its row locks while it waits, so it awaits nothing but its own
+          // queries: never the AI provider, which can take seconds.
+          expect(body).not.toMatch(/\bpopulateAiFields\(|\bgenerate\(/);
+          for (const expression of awaited(body)) expect(expression).toMatch(THROUGH_TX);
         }
       });
     }

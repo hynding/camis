@@ -177,6 +177,16 @@ describe("the generated PostgreSQL and MySQL transaction", () => {
       client.failures.push(deadlock[dialect], deadlock[dialect], deadlock[dialect]);
       await expect(pooled(async () => "never")).rejects.toBe(deadlock[dialect]);
     });
+    it(`pauses a different 10 to 50ms before each attempt again (${dialect})`, async () => {
+      const { atomic: pooled, client } = await pooledAtomic(dialect);
+      const timers = vi.spyOn(globalThis, "setTimeout");
+      const random = vi.spyOn(Math, "random").mockReturnValueOnce(0).mockReturnValueOnce(0.999);
+      client.failures.push(deadlock[dialect], deadlock[dialect]);
+      await pooled(async () => undefined);
+      expect(timers.mock.calls.map(([, delay]) => delay)).toEqual([10, 10 + 0.999 * 40]);
+      random.mockRestore();
+      timers.mockRestore();
+    });
     it(`does not run the work again after any other failure (${dialect})`, async () => {
       const { atomic: pooled, client } = await pooledAtomic(dialect);
       const other = { code: "23505" };
