@@ -256,14 +256,9 @@ describe("endpoint guards", () => {
     ]);
   });
 
-  // A target tells its endpoints apart by a route value named "endpoint", which a path parameter of
-  // that name would replace.
-  it("rejects a path parameter named endpoint, located at the endpoint's path", () => {
-    expect(
-      issues({ ...base, endpoints: [{ ...ingest, path: "/articles/:endpoint/ingest" }] }),
-    ).toEqual([{ code: "reserved_path_parameter", path: ["endpoints", 0, "path"] }]);
-    expect(
-      issues({ ...base, endpoints: [{ ...ingest, path: "/articles/:endpointId/ingest" }] }),
-    ).toEqual([]);
+  // How a target tells its endpoints apart is the target's own: no path parameter name is reserved.
+  it("takes any path parameter name, endpoint included", () => {
+    for (const path of ["/articles/:endpoint/ingest", "/articles/:endpointId/ingest"])
+      expect(issues({ ...base, endpoints: [{ ...ingest, path }] })).toEqual([]);
   });
 });
