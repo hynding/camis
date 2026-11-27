@@ -209,9 +209,11 @@ ${t}Router.param("id", routeId);`;
   ${dataDecl} data = linkColumns("${typeName}", body);${createPop}${insert("body")}`
       : `
   ${dataDecl} data = pick(req.body, [${cols}]);${createPop}${insert("")}`;
+    // The find answers a missing row before its links are checked or anything is generated; the
+    // locked read inside the transaction decides.
     const patch = own
       ? `
-  const id = Number(req.params.id);
+  const id = Number(req.params.id);${notFound("!(await find(id))")}
   const body = pick(req.body, [${writable}]);${refusal("body", "allowed")}
   ${dataDecl} data = linkColumns("${typeName}", body);${updatePop}${write("body")}`
       : `
